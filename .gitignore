@@ -1,0 +1,33 @@
+.claude/
+.autodev/local/
+
+bin/
+obj/
+Logs/
+Build/
+TestResults/
+
+*.db
+*.db-shm
+*.db-wal
+
+# .NET
+*.user
+*.suo
+*.userosscache
+*.sln.docstates
+project.lock.json
+project.fragment.lock.json
+artifacts/
+*.nupkg
+*.snupkg
+
+# IDE
+.vs/
+.vscode/
+.idea/
+*.DotSettings.user
+
+# OS
+.DS_Store
+Thumbs.db

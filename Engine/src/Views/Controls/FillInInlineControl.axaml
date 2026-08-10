@@ -1,0 +1,114 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:vm="using:BlueHeighliner.Comlink.Engine.ViewModels.Entries"
+             x:Class="BlueHeighliner.Comlink.Engine.Views.Controls.FillInInlineControl"
+             Height="20">
+
+  <Grid>
+    <Button x:Name="FillInToggle"
+            Command="{Binding TogglePopupCommand}"
+            Background="#2D2D30"
+            BorderBrush="#5A5A5A"
+            BorderThickness="1"
+            CornerRadius="2"
+            Height="20"
+            Padding="0"
+            HorizontalAlignment="Stretch"
+            HorizontalContentAlignment="Center"
+            VerticalContentAlignment="Center"
+            Cursor="Hand">
+      <TextBlock Text="{Binding DisplayText}"
+                 FontSize="11"
+                 FontStyle="Italic"
+                 Foreground="#858585"
+                 VerticalAlignment="Center" />
+    </Button>
+    <Popup x:Name="FillInPopup"
+           IsOpen="{Binding IsPopupOpen, Mode=TwoWay}"
+           IsLightDismissEnabled="True"
+           Placement="Bottom"
+           PlacementTarget="{Binding #FillInToggle}">
+      <Border Background="#252526"
+              BorderBrush="#3E3E42"
+              BorderThickness="1"
+              Padding="10"
+              MinWidth="220">
+        <StackPanel Spacing="6">
+          <TextBlock Text="OPTIONS"
+                     FontSize="10"
+                     FontWeight="SemiBold"
+                     Foreground="#5A5A5A"
+                     LetterSpacing="1" />
+          <ScrollViewer MaxHeight="140"
+                        VerticalScrollBarVisibility="Auto">
+            <ItemsControl ItemsSource="{Binding Options}">
+              <ItemsControl.ItemTemplate>
+                <DataTemplate>
+                  <Grid ColumnDefinitions="*,Auto,Auto,Auto" Margin="0,2">
+                    <Button Grid.Column="0"
+                            Command="{Binding $parent[ItemsControl].DataContext.SelectOptionCommand}"
+                            CommandParameter="{Binding Value}"
+                            HorizontalAlignment="Stretch"
+                            HorizontalContentAlignment="Left"
+                            Background="Transparent"
+                            Padding="4,3">
+                      <StackPanel Orientation="Horizontal" Spacing="6">
+                        <TextBlock Text="●"
+                                   FontSize="10"
+                                   IsVisible="{Binding IsSelected}"
+                                   Foreground="#98C379"
+                                   VerticalAlignment="Center" />
+                        <TextBlock Text="○"
+                                   FontSize="10"
+                                   IsVisible="{Binding IsSelected, Converter={x:Static BoolConverters.Not}}"
+                                   Foreground="#858585"
+                                   VerticalAlignment="Center" />
+                        <TextBlock Text="{Binding Value}"
+                                   FontSize="13"
+                                   Foreground="#CCCCCC" />
+                      </StackPanel>
+                    </Button>
+                    <Button Grid.Column="1"
+                            Content="↑"
+                            Command="{Binding $parent[ItemsControl].DataContext.MoveOptionUpCommand}"
+                            CommandParameter="{Binding Value}"
+                            FontSize="11"
+                            Padding="4,2"
+                            Foreground="#858585" />
+                    <Button Grid.Column="2"
+                            Content="↓"
+                            Command="{Binding $parent[ItemsControl].DataContext.MoveOptionDownCommand}"
+                            CommandParameter="{Binding Value}"
+                            FontSize="11"
+                            Padding="4,2"
+                            Foreground="#858585" />
+                    <Button Grid.Column="3"
+                            Content="×"
+                            Command="{Binding $parent[ItemsControl].DataContext.RemoveOptionCommand}"
+                            CommandParameter="{Binding Value}"
+                            FontSize="12"
+                            Padding="4,2"
+                            Foreground="#858585" />
+                  </Grid>
+                </DataTemplate>
+              </ItemsControl.ItemTemplate>
+            </ItemsControl>
+          </ScrollViewer>
+          <Grid ColumnDefinitions="*,Auto" Margin="0,4,0,0">
+            <TextBox x:Name="NewOptionInput"
+                     Grid.Column="0"
+                     Text="{Binding NewOption}"
+                     Watermark="New option..."
+                     FontSize="12"
+                     Height="28" />
+            <Button Grid.Column="1"
+                    Content="Add"
+                    Command="{Binding AddOptionCommand}"
+                    Margin="6,0,0,0"
+                    FontSize="12" />
+          </Grid>
+        </StackPanel>
+      </Border>
+    </Popup>
+  </Grid>
+</UserControl>

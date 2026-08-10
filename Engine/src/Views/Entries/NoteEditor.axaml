@@ -1,0 +1,55 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:vm="using:BlueHeighliner.Comlink.Engine.ViewModels.Entries"
+             x:Class="BlueHeighliner.Comlink.Engine.Views.Entries.NoteEditor"
+             x:DataType="vm:NoteViewModel"
+             Background="#1E1E1E">
+
+  <DockPanel Margin="24,20">
+
+    <!-- Toolbar -->
+    <Border DockPanel.Dock="Top"
+            BorderBrush="#3E3E42"
+            BorderThickness="0,0,0,1"
+            Padding="0,0,0,10"
+            Margin="0,0,0,16">
+      <DockPanel>
+        <StackPanel DockPanel.Dock="Right"
+                    Orientation="Horizontal"
+                    Spacing="8"
+                    VerticalAlignment="Center">
+          <TextBlock Text="{Binding StatusMessage}"
+                     FontSize="12"
+                     Foreground="#858585"
+                     VerticalAlignment="Center" />
+          <Button Classes="accent"
+                  Content="SAVE"
+                  Command="{Binding SaveCommand}"
+                  IsEnabled="{Binding !IsSaving}"
+                  FontWeight="SemiBold"
+                  FontSize="12" />
+        </StackPanel>
+        <TextBlock Text="NOTE"
+                   FontSize="11"
+                   FontWeight="SemiBold"
+                   Foreground="#858585"
+                   LetterSpacing="1"
+                   VerticalAlignment="Center" />
+      </DockPanel>
+    </Border>
+
+    <!-- Note Body (fills remaining space) -->
+    <TextBox Text="{Binding Body}"
+             Watermark="Start writing..."
+             AcceptsReturn="True"
+             TextWrapping="Wrap"
+             FontSize="14"
+             Background="Transparent"
+             BorderThickness="0"
+             Padding="0"
+             LineHeight="24"
+             VerticalContentAlignment="Top"
+             VerticalAlignment="Stretch" />
+
+  </DockPanel>
+</UserControl>

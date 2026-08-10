@@ -1,0 +1,88 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:vm="using:BlueHeighliner.Comlink.Engine.ViewModels"
+             x:Class="BlueHeighliner.Comlink.Engine.Views.Controls.FolderBar"
+             x:DataType="vm:FolderBarViewModel"
+             Background="#252526"
+             MinWidth="150">
+
+    <DockPanel>
+
+      <Button DockPanel.Dock="Top"
+              Content="COLLAPSE"
+              Click="OnCollapseAll"
+              Background="Transparent"
+              Foreground="#858585"
+              FontSize="10"
+              Padding="4,4"
+              HorizontalAlignment="Stretch"
+              HorizontalContentAlignment="Center" />
+
+      <TreeView x:Name="FolderTree"
+                ItemsSource="{Binding RootFolders}"
+                SelectedItem="{Binding SelectedFolder, Mode=OneWay}"
+                SelectionChanged="OnFolderSelectionChanged"
+                DoubleTapped="OnFolderDoubleTapped"
+                ContextRequested="OnFolderContextRequested"
+                DragDrop.AllowDrop="True"
+                Background="Transparent"
+                BorderThickness="0"
+                Margin="0,4,0,8"
+                Padding="0">
+
+        <TreeView.ItemContainerTheme>
+          <ControlTheme TargetType="TreeViewItem" BasedOn="{StaticResource {x:Type TreeViewItem}}">
+            <Setter Property="IsExpanded" Value="{Binding IsExpanded, Mode=TwoWay}" />
+            <Setter Property="Padding" Value="0,3" />
+            <Setter Property="Template">
+              <ControlTemplate>
+                <StackPanel>
+                  <Border Name="PART_LayoutRoot"
+                          Background="{TemplateBinding Background}"
+                          BorderBrush="{TemplateBinding BorderBrush}"
+                          BorderThickness="{TemplateBinding BorderThickness}"
+                          CornerRadius="{TemplateBinding CornerRadius}"
+                          MinHeight="{TemplateBinding MinHeight}"
+                          Padding="{TemplateBinding Padding}">
+                    <ContentPresenter Name="PART_Header"
+                                      Content="{TemplateBinding Header}"
+                                      ContentTemplate="{TemplateBinding HeaderTemplate}"
+                                      Padding="0" />
+                  </Border>
+                  <ItemsPresenter Name="PART_ItemsPresenter"
+                                  IsVisible="{TemplateBinding IsExpanded}"
+                                  ItemsPanel="{TemplateBinding ItemsPanel}"
+                                  Margin="16,0,0,0" />
+                </StackPanel>
+              </ControlTemplate>
+            </Setter>
+            <Style Selector="^ /template/ ContentPresenter#PART_Header">
+              <Setter Property="Padding" Value="0" />
+            </Style>
+          </ControlTheme>
+        </TreeView.ItemContainerTheme>
+
+        <TreeView.ItemTemplate>
+          <TreeDataTemplate DataType="{x:Type vm:FolderItemViewModel}"
+                            ItemsSource="{Binding Children}">
+            <StackPanel Orientation="Horizontal" Spacing="6" Margin="8,0,0,0">
+              <TextBlock Text="{Binding Icon}"
+                         IsVisible="{Binding Icon, Converter={x:Static StringConverters.IsNotNullOrEmpty}}"
+                         FontSize="17"
+                         Width="24"
+                         TextAlignment="Center"
+                         VerticalAlignment="Center" />
+              <TextBlock Text="{Binding Name}"
+                         Padding="0,2"
+                         FontSize="{Binding LabelFontSize}"
+                         FontWeight="{Binding IsLabelBold, Converter={x:Static vm:BoolToFontWeightConverter.Instance}}"
+                         VerticalAlignment="Center" />
+            </StackPanel>
+          </TreeDataTemplate>
+        </TreeView.ItemTemplate>
+
+      </TreeView>
+
+    </DockPanel>
+
+</UserControl>

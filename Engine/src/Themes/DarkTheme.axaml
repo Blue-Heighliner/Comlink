@@ -1,0 +1,145 @@
+<Styles xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        x:Class="BlueHeighliner.Comlink.Engine.Themes.DarkTheme">
+  <Styles.Resources>
+    <!-- Core Colors -->
+    <Color x:Key="PrimaryBgColor">#1E1E1E</Color>
+    <Color x:Key="SidebarBgColor">#252526</Color>
+    <Color x:Key="TitleBarBgColor">#2D2D30</Color>
+    <Color x:Key="PanelBgColor">#252526</Color>
+    <Color x:Key="InputBgColor">#3C3C3C</Color>
+    <Color x:Key="BorderColor">#3E3E42</Color>
+    <Color x:Key="HoverColor">#2A2D2E</Color>
+    <Color x:Key="SelectedBgColor">#094771</Color>
+    <Color x:Key="PrimaryTextColor">#CCCCCC</Color>
+    <Color x:Key="DimTextColor">#858585</Color>
+    <Color x:Key="AccentColor">#007ACC</Color>
+    <Color x:Key="DangerColor">#F44336</Color>
+    <Color x:Key="SuccessColor">#4CAF50</Color>
+    <Color x:Key="WindowControlHoverColor">#3E3E42</Color>
+    <Color x:Key="WindowCloseHoverColor">#E81123</Color>
+
+    <!-- Brushes -->
+    <SolidColorBrush x:Key="PrimaryBg" Color="{StaticResource PrimaryBgColor}" />
+    <SolidColorBrush x:Key="SidebarBg" Color="{StaticResource SidebarBgColor}" />
+    <SolidColorBrush x:Key="TitleBarBg" Color="{StaticResource TitleBarBgColor}" />
+    <SolidColorBrush x:Key="PanelBg" Color="{StaticResource PanelBgColor}" />
+    <SolidColorBrush x:Key="InputBg" Color="{StaticResource InputBgColor}" />
+    <SolidColorBrush x:Key="BorderBrush" Color="{StaticResource BorderColor}" />
+    <SolidColorBrush x:Key="PrimaryText" Color="{StaticResource PrimaryTextColor}" />
+    <SolidColorBrush x:Key="DimText" Color="{StaticResource DimTextColor}" />
+    <SolidColorBrush x:Key="AccentBrush" Color="{StaticResource AccentColor}" />
+    <SolidColorBrush x:Key="HoverBrush" Color="{StaticResource HoverColor}" />
+    <SolidColorBrush x:Key="SelectedBg" Color="{StaticResource SelectedBgColor}" />
+    <SolidColorBrush x:Key="WindowControlHoverBrush" Color="{StaticResource WindowControlHoverColor}" />
+    <SolidColorBrush x:Key="WindowCloseHoverBrush" Color="{StaticResource WindowCloseHoverColor}" />
+  </Styles.Resources>
+
+  <!-- Text -->
+  <Style Selector="TextBlock">
+    <Setter Property="Foreground" Value="{StaticResource PrimaryText}" />
+    <Setter Property="FontFamily" Value="Segoe UI, SF Pro Display, Ubuntu, sans-serif" />
+  </Style>
+
+  <!-- TextBox -->
+  <Style Selector="TextBox">
+    <Setter Property="Background" Value="{StaticResource InputBg}" />
+    <Setter Property="Foreground" Value="{StaticResource PrimaryText}" />
+    <Setter Property="BorderBrush" Value="{StaticResource BorderBrush}" />
+    <Setter Property="BorderThickness" Value="1" />
+    <Setter Property="Padding" Value="6,4" />
+    <Setter Property="CaretBrush" Value="{StaticResource PrimaryText}" />
+    <Setter Property="VerticalContentAlignment" Value="Center" />
+  </Style>
+
+  <!-- Button -->
+  <Style Selector="Button">
+    <Setter Property="Background" Value="Transparent" />
+    <Setter Property="Foreground" Value="{StaticResource PrimaryText}" />
+    <Setter Property="BorderThickness" Value="0" />
+    <Setter Property="Padding" Value="10,4" />
+    <Setter Property="Cursor" Value="Hand" />
+  </Style>
+  <Style Selector="Button:pointerover /template/ ContentPresenter">
+    <Setter Property="Background" Value="{StaticResource HoverBrush}" />
+  </Style>
+
+  <!-- Accent Button -->
+  <Style Selector="Button.accent">
+    <Setter Property="Background" Value="{StaticResource AccentBrush}" />
+    <Setter Property="Foreground" Value="White" />
+    <Setter Property="Padding" Value="14,6" />
+  </Style>
+
+  <!-- TitleBar Button -->
+  <Style Selector="Button.titlebar-action">
+    <Setter Property="FontSize" Value="13" />
+    <Setter Property="FontWeight" Value="SemiBold" />
+    <Setter Property="Padding" Value="12,4" />
+    <Setter Property="Height" Value="32" />
+    <Setter Property="VerticalAlignment" Value="Center" />
+    <Setter Property="VerticalContentAlignment" Value="Center" />
+  </Style>
+  <Style Selector="Button.titlebar-action:pointerover /template/ ContentPresenter">
+    <Setter Property="Background" Value="{StaticResource WindowControlHoverBrush}" />
+  </Style>
+
+  <!-- Window Control Buttons -->
+  <Style Selector="Button.winctrl">
+    <Setter Property="Width" Value="46" />
+    <Setter Property="Height" Value="32" />
+    <Setter Property="Padding" Value="0" />
+    <Setter Property="FontSize" Value="16" />
+    <Setter Property="HorizontalContentAlignment" Value="Center" />
+    <Setter Property="VerticalContentAlignment" Value="Center" />
+  </Style>
+  <Style Selector="Button.winctrl:pointerover /template/ ContentPresenter">
+    <Setter Property="Background" Value="{StaticResource WindowControlHoverBrush}" />
+  </Style>
+  <Style Selector="Button.winctrl.close:pointerover /template/ ContentPresenter">
+    <Setter Property="Background" Value="{StaticResource WindowCloseHoverBrush}" />
+  </Style>
+
+  <!-- ListBox -->
+  <Style Selector="ListBox">
+    <Setter Property="Background" Value="Transparent" />
+    <Setter Property="BorderThickness" Value="0" />
+    <Setter Property="Padding" Value="0" />
+  </Style>
+  <Style Selector="ListBoxItem">
+    <Setter Property="Padding" Value="10,6" />
+    <Setter Property="Background" Value="Transparent" />
+  </Style>
+  <Style Selector="ListBoxItem:selected /template/ ContentPresenter">
+    <Setter Property="Background" Value="{StaticResource SelectedBg}" />
+  </Style>
+  <Style Selector="ListBoxItem:pointerover /template/ ContentPresenter">
+    <Setter Property="Background" Value="{StaticResource HoverBrush}" />
+  </Style>
+
+  <!-- TreeView -->
+  <Style Selector="TreeView">
+    <Setter Property="Background" Value="Transparent" />
+    <Setter Property="BorderThickness" Value="0" />
+    <Setter Property="Padding" Value="0" />
+  </Style>
+  <Style Selector="TreeViewItem">
+    <Setter Property="Padding" Value="4,3" />
+    <Setter Property="Background" Value="Transparent" />
+  </Style>
+  <Style Selector="TreeViewItem:selected /template/ Border#PART_LayoutRoot">
+    <Setter Property="Background" Value="{StaticResource SelectedBg}" />
+  </Style>
+
+  <!-- ScrollBar -->
+  <Style Selector="ScrollBar">
+    <Setter Property="Background" Value="Transparent" />
+  </Style>
+
+  <!-- Separator -->
+  <Style Selector="Separator">
+    <Setter Property="Background" Value="{StaticResource BorderBrush}" />
+    <Setter Property="Height" Value="1" />
+    <Setter Property="Margin" Value="0,4" />
+  </Style>
+</Styles>

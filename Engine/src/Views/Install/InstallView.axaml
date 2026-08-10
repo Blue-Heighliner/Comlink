@@ -1,0 +1,59 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:vm="using:BlueHeighliner.Comlink.Engine.ViewModels.Install"
+             x:Class="BlueHeighliner.Comlink.Engine.Views.Install.InstallView"
+             x:DataType="vm:InstallViewModel"
+             Background="#1E1E1E">
+
+  <Panel>
+    <Border HorizontalAlignment="Center"
+            VerticalAlignment="Center"
+            Background="#252526"
+            CornerRadius="8"
+            Padding="40,36"
+            Width="420"
+            BorderBrush="#3E3E42"
+            BorderThickness="1">
+
+      <StackPanel Spacing="20">
+
+        <!-- Site code input -->
+        <TextBox x:Name="SiteCodeInput"
+                 Text="{Binding SiteCode}"
+                 Watermark="Enter site code..."
+                 FontSize="14"
+                 Height="36"
+                 TextAlignment="Center"
+                 VerticalContentAlignment="Center" />
+
+        <!-- Error message -->
+        <TextBlock Text="{Binding ErrorMessage}"
+                   IsVisible="{Binding ErrorMessage, Converter={x:Static StringConverters.IsNotNullOrEmpty}}"
+                   Foreground="#F44336"
+                   FontSize="13"
+                   TextWrapping="Wrap" />
+
+        <!-- Install button -->
+        <Button Classes="accent"
+                Content="INSTALL"
+                Command="{Binding InstallCommand}"
+                IsEnabled="{Binding !IsLoading}"
+                HorizontalAlignment="Stretch"
+                HorizontalContentAlignment="Center"
+                VerticalContentAlignment="Center"
+                Height="38"
+                FontWeight="SemiBold"
+                FontSize="13" />
+
+        <!-- Loading indicator -->
+        <TextBlock Text="Connecting..."
+                   IsVisible="{Binding IsLoading}"
+                   Foreground="#858585"
+                   FontSize="13"
+                   HorizontalAlignment="Center" />
+
+      </StackPanel>
+    </Border>
+  </Panel>
+
+</UserControl>

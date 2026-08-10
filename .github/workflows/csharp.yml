@@ -1,0 +1,56 @@
+name: C#
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  release:
+    types: [published]
+  workflow_dispatch:
+
+jobs:
+  build-and-test:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: "10.0.x"
+
+      - name: Build
+        run: dotnet build
+
+      - name: Test
+        run: dotnet test Tests/Tests.csproj --configuration Debug
+
+  publish:
+    needs: build-and-test
+    if: github.event_name == 'release' || github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: "10.0.x"
+
+      - name: Pack
+        # GeneratePackageOnBuild (Engine/Engine.csproj) is only meant to fire from `dotnet build`;
+        # combined with an explicit `dotnet pack` invocation it conflicts with `pack`'s own
+        # Build-then-Pack target ordering and the build never runs (NU5026: DLL not found). Disabling
+        # it here lets `dotnet pack`'s own wiring build first as normal.
+        run: dotnet pack Engine/Engine.csproj --configuration Release --output nupkgs -p:GeneratePackageOnBuild=false
+
+      - name: Push to GitHub Packages
+        run: >
+          dotnet nuget push "nupkgs/*.nupkg"
+          --source "https://nuget.pkg.github.com/${{ github.repository_owner }}/index.json"
+          --api-key ${{ secrets.GITHUB_TOKEN }}
+          --skip-duplicate

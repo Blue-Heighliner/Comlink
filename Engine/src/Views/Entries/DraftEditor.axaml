@@ -1,0 +1,164 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:vm="using:BlueHeighliner.Comlink.Engine.ViewModels.Entries"
+             xmlns:avaloniaEdit="clr-namespace:AvaloniaEdit;assembly=AvaloniaEdit"
+             x:Class="BlueHeighliner.Comlink.Engine.Views.Entries.DraftEditor"
+             x:DataType="vm:DraftViewModel"
+             Background="#1E1E1E">
+
+  <DockPanel Margin="24,20">
+
+    <!-- Toolbar -->
+    <Border DockPanel.Dock="Top"
+            BorderBrush="#3E3E42"
+            BorderThickness="0,0,0,1"
+            Padding="0,0,0,10"
+            Margin="0,0,0,16">
+      <DockPanel>
+        <StackPanel DockPanel.Dock="Right"
+                    Orientation="Horizontal"
+                    Spacing="8"
+                    VerticalAlignment="Center">
+          <TextBlock Text="{Binding StatusMessage}"
+                     FontSize="12"
+                     Foreground="#858585"
+                     VerticalAlignment="Center" />
+          <Button Classes="accent"
+                  Content="SAVE"
+                  Command="{Binding SaveCommand}"
+                  IsEnabled="{Binding !IsSaving}"
+                  FontWeight="SemiBold"
+                  FontSize="12" />
+          <Button Classes="accent"
+                  Content="SEND"
+                  Command="{Binding SendCommand}"
+                  IsEnabled="{Binding !IsSaving}"
+                  FontWeight="SemiBold"
+                  FontSize="12"
+                  IsVisible="{Binding !IsSent}"
+                  Background="#1565C0" />
+          <TextBlock Text="SENT"
+                     IsVisible="{Binding IsSent}"
+                     Foreground="#4CAF50"
+                     FontSize="12"
+                     FontWeight="SemiBold"
+                     VerticalAlignment="Center" />
+        </StackPanel>
+        <StackPanel Orientation="Horizontal"
+                    Spacing="8"
+                    VerticalAlignment="Center">
+          <TextBlock Text="DRAFT"
+                     FontSize="11"
+                     FontWeight="SemiBold"
+                     Foreground="#858585"
+                     LetterSpacing="1"
+                     VerticalAlignment="Center" />
+          <Button x:Name="AddFillInButton"
+                  Content="FILL-IN"
+                  IsVisible="{Binding !IsSent}"
+                  Click="OnAddFillInClick"
+                  FontSize="11"
+                  FontWeight="SemiBold"
+                  Foreground="#858585"
+                  Padding="8,4"
+                  Margin="0,0,8,0" />
+        </StackPanel>
+      </DockPanel>
+    </Border>
+
+    <!-- Subject -->
+    <TextBox DockPanel.Dock="Top"
+             Text="{Binding Subject}"
+             Watermark="Subject"
+             IsReadOnly="{Binding IsSent}"
+             FontSize="18"
+             FontWeight="SemiBold"
+             Background="Transparent"
+             BorderThickness="0"
+             Padding="0,4,0,4"
+             Margin="0,0,0,12" />
+
+    <!-- Addresses -->
+    <Border DockPanel.Dock="Top"
+            BorderBrush="#3E3E42"
+            BorderThickness="0,0,0,1"
+            Margin="0,0,0,12"
+            Padding="0,0,0,12">
+      <StackPanel Spacing="6">
+
+        <!-- Existing addresses -->
+        <ItemsControl ItemsSource="{Binding Addresses}">
+          <ItemsControl.ItemTemplate>
+            <DataTemplate>
+              <Grid ColumnDefinitions="60,*,Auto" Margin="0,2">
+                <Border Grid.Column="0"
+                        Background="#3C3C3C"
+                        CornerRadius="3"
+                        Padding="6,2"
+                        HorizontalAlignment="Left">
+                  <TextBlock Text="{Binding Type}"
+                             FontSize="11"
+                             FontWeight="SemiBold"
+                             Foreground="#858585" />
+                </Border>
+                <TextBlock Grid.Column="1"
+                           Text="{Binding SiteName}"
+                           FontSize="13"
+                           Foreground="#CCCCCC"
+                           VerticalAlignment="Center"
+                           Margin="8,0" />
+                <Button Grid.Column="2"
+                        Content="×"
+                        Command="{Binding $parent[UserControl].DataContext.RemoveAddressCommand}"
+                        CommandParameter="{Binding}"
+                        IsVisible="{Binding $parent[UserControl].DataContext.IsSent, Converter={x:Static BoolConverters.Not}}"
+                        FontSize="14"
+                        Padding="4,0"
+                        Foreground="#858585" />
+              </Grid>
+            </DataTemplate>
+          </ItemsControl.ItemTemplate>
+        </ItemsControl>
+
+        <!-- Add address row -->
+        <Grid ColumnDefinitions="80,*,Auto"
+              IsVisible="{Binding !IsSent}"
+              Margin="0,4,0,0">
+          <ComboBox Grid.Column="0"
+                    ItemsSource="{Binding AddressTypes}"
+                    SelectedItem="{Binding NewAddressType}"
+                    Background="#3C3C3C"
+                    BorderThickness="0"
+                    FontSize="12"
+                    Height="30" />
+          <AutoCompleteBox Grid.Column="1"
+                           x:Name="SiteInput"
+                           Text="{Binding NewAddressSite}"
+                           Watermark="Site name..."
+                           ItemsSource="{Binding AllSiteNames}"
+                           FilterMode="StartsWith"
+                           MinimumPrefixLength="1"
+                           FontSize="13"
+                           Margin="8,0"
+                           Height="30" />
+          <Button Grid.Column="2"
+                  Content="Add"
+                  Command="{Binding AddAddressCommand}"
+                  Padding="10,4"
+                  FontSize="12" />
+        </Grid>
+      </StackPanel>
+    </Border>
+
+    <!-- Body: single AvaloniaEdit TextEditor with fill-ins as inline objects (fills remaining space) -->
+    <avaloniaEdit:TextEditor x:Name="BodyEditor"
+                             IsReadOnly="{Binding IsSent}"
+                             FontFamily="avares://BlueHeighliner.Comlink.Engine/Assets/Fonts/DejaVuSansMono.ttf#DejaVu Sans Mono"
+                             FontSize="16"
+                             WordWrap="True"
+                             ShowLineNumbers="False"
+                             HorizontalScrollBarVisibility="Disabled"
+                             VerticalScrollBarVisibility="Auto" />
+
+  </DockPanel>
+</UserControl>

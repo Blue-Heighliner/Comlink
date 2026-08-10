@@ -1,0 +1,62 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             x:Class="BlueHeighliner.Comlink.Engine.Views.Controls.TitleBar"
+             Background="#2D2D30"
+             Height="32">
+
+  <Grid ColumnDefinitions="Auto,*,Auto,Auto">
+
+    <!-- Left: Action buttons -->
+    <StackPanel x:Name="ActionButtonsPanel"
+                Grid.Column="0"
+                Orientation="Horizontal"
+                VerticalAlignment="Center"
+                Margin="4,0">
+      <Button x:Name="DraftButton"
+              Classes="titlebar-action"
+              Content="NEW DRAFT"
+              Foreground="#CCCCCC"
+              Click="OnDraftClick" />
+      <Button x:Name="NoteButton"
+              Classes="titlebar-action"
+              Content="NEW NOTE"
+              Foreground="#CCCCCC"
+              Click="OnNoteClick" />
+    </StackPanel>
+
+    <!-- Center: Drag area (transparent, fills space) -->
+    <Border Grid.Column="1"
+            Background="Transparent"
+            PointerPressed="OnDragAreaPressed" />
+
+    <!-- Right side: site name + version -->
+    <TextBlock x:Name="SiteInfoText"
+               Grid.Column="2"
+               FontSize="12"
+               Foreground="#AAAAAA"
+               VerticalAlignment="Center"
+               Margin="0,0,8,0" />
+
+    <!-- Window controls -->
+    <StackPanel Grid.Column="3"
+                Orientation="Horizontal"
+                Spacing="0">
+      <Button x:Name="MinimizeButton"
+              Classes="winctrl"
+              Content="&#x2212;"
+              ToolTip.Tip="Minimize"
+              Click="OnMinimize" />
+      <Button x:Name="MaximizeButton"
+              Classes="winctrl"
+              Content="&#x25A1;"
+              ToolTip.Tip="Maximize"
+              Click="OnMaximize" />
+      <Button x:Name="CloseButton"
+              Classes="winctrl close"
+              Content="&#x2715;"
+              ToolTip.Tip="Close"
+              Click="OnClose" />
+    </StackPanel>
+
+  </Grid>
+</UserControl>

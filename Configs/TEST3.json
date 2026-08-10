@@ -1,0 +1,13 @@
+{
+  "SiteName": "TEST3",
+  "PeerPort": 50040,
+  "DataFolder": "@TEST3",
+  "PeerCertificateName": "disable",
+  "Sites": {
+    "TEST1": { "IpAddress": "127.0.0.1", "Port": 50020 },
+    "TEST2": { "IpAddress": "127.0.0.1", "Port": 50030 }
+  },
+  "SiteGroups": {
+    "TEST": [ "TEST1", "TEST2", "TEST3" ]
+  }
+}

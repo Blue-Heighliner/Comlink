@@ -1,0 +1,101 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:vm="using:BlueHeighliner.Comlink.Engine.ViewModels"
+             x:Class="BlueHeighliner.Comlink.Engine.Views.Controls.EntryBar"
+             x:DataType="vm:EntryBarViewModel"
+             Background="#252526"
+             BorderBrush="#3E3E42"
+             BorderThickness="1,0,1,0"
+             MinWidth="200">
+
+  <DockPanel>
+
+    <!-- Pagination Header -->
+    <Border DockPanel.Dock="Top"
+            BorderBrush="#3E3E42"
+            BorderThickness="0,0,0,1"
+            Padding="8,4">
+      <Grid ColumnDefinitions="Auto,*,Auto">
+        <Button Grid.Column="0"
+                Content="&lt; Prev"
+                Command="{Binding PrevPageCommand}"
+                IsEnabled="{Binding CanGoPrev}"
+                FontSize="13"
+                Padding="6,2" />
+        <TextBlock Grid.Column="1"
+                   HorizontalAlignment="Center"
+                   VerticalAlignment="Center"
+                   FontSize="13"
+                   Foreground="#858585">
+          <TextBlock.Text>
+            <MultiBinding StringFormat="{}{0} / {1}">
+              <Binding Path="CurrentPage" />
+              <Binding Path="TotalPages" />
+            </MultiBinding>
+          </TextBlock.Text>
+        </TextBlock>
+        <Button Grid.Column="2"
+                Content="Next &gt;"
+                Command="{Binding NextPageCommand}"
+                IsEnabled="{Binding CanGoNext}"
+                FontSize="13"
+                Padding="6,2" />
+      </Grid>
+    </Border>
+
+    <!-- Sort toggle header (Drafts/Notes only) -->
+    <Border DockPanel.Dock="Top"
+            IsVisible="{Binding ShowSortToggle}"
+            BorderBrush="#3E3E42"
+            BorderThickness="0,0,0,1"
+            Padding="8,4">
+      <Button Content="{Binding IsAlphabeticalSort, Converter={x:Static vm:SortLabelValueConverter.Instance}}"
+              Command="{Binding ToggleSortCommand}"
+              Background="Transparent"
+              Foreground="#858585"
+              FontSize="11"
+              Padding="4,2" />
+    </Border>
+
+    <!-- Entry List -->
+    <ListBox x:Name="EntryList"
+             ItemsSource="{Binding Entries}"
+             SelectedItem="{Binding SelectedEntry, Mode=OneWay}"
+             SelectionChanged="OnEntrySelectionChanged"
+             Background="Transparent"
+             BorderThickness="0">
+
+      <ListBox.ItemTemplate>
+        <DataTemplate DataType="{x:Type vm:EntryItemViewModel}">
+          <Grid ColumnDefinitions="*,Auto" Margin="0,2">
+            <StackPanel Grid.Column="0" Margin="0,0,8,0">
+              <TextBlock Text="{Binding Title}"
+                         FontSize="13"
+                         TextTrimming="CharacterEllipsis"
+                         ToolTip.Tip="{Binding Title}" />
+              <TextBlock Text="{Binding SecondaryText}"
+                         FontSize="12"
+                         TextTrimming="CharacterEllipsis"
+                         Foreground="#CCCCCC"
+                         IsVisible="{Binding SecondaryText, Converter={x:Static StringConverters.IsNotNullOrEmpty}}" />
+            </StackPanel>
+            <StackPanel Grid.Column="1" HorizontalAlignment="Right">
+              <TextBlock Text="{Binding TimeText}"
+                         FontSize="11"
+                         Foreground="#858585"
+                         HorizontalAlignment="Right"
+                         IsVisible="{Binding TimeText, Converter={x:Static StringConverters.IsNotNullOrEmpty}}" />
+              <TextBlock Text="{Binding StatusText}"
+                         FontSize="11"
+                         Foreground="{Binding StatusColorHex, Converter={x:Static vm:ColorHexToBrushConverter.Instance}}"
+                         HorizontalAlignment="Right"
+                         IsVisible="{Binding StatusText, Converter={x:Static StringConverters.IsNotNullOrEmpty}}" />
+            </StackPanel>
+          </Grid>
+        </DataTemplate>
+      </ListBox.ItemTemplate>
+
+    </ListBox>
+
+  </DockPanel>
+</UserControl>

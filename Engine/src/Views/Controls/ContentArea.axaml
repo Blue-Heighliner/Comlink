@@ -1,0 +1,49 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:vm="using:BlueHeighliner.Comlink.Engine.ViewModels"
+             xmlns:entryVm="using:BlueHeighliner.Comlink.Engine.ViewModels.Entries"
+             xmlns:entryViews="using:BlueHeighliner.Comlink.Engine.Views.Entries"
+             x:Class="BlueHeighliner.Comlink.Engine.Views.Controls.ContentArea"
+             x:DataType="vm:ContentAreaViewModel"
+             Background="#1E1E1E">
+
+  <Panel>
+
+    <!-- Home screen -->
+    <TextBlock Text="{Binding HomeText}"
+               IsVisible="{Binding IsHomeVisible}"
+               HorizontalAlignment="Center"
+               VerticalAlignment="Center"
+               FontSize="18"
+               Foreground="#5A5A5A"
+               TextAlignment="Center"
+               Margin="40" />
+
+    <!-- Active entry content -->
+    <ContentControl Content="{Binding ActiveContent}"
+                    IsVisible="{Binding !IsHomeVisible}"
+                    HorizontalContentAlignment="Stretch"
+                    VerticalContentAlignment="Stretch">
+      <ContentControl.DataTemplates>
+
+        <DataTemplate DataType="{x:Type entryVm:MessageViewModel}">
+          <entryViews:MessageView DataContext="{Binding}" />
+        </DataTemplate>
+
+        <DataTemplate DataType="{x:Type entryVm:DraftViewModel}">
+          <entryViews:DraftEditor DataContext="{Binding}" />
+        </DataTemplate>
+
+        <DataTemplate DataType="{x:Type entryVm:NoteViewModel}">
+          <entryViews:NoteEditor DataContext="{Binding}" />
+        </DataTemplate>
+
+        <DataTemplate DataType="{x:Type entryVm:ActivityLogViewModel}">
+          <entryViews:ActivityLogView DataContext="{Binding}" />
+        </DataTemplate>
+
+      </ContentControl.DataTemplates>
+    </ContentControl>
+
+  </Panel>
+</UserControl>

@@ -1,0 +1,15 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             x:Class="BlueHeighliner.Comlink.Engine.Views.Controls.EnvironmentBanner">
+
+  <Border x:Name="BannerBorder" Height="24" Padding="12,0" PointerPressed="OnBannerPressed">
+    <TextBlock x:Name="TitleText"
+               VerticalAlignment="Center"
+               HorizontalAlignment="Center"
+               FontSize="12"
+               FontWeight="SemiBold"
+               Foreground="White"
+               LetterSpacing="2" />
+  </Border>
+
+</UserControl>

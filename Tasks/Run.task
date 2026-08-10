@@ -1,0 +1,2 @@
+script TEST1
+	run dotnet run --project Sample -- --config Configs/TEST1.json

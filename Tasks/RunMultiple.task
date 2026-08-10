@@ -1,0 +1,10 @@
+script TEST1
+	run dotnet run --project Sample -- --config Configs/TEST1.json
+	
+script TEST2
+	wait 2
+	run dotnet run --project Sample -- --config Configs/TEST2.json
+	
+script TEST3
+	wait 4
+	run dotnet run --project Sample -- --config Configs/TEST3.json

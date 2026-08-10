@@ -1,0 +1,71 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:vm="using:BlueHeighliner.Comlink.Engine.ViewModels.Entries"
+             x:Class="BlueHeighliner.Comlink.Engine.Views.Entries.ActivityLogView"
+             x:DataType="vm:ActivityLogViewModel"
+             Background="#1E1E1E">
+
+  <DockPanel Margin="24,20">
+
+    <!-- Header -->
+    <Border DockPanel.Dock="Top"
+            BorderBrush="#3E3E42"
+            BorderThickness="0,0,0,1"
+            Padding="0,0,0,12"
+            Margin="0,0,0,8">
+      <StackPanel Spacing="4">
+        <TextBlock Text="ACTIVITY"
+                   FontSize="11"
+                   FontWeight="SemiBold"
+                   Foreground="#5A5A5A"
+                   LetterSpacing="1" />
+        <TextBlock Text="{Binding Date}"
+                   FontSize="20"
+                   FontWeight="SemiBold"
+                   Foreground="#CCCCCC" />
+      </StackPanel>
+    </Border>
+
+    <!-- Table header -->
+    <Grid DockPanel.Dock="Top"
+          ColumnDefinitions="155,*"
+          Margin="0,0,0,4">
+      <TextBlock Grid.Column="0"
+                 Text="TIME"
+                 FontSize="11"
+                 FontWeight="SemiBold"
+                 Foreground="#5A5A5A"
+                 LetterSpacing="1" />
+      <TextBlock Grid.Column="1"
+                 Text="EVENT"
+                 FontSize="11"
+                 FontWeight="SemiBold"
+                 Foreground="#5A5A5A"
+                 LetterSpacing="1" />
+    </Grid>
+
+    <!-- Table rows -->
+    <ScrollViewer>
+      <ItemsControl ItemsSource="{Binding Events}">
+        <ItemsControl.ItemTemplate>
+          <DataTemplate DataType="{x:Type vm:ActivityEventRow}">
+            <Grid ColumnDefinitions="155,*" Margin="0,3">
+              <TextBlock Grid.Column="0"
+                         Text="{Binding TimeText}"
+                         FontSize="13"
+                         Foreground="#858585"
+                         VerticalAlignment="Top" />
+              <TextBlock Grid.Column="1"
+                         Text="{Binding Message}"
+                         FontSize="13"
+                         Foreground="#CCCCCC"
+                         TextWrapping="Wrap"
+                         VerticalAlignment="Top" />
+            </Grid>
+          </DataTemplate>
+        </ItemsControl.ItemTemplate>
+      </ItemsControl>
+    </ScrollViewer>
+
+  </DockPanel>
+</UserControl>

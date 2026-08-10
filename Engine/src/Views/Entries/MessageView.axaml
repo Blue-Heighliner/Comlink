@@ -1,0 +1,116 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:vm="using:BlueHeighliner.Comlink.Engine.ViewModels.Entries"
+             xmlns:converters="using:BlueHeighliner.Comlink.Engine.ViewModels"
+             x:Class="BlueHeighliner.Comlink.Engine.Views.Entries.MessageView"
+             x:DataType="vm:MessageViewModel"
+             Background="#1E1E1E">
+
+  <DockPanel Margin="24,20">
+
+    <!-- Header -->
+    <Border DockPanel.Dock="Top"
+            BorderBrush="#3E3E42"
+            BorderThickness="0,0,0,1"
+            Padding="0,0,0,12"
+            Margin="0,0,0,16">
+      <StackPanel Spacing="6">
+        <TextBlock Text="{Binding Subject}"
+                   FontSize="20"
+                   FontWeight="SemiBold"
+                   Foreground="#CCCCCC"
+                   TextWrapping="Wrap" />
+        <Grid ColumnDefinitions="Auto,*" RowDefinitions="Auto,Auto,Auto,Auto">
+          <TextBlock Grid.Row="0" Grid.Column="0" Text="FROM" FontSize="11" Foreground="#5A5A5A" FontWeight="SemiBold" LetterSpacing="1" Width="60" VerticalAlignment="Center" />
+          <TextBlock Grid.Row="0" Grid.Column="1" Text="{Binding FromSite}" FontSize="13" Foreground="#CCCCCC" VerticalAlignment="Center" />
+          <TextBlock Grid.Row="1" Grid.Column="0" Text="TO" FontSize="11" Foreground="#5A5A5A" FontWeight="SemiBold" LetterSpacing="1" Width="60" VerticalAlignment="Center" Margin="0,4,0,0" />
+          <TextBlock Grid.Row="1" Grid.Column="1" Text="{Binding ToList}" FontSize="13" Foreground="#CCCCCC" VerticalAlignment="Center" Margin="0,4,0,0" />
+          <TextBlock Grid.Row="2" Grid.Column="0" Text="CC" FontSize="11" Foreground="#5A5A5A" FontWeight="SemiBold" LetterSpacing="1" Width="60" VerticalAlignment="Center" Margin="0,4,0,0"
+                     IsVisible="{Binding CcList, Converter={x:Static StringConverters.IsNotNullOrEmpty}}" />
+          <TextBlock Grid.Row="2" Grid.Column="1" Text="{Binding CcList}" FontSize="13" Foreground="#CCCCCC" VerticalAlignment="Center" Margin="0,4,0,0"
+                     IsVisible="{Binding CcList, Converter={x:Static StringConverters.IsNotNullOrEmpty}}" />
+          <TextBlock Grid.Row="3" Grid.Column="0" Text="DATE" FontSize="11" Foreground="#5A5A5A" FontWeight="SemiBold" LetterSpacing="1" Width="60" VerticalAlignment="Center" Margin="0,4,0,0" />
+          <TextBlock Grid.Row="3" Grid.Column="1" Text="{Binding ReceivedAt, StringFormat='{}{0:MMM d, yyyy  HH:mm}'}" FontSize="13" Foreground="#858585" VerticalAlignment="Center" Margin="0,4,0,0" />
+        </Grid>
+      </StackPanel>
+    </Border>
+
+    <!-- Delivery Status (collapsible) -->
+    <Border DockPanel.Dock="Top"
+            IsVisible="{Binding HasDeliveryStatuses}"
+            BorderBrush="#3E3E42"
+            BorderThickness="0,0,0,1"
+            Padding="0,0,0,12"
+            Margin="0,0,0,16">
+      <StackPanel Spacing="0">
+
+        <!-- Toggle header -->
+        <Button Command="{Binding ToggleDeliveryCommand}"
+                Background="Transparent"
+                BorderThickness="0"
+                Padding="0"
+                HorizontalAlignment="Stretch"
+                HorizontalContentAlignment="Stretch"
+                Cursor="Hand">
+          <Grid ColumnDefinitions="*,Auto,16" Margin="0,0,0,4">
+            <TextBlock Grid.Column="0"
+                       Text="DELIVERY STATUS"
+                       FontSize="11"
+                       Foreground="#5A5A5A"
+                       FontWeight="SemiBold"
+                       LetterSpacing="1"
+                       VerticalAlignment="Center" />
+            <TextBlock Grid.Column="1"
+                       Text="{Binding OverallStatusText}"
+                       FontSize="11"
+                       FontWeight="SemiBold"
+                       Foreground="{Binding OverallStatus, Converter={x:Static converters:StatusForegroundConverter.Instance}}"
+                       VerticalAlignment="Center"
+                       Margin="8,0" />
+            <TextBlock Grid.Column="2"
+                       Text="{Binding DeliveryExpandIndicator}"
+                       FontSize="10"
+                       Foreground="#5A5A5A"
+                       VerticalAlignment="Center"
+                       HorizontalAlignment="Right" />
+          </Grid>
+        </Button>
+
+        <!-- Per-site rows (shown when expanded) -->
+        <ItemsControl ItemsSource="{Binding DeliveryStatuses}"
+                      IsVisible="{Binding IsDeliveryExpanded}"
+                      Margin="0,4,0,0">
+          <ItemsControl.ItemTemplate>
+            <DataTemplate DataType="{x:Type vm:DeliveryStatusRow}">
+              <Grid ColumnDefinitions="80,*" Margin="0,2">
+                <TextBlock Grid.Column="0"
+                           Text="{Binding StatusText}"
+                           FontSize="11"
+                           Foreground="{Binding Status, Converter={x:Static converters:StatusForegroundConverter.Instance}}"
+                           HorizontalAlignment="Right"
+                           VerticalAlignment="Center" />
+                <TextBlock Grid.Column="1"
+                           Text="{Binding DisplayName}"
+                           FontSize="13"
+                           Foreground="#CCCCCC"
+                           Margin="8,0,0,0" />
+              </Grid>
+            </DataTemplate>
+          </ItemsControl.ItemTemplate>
+        </ItemsControl>
+
+      </StackPanel>
+    </Border>
+
+    <!-- Body -->
+    <ScrollViewer>
+      <SelectableTextBlock Text="{Binding Body}"
+                          FontSize="14"
+                          Foreground="#CCCCCC"
+                          TextWrapping="Wrap"
+                          LineHeight="22"
+                          SelectionBrush="#094771" />
+    </ScrollViewer>
+
+  </DockPanel>
+</UserControl>

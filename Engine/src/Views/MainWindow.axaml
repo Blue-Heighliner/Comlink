@@ -1,0 +1,70 @@
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:vm="using:BlueHeighliner.Comlink.Engine.ViewModels"
+        xmlns:controls="using:BlueHeighliner.Comlink.Engine.Views.Controls"
+        xmlns:installViews="using:BlueHeighliner.Comlink.Engine.Views.Install"
+        x:Class="BlueHeighliner.Comlink.Engine.Views.MainWindow"
+        x:DataType="vm:MainViewModel"
+        Width="1280" Height="800"
+        MinWidth="900" MinHeight="500"
+        SystemDecorations="None"
+        Background="#1E1E1E"
+        TransparencyLevelHint="None"
+        WindowState="Maximized">
+
+  <Grid RowDefinitions="Auto,Auto,*">
+
+    <!-- Environment Banner (row 0) -->
+    <controls:EnvironmentBanner Grid.Row="0"
+                                Title="{Binding EnvironmentTitle}"
+                                BannerColor="{Binding EnvironmentColor}"
+                                IsVisible="{Binding EnvironmentTitle, Converter={x:Static StringConverters.IsNotNullOrEmpty}}" />
+
+    <!-- Custom Title Bar (row 1) -->
+    <controls:TitleBar Grid.Row="1"
+                       SiteName="{Binding SiteName}"
+                       AppVersion="{Binding AppVersion}"
+                       CreateDraftCommand="{Binding CreateDraftCommand}"
+                       CreateNoteCommand="{Binding CreateNoteCommand}"
+                       IsInstallScreenVisible="{Binding IsInstallScreenVisible}"
+                       IsKioskMode="{Binding IsKioskMode}" />
+
+    <!-- Main Content (row 2) -->
+    <Panel Grid.Row="2">
+
+      <!-- Install Screen -->
+      <installViews:InstallView DataContext="{Binding InstallView}"
+                                IsVisible="{Binding $parent[Window].DataContext.IsInstallScreenVisible}" />
+
+      <!-- Main 3-panel layout -->
+      <Grid IsVisible="{Binding !IsInstallScreenVisible}"
+            ColumnDefinitions="220,4,300,4,*">
+
+        <!-- Folder Bar -->
+        <controls:FolderBar Grid.Column="0"
+                            DataContext="{Binding FolderBar}" />
+
+        <!-- Splitter 1 -->
+        <GridSplitter Grid.Column="1"
+                      ResizeDirection="Columns"
+                      Background="#3E3E42"
+                      MinWidth="2" />
+
+        <!-- Entry Bar -->
+        <controls:EntryBar Grid.Column="2"
+                           DataContext="{Binding EntryBar}" />
+
+        <!-- Splitter 2 -->
+        <GridSplitter Grid.Column="3"
+                      ResizeDirection="Columns"
+                      Background="#3E3E42"
+                      MinWidth="2" />
+
+        <!-- Content Area -->
+        <controls:ContentArea Grid.Column="4"
+                              DataContext="{Binding ContentArea}" />
+      </Grid>
+    </Panel>
+
+  </Grid>
+</Window>
