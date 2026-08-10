@@ -79,8 +79,9 @@ When making changes that affect the interface wire format, peer protocol, data s
   dotnet build Engine/Engine.csproj -c Release
   ```
 
-  The resulting `.nupkg`/`.snupkg` land in `Engine/bin/Release/`. `dotnet pack -c Release` works the same way if you only want the package without a full build.
-- CI (`.github/workflows/csharp.yml`) builds and tests on every push/PR to `main`, and packs + publishes to GitHub Packages on a published GitHub Release or manual `workflow_dispatch`.
+  The resulting `.nupkg` lands in `Engine/bin/Release/`. `dotnet pack -c Release` works the same way if you only want the package without a full build.
+- CI (`.github/workflows/csharp.yml`) builds and tests on every push/PR to `main`, and packs + publishes to GitHub Packages on a published GitHub Release or manual `workflow_dispatch`. On an actual GitHub Release (not a manual `workflow_dispatch`), the `.nupkg` is also attached directly to the release as a downloadable asset.
+- **Single-file deployment**: `Engine/Engine.csproj` sets `<DebugType>embedded</DebugType>` for Release builds — deliberately, not an oversight. `Sample` publishes as a single-file self-contained deployment (`PublishSingleFile`/`SelfContained` in `Sample.csproj`); a `PublishSingleFile` bundle only packs the files the runtime actually needs to execute, and a separate portable `.pdb` for a referenced library like Engine is **not** one of them — it would be left behind as a loose file next to the single executable instead of being embedded in the bundle. Embedding debug symbols directly in `BlueHeighliner.Comlink.Engine.dll` avoids that, at the cost of `Engine`'s NuGet package having no meaningful separate symbol package (`IncludeSymbols`/`SymbolPackageFormat=snupkg` were deliberately left off the `PackageId` property group for this reason — a `.snupkg` built against an embedded-symbol DLL has no `.pdb` to include and is empty). Verify with `dotnet publish Sample/Sample.csproj -c Release -r <RID> -o <dir>` and confirm the output directory contains only the single executable (plus the harmless `BlueHeighliner.Comlink.Engine.xml` doc-comments file) — no stray `.pdb`.
 
 ## Versioning
 

@@ -11,6 +11,11 @@
   </PropertyGroup>
 
   <PropertyGroup Condition="'$(Configuration)' == 'Release'">
+    <!--
+      Embedded (not portable) debug symbols: Sample publishes as a single-file self-contained
+      deployment (PublishSingleFile) that references Engine, and a separate .pdb would remain a
+      loose file outside that bundle. Embedding keeps the whole deployment to one file.
+    -->
     <DebugType>embedded</DebugType>
   </PropertyGroup>
 
@@ -24,8 +29,6 @@
     <PackageReadmeFile>README.md</PackageReadmeFile>
     <RepositoryUrl>https://github.com/Blue-Heighliner/Comlink</RepositoryUrl>
     <PackageProjectUrl>https://github.com/Blue-Heighliner/Comlink</PackageProjectUrl>
-    <IncludeSymbols>true</IncludeSymbols>
-    <SymbolPackageFormat>snupkg</SymbolPackageFormat>
     <GeneratePackageOnBuild Condition="'$(Configuration)' == 'Release'">true</GeneratePackageOnBuild>
   </PropertyGroup>
 

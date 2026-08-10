@@ -32,7 +32,7 @@ jobs:
     if: github.event_name == 'release' || github.event_name == 'workflow_dispatch'
     runs-on: ubuntu-latest
     permissions:
-      contents: read
+      contents: write
       packages: write
     steps:
       - uses: actions/checkout@v4
@@ -54,3 +54,9 @@ jobs:
           --source "https://nuget.pkg.github.com/${{ github.repository_owner }}/index.json"
           --api-key ${{ secrets.GITHUB_TOKEN }}
           --skip-duplicate
+
+      - name: Upload release assets
+        if: github.event_name == 'release'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: gh release upload "${{ github.event.release.tag_name }}" nupkgs/*.nupkg
