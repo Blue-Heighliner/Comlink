@@ -20,7 +20,7 @@ A peer-to-peer messaging system built on .NET 10 and the [Open Frame Transport (
 
 ## Installing
 
-Engine is published as a single NuGet package covering both the core library and the Avalonia UI layer:
+Engine is published as a single NuGet package covering both the core library and the Avalonia UI layer. The Avalonia GUI is a required dependency of this package, not optional — a host can run Engine headless (no window shown, see [Docs/Architecture.md](Docs/Architecture.md#modes)), but Avalonia and its dependencies are always pulled in:
 
 ```sh
 dotnet add package BlueHeighliner.Comlink

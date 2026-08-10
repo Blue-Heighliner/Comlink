@@ -28,6 +28,8 @@ The engine runs in one of two modes selected at startup via `EngineMode`:
 
 Both modes run `PeerService` to accept and send peer-to-peer messages over [OFT](Oft.md), and both always run `InterfaceService`, hosting the local interface listener for external programs — see [Interface.md](Interface.md). The interface listener is not tied to Headless mode; it is active regardless of which mode the engine runs in.
 
+Headless mode does not remove the Avalonia dependency — Engine is a single assembly, so Avalonia and its packages are always loaded regardless of mode. `HeadlessMode` only controls whether `EngineApplication` shows a window (`AppBuilder...StartWithClassicDesktopLifetime`) or runs the `IHost` directly with no UI; it is not a build-time or package-level option.
+
 ## Component Map
 
 ```

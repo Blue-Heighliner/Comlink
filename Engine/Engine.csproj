@@ -23,7 +23,7 @@
     <PackageId>BlueHeighliner.Comlink</PackageId>
     <Version>0.1.0</Version>
     <Authors>Chris Markwardt</Authors>
-    <Description>A peer-to-peer messaging engine built on the Open Frame Transport (OFT) protocol, with an optional Avalonia desktop UI.</Description>
+    <Description>A peer-to-peer messaging engine built on the Open Frame Transport (OFT) protocol, with a built-in Avalonia desktop GUI. Avalonia is a required dependency of this package, not optional — it can be run headless (no window shown), but the GUI layer and its dependencies are always present.</Description>
     <PackageTags>comlink;messaging;peer-to-peer;oft;avalonia</PackageTags>
     <PackageLicenseExpression>MIT</PackageLicenseExpression>
     <PackageReadmeFile>README.md</PackageReadmeFile>

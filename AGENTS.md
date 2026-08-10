@@ -6,7 +6,7 @@ Guidance for AI agents working in this repository.
 
 Comlink is a peer-to-peer messaging system. The solution has three projects:
 
-- **Engine** — the whole engine, in one assembly: networking, data, services, ViewModels, and the Avalonia UI layer (Views, Themes, converters, `TextDocumentBodyDocument`). The only project that depends on Avalonia.
+- **Engine** — the whole engine, in one assembly: networking, data, services, ViewModels, and the Avalonia UI layer (Views, Themes, converters, `TextDocumentBodyDocument`). The only project that depends on Avalonia. The GUI is Avalonia-based and is **not optional** — Avalonia and its packages are a hard dependency of the `BlueHeighliner.Comlink` NuGet package and are always loaded, even in Headless mode (see [Modes](Docs/Architecture.md#modes)); `HeadlessMode` only skips showing a window, it does not remove Avalonia from the dependency graph.
 - **Sample** — host application. References Engine.
 - **Tests** — xUnit tests for Engine.
 
