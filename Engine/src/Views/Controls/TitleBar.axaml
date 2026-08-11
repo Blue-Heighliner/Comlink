@@ -4,7 +4,7 @@
              Background="#2D2D30"
              Height="32">
 
-  <Grid ColumnDefinitions="Auto,*,Auto,Auto">
+  <Grid ColumnDefinitions="Auto,*,Auto,Auto,Auto">
 
     <!-- Left: Action buttons -->
     <StackPanel x:Name="ActionButtonsPanel"
@@ -29,16 +29,33 @@
             Background="Transparent"
             PointerPressed="OnDragAreaPressed" />
 
-    <!-- Right side: site name + version -->
-    <TextBlock x:Name="SiteInfoText"
-               Grid.Column="2"
+    <!-- Alert box: shown while one or more alert messages are pending (unread) -->
+    <Border x:Name="AlertBox"
+            Grid.Column="2"
+            Background="#C0392B"
+            CornerRadius="3"
+            Padding="10,4"
+            Margin="0,0,8,0"
+            VerticalAlignment="Center"
+            IsVisible="False"
+            Cursor="Hand"
+            PointerPressed="OnAlertBoxPressed">
+      <TextBlock x:Name="AlertBoxText"
+                 FontWeight="Bold"
+                 FontSize="12"
+                 Foreground="White" />
+    </Border>
+
+    <!-- Right side: user name + version -->
+    <TextBlock x:Name="UserInfoText"
+               Grid.Column="3"
                FontSize="12"
                Foreground="#AAAAAA"
                VerticalAlignment="Center"
                Margin="0,0,8,0" />
 
     <!-- Window controls -->
-    <StackPanel Grid.Column="3"
+    <StackPanel Grid.Column="4"
                 Orientation="Horizontal"
                 Spacing="0">
       <Button x:Name="MinimizeButton"

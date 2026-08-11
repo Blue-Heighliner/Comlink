@@ -62,7 +62,7 @@ When making changes that affect the interface wire format, peer protocol, data s
 ### Tests
 - Tests live in `Tests/src/`. Use xUnit.
 - Do not mock the database — tests use a real `LiteDbContext` pointed at a temp directory (GUID-named under `%APPDATA%`). The `Dispose()` method deletes it.
-- `TestAppDataPathProvider` provides the isolated path. Use it in any test that needs `LiteDbContext` or `SiteService`.
+- `TestAppDataPathProvider` provides the isolated path. Use it in any test that needs `LiteDbContext` or `UserService`.
 - Do not add `#if DEBUG` guards. All features must work in Release configuration.
 - For UI changes, run and exercise the application headlessly using `xvfb-run`. Always target a virtual display — never the real/physical display.
 
@@ -103,16 +103,19 @@ If `--config` is omitted, all settings use their defaults (Client mode, default 
 ```json
 {
   "HeadlessMode":        false,
-  "SiteName":            null,
+  "UserName":            null,
   "PeerPort":            50021,
   "InterfacePort":       50020,
   "DataFolder":          null,
   "PeerCertificateName": null,
-  "Sites": {
-    "SITE-A": { "IpAddress": "192.168.1.10", "Port": 7890 }
+  "AlertText":           null,
+  "AlarmSoundSeconds":   null,
+  "QuickConfirmationEnabled": null,
+  "Users": {
+    "USER-A": { "IpAddress": "192.168.1.10", "Port": 7890 }
   },
-  "SiteGroups": {
-    "OPS": ["SITE-A", "SITE-B"]
+  "UserGroups": {
+    "OPS": ["USER-A", "USER-B"]
   }
 }
 ```
@@ -120,12 +123,15 @@ If `--config` is omitted, all settings use their defaults (Client mode, default 
 | Field | Type | Default | Description |
 |-------|------|---------|-------------|
 | `HeadlessMode` | bool | `false` | Run as a headless peer client instead of launching the GUI |
-| `SiteName` | string? | `null` | Debug site name override — skips `State.json` |
+| `UserName` | string? | `null` | Debug user name override — skips `State.json` |
 | `PeerPort` | int? | `null` | Peer TCP listen port (`null` = 50021) |
 | `InterfacePort` | int? | `null` | Interface TCP listen port (`null` = 50020; always active, in every mode) |
-| `DataFolder` | string? | `null` | Custom app data directory; defaults to `%APPDATA%\{AppName}`. A path starting with `@` is relative to that default (e.g. `@test/site` → `%APPDATA%\{AppName}\test\site`) |
-| `PeerCertificateName` | string? | `null` | TLS cert subject name for peer auth. `null`/absent = auto (`SITE-{siteName}`, throws if missing); `"disable"` = no auth; explicit name = use that cert (throws if missing). See `Docs/Config.md`. |
-| `Sites` | object | `{}` | Map of site name → `{ IpAddress, Port }` — overrides or defines site endpoints |
-| `SiteGroups` | object | `{}` | Map of group name → member list (site or group names); groups are addressable destinations and are expanded recursively on send |
+| `DataFolder` | string? | `null` | Custom app data directory; defaults to `%APPDATA%\{AppName}`. A path starting with `@` is relative to that default (e.g. `@test/user` → `%APPDATA%\{AppName}\test\user`) |
+| `PeerCertificateName` | string? | `null` | TLS cert subject name for peer auth. `null`/absent = auto (`USER-{userName}`, throws if missing); `"disable"` = no auth; explicit name = use that cert (throws if missing). See `Docs/Config.md`. |
+| `AlertText` | string? | `null` | Alert box text in the title bar while alarming (`null` = `"ALERT"`) |
+| `AlarmSoundSeconds` | double? | `null` | Seconds the alarm sound plays before auto-stopping, reset on each new alert (`null` = 30) |
+| `QuickConfirmationEnabled` | bool? | `null` | Whether click/Space/Enter quick-confirms the latest pending alert (`null` = `true`) |
+| `Users` | object | `{}` | Map of user name → `{ IpAddress, Port }` — overrides or defines user endpoints |
+| `UserGroups` | object | `{}` | Map of group name → member list (user or group names); groups are addressable destinations and are expanded recursively on send |
 
 JSON property names are PascalCase (matching C# property names). Deserialization is case-insensitive. Missing fields use their defaults. If `--config` points to a non-existent or unreadable file, the process throws at startup.

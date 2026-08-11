@@ -15,16 +15,19 @@ All property names are PascalCase; deserialization is case-insensitive. Unrecogn
 ```json
 {
   "HeadlessMode":        false,
-  "SiteName":            null,
+  "UserName":            null,
   "PeerPort":            50021,
   "InterfacePort":       50020,
   "DataFolder":          null,
   "PeerCertificateName": null,
-  "Sites": {
-    "SITE-A": { "IpAddress": "192.168.1.10", "Port": 7890 }
+  "AlertText":           null,
+  "AlarmSoundSeconds":   null,
+  "QuickConfirmationEnabled": null,
+  "Users": {
+    "USER-A": { "IpAddress": "192.168.1.10", "Port": 7890 }
   },
-  "SiteGroups": {
-    "OPS": ["SITE-A", "SITE-B"]
+  "UserGroups": {
+    "OPS": ["USER-A", "USER-B"]
   }
 }
 ```
@@ -35,15 +38,15 @@ All property names are PascalCase; deserialization is case-insensitive. Unrecogn
 
 **Type:** `bool` | **Default:** `false`
 
-Run the process headless — as a normal peer client, with the same local database and `IServiceConnection` as the GUI — instead of launching the desktop GUI. No window is opened. The local interface listener that lets external programs plug into this site's message stream (see [Interface.md](Interface.md)) is active regardless of this setting.
+Run the process headless — as a normal peer client, with the same local database and `IServiceConnection` as the GUI — instead of launching the desktop GUI. No window is opened. The local interface listener that lets external programs plug into this user's message stream (see [Interface.md](Interface.md)) is active regardless of this setting.
 
 ---
 
-### `SiteName`
+### `UserName`
 
 **Type:** `string | null` | **Default:** `null`
 
-Debug site name override. When set, `SiteService` skips `State.json` entirely and uses this value as the active site name without requiring installation. Intended for development and testing only.
+Debug user name override. When set, `UserService` skips `State.json` entirely and uses this value as the active user name without requiring installation. Intended for development and testing only.
 
 ---
 
@@ -51,7 +54,7 @@ Debug site name override. When set, `SiteService` skips `State.json` entirely an
 
 **Type:** `int | null` | **Default:** `null` (uses Engine default of `50021`)
 
-TCP port on which the peer-to-peer server listens for inbound messages from other nodes. Must be reachable from all peer nodes that will send messages to this site.
+TCP port on which the peer-to-peer server listens for inbound messages from other nodes. Must be reachable from all peer nodes that will send messages to this user.
 
 ---
 
@@ -67,13 +70,13 @@ TCP port on which the interface listener listens. Always active, in both GUI and
 
 **Type:** `string | null` | **Default:** `null` (`%APPDATA%\{AppName}`)
 
-Root directory for all persistent data (LiteDB database, site state file, daily logs). Three forms are accepted:
+Root directory for all persistent data (LiteDB database, user state file, daily logs). Three forms are accepted:
 
 | Value | Resolves to |
 |-------|-------------|
 | `null` or absent | `%APPDATA%\{AppName}` |
-| Absolute path (e.g. `C:\Data\mysite`) | That exact path |
-| `@`-prefixed path (e.g. `@test/site`) | `%APPDATA%\{AppName}\test\site` |
+| Absolute path (e.g. `C:\Data\myuser`) | That exact path |
+| `@`-prefixed path (e.g. `@test/user`) | `%APPDATA%\{AppName}\test\user` |
 
 The `@` prefix is useful for running multiple instances in isolated sub-directories under the default app data folder.
 
@@ -87,7 +90,7 @@ Controls which certificate is used for mutual TLS authentication on peer connect
 
 | Value | Behaviour |
 |-------|-----------|
-| `null` or absent | Auto-detect: look for a certificate named `SITE-{siteName}`. Throws at startup if not found. |
+| `null` or absent | Auto-detect: look for a certificate named `USER-{userName}`. Throws at startup if not found. |
 | `"disable"` | Disable peer authentication. Connections use an ephemeral self-signed certificate; no client certificate is required or validated. |
 | Any other string | Look for a certificate with that exact subject name. Throws at startup if not found. |
 
@@ -95,16 +98,40 @@ When authentication is enabled both sides must present a certificate signed by a
 
 ---
 
-### `Sites`
+### `AlertText`
+
+**Type:** `string | null` | **Default:** `null` (uses Engine default of `"ALERT"`)
+
+Text shown in the title bar's alert box while alarming (see `Docs/Peer.md#alert-messages`).
+
+---
+
+### `AlarmSoundSeconds`
+
+**Type:** `double | null` | **Default:** `null` (uses Engine default of `30`)
+
+Seconds the alarm sound plays after an alert is received before automatically stopping. Resets to this full duration whenever a new alert is received while already alarming.
+
+---
+
+### `QuickConfirmationEnabled`
+
+**Type:** `bool | null` | **Default:** `null` (uses Engine default of `true`)
+
+Whether clicking the alert box, or pressing Space/Enter while not focused in a text input, confirms (marks read) the latest unconfirmed alert.
+
+---
+
+### `Users`
 
 **Type:** `object` | **Default:** `{}`
 
-A map of site name → endpoint used by the `ISiteLocator` implementation. Keys are site names (case-insensitive). Entries may override the endpoint of an existing known site or introduce an entirely new site that does not appear in environment variables.
+A map of user name → endpoint used by the `IUserLocator` implementation. Keys are user names (case-insensitive). Entries may override the endpoint of an existing known user or introduce an entirely new user that does not appear in environment variables.
 
 ```json
-"Sites": {
-  "SITE-A": { "IpAddress": "192.168.1.10", "Port": 7890 },
-  "NEW-SITE": { "IpAddress": "192.168.1.12", "Port": 7890 }
+"Users": {
+  "USER-A": { "IpAddress": "192.168.1.10", "Port": 7890 },
+  "NEW-USER": { "IpAddress": "192.168.1.12", "Port": 7890 }
 }
 ```
 
@@ -115,20 +142,20 @@ A map of site name → endpoint used by the `ISiteLocator` implementation. Keys 
 
 ---
 
-### `SiteGroups`
+### `UserGroups`
 
 **Type:** `object` | **Default:** `{}`
 
-A map of group name → member list. Members may be site names or other group names, enabling nested hierarchies. Groups appear as addressable destinations in the draft editor alongside individual sites. When a message is addressed to a group, the Engine expands it recursively and delivers the message to every contained site exactly once.
+A map of group name → member list. Members may be user names or other group names, enabling nested hierarchies. Groups appear as addressable destinations in the draft editor alongside individual users. When a message is addressed to a group, the Engine expands it recursively and delivers the message to every contained user exactly once.
 
 ```json
-"SiteGroups": {
-  "OPS": ["SITE-A", "SITE-B"],
-  "ALL": ["OPS", "NEW-SITE"]
+"UserGroups": {
+  "OPS": ["USER-A", "USER-B"],
+  "ALL": ["OPS", "NEW-USER"]
 }
 ```
 
-Sending to `ALL` delivers to `SITE-A`, `SITE-B`, and `NEW-SITE`. Cycles are ignored.
+Sending to `ALL` delivers to `USER-A`, `USER-B`, and `NEW-USER`. Cycles are ignored.
 
 ## Examples
 
@@ -137,25 +164,25 @@ Sending to `ALL` delivers to `SITE-A`, `SITE-B`, and `NEW-SITE`. Cycles are igno
 ```json
 {
   "PeerPort": 50021,
-  "Sites": {
-    "SITE-B": { "IpAddress": "192.168.1.11", "Port": 50021 }
+  "Users": {
+    "USER-B": { "IpAddress": "192.168.1.11", "Port": 50021 }
   }
 }
 ```
 
-`PeerCertificateName` is absent so authentication uses `SITE-{siteName}` auto-detection.
+`PeerCertificateName` is absent so authentication uses `USER-{userName}` auto-detection.
 
 ### Development (unauthenticated, Headless mode)
 
 ```json
 {
   "HeadlessMode": true,
-  "SiteName": "TEST1",
+  "UserName": "TEST1",
   "PeerPort": 50020,
   "InterfacePort": 50021,
   "DataFolder": "@TEST1",
   "PeerCertificateName": "disable",
-  "Sites": {
+  "Users": {
     "TEST2": { "IpAddress": "127.0.0.1", "Port": 50030 }
   }
 }
@@ -165,13 +192,13 @@ Sending to `ALL` delivers to `SITE-A`, `SITE-B`, and `NEW-SITE`. Cycles are igno
 
 ```json
 {
-  "Sites": {
-    "SITE-A": { "IpAddress": "10.0.0.1", "Port": 50021 },
-    "SITE-B": { "IpAddress": "10.0.0.2", "Port": 50021 }
+  "Users": {
+    "USER-A": { "IpAddress": "10.0.0.1", "Port": 50021 },
+    "USER-B": { "IpAddress": "10.0.0.2", "Port": 50021 }
   },
-  "SiteGroups": {
-    "WEST": ["SITE-A", "SITE-B"],
-    "ALL":  ["WEST", "SITE-C"]
+  "UserGroups": {
+    "WEST": ["USER-A", "USER-B"],
+    "ALL":  ["WEST", "USER-C"]
   }
 }
 ```
@@ -181,8 +208,8 @@ Sending to `ALL` delivers to `SITE-A`, `SITE-B`, and `NEW-SITE`. Cycles are igno
 ```json
 {
   "PeerCertificateName": "MY-CUSTOM-CERT",
-  "Sites": {
-    "SITE-B": { "IpAddress": "192.168.1.11", "Port": 50021 }
+  "Users": {
+    "USER-B": { "IpAddress": "192.168.1.11", "Port": 50021 }
   }
 }
 ```

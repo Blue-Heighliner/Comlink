@@ -9,11 +9,11 @@ public sealed class DraftViewModelTests
         out Mock<IEntryService> entryMock,
         out Mock<IServiceConnection> connMock,
         DraftEntity? entity = null,
-        IReadOnlyList<string>? siteNames = null)
+        IReadOnlyList<string>? userNames = null)
     {
         entryMock = new Mock<IEntryService>();
         connMock = new Mock<IServiceConnection>();
-        connMock.Setup(c => c.GetSiteNames(It.IsAny<CancellationToken>()))
+        connMock.Setup(c => c.GetUserNames(It.IsAny<CancellationToken>()))
                 .ReturnsAsync(new List<string>());
         DraftEntity ent = entity ?? new DraftEntity
         {
@@ -22,7 +22,7 @@ public sealed class DraftViewModelTests
             Addresses = [],
             FolderId = "root-drafts"
         };
-        return new DraftViewModel(ent, entryMock.Object, connMock.Object, siteNames ?? [], NoLogger);
+        return new DraftViewModel(ent, entryMock.Object, connMock.Object, userNames ?? [], NoLogger);
     }
 
     // ── Construction ──────────────────────────────────────────────────────────
@@ -53,20 +53,20 @@ public sealed class DraftViewModelTests
         DraftEntity entity = new()
         {
             Subject = "Sub",
-            Addresses = [new AddressData { SiteName = "ALPHA", Type = "To" }]
+            Addresses = [new AddressData { UserName = "ALPHA", Type = "To" }]
         };
         DraftViewModel vm = Build(out _, out _, entity: entity);
 
         Assert.Single(vm.Addresses);
-        Assert.Equal("ALPHA", vm.Addresses[0].SiteName);
+        Assert.Equal("ALPHA", vm.Addresses[0].UserName);
     }
 
-    /// <summary>AllSiteNames reflects the constructor argument.</summary>
+    /// <summary>AllUserNames reflects the constructor argument.</summary>
     [Fact]
-    public void Constructor_SetsAllSiteNames()
+    public void Constructor_SetsAllUserNames()
     {
-        DraftViewModel vm = Build(out _, out _, siteNames: ["ALPHA", "BETA"]);
-        Assert.Equal(["ALPHA", "BETA"], vm.AllSiteNames);
+        DraftViewModel vm = Build(out _, out _, userNames: ["ALPHA", "BETA"]);
+        Assert.Equal(["ALPHA", "BETA"], vm.AllUserNames);
     }
 
     /// <summary>AddressTypes is ["To", "Cc"].</summary>
@@ -85,50 +85,50 @@ public sealed class DraftViewModelTests
         Assert.NotEmpty(vm.Id);
     }
 
-    // ── NewAddressSite auto-uppercase ─────────────────────────────────────────
+    // ── NewAddressUser auto-uppercase ─────────────────────────────────────────
 
-    /// <summary>Setting NewAddressSite to lowercase auto-uppercases it.</summary>
+    /// <summary>Setting NewAddressUser to lowercase auto-uppercases it.</summary>
     [Fact]
-    public void NewAddressSite_Lowercase_AutoUppercased()
+    public void NewAddressUser_Lowercase_AutoUppercased()
     {
         DraftViewModel vm = Build(out _, out _);
-        vm.NewAddressSite = "alpha";
-        Assert.Equal("ALPHA", vm.NewAddressSite);
+        vm.NewAddressUser = "alpha";
+        Assert.Equal("ALPHA", vm.NewAddressUser);
     }
 
-    /// <summary>Setting NewAddressSite to already-uppercase leaves it unchanged.</summary>
+    /// <summary>Setting NewAddressUser to already-uppercase leaves it unchanged.</summary>
     [Fact]
-    public void NewAddressSite_AlreadyUppercase_Unchanged()
+    public void NewAddressUser_AlreadyUppercase_Unchanged()
     {
         DraftViewModel vm = Build(out _, out _);
-        vm.NewAddressSite = "ALPHA";
-        Assert.Equal("ALPHA", vm.NewAddressSite);
+        vm.NewAddressUser = "ALPHA";
+        Assert.Equal("ALPHA", vm.NewAddressUser);
     }
 
     // ── AddAddressCommand ─────────────────────────────────────────────────────
 
-    /// <summary>AddAddressCommand with a valid site adds to Addresses.</summary>
+    /// <summary>AddAddressCommand with a valid user adds to Addresses.</summary>
     [Fact]
-    public void AddAddressCommand_ValidSite_AddsAddress()
+    public void AddAddressCommand_ValidUser_AddsAddress()
     {
         DraftViewModel vm = Build(out _, out _);
-        vm.NewAddressSite = "BRAVO";
+        vm.NewAddressUser = "BRAVO";
         vm.NewAddressType = "Cc";
 
         vm.AddAddressCommand.Execute(null);
 
         Assert.Single(vm.Addresses);
-        Assert.Equal("BRAVO", vm.Addresses[0].SiteName);
+        Assert.Equal("BRAVO", vm.Addresses[0].UserName);
         Assert.Equal("Cc", vm.Addresses[0].Type);
-        Assert.Equal(string.Empty, vm.NewAddressSite);
+        Assert.Equal(string.Empty, vm.NewAddressUser);
     }
 
-    /// <summary>AddAddressCommand with a blank site does nothing.</summary>
+    /// <summary>AddAddressCommand with a blank user does nothing.</summary>
     [Fact]
-    public void AddAddressCommand_BlankSite_DoesNothing()
+    public void AddAddressCommand_BlankUser_DoesNothing()
     {
         DraftViewModel vm = Build(out _, out _);
-        vm.NewAddressSite = "   ";
+        vm.NewAddressUser = "   ";
 
         vm.AddAddressCommand.Execute(null);
 
@@ -144,7 +144,7 @@ public sealed class DraftViewModelTests
         DraftEntity entity = new()
         {
             Subject = "S",
-            Addresses = [new AddressData { SiteName = "ALPHA", Type = "To" }]
+            Addresses = [new AddressData { UserName = "ALPHA", Type = "To" }]
         };
         DraftViewModel vm = Build(out _, out _, entity: entity);
         AddressData addr = vm.Addresses[0];
@@ -207,7 +207,7 @@ public sealed class DraftViewModelTests
         await vm.SendCommand.ExecuteAsync(null);
 
         Assert.Equal("Add at least one recipient", vm.StatusMessage);
-        connMock.Verify(c => c.SendMessage(It.IsAny<string>(), It.IsAny<string>(), It.IsAny<List<AddressRequest>>(), It.IsAny<CancellationToken>()), Times.Never);
+        connMock.Verify(c => c.SendMessage(It.IsAny<string>(), It.IsAny<string>(), It.IsAny<List<AddressRequest>>(), It.IsAny<bool>(), It.IsAny<CancellationToken>()), Times.Never);
     }
 
     /// <summary>SendCommand with addresses and successful send sets IsSent and StatusMessage.</summary>
@@ -218,7 +218,7 @@ public sealed class DraftViewModelTests
         {
             Subject = "Hello",
             Body = "World",
-            Addresses = [new AddressData { SiteName = "ALPHA", Type = "To" }],
+            Addresses = [new AddressData { UserName = "ALPHA", Type = "To" }],
             FolderId = "root-drafts"
         };
         DraftViewModel vm = Build(out Mock<IEntryService> entryMock, out Mock<IServiceConnection> connMock, entity: entity);
@@ -226,17 +226,17 @@ public sealed class DraftViewModelTests
         SendMessageResult sendResult = new()
         {
             MessageId = "MSG-001",
-            SiteResults = [new SiteDeliveryResult { SiteName = "ALPHA", Success = true, AddressedVia = [] }]
+            UserResults = [new UserDeliveryResult { UserName = "ALPHA", Success = true, AddressedVia = [] }]
         };
         connMock.Setup(c => c.SendMessage(It.IsAny<string>(), It.IsAny<string>(),
-                It.IsAny<List<AddressRequest>>(), It.IsAny<CancellationToken>()))
+                It.IsAny<List<AddressRequest>>(), It.IsAny<bool>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync(sendResult);
 
         MessageEntity sentMessage = new() { MessageId = "MSG-001" };
         entryMock.Setup(e => e.SaveDraft(It.IsAny<DraftEntity>())).Returns(Task.CompletedTask);
         entryMock.Setup(e => e.StoreSentMessage(It.IsAny<string>(), It.IsAny<string>(), It.IsAny<string>(),
                 It.IsAny<List<AddressData>>(), It.IsAny<DateTime>(),
-                It.IsAny<IReadOnlyList<SiteDeliveryResult>>()))
+                It.IsAny<IReadOnlyList<UserDeliveryResult>>(), It.IsAny<bool>()))
             .ReturnsAsync(sentMessage);
 
         await vm.SendCommand.ExecuteAsync(null);

@@ -13,6 +13,7 @@ graph TD
     EBV[EntryBarViewModel]
     CAV[ContentAreaViewModel]
     IV[InstallViewModel]
+    AV[AlertViewModel]
     DVM[DraftViewModel]
     MVMe[MessageViewModel]
     NVM[NoteViewModel]
@@ -22,6 +23,7 @@ graph TD
     MVM --> EBV
     MVM --> CAV
     MVM --> IV
+    MVM --> AV
     CAV -->|ShowEntry| DVM
     CAV -->|ShowEntry| MVMe
     CAV -->|ShowEntry| NVM
@@ -35,14 +37,14 @@ graph TD
 
 Root coordinator. Registered as singleton via `IMainViewModel → MainViewModel`; bound to `MainWindow(IMainViewModel)`.
 
-**Properties**: `IsInstallScreenVisible`, `IsKioskMode`, `SiteName`, `EnvironmentTitle`, `EnvironmentColor`, `AppVersion`, plus `FolderBar (IFolderBarViewModel)`, `EntryBar (IEntryBarViewModel)`, `ContentArea (IContentAreaViewModel)`, `InstallView (IInstallViewModel)`.
+**Properties**: `IsInstallScreenVisible`, `IsKioskMode`, `UserName`, `EnvironmentTitle`, `EnvironmentColor`, `AppVersion`, plus `FolderBar (IFolderBarViewModel)`, `EntryBar (IEntryBarViewModel)`, `ContentArea (IContentAreaViewModel)`, `InstallView (IInstallViewModel)`, `Alert (IAlertViewModel)`.
 
 **Commands**: `CreateDraftCommand`, `CreateNoteCommand` (`IAsyncRelayCommand`).
 
-**Method**: `Task Initialize()` — connects, loads site info, shows main UI or install screen.
+**Method**: `Task Initialize()` — connects, loads user info, shows main UI or install screen.
 
 **Wiring**:
-- `IInstallViewModel.InstallSucceeded` → initializes DB, applies site info, loads folder tree
+- `IInstallViewModel.InstallSucceeded` → initializes DB, applies user info, loads folder tree
 - `IServiceConnection.MessageReceived` → stores inbound message, prepends to entry bar when Inbox is active
 - `IServiceConnection.DeliveryStatusChanged` → passes to `IEntryBarViewModel.UpdateEntryStatus`
 - `IContentAreaViewModel.DraftSent` → navigates to Outbox and selects sent message
@@ -85,7 +87,9 @@ Right-side content pane. Registered as `IContentAreaViewModel → ContentAreaVie
 
 **Methods**: `ShowHome()`, `ShowEntry(EntryItemViewModel)`, `ShowEntry(object)`.
 
-The `DeliveryStatusChanged` handler checks `ActiveContent is IMessageViewModel` to route status updates to the currently displayed message.
+The `DeliveryStatusChanged` handler checks `ActiveContent is IMessageViewModel` to route status updates to the currently displayed message — an empty `UserName` sets `IMessageViewModel.ReadStatus` directly (a local read-status notification), otherwise it calls `UpdateDeliveryStatus(userName, status)` (a remote destination's delivery status).
+
+When `ShowEntry(EntryItemViewModel)` opens an Inbox message whose `ReadStatus` is `Received`, it calls `IServiceConnection.MarkMessageRead(messageId)` before building the `MessageViewModel`, so the message is marked read (and a confirmation sent to the sender) as soon as it is displayed. See [Peer.md](Peer.md#read-confirmation).
 
 ---
 
@@ -93,13 +97,15 @@ The `DeliveryStatusChanged` handler checks `ActiveContent is IMessageViewModel` 
 
 Read-only message display. Constructed with `new MessageViewModel(MessageEntity)` — not DI-registered.
 
-**Properties**: `MessageId`, `Subject`, `Body`, `FromSite`, `ToList`, `CcList`, `ReceivedAt (DateTime)`, `HasDeliveryStatuses`, `DeliveryStatuses (ObservableCollection<DeliveryStatusRow>)`, `OverallStatus`, `OverallStatusText`, `IsDeliveryExpanded`, `DeliveryExpandIndicator`.
+**Properties**: `MessageId`, `Subject`, `Body`, `FromUser`, `ToList`, `CcList`, `ReceivedAt (DateTime)`, `IsAlert`, `HasDeliveryStatuses`, `DeliveryStatuses (ObservableCollection<DeliveryStatusRow>)`, `OverallStatus`, `OverallStatusText`, `ReadStatus`, `ReadStatusText`, `IsDeliveryExpanded`, `DeliveryExpandIndicator`.
 
 **Commands**: `ToggleDeliveryCommand (IRelayCommand)`.
 
-**Method**: `UpdateDeliveryStatus(string siteName, DestinationStatus)` — updates per-site row and recomputes `OverallStatus`.
+**Method**: `UpdateDeliveryStatus(string userName, DestinationStatus)` — updates per-user row and recomputes `OverallStatus`.
 
-**Status priority**: `Failed > Timeout > Confirmed > Sent > Sending`.
+**Status priority** (per-user `OverallStatus`, Outbox only): `Failed > Read (all) > Confirmed (all Confirmed/Read) > Sent > Sending`.
+
+**ReadStatus** (Inbox only, `null` on Outbox messages): `Received` when stored, `Read` once opened. Set directly by `ContentAreaViewModel` when it marks an unread message read, or by `ContentAreaViewModel.OnDeliveryStatusChanged` when a `DeliveryStatusChangedEvent` with an empty `UserName` arrives (see [Peer.md](Peer.md#read-confirmation)) — distinct from `UpdateDeliveryStatus`, which only ever applies to `DeliveryStatuses` rows.
 
 ---
 
@@ -107,7 +113,9 @@ Read-only message display. Constructed with `new MessageViewModel(MessageEntity)
 
 Editable draft with fill-in support. Constructed with `new DraftViewModel(entity, ...)` — not DI-registered.
 
-**Properties**: `Id`, `Subject`, `NewAddressSite` (auto-uppercased), `NewAddressType`, `IsSent`, `IsSaving`, `StatusMessage`, `Addresses (ObservableCollection<AddressData>)`, `BodyDocument (IBodyDocument)`, `FillIns (IReadOnlyDictionary<string, IFillInViewModel>)`, `AllSiteNames`, `AddressTypes`.
+**Properties**: `Id`, `Subject`, `NewAddressUser` (auto-uppercased), `NewAddressType`, `IsSent`, `IsAlert`, `IsSaving`, `StatusMessage`, `Addresses (ObservableCollection<AddressData>)`, `BodyDocument (IBodyDocument)`, `FillIns (IReadOnlyDictionary<string, IFillInViewModel>)`, `AllUserNames`, `AddressTypes`.
+
+`IsAlert` is persisted on `DraftEntity.IsAlert` across save/reload and passed through `IServiceConnection.SendMessage(..., IsAlert)` on send — see [Peer.md](Peer.md#alert-messages).
 
 **IBodyDocument** — framework-agnostic body document abstraction in `Engine.ViewModels.Entries`. `BodyDocumentFactory` provides the default `StringBodyDocument` (plain string, used in tests and Headless mode). `TextDocumentBodyDocumentFactory` provides `TextDocumentBodyDocument` (wraps AvaloniaEdit's `TextDocument`) for Client mode. `DraftEditor.axaml.cs` casts to `TextDocumentBodyDocument` to bind the editor. `IBodyDocumentFactory` controls which implementation is created; `UseEngineUi()` overrides the default with `TextDocumentBodyDocumentFactory`.
 
@@ -143,11 +151,29 @@ Read-only daily activity log. Constructed with `new ActivityLogViewModel(entity)
 
 One-time setup screen. Registered as `IInstallViewModel → InstallViewModel` singleton.
 
-**Properties**: `SiteCode` (auto-uppercased), `ErrorMessage`, `IsLoading`.
+**Properties**: `UserCode` (auto-uppercased), `ErrorMessage`, `IsLoading`.
 
-**Events**: `InstallSucceeded (Func<SiteInfo, Task>)` — raised on success; consumed by `MainViewModel`.
+**Events**: `InstallSucceeded (Func<UserInfo, Task>)` — raised on success; consumed by `MainViewModel`.
 
 **Commands**: `InstallCommand (IAsyncRelayCommand)`.
+
+---
+
+## IAlertViewModel / AlertViewModel
+
+Tracks pending (unread) alert messages and drives the title bar's alarm box and sound (see [Peer.md](Peer.md#alert-messages)). Registered as `IAlertViewModel → AlertViewModel` singleton; exposed as `MainViewModel.Alert` and bound from `MainWindow.axaml` onto `TitleBar`'s `IsAlerting`/`AlertText`/`QuickConfirmationEnabled`/`AlertCommand` styled properties.
+
+**Properties**: `IsAlerting (bool)` — `PendingCount > 0`; `PendingCount (int)`; `AlertText (string)` and `QuickConfirmationEnabled (bool)` — both read from `IAlertConfiguration`.
+
+**Commands**: `ConfirmLatestCommand (IAsyncRelayCommand)` — confirms (marks read via `IServiceConnection.MarkMessageRead`) the most recently received pending alert. `CanExecute` is `IsAlerting && QuickConfirmationEnabled`.
+
+**Wiring**:
+- `IEntryService.MessageInserted` — if `IMessageFormat.GetIsAlert` is `true`, appends the message ID to the pending list, calls `IAlertSoundPlayer.Play()`, and (re)starts the auto-stop timer from `IAlertConfiguration.AlarmSoundDuration`
+- `IEntryService.MessageRead` — removes the message ID from the pending list if present (a no-op for a non-alert message read); once the pending list is empty, disposes the timer and calls `IAlertSoundPlayer.Stop()`
+
+The auto-stop timer only stops the *sound* — the alert box itself stays visible until every pending alert has been read. A new alert received while already alarming resets the timer to the full `AlarmSoundDuration` again.
+
+**Quick confirmation**: When `QuickConfirmationEnabled`, `TitleBar`'s alert box responds to a pointer press by invoking `AlertCommand` (bound to `ConfirmLatestCommand`), and `MainWindow`'s tunnel-priority `KeyDown` handler invokes the same command on Space/Enter when focus is not in a `TextBox` or the AvaloniaEdit `TextEditor` (the draft body). Each invocation confirms one alert (the current last entry in the pending list); repeating the action — clicking or pressing the key again — confirms the next one, most-recently-received first, until none remain.
 
 ---
 
@@ -174,7 +200,7 @@ Wraps a row in the entry list. Properties: `Id`, `Title`, `SecondaryText`, `Time
 For `EntryType.Message` rows, `IsOutboundMessage` records whether the row is the Outbox (sent) or Inbox (received) record — `EntryBarViewModel.Refresh()` sets it `true` for Outbox rows. A self-addressed message produces one row of each kind sharing the same `Id` (`MessageId`), so `ContentAreaViewModel`, `EntryBarViewModel.DeleteEntry`, and `FolderBarViewModel.MoveEntry` all pass it through to `IMessageRepository`/`IEntryService` to disambiguate which underlying document to load, delete, or move. See `Docs/Data.md`.
 
 ### `DeliveryStatusRow`
-Display row for per-site delivery tracking: `SiteName`, `DisplayName` (with group context), `Status (DestinationStatus)`, `StatusText`.
+Display row for per-user delivery tracking: `UserName`, `DisplayName` (with group context), `Status (DestinationStatus)`, `StatusText`.
 
 ### `FillInOptionViewModel`
 A single selectable option within a `FillInViewModel`: `Value`, `IsSelected`.

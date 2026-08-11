@@ -29,27 +29,27 @@ Network ports for the local interface listener (always active, in every mode; se
 
 ---
 
-### `ISiteLocator`
+### `IUserLocator`
 ```csharp
-Task<SiteEndpoint?> GetEndpoint(string siteName, CancellationToken cancellation = default);
+Task<UserEndpoint?> GetEndpoint(string userName, CancellationToken cancellation = default);
 ```
-Resolves a site name to a `SiteEndpoint` (`IpAddress`, `Port`). Called by `PeerService` when opening an outbound peer connection. No default — must be provided by the host.
+Resolves a user name to a `UserEndpoint` (`IpAddress`, `Port`). Called by `PeerService` when opening an outbound peer connection. No default — must be provided by the host.
 
 ---
 
-### `ISiteCodeResolver`
+### `IUserCodeResolver`
 ```csharp
-Task<SiteInfo?> Resolve(string siteCode, CancellationToken cancellation = default);
+Task<UserInfo?> Resolve(string userCode, CancellationToken cancellation = default);
 ```
-Resolves an installation code to a `SiteInfo` (name, environment title, color). Called during site installation. No default — must be provided by the host.
+Resolves an installation code to a `UserInfo` (name, environment title, color). Called during user installation. No default — must be provided by the host.
 
 ---
 
-### `ISiteNameDirectory`
+### `IUserNameDirectory`
 ```csharp
-Task<IReadOnlyList<string>> GetAllSiteNames(CancellationToken cancellation = default);
+Task<IReadOnlyList<string>> GetAllUserNames(CancellationToken cancellation = default);
 ```
-Returns all known site names. Used to populate address autocomplete in the UI and `IServiceConnection.GetSiteNames`. No default — must be provided by the host.
+Returns all known user names. Used to populate address autocomplete in the UI and `IServiceConnection.GetUserNames`. No default — must be provided by the host.
 
 ---
 
@@ -69,11 +69,11 @@ When `true`, the UI hides navigation and limits functionality to a single-purpos
 
 ---
 
-### `IDebugSiteOverride`
+### `IDebugUserOverride`
 ```csharp
-string SiteName { get; }
+string UserName { get; }
 ```
-When registered, `SiteService` skips `State.json` and uses this site name directly without installing. Intended for development/testing. Only one instance is expected; the first registered wins.
+When registered, `UserService` skips `State.json` and uses this user name directly without installing. Intended for development/testing. Only one instance is expected; the first registered wins.
 
 ---
 
@@ -87,15 +87,15 @@ Produces the [OFT](Oft.md) `OftPeerOptions` used by the peer layer. The default 
 
 ### `IOftPeerCertificateName`
 ```csharp
-string? GetCertificateName(string siteName);
+string? GetCertificateName(string userName);
 ```
-Maps a site name to the certificate subject name that should be located in the system cert store. Returning `null` disables peer authentication. Default: `"SITE-{siteName}"`.
+Maps a user name to the certificate subject name that should be located in the system cert store. Returning `null` disables peer authentication. Default: `"USER-{userName}"`.
 
 The Sample host reads `PeerCertificateName` from `config.json` and uses it as follows:
 
 | Config value | Behaviour |
 |---|---|
-| Absent / `null` | Auto-detect: look for `SITE-{siteName}` in system store. Throws at startup if not found. |
+| Absent / `null` | Auto-detect: look for `USER-{userName}` in system store. Throws at startup if not found. |
 | `"disable"` | Disable peer authentication (ephemeral cert, no client cert required) |
 | Any other string | Look for a cert with that exact subject name. Throws at startup if not found. |
 
@@ -107,8 +107,8 @@ Type MessageType { get; }
 object CreateMessage();
 string GetMessageId(object message);
 void SetMessageId(object message, string value);
-string GetFromSite(object message);
-void SetFromSite(object message, string value);
+string GetFromUser(object message);
+void SetFromUser(object message, string value);
 string GetSubject(object message);
 void SetSubject(object message, string value);
 string GetBody(object message);
@@ -117,8 +117,31 @@ List<MessageAddress> GetAddresses(object message);
 void SetAddresses(object message, List<MessageAddress> value);
 DateTime GetSentAt(object message);
 void SetSentAt(object message, DateTime value);
+string GetConfirmationMessageId(object message);
+void SetConfirmationMessageId(object message, string value);
+bool GetIsAlert(object message);
+void SetIsAlert(object message, bool value);
 ```
 Supplies the concrete message type used throughout the engine — on the wire (peer and interface connections) and in the database — and maps the engine's logical fields onto that type's real fields. No default — the engine has no message DTO of its own and fails at startup if a host does not register an implementation. See [Peer.md](Peer.md#message-format).
+
+---
+
+### `IAlertConfiguration`
+```csharp
+string AlertText { get; }
+TimeSpan AlarmSoundDuration { get; }
+bool QuickConfirmationEnabled { get; }
+```
+Configures the title bar's alarm box text, how long the alarm sound plays before auto-stopping, and whether click/Space/Enter quick confirmation is enabled. Default: `"ALERT"` / 30 seconds / `true`, overridable via `config.json`. See [Peer.md](Peer.md#alert-messages).
+
+---
+
+### `IAlertSoundPlayer`
+```csharp
+void Play();
+void Stop();
+```
+Starts/stops the looping alarm sound for alert messages. Default: silent no-op — audio playback is platform-specific, so a host must register an implementation for real sound.
 
 ---
 
@@ -126,5 +149,5 @@ Supplies the concrete message type used throughout the engine — on the wire (p
 
 These are internal to the engine and not overridable from the host:
 
-### `CurrentSiteProvider`
-Mutable string holding the currently active site name. Shared between `SiteService`, `OftCertificateProvider`, and the logging system. Updated when a site is installed or loaded.
+### `CurrentUserProvider`
+Mutable string holding the currently active user name. Shared between `UserService`, `OftCertificateProvider`, and the logging system. Updated when a user is installed or loaded.

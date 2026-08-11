@@ -11,13 +11,13 @@ public partial class DraftEditor : UserControl
     {
         InitializeComponent();
 
-        SiteInput.AddHandler(
+        UserInput.AddHandler(
             InputElement.TextInputEvent,
-            OnSiteInputTextInput,
+            OnUserInputTextInput,
             RoutingStrategies.Tunnel);
-        SiteInput.AddHandler(
+        UserInput.AddHandler(
             InputElement.KeyDownEvent,
-            OnSiteInputKeyDown,
+            OnUserInputKeyDown,
             RoutingStrategies.Bubble,
             handledEventsToo: true);
 
@@ -124,13 +124,13 @@ public partial class DraftEditor : UserControl
         }
     }
 
-    private static void OnSiteInputTextInput(object? sender, TextInputEventArgs e)
+    private static void OnUserInputTextInput(object? sender, TextInputEventArgs e)
     {
         if (e.Text is not null)
             e.Text = e.Text.ToUpperInvariant();
     }
 
-    private void OnSiteInputKeyDown(object? sender, KeyEventArgs e)
+    private void OnUserInputKeyDown(object? sender, KeyEventArgs e)
     {
         if (e.Key != Key.Return) return;
         if (DataContext is IDraftViewModel vm && vm.AddAddressCommand.CanExecute(null))

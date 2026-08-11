@@ -13,40 +13,40 @@ public sealed class EngineConfigTests
         Assert.False(config.HeadlessMode);
     }
 
-    /// <summary>Default config has empty Sites and SiteGroups.</summary>
+    /// <summary>Default config has empty Users and UserGroups.</summary>
     [Fact]
-    public void DefaultConfig_EmptySitesAndGroups()
+    public void DefaultConfig_EmptyUsersAndGroups()
     {
         EngineConfig config = new();
-        Assert.Empty(config.Sites);
-        Assert.Empty(config.SiteGroups);
+        Assert.Empty(config.Users);
+        Assert.Empty(config.UserGroups);
     }
 
-    // ── GetSiteEndpoints ──────────────────────────────────────────────────────
+    // ── GetUserEndpoints ──────────────────────────────────────────────────────
 
-    /// <summary>Empty Sites produces an empty endpoint map.</summary>
+    /// <summary>Empty Users produces an empty endpoint map.</summary>
     [Fact]
-    public void GetSiteEndpoints_EmptySites_ReturnsEmptyMap()
+    public void GetUserEndpoints_EmptyUsers_ReturnsEmptyMap()
     {
         EngineConfig config = new();
-        IReadOnlyDictionary<string, SiteEndpoint> endpoints = config.GetSiteEndpoints();
+        IReadOnlyDictionary<string, UserEndpoint> endpoints = config.GetUserEndpoints();
         Assert.Empty(endpoints);
     }
 
-    /// <summary>Site entries are converted to SiteEndpoint with correct fields.</summary>
+    /// <summary>User entries are converted to UserEndpoint with correct fields.</summary>
     [Fact]
-    public void GetSiteEndpoints_WithSites_MapsCorrectly()
+    public void GetUserEndpoints_WithUsers_MapsCorrectly()
     {
         EngineConfig config = new()
         {
-            Sites = new Dictionary<string, SiteEndpointConfig>
+            Users = new Dictionary<string, UserEndpointConfig>
             {
-                ["ALPHA"] = new SiteEndpointConfig { IpAddress = "10.0.0.1", Port = 7890 },
-                ["BETA"]  = new SiteEndpointConfig { IpAddress = "10.0.0.2", Port = 7891 }
+                ["ALPHA"] = new UserEndpointConfig { IpAddress = "10.0.0.1", Port = 7890 },
+                ["BETA"]  = new UserEndpointConfig { IpAddress = "10.0.0.2", Port = 7891 }
             }
         };
 
-        IReadOnlyDictionary<string, SiteEndpoint> endpoints = config.GetSiteEndpoints();
+        IReadOnlyDictionary<string, UserEndpoint> endpoints = config.GetUserEndpoints();
 
         Assert.Equal(2, endpoints.Count);
         Assert.Equal("10.0.0.1", endpoints["ALPHA"].IpAddress);
@@ -54,19 +54,19 @@ public sealed class EngineConfigTests
         Assert.Equal("10.0.0.2", endpoints["BETA"].IpAddress);
     }
 
-    /// <summary>Site lookup is case-insensitive.</summary>
+    /// <summary>User lookup is case-insensitive.</summary>
     [Fact]
-    public void GetSiteEndpoints_LookupIsCaseInsensitive()
+    public void GetUserEndpoints_LookupIsCaseInsensitive()
     {
         EngineConfig config = new()
         {
-            Sites = new Dictionary<string, SiteEndpointConfig>
+            Users = new Dictionary<string, UserEndpointConfig>
             {
-                ["Alpha"] = new SiteEndpointConfig { IpAddress = "1.2.3.4", Port = 100 }
+                ["Alpha"] = new UserEndpointConfig { IpAddress = "1.2.3.4", Port = 100 }
             }
         };
 
-        IReadOnlyDictionary<string, SiteEndpoint> endpoints = config.GetSiteEndpoints();
+        IReadOnlyDictionary<string, UserEndpoint> endpoints = config.GetUserEndpoints();
 
         Assert.True(endpoints.ContainsKey("ALPHA"));
         Assert.True(endpoints.ContainsKey("alpha"));
@@ -80,7 +80,7 @@ public sealed class EngineConfigTests
     {
         EngineConfig config = EngineConfig.Load([]);
         Assert.False(config.HeadlessMode);
-        Assert.Null(config.SiteName);
+        Assert.Null(config.UserName);
         Assert.Null(config.PeerPort);
         Assert.Null(config.InterfacePort);
     }
@@ -95,24 +95,24 @@ public sealed class EngineConfigTests
             File.WriteAllText(tempFile, """
                 {
                   "HeadlessMode": true,
-                  "SiteName": "TEST",
+                  "UserName": "TEST",
                   "PeerPort": 9001,
                   "InterfacePort": 9002,
-                  "Sites": { "ALPHA": { "IpAddress": "1.2.3.4", "Port": 5000 } },
-                  "SiteGroups": { "OPS": ["ALPHA"] }
+                  "Users": { "ALPHA": { "IpAddress": "1.2.3.4", "Port": 5000 } },
+                  "UserGroups": { "OPS": ["ALPHA"] }
                 }
                 """);
 
             EngineConfig config = EngineConfig.Load(["--config", tempFile]);
 
             Assert.True(config.HeadlessMode);
-            Assert.Equal("TEST", config.SiteName);
+            Assert.Equal("TEST", config.UserName);
             Assert.Equal(9001, config.PeerPort);
             Assert.Equal(9002, config.InterfacePort);
-            Assert.Single(config.Sites);
-            Assert.Equal("1.2.3.4", config.Sites["ALPHA"].IpAddress);
-            Assert.Single(config.SiteGroups);
-            Assert.Contains("ALPHA", config.SiteGroups["OPS"]);
+            Assert.Single(config.Users);
+            Assert.Equal("1.2.3.4", config.Users["ALPHA"].IpAddress);
+            Assert.Single(config.UserGroups);
+            Assert.Contains("ALPHA", config.UserGroups["OPS"]);
         }
         finally
         {
@@ -130,7 +130,7 @@ public sealed class EngineConfigTests
             File.WriteAllText(tempFile, "{}");
             EngineConfig config = EngineConfig.Load(["--config", tempFile]);
             Assert.False(config.HeadlessMode);
-            Assert.Null(config.SiteName);
+            Assert.Null(config.UserName);
         }
         finally
         {

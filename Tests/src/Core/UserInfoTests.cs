@@ -1,13 +1,13 @@
 namespace BlueHeighliner.Comlink.Tests.Core;
 
-/// <summary>Unit tests for <see cref="SiteInfo"/> and <see cref="Folder"/> model types.</summary>
-public sealed class SiteInfoTests
+/// <summary>Unit tests for <see cref="UserInfo"/> and <see cref="Folder"/> model types.</summary>
+public sealed class UserInfoTests
 {
-    /// <summary>Verifies that all required properties on <see cref="SiteInfo"/> are correctly stored.</summary>
+    /// <summary>Verifies that all required properties on <see cref="UserInfo"/> are correctly stored.</summary>
     [Fact]
-    public void SiteInfo_RequiredProperties_AreSet()
+    public void UserInfo_RequiredProperties_AreSet()
     {
-        SiteInfo info = new()
+        UserInfo info = new()
         {
             Name = "TestNode",
             Code = "TN01",

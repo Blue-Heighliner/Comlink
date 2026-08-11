@@ -7,10 +7,11 @@ public sealed class InterfaceServiceTests
     {
         public event Func<object, Task>? MessageDelivered;
 #pragma warning disable CS0067
+        public event Func<string, string, Task>? ConfirmationReceived;
         public event Func<string, string, OftDeliveryStatus, Task>? DeliveryStatusChanged;
 #pragma warning restore CS0067
         public Task Start(CancellationToken cancellation) => Task.CompletedTask;
-        public Task<bool> Send(string siteName, object message, CancellationToken cancellation = default) => Task.FromResult(true);
+        public Task<bool> Send(string userName, object message, CancellationToken cancellation = default) => Task.FromResult(true);
         public Task DeliverLocal(object payload) => Task.CompletedTask;
 
         public async Task FireMessageDelivered(object payload)
@@ -21,7 +22,7 @@ public sealed class InterfaceServiceTests
 
     private static readonly IMessageFormat Format = new TestMessageFormat();
 
-    private static SiteInfo MakeSiteInfo(string name) => new() { Name = name, Code = "C1", EnvironmentTitle = "T", EnvironmentColor = "#000" };
+    private static UserInfo MakeUserInfo(string name) => new() { Name = name, Code = "C1", EnvironmentTitle = "T", EnvironmentColor = "#000" };
 
     /// <summary>Retries connecting to the listener while it finishes binding, tolerating scheduling delays under parallel test load.</summary>
     private static async Task<IOftConnection> ConnectWithRetry(int port)
@@ -42,46 +43,47 @@ public sealed class InterfaceServiceTests
 
     // ── HandleInterfaceMessage ────────────────────────────────────────────────
 
-    /// <summary>A message received from an interface is routed as if sent by the currently installed site.</summary>
+    /// <summary>A message received from an interface is routed as if sent by the currently installed user.</summary>
     [Fact]
-    public async Task HandleInterfaceMessage_ValidMessage_RoutesAsCurrentSite()
+    public async Task HandleInterfaceMessage_ValidMessage_RoutesAsCurrentUser()
     {
         Mock<IOftHoster> hoster = new();
         Mock<IMessageRoutingService> routing = new();
         routing.Setup(r => r.Route(It.IsAny<string>(), It.IsAny<SendMessagePayload>(), It.IsAny<CancellationToken>()))
-            .ReturnsAsync(("MSGID", (IReadOnlyList<SiteDeliveryResult>)[]));
-        Mock<ISiteService> site = new();
-        site.Setup(s => s.GetCurrentSiteInfo()).Returns(MakeSiteInfo("LOCAL"));
+            .ReturnsAsync(("MSGID", (IReadOnlyList<UserDeliveryResult>)[]));
+        Mock<IUserService> user = new();
+        user.Setup(s => s.GetCurrentUserInfo()).Returns(MakeUserInfo("LOCAL"));
         FakePeerService peer = new();
 
-        InterfaceService svc = new(hoster.Object, new PortConfiguration(new EngineConfig()), routing.Object, site.Object, Format, peer);
+        InterfaceService svc = new(hoster.Object, new PortConfiguration(new EngineConfig()), routing.Object, user.Object, Format, peer);
 
         TestMessage incoming = new()
         {
             Subject = "Hi",
             Body = "Body",
-            Addresses = [new TestAddressEntry { SiteName = "DEST", Type = "To" }]
+            Addresses = [new TestAddressEntry { UserName = "DEST", Type = "To" }],
+            IsAlert = true
         };
         using OwnedBuffer buf = PeerSerializer.Serialize(incoming);
 
         await svc.HandleInterfaceMessage(buf.Memory.ToArray());
 
         routing.Verify(r => r.Route("LOCAL", It.Is<SendMessagePayload>(p =>
-            p.Subject == "Hi" && p.Body == "Body" && p.Addresses.Count == 1 && p.Addresses[0].SiteName == "DEST"),
+            p.Subject == "Hi" && p.Body == "Body" && p.Addresses.Count == 1 && p.Addresses[0].UserName == "DEST" && p.IsAlert),
             It.IsAny<CancellationToken>()), Times.Once);
     }
 
-    /// <summary>A message received from an interface is dropped without routing when no site is installed.</summary>
+    /// <summary>A message received from an interface is dropped without routing when no user is installed.</summary>
     [Fact]
-    public async Task HandleInterfaceMessage_NoSiteInstalled_DoesNotRoute()
+    public async Task HandleInterfaceMessage_NoUserInstalled_DoesNotRoute()
     {
         Mock<IOftHoster> hoster = new();
         Mock<IMessageRoutingService> routing = new();
-        Mock<ISiteService> site = new();
-        site.Setup(s => s.GetCurrentSiteInfo()).Returns((SiteInfo?)null);
+        Mock<IUserService> user = new();
+        user.Setup(s => s.GetCurrentUserInfo()).Returns((UserInfo?)null);
         FakePeerService peer = new();
 
-        InterfaceService svc = new(hoster.Object, new PortConfiguration(new EngineConfig()), routing.Object, site.Object, Format, peer);
+        InterfaceService svc = new(hoster.Object, new PortConfiguration(new EngineConfig()), routing.Object, user.Object, Format, peer);
 
         using OwnedBuffer buf = PeerSerializer.Serialize(new TestMessage { Subject = "Hi" });
         await svc.HandleInterfaceMessage(buf.Memory.ToArray());
@@ -95,10 +97,10 @@ public sealed class InterfaceServiceTests
     {
         Mock<IOftHoster> hoster = new();
         Mock<IMessageRoutingService> routing = new();
-        Mock<ISiteService> site = new();
+        Mock<IUserService> user = new();
         FakePeerService peer = new();
 
-        InterfaceService svc = new(hoster.Object, new PortConfiguration(new EngineConfig()), routing.Object, site.Object, Format, peer);
+        InterfaceService svc = new(hoster.Object, new PortConfiguration(new EngineConfig()), routing.Object, user.Object, Format, peer);
 
         await svc.HandleInterfaceMessage(new byte[] { 0xFF, 0xFE, 0xFD });
 
@@ -107,16 +109,16 @@ public sealed class InterfaceServiceTests
 
     // ── End-to-end over real OFT ──────────────────────────────────────────────
 
-    /// <summary>A message the site receives from a peer is mirrored, unmodified, to a connected interface.</summary>
+    /// <summary>A message the user receives from a peer is mirrored, unmodified, to a connected interface.</summary>
     [Fact]
     public async Task RealOft_MessageDeliveredFromPeer_IsMirroredToConnectedInterface()
     {
         int port = 43000 + Random.Shared.Next(1000);
         Mock<IMessageRoutingService> routing = new();
-        Mock<ISiteService> site = new();
+        Mock<IUserService> user = new();
         FakePeerService peer = new();
 
-        await using InterfaceService svc = new(new OftHoster(), new PortConfiguration(new EngineConfig { InterfacePort = port }), routing.Object, site.Object, Format, peer);
+        await using InterfaceService svc = new(new OftHoster(), new PortConfiguration(new EngineConfig { InterfacePort = port }), routing.Object, user.Object, Format, peer);
 
         using CancellationTokenSource cts = new();
         _ = svc.Start(cts.Token);
@@ -132,30 +134,30 @@ public sealed class InterfaceServiceTests
             if (message is not null) tcs.TrySetResult(message);
         };
 
-        await peer.FireMessageDelivered(new TestMessage { MessageId = "M1", FromSite = "REMOTE", Subject = "Hello", Body = "World" });
+        await peer.FireMessageDelivered(new TestMessage { MessageId = "M1", FromUser = "REMOTE", Subject = "Hello", Body = "World" });
 
         TestMessage received = await tcs.Task.WaitAsync(TimeSpan.FromSeconds(10));
         Assert.Equal("M1", received.MessageId);
-        Assert.Equal("REMOTE", received.FromSite);
+        Assert.Equal("REMOTE", received.FromUser);
 
         cts.Cancel();
     }
 
-    /// <summary>A message an interface sends is routed out to peers as if the app's own installed site had sent it.</summary>
+    /// <summary>A message an interface sends is routed out to peers as if the app's own installed user had sent it.</summary>
     [Fact]
-    public async Task RealOft_MessageFromInterface_IsRoutedAsCurrentSite()
+    public async Task RealOft_MessageFromInterface_IsRoutedAsCurrentUser()
     {
         int port = 44000 + Random.Shared.Next(1000);
         Mock<IMessageRoutingService> routing = new();
-        TaskCompletionSource<(string FromSite, SendMessagePayload Payload)> routeCalled = new();
+        TaskCompletionSource<(string FromUser, SendMessagePayload Payload)> routeCalled = new();
         routing.Setup(r => r.Route(It.IsAny<string>(), It.IsAny<SendMessagePayload>(), It.IsAny<CancellationToken>()))
-            .Callback<string, SendMessagePayload, CancellationToken>((fromSite, payload, _) => routeCalled.TrySetResult((fromSite, payload)))
-            .ReturnsAsync(("MSGID", (IReadOnlyList<SiteDeliveryResult>)[]));
-        Mock<ISiteService> site = new();
-        site.Setup(s => s.GetCurrentSiteInfo()).Returns(MakeSiteInfo("LOCAL"));
+            .Callback<string, SendMessagePayload, CancellationToken>((fromUser, payload, _) => routeCalled.TrySetResult((fromUser, payload)))
+            .ReturnsAsync(("MSGID", (IReadOnlyList<UserDeliveryResult>)[]));
+        Mock<IUserService> user = new();
+        user.Setup(s => s.GetCurrentUserInfo()).Returns(MakeUserInfo("LOCAL"));
         FakePeerService peer = new();
 
-        await using InterfaceService svc = new(new OftHoster(), new PortConfiguration(new EngineConfig { InterfacePort = port }), routing.Object, site.Object, Format, peer);
+        await using InterfaceService svc = new(new OftHoster(), new PortConfiguration(new EngineConfig { InterfacePort = port }), routing.Object, user.Object, Format, peer);
 
         using CancellationTokenSource cts = new();
         _ = svc.Start(cts.Token);
@@ -166,16 +168,16 @@ public sealed class InterfaceServiceTests
         {
             Subject = "FromInterface",
             Body = "Body",
-            Addresses = [new TestAddressEntry { SiteName = "DEST", Type = "To" }]
+            Addresses = [new TestAddressEntry { UserName = "DEST", Type = "To" }]
         };
         using OwnedBuffer buf = PeerSerializer.Serialize(outgoing);
         await client.Send(buf.Memory);
 
-        (string fromSite, SendMessagePayload payload) = await routeCalled.Task.WaitAsync(TimeSpan.FromSeconds(10));
-        Assert.Equal("LOCAL", fromSite);
+        (string fromUser, SendMessagePayload payload) = await routeCalled.Task.WaitAsync(TimeSpan.FromSeconds(10));
+        Assert.Equal("LOCAL", fromUser);
         Assert.Equal("FromInterface", payload.Subject);
         Assert.Single(payload.Addresses);
-        Assert.Equal("DEST", payload.Addresses[0].SiteName);
+        Assert.Equal("DEST", payload.Addresses[0].UserName);
 
         cts.Cancel();
     }

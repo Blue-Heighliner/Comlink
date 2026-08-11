@@ -5,7 +5,7 @@ namespace BlueHeighliner.Comlink.Engine.Logging;
 public sealed class DailyFileLoggerProvider : ILoggerProvider
 {
     private readonly IAppDataPathProvider _appDataPathProvider;
-    private readonly ICurrentSiteProvider _currentSite;
+    private readonly ICurrentUserProvider _currentUser;
     private readonly ConcurrentDictionary<string, DailyFileLogger> _loggers = new();
     private readonly object _writeLock = new();
     private string? _logDirectory;
@@ -13,11 +13,11 @@ public sealed class DailyFileLoggerProvider : ILoggerProvider
     private DateOnly _currentDate;
     private StreamWriter? _writer;
 
-    /// <summary>Initializes a new <see cref="DailyFileLoggerProvider"/> using the provided path and site providers.</summary>
-    public DailyFileLoggerProvider(IAppDataPathProvider appDataPathProvider, ICurrentSiteProvider currentSite)
+    /// <summary>Initializes a new <see cref="DailyFileLoggerProvider"/> using the provided path and user providers.</summary>
+    public DailyFileLoggerProvider(IAppDataPathProvider appDataPathProvider, ICurrentUserProvider currentUser)
     {
         _appDataPathProvider = appDataPathProvider;
-        _currentSite = currentSite;
+        _currentUser = currentUser;
     }
 
     private string LogDirectory
@@ -39,7 +39,7 @@ public sealed class DailyFileLoggerProvider : ILoggerProvider
 
     /// <inheritdoc />
     public ILogger CreateLogger(string categoryName) =>
-        _loggers.GetOrAdd(categoryName, name => new DailyFileLogger(name, this, _currentSite));
+        _loggers.GetOrAdd(categoryName, name => new DailyFileLogger(name, this, _currentUser));
 
     /// <summary>Writes a formatted log line to the current daily file under a cross-process mutex.</summary>
     internal void Write(string line)
@@ -89,14 +89,14 @@ public sealed class DailyFileLogger : ILogger, IDisposable
 {
     private readonly string _categoryName;
     private readonly DailyFileLoggerProvider _provider;
-    private readonly ICurrentSiteProvider _currentSite;
+    private readonly ICurrentUserProvider _currentUser;
 
     /// <summary>Initializes a new <see cref="DailyFileLogger"/> for the specified category.</summary>
-    public DailyFileLogger(string categoryName, DailyFileLoggerProvider provider, ICurrentSiteProvider currentSite)
+    public DailyFileLogger(string categoryName, DailyFileLoggerProvider provider, ICurrentUserProvider currentUser)
     {
         _categoryName = categoryName;
         _provider = provider;
-        _currentSite = currentSite;
+        _currentUser = currentUser;
     }
 
     /// <inheritdoc />
@@ -110,12 +110,12 @@ public sealed class DailyFileLogger : ILogger, IDisposable
     {
         if (!IsEnabled(logLevel)) return;
         string message = formatter(state, exception);
-        string? site = _currentSite.SiteName;
+        string? user = _currentUser.UserName;
         DateTime dt = DateTime.Now;
         string dateStr = $"{dt.Day:D2}-{dt.ToString("MMM").ToUpperInvariant()}-{dt.Year} {dt:HH:mm}.{dt:fff}";
         string level = logLevel == LogLevel.Information ? "INFO" : logLevel.ToString().ToUpperInvariant();
         string category = _categoryName.ToUpperInvariant();
-        string line = $"[{dateStr}] [{level}] [{category}] [{site ?? "----"}] {message}";
+        string line = $"[{dateStr}] [{level}] [{category}] [{user ?? "----"}] {message}";
         if (exception is not null)
             line += Environment.NewLine + exception;
 

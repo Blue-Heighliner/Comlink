@@ -23,6 +23,13 @@
                      FontSize="12"
                      Foreground="#858585"
                      VerticalAlignment="Center" />
+          <CheckBox Content="ALERT"
+                     IsChecked="{Binding IsAlert}"
+                     IsVisible="{Binding !IsSent}"
+                     Foreground="#E06C75"
+                     FontSize="12"
+                     FontWeight="SemiBold"
+                     VerticalAlignment="Center" />
           <Button Classes="accent"
                   Content="SAVE"
                   Command="{Binding SaveCommand}"
@@ -102,7 +109,7 @@
                              Foreground="#858585" />
                 </Border>
                 <TextBlock Grid.Column="1"
-                           Text="{Binding SiteName}"
+                           Text="{Binding UserName}"
                            FontSize="13"
                            Foreground="#CCCCCC"
                            VerticalAlignment="Center"
@@ -132,10 +139,10 @@
                     FontSize="12"
                     Height="30" />
           <AutoCompleteBox Grid.Column="1"
-                           x:Name="SiteInput"
-                           Text="{Binding NewAddressSite}"
-                           Watermark="Site name..."
-                           ItemsSource="{Binding AllSiteNames}"
+                           x:Name="UserInput"
+                           Text="{Binding NewAddressUser}"
+                           Watermark="User name..."
+                           ItemsSource="{Binding AllUserNames}"
                            FilterMode="StartsWith"
                            MinimumPrefixLength="1"
                            FontSize="13"

@@ -20,7 +20,7 @@ public sealed class EntryServiceTests : IDisposable
         NoteRepository notes = new(_ctx);
         ActivityLogRepository activityLogs = new(_ctx);
         FolderRepository folders = new(_ctx);
-        _service = new EntryService(messages, drafts, notes, activityLogs, folders, new BlueHeighliner.Comlink.Engine.Control.CurrentSiteProvider(), Format);
+        _service = new EntryService(messages, drafts, notes, activityLogs, folders, new BlueHeighliner.Comlink.Engine.Control.CurrentUserProvider(), Format);
     }
 
     /// <summary>Verifies that StoreIncomingMessage creates a message in the Inbox folder.</summary>
@@ -28,14 +28,80 @@ public sealed class EntryServiceTests : IDisposable
     public async Task StoreIncomingMessageAsync_CreatesMessageInInbox()
     {
         MessageEntity entity = await _service.StoreIncomingMessage(
-            Guid.NewGuid().ToString(), "SenderSite", "Hello", "Body text",
-            [new AddressData { SiteName = "LocalSite", Type = "To" }],
+            Guid.NewGuid().ToString(), "SenderUser", "Hello", "Body text",
+            [new AddressData { UserName = "LocalUser", Type = "To" }],
             DateTime.UtcNow);
 
         Assert.NotNull(entity);
-        Assert.Equal("SenderSite", Format.GetFromSite(entity.Message));
+        Assert.Equal("SenderUser", Format.GetFromUser(entity.Message));
         Assert.Equal("Hello", Format.GetSubject(entity.Message));
         Assert.Contains("root-inbox", entity.FolderId);
+    }
+
+    /// <summary>StoreIncomingMessage sets ReadStatus to Received.</summary>
+    [Fact]
+    public async Task StoreIncomingMessageAsync_SetsReadStatusReceived()
+    {
+        MessageEntity entity = await _service.StoreIncomingMessage(
+            Guid.NewGuid().ToString(), "SenderUser", "Hello", "Body", [], DateTime.UtcNow);
+
+        Assert.Equal(DestinationStatus.Received, entity.ReadStatus);
+    }
+
+    /// <summary>StoreIncomingMessage/StoreSentMessage round-trip the IsAlert flag onto the stored message.</summary>
+    [Fact]
+    public async Task StoreMessage_IsAlertTrue_RoundTripsOnStoredMessage()
+    {
+        MessageEntity incoming = await _service.StoreIncomingMessage(
+            Guid.NewGuid().ToString(), "SenderUser", "Hello", "Body", [], DateTime.UtcNow, isAlert: true);
+        Assert.True(Format.GetIsAlert(incoming.Message));
+
+        MessageEntity sent = await _service.StoreSentMessage(
+            Guid.NewGuid().ToString("N"), "Subj", "Body", [], DateTime.UtcNow, [], isAlert: true);
+        Assert.True(Format.GetIsAlert(sent.Message));
+    }
+
+    /// <summary>MarkMessageRead transitions an Inbox record from Received to Read and fires MessageRead.</summary>
+    [Fact]
+    public async Task MarkMessageRead_ReceivedMessage_TransitionsToReadAndFiresEvent()
+    {
+        string messageId = Guid.NewGuid().ToString("N");
+        await _service.StoreIncomingMessage(messageId, "Sender", "Subj", "Body", [], DateTime.UtcNow);
+
+        MessageEntity? readEntity = null;
+        _service.MessageRead += entity => { readEntity = entity; return Task.CompletedTask; };
+
+        MessageEntity? result = await _service.MarkMessageRead(messageId);
+
+        Assert.NotNull(result);
+        Assert.Equal(DestinationStatus.Read, result.ReadStatus);
+        Assert.NotNull(readEntity);
+        Assert.Equal(messageId, readEntity!.MessageId);
+    }
+
+    /// <summary>MarkMessageRead on an already-read message is a no-op that returns null and does not re-fire the event.</summary>
+    [Fact]
+    public async Task MarkMessageRead_AlreadyRead_IsNoOp()
+    {
+        string messageId = Guid.NewGuid().ToString("N");
+        await _service.StoreIncomingMessage(messageId, "Sender", "Subj", "Body", [], DateTime.UtcNow);
+        await _service.MarkMessageRead(messageId);
+
+        int eventCount = 0;
+        _service.MessageRead += _ => { eventCount++; return Task.CompletedTask; };
+
+        MessageEntity? result = await _service.MarkMessageRead(messageId);
+
+        Assert.Null(result);
+        Assert.Equal(0, eventCount);
+    }
+
+    /// <summary>MarkMessageRead for a nonexistent message returns null.</summary>
+    [Fact]
+    public async Task MarkMessageRead_UnknownMessageId_ReturnsNull()
+    {
+        MessageEntity? result = await _service.MarkMessageRead("does-not-exist");
+        Assert.Null(result);
     }
 
     /// <summary>Verifies that CreateDraft creates an unsent draft in the Drafts folder.</summary>
@@ -115,10 +181,10 @@ public sealed class EntryServiceTests : IDisposable
     {
         string messageId = Guid.NewGuid().ToString("N");
         await _service.StoreIncomingMessage(messageId, "SELF", "Hello", "Body",
-            [new AddressData { SiteName = "SELF", Type = "To" }], DateTime.UtcNow);
+            [new AddressData { UserName = "SELF", Type = "To" }], DateTime.UtcNow);
         await _service.StoreSentMessage(messageId, "Hello", "Body",
-            [new AddressData { SiteName = "SELF", Type = "To" }], DateTime.UtcNow,
-            [new SiteDeliveryResult { SiteName = "SELF", Success = true, AddressedVia = [] }]);
+            [new AddressData { UserName = "SELF", Type = "To" }], DateTime.UtcNow,
+            [new UserDeliveryResult { UserName = "SELF", Success = true, AddressedVia = [] }]);
 
         MessageEntity? updated = await _service.UpdateDeliveryStatus(messageId, "SELF", DestinationStatus.Confirmed);
 
@@ -132,25 +198,25 @@ public sealed class EntryServiceTests : IDisposable
         Assert.Empty(inboxCopy.DeliveryStatuses);
     }
 
-    /// <summary>A successful site result seeds the Outbox record with Confirmed status immediately — a successful send already implies full OFT delivery.</summary>
+    /// <summary>A successful user result seeds the Outbox record with Confirmed status immediately — a successful send already implies full OFT delivery.</summary>
     [Fact]
-    public async Task StoreSentMessage_SuccessfulSiteResult_SeedsConfirmedStatusImmediately()
+    public async Task StoreSentMessage_SuccessfulUserResult_SeedsConfirmedStatusImmediately()
     {
         MessageEntity entity = await _service.StoreSentMessage(
             Guid.NewGuid().ToString("N"), "Subj", "Body", [],
-            DateTime.UtcNow, [new SiteDeliveryResult { SiteName = "SELF", Success = true, AddressedVia = [] }]);
+            DateTime.UtcNow, [new UserDeliveryResult { UserName = "SELF", Success = true, AddressedVia = [] }]);
 
         Assert.Equal(DestinationStatus.Confirmed, Assert.Single(entity.DeliveryStatuses).Status);
         Assert.True(entity.IsOutbound);
     }
 
-    /// <summary>A failed site result seeds the Outbox record with Failed status immediately.</summary>
+    /// <summary>A failed user result seeds the Outbox record with Failed status immediately.</summary>
     [Fact]
-    public async Task StoreSentMessage_FailedSiteResult_SeedsFailedStatusImmediately()
+    public async Task StoreSentMessage_FailedUserResult_SeedsFailedStatusImmediately()
     {
         MessageEntity entity = await _service.StoreSentMessage(
             Guid.NewGuid().ToString("N"), "Subj", "Body", [],
-            DateTime.UtcNow, [new SiteDeliveryResult { SiteName = "UNREACHABLE", Success = false, AddressedVia = [] }]);
+            DateTime.UtcNow, [new UserDeliveryResult { UserName = "UNREACHABLE", Success = false, AddressedVia = [] }]);
 
         Assert.Equal(DestinationStatus.Failed, Assert.Single(entity.DeliveryStatuses).Status);
         Assert.True(entity.IsOutbound);

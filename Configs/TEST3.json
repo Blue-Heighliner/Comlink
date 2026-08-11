@@ -1,13 +1,13 @@
 {
-  "SiteName": "TEST3",
+  "UserName": "TEST3",
   "PeerPort": 50040,
   "DataFolder": "@TEST3",
   "PeerCertificateName": "disable",
-  "Sites": {
+  "Users": {
     "TEST1": { "IpAddress": "127.0.0.1", "Port": 50020 },
     "TEST2": { "IpAddress": "127.0.0.1", "Port": 50030 }
   },
-  "SiteGroups": {
+  "UserGroups": {
     "TEST": [ "TEST1", "TEST2", "TEST3" ]
   }
 }

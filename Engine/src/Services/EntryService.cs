@@ -13,12 +13,20 @@ public interface IEntryService
     event Func<NoteEntity, Task>? NoteInserted;
     /// <summary>Raised after an existing note is saved.</summary>
     event Func<NoteEntity, Task>? NoteUpdated;
-    /// <summary>Persists a sent message to the Outbox folder, including per-site delivery status entries.</summary>
-    Task<MessageEntity> StoreSentMessage(string messageId, string subject, string body, List<AddressData> addresses, DateTime sentAt, IReadOnlyList<SiteDeliveryResult> siteResults);
-    /// <summary>Updates the delivery status for a specific site on an existing message entity.</summary>
-    Task<MessageEntity?> UpdateDeliveryStatus(string messageId, string siteName, DestinationStatus status);
-    /// <summary>Persists a received message to the Inbox folder and raises <see cref="MessageInserted"/>.</summary>
-    Task<MessageEntity> StoreIncomingMessage(string messageId, string fromSite, string subject, string body, List<AddressData> addresses, DateTime sentAt);
+    /// <summary>Raised after an Inbox message's <see cref="MessageEntity.ReadStatus"/> transitions from <c>Received</c> to <c>Read</c>.</summary>
+    event Func<MessageEntity, Task>? MessageRead;
+    /// <summary>Persists a sent message to the Outbox folder, including per-user delivery status entries.</summary>
+    Task<MessageEntity> StoreSentMessage(string messageId, string subject, string body, List<AddressData> addresses, DateTime sentAt, IReadOnlyList<UserDeliveryResult> userResults, bool isAlert = false);
+    /// <summary>Updates the delivery status for a specific user on an existing message entity.</summary>
+    Task<MessageEntity?> UpdateDeliveryStatus(string messageId, string userName, DestinationStatus status);
+    /// <summary>Persists a received message to the Inbox folder with <see cref="MessageEntity.ReadStatus"/> set to <see cref="DestinationStatus.Received"/>, and raises <see cref="MessageInserted"/>.</summary>
+    Task<MessageEntity> StoreIncomingMessage(string messageId, string fromUser, string subject, string body, List<AddressData> addresses, DateTime sentAt, bool isAlert = false);
+    /// <summary>
+    /// Transitions the Inbox record for <paramref name="messageId"/> from <see cref="DestinationStatus.Received"/>
+    /// to <see cref="DestinationStatus.Read"/> and raises <see cref="MessageRead"/>. Returns <see langword="null"/>
+    /// (a no-op) if the record does not exist or is already <see cref="DestinationStatus.Read"/>.
+    /// </summary>
+    Task<MessageEntity?> MarkMessageRead(string messageId);
     /// <summary>Creates a new empty draft in the Drafts folder and raises <see cref="DraftInserted"/>.</summary>
     Task<DraftEntity> CreateDraft();
     /// <summary>Creates a new empty note in the Notes folder and raises <see cref="NoteInserted"/>.</summary>
@@ -58,7 +66,7 @@ public sealed class EntryService : IEntryService
     private readonly INoteRepository _notes;
     private readonly IActivityLogRepository _activityLogs;
     private readonly IFolderRepository _folders;
-    private readonly ICurrentSiteProvider _currentSiteProvider;
+    private readonly ICurrentUserProvider _currentUserProvider;
     private readonly IMessageFormat _messageFormat;
     private readonly SemaphoreSlim _deliveryLock = new(1, 1);
 
@@ -72,6 +80,8 @@ public sealed class EntryService : IEntryService
     public event Func<NoteEntity, Task>? NoteInserted;
     /// <summary>Raised after an existing note is saved.</summary>
     public event Func<NoteEntity, Task>? NoteUpdated;
+    /// <summary>Raised after an Inbox message's <see cref="MessageEntity.ReadStatus"/> transitions from <c>Received</c> to <c>Read</c>.</summary>
+    public event Func<MessageEntity, Task>? MessageRead;
 
     /// <summary>Initializes a new <see cref="EntryService"/> with the required repositories and providers.</summary>
     public EntryService(
@@ -80,7 +90,7 @@ public sealed class EntryService : IEntryService
         INoteRepository notes,
         IActivityLogRepository activityLogs,
         IFolderRepository folders,
-        ICurrentSiteProvider currentSiteProvider,
+        ICurrentUserProvider currentUserProvider,
         IMessageFormat messageFormat)
     {
         _messages = messages;
@@ -88,30 +98,31 @@ public sealed class EntryService : IEntryService
         _notes = notes;
         _activityLogs = activityLogs;
         _folders = folders;
-        _currentSiteProvider = currentSiteProvider;
+        _currentUserProvider = currentUserProvider;
         _messageFormat = messageFormat;
     }
 
-    private object BuildMessage(string messageId, string fromSite, string subject, string body, List<AddressData> addresses, DateTime sentAt)
+    private object BuildMessage(string messageId, string fromUser, string subject, string body, List<AddressData> addresses, DateTime sentAt, bool isAlert)
     {
         object message = _messageFormat.CreateMessage();
         _messageFormat.SetMessageId(message, messageId);
-        _messageFormat.SetFromSite(message, fromSite);
+        _messageFormat.SetFromUser(message, fromUser);
         _messageFormat.SetSubject(message, subject);
         _messageFormat.SetBody(message, body);
-        _messageFormat.SetAddresses(message, addresses.Select(a => new MessageAddress { SiteName = a.SiteName, Type = a.Type.ParseAddressType() }).ToList());
+        _messageFormat.SetAddresses(message, addresses.Select(a => new MessageAddress { UserName = a.UserName, Type = a.Type.ParseAddressType() }).ToList());
         _messageFormat.SetSentAt(message, sentAt);
+        _messageFormat.SetIsAlert(message, isAlert);
         return message;
     }
 
-    /// <summary>Persists a sent message to the Outbox folder, including per-site delivery status entries.</summary>
-    public async Task<MessageEntity> StoreSentMessage(string messageId, string subject, string body, List<AddressData> addresses, DateTime sentAt, IReadOnlyList<SiteDeliveryResult> siteResults)
+    /// <summary>Persists a sent message to the Outbox folder, including per-user delivery status entries.</summary>
+    public async Task<MessageEntity> StoreSentMessage(string messageId, string subject, string body, List<AddressData> addresses, DateTime sentAt, IReadOnlyList<UserDeliveryResult> userResults, bool isAlert = false)
     {
         string outboxId = await _folders.GetRootId(FolderType.Outbox);
-        List<DeliveryStatus> deliveryStatuses = siteResults
+        List<DeliveryStatus> deliveryStatuses = userResults
             .Select(r => new DeliveryStatus
             {
-                SiteName = r.SiteName,
+                UserName = r.UserName,
                 Status = r.Success ? DestinationStatus.Confirmed : DestinationStatus.Failed,
                 AddressedVia = [.. r.AddressedVia]
             })
@@ -119,7 +130,7 @@ public sealed class EntryService : IEntryService
         MessageEntity entity = new()
         {
             MessageId = messageId,
-            Message = BuildMessage(messageId, _currentSiteProvider.SiteName ?? string.Empty, subject, body, addresses, sentAt),
+            Message = BuildMessage(messageId, _currentUserProvider.UserName ?? string.Empty, subject, body, addresses, sentAt, isAlert),
             DeliveryStatuses = deliveryStatuses,
             ReceivedAt = sentAt,
             FolderId = outboxId,
@@ -129,8 +140,8 @@ public sealed class EntryService : IEntryService
         return entity;
     }
 
-    /// <summary>Updates the delivery status for a specific site on an existing message entity.</summary>
-    public async Task<MessageEntity?> UpdateDeliveryStatus(string messageId, string siteName, DestinationStatus status)
+    /// <summary>Updates the delivery status for a specific user on an existing message entity.</summary>
+    public async Task<MessageEntity?> UpdateDeliveryStatus(string messageId, string userName, DestinationStatus status)
     {
         await _deliveryLock.WaitAsync();
         try
@@ -140,11 +151,11 @@ public sealed class EntryService : IEntryService
             MessageEntity? entity = await _messages.Get(messageId, outbound: true);
             if (entity is null) return null;
 
-            DeliveryStatus? existing = entity.DeliveryStatuses.FirstOrDefault(d => d.SiteName == siteName);
+            DeliveryStatus? existing = entity.DeliveryStatuses.FirstOrDefault(d => d.UserName == userName);
             if (existing is not null)
                 existing.Status = status;
             else
-                entity.DeliveryStatuses.Add(new DeliveryStatus { SiteName = siteName, Status = status });
+                entity.DeliveryStatuses.Add(new DeliveryStatus { UserName = userName, Status = status });
 
             await _messages.Update(entity);
             return entity;
@@ -156,21 +167,41 @@ public sealed class EntryService : IEntryService
     }
 
     /// <summary>Persists a received message to the Inbox folder and raises <see cref="MessageInserted"/>.</summary>
-    public async Task<MessageEntity> StoreIncomingMessage(string messageId, string fromSite, string subject, string body, List<AddressData> addresses, DateTime sentAt)
+    public async Task<MessageEntity> StoreIncomingMessage(string messageId, string fromUser, string subject, string body, List<AddressData> addresses, DateTime sentAt, bool isAlert = false)
     {
         string inboxId = await _folders.GetRootId(FolderType.Inbox);
         MessageEntity entity = new()
         {
             MessageId = messageId,
-            Message = BuildMessage(messageId, fromSite, subject, body, addresses, sentAt),
+            Message = BuildMessage(messageId, fromUser, subject, body, addresses, sentAt, isAlert),
             ReceivedAt = sentAt,
-            FolderId = inboxId
+            FolderId = inboxId,
+            ReadStatus = DestinationStatus.Received
         };
 
         await _messages.Insert(entity);
 
         if (MessageInserted is not null)
             await MessageInserted(entity);
+
+        return entity;
+    }
+
+    /// <summary>
+    /// Transitions the Inbox record for <paramref name="messageId"/> from <see cref="DestinationStatus.Received"/>
+    /// to <see cref="DestinationStatus.Read"/> and raises <see cref="MessageRead"/>. Returns <see langword="null"/>
+    /// (a no-op) if the record does not exist or is already <see cref="DestinationStatus.Read"/>.
+    /// </summary>
+    public async Task<MessageEntity?> MarkMessageRead(string messageId)
+    {
+        MessageEntity? entity = await _messages.Get(messageId, outbound: false);
+        if (entity is null || entity.ReadStatus != DestinationStatus.Received) return null;
+
+        entity.ReadStatus = DestinationStatus.Read;
+        await _messages.Update(entity);
+
+        if (MessageRead is not null)
+            await MessageRead(entity);
 
         return entity;
     }

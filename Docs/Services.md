@@ -29,50 +29,51 @@ graph TD
 
 Message and delivery-status persistence (`StoreIncomingMessage`, `StoreSentMessage`, `UpdateDeliveryStatus`) all go through `EntryService`, which is only ever driven from Client-mode ViewModels (`MainViewModel`, `DraftViewModel`) and `DirectServiceConnection`'s own delivery-status handler — never from `DirectServiceConnection.OnMessageDelivered`/`SendMessage` directly. In Headless mode, no ViewModels are constructed, so a host consuming `IServiceConnection` in that mode observes messages and delivery-status changes purely as events/calls and is responsible for its own persistence if it needs any — the data layer is Client-mode-only (see below).
 
-## SiteService
+## UserService
 
-Manages site installation and persists site identity to `State.json`.
+Manages user installation and persists user identity to `State.json`.
 
 **Key responsibilities**:
-- Load existing site state on startup (`Load`)
-- Install a new site by resolving a code (`Install`)
-- Apply a debug override (`IDebugSiteOverride`) that bypasses `State.json`
+- Load existing user state on startup (`Load`)
+- Install a new user by resolving a code (`Install`)
+- Apply a debug override (`IDebugUserOverride`) that bypasses `State.json`
 
-**State file**: `{AppDataPath}/State.json` — contains `SiteName`, `SiteCode`, `EnvironmentTitle`, `EnvironmentColor`. `IsInstalled` is a computed property: `true` when `SiteName` is non-null.
+**State file**: `{AppDataPath}/State.json` — contains `UserName`, `UserCode`, `EnvironmentTitle`, `EnvironmentColor`. `IsInstalled` is a computed property: `true` when `UserName` is non-null.
 
 **Thread safety**: `Install` uses a `SemaphoreSlim(1,1)` to prevent concurrent installs.
 
-**Debug override**: If any `IDebugSiteOverride` is registered, `Load` skips the state file entirely and uses the override's `SiteName` (uppercased) with a synthetic `EnvironmentTitle = "DEBUG"` and color `#FF6200`. Useful for development without a real site code.
+**Debug override**: If any `IDebugUserOverride` is registered, `Load` skips the state file entirely and uses the override's `UserName` (uppercased) with a synthetic `EnvironmentTitle = "DEBUG"` and color `#FF6200`. Useful for development without a real user code.
 
 ```csharp
 // Consumers call:
-SiteInfo? info = service.GetCurrentSiteInfo();  // null if not installed
-SiteState state = service.CurrentState;
+UserInfo? info = service.GetCurrentUserInfo();  // null if not installed
+UserState state = service.CurrentState;
 await service.Load(cancellation);
-SiteInfo? installed = await service.Install("SN01", cancellation);
+UserInfo? installed = await service.Install("SN01", cancellation);
 ```
 
 ---
 
 ## MessageRoutingService
 
-Routes outbound messages to peer nodes and surfaces their delivery status. There is no custom acknowledgement or confirmation layer — delivery status comes entirely from OFT's own delivery status stream (see [Peer.md](Peer.md#delivery-status)).
+Routes outbound messages to peer nodes and surfaces their delivery status. OFT-level delivery status comes entirely from OFT's own delivery status stream (see [Peer.md](Peer.md#delivery-status)); the one application-level status above that — `Read` — comes from the user-read confirmation message flow (see [Peer.md](Peer.md#read-confirmation)).
 
 **Key responsibilities**:
-- Build the outbound message via `IMessageFormat` (`CreateMessage()` then the `Set*` logical-field setters) so it can be sent as whatever concrete type the host has configured (see [Control.md](Control.md#imessageformat))
+- Build the outbound message via `IMessageFormat` (`CreateMessage()` then the `Set*` logical-field setters, including `SetIsAlert`) so it can be sent as whatever concrete type the host has configured (see [Control.md](Control.md#imessageformat))
 - For each recipient in `SendMessagePayload.Addresses`, deliver via `IPeerService.Send`
 - Subscribe to `IPeerService.DeliveryStatusChanged` and map each `OftDeliveryStatus` to a `DestinationStatus`, re-raising its own `DeliveryStatusChanged`
+- Subscribe to `IPeerService.ConfirmationReceived` and re-raise it as `DeliveryStatusChanged(messageId, confirmingUser, DestinationStatus.Read)` — reusing the same event as OFT-driven status changes
 
 **Events**:
-- `DeliveryStatusChanged(messageId, siteName, DestinationStatus)` — raised on every per-site status change
+- `DeliveryStatusChanged(messageId, userName, DestinationStatus)` — raised on every per-user status change
 
-**Result timing**: `IPeerService.Send` (and therefore `IOftPeer.Send`) does not return until OFT has fully delivered the message, so `Route`'s own per-site `SiteDeliveryResult.Success` already reflects the final outcome by the time `Route` returns — there is no separate "sent but not yet confirmed" pending state to track.
+**Result timing**: `IPeerService.Send` (and therefore `IOftPeer.Send`) does not return until OFT has fully delivered the message, so `Route`'s own per-user `UserDeliveryResult.Success` already reflects the final outcome by the time `Route` returns — there is no separate "sent but not yet confirmed" pending state to track.
 
-**Self-addressing**: When a recipient site name matches the sending site (`fromSite`), that recipient is delivered in-process via `IPeerService.DeliverLocal` — no network connection is opened, and the delivery status for that site is immediately raised as `Confirmed`. A message can address itself alongside remote sites in the same `Route` call; each recipient is handled independently.
+**Self-addressing**: When a recipient user name matches the sending user (`fromUser`), that recipient is delivered in-process via `IPeerService.DeliverLocal` — no network connection is opened, and the delivery status for that user is immediately raised as `Confirmed`. A message can address itself alongside remote users in the same `Route` call; each recipient is handled independently.
 
 ```csharp
-var (messageId, results) = await routing.Route(fromSite, payload, ct);
-// results: IReadOnlyList<SiteDeliveryResult> { SiteName, Success, AddressedVia }
+var (messageId, results) = await routing.Route(fromUser, payload, ct);
+// results: IReadOnlyList<UserDeliveryResult> { UserName, Success, AddressedVia }
 ```
 
 ---
@@ -83,20 +84,22 @@ CRUD for messages, drafts, notes, and activity log reads. Runs in `Client` mode 
 
 **Events** (all `Func<entity, Task>`):
 - `MessageInserted` — fired after `StoreIncomingMessage`
+- `MessageRead` — fired after `MarkMessageRead` transitions an Inbox record from `Received` to `Read`; consumed by `AlertViewModel` to track pending alerts (see [Peer.md](Peer.md#read-confirmation))
 - `DraftInserted` — after `CreateDraft`
 - `DraftUpdated` — after `SaveDraft`, only if the draft has not yet been sent
 - `NoteInserted` — after `CreateNote`
 - `NoteUpdated` — after `SaveNote`
 
-Both `StoreIncomingMessage` and `StoreSentMessage` take the message's logical fields (subject, body, addresses, etc.) as plain parameters and build `MessageEntity.Message` from them via `IMessageFormat` (`CreateMessage()` + `Set*`) before saving — callers never construct the stored message type directly. `MessageEntity.MessageId` is denormalized from the same value passed to `IMessageFormat.SetMessageId` so it stays queryable/indexable (see [Data.md](Data.md#messageentity)).
+Both `StoreIncomingMessage` and `StoreSentMessage` take the message's logical fields (subject, body, addresses, etc.) as plain parameters, plus an `isAlert` flag, and build `MessageEntity.Message` from them via `IMessageFormat` (`CreateMessage()` + `Set*`) before saving — callers never construct the stored message type directly. `MessageEntity.MessageId` is denormalized from the same value passed to `IMessageFormat.SetMessageId` so it stays queryable/indexable (see [Data.md](Data.md#messageentity)).
 
 **Key methods**:
 
 | Method | Description |
 |--------|-------------|
-| `StoreIncomingMessage(messageId, fromSite, subject, body, addresses, sentAt)` | Creates a `MessageEntity` in the Inbox folder (`IsOutbound = false`), fires `MessageInserted` |
-| `StoreSentMessage(messageId, subject, body, addresses, sentAt, siteResults)` | Creates a `MessageEntity` in the Outbox (`IsOutbound = true`) with per-site delivery statuses seeded from the routing result — `Confirmed` when `Success` is `true` (a successful send already implies full OFT delivery, see `Docs/Peer.md`), otherwise `Failed` |
-| `UpdateDeliveryStatus(messageId, siteName, status)` | Updates per-site delivery status on the Outbox record for `messageId` — always scoped to the outbound record, since a self-addressed message also has an Inbox record sharing the same `messageId` |
+| `StoreIncomingMessage(messageId, fromUser, subject, body, addresses, sentAt, isAlert = false)` | Creates a `MessageEntity` in the Inbox folder (`IsOutbound = false`, `ReadStatus = Received`), fires `MessageInserted` |
+| `StoreSentMessage(messageId, subject, body, addresses, sentAt, userResults, isAlert = false)` | Creates a `MessageEntity` in the Outbox (`IsOutbound = true`) with per-user delivery statuses seeded from the routing result — `Confirmed` when `Success` is `true` (a successful send already implies full OFT delivery, see `Docs/Peer.md`), otherwise `Failed` |
+| `UpdateDeliveryStatus(messageId, userName, status)` | Updates per-user delivery status on the Outbox record for `messageId` — always scoped to the outbound record, since a self-addressed message also has an Inbox record sharing the same `messageId` |
+| `MarkMessageRead(messageId)` | Transitions the Inbox record's `ReadStatus` from `Received` to `Read` and fires `MessageRead`. A no-op (returns `null`) if the record is missing or already `Read` — see [Peer.md](Peer.md#read-confirmation) |
 | `CreateDraft()` | Creates a blank draft in the Drafts folder, fires `DraftInserted` |
 | `CreateNote()` | Creates a blank note in the Notes folder, fires `NoteInserted` |
 | `SaveDraft(entity)` | Persists draft changes, fires `DraftUpdated` if not yet sent |
@@ -115,10 +118,11 @@ Both `StoreIncomingMessage` and `StoreSentMessage` take the message's logical fi
 Implements `IServiceConnection`, registered in both `Client` and `Headless` mode. Wires engine internals to the interface consumed by ViewModels (Client) or embedding host code (Headless).
 
 **Responsibilities**:
-- Forwards `IServiceConnection.SendMessage` → `MessageRoutingService.Route` and returns the result. It does not persist anything itself — in Client mode, `DraftViewModel` calls `EntryService.StoreSentMessage` after a successful send
+- Forwards `IServiceConnection.SendMessage(subject, body, addresses, isAlert)` → `MessageRoutingService.Route` and returns the result. It does not persist anything itself — in Client mode, `DraftViewModel` calls `EntryService.StoreSentMessage` after a successful send
 - Translates `PeerService.MessageDelivered` → fires `IServiceConnection.MessageReceived`. It does not persist the message itself — in Client mode, `MainViewModel`'s handler for that event calls `EntryService.StoreIncomingMessage`
 - On `MessageRoutingService.DeliveryStatusChanged`, updates the Outbox record via `EntryService.UpdateDeliveryStatus`, then fires `IServiceConnection.DeliveryStatusChanged` with the resulting `OverallStatus`
-- Implements install, site info query, and site names query by delegating to `SiteService` / `ISiteNameDirectory`
+- `MarkMessageRead(messageId)`: calls `EntryService.MarkMessageRead`, fires `IServiceConnection.DeliveryStatusChanged` locally (empty `UserName`, status `Read`) so Client-mode UI reflects the read state immediately, then sends a user-read confirmation message to the original sender via `IPeerService.Send` directly — or, for a self-addressed message, calls `EntryService.UpdateDeliveryStatus` directly with no network round-trip. See [Peer.md](Peer.md#read-confirmation)
+- Implements install, user info query, and user names query by delegating to `UserService` / `IUserNameDirectory`
 
 ---
 
@@ -134,10 +138,10 @@ DTOs used across the service layer:
 
 | Type | Fields |
 |------|--------|
-| `MessageReceivedEvent` | `MessageId`, `FromSite`, `Subject`, `Body`, `Addresses[]`, `SentAt` |
-| `AddressRequest` | `SiteName`, `Type` |
-| `SiteDeliveryResult` | `SiteName`, `Success (bool)`, `AddressedVia[]` |
-| `SendMessageResult` | `MessageId`, `SiteResults[]` |
-| `DeliveryStatusChangedEvent` | `MessageId`, `SiteName`, `Status`, `OverallStatus` |
-| `SendMessagePayload` | `Subject`, `Body`, `Addresses[]` (of `AddressPayload`) |
-| `AddressPayload` | `SiteName`, `Type` |
+| `MessageReceivedEvent` | `MessageId`, `FromUser`, `Subject`, `Body`, `Addresses[]`, `SentAt`, `IsAlert` |
+| `AddressRequest` | `UserName`, `Type` |
+| `UserDeliveryResult` | `UserName`, `Success (bool)`, `AddressedVia[]` |
+| `SendMessageResult` | `MessageId`, `UserResults[]` |
+| `DeliveryStatusChangedEvent` | `MessageId`, `UserName`, `Status`, `OverallStatus` — an empty `UserName` marks a local read-status notification for this user's own Inbox record rather than a remote destination (see [Peer.md](Peer.md#read-confirmation)) |
+| `SendMessagePayload` | `Subject`, `Body`, `Addresses[]` (of `AddressPayload`), `IsAlert` |
+| `AddressPayload` | `UserName`, `Type` |

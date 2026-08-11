@@ -7,12 +7,14 @@ public interface IDraftViewModel
     string Id { get; }
     /// <summary>Gets or sets the message subject.</summary>
     string Subject { get; set; }
-    /// <summary>Gets or sets the site name being typed into the address field (auto-uppercased).</summary>
-    string NewAddressSite { get; set; }
+    /// <summary>Gets or sets the user name being typed into the address field (auto-uppercased).</summary>
+    string NewAddressUser { get; set; }
     /// <summary>Gets or sets the address type selected in the address field.</summary>
     string NewAddressType { get; set; }
     /// <summary>Gets or sets a value indicating whether this draft has been sent.</summary>
     bool IsSent { get; set; }
+    /// <summary>Gets or sets a value indicating whether this draft will be sent as an alert.</summary>
+    bool IsAlert { get; set; }
     /// <summary>Gets or sets a value indicating whether a save or send operation is in progress.</summary>
     bool IsSaving { get; set; }
     /// <summary>Gets or sets the status message displayed after a save or send attempt.</summary>
@@ -23,8 +25,8 @@ public interface IDraftViewModel
     IBodyDocument BodyDocument { get; }
     /// <summary>Gets the map of fill-in IDs to their ViewModels, keyed by the 8-char hex ID.</summary>
     IReadOnlyDictionary<string, IFillInViewModel> FillIns { get; }
-    /// <summary>Gets all known site names available for recipient auto-complete.</summary>
-    IReadOnlyList<string> AllSiteNames { get; }
+    /// <summary>Gets all known user names available for recipient auto-complete.</summary>
+    IReadOnlyList<string> AllUserNames { get; }
     /// <summary>Gets the list of valid address type labels.</summary>
     IReadOnlyList<string> AddressTypes { get; }
     /// <summary>Raised after the draft is successfully sent, providing the resulting message entity.</summary>
@@ -35,7 +37,7 @@ public interface IDraftViewModel
     IAsyncRelayCommand SaveCommand { get; }
     /// <summary>Sends the draft as a message.</summary>
     IAsyncRelayCommand SendCommand { get; }
-    /// <summary>Adds the current <see cref="NewAddressSite"/> and <see cref="NewAddressType"/> as a recipient.</summary>
+    /// <summary>Adds the current <see cref="NewAddressUser"/> and <see cref="NewAddressType"/> as a recipient.</summary>
     IRelayCommand AddAddressCommand { get; }
     /// <summary>Removes the specified address from the recipient list.</summary>
     IRelayCommand<AddressData> RemoveAddressCommand { get; }
@@ -55,9 +57,10 @@ public sealed partial class DraftViewModel : ObservableObject, IDraftViewModel
     private const int FillInMarkerLength = FillInIdLength + 1; // 9
 
     [ObservableProperty] private string _subject;
-    [ObservableProperty] private string _newAddressSite = string.Empty;
+    [ObservableProperty] private string _newAddressUser = string.Empty;
     [ObservableProperty] private string _newAddressType = "To";
     [ObservableProperty] private bool _isSent;
+    [ObservableProperty] private bool _isAlert;
     [ObservableProperty] private bool _isSaving;
     [ObservableProperty] private string? _statusMessage;
 
@@ -72,7 +75,7 @@ public sealed partial class DraftViewModel : ObservableObject, IDraftViewModel
     /// <inheritdoc />
     public IReadOnlyDictionary<string, IFillInViewModel> FillIns => _fillIns;
     /// <inheritdoc />
-    public IReadOnlyList<string> AllSiteNames { get; }
+    public IReadOnlyList<string> AllUserNames { get; }
     /// <inheritdoc />
     public IReadOnlyList<string> AddressTypes { get; } = ["To", "Cc"];
 
@@ -83,10 +86,10 @@ public sealed partial class DraftViewModel : ObservableObject, IDraftViewModel
     /// <param name="entity">The draft entity to compose and send.</param>
     /// <param name="entryService">Entry service for saving and sending the draft.</param>
     /// <param name="connection">Service connection for sending messages.</param>
-    /// <param name="siteNames">All known site names available for recipient auto-complete.</param>
+    /// <param name="userNames">All known user names available for recipient auto-complete.</param>
     /// <param name="loggerFactory">Factory for creating named loggers.</param>
     /// <param name="bodyDocument">Optional body document implementation; defaults to <see cref="StringBodyDocument"/> when <see langword="null"/>.</param>
-    public DraftViewModel(DraftEntity entity, IEntryService entryService, IServiceConnection connection, IReadOnlyList<string> siteNames, ILoggerFactory loggerFactory, IBodyDocument? bodyDocument = null)
+    public DraftViewModel(DraftEntity entity, IEntryService entryService, IServiceConnection connection, IReadOnlyList<string> userNames, ILoggerFactory loggerFactory, IBodyDocument? bodyDocument = null)
     {
         _entity = entity;
         _entryService = entryService;
@@ -94,7 +97,8 @@ public sealed partial class DraftViewModel : ObservableObject, IDraftViewModel
         _activityLogger = loggerFactory.CreateLogger("ACTIVITY");
         _subject = entity.Subject;
         _isSent = entity.IsSent;
-        AllSiteNames = siteNames;
+        _isAlert = entity.IsAlert;
+        AllUserNames = userNames;
         BodyDocument = bodyDocument ?? new StringBodyDocument();
 
         foreach (AddressData a in entity.Addresses)
@@ -132,10 +136,10 @@ public sealed partial class DraftViewModel : ObservableObject, IDraftViewModel
         }
     }
 
-    partial void OnNewAddressSiteChanged(string value)
+    partial void OnNewAddressUserChanged(string value)
     {
         string upper = value.ToUpperInvariant();
-        if (value != upper) NewAddressSite = upper;
+        if (value != upper) NewAddressUser = upper;
     }
 
     /// <inheritdoc />
@@ -229,6 +233,7 @@ public sealed partial class DraftViewModel : ObservableObject, IDraftViewModel
             _entity.Body = BuildPlainBody();
             _entity.BodySegmentsJson = SerializeBody();
             _entity.Addresses = [.. Addresses];
+            _entity.IsAlert = IsAlert;
             await _entryService.SaveDraft(_entity);
             StatusMessage = "Saved";
         }
@@ -255,10 +260,12 @@ public sealed partial class DraftViewModel : ObservableObject, IDraftViewModel
             _entity.Body = body;
             _entity.BodySegmentsJson = SerializeBody();
             _entity.Addresses = [.. Addresses];
+            _entity.IsAlert = IsAlert;
 
             SendMessageResult? result = await _connection.SendMessage(
                 Subject, body,
-                Addresses.Select(a => new AddressRequest { SiteName = a.SiteName, Type = a.Type }).ToList());
+                Addresses.Select(a => new AddressRequest { UserName = a.UserName, Type = a.Type }).ToList(),
+                IsAlert);
 
             _entity.IsSent = true;
             _entity.SentAt = DateTime.UtcNow;
@@ -266,7 +273,7 @@ public sealed partial class DraftViewModel : ObservableObject, IDraftViewModel
 
             DateTime sentAt = _entity.SentAt ?? DateTime.UtcNow;
             MessageEntity sentMessage = await _entryService.StoreSentMessage(
-                result!.MessageId, Subject, body, [.. Addresses], sentAt, result.SiteResults);
+                result!.MessageId, Subject, body, [.. Addresses], sentAt, result.UserResults, IsAlert);
 
             IsSent = true;
             StatusMessage = "Sent";
@@ -288,9 +295,9 @@ public sealed partial class DraftViewModel : ObservableObject, IDraftViewModel
     [RelayCommand]
     private void AddAddress()
     {
-        if (string.IsNullOrWhiteSpace(NewAddressSite)) return;
-        Addresses.Add(new AddressData { SiteName = NewAddressSite.Trim(), Type = NewAddressType });
-        NewAddressSite = string.Empty;
+        if (string.IsNullOrWhiteSpace(NewAddressUser)) return;
+        Addresses.Add(new AddressData { UserName = NewAddressUser.Trim(), Type = NewAddressType });
+        NewAddressUser = string.Empty;
     }
 
     [RelayCommand]

@@ -8,7 +8,7 @@ A single file `Data.db` in `IAppDataPathProvider.AppDataPath`. The file is creat
 
 ## LiteDbContext
 
-`LiteDbContext` owns the `LiteDatabase` instance and exposes typed collection handles. Call `Initialize()` after the site is known (on install or on startup when an existing site is loaded). Re-calling `Initialize()` is safe — it disposes and reopens the database.
+`LiteDbContext` owns the `LiteDatabase` instance and exposes typed collection handles. Call `Initialize()` after the user is known (on install or on startup when an existing user is loaded). Re-calling `Initialize()` is safe — it disposes and reopens the database.
 
 Collections initialized:
 
@@ -75,12 +75,13 @@ Stored in both Inbox (received) and Outbox (sent).
 | `Id` | `ObjectId` | LiteDB auto-ID (the actual primary key) |
 | `MessageId` | `string` | Denormalized from `Message` (via `IMessageFormat.GetMessageId`) so LiteDB can query/index on it directly. **Not unique** — see below |
 | `Message` | `object` | The message content — subject, body, sender, addresses, sent time — as an instance of `IMessageFormat.MessageType`. This is the canonical representation; LiteDB serializes it using its own runtime type (via its built-in `object`-property polymorphism, storing a `_type` discriminator) and reconstructs the same concrete type on load. Read its logical fields through the registered `IMessageFormat` — see `Docs/Peer.md` and `Docs/Control.md`. |
-| `DeliveryStatuses` | `List<DeliveryStatus>` | Per-site delivery state (Outbox messages) |
+| `DeliveryStatuses` | `List<DeliveryStatus>` | Per-user delivery state (Outbox messages) |
+| `ReadStatus` | `DestinationStatus?` | Inbox-only: `Received` when stored, `Read` once the user opens it (see `Docs/Peer.md#read-confirmation`). Always `null` on Outbox records — per-destination read state lives in `DeliveryStatuses` instead |
 | `ReceivedAt` | `DateTime` | UTC timestamp; denormalized from `Message`'s sent time so LiteDB can sort/index on it directly |
 | `FolderId` | `string` | Parent folder ID |
 | `IsOutbound` | `bool` | `true` for the Outbox (sent) record, `false` for the Inbox (received) record |
 
-**Self-addressed messages**: when a site sends a message to itself (see `Docs/Peer.md`), one `MessageEntity` document is created in the Inbox (`IsOutbound = false`, no `DeliveryStatuses`) and a second in the Outbox (`IsOutbound = true`, populated `DeliveryStatuses`) — both sharing the same `MessageId`. `MessageRepository.Get`/`Delete` always take an explicit `outbound` flag to disambiguate which of the two documents to target; delivery-status updates are always scoped to the outbound record.
+**Self-addressed messages**: when a user sends a message to itself (see `Docs/Peer.md`), one `MessageEntity` document is created in the Inbox (`IsOutbound = false`, no `DeliveryStatuses`) and a second in the Outbox (`IsOutbound = true`, populated `DeliveryStatuses`) — both sharing the same `MessageId`. `MessageRepository.Get`/`Delete` always take an explicit `outbound` flag to disambiguate which of the two documents to target; delivery-status updates are always scoped to the outbound record.
 
 ### `DraftEntity`
 
@@ -92,6 +93,7 @@ Stored in both Inbox (received) and Outbox (sent).
 | `BodySegmentsJson` | `string` | JSON array of `DraftBodySegmentData` — used for fill-ins |
 | `Addresses` | `List<AddressData>` | |
 | `IsSent` | `bool` | `true` after successful send |
+| `IsAlert` | `bool` | Whether this draft will be sent as an alert; see `Docs/Peer.md#alert-messages` |
 | `SentAt` | `DateTime?` | UTC send time |
 | `ModifiedAt` | `DateTime` | UTC last edit time |
 | `FolderId` | `string` | |
@@ -133,9 +135,9 @@ One record per day, accumulated throughout the day.
 
 ### Embedded Types
 
-**`AddressData`**: `SiteName (string)`, `Type (string)` — `"To"` or `"Cc"`
+**`AddressData`**: `UserName (string)`, `Type (string)` — `"To"` or `"Cc"`
 
-**`DeliveryStatus`**: `SiteName (string)`, `Status (DestinationStatus enum)` — `Sending`, `Sent`, `Failed`, `Confirmed`
+**`DeliveryStatus`**: `UserName (string)`, `Status (DestinationStatus enum)` — `Sending`, `Sent`, `Failed`, `Confirmed`, `Read` (`Received` never appears here — see `ReadStatus` above)
 
 ## Repositories
 

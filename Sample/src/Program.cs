@@ -11,10 +11,11 @@ internal static class Program
             args,
             services =>
             {
-                services.AddSingleton<ISiteLocator, SampleSiteLocator>();
-                services.AddSingleton<ISiteCodeResolver, SampleSiteCodeResolver>();
-                services.AddSingleton<ISiteNameDirectory, SampleSiteNameDirectory>();
+                services.AddSingleton<IUserLocator, SampleUserLocator>();
+                services.AddSingleton<IUserCodeResolver, SampleUserCodeResolver>();
+                services.AddSingleton<IUserNameDirectory, SampleUserNameDirectory>();
                 services.AddSingleton<IHomeContentProvider, SampleHomeContentProvider>();
+                services.AddSingleton<IAlertSoundPlayer, SampleAlertSoundPlayer>();
             },
             new Uri("avares://BlueHeighliner.Comlink.Sample/Assets/envelope.png"));
     }

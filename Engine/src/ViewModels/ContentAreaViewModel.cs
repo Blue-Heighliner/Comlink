@@ -76,8 +76,15 @@ public sealed partial class ContentAreaViewModel : ObservableObject, IContentAre
 
     private Task OnDeliveryStatusChanged(DeliveryStatusChangedEvent evt)
     {
-        if (ActiveContent is IMessageViewModel msgVm && msgVm.MessageId == evt.MessageId)
-            msgVm.UpdateDeliveryStatus(evt.SiteName, evt.Status);
+        if (ActiveContent is not IMessageViewModel msgVm || msgVm.MessageId != evt.MessageId)
+            return Task.CompletedTask;
+
+        // An empty UserName marks a local read-status notification for this user's own Inbox record
+        // (see DirectServiceConnection.MarkMessageRead), not a remote destination's delivery status.
+        if (string.IsNullOrEmpty(evt.UserName))
+            msgVm.ReadStatus = evt.Status;
+        else
+            msgVm.UpdateDeliveryStatus(evt.UserName, evt.Status);
         return Task.CompletedTask;
     }
 
@@ -117,7 +124,19 @@ public sealed partial class ContentAreaViewModel : ObservableObject, IContentAre
     private async Task<MessageViewModel?> BuildMessageViewModel(string id, bool isOutboundMessage)
     {
         MessageEntity? entity = await _messages.Get(id, isOutboundMessage);
-        return entity is null ? null : new MessageViewModel(entity, _messageFormat);
+        if (entity is null) return null;
+
+        if (!entity.IsOutbound && entity.ReadStatus == DestinationStatus.Received)
+        {
+            try
+            {
+                if (await _connection.MarkMessageRead(entity.MessageId))
+                    entity.ReadStatus = DestinationStatus.Read;
+            }
+            catch { }
+        }
+
+        return new MessageViewModel(entity, _messageFormat);
     }
 
     private async Task<DraftViewModel?> BuildDraftViewModel(string id)
@@ -126,8 +145,8 @@ public sealed partial class ContentAreaViewModel : ObservableObject, IContentAre
         if (oid is null) return null;
         DraftEntity? entity = await _drafts.Get(oid);
         if (entity is null) return null;
-        List<string> siteNames = await _connection.GetSiteNames();
-        DraftViewModel vm = new(entity, _entryService, _connection, siteNames, _loggerFactory);
+        List<string> userNames = await _connection.GetUserNames();
+        DraftViewModel vm = new(entity, _entryService, _connection, userNames, _loggerFactory);
         vm.DraftSent += async (IDraftViewModel _, MessageEntity msg) =>
         {
             ShowEntry(new MessageViewModel(msg, _messageFormat));

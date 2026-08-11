@@ -8,11 +8,11 @@ public sealed class EntryBarViewModelTests
     private static FolderItemViewModel MakeFolder(string id, FolderType type)
         => new(id, type.ToString(), type, null);
 
-    private static MessageEntity MakeMessage(string id = "MSG1", string fromSite = "ALPHA", string subject = "Hello")
+    private static MessageEntity MakeMessage(string id = "MSG1", string fromUser = "ALPHA", string subject = "Hello")
     {
         object message = Format.CreateMessage();
         Format.SetMessageId(message, id);
-        Format.SetFromSite(message, fromSite);
+        Format.SetFromUser(message, fromUser);
         Format.SetSubject(message, subject);
         Format.SetBody(message, "body");
         return new MessageEntity

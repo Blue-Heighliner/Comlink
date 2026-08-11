@@ -20,14 +20,14 @@ public sealed class PeerSerializerTests
         TestMessage original = new()
         {
             MessageId = "MSG123",
-            FromSite = "ALPHA",
+            FromUser = "ALPHA",
             Subject = "Hello",
             Body = "World",
             SentAt = sentAt,
             Addresses =
             [
-                new TestAddressEntry { SiteName = "BETA", Type = "To" },
-                new TestAddressEntry { SiteName = "GAMMA", Type = "Cc" }
+                new TestAddressEntry { UserName = "BETA", Type = "To" },
+                new TestAddressEntry { UserName = "GAMMA", Type = "Cc" }
             ]
         };
 
@@ -36,12 +36,12 @@ public sealed class PeerSerializerTests
 
         Assert.NotNull(decoded);
         Assert.Equal(original.MessageId, decoded.MessageId);
-        Assert.Equal(original.FromSite, decoded.FromSite);
+        Assert.Equal(original.FromUser, decoded.FromUser);
         Assert.Equal(original.Subject, decoded.Subject);
         Assert.Equal(original.Body, decoded.Body);
         Assert.Equal(original.SentAt, decoded.SentAt);
         Assert.Equal(2, decoded.Addresses.Count);
-        Assert.Equal("BETA", decoded.Addresses[0].SiteName);
+        Assert.Equal("BETA", decoded.Addresses[0].UserName);
         Assert.Equal("Cc", decoded.Addresses[1].Type);
     }
 
@@ -67,7 +67,7 @@ public sealed class PeerSerializerTests
     [Fact]
     public void Serialize_ProducesNonEmptyBytes()
     {
-        TestMessage msg = new() { MessageId = "x", FromSite = "SOURCE", Subject = "s" };
+        TestMessage msg = new() { MessageId = "x", FromUser = "SOURCE", Subject = "s" };
         using OwnedBuffer buf = PeerSerializer.Serialize(msg);
         Assert.True(buf.Memory.Length > 0);
     }
@@ -81,7 +81,7 @@ public sealed class PeerSerializerTests
         TestMessage? result = PeerSerializer.Deserialize(typeof(TestMessage), ReadOnlyMemory<byte>.Empty) as TestMessage;
         Assert.NotNull(result);
         Assert.Equal(string.Empty, result.MessageId);
-        Assert.Equal(string.Empty, result.FromSite);
+        Assert.Equal(string.Empty, result.FromUser);
         Assert.Empty(result.Addresses);
     }
 }

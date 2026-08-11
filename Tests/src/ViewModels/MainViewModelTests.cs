@@ -5,7 +5,7 @@ public sealed class MainViewModelTests
 {
     private static readonly ILoggerFactory NoLogger = LoggerFactory.Create(_ => { });
 
-    private static SiteInfo MakeSiteInfo(string name = "ALPHA") => new()
+    private static UserInfo MakeUserInfo(string name = "ALPHA") => new()
     {
         Name = name,
         Code = "CODE1",
@@ -23,7 +23,8 @@ public sealed class MainViewModelTests
         public Mock<IEntryBarViewModel> EntryBar { get; } = new();
         public Mock<IContentAreaViewModel> ContentArea { get; } = new();
         public Mock<IInstallViewModel> InstallView { get; } = new();
-        public Mock<ICurrentSiteProvider> SiteProvider { get; } = new();
+        public Mock<IAlertViewModel> Alert { get; } = new();
+        public Mock<ICurrentUserProvider> UserProvider { get; } = new();
         public Mock<IAppNameProvider> AppName { get; } = new();
         public Mock<IKioskModeProvider> KioskMode { get; } = new();
         public Mock<IBodyDocumentFactory> BodyDocumentFactory { get; } = new();
@@ -43,7 +44,8 @@ public sealed class MainViewModelTests
                 EntryBar.Object,
                 ContentArea.Object,
                 InstallView.Object,
-                SiteProvider.Object,
+                Alert.Object,
+                UserProvider.Object,
                 AppName.Object,
                 KioskMode.Object,
                 NoLogger,
@@ -54,7 +56,7 @@ public sealed class MainViewModelTests
 
     // ── Sub-VM properties ─────────────────────────────────────────────────────
 
-    /// <summary>FolderBar, EntryBar, ContentArea, and InstallView expose the injected interfaces.</summary>
+    /// <summary>FolderBar, EntryBar, ContentArea, InstallView, and Alert expose the injected interfaces.</summary>
     [Fact]
     public void Properties_ExposeInjectedSubViewModels()
     {
@@ -65,6 +67,7 @@ public sealed class MainViewModelTests
         Assert.Same(s.EntryBar.Object, vm.EntryBar);
         Assert.Same(s.ContentArea.Object, vm.ContentArea);
         Assert.Same(s.InstallView.Object, vm.InstallView);
+        Assert.Same(s.Alert.Object, vm.Alert);
     }
 
     // ── KioskMode ─────────────────────────────────────────────────────────────
@@ -80,15 +83,15 @@ public sealed class MainViewModelTests
         Assert.True(vm.IsKioskMode);
     }
 
-    // ── Initialize – site installed ───────────────────────────────────────────
+    // ── Initialize – user installed ───────────────────────────────────────────
 
-    /// <summary>Initialize connects, initializes the DB, applies site info, and loads the folder tree when a site is installed.</summary>
+    /// <summary>Initialize connects, initializes the DB, applies user info, and loads the folder tree when a user is installed.</summary>
     [Fact]
-    public async Task Initialize_SiteInstalled_ConnectsAppliesSiteInfoAndLoadsFolder()
+    public async Task Initialize_UserInstalled_ConnectsAppliesUserInfoAndLoadsFolder()
     {
         Setup s = new();
         s.Connection.Setup(c => c.Connect(It.IsAny<CancellationToken>())).Returns(Task.CompletedTask);
-        s.Connection.Setup(c => c.GetSiteInfo(It.IsAny<CancellationToken>())).ReturnsAsync(MakeSiteInfo("BETA"));
+        s.Connection.Setup(c => c.GetUserInfo(It.IsAny<CancellationToken>())).ReturnsAsync(MakeUserInfo("BETA"));
         s.FolderBar.Setup(f => f.Load()).Returns(Task.CompletedTask);
         MainViewModel vm = s.BuildVm();
 
@@ -97,20 +100,20 @@ public sealed class MainViewModelTests
         s.Connection.Verify(c => c.Connect(It.IsAny<CancellationToken>()), Times.Once);
         s.Db.Verify(d => d.Initialize(), Times.Once);
         s.FolderBar.Verify(f => f.Load(), Times.Once);
-        Assert.Equal("BETA", vm.SiteName);
+        Assert.Equal("BETA", vm.UserName);
         Assert.Equal("PROD", vm.EnvironmentTitle);
         Assert.False(vm.IsInstallScreenVisible);
     }
 
     // ── Initialize – not installed ────────────────────────────────────────────
 
-    /// <summary>Initialize shows the install screen when no site is installed and does not load the folder bar.</summary>
+    /// <summary>Initialize shows the install screen when no user is installed and does not load the folder bar.</summary>
     [Fact]
-    public async Task Initialize_NoSite_ShowsInstallScreen()
+    public async Task Initialize_NoUser_ShowsInstallScreen()
     {
         Setup s = new();
         s.Connection.Setup(c => c.Connect(It.IsAny<CancellationToken>())).Returns(Task.CompletedTask);
-        s.Connection.Setup(c => c.GetSiteInfo(It.IsAny<CancellationToken>())).ReturnsAsync((SiteInfo?)null);
+        s.Connection.Setup(c => c.GetUserInfo(It.IsAny<CancellationToken>())).ReturnsAsync((UserInfo?)null);
         MainViewModel vm = s.BuildVm();
 
         await vm.Initialize();

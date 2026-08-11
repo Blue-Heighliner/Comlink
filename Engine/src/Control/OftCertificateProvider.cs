@@ -14,7 +14,7 @@ public interface IOftCertificateProvider
 [ExcludeFromCodeCoverage]
 internal sealed class OftCertificateProvider(
     IOftPeerCertificateName certNameProvider,
-    ICurrentSiteProvider currentSiteProvider) : IOftCertificateProvider
+    ICurrentUserProvider currentUserProvider) : IOftCertificateProvider
 {
     /// <inheritdoc />
     public OftPeerOptions GetPeerOptions()
@@ -22,7 +22,7 @@ internal sealed class OftCertificateProvider(
         X509Certificate2? cert = GetOwnCertificate();
         return new OftPeerOptions
         {
-            Info = currentSiteProvider.SiteName ?? string.Empty,
+            Info = currentUserProvider.UserName ?? string.Empty,
             Certificate = cert,
             CertificateValidation = cert is not null ? ValidateChain : null,
             SecurityMode = cert is not null ? OftSecurityMode.DualAuthentication : OftSecurityMode.Secure
@@ -31,9 +31,9 @@ internal sealed class OftCertificateProvider(
 
     private X509Certificate2? GetOwnCertificate()
     {
-        string? siteName = currentSiteProvider.SiteName;
-        if (siteName is null) return null;
-        string? certName = certNameProvider.GetCertificateName(siteName);
+        string? userName = currentUserProvider.UserName;
+        if (userName is null) return null;
+        string? certName = certNameProvider.GetCertificateName(userName);
         if (certName is null) return null;
         return FindCertificate(certName)
             ?? throw new InvalidOperationException(

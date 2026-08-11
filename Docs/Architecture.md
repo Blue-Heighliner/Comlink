@@ -40,7 +40,7 @@ Engine/src/
 │   └── Repositories/
 ├── Interface/      Local interface listener (always active) — see Interface.md
 ├── Logging/        Daily file logger + activity log writer
-├── Models/         Shared DTOs (SiteInfo, SiteEndpoint, SiteState, Folder, etc.)
+├── Models/         Shared DTOs (UserInfo, UserEndpoint, UserState, Folder, etc.)
 ├── Peer/           P2P networking over OFT — send and receive messages between nodes
 ├── Services/       Business logic
 ├── ViewModels/     MVVM layer — mostly Avalonia-agnostic (primitive types, custom interfaces),
@@ -58,7 +58,7 @@ sequenceDiagram
     participant DVM as DraftViewModel
     participant SC as IServiceConnection
     participant MRS as MessageRoutingService
-    participant SL as ISiteLocator
+    participant SL as IUserLocator
     participant PS as PeerService
     participant RP as Remote IOftPeer
     DVM->>SC: SendMessage
@@ -79,23 +79,25 @@ sequenceDiagram
     participant RN as Remote Node
     participant PS as PeerService
     participant DSC as DirectServiceConnection
-    participant ES as EntryService
     participant MVM as MainViewModel
+    participant ES as EntryService
     RN->>PS: OFT send (IMessageFormat.MessageType instance)
     PS-->>DSC: MessageDelivered event
-    DSC->>ES: StoreIncomingMessage
     DSC-->>MVM: MessageReceived event
+    MVM->>ES: StoreIncomingMessage (ReadStatus=Received)
     MVM->>MVM: Prepend to EntryBar if Inbox active
 ```
 
+When the user opens that Inbox message, `ContentAreaViewModel` calls `IServiceConnection.MarkMessageRead`, which transitions `ReadStatus` to `Read` and sends a user-read confirmation back to the sender — see [Peer.md](Peer.md#read-confirmation). If the message is an alert (`IMessageFormat.GetIsAlert`), `AlertViewModel` also alarms (title bar box + sound) until it — and every other pending alert — is read; see `Docs/ViewModels.md`.
+
 ### Receiving a message (via an interface connection)
-1. Remote node sends to this site's `PeerService` over OFT.
+1. Remote node sends to this user's `PeerService` over OFT.
 2. `InterfaceService` (subscribed to `PeerService.MessageDelivered`) mirrors the message, unmodified, to every currently connected interface connection.
 3. Any connected external program receives it directly over its own OFT connection — see [Interface.md](Interface.md). This happens in both Client and Headless mode.
 
 ### Sending a message from an interface
 1. An external program sends an instance of `IMessageFormat.MessageType` on its interface connection.
-2. `InterfaceService` reads `Subject`/`Body`/`Addresses` from it via `IMessageFormat` and calls `MessageRoutingService.Route` with this site's own installed name as `fromSite` — exactly as if the site itself had composed the message. This happens in both Client and Headless mode.
+2. `InterfaceService` reads `Subject`/`Body`/`Addresses` from it via `IMessageFormat` and calls `MessageRoutingService.Route` with this user's own installed name as `fromUser` — exactly as if the user itself had composed the message. This happens in both Client and Headless mode.
 
 ## Startup Sequence
 
@@ -107,7 +109,7 @@ sequenceDiagram
     participant EE as EngineExtensions
     participant EA as EngineUiExtensions
     participant EH as EngineHost
-    participant SS as SiteService
+    participant SS as UserService
     participant PS as PeerService
     participant IS as InterfaceService
     H->>EE: UseEngine(Client)
@@ -118,7 +120,7 @@ sequenceDiagram
     EH->>IS: Start()
 ```
 
-1. `SiteService.Load` — restores installed site from `State.json` (or applies `IDebugSiteOverride`)
+1. `UserService.Load` — restores installed user from `State.json` (or applies `IDebugUserOverride`)
 2. `PeerService.Start` — begins accepting peer connections
 3. `InterfaceService.Start` — begins accepting interface connections (always, regardless of mode)
 
@@ -129,7 +131,7 @@ All persistent data lives under `IAppDataPathProvider.AppDataPath` (default: `%A
 ```
 {AppDataPath}/
 ├── Data.db      LiteDB file (messages, drafts, notes, folders, activity)
-├── State.json   Installed site state (name, code, environment)
+├── State.json   Installed user state (name, code, environment)
 └── Logs/
     └── yyyy-MM-dd.log
 ```

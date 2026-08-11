@@ -22,12 +22,16 @@
 
     <!-- Custom Title Bar (row 1) -->
     <controls:TitleBar Grid.Row="1"
-                       SiteName="{Binding SiteName}"
+                       UserName="{Binding UserName}"
                        AppVersion="{Binding AppVersion}"
                        CreateDraftCommand="{Binding CreateDraftCommand}"
                        CreateNoteCommand="{Binding CreateNoteCommand}"
                        IsInstallScreenVisible="{Binding IsInstallScreenVisible}"
-                       IsKioskMode="{Binding IsKioskMode}" />
+                       IsKioskMode="{Binding IsKioskMode}"
+                       IsAlerting="{Binding Alert.IsAlerting}"
+                       AlertText="{Binding Alert.AlertText}"
+                       QuickConfirmationEnabled="{Binding Alert.QuickConfirmationEnabled}"
+                       AlertCommand="{Binding Alert.ConfirmLatestCommand}" />
 
     <!-- Main Content (row 2) -->
     <Panel Grid.Row="2">

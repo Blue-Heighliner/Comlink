@@ -17,7 +17,7 @@ public sealed class MessageEntity
     /// read its logical fields via the registered <see cref="IMessageFormat"/>.
     /// </summary>
     public object Message { get; set; } = default!;
-    /// <summary>Per-site delivery statuses for outbound messages.</summary>
+    /// <summary>Per-user delivery statuses for outbound messages.</summary>
     public List<DeliveryStatus> DeliveryStatuses { get; set; } = [];
     /// <summary>UTC timestamp when the message was received.</summary>
     public DateTime ReceivedAt { get; set; }
@@ -26,14 +26,21 @@ public sealed class MessageEntity
     /// <summary>Identifier of the folder this message belongs to.</summary>
     public string FolderId { get; set; } = string.Empty;
     /// <summary>
-    /// <see langword="true"/> when this document is the Outbox record for a message sent by this site;
-    /// <see langword="false"/> when it is the Inbox record for a message received by this site. A self-addressed
+    /// <see langword="true"/> when this document is the Outbox record for a message sent by this user;
+    /// <see langword="false"/> when it is the Inbox record for a message received by this user. A self-addressed
     /// message produces one document of each kind sharing the same <see cref="MessageId"/>, so this flag
     /// disambiguates lookups that would otherwise be ambiguous.
     /// </summary>
     public bool IsOutbound { get; set; }
+    /// <summary>
+    /// Inbox-only read status: <see cref="DestinationStatus.Received"/> when stored, <see cref="DestinationStatus.Read"/>
+    /// once the user opens it (which also sends a user-read confirmation message back to <see cref="IMessageFormat.GetFromUser"/>
+    /// — see <c>Docs/Peer.md</c>). Always <see langword="null"/> on Outbox records; per-destination read state
+    /// there lives in <see cref="DeliveryStatuses"/> instead.
+    /// </summary>
+    public DestinationStatus? ReadStatus { get; set; }
 
-    /// <summary>Computed aggregate delivery status derived from all per-site statuses; <c>null</c> if no statuses exist.</summary>
+    /// <summary>Computed aggregate delivery status derived from all per-user statuses; <c>null</c> if no statuses exist.</summary>
     [BsonIgnore]
     public DestinationStatus? OverallStatus
     {
@@ -41,7 +48,8 @@ public sealed class MessageEntity
         {
             if (DeliveryStatuses.Count == 0) return null;
             if (DeliveryStatuses.Any(d => d.Status == DestinationStatus.Failed)) return DestinationStatus.Failed;
-            if (DeliveryStatuses.All(d => d.Status == DestinationStatus.Confirmed)) return DestinationStatus.Confirmed;
+            if (DeliveryStatuses.All(d => d.Status == DestinationStatus.Read)) return DestinationStatus.Read;
+            if (DeliveryStatuses.All(d => d.Status is DestinationStatus.Confirmed or DestinationStatus.Read)) return DestinationStatus.Confirmed;
             if (DeliveryStatuses.All(d => d.Status != DestinationStatus.Sending)) return DestinationStatus.Sent;
             return DestinationStatus.Sending;
         }

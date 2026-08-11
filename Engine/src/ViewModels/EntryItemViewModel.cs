@@ -39,8 +39,7 @@ public sealed partial class EntryItemViewModel : ObservableObject
     public string StatusColorHex => OverallStatus switch
     {
         DestinationStatus.Failed => "#E06C75",
-        DestinationStatus.Confirmed => "#98C379",
-        null when FixedStatusText == "RECEIVED" => "#98C379",
+        DestinationStatus.Confirmed or DestinationStatus.Read or DestinationStatus.Received => "#98C379",
         _ => "#858585"
     };
 

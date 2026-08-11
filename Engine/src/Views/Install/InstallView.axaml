@@ -17,10 +17,10 @@
 
       <StackPanel Spacing="20">
 
-        <!-- Site code input -->
-        <TextBox x:Name="SiteCodeInput"
-                 Text="{Binding SiteCode}"
-                 Watermark="Enter site code..."
+        <!-- User code input -->
+        <TextBox x:Name="UserCodeInput"
+                 Text="{Binding UserCode}"
+                 Watermark="Enter user code..."
                  FontSize="14"
                  Height="36"
                  TextAlignment="Center"

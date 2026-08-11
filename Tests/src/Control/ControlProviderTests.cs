@@ -42,22 +42,22 @@ public sealed class ControlProviderTests
         Assert.Equal(absolute, provider.AppDataPath);
     }
 
-    // ── DebugSiteOverride ─────────────────────────────────────────────────────
+    // ── DebugUserOverride ─────────────────────────────────────────────────────
 
-    /// <summary>SiteName returns the value from config.</summary>
+    /// <summary>UserName returns the value from config.</summary>
     [Fact]
-    public void DebugSiteOverride_ReturnsSiteNameFromConfig()
+    public void DebugUserOverride_ReturnsUserNameFromConfig()
     {
-        DebugSiteOverride provider = new(new EngineConfig { SiteName = "ALPHA" });
-        Assert.Equal("ALPHA", provider.SiteName);
+        DebugUserOverride provider = new(new EngineConfig { UserName = "ALPHA" });
+        Assert.Equal("ALPHA", provider.UserName);
     }
 
-    /// <summary>SiteName is null when config has no override.</summary>
+    /// <summary>UserName is null when config has no override.</summary>
     [Fact]
-    public void DebugSiteOverride_NullWhenNotConfigured()
+    public void DebugUserOverride_NullWhenNotConfigured()
     {
-        DebugSiteOverride provider = new(new EngineConfig());
-        Assert.Null(provider.SiteName);
+        DebugUserOverride provider = new(new EngineConfig());
+        Assert.Null(provider.UserName);
     }
 
     // ── KioskModeProvider ─────────────────────────────────────────────────────
@@ -82,12 +82,12 @@ public sealed class ControlProviderTests
 
     // ── OftPeerCertificateName ───────────────────────────────────────────────
 
-    /// <summary>Null config → auto name "SITE-{siteName}".</summary>
+    /// <summary>Null config → auto name "USER-{userName}".</summary>
     [Fact]
     public void OftPeerCertificateName_NullConfig_ReturnsAutoName()
     {
         OftPeerCertificateName provider = new(new EngineConfig());
-        Assert.Equal("SITE-ALPHA", provider.GetCertificateName("ALPHA"));
+        Assert.Equal("USER-ALPHA", provider.GetCertificateName("ALPHA"));
     }
 
     /// <summary>"disable" config → null (no authentication).</summary>
@@ -98,7 +98,7 @@ public sealed class ControlProviderTests
         Assert.Null(provider.GetCertificateName("ALPHA"));
     }
 
-    /// <summary>Explicit name → that name regardless of site.</summary>
+    /// <summary>Explicit name → that name regardless of user.</summary>
     [Fact]
     public void OftPeerCertificateName_ExplicitConfig_ReturnsExactName()
     {
@@ -127,14 +127,14 @@ public sealed class ControlProviderTests
         Assert.Equal(9002, ports.InterfacePort);
     }
 
-    // ── SiteCodeResolver ──────────────────────────────────────────────────────
+    // ── UserCodeResolver ──────────────────────────────────────────────────────
 
-    /// <summary>Resolves the hard-coded "CODE" code to a SiteInfo.</summary>
+    /// <summary>Resolves the hard-coded "CODE" code to a UserInfo.</summary>
     [Fact]
-    public async Task SiteCodeResolver_KnownCode_ReturnsSiteInfo()
+    public async Task UserCodeResolver_KnownCode_ReturnsUserInfo()
     {
-        SiteCodeResolver resolver = new();
-        SiteInfo? result = await resolver.Resolve("CODE");
+        UserCodeResolver resolver = new();
+        UserInfo? result = await resolver.Resolve("CODE");
         Assert.NotNull(result);
         Assert.Equal("TEST", result.Name);
         Assert.Equal("CODE", result.Code);
@@ -142,84 +142,84 @@ public sealed class ControlProviderTests
 
     /// <summary>Case-insensitive: "code" resolves the same as "CODE".</summary>
     [Fact]
-    public async Task SiteCodeResolver_CaseInsensitive_Resolves()
+    public async Task UserCodeResolver_CaseInsensitive_Resolves()
     {
-        SiteCodeResolver resolver = new();
-        SiteInfo? result = await resolver.Resolve("code");
+        UserCodeResolver resolver = new();
+        UserInfo? result = await resolver.Resolve("code");
         Assert.NotNull(result);
     }
 
     /// <summary>Unknown code returns null.</summary>
     [Fact]
-    public async Task SiteCodeResolver_UnknownCode_ReturnsNull()
+    public async Task UserCodeResolver_UnknownCode_ReturnsNull()
     {
-        SiteCodeResolver resolver = new();
-        SiteInfo? result = await resolver.Resolve("UNKNOWN");
+        UserCodeResolver resolver = new();
+        UserInfo? result = await resolver.Resolve("UNKNOWN");
         Assert.Null(result);
     }
 
-    // ── SiteLocator ───────────────────────────────────────────────────────────
+    // ── UserLocator ───────────────────────────────────────────────────────────
 
-    /// <summary>Returns endpoint for a configured site.</summary>
+    /// <summary>Returns endpoint for a configured user.</summary>
     [Fact]
-    public async Task SiteLocator_KnownSite_ReturnsEndpoint()
+    public async Task UserLocator_KnownUser_ReturnsEndpoint()
     {
         EngineConfig config = new()
         {
-            Sites = new Dictionary<string, SiteEndpointConfig>
+            Users = new Dictionary<string, UserEndpointConfig>
             {
-                ["ALPHA"] = new SiteEndpointConfig { IpAddress = "192.168.1.10", Port = 7890 }
+                ["ALPHA"] = new UserEndpointConfig { IpAddress = "192.168.1.10", Port = 7890 }
             }
         };
-        SiteLocator locator = new(config);
+        UserLocator locator = new(config);
 
-        SiteEndpoint? result = await locator.GetEndpoint("ALPHA");
+        UserEndpoint? result = await locator.GetEndpoint("ALPHA");
 
         Assert.NotNull(result);
         Assert.Equal("192.168.1.10", result.IpAddress);
         Assert.Equal(7890, result.Port);
     }
 
-    /// <summary>Returns null for an unknown site.</summary>
+    /// <summary>Returns null for an unknown user.</summary>
     [Fact]
-    public async Task SiteLocator_UnknownSite_ReturnsNull()
+    public async Task UserLocator_UnknownUser_ReturnsNull()
     {
-        SiteLocator locator = new(new EngineConfig());
-        SiteEndpoint? result = await locator.GetEndpoint("UNKNOWN");
+        UserLocator locator = new(new EngineConfig());
+        UserEndpoint? result = await locator.GetEndpoint("UNKNOWN");
         Assert.Null(result);
     }
 
-    // ── SiteNameDirectory ─────────────────────────────────────────────────────
+    // ── UserNameDirectory ─────────────────────────────────────────────────────
 
-    /// <summary>Combines site and group names, deduplicates, and sorts alphabetically.</summary>
+    /// <summary>Combines user and group names, deduplicates, and sorts alphabetically.</summary>
     [Fact]
-    public async Task SiteNameDirectory_CombinesSitesAndGroups()
+    public async Task UserNameDirectory_CombinesUsersAndGroups()
     {
         EngineConfig config = new()
         {
-            Sites = new Dictionary<string, SiteEndpointConfig>
+            Users = new Dictionary<string, UserEndpointConfig>
             {
-                ["CHARLIE"] = new SiteEndpointConfig { IpAddress = "1.2.3.4", Port = 1 },
-                ["ALPHA"] = new SiteEndpointConfig { IpAddress = "1.2.3.5", Port = 2 }
+                ["CHARLIE"] = new UserEndpointConfig { IpAddress = "1.2.3.4", Port = 1 },
+                ["ALPHA"] = new UserEndpointConfig { IpAddress = "1.2.3.5", Port = 2 }
             },
-            SiteGroups = new Dictionary<string, List<string>>
+            UserGroups = new Dictionary<string, List<string>>
             {
                 ["BRAVO"] = ["ALPHA"]
             }
         };
-        SiteNameDirectory dir = new(config);
+        UserNameDirectory dir = new(config);
 
-        IReadOnlyList<string> names = await dir.GetAllSiteNames();
+        IReadOnlyList<string> names = await dir.GetAllUserNames();
 
         Assert.Equal(["ALPHA", "BRAVO", "CHARLIE"], names);
     }
 
     /// <summary>Empty config produces an empty list.</summary>
     [Fact]
-    public async Task SiteNameDirectory_EmptyConfig_ReturnsEmptyList()
+    public async Task UserNameDirectory_EmptyConfig_ReturnsEmptyList()
     {
-        SiteNameDirectory dir = new(new EngineConfig());
-        IReadOnlyList<string> names = await dir.GetAllSiteNames();
+        UserNameDirectory dir = new(new EngineConfig());
+        IReadOnlyList<string> names = await dir.GetAllUserNames();
         Assert.Empty(names);
     }
 }

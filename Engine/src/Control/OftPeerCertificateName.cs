@@ -7,17 +7,17 @@ namespace BlueHeighliner.Comlink.Engine.Control;
 public interface IOftPeerCertificateName
 {
     /// <summary>
-    /// Returns the certificate subject name to search for in the system store for the given site.
+    /// Returns the certificate subject name to search for in the system store for the given user.
     /// Returns <see langword="null"/> to disable peer authentication (unauthenticated mode).
     /// When a non-null name is returned and no matching certificate exists, startup throws.
     /// </summary>
-    /// <param name="siteName">The local site name for which to resolve a certificate name.</param>
-    string? GetCertificateName(string siteName);
+    /// <param name="userName">The local user name for which to resolve a certificate name.</param>
+    string? GetCertificateName(string userName);
 }
 
 /// <summary>
 /// Implements <see cref="IOftPeerCertificateName"/> using the certificate name from engine configuration.
-/// <c>null</c> config value → auto (<c>SITE-{siteName}</c>); <c>"disable"</c> → no auth; explicit name → use that name.
+/// <c>null</c> config value → auto (<c>USER-{userName}</c>); <c>"disable"</c> → no auth; explicit name → use that name.
 /// </summary>
 internal sealed class OftPeerCertificateName : IOftPeerCertificateName
 {
@@ -28,10 +28,10 @@ internal sealed class OftPeerCertificateName : IOftPeerCertificateName
     public OftPeerCertificateName(EngineConfig config) => _config = config;
 
     /// <inheritdoc />
-    public string? GetCertificateName(string siteName) =>
+    public string? GetCertificateName(string userName) =>
         _config.PeerCertificateName switch
         {
-            null => $"SITE-{siteName}",
+            null => $"USER-{userName}",
             "disable" => null,
             string name => name
         };

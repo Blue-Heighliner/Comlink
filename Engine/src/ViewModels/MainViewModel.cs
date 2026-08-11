@@ -7,8 +7,8 @@ public interface IMainViewModel
     bool IsInstallScreenVisible { get; set; }
     /// <summary>Gets or sets a value indicating whether the UI is running in kiosk mode.</summary>
     bool IsKioskMode { get; set; }
-    /// <summary>Gets or sets the local site name displayed in the title bar.</summary>
-    string SiteName { get; set; }
+    /// <summary>Gets or sets the local user name displayed in the title bar.</summary>
+    string UserName { get; set; }
     /// <summary>Gets or sets the environment title displayed in the title bar.</summary>
     string EnvironmentTitle { get; set; }
     /// <summary>Gets or sets the environment accent color as a hex string.</summary>
@@ -23,11 +23,13 @@ public interface IMainViewModel
     IContentAreaViewModel ContentArea { get; }
     /// <summary>Gets the install screen ViewModel.</summary>
     IInstallViewModel InstallView { get; }
+    /// <summary>Gets the alert ViewModel driving the title bar's alarm box and sound.</summary>
+    IAlertViewModel Alert { get; }
     /// <summary>Creates a new draft and displays it in the content area.</summary>
     IAsyncRelayCommand CreateDraftCommand { get; }
     /// <summary>Creates a new note and displays it in the content area.</summary>
     IAsyncRelayCommand CreateNoteCommand { get; }
-    /// <summary>Connects to the service, loads site info, and initializes either the main UI or the install screen.</summary>
+    /// <summary>Connects to the service, loads user info, and initializes either the main UI or the install screen.</summary>
     Task Initialize();
 }
 
@@ -41,7 +43,8 @@ public sealed partial class MainViewModel : ObservableObject, IMainViewModel
     private readonly IEntryBarViewModel _entryBar;
     private readonly IContentAreaViewModel _contentArea;
     private readonly IInstallViewModel _installViewModel;
-    private readonly ICurrentSiteProvider _currentSiteProvider;
+    private readonly IAlertViewModel _alert;
+    private readonly ICurrentUserProvider _currentUserProvider;
     private readonly IAppNameProvider _appNameProvider;
     private readonly IBodyDocumentFactory _bodyDocumentFactory;
     private readonly IMessageFormat _messageFormat;
@@ -51,7 +54,7 @@ public sealed partial class MainViewModel : ObservableObject, IMainViewModel
 
     [ObservableProperty] private bool _isInstallScreenVisible;
     [ObservableProperty] private bool _isKioskMode;
-    [ObservableProperty] private string _siteName = string.Empty;
+    [ObservableProperty] private string _userName = string.Empty;
     [ObservableProperty] private string _environmentTitle = string.Empty;
     [ObservableProperty] private string _environmentColor = "#1565C0";
     [ObservableProperty] private string _appVersion;
@@ -64,16 +67,19 @@ public sealed partial class MainViewModel : ObservableObject, IMainViewModel
     public IContentAreaViewModel ContentArea => _contentArea;
     /// <inheritdoc />
     public IInstallViewModel InstallView => _installViewModel;
+    /// <inheritdoc />
+    public IAlertViewModel Alert => _alert;
 
     /// <summary>Initializes a new <see cref="MainViewModel"/> with all required engine and UI dependencies.</summary>
-    /// <param name="connection">Service connection used for site and messaging operations.</param>
+    /// <param name="connection">Service connection used for user and messaging operations.</param>
     /// <param name="db">LiteDB context for lazy initialization after install.</param>
     /// <param name="entryService">Entry CRUD service for messages, drafts, and notes.</param>
     /// <param name="folderBar">Folder tree ViewModel.</param>
     /// <param name="entryBar">Entry list ViewModel.</param>
     /// <param name="contentArea">Content area ViewModel.</param>
     /// <param name="installViewModel">Install screen ViewModel.</param>
-    /// <param name="currentSiteProvider">Provides and accepts the current site name.</param>
+    /// <param name="alert">Alert ViewModel driving the title bar's alarm box and sound.</param>
+    /// <param name="currentUserProvider">Provides and accepts the current user name.</param>
     /// <param name="appNameProvider">Provides the application display name.</param>
     /// <param name="kioskModeProvider">Determines whether the UI should run in kiosk mode.</param>
     /// <param name="loggerFactory">Factory for creating named loggers.</param>
@@ -87,7 +93,8 @@ public sealed partial class MainViewModel : ObservableObject, IMainViewModel
         IEntryBarViewModel entryBar,
         IContentAreaViewModel contentArea,
         IInstallViewModel installViewModel,
-        ICurrentSiteProvider currentSiteProvider,
+        IAlertViewModel alert,
+        ICurrentUserProvider currentUserProvider,
         IAppNameProvider appNameProvider,
         IKioskModeProvider kioskModeProvider,
         ILoggerFactory loggerFactory,
@@ -101,7 +108,8 @@ public sealed partial class MainViewModel : ObservableObject, IMainViewModel
         _entryBar = entryBar;
         _contentArea = contentArea;
         _installViewModel = installViewModel;
-        _currentSiteProvider = currentSiteProvider;
+        _alert = alert;
+        _currentUserProvider = currentUserProvider;
         _appNameProvider = appNameProvider;
         _bodyDocumentFactory = bodyDocumentFactory;
         _messageFormat = messageFormat;
@@ -131,8 +139,8 @@ public sealed partial class MainViewModel : ObservableObject, IMainViewModel
         _installViewModel.InstallSucceeded += async info =>
         {
             _db.Initialize();
-            _currentSiteProvider.SiteName = info.Name;
-            await ApplySiteInfo(info);
+            _currentUserProvider.UserName = info.Name;
+            await ApplyUserInfo(info);
             await StartMainUi();
             _logger.LogInformation("{AppName} started", _appNameProvider.AppName);
             IsInstallScreenVisible = false;
@@ -150,22 +158,23 @@ public sealed partial class MainViewModel : ObservableObject, IMainViewModel
             try
             {
                 MessageEntity entity = await _entryService.StoreIncomingMessage(
-                    evt.MessageId, evt.FromSite, evt.Subject, evt.Body,
-                    evt.Addresses.Select(a => new Data.Entities.AddressData { SiteName = a.SiteName, Type = a.Type }).ToList(),
-                    evt.SentAt);
+                    evt.MessageId, evt.FromUser, evt.Subject, evt.Body,
+                    evt.Addresses.Select(a => new Data.Entities.AddressData { UserName = a.UserName, Type = a.Type }).ToList(),
+                    evt.SentAt, evt.IsAlert);
 
                 FolderItemViewModel? inboxFolder = _folderBar.RootFolders.FirstOrDefault(f => f.RootType == FolderType.Inbox);
                 if (inboxFolder is not null && _folderBar.SelectedFolder?.Id == inboxFolder.Id)
                 {
                     string timeText = entity.ReceivedAt.ToString("dd-MMM-yyyy HH:mm").ToUpperInvariant();
-                    EntryItemViewModel item = new(entity.MessageId, evt.FromSite, EntryType.Message, entity.ReceivedAt,
-                        secondaryText: evt.Subject, timeText: timeText, fixedStatusText: "RECEIVED");
+                    EntryItemViewModel item = new(entity.MessageId, evt.FromUser, EntryType.Message, entity.ReceivedAt,
+                        secondaryText: evt.Subject, timeText: timeText);
+                    item.OverallStatus = entity.ReadStatus;
                     await _entryBar.PrependEntry(item);
                 }
             }
             catch (Exception ex)
             {
-                _activityLogger.LogError(ex, "Failed to store received message from {FromSite}", evt.FromSite);
+                _activityLogger.LogError(ex, "Failed to store received message from {FromUser}", evt.FromUser);
             }
         };
 
@@ -198,13 +207,13 @@ public sealed partial class MainViewModel : ObservableObject, IMainViewModel
         try
         {
             await _connection.Connect();
-            SiteInfo? siteInfo = await _connection.GetSiteInfo();
+            UserInfo? userInfo = await _connection.GetUserInfo();
 
-            if (siteInfo is not null)
+            if (userInfo is not null)
             {
                 _db.Initialize();
-                _currentSiteProvider.SiteName = siteInfo.Name;
-                await ApplySiteInfo(siteInfo);
+                _currentUserProvider.UserName = userInfo.Name;
+                await ApplyUserInfo(userInfo);
                 await StartMainUi();
             }
             else
@@ -220,9 +229,9 @@ public sealed partial class MainViewModel : ObservableObject, IMainViewModel
         await _folderBar.Load();
     }
 
-    private Task ApplySiteInfo(SiteInfo info)
+    private Task ApplyUserInfo(UserInfo info)
     {
-        SiteName = info.Name;
+        UserName = info.Name;
         EnvironmentTitle = info.EnvironmentTitle;
         EnvironmentColor = info.EnvironmentColor;
         return Task.CompletedTask;
@@ -244,8 +253,8 @@ public sealed partial class MainViewModel : ObservableObject, IMainViewModel
     private async Task CreateDraft()
     {
         DraftEntity entity = await _entryService.CreateDraft();
-        List<string> siteNames = await _connection.GetSiteNames();
-        Entries.DraftViewModel vm = new(entity, _entryService, _connection, siteNames, _loggerFactory, _bodyDocumentFactory.Create());
+        List<string> userNames = await _connection.GetUserNames();
+        Entries.DraftViewModel vm = new(entity, _entryService, _connection, userNames, _loggerFactory, _bodyDocumentFactory.Create());
         vm.DraftSent += async (IDraftViewModel _, MessageEntity msg) =>
         {
             _contentArea.ShowEntry(new Entries.MessageViewModel(msg, _messageFormat));

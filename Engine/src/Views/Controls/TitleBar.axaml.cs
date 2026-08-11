@@ -1,12 +1,12 @@
 namespace BlueHeighliner.Comlink.Engine.Views.Controls;
 
-/// <summary>User control for the application title bar, providing window controls, site info, and action buttons.</summary>
+/// <summary>User control for the application title bar, providing window controls, user info, and action buttons.</summary>
 [ExcludeFromCodeCoverage]
 public partial class TitleBar : UserControl
 {
-    /// <summary>Identifies the <see cref="SiteName"/> styled property.</summary>
-    public static readonly StyledProperty<string> SiteNameProperty =
-        AvaloniaProperty.Register<TitleBar, string>(nameof(SiteName), string.Empty);
+    /// <summary>Identifies the <see cref="UserName"/> styled property.</summary>
+    public static readonly StyledProperty<string> UserNameProperty =
+        AvaloniaProperty.Register<TitleBar, string>(nameof(UserName), string.Empty);
 
     /// <summary>Identifies the <see cref="AppVersion"/> styled property.</summary>
     public static readonly StyledProperty<string> AppVersionProperty =
@@ -28,14 +28,30 @@ public partial class TitleBar : UserControl
     public static readonly StyledProperty<bool> IsKioskModeProperty =
         AvaloniaProperty.Register<TitleBar, bool>(nameof(IsKioskMode));
 
-    /// <summary>Gets or sets the site name displayed in the title bar.</summary>
-    public string SiteName
+    /// <summary>Identifies the <see cref="IsAlerting"/> styled property.</summary>
+    public static readonly StyledProperty<bool> IsAlertingProperty =
+        AvaloniaProperty.Register<TitleBar, bool>(nameof(IsAlerting));
+
+    /// <summary>Identifies the <see cref="AlertText"/> styled property.</summary>
+    public static readonly StyledProperty<string> AlertTextProperty =
+        AvaloniaProperty.Register<TitleBar, string>(nameof(AlertText), "ALERT");
+
+    /// <summary>Identifies the <see cref="QuickConfirmationEnabled"/> styled property.</summary>
+    public static readonly StyledProperty<bool> QuickConfirmationEnabledProperty =
+        AvaloniaProperty.Register<TitleBar, bool>(nameof(QuickConfirmationEnabled), true);
+
+    /// <summary>Identifies the <see cref="AlertCommand"/> styled property.</summary>
+    public static readonly StyledProperty<ICommand?> AlertCommandProperty =
+        AvaloniaProperty.Register<TitleBar, ICommand?>(nameof(AlertCommand));
+
+    /// <summary>Gets or sets the user name displayed in the title bar.</summary>
+    public string UserName
     {
-        get => GetValue(SiteNameProperty);
-        set => SetValue(SiteNameProperty, value);
+        get => GetValue(UserNameProperty);
+        set => SetValue(UserNameProperty, value);
     }
 
-    /// <summary>Gets or sets the application version string displayed alongside the site name.</summary>
+    /// <summary>Gets or sets the application version string displayed alongside the user name.</summary>
     public string AppVersion
     {
         get => GetValue(AppVersionProperty);
@@ -70,6 +86,34 @@ public partial class TitleBar : UserControl
         set => SetValue(IsKioskModeProperty, value);
     }
 
+    /// <summary>Gets or sets a value indicating whether one or more alert messages are pending, showing the alert box.</summary>
+    public bool IsAlerting
+    {
+        get => GetValue(IsAlertingProperty);
+        set => SetValue(IsAlertingProperty, value);
+    }
+
+    /// <summary>Gets or sets the text displayed in the alert box.</summary>
+    public string AlertText
+    {
+        get => GetValue(AlertTextProperty);
+        set => SetValue(AlertTextProperty, value);
+    }
+
+    /// <summary>Gets or sets a value indicating whether clicking the alert box quick-confirms the latest pending alert.</summary>
+    public bool QuickConfirmationEnabled
+    {
+        get => GetValue(QuickConfirmationEnabledProperty);
+        set => SetValue(QuickConfirmationEnabledProperty, value);
+    }
+
+    /// <summary>Gets or sets the command invoked when the user clicks the alert box (subject to <see cref="QuickConfirmationEnabled"/>).</summary>
+    public ICommand? AlertCommand
+    {
+        get => GetValue(AlertCommandProperty);
+        set => SetValue(AlertCommandProperty, value);
+    }
+
     /// <summary>Initializes the control and loads the AXAML layout.</summary>
     public TitleBar()
     {
@@ -80,8 +124,8 @@ public partial class TitleBar : UserControl
     protected override void OnPropertyChanged(AvaloniaPropertyChangedEventArgs change)
     {
         base.OnPropertyChanged(change);
-        if (change.Property == SiteNameProperty || change.Property == AppVersionProperty)
-            UpdateSiteInfo();
+        if (change.Property == UserNameProperty || change.Property == AppVersionProperty)
+            UpdateUserInfo();
         if (change.Property == IsInstallScreenVisibleProperty)
         {
             var panel = this.FindControl<StackPanel>("ActionButtonsPanel");
@@ -89,14 +133,23 @@ public partial class TitleBar : UserControl
         }
         if (change.Property == IsKioskModeProperty)
             ApplyKioskMode();
-
+        if (change.Property == IsAlertingProperty)
+        {
+            Border? box = this.FindControl<Border>("AlertBox");
+            if (box is not null) box.IsVisible = IsAlerting;
+        }
+        if (change.Property == AlertTextProperty)
+        {
+            TextBlock? tb = this.FindControl<TextBlock>("AlertBoxText");
+            if (tb is not null) tb.Text = AlertText;
+        }
     }
 
-    private void UpdateSiteInfo()
+    private void UpdateUserInfo()
     {
-        var tb = this.FindControl<TextBlock>("SiteInfoText");
+        var tb = this.FindControl<TextBlock>("UserInfoText");
         if (tb is null) return;
-        tb.Text = string.IsNullOrEmpty(AppVersion) ? SiteName : $"{SiteName} v{AppVersion}";
+        tb.Text = string.IsNullOrEmpty(AppVersion) ? UserName : $"{UserName} v{AppVersion}";
     }
 
     private void OnDraftClick(object? sender, Avalonia.Interactivity.RoutedEventArgs e) =>
@@ -104,6 +157,13 @@ public partial class TitleBar : UserControl
 
     private void OnNoteClick(object? sender, Avalonia.Interactivity.RoutedEventArgs e) =>
         CreateNoteCommand?.Execute(null);
+
+    private void OnAlertBoxPressed(object? sender, PointerPressedEventArgs e)
+    {
+        if (!QuickConfirmationEnabled) return;
+        if (AlertCommand?.CanExecute(null) == true)
+            AlertCommand.Execute(null);
+    }
 
     private void ApplyKioskMode()
     {

@@ -125,8 +125,10 @@ public sealed partial class EntryBarViewModel : ObservableObject, IEntryBarViewM
                 foreach (MessageEntity m in inboxMsgs)
                 {
                     string timeText = m.ReceivedAt.ToString("dd-MMM-yyyy HH:mm").ToUpperInvariant();
-                    Entries.Add(new EntryItemViewModel(m.MessageId, _messageFormat.GetFromSite(m.Message), EntryType.Message, m.ReceivedAt,
-                        secondaryText: _messageFormat.GetSubject(m.Message), timeText: timeText, fixedStatusText: "RECEIVED"));
+                    EntryItemViewModel item = new(m.MessageId, _messageFormat.GetFromUser(m.Message), EntryType.Message, m.ReceivedAt,
+                        secondaryText: _messageFormat.GetSubject(m.Message), timeText: timeText);
+                    item.OverallStatus = m.ReadStatus;
+                    Entries.Add(item);
                 }
                 UpdatePagination(inboxTotal);
                 break;
@@ -135,7 +137,7 @@ public sealed partial class EntryBarViewModel : ObservableObject, IEntryBarViewM
                 (List<MessageEntity> outboxMsgs, int outboxTotal) = await _entryService.GetMessages(_currentFolder.Id, CurrentPage);
                 foreach (MessageEntity m in outboxMsgs)
                 {
-                    string destinations = string.Join(", ", _messageFormat.GetAddresses(m.Message).Select(a => a.SiteName).Distinct());
+                    string destinations = string.Join(", ", _messageFormat.GetAddresses(m.Message).Select(a => a.UserName).Distinct());
                     string timeText = m.ReceivedAt.ToString("dd-MMM-yyyy HH:mm").ToUpperInvariant();
                     EntryItemViewModel item = new(m.MessageId, destinations, EntryType.Message, m.ReceivedAt,
                         secondaryText: _messageFormat.GetSubject(m.Message), timeText: timeText, isOutboundMessage: true);

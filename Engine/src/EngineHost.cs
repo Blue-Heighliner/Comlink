@@ -4,7 +4,7 @@ namespace BlueHeighliner.Comlink.Engine;
 [ExcludeFromCodeCoverage]
 internal sealed class EngineHost : IHostedService
 {
-    private readonly ISiteService _siteService;
+    private readonly IUserService _userService;
     private readonly IPeerService _peerService;
     private readonly IInterfaceService _interfaceService;
     private readonly ILogger _logger;
@@ -13,14 +13,14 @@ internal sealed class EngineHost : IHostedService
 
     /// <summary>Initializes a new <see cref="EngineHost"/> with required engine services.</summary>
     public EngineHost(
-        ISiteService siteService,
+        IUserService userService,
         IPeerService peerService,
         IInterfaceService interfaceService,
         IAppNameProvider appNameProvider,
         EngineMode mode,
         ILoggerFactory loggerFactory)
     {
-        _siteService = siteService;
+        _userService = userService;
         _peerService = peerService;
         _interfaceService = interfaceService;
         _logger = loggerFactory.CreateLogger("APP");
@@ -31,7 +31,7 @@ internal sealed class EngineHost : IHostedService
     public async Task StartAsync(CancellationToken cancellationToken)
     {
         _logger.LogInformation("{AppName} starting...", _displayName);
-        await _siteService.Load(cancellationToken);
+        await _userService.Load(cancellationToken);
 
         _cts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
         CancellationToken cancellation = _cts.Token;

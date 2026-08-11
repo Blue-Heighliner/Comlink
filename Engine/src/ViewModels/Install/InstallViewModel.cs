@@ -1,40 +1,40 @@
 namespace BlueHeighliner.Comlink.Engine.ViewModels.Install;
 
-/// <summary>ViewModel interface for the site-installation screen.</summary>
+/// <summary>ViewModel interface for the user-installation screen.</summary>
 public interface IInstallViewModel
 {
-    /// <summary>Gets or sets the site activation code entered by the user (auto-uppercased).</summary>
-    string SiteCode { get; set; }
+    /// <summary>Gets or sets the user activation code entered by the user (auto-uppercased).</summary>
+    string UserCode { get; set; }
     /// <summary>Gets or sets the error message to display, or <see langword="null"/> when there is no error.</summary>
     string? ErrorMessage { get; set; }
     /// <summary>Gets or sets a value indicating whether an install operation is in progress.</summary>
     bool IsLoading { get; set; }
-    /// <summary>Raised after a site is successfully installed, providing the resulting site information.</summary>
-    event Func<SiteInfo, Task>? InstallSucceeded;
-    /// <summary>Validates the site code and installs the site via the service connection.</summary>
+    /// <summary>Raised after a user is successfully installed, providing the resulting user information.</summary>
+    event Func<UserInfo, Task>? InstallSucceeded;
+    /// <summary>Validates the user code and installs the user via the service connection.</summary>
     IAsyncRelayCommand InstallCommand { get; }
 }
 
-/// <summary>ViewModel for the site-installation screen, handling site code entry and the install command.</summary>
+/// <summary>ViewModel for the user-installation screen, handling user code entry and the install command.</summary>
 public sealed partial class InstallViewModel : ObservableObject, IInstallViewModel
 {
     private readonly IServiceConnection _connection;
 
-    [ObservableProperty] private string _siteCode = string.Empty;
+    [ObservableProperty] private string _userCode = string.Empty;
     [ObservableProperty] private string? _errorMessage;
     [ObservableProperty] private bool _isLoading;
 
-    partial void OnSiteCodeChanged(string value)
+    partial void OnUserCodeChanged(string value)
     {
         string upper = value.ToUpperInvariant();
-        if (value != upper) SiteCode = upper;
+        if (value != upper) UserCode = upper;
     }
 
-    /// <summary>Raised after a site is successfully installed, providing the resulting site information.</summary>
-    public event Func<SiteInfo, Task>? InstallSucceeded;
+    /// <summary>Raised after a user is successfully installed, providing the resulting user information.</summary>
+    public event Func<UserInfo, Task>? InstallSucceeded;
 
     /// <summary>Initializes a new <see cref="InstallViewModel"/> with the required service connection.</summary>
-    /// <param name="connection">Service connection used to install the site.</param>
+    /// <param name="connection">Service connection used to install the user.</param>
     public InstallViewModel(IServiceConnection connection)
     {
         _connection = connection;
@@ -43,9 +43,9 @@ public sealed partial class InstallViewModel : ObservableObject, IInstallViewMod
     [RelayCommand]
     private async Task Install()
     {
-        if (string.IsNullOrWhiteSpace(SiteCode))
+        if (string.IsNullOrWhiteSpace(UserCode))
         {
-            ErrorMessage = "Please enter a site code.";
+            ErrorMessage = "Please enter a user code.";
             return;
         }
 
@@ -54,15 +54,15 @@ public sealed partial class InstallViewModel : ObservableObject, IInstallViewMod
 
         try
         {
-            SiteInfo? siteInfo = await _connection.InstallSite(SiteCode.Trim());
-            if (siteInfo is null)
+            UserInfo? userInfo = await _connection.InstallUser(UserCode.Trim());
+            if (userInfo is null)
             {
-                ErrorMessage = "Invalid site code. Please try again.";
+                ErrorMessage = "Invalid user code. Please try again.";
                 return;
             }
 
             if (InstallSucceeded is not null)
-                await InstallSucceeded(siteInfo);
+                await InstallSucceeded(userInfo);
         }
         catch (Exception ex)
         {

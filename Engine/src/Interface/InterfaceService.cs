@@ -2,9 +2,9 @@ namespace BlueHeighliner.Comlink.Engine.Interface;
 
 /// <summary>
 /// Hosts the local interface listener: an OFT connection that behaves like a peer connection — same
-/// transport, same message type (<see cref="IMessageFormat.MessageType"/>) — but represents no site of
-/// its own. Every message this site receives from a peer is mirrored to every connected interface, and
-/// every message an interface sends is routed out to other peers as if this site had originated it itself.
+/// transport, same message type (<see cref="IMessageFormat.MessageType"/>) — but represents no user of
+/// its own. Every message this user receives from a peer is mirrored to every connected interface, and
+/// every message an interface sends is routed out to other peers as if this user had originated it itself.
 /// </summary>
 internal interface IInterfaceService : IAsyncDisposable
 {
@@ -18,7 +18,7 @@ internal sealed class InterfaceService : IInterfaceService
     private readonly IOftHoster _hoster;
     private readonly IPortConfiguration _ports;
     private readonly IMessageRoutingService _routingService;
-    private readonly ISiteService _siteService;
+    private readonly IUserService _userService;
     private readonly IMessageFormat _messageFormat;
     private readonly ConcurrentDictionary<Guid, IOftConnection> _connections = new();
 
@@ -27,14 +27,14 @@ internal sealed class InterfaceService : IInterfaceService
         IOftHoster hoster,
         IPortConfiguration ports,
         IMessageRoutingService routingService,
-        ISiteService siteService,
+        IUserService userService,
         IMessageFormat messageFormat,
         IPeerService peerService)
     {
         _hoster = hoster;
         _ports = ports;
         _routingService = routingService;
-        _siteService = siteService;
+        _userService = userService;
         _messageFormat = messageFormat;
         peerService.MessageDelivered += OnMessageDelivered;
     }
@@ -80,17 +80,18 @@ internal sealed class InterfaceService : IInterfaceService
         }
         if (message is null) return;
 
-        SiteInfo? siteInfo = _siteService.GetCurrentSiteInfo();
-        if (siteInfo is null) return;
+        UserInfo? userInfo = _userService.GetCurrentUserInfo();
+        if (userInfo is null) return;
 
         SendMessagePayload payload = new()
         {
             Subject = _messageFormat.GetSubject(message),
             Body = _messageFormat.GetBody(message),
-            Addresses = _messageFormat.GetAddresses(message).Select(a => new AddressPayload { SiteName = a.SiteName, Type = a.Type.ToString() }).ToList()
+            Addresses = _messageFormat.GetAddresses(message).Select(a => new AddressPayload { UserName = a.UserName, Type = a.Type.ToString() }).ToList(),
+            IsAlert = _messageFormat.GetIsAlert(message)
         };
 
-        await _routingService.Route(siteInfo.Name, payload, CancellationToken.None);
+        await _routingService.Route(userInfo.Name, payload, CancellationToken.None);
     }
 
     private async Task OnMessageDelivered(object message)

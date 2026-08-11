@@ -1,20 +1,20 @@
 # Interface Contract
 
 The engine always exposes a local **interface listener** — in both `Client` and `Headless` mode — that
-lets an external program plug directly into this site's message stream. An interface connection is not
+lets an external program plug directly into this user's message stream. An interface connection is not
 a request/response control channel — it uses the same transport and message type as a peer connection
 (see [Oft.md](Oft.md) and [Peer.md](Peer.md#message-format)) and carries nothing but instances of
 `IMessageFormat.MessageType`, with no envelope or command discriminator. That type is injectable by the
 host (see [Control.md](Control.md)); an external program must encode/decode whatever concrete type the
 running engine is configured with.
 
-An interface connection represents no site of its own. It is purely a relay:
+An interface connection represents no user of its own. It is purely a relay:
 
-- **Inbound → interface**: every message this site receives from a peer is mirrored, unmodified, to
+- **Inbound → interface**: every message this user receives from a peer is mirrored, unmodified, to
   every currently connected interface.
 - **Interface → outbound**: every message an interface sends is routed out to peers exactly as if this
-  site's own installed identity had composed and sent it — `Subject`, `Body`, and `Addresses` are read
-  from the message via `IMessageFormat`; `MessageId`, `FromSite`, and `SentAt` are ignored and
+  user's own installed identity had composed and sent it — `Subject`, `Body`, and `Addresses` are read
+  from the message via `IMessageFormat`; `MessageId`, `FromUser`, and `SentAt` are ignored and
   re-assigned by `MessageRoutingService.Route`, the same call `DirectServiceConnection.SendMessage`
   makes for a GUI-composed send.
 
@@ -48,6 +48,6 @@ connection.ReceivedHandler = data =>
     // Deserialize with protobuf-net using that type, then dispose data.
 };
 
-// Anything sent here, in the same type, is routed out to peers as if this site sent it.
+// Anything sent here, in the same type, is routed out to peers as if this user sent it.
 await connection.Send(messageBytes);
 ```

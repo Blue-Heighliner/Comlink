@@ -3,7 +3,7 @@ namespace BlueHeighliner.Comlink.Tests.ViewModels;
 /// <summary>Unit tests for <see cref="InstallViewModel"/>.</summary>
 public sealed class InstallViewModelTests
 {
-    private static SiteInfo MakeSiteInfo(string name) => new()
+    private static UserInfo MakeUserInfo(string name) => new()
     {
         Name = name,
         Code = "CODE1",
@@ -13,33 +13,33 @@ public sealed class InstallViewModelTests
 
     // ── Validation ────────────────────────────────────────────────────────────
 
-    /// <summary>Empty SiteCode sets ErrorMessage without calling the service.</summary>
+    /// <summary>Empty UserCode sets ErrorMessage without calling the service.</summary>
     [Fact]
-    public async Task Install_EmptySiteCode_SetsErrorMessage()
+    public async Task Install_EmptyUserCode_SetsErrorMessage()
     {
         Mock<IServiceConnection> connMock = new();
         InstallViewModel vm = new(connMock.Object);
-        vm.SiteCode = "";
+        vm.UserCode = "";
 
         await vm.InstallCommand.ExecuteAsync(null);
 
         Assert.NotNull(vm.ErrorMessage);
-        connMock.Verify(c => c.InstallSite(It.IsAny<string>(), It.IsAny<CancellationToken>()), Times.Never);
+        connMock.Verify(c => c.InstallUser(It.IsAny<string>(), It.IsAny<CancellationToken>()), Times.Never);
     }
 
     // ── Success ───────────────────────────────────────────────────────────────
 
-    /// <summary>Valid code fires InstallSucceeded with the returned SiteInfo.</summary>
+    /// <summary>Valid code fires InstallSucceeded with the returned UserInfo.</summary>
     [Fact]
-    public async Task Install_ValidCode_FiresInstallSucceededWithSiteInfo()
+    public async Task Install_ValidCode_FiresInstallSucceededWithUserInfo()
     {
-        SiteInfo expectedInfo = MakeSiteInfo("ALPHA");
+        UserInfo expectedInfo = MakeUserInfo("ALPHA");
         Mock<IServiceConnection> connMock = new();
-        connMock.Setup(c => c.InstallSite("CODE1", It.IsAny<CancellationToken>())).ReturnsAsync(expectedInfo);
+        connMock.Setup(c => c.InstallUser("CODE1", It.IsAny<CancellationToken>())).ReturnsAsync(expectedInfo);
         InstallViewModel vm = new(connMock.Object);
-        vm.SiteCode = "CODE1";
+        vm.UserCode = "CODE1";
 
-        SiteInfo? received = null;
+        UserInfo? received = null;
         vm.InstallSucceeded += info => { received = info; return Task.CompletedTask; };
 
         await vm.InstallCommand.ExecuteAsync(null);
@@ -55,9 +55,9 @@ public sealed class InstallViewModelTests
     public async Task Install_InvalidCode_SetsErrorMessage()
     {
         Mock<IServiceConnection> connMock = new();
-        connMock.Setup(c => c.InstallSite(It.IsAny<string>(), It.IsAny<CancellationToken>())).ReturnsAsync((SiteInfo?)null);
+        connMock.Setup(c => c.InstallUser(It.IsAny<string>(), It.IsAny<CancellationToken>())).ReturnsAsync((UserInfo?)null);
         InstallViewModel vm = new(connMock.Object);
-        vm.SiteCode = "BADCODE";
+        vm.UserCode = "BADCODE";
 
         bool eventFired = false;
         vm.InstallSucceeded += _ => { eventFired = true; return Task.CompletedTask; };
@@ -74,11 +74,11 @@ public sealed class InstallViewModelTests
     [Fact]
     public async Task Install_IsLoadingLifecycle()
     {
-        TaskCompletionSource<SiteInfo?> gate = new();
+        TaskCompletionSource<UserInfo?> gate = new();
         Mock<IServiceConnection> connMock = new();
-        connMock.Setup(c => c.InstallSite(It.IsAny<string>(), It.IsAny<CancellationToken>())).Returns(gate.Task);
+        connMock.Setup(c => c.InstallUser(It.IsAny<string>(), It.IsAny<CancellationToken>())).Returns(gate.Task);
         InstallViewModel vm = new(connMock.Object);
-        vm.SiteCode = "CODE1";
+        vm.UserCode = "CODE1";
 
         Task installTask = vm.InstallCommand.ExecuteAsync(null);
         Assert.True(vm.IsLoading);
@@ -90,15 +90,15 @@ public sealed class InstallViewModelTests
 
     // ── Auto-uppercase ────────────────────────────────────────────────────────
 
-    /// <summary>SiteCode is automatically uppercased when set.</summary>
+    /// <summary>UserCode is automatically uppercased when set.</summary>
     [Fact]
-    public void SiteCode_AutoUppercased()
+    public void UserCode_AutoUppercased()
     {
         Mock<IServiceConnection> connMock = new();
         InstallViewModel vm = new(connMock.Object);
 
-        vm.SiteCode = "code1";
+        vm.UserCode = "code1";
 
-        Assert.Equal("CODE1", vm.SiteCode);
+        Assert.Equal("CODE1", vm.UserCode);
     }
 }

@@ -8,8 +8,8 @@ public sealed class EngineConfig
     /// <summary>Run headless — as a normal peer client, with no GUI — instead of launching the desktop GUI.</summary>
     public bool HeadlessMode { get; init; }
 
-    /// <summary>Debug site name override; skips <c>State.json</c> lookup when set.</summary>
-    public string? SiteName { get; init; }
+    /// <summary>Debug user name override; skips <c>State.json</c> lookup when set.</summary>
+    public string? UserName { get; init; }
 
     /// <summary>Peer TCP listen port override. <see langword="null"/> uses the Engine default (50021).</summary>
     public int? PeerPort { get; init; }
@@ -25,21 +25,36 @@ public sealed class EngineConfig
 
     /// <summary>
     /// TLS certificate subject name for peer auth.
-    /// <see langword="null"/> = auto (<c>SITE-{siteName}</c>); <c>"disable"</c> = no auth; explicit name = use that cert.
+    /// <see langword="null"/> = auto (<c>USER-{userName}</c>); <c>"disable"</c> = no auth; explicit name = use that cert.
     /// </summary>
     public string? PeerCertificateName { get; init; }
 
-    /// <summary>
-    /// Site definitions and endpoint overrides. Keys are site names (case-insensitive).
-    /// Entries may override an existing site's endpoint or introduce an entirely new site.
-    /// </summary>
-    public Dictionary<string, SiteEndpointConfig> Sites { get; init; } = [];
+    /// <summary>Text shown in the title bar's alert box while alarming. <see langword="null"/> uses the Engine default (<c>"ALERT"</c>).</summary>
+    public string? AlertText { get; init; }
 
     /// <summary>
-    /// Site group definitions. Keys are group names; values are lists of member names.
-    /// Members may be site names or other group names, enabling nested hierarchies.
+    /// Seconds the alarm sound plays after an alert is received before automatically stopping; resets
+    /// whenever a new alert is received. <see langword="null"/> uses the Engine default (30).
     /// </summary>
-    public Dictionary<string, List<string>> SiteGroups { get; init; } = [];
+    public double? AlarmSoundSeconds { get; init; }
+
+    /// <summary>
+    /// Whether clicking the alert box, or pressing Space/Enter while not focused in a text input, confirms
+    /// (marks read) the latest unconfirmed alert. <see langword="null"/> uses the Engine default (<see langword="true"/>).
+    /// </summary>
+    public bool? QuickConfirmationEnabled { get; init; }
+
+    /// <summary>
+    /// User definitions and endpoint overrides. Keys are user names (case-insensitive).
+    /// Entries may override an existing user's endpoint or introduce an entirely new user.
+    /// </summary>
+    public Dictionary<string, UserEndpointConfig> Users { get; init; } = [];
+
+    /// <summary>
+    /// User group definitions. Keys are group names; values are lists of member names.
+    /// Members may be user names or other group names, enabling nested hierarchies.
+    /// </summary>
+    public Dictionary<string, List<string>> UserGroups { get; init; } = [];
 
     /// <summary>
     /// Loads configuration from a file specified by the <c>--config</c> argument.
@@ -58,16 +73,16 @@ public sealed class EngineConfig
         return new EngineConfig();
     }
 
-    /// <summary>Returns the configured site entries as Engine model types, with case-insensitive key lookup.</summary>
-    public IReadOnlyDictionary<string, SiteEndpoint> GetSiteEndpoints() =>
-        Sites.ToDictionary(
+    /// <summary>Returns the configured user entries as Engine model types, with case-insensitive key lookup.</summary>
+    public IReadOnlyDictionary<string, UserEndpoint> GetUserEndpoints() =>
+        Users.ToDictionary(
             kvp => kvp.Key,
-            kvp => new SiteEndpoint { IpAddress = kvp.Value.IpAddress, Port = kvp.Value.Port },
+            kvp => new UserEndpoint { IpAddress = kvp.Value.IpAddress, Port = kvp.Value.Port },
             StringComparer.OrdinalIgnoreCase);
 }
 
-/// <summary>JSON deserialization shape for a site endpoint entry in the config file.</summary>
-public sealed class SiteEndpointConfig
+/// <summary>JSON deserialization shape for a user endpoint entry in the config file.</summary>
+public sealed class UserEndpointConfig
 {
     /// <summary>IPv4 or IPv6 address of the remote peer node.</summary>
     public string IpAddress { get; init; } = string.Empty;

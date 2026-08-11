@@ -19,6 +19,8 @@ public sealed class DraftEntity
     public DateTime ModifiedAt { get; set; } = DateTime.UtcNow;
     /// <summary>Indicates whether this draft has been sent.</summary>
     public bool IsSent { get; set; }
+    /// <summary>Whether this draft should be sent as an alert; see <see cref="IMessageFormat.GetIsAlert"/>.</summary>
+    public bool IsAlert { get; set; }
     /// <summary>UTC timestamp when the draft was sent, or <c>null</c> if not yet sent.</summary>
     public DateTime? SentAt { get; set; }
     /// <summary>Identifier of the folder this draft belongs to.</summary>

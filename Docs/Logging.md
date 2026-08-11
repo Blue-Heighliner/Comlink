@@ -10,18 +10,18 @@ Writes all log output to a daily rotating file and to stdout.
 
 **Log format**:
 ```
-[dd-MMM-yyyy HH:mm.fff] [LEVEL] [CATEGORY] [SITE] message
+[dd-MMM-yyyy HH:mm.fff] [LEVEL] [CATEGORY] [USER] message
 ```
 
 Example:
 ```
-[30-JUL-2026 14:23.051] [INFO] [APP] [MYSITE] Engine started
-[30-JUL-2026 14:23.102] [ERROR] [ACTIVITY] [MYSITE] Failed to load: System.IO.IOException: ...
+[30-JUL-2026 14:23.051] [INFO] [APP] [MYUSER] Engine started
+[30-JUL-2026 14:23.102] [ERROR] [ACTIVITY] [MYUSER] Failed to load: System.IO.IOException: ...
 ```
 
 Level tokens: `INFO` for `Information`; all others uppercased (`DEBUG`, `WARNING`, `ERROR`, `CRITICAL`).
 
-`SITE` is the current value of `CurrentSiteProvider.SiteName`, or `----` before a site is loaded.
+`USER` is the current value of `CurrentUserProvider.UserName`, or `----` before a user is loaded.
 
 **Multi-process safety**: The provider uses a named Windows Mutex (`Local\PCLog_{md5(logdir)}`) so that multiple processes writing to the same log directory serialize their writes. File is opened with `FileShare.ReadWrite` so all processes can hold handles simultaneously. Within a single process, a `lock` serializes all loggers (one per category) through a single shared `StreamWriter`.
 
@@ -52,5 +52,5 @@ var logger = loggerFactory.CreateLogger("APP");
 logger.LogInformation("Engine started");
 
 var activityLogger = loggerFactory.CreateLogger("ACTIVITY");
-activityLogger.LogInformation("Message sent to {Site}", siteName);
+activityLogger.LogInformation("Message sent to {User}", userName);
 ```

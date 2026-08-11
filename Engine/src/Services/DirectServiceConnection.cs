@@ -3,9 +3,9 @@ namespace BlueHeighliner.Comlink.Engine.Services;
 /// <summary>In-process <see cref="IServiceConnection"/> implementation that wires directly to engine services without a network hop.</summary>
 internal sealed class DirectServiceConnection : IServiceConnection
 {
-    private readonly ISiteService _siteService;
-    private readonly ISiteCodeResolver _siteCodeResolver;
-    private readonly ISiteNameDirectory _siteNameDirectory;
+    private readonly IUserService _userService;
+    private readonly IUserCodeResolver _userCodeResolver;
+    private readonly IUserNameDirectory _userNameDirectory;
     private readonly IMessageRoutingService _messageRouting;
     private readonly IPeerService _peerService;
     private readonly IEntryService _entryService;
@@ -18,17 +18,17 @@ internal sealed class DirectServiceConnection : IServiceConnection
 
     /// <summary>Initializes a new <see cref="DirectServiceConnection"/> with the required engine services.</summary>
     public DirectServiceConnection(
-        ISiteService siteService,
-        ISiteCodeResolver siteCodeResolver,
-        ISiteNameDirectory siteNameDirectory,
+        IUserService userService,
+        IUserCodeResolver userCodeResolver,
+        IUserNameDirectory userNameDirectory,
         IMessageRoutingService messageRouting,
         IPeerService peerService,
         IEntryService entryService,
         IMessageFormat messageFormat)
     {
-        _siteService = siteService;
-        _siteCodeResolver = siteCodeResolver;
-        _siteNameDirectory = siteNameDirectory;
+        _userService = userService;
+        _userCodeResolver = userCodeResolver;
+        _userNameDirectory = userNameDirectory;
         _messageRouting = messageRouting;
         _peerService = peerService;
         _entryService = entryService;
@@ -49,32 +49,33 @@ internal sealed class DirectServiceConnection : IServiceConnection
         MessageReceivedEvent evt = new()
         {
             MessageId = _messageFormat.GetMessageId(payload),
-            FromSite = _messageFormat.GetFromSite(payload),
+            FromUser = _messageFormat.GetFromUser(payload),
             Subject = _messageFormat.GetSubject(payload),
             Body = _messageFormat.GetBody(payload),
-            Addresses = _messageFormat.GetAddresses(payload).Select(a => new AddressRequest { SiteName = a.SiteName, Type = a.Type.ToString() }).ToList(),
-            SentAt = _messageFormat.GetSentAt(payload)
+            Addresses = _messageFormat.GetAddresses(payload).Select(a => new AddressRequest { UserName = a.UserName, Type = a.Type.ToString() }).ToList(),
+            SentAt = _messageFormat.GetSentAt(payload),
+            IsAlert = _messageFormat.GetIsAlert(payload)
         };
         await MessageReceived(evt);
     }
 
-    private async Task OnDeliveryStatusChanged(string messageId, string site, DestinationStatus status)
+    private async Task OnDeliveryStatusChanged(string messageId, string user, DestinationStatus status)
     {
-        MessageEntity? entity = await _entryService.UpdateDeliveryStatus(messageId, site, status);
+        MessageEntity? entity = await _entryService.UpdateDeliveryStatus(messageId, user, status);
         if (entity is not null && DeliveryStatusChanged is not null)
-            await DeliveryStatusChanged(new DeliveryStatusChangedEvent { MessageId = messageId, SiteName = site, Status = status, OverallStatus = entity.OverallStatus });
+            await DeliveryStatusChanged(new DeliveryStatusChangedEvent { MessageId = messageId, UserName = user, Status = status, OverallStatus = entity.OverallStatus });
     }
 
     /// <inheritdoc />
-    public Task<SiteInfo?> GetSiteInfo(CancellationToken cancellation = default)
-        => Task.FromResult(_siteService.GetCurrentSiteInfo());
+    public Task<UserInfo?> GetUserInfo(CancellationToken cancellation = default)
+        => Task.FromResult(_userService.GetCurrentUserInfo());
 
     /// <inheritdoc />
-    public async Task<List<string>> GetSiteNames(CancellationToken cancellation = default)
+    public async Task<List<string>> GetUserNames(CancellationToken cancellation = default)
     {
         try
         {
-            IReadOnlyList<string> names = await _siteNameDirectory.GetAllSiteNames(cancellation);
+            IReadOnlyList<string> names = await _userNameDirectory.GetAllUserNames(cancellation);
             return [.. names];
         }
         catch
@@ -84,27 +85,57 @@ internal sealed class DirectServiceConnection : IServiceConnection
     }
 
     /// <inheritdoc />
-    public Task<SiteInfo?> InstallSite(string siteCode, CancellationToken cancellation = default)
-        => _siteService.Install(siteCode, cancellation);
+    public Task<UserInfo?> InstallUser(string userCode, CancellationToken cancellation = default)
+        => _userService.Install(userCode, cancellation);
 
     /// <inheritdoc />
-    public async Task<SendMessageResult?> SendMessage(string subject, string body, List<AddressRequest> addresses, CancellationToken cancellation = default)
+    public async Task<SendMessageResult?> SendMessage(string subject, string body, List<AddressRequest> addresses, bool isAlert = false, CancellationToken cancellation = default)
     {
-        SiteInfo? siteInfo = _siteService.GetCurrentSiteInfo();
-        if (siteInfo is null) return null;
+        UserInfo? userInfo = _userService.GetCurrentUserInfo();
+        if (userInfo is null) return null;
 
         SendMessagePayload payload = new()
         {
             Subject = subject,
             Body = body,
-            Addresses = addresses.Select(a => new AddressPayload { SiteName = a.SiteName, Type = a.Type }).ToList()
+            Addresses = addresses.Select(a => new AddressPayload { UserName = a.UserName, Type = a.Type }).ToList(),
+            IsAlert = isAlert
         };
 
-        (string messageId, IReadOnlyList<SiteDeliveryResult> siteResults) = await _messageRouting.Route(siteInfo.Name, payload, cancellation);
+        (string messageId, IReadOnlyList<UserDeliveryResult> userResults) = await _messageRouting.Route(userInfo.Name, payload, cancellation);
         return new SendMessageResult
         {
             MessageId = messageId,
-            SiteResults = [.. siteResults]
+            UserResults = [.. userResults]
         };
+    }
+
+    /// <inheritdoc />
+    public async Task<bool> MarkMessageRead(string messageId, CancellationToken cancellation = default)
+    {
+        MessageEntity? entity = await _entryService.MarkMessageRead(messageId);
+        if (entity is null) return false;
+
+        if (DeliveryStatusChanged is not null)
+            await DeliveryStatusChanged(new DeliveryStatusChangedEvent { MessageId = messageId, Status = DestinationStatus.Read, OverallStatus = DestinationStatus.Read });
+
+        UserInfo? userInfo = _userService.GetCurrentUserInfo();
+        if (userInfo is null) return true;
+
+        string fromUser = _messageFormat.GetFromUser(entity.Message);
+        if (string.Equals(fromUser, userInfo.Name, StringComparison.OrdinalIgnoreCase))
+        {
+            // Self-addressed message: no network hop needed, mirroring MessageRoutingService.Route's own self-delivery bypass.
+            await _entryService.UpdateDeliveryStatus(messageId, fromUser, DestinationStatus.Read);
+            return true;
+        }
+
+        object confirmation = _messageFormat.CreateMessage();
+        _messageFormat.SetMessageId(confirmation, Guid.NewGuid().ToString("N").ToUpperInvariant());
+        _messageFormat.SetFromUser(confirmation, userInfo.Name);
+        _messageFormat.SetConfirmationMessageId(confirmation, messageId);
+        _messageFormat.SetSentAt(confirmation, DateTime.UtcNow);
+        await _peerService.Send(fromUser, confirmation, cancellation);
+        return true;
     }
 }
