@@ -134,7 +134,23 @@ public sealed class InterfaceServiceTests
             if (message is not null) tcs.TrySetResult(message);
         };
 
-        await peer.FireMessageDelivered(new TestMessage { MessageId = "M1", FromUser = "REMOTE", Subject = "Hello", Body = "World" });
+        // The client's Connect() completing does not happen-before the server's ConnectedHandler
+        // registering the connection into InterfaceService's own connection set — OnMessageDelivered
+        // is a one-shot fire-and-forget event that silently drops the message if that registration
+        // hasn't finished yet, so a single FireMessageDelivered call can race and be lost. Re-fire
+        // until the client observes it (harmless: TrySetResult only ever accepts the first delivery).
+        _ = Task.Run(async () =>
+        {
+            try
+            {
+                while (!tcs.Task.IsCompleted)
+                {
+                    await peer.FireMessageDelivered(new TestMessage { MessageId = "M1", FromUser = "REMOTE", Subject = "Hello", Body = "World" });
+                    await Task.Delay(100);
+                }
+            }
+            catch { }
+        });
 
         TestMessage received = await tcs.Task.WaitAsync(TimeSpan.FromSeconds(10));
         Assert.Equal("M1", received.MessageId);
@@ -170,8 +186,24 @@ public sealed class InterfaceServiceTests
             Body = "Body",
             Addresses = [new TestAddressEntry { UserName = "DEST", Type = "To" }]
         };
-        using OwnedBuffer buf = PeerSerializer.Serialize(outgoing);
-        await client.Send(buf.Memory);
+
+        // Same race as RealOft_MessageDeliveredFromPeer_IsMirroredToConnectedInterface, mirrored on the
+        // send side: the client's Connect() completing does not happen-before the server's ConnectedHandler
+        // setting connection.ReceivedHandler, so a single send can arrive before the server is listening.
+        // Re-send until routing observes it (harmless: Route is a no-op to production state here).
+        _ = Task.Run(async () =>
+        {
+            try
+            {
+                while (!routeCalled.Task.IsCompleted)
+                {
+                    using OwnedBuffer buf = PeerSerializer.Serialize(outgoing);
+                    await client.Send(buf.Memory);
+                    await Task.Delay(100);
+                }
+            }
+            catch { }
+        });
 
         (string fromUser, SendMessagePayload payload) = await routeCalled.Task.WaitAsync(TimeSpan.FromSeconds(10));
         Assert.Equal("LOCAL", fromUser);
