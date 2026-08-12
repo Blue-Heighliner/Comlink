@@ -69,6 +69,15 @@
                   Foreground="#858585"
                   Padding="8,4"
                   Margin="0,0,8,0" />
+          <Button x:Name="PlsoButton"
+                  Content="{Binding PlsoButtonText}"
+                  IsVisible="{Binding !IsSent}"
+                  Click="OnPlsoButtonClick"
+                  ToolTip.Tip="Phonetic Language Spell Out — click to cycle OFF → ON → SPACES. ON replaces typed letters/digits with their phonetic word (A → ALFA, 5 → FIVE); SPACES does the same and adds a trailing space after each word."
+                  FontSize="11"
+                  FontWeight="SemiBold"
+                  Foreground="#858585"
+                  Padding="8,4" />
         </StackPanel>
       </DockPanel>
     </Border>

@@ -62,18 +62,60 @@ public partial class DraftEditor : UserControl
 
     private void OnBodyEditorTextInput(object? sender, TextInputEventArgs e)
     {
-        IFillInViewModel? activeFillIn = GetActiveFillIn(DataContext as IDraftViewModel);
-        if (activeFillIn is null || e.Text is null) return;
-        activeFillIn.NewOption += e.Text;
+        IDraftViewModel? vm = DataContext as IDraftViewModel;
+
+        IFillInViewModel? activeFillIn = GetActiveFillIn(vm);
+        if (activeFillIn is not null)
+        {
+            if (e.Text is not null)
+            {
+                activeFillIn.NewOption += e.Text;
+                e.Handled = true;
+            }
+            return;
+        }
+
+        // PLSO (Phonetic Language Spell Out): substitute a single typed letter or digit with its
+        // phonetic word instead of inserting the character itself.
+        if (vm is not { PlsoMode: not PlsoMode.Off } || e.Text is not { Length: 1 } text || !PhoneticAlphabet.TryGetWord(text[0], out string word))
+            return;
+
+        TextDocument doc = BodyEditor.Document;
+        int caret = BodyEditor.CaretOffset;
+        string insertion = vm.PlsoMode == PlsoMode.Spaces ? word + " " : word;
+        doc.Insert(caret, insertion);
+        BodyEditor.CaretOffset = caret + insertion.Length;
         e.Handled = true;
+    }
+
+    /// <summary>
+    /// Finds the longest phonetic word (see <see cref="PhoneticAlphabet"/>) ending exactly at
+    /// <paramref name="caret"/>, if any — checked against the raw document text regardless of how it
+    /// got there (typed via PLSO, pasted, etc.), per PLSO's whole-word backspace behavior.
+    /// </summary>
+    private static bool TryFindPhoneticWordBeforeCaret(TextDocument doc, int caret, out int wordLength)
+    {
+        foreach (int length in PhoneticAlphabet.Lengths)
+        {
+            if (caret - length < 0) continue;
+            if (PhoneticAlphabet.IsWord(doc.GetText(caret - length, length)))
+            {
+                wordLength = length;
+                return true;
+            }
+        }
+        wordLength = 0;
+        return false;
     }
 
     private void OnBodyEditorKeyDown(object? sender, KeyEventArgs e)
     {
+        IDraftViewModel? vm = DataContext as IDraftViewModel;
+
         // When a fill-in popup is open, redirect keyboard input to it instead of the body editor.
         // The Popup is a separate X11 window and cannot receive X11 keyboard focus, so we
         // intercept here at tunnel priority and forward to the fill-in's NewOption property.
-        IFillInViewModel? activeFillIn = GetActiveFillIn(DataContext as IDraftViewModel);
+        IFillInViewModel? activeFillIn = GetActiveFillIn(vm);
         if (activeFillIn is not null)
         {
             if (e.Key == Key.Back)
@@ -102,6 +144,16 @@ public partial class DraftEditor : UserControl
 
         TextDocument doc = BodyEditor.Document;
         int caret = BodyEditor.CaretOffset;
+
+        // PLSO: backspacing when the text immediately to the left of the caret is a phonetic word
+        // deletes the whole word at once, regardless of which word it is or how it got there.
+        if (e.Key == Key.Back && vm is { PlsoMode: not PlsoMode.Off } &&
+            TryFindPhoneticWordBeforeCaret(doc, caret, out int wordLength))
+        {
+            doc.Remove(caret - wordLength, wordLength);
+            e.Handled = true;
+            return;
+        }
 
         // Delete key: if caret is at fill-in sentinel, delete the whole marker
         if (e.Key == Key.Delete && caret < doc.TextLength &&
@@ -144,5 +196,17 @@ public partial class DraftEditor : UserControl
         vm.InsertFillIn(offset);
         BodyEditor.CaretOffset = offset + FillInElementGenerator.MarkerLength;
         BodyEditor.Focus();
+    }
+
+    private void OnPlsoButtonClick(object? sender, RoutedEventArgs e)
+    {
+        if (DataContext is not IDraftViewModel vm) return;
+        vm.PlsoMode = vm.PlsoMode switch
+        {
+            PlsoMode.Off => PlsoMode.On,
+            PlsoMode.On => PlsoMode.Spaces,
+            PlsoMode.Spaces => PlsoMode.Off,
+            _ => PlsoMode.Off
+        };
     }
 }

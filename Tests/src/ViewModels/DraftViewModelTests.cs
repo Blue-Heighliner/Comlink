@@ -46,6 +46,42 @@ public sealed class DraftViewModelTests
         Assert.Equal(isSent, vm.IsSent);
     }
 
+    /// <summary>PlsoMode defaults to Off — it is editor-session-only UI state, never read from the entity.</summary>
+    [Fact]
+    public void Constructor_PlsoModeDefaultsToOff()
+    {
+        DraftViewModel vm = Build(out _, out _);
+        Assert.Equal(PlsoMode.Off, vm.PlsoMode);
+    }
+
+    /// <summary>PlsoMode is freely settable to any of its three states.</summary>
+    [Theory]
+    [InlineData(PlsoMode.Off)]
+    [InlineData(PlsoMode.On)]
+    [InlineData(PlsoMode.Spaces)]
+    public void PlsoMode_CanBeSet(PlsoMode mode)
+    {
+        DraftViewModel vm = Build(out _, out _);
+
+        vm.PlsoMode = mode;
+
+        Assert.Equal(mode, vm.PlsoMode);
+    }
+
+    /// <summary>PlsoButtonText reflects the current PlsoMode.</summary>
+    [Theory]
+    [InlineData(PlsoMode.Off, "PLSO OFF")]
+    [InlineData(PlsoMode.On, "PLSO ON")]
+    [InlineData(PlsoMode.Spaces, "PLSO SPACES")]
+    public void PlsoButtonText_ReflectsPlsoMode(PlsoMode mode, string expected)
+    {
+        DraftViewModel vm = Build(out _, out _);
+
+        vm.PlsoMode = mode;
+
+        Assert.Equal(expected, vm.PlsoButtonText);
+    }
+
     /// <summary>Constructor loads addresses from entity.</summary>
     [Fact]
     public void Constructor_LoadsAddressesFromEntity()

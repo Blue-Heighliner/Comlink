@@ -15,6 +15,16 @@ public interface IDraftViewModel
     bool IsSent { get; set; }
     /// <summary>Gets or sets a value indicating whether this draft will be sent as an alert.</summary>
     bool IsAlert { get; set; }
+    /// <summary>
+    /// Gets or sets the PLSO (Phonetic Language Spell Out) mode active in the body editor: when not
+    /// <see cref="Entries.PlsoMode.Off"/>, typing a letter or digit inserts its phonetic word (see
+    /// <see cref="PhoneticAlphabet"/>) instead of the character itself, with a trailing space added
+    /// after each word when <see cref="Entries.PlsoMode.Spaces"/>. Editor-session-only UI state — not
+    /// persisted with the draft.
+    /// </summary>
+    PlsoMode PlsoMode { get; set; }
+    /// <summary>Gets the display text for the PLSO toggle button, reflecting the current <see cref="PlsoMode"/>.</summary>
+    string PlsoButtonText { get; }
     /// <summary>Gets or sets a value indicating whether a save or send operation is in progress.</summary>
     bool IsSaving { get; set; }
     /// <summary>Gets or sets the status message displayed after a save or send attempt.</summary>
@@ -61,6 +71,7 @@ public sealed partial class DraftViewModel : ObservableObject, IDraftViewModel
     [ObservableProperty] private string _newAddressType = "To";
     [ObservableProperty] private bool _isSent;
     [ObservableProperty] private bool _isAlert;
+    [ObservableProperty] private PlsoMode _plsoMode;
     [ObservableProperty] private bool _isSaving;
     [ObservableProperty] private string? _statusMessage;
 
@@ -78,6 +89,14 @@ public sealed partial class DraftViewModel : ObservableObject, IDraftViewModel
     public IReadOnlyList<string> AllUserNames { get; }
     /// <inheritdoc />
     public IReadOnlyList<string> AddressTypes { get; } = ["To", "Cc"];
+    /// <inheritdoc />
+    public string PlsoButtonText => PlsoMode switch
+    {
+        PlsoMode.Off => "PLSO OFF",
+        PlsoMode.On => "PLSO ON",
+        PlsoMode.Spaces => "PLSO SPACES",
+        _ => "PLSO OFF"
+    };
 
     /// <inheritdoc />
     public event Func<IDraftViewModel, MessageEntity, Task>? DraftSent;
@@ -141,6 +160,8 @@ public sealed partial class DraftViewModel : ObservableObject, IDraftViewModel
         string upper = value.ToUpperInvariant();
         if (value != upper) NewAddressUser = upper;
     }
+
+    partial void OnPlsoModeChanged(PlsoMode value) => OnPropertyChanged(nameof(PlsoButtonText));
 
     /// <inheritdoc />
     public void InsertFillIn(int caretOffset)

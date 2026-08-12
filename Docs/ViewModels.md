@@ -113,9 +113,11 @@ Read-only message display. Constructed with `new MessageViewModel(MessageEntity)
 
 Editable draft with fill-in support. Constructed with `new DraftViewModel(entity, ...)` — not DI-registered.
 
-**Properties**: `Id`, `Subject`, `NewAddressUser` (auto-uppercased), `NewAddressType`, `IsSent`, `IsAlert`, `IsSaving`, `StatusMessage`, `Addresses (ObservableCollection<AddressData>)`, `BodyDocument (IBodyDocument)`, `FillIns (IReadOnlyDictionary<string, IFillInViewModel>)`, `AllUserNames`, `AddressTypes`.
+**Properties**: `Id`, `Subject`, `NewAddressUser` (auto-uppercased), `NewAddressType`, `IsSent`, `IsAlert`, `PlsoMode (PlsoMode)`, `PlsoButtonText`, `IsSaving`, `StatusMessage`, `Addresses (ObservableCollection<AddressData>)`, `BodyDocument (IBodyDocument)`, `FillIns (IReadOnlyDictionary<string, IFillInViewModel>)`, `AllUserNames`, `AddressTypes`.
 
 `IsAlert` is persisted on `DraftEntity.IsAlert` across save/reload and passed through `IServiceConnection.SendMessage(..., IsAlert)` on send — see [Peer.md](Peer.md#alert-messages).
+
+`PlsoMode` is editor-session-only UI state, cycled by the "PLSO" button (`OFF` → `ON` → `SPACES` → `OFF`, `PlsoButtonText` displays the current state) in `DraftEditor.axaml`'s toolbar — never read from or written to `DraftEntity`, so it resets to `PlsoMode.Off` whenever a draft is reopened. Only the body editor is affected; the Subject field is untouched.
 
 **IBodyDocument** — framework-agnostic body document abstraction in `Engine.ViewModels.Entries`. `BodyDocumentFactory` provides the default `StringBodyDocument` (plain string, used in tests and Headless mode). `TextDocumentBodyDocumentFactory` provides `TextDocumentBodyDocument` (wraps AvaloniaEdit's `TextDocument`) for Client mode. `DraftEditor.axaml.cs` casts to `TextDocumentBodyDocument` to bind the editor. `IBodyDocumentFactory` controls which implementation is created; `UseEngineUi()` overrides the default with `TextDocumentBodyDocumentFactory`.
 
@@ -126,6 +128,8 @@ Editable draft with fill-in support. Constructed with `new DraftViewModel(entity
 **Method**: `InsertFillIn(int caretOffset)` — adds a fill-in marker to the document and a new `FillInViewModel` to `FillIns`.
 
 **Fill-ins**: Body text contains fill-in markers — Unicode `U+E001` sentinel + 8-character hex ID. `FillIns` maps each ID to its `IFillInViewModel`. `FillInElementGenerator` renders them inline. Internally backed by `Dictionary<string, IFillInViewModel>` with a read-only view exposed on the interface.
+
+**PLSO (Phonetic Language Spell Out)**: `PlsoMode` is a three-state enum (`Off`, `On`, `Spaces`) cycled by the toolbar button. When not `Off`, `DraftEditor.axaml.cs` intercepts body text input at tunnel priority: each typed letter or digit is looked up via `PhoneticAlphabet.TryGetWord` (ICAO/NATO alphabet for letters — `A` → `ALFA`, `G` → `GOLF` — and spelled-out digits — `5` → `FIVE`) and the resulting word is inserted in place of the character, with a trailing space appended when the mode is `Spaces`. When not `Off`, Backspace is intercepted: the text immediately to the left of the caret is checked against every phonetic word length (longest first, via `PhoneticAlphabet.Lengths`/`IsWord`) and, on a match, the whole word is removed in one keystroke instead of one character — this check runs against the live document text regardless of which word it is or how it got there (typed via PLSO, pasted, edited), not just the most recently inserted word. `PhoneticAlphabet` is a pure static lookup class in `Engine.ViewModels.Entries` with no UI dependency.
 
 ---
 
