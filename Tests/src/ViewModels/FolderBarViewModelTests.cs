@@ -124,6 +124,50 @@ public sealed class FolderBarViewModelTests
         Assert.False(first.IsSelected);
     }
 
+    // ── DeselectFolder ────────────────────────────────────────────────────────
+
+    /// <summary>DeselectFolder clears SelectedFolder and unmarks the folder's IsSelected flag.</summary>
+    [Fact]
+    public async Task DeselectFolder_ClearsSelectionAndFlag()
+    {
+        List<Folder> tree = [MakeFolder("inbox", FolderType.Inbox)];
+        (FolderBarViewModel vm, _, _) = Build(tree);
+        await vm.Load();
+        FolderItemViewModel selected = vm.RootFolders[0];
+
+        vm.DeselectFolder();
+
+        Assert.Null(vm.SelectedFolder);
+        Assert.False(selected.IsSelected);
+    }
+
+    /// <summary>DeselectFolder does not raise FolderSelected.</summary>
+    [Fact]
+    public async Task DeselectFolder_DoesNotRaiseFolderSelected()
+    {
+        List<Folder> tree = [MakeFolder("inbox", FolderType.Inbox)];
+        (FolderBarViewModel vm, _, _) = Build(tree);
+        await vm.Load();
+        bool raised = false;
+        vm.FolderSelected += _ => raised = true;
+
+        vm.DeselectFolder();
+
+        Assert.False(raised);
+    }
+
+    /// <summary>DeselectFolder is a no-op when nothing is selected.</summary>
+    [Fact]
+    public void DeselectFolder_NothingSelected_IsNoOp()
+    {
+        (FolderBarViewModel vm, _, _) = Build();
+
+        Exception? ex = Record.Exception(() => vm.DeselectFolder());
+
+        Assert.Null(ex);
+        Assert.Null(vm.SelectedFolder);
+    }
+
     // ── SelectFolderByType ────────────────────────────────────────────────────
 
     /// <summary>SelectFolderByType selects the matching root folder.</summary>

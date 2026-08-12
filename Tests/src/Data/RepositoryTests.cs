@@ -365,4 +365,72 @@ public sealed class RepositoryTests : IDisposable
 
         Assert.Null(await repo.Get(note.Id));
     }
+
+    // ── GetAll (export support) ───────────────────────────────────────────────
+
+    private static readonly IMessageFormat MessageFormat = new TestMessageFormat();
+
+    private static MessageEntity MakeMessage(string messageId, string folderId, bool isOutbound)
+    {
+        object message = MessageFormat.CreateMessage();
+        MessageFormat.SetMessageId(message, messageId);
+        return new MessageEntity { MessageId = messageId, Message = message, FolderId = folderId, IsOutbound = isOutbound };
+    }
+
+    /// <summary>MessageRepository.GetAll returns messages from every folder, both Inbox and Outbox.</summary>
+    [Fact]
+    public async Task Message_GetAll_ReturnsAllFoldersAndDirections()
+    {
+        MessageRepository repo = new(_ctx);
+        await repo.Insert(MakeMessage("M1", "root-inbox", isOutbound: false));
+        await repo.Insert(MakeMessage("M2", "root-outbox", isOutbound: true));
+        await repo.Insert(MakeMessage("M3", "custom-folder", isOutbound: false));
+
+        List<MessageEntity> all = await repo.GetAll();
+
+        Assert.Equal(3, all.Count);
+        Assert.Contains(all, m => m.MessageId == "M1");
+        Assert.Contains(all, m => m.MessageId == "M2");
+        Assert.Contains(all, m => m.MessageId == "M3");
+    }
+
+    /// <summary>DraftRepository.GetAll returns both sent and unsent drafts across all folders.</summary>
+    [Fact]
+    public async Task Draft_GetAll_ReturnsSentAndUnsentAcrossFolders()
+    {
+        DraftRepository repo = new(_ctx);
+        await repo.Insert(MakeDraft("root-drafts", "Unsent"));
+        await repo.Insert(MakeDraft("root-drafts", "Sent", sent: true));
+        await repo.Insert(MakeDraft("custom-folder", "Other"));
+
+        List<DraftEntity> all = await repo.GetAll();
+
+        Assert.Equal(3, all.Count);
+    }
+
+    /// <summary>NoteRepository.GetAll returns notes across all folders.</summary>
+    [Fact]
+    public async Task Note_GetAll_ReturnsAllFolders()
+    {
+        NoteRepository repo = new(_ctx);
+        await repo.Insert(MakeNote("root-notes"));
+        await repo.Insert(MakeNote("custom-folder"));
+
+        List<NoteEntity> all = await repo.GetAll();
+
+        Assert.Equal(2, all.Count);
+    }
+
+    /// <summary>ActivityLogRepository.GetAll returns every activity log document.</summary>
+    [Fact]
+    public async Task ActivityLog_GetAll_ReturnsAllDocuments()
+    {
+        ActivityLogRepository repo = new(_ctx);
+        await repo.Insert(new ActivityLogEntity { Date = DateTime.UtcNow.Date, EventEntries = [] });
+        await repo.Insert(new ActivityLogEntity { Date = DateTime.UtcNow.Date.AddDays(-1), EventEntries = [] });
+
+        List<ActivityLogEntity> all = await repo.GetAll();
+
+        Assert.Equal(2, all.Count);
+    }
 }

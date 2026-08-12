@@ -1,0 +1,158 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:vm="using:BlueHeighliner.Comlink.Engine.ViewModels"
+             xmlns:svc="using:BlueHeighliner.Comlink.Engine.Services"
+             x:Class="BlueHeighliner.Comlink.Engine.Views.ImportView"
+             x:DataType="vm:ImportViewModel"
+             Background="#1E1E1E">
+
+  <Panel>
+
+    <DockPanel Margin="24,20">
+
+      <!-- Toolbar -->
+      <Border DockPanel.Dock="Top"
+              BorderBrush="#3E3E42"
+              BorderThickness="0,0,0,1"
+              Padding="0,0,0,10"
+              Margin="0,0,0,16">
+        <DockPanel>
+          <StackPanel DockPanel.Dock="Right"
+                      Orientation="Horizontal"
+                      Spacing="8"
+                      VerticalAlignment="Center">
+            <TextBlock Text="{Binding StatusMessage}"
+                       FontSize="12"
+                       Foreground="#858585"
+                       VerticalAlignment="Center" />
+            <Button Content="×"
+                    Command="{Binding $parent[Window].DataContext.ShowHomeCommand}"
+                    ToolTip.Tip="Close"
+                    FontSize="16"
+                    Padding="8,0"
+                    Foreground="#858585" />
+          </StackPanel>
+          <TextBlock Text="IMPORT"
+                     FontSize="11"
+                     FontWeight="SemiBold"
+                     Foreground="#858585"
+                     LetterSpacing="1"
+                     VerticalAlignment="Center" />
+        </DockPanel>
+      </Border>
+
+      <ProgressBar DockPanel.Dock="Top"
+                   IsIndeterminate="True"
+                   IsVisible="{Binding IsImporting}"
+                   Height="4"
+                   Margin="0,0,0,16" />
+
+      <StackPanel DockPanel.Dock="Top"
+                  Spacing="16"
+                  IsEnabled="{Binding !IsImporting}"
+                  Margin="0,0,0,16">
+
+        <!-- Source drive -->
+        <StackPanel Spacing="6">
+          <TextBlock Text="SOURCE DRIVE" FontSize="11" FontWeight="SemiBold" Foreground="#858585" LetterSpacing="1" />
+          <Grid ColumnDefinitions="*,Auto">
+            <ComboBox Grid.Column="0"
+                      ItemsSource="{Binding AvailableDrives}"
+                      SelectedItem="{Binding SelectedDrive}"
+                      PlaceholderText="Select a drive..."
+                      Background="#3C3C3C"
+                      BorderThickness="0"
+                      FontSize="13"
+                      HorizontalAlignment="Stretch">
+              <ComboBox.ItemTemplate>
+                <DataTemplate>
+                  <TextBlock Text="{Binding DisplayName}" />
+                </DataTemplate>
+              </ComboBox.ItemTemplate>
+            </ComboBox>
+            <Button Grid.Column="1"
+                    Content="REFRESH"
+                    Command="{Binding RefreshDrivesCommand}"
+                    FontSize="12"
+                    Margin="8,0,0,0" />
+          </Grid>
+        </StackPanel>
+
+      </StackPanel>
+
+      <!-- Packages on the selected drive -->
+      <StackPanel IsVisible="{Binding SelectedDrive, Converter={x:Static ObjectConverters.IsNotNull}}"
+                  IsEnabled="{Binding !IsImporting}"
+                  Spacing="6">
+        <TextBlock Text="PACKAGES" FontSize="11" FontWeight="SemiBold" Foreground="#858585" LetterSpacing="1" />
+        <TextBlock Text="No export packages found on this drive"
+                   IsVisible="{Binding !AvailablePackages.Count}"
+                   FontSize="12"
+                   Foreground="#858585" />
+        <ItemsControl ItemsSource="{Binding AvailablePackages}">
+          <ItemsControl.ItemTemplate>
+            <DataTemplate DataType="{x:Type svc:ImportPackageInfo}">
+              <Grid ColumnDefinitions="*,Auto" Margin="0,2">
+                <TextBlock Grid.Column="0"
+                           Text="{Binding FileName}"
+                           FontSize="13"
+                           VerticalAlignment="Center"
+                           TextTrimming="CharacterEllipsis"
+                           ToolTip.Tip="{Binding FileName}" />
+                <Button Grid.Column="1"
+                        Classes="accent"
+                        Content="IMPORT"
+                        Command="{Binding $parent[UserControl].DataContext.StartImportCommand}"
+                        CommandParameter="{Binding}"
+                        FontSize="12"
+                        FontWeight="SemiBold" />
+              </Grid>
+            </DataTemplate>
+          </ItemsControl.ItemTemplate>
+        </ItemsControl>
+      </StackPanel>
+
+    </DockPanel>
+
+    <!-- Draft/note name conflict prompt -->
+    <Border IsVisible="{Binding PendingConflict, Converter={x:Static ObjectConverters.IsNotNull}}"
+            Background="#2D2D30"
+            BorderBrush="#3E3E42"
+            BorderThickness="1"
+            CornerRadius="4"
+            Padding="20"
+            Width="420"
+            HorizontalAlignment="Center"
+            VerticalAlignment="Center"
+            BoxShadow="0 4 16 0 #80000000">
+      <StackPanel Spacing="12">
+        <TextBlock Text="Import conflict" FontSize="14" FontWeight="SemiBold" />
+        <TextBlock Text="{Binding PendingConflict.Name, FallbackValue=''}"
+                   FontSize="13"
+                   Foreground="#CCCCCC"
+                   TextWrapping="Wrap" />
+        <TextBlock Text="An entry with this name already exists. What would you like to do?"
+                   FontSize="12"
+                   Foreground="#858585"
+                   TextWrapping="Wrap" />
+        <StackPanel Orientation="Horizontal" Spacing="8" HorizontalAlignment="Right">
+          <Button Content="Keep Existing"
+                  Command="{Binding ResolveConflictCommand}"
+                  CommandParameter="{x:Static svc:DraftNoteConflictResolution.KeepExisting}"
+                  FontSize="12" />
+          <Button Content="Overwrite"
+                  Command="{Binding ResolveConflictCommand}"
+                  CommandParameter="{x:Static svc:DraftNoteConflictResolution.Overwrite}"
+                  FontSize="12" />
+          <Button Classes="accent"
+                  Content="Overwrite All"
+                  Command="{Binding ResolveConflictCommand}"
+                  CommandParameter="{x:Static svc:DraftNoteConflictResolution.OverwriteAll}"
+                  FontSize="12"
+                  FontWeight="SemiBold" />
+        </StackPanel>
+      </StackPanel>
+    </Border>
+
+  </Panel>
+</UserControl>

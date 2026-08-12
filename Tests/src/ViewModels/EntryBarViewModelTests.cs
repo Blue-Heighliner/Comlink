@@ -101,7 +101,7 @@ public sealed class EntryBarViewModelTests
 
     // ── SelectEntry ───────────────────────────────────────────────────────────
 
-    /// <summary>SelectEntry fires EntrySelected and updates SelectedEntry.</summary>
+    /// <summary>SelectEntry fires EntriesSelected with a single-item list and updates SelectedEntry.</summary>
     [Fact]
     public async Task SelectEntry_FiresEventAndUpdatesSelection()
     {
@@ -111,13 +111,13 @@ public sealed class EntryBarViewModelTests
         EntryBarViewModel vm = new(svc.Object, Format);
         await vm.LoadFolder(MakeFolder("root-inbox", FolderType.Inbox));
         EntryItemViewModel entry = vm.Entries[0];
-        EntryItemViewModel? received = null;
-        vm.EntrySelected += e => received = e;
+        IReadOnlyList<EntryItemViewModel>? received = null;
+        vm.EntriesSelected += e => received = e;
 
         vm.SelectEntry(entry);
 
         Assert.Same(entry, vm.SelectedEntry);
-        Assert.Same(entry, received);
+        Assert.Equal([entry], received);
         Assert.True(entry.IsSelected);
     }
 
@@ -136,6 +136,204 @@ public sealed class EntryBarViewModelTests
         vm.SelectEntry(vm.Entries[1]);
 
         Assert.False(first.IsSelected);
+    }
+
+    /// <summary>Selecting a new entry deselects every previously multi-selected entry, not just SelectedEntry.</summary>
+    [Fact]
+    public async Task SelectEntry_DeselectedAllPreviousMultiSelection()
+    {
+        Mock<IEntryService> svc = new();
+        svc.Setup(s => s.GetMessages(It.IsAny<string>(), It.IsAny<int>()))
+           .ReturnsAsync((Items: new List<MessageEntity> { MakeMessage("M1"), MakeMessage("M2"), MakeMessage("M3") }, Total: 3));
+        EntryBarViewModel vm = new(svc.Object, Format);
+        await vm.LoadFolder(MakeFolder("root-inbox", FolderType.Inbox));
+        vm.SelectEntries([vm.Entries[0], vm.Entries[1]], []);
+
+        vm.SelectEntry(vm.Entries[2]);
+
+        Assert.False(vm.Entries[0].IsSelected);
+        Assert.False(vm.Entries[1].IsSelected);
+        Assert.True(vm.Entries[2].IsSelected);
+    }
+
+    // ── SelectEntries (shift/ctrl multi-select) ─────────────────────────────────
+
+    /// <summary>SelectEntries marks every added entry selected and fires EntriesSelected with the added list.</summary>
+    [Fact]
+    public async Task SelectEntries_MarksAddedSelectedAndFiresEvent()
+    {
+        Mock<IEntryService> svc = new();
+        svc.Setup(s => s.GetMessages(It.IsAny<string>(), It.IsAny<int>()))
+           .ReturnsAsync((Items: new List<MessageEntity> { MakeMessage("M1"), MakeMessage("M2"), MakeMessage("M3") }, Total: 3));
+        EntryBarViewModel vm = new(svc.Object, Format);
+        await vm.LoadFolder(MakeFolder("root-inbox", FolderType.Inbox));
+        IReadOnlyList<EntryItemViewModel>? received = null;
+        vm.EntriesSelected += e => received = e;
+
+        vm.SelectEntries([vm.Entries[0], vm.Entries[1], vm.Entries[2]], []);
+
+        Assert.True(vm.Entries[0].IsSelected);
+        Assert.True(vm.Entries[1].IsSelected);
+        Assert.True(vm.Entries[2].IsSelected);
+        Assert.Equal([vm.Entries[0], vm.Entries[1], vm.Entries[2]], received);
+    }
+
+    /// <summary>SelectEntries deselects every removed entry (e.g. a ctrl-click toggle-off).</summary>
+    [Fact]
+    public async Task SelectEntries_DeselectsRemoved()
+    {
+        Mock<IEntryService> svc = new();
+        svc.Setup(s => s.GetMessages(It.IsAny<string>(), It.IsAny<int>()))
+           .ReturnsAsync((Items: new List<MessageEntity> { MakeMessage("M1"), MakeMessage("M2") }, Total: 2));
+        EntryBarViewModel vm = new(svc.Object, Format);
+        await vm.LoadFolder(MakeFolder("root-inbox", FolderType.Inbox));
+        vm.SelectEntries([vm.Entries[0], vm.Entries[1]], []);
+
+        vm.SelectEntries([], [vm.Entries[0]]);
+
+        Assert.False(vm.Entries[0].IsSelected);
+        Assert.True(vm.Entries[1].IsSelected);
+    }
+
+    /// <summary>SelectEntries with no added entries does not raise EntriesSelected.</summary>
+    [Fact]
+    public async Task SelectEntries_NoAdded_DoesNotRaiseEvent()
+    {
+        Mock<IEntryService> svc = new();
+        svc.Setup(s => s.GetMessages(It.IsAny<string>(), It.IsAny<int>()))
+           .ReturnsAsync((Items: new List<MessageEntity> { MakeMessage("M1") }, Total: 1));
+        EntryBarViewModel vm = new(svc.Object, Format);
+        await vm.LoadFolder(MakeFolder("root-inbox", FolderType.Inbox));
+        vm.SelectEntries([vm.Entries[0]], []);
+        bool raised = false;
+        vm.EntriesSelected += _ => raised = true;
+
+        vm.SelectEntries([], [vm.Entries[0]]);
+
+        Assert.False(raised);
+    }
+
+    /// <summary>
+    /// SelectEntries never assigns SelectedEntry: it reacts to the View's own SelectionChanged, and
+    /// SelectedEntry drives a OneWay binding back into that same ListBox's SelectedItem — writing it here
+    /// would collapse a ctrl/shift multi-selection down to a single item (regression test for the bug
+    /// where "click entry A, then ctrl-click entry B" ended up with only B selected).
+    /// </summary>
+    [Fact]
+    public async Task SelectEntries_DoesNotAssignSelectedEntry()
+    {
+        Mock<IEntryService> svc = new();
+        svc.Setup(s => s.GetMessages(It.IsAny<string>(), It.IsAny<int>()))
+           .ReturnsAsync((Items: new List<MessageEntity> { MakeMessage("M1"), MakeMessage("M2") }, Total: 2));
+        EntryBarViewModel vm = new(svc.Object, Format);
+        await vm.LoadFolder(MakeFolder("root-inbox", FolderType.Inbox));
+
+        vm.SelectEntries([vm.Entries[0], vm.Entries[1]], []);
+
+        Assert.Null(vm.SelectedEntry);
+    }
+
+    /// <summary>SelectEntries leaves a pre-existing SelectedEntry (e.g. from a prior programmatic SelectEntry) untouched.</summary>
+    [Fact]
+    public async Task SelectEntries_LeavesExistingSelectedEntryUntouched()
+    {
+        Mock<IEntryService> svc = new();
+        svc.Setup(s => s.GetMessages(It.IsAny<string>(), It.IsAny<int>()))
+           .ReturnsAsync((Items: new List<MessageEntity> { MakeMessage("M1"), MakeMessage("M2"), MakeMessage("M3") }, Total: 3));
+        EntryBarViewModel vm = new(svc.Object, Format);
+        await vm.LoadFolder(MakeFolder("root-inbox", FolderType.Inbox));
+        vm.SelectEntry(vm.Entries[0]);
+
+        vm.SelectEntries([vm.Entries[1], vm.Entries[2]], []);
+
+        Assert.Same(vm.Entries[0], vm.SelectedEntry);
+    }
+
+    /// <summary>Both entries from a ctrl-click-style selection (A then A+B, neither removed) remain marked selected.</summary>
+    [Fact]
+    public async Task SelectEntries_CtrlClickAfterPlainClick_BothRemainSelected()
+    {
+        Mock<IEntryService> svc = new();
+        svc.Setup(s => s.GetMessages(It.IsAny<string>(), It.IsAny<int>()))
+           .ReturnsAsync((Items: new List<MessageEntity> { MakeMessage("M1"), MakeMessage("M2") }, Total: 2));
+        EntryBarViewModel vm = new(svc.Object, Format);
+        await vm.LoadFolder(MakeFolder("root-inbox", FolderType.Inbox));
+
+        // Plain click on entry A (as the View's SelectionChanged would report it).
+        vm.SelectEntries([vm.Entries[0]], []);
+        // Ctrl-click on entry B: Avalonia's native selection adds B without removing A.
+        vm.SelectEntries([vm.Entries[1]], []);
+
+        Assert.True(vm.Entries[0].IsSelected);
+        Assert.True(vm.Entries[1].IsSelected);
+    }
+
+    // ── DeselectEntry ─────────────────────────────────────────────────────────
+
+    /// <summary>DeselectEntry clears SelectedEntry and unmarks the entry's IsSelected flag.</summary>
+    [Fact]
+    public async Task DeselectEntry_ClearsSelectionAndFlag()
+    {
+        Mock<IEntryService> svc = new();
+        svc.Setup(s => s.GetMessages(It.IsAny<string>(), It.IsAny<int>()))
+           .ReturnsAsync((Items: new List<MessageEntity> { MakeMessage("M1") }, Total: 1));
+        EntryBarViewModel vm = new(svc.Object, Format);
+        await vm.LoadFolder(MakeFolder("root-inbox", FolderType.Inbox));
+        EntryItemViewModel entry = vm.Entries[0];
+        vm.SelectEntry(entry);
+
+        vm.DeselectEntry();
+
+        Assert.Null(vm.SelectedEntry);
+        Assert.False(entry.IsSelected);
+    }
+
+    /// <summary>DeselectEntry clears every multi-selected entry, not just SelectedEntry.</summary>
+    [Fact]
+    public async Task DeselectEntry_ClearsAllMultiSelectedEntries()
+    {
+        Mock<IEntryService> svc = new();
+        svc.Setup(s => s.GetMessages(It.IsAny<string>(), It.IsAny<int>()))
+           .ReturnsAsync((Items: new List<MessageEntity> { MakeMessage("M1"), MakeMessage("M2") }, Total: 2));
+        EntryBarViewModel vm = new(svc.Object, Format);
+        await vm.LoadFolder(MakeFolder("root-inbox", FolderType.Inbox));
+        vm.SelectEntries([vm.Entries[0], vm.Entries[1]], []);
+
+        vm.DeselectEntry();
+
+        Assert.False(vm.Entries[0].IsSelected);
+        Assert.False(vm.Entries[1].IsSelected);
+        Assert.Null(vm.SelectedEntry);
+    }
+
+    /// <summary>DeselectEntry does not raise EntriesSelected.</summary>
+    [Fact]
+    public async Task DeselectEntry_DoesNotRaiseEntriesSelected()
+    {
+        Mock<IEntryService> svc = new();
+        svc.Setup(s => s.GetMessages(It.IsAny<string>(), It.IsAny<int>()))
+           .ReturnsAsync((Items: new List<MessageEntity> { MakeMessage("M1") }, Total: 1));
+        EntryBarViewModel vm = new(svc.Object, Format);
+        await vm.LoadFolder(MakeFolder("root-inbox", FolderType.Inbox));
+        vm.SelectEntry(vm.Entries[0]);
+        bool raised = false;
+        vm.EntriesSelected += _ => raised = true;
+
+        vm.DeselectEntry();
+
+        Assert.False(raised);
+    }
+
+    /// <summary>DeselectEntry is a no-op when nothing is selected.</summary>
+    [Fact]
+    public void DeselectEntry_NothingSelected_IsNoOp()
+    {
+        EntryBarViewModel vm = new(new Mock<IEntryService>().Object, Format);
+
+        Exception? ex = Record.Exception(() => vm.DeselectEntry());
+
+        Assert.Null(ex);
+        Assert.Null(vm.SelectedEntry);
     }
 
     // ── LoadFolder – Outbox ───────────────────────────────────────────────────

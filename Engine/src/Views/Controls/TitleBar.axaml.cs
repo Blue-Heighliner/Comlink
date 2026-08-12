@@ -20,6 +20,14 @@ public partial class TitleBar : UserControl
     public static readonly StyledProperty<ICommand?> CreateNoteCommandProperty =
         AvaloniaProperty.Register<TitleBar, ICommand?>(nameof(CreateNoteCommand));
 
+    /// <summary>Identifies the <see cref="ShowExportCommand"/> styled property.</summary>
+    public static readonly StyledProperty<ICommand?> ShowExportCommandProperty =
+        AvaloniaProperty.Register<TitleBar, ICommand?>(nameof(ShowExportCommand));
+
+    /// <summary>Identifies the <see cref="ShowImportCommand"/> styled property.</summary>
+    public static readonly StyledProperty<ICommand?> ShowImportCommandProperty =
+        AvaloniaProperty.Register<TitleBar, ICommand?>(nameof(ShowImportCommand));
+
     /// <summary>Identifies the <see cref="IsInstallScreenVisible"/> styled property.</summary>
     public static readonly StyledProperty<bool> IsInstallScreenVisibleProperty =
         AvaloniaProperty.Register<TitleBar, bool>(nameof(IsInstallScreenVisible));
@@ -70,6 +78,20 @@ public partial class TitleBar : UserControl
     {
         get => GetValue(CreateNoteCommandProperty);
         set => SetValue(CreateNoteCommandProperty, value);
+    }
+
+    /// <summary>Gets or sets the command invoked when the user clicks the Export button.</summary>
+    public ICommand? ShowExportCommand
+    {
+        get => GetValue(ShowExportCommandProperty);
+        set => SetValue(ShowExportCommandProperty, value);
+    }
+
+    /// <summary>Gets or sets the command invoked when the user clicks the Import button.</summary>
+    public ICommand? ShowImportCommand
+    {
+        get => GetValue(ShowImportCommandProperty);
+        set => SetValue(ShowImportCommandProperty, value);
     }
 
     /// <summary>Gets or sets a value indicating whether the install screen is currently visible, which hides action buttons.</summary>
@@ -157,6 +179,12 @@ public partial class TitleBar : UserControl
 
     private void OnNoteClick(object? sender, Avalonia.Interactivity.RoutedEventArgs e) =>
         CreateNoteCommand?.Execute(null);
+
+    private void OnExportClick(object? sender, Avalonia.Interactivity.RoutedEventArgs e) =>
+        ShowExportCommand?.Execute(null);
+
+    private void OnImportClick(object? sender, Avalonia.Interactivity.RoutedEventArgs e) =>
+        ShowImportCommand?.Execute(null);
 
     private void OnAlertBoxPressed(object? sender, PointerPressedEventArgs e)
     {

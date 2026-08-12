@@ -7,6 +7,8 @@ public interface IActivityLogRepository
     Task<List<ActivityLogEntity>> GetPage(int page);
     /// <summary>Returns the total number of activity log documents.</summary>
     Task<int> Count();
+    /// <summary>Returns every activity log document in the database.</summary>
+    Task<List<ActivityLogEntity>> GetAll();
     /// <summary>Returns the activity log document for today's UTC date, or <c>null</c> if none exists.</summary>
     Task<ActivityLogEntity?> GetForToday();
     /// <summary>Returns the activity log document with the given identifier, or <c>null</c> if not found.</summary>
@@ -41,6 +43,10 @@ public sealed class ActivityLogRepository : IActivityLogRepository
     /// <inheritdoc />
     public Task<int> Count() =>
         Task.Run(() => _ctx.ActivityLogs.Count());
+
+    /// <inheritdoc />
+    public Task<List<ActivityLogEntity>> GetAll() =>
+        Task.Run(() => _ctx.ActivityLogs.FindAll().ToList());
 
     /// <inheritdoc />
     public Task<ActivityLogEntity?> GetForToday() =>

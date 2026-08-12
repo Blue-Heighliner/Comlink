@@ -19,6 +19,7 @@ global using BlueHeighliner.Comlink.Tests;
 global using Xunit;
 global using System.Buffers;
 global using System.Collections.ObjectModel;
+global using System.IO.Compression;
 global using System.Net;
 global using System.Net.Sockets;
 global using System.Text.Json;

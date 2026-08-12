@@ -7,6 +7,8 @@ public interface IMessageRepository
     Task<List<MessageEntity>> GetPage(string folderId, int page);
     /// <summary>Returns the count of messages in the specified folder.</summary>
     Task<int> Count(string folderId);
+    /// <summary>Returns every message document in the database, both Inbox and Outbox, across all folders.</summary>
+    Task<List<MessageEntity>> GetAll();
     /// <summary>
     /// Returns the message with the given application-level identifier and direction, or <c>null</c> if not found.
     /// A self-addressed message has both an inbound (received) and outbound (sent) document sharing the same
@@ -43,6 +45,10 @@ public sealed class MessageRepository : IMessageRepository
     /// <inheritdoc />
     public Task<int> Count(string folderId) =>
         Task.Run(() => _ctx.Messages.Count(m => m.FolderId == folderId));
+
+    /// <inheritdoc />
+    public Task<List<MessageEntity>> GetAll() =>
+        Task.Run(() => _ctx.Messages.FindAll().ToList());
 
     /// <inheritdoc />
     public Task<MessageEntity?> Get(string messageId, bool outbound) =>

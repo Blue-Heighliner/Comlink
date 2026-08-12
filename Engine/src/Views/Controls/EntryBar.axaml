@@ -61,6 +61,7 @@
     <ListBox x:Name="EntryList"
              ItemsSource="{Binding Entries}"
              SelectedItem="{Binding SelectedEntry, Mode=OneWay}"
+             SelectionMode="Multiple"
              SelectionChanged="OnEntrySelectionChanged"
              Background="Transparent"
              BorderThickness="0">

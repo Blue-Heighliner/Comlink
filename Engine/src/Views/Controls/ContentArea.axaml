@@ -3,6 +3,7 @@
              xmlns:vm="using:BlueHeighliner.Comlink.Engine.ViewModels"
              xmlns:entryVm="using:BlueHeighliner.Comlink.Engine.ViewModels.Entries"
              xmlns:entryViews="using:BlueHeighliner.Comlink.Engine.Views.Entries"
+             xmlns:views="using:BlueHeighliner.Comlink.Engine.Views"
              x:Class="BlueHeighliner.Comlink.Engine.Views.Controls.ContentArea"
              x:DataType="vm:ContentAreaViewModel"
              Background="#1E1E1E">
@@ -40,6 +41,14 @@
 
         <DataTemplate DataType="{x:Type entryVm:ActivityLogViewModel}">
           <entryViews:ActivityLogView DataContext="{Binding}" />
+        </DataTemplate>
+
+        <DataTemplate DataType="{x:Type vm:ExportViewModel}">
+          <views:ExportView DataContext="{Binding}" />
+        </DataTemplate>
+
+        <DataTemplate DataType="{x:Type vm:ImportViewModel}">
+          <views:ImportView DataContext="{Binding}" />
         </DataTemplate>
 
       </ContentControl.DataTemplates>

@@ -19,8 +19,8 @@ public interface IEntryBarViewModel
     bool CanGoPrev { get; set; }
     /// <summary>Gets or sets a value indicating whether the sort toggle control is visible.</summary>
     bool ShowSortToggle { get; set; }
-    /// <summary>Raised when the user selects an entry from the list.</summary>
-    event Action<EntryItemViewModel>? EntrySelected;
+    /// <summary>Raised when the user's selection in the list changes, carrying every entry newly added to the selection (one for a plain click, several for a shift-range or accumulated ctrl-click selection).</summary>
+    event Action<IReadOnlyList<EntryItemViewModel>>? EntriesSelected;
     /// <summary>Loads the first page of entries for the given folder and resets pagination.</summary>
     Task LoadFolder(FolderItemViewModel folder);
     /// <summary>Reloads the current page of entries for the active folder.</summary>
@@ -33,8 +33,16 @@ public interface IEntryBarViewModel
     Task DeleteEntry(EntryItemViewModel entry);
     /// <summary>Queues an entry ID to be auto-selected after the next refresh.</summary>
     void SetPendingSelectId(string id);
-    /// <summary>Marks the given entry as selected, deselecting the previously selected entry.</summary>
+    /// <summary>Marks the given entry as selected, deselecting every other entry.</summary>
     void SelectEntry(EntryItemViewModel entry);
+    /// <summary>
+    /// Applies a selection change reported by the entry list (e.g. from a shift-range or ctrl-click
+    /// multi-selection): marks <paramref name="added"/> as selected and <paramref name="removed"/> as
+    /// deselected, then raises <see cref="EntriesSelected"/> with <paramref name="added"/> if non-empty.
+    /// </summary>
+    void SelectEntries(IReadOnlyList<EntryItemViewModel> added, IReadOnlyList<EntryItemViewModel> removed);
+    /// <summary>Clears the current selection, if any, without raising <see cref="EntriesSelected"/>.</summary>
+    void DeselectEntry();
 }
 
 /// <summary>ViewModel for the entry list panel, providing paginated browsing and selection of entries within a folder.</summary>
@@ -57,8 +65,8 @@ public sealed partial class EntryBarViewModel : ObservableObject, IEntryBarViewM
 
     /// <summary>Gets the current page of entry items displayed in the list.</summary>
     public ObservableCollection<EntryItemViewModel> Entries { get; } = [];
-    /// <summary>Raised when the user selects an entry from the list.</summary>
-    public event Action<EntryItemViewModel>? EntrySelected;
+    /// <inheritdoc />
+    public event Action<IReadOnlyList<EntryItemViewModel>>? EntriesSelected;
 
     /// <summary>Initializes a new <see cref="EntryBarViewModel"/> with the required entry service.</summary>
     /// <param name="entryService">Entry service for data loading and delete operations.</param>
@@ -75,12 +83,16 @@ public sealed partial class EntryBarViewModel : ObservableObject, IEntryBarViewM
         _currentFolder = folder;
         CurrentPage = 1;
         ShowSortToggle = folder.RootType is FolderType.Drafts or FolderType.Notes;
-        if (SelectedEntry is not null)
-        {
-            SelectedEntry.IsSelected = false;
-            SelectedEntry = null;
-        }
+        DeselectEntry();
         await Refresh();
+    }
+
+    /// <inheritdoc />
+    public void DeselectEntry()
+    {
+        foreach (EntryItemViewModel entry in Entries.Where(e => e.IsSelected).ToList())
+            entry.IsSelected = false;
+        SelectedEntry = null;
     }
 
     [RelayCommand]
@@ -249,15 +261,32 @@ public sealed partial class EntryBarViewModel : ObservableObject, IEntryBarViewM
     /// <summary>Queues an entry ID to be auto-selected after the next refresh.</summary>
     public void SetPendingSelectId(string id) => _pendingSelectId = id;
 
-    /// <summary>Marks the given entry as selected, deselecting the previously selected entry.</summary>
+    /// <inheritdoc />
     public void SelectEntry(EntryItemViewModel entry)
     {
-        if (SelectedEntry == entry) return;
+        if (SelectedEntry == entry && Entries.Count(e => e.IsSelected) == 1) return;
 
-        if (SelectedEntry is not null)
-            SelectedEntry.IsSelected = false;
+        foreach (EntryItemViewModel other in Entries.Where(e => e.IsSelected && e != entry).ToList())
+            other.IsSelected = false;
         SelectedEntry = entry;
         entry.IsSelected = true;
-        EntrySelected?.Invoke(entry);
+        EntriesSelected?.Invoke([entry]);
+    }
+
+    /// <inheritdoc />
+    public void SelectEntries(IReadOnlyList<EntryItemViewModel> added, IReadOnlyList<EntryItemViewModel> removed)
+    {
+        // Deliberately does not assign SelectedEntry: this method reacts to the View's own
+        // SelectionChanged, so the ListBox's native multi-selection is already correct. SelectedEntry
+        // drives the OneWay SelectedItem binding back into that same ListBox, and Avalonia's
+        // SelectedItem setter collapses a multi-selection down to a single item — writing it here
+        // would immediately undo a ctrl/shift selection the user just made.
+        foreach (EntryItemViewModel entry in removed)
+            entry.IsSelected = false;
+        foreach (EntryItemViewModel entry in added)
+            entry.IsSelected = true;
+
+        if (added.Count > 0)
+            EntriesSelected?.Invoke(added);
     }
 }

@@ -99,6 +99,27 @@ When the user opens that Inbox message, `ContentAreaViewModel` calls `IServiceCo
 1. An external program sends an instance of `IMessageFormat.MessageType` on its interface connection.
 2. `InterfaceService` reads `Subject`/`Body`/`Addresses` from it via `IMessageFormat` and calls `MessageRoutingService.Route` with this user's own installed name as `fromUser` — exactly as if the user itself had composed the message. This happens in both Client and Headless mode.
 
+### Exporting and importing entries (Client mode)
+
+The title bar's EXPORT/IMPORT buttons back up and restore messages, drafts, notes, and activity logs to/from an external drive (USB, etc.), independent of the peer network. See `Docs/ViewModels.md` (`IExportViewModel`/`IImportViewModel`) and `Docs/Services.md` (`ExportService`/`ImportService`) for the full behavior — conflict resolution, activity log merging, the `.export.zip` package format, and how the export/import screens keep their own state (including an in-progress operation) while the user navigates the rest of the app.
+
+```mermaid
+sequenceDiagram
+    participant EXV as ExportViewModel
+    participant EXS as ExportService
+    participant Drive as External Drive
+    participant IMV as ImportViewModel
+    participant IMS as ImportService
+    EXV->>EXS: GetAllEntryRefs / SelectedEntries
+    EXS->>Drive: write {name}.export.zip (one JSON file per entry)
+    IMV->>IMS: GetPackages(drive)
+    IMS->>Drive: list *.export.zip
+    IMV->>IMS: Import(package, resolveConflict)
+    IMS->>Drive: read entries
+    IMS-->>IMV: ImportConflict (per draft/note name clash)
+    IMV-->>IMS: DraftNoteConflictResolution
+```
+
 ## Startup Sequence
 
 `EngineExtensions.UseEngine()` registers the core services. For Client mode, `EngineUiExtensions.UseEngineUi()` additionally registers `MainWindow` and overrides `IBodyDocumentFactory`. `EngineHost` (an `IHostedService`) runs at startup:
@@ -135,6 +156,8 @@ All persistent data lives under `IAppDataPathProvider.AppDataPath` (default: `%A
 └── Logs/
     └── yyyy-MM-dd.log
 ```
+
+Export packages (`{name}.export.zip`, one JSON file per entry) are written to and read from an external drive selected by the user, not `AppDataPath` — see "Exporting and importing entries" above.
 
 ## Dependency Injection
 

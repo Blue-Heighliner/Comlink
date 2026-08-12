@@ -18,12 +18,11 @@ public partial class EntryBar : UserControl
 
     private void OnEntrySelectionChanged(object? sender, SelectionChangedEventArgs e)
     {
-        if (DataContext is IEntryBarViewModel vm &&
-            e.AddedItems.Count > 0 &&
-            e.AddedItems[0] is EntryItemViewModel selected)
-        {
-            vm.SelectEntry(selected);
-        }
+        if (DataContext is not IEntryBarViewModel vm) return;
+
+        vm.SelectEntries(
+            e.AddedItems.OfType<EntryItemViewModel>().ToList(),
+            e.RemovedItems.OfType<EntryItemViewModel>().ToList());
     }
 
     private void OnEntryPointerPressed(object? sender, PointerPressedEventArgs e)

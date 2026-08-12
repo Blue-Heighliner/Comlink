@@ -188,6 +188,20 @@ Starts and stops the looping alarm sound triggered by alert messages. Actual aud
 
 ---
 
+#### `IExternalDriveProvider`
+
+```csharp
+IReadOnlyList<ExternalDriveInfo> GetDrives();
+```
+
+Enumerates the external (removable/optical) drives currently available as a destination for the export feature or a source for the import feature (see `Docs/ViewModels.md`, `IExportViewModel`/`IImportViewModel`) — both share this same provider and drive list. Each `ExternalDriveInfo` carries a `RootPath` (to write to or read from) and a `DisplayName` (volume label + drive name, for the drive picker).
+
+**Engine default:** `DriveInfo.GetDrives()` filtered to ready `Removable`/`CDRom` drives that pass a live write probe (a small temp file is written and deleted at the drive root) (via `ExternalDriveProvider`).
+
+**Sample override:** none — Sample uses the Engine default.
+
+---
+
 #### `IOftPeerCertificateName`
 
 ```csharp

@@ -15,6 +15,8 @@ public interface IFolderBarViewModel
     Task Load();
     /// <summary>Marks the given folder as selected, deselecting the previously selected folder.</summary>
     void SelectFolder(FolderItemViewModel folder);
+    /// <summary>Clears the current selection, if any, without raising <see cref="FolderSelected"/>.</summary>
+    void DeselectFolder();
     /// <summary>Selects the first root folder of the given type, if one exists.</summary>
     void SelectFolderByType(FolderType type);
     /// <summary>Moves the given entry to the target folder if the types are compatible.</summary>
@@ -89,6 +91,14 @@ public sealed partial class FolderBarViewModel : ObservableObject, IFolderBarVie
         SelectedFolder = folder;
         folder.IsSelected = true;
         FolderSelected?.Invoke(folder);
+    }
+
+    /// <summary>Clears the current selection, if any, without raising <see cref="FolderSelected"/>.</summary>
+    public void DeselectFolder()
+    {
+        if (SelectedFolder is null) return;
+        SelectedFolder.IsSelected = false;
+        SelectedFolder = null;
     }
 
     /// <summary>Selects the first root folder of the given type, if one exists.</summary>

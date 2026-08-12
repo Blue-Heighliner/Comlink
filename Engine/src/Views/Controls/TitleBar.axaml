@@ -22,6 +22,16 @@
               Content="NEW NOTE"
               Foreground="#CCCCCC"
               Click="OnNoteClick" />
+      <Button x:Name="ExportButton"
+              Classes="titlebar-action"
+              Content="EXPORT"
+              Foreground="#CCCCCC"
+              Click="OnExportClick" />
+      <Button x:Name="ImportButton"
+              Classes="titlebar-action"
+              Content="IMPORT"
+              Foreground="#CCCCCC"
+              Click="OnImportClick" />
     </StackPanel>
 
     <!-- Center: Drag area (transparent, fills space) -->

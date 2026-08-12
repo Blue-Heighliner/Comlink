@@ -25,10 +25,20 @@ public interface IMainViewModel
     IInstallViewModel InstallView { get; }
     /// <summary>Gets the alert ViewModel driving the title bar's alarm box and sound.</summary>
     IAlertViewModel Alert { get; }
+    /// <summary>Gets the export ViewModel driving the export screen.</summary>
+    IExportViewModel Export { get; }
+    /// <summary>Gets the import ViewModel driving the import screen.</summary>
+    IImportViewModel Import { get; }
     /// <summary>Creates a new draft and displays it in the content area.</summary>
     IAsyncRelayCommand CreateDraftCommand { get; }
     /// <summary>Creates a new note and displays it in the content area.</summary>
     IAsyncRelayCommand CreateNoteCommand { get; }
+    /// <summary>Displays the export screen in the content area, refreshing the available drive list first.</summary>
+    IRelayCommand ShowExportCommand { get; }
+    /// <summary>Displays the import screen in the content area, refreshing the available drive list first.</summary>
+    IRelayCommand ShowImportCommand { get; }
+    /// <summary>Restores the content area to its default (home) state, without disturbing any other ViewModel's state.</summary>
+    IRelayCommand ShowHomeCommand { get; }
     /// <summary>Connects to the service, loads user info, and initializes either the main UI or the install screen.</summary>
     Task Initialize();
 }
@@ -44,6 +54,8 @@ public sealed partial class MainViewModel : ObservableObject, IMainViewModel
     private readonly IContentAreaViewModel _contentArea;
     private readonly IInstallViewModel _installViewModel;
     private readonly IAlertViewModel _alert;
+    private readonly IExportViewModel _export;
+    private readonly IImportViewModel _import;
     private readonly ICurrentUserProvider _currentUserProvider;
     private readonly IAppNameProvider _appNameProvider;
     private readonly IBodyDocumentFactory _bodyDocumentFactory;
@@ -69,6 +81,10 @@ public sealed partial class MainViewModel : ObservableObject, IMainViewModel
     public IInstallViewModel InstallView => _installViewModel;
     /// <inheritdoc />
     public IAlertViewModel Alert => _alert;
+    /// <inheritdoc />
+    public IExportViewModel Export => _export;
+    /// <inheritdoc />
+    public IImportViewModel Import => _import;
 
     /// <summary>Initializes a new <see cref="MainViewModel"/> with all required engine and UI dependencies.</summary>
     /// <param name="connection">Service connection used for user and messaging operations.</param>
@@ -79,6 +95,8 @@ public sealed partial class MainViewModel : ObservableObject, IMainViewModel
     /// <param name="contentArea">Content area ViewModel.</param>
     /// <param name="installViewModel">Install screen ViewModel.</param>
     /// <param name="alert">Alert ViewModel driving the title bar's alarm box and sound.</param>
+    /// <param name="export">Export ViewModel driving the export screen.</param>
+    /// <param name="import">Import ViewModel driving the import screen.</param>
     /// <param name="currentUserProvider">Provides and accepts the current user name.</param>
     /// <param name="appNameProvider">Provides the application display name.</param>
     /// <param name="kioskModeProvider">Determines whether the UI should run in kiosk mode.</param>
@@ -94,6 +112,8 @@ public sealed partial class MainViewModel : ObservableObject, IMainViewModel
         IContentAreaViewModel contentArea,
         IInstallViewModel installViewModel,
         IAlertViewModel alert,
+        IExportViewModel export,
+        IImportViewModel import,
         ICurrentUserProvider currentUserProvider,
         IAppNameProvider appNameProvider,
         IKioskModeProvider kioskModeProvider,
@@ -109,6 +129,8 @@ public sealed partial class MainViewModel : ObservableObject, IMainViewModel
         _contentArea = contentArea;
         _installViewModel = installViewModel;
         _alert = alert;
+        _export = export;
+        _import = import;
         _currentUserProvider = currentUserProvider;
         _appNameProvider = appNameProvider;
         _bodyDocumentFactory = bodyDocumentFactory;
@@ -126,15 +148,28 @@ public sealed partial class MainViewModel : ObservableObject, IMainViewModel
     {
         _folderBar.FolderSelected += async folder =>
         {
-            _contentArea.ShowHome();
+            // While the export view is active and collecting entries ("Some" scope), browsing folders
+            // refreshes the entry listing to pick more entries from without leaving the export view.
+            if (!IsExportCollectingActive())
+                _contentArea.ShowHome();
             await _entryBar.LoadFolder(folder);
         };
 
         _folderBar.EntryMoved += async () =>
             await _entryBar.Refresh();
 
-        _entryBar.EntrySelected += async entry =>
-            await _contentArea.ShowEntry(entry);
+        _entryBar.EntriesSelected += async entries =>
+        {
+            if (IsExportCollectingActive())
+            {
+                foreach (EntryItemViewModel entry in entries)
+                    _export.AddEntry(entry);
+            }
+            else if (entries.Count == 1)
+            {
+                await _contentArea.ShowEntry(entries[0]);
+            }
+        };
 
         _installViewModel.InstallSucceeded += async info =>
         {
@@ -270,6 +305,34 @@ public sealed partial class MainViewModel : ObservableObject, IMainViewModel
         Entries.NoteViewModel vm = new(entity, _entryService);
         _contentArea.ShowEntry(vm);
     }
+
+    [RelayCommand]
+    private void ShowExport()
+    {
+        DeselectFolderAndEntry();
+        _export.RefreshDrivesCommand.Execute(null);
+        _contentArea.ShowEntry(_export);
+    }
+
+    [RelayCommand]
+    private void ShowImport()
+    {
+        DeselectFolderAndEntry();
+        _import.RefreshDrivesCommand.Execute(null);
+        _contentArea.ShowEntry(_import);
+    }
+
+    [RelayCommand]
+    private void ShowHome() => _contentArea.ShowHome();
+
+    private void DeselectFolderAndEntry()
+    {
+        _folderBar.DeselectFolder();
+        _entryBar.DeselectEntry();
+    }
+
+    private bool IsExportCollectingActive() =>
+        ReferenceEquals(_contentArea.ActiveContent, _export) && _export.IsCollectingEntries;
 
     private static string GetAppVersion()
     {

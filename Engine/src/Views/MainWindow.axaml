@@ -26,6 +26,8 @@
                        AppVersion="{Binding AppVersion}"
                        CreateDraftCommand="{Binding CreateDraftCommand}"
                        CreateNoteCommand="{Binding CreateNoteCommand}"
+                       ShowExportCommand="{Binding ShowExportCommand}"
+                       ShowImportCommand="{Binding ShowImportCommand}"
                        IsInstallScreenVisible="{Binding IsInstallScreenVisible}"
                        IsKioskMode="{Binding IsKioskMode}"
                        IsAlerting="{Binding Alert.IsAlerting}"

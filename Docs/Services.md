@@ -132,6 +132,55 @@ Hosts the local interface listener described in [Interface.md](Interface.md). Al
 
 ---
 
+## ExportService
+
+Builds the entry-reference list for a full export and writes selected entries to a zip archive as one JSON file per entry. Backs the export feature described in `Docs/ViewModels.md` (`IExportViewModel`).
+
+**Key responsibilities**:
+- `GetAllEntryRefs()` — returns an `ExportEntryRef` (`Id`, `EntryType`, `IsOutboundMessage`) for every message (both Inbox and Outbox, across every folder), draft, note, and activity log document in the database, via each repository's `GetAll()`
+- `Export(entries, zipPath, cancellation)` — for each reference, loads the full entity from the appropriate repository, maps it to a clean JSON DTO (`MessageExportData`/`DraftExportData`/`NoteExportData`/`ActivityLogExportData` in `ExportModels.cs`) via `IMessageFormat` for messages, and writes it as `{index}_{EntryType}_{id}.json` inside a new `ZipArchive` at `zipPath`. A reference whose entity has since been deleted is silently skipped.
+- On cancellation (or any other failure) mid-write, the partially written zip file at `zipPath` is deleted before the exception propagates — the `try`/`catch` wraps the entire archive-writing block, so this holds regardless of how many entries had already been written.
+
+Message content is read through `IMessageFormat`, matching every other message read path in Engine — `ExportService` has no knowledge of the host's concrete message type.
+
+`IExportService.PackageExtension` (a `const` interface member, `".export.zip"`) is the file extension every export package is written with, distinguishing it from an ordinary zip file so `ImportService.GetPackages` can find it on a drive. `ExportViewModel` appends this to the user-entered file name.
+
+```csharp
+IReadOnlyList<ExportEntryRef> refs = await exportService.GetAllEntryRefs();
+await exportService.Export(refs, "/media/usb/backup" + IExportService.PackageExtension, cancellation);
+```
+
+---
+
+## ImportService
+
+Lists export packages on a drive and restores their entries into the local database. Backs the import feature described in `Docs/ViewModels.md` (`IImportViewModel`). Operates directly on the repositories, the same way `ExportService` does — it is a bulk data-restore operation, not a "live" business event, so it does not raise `IEntryService`'s insert/update events (no retroactive alerting for an imported alert message, no auto-navigation to Drafts/Notes; the imported data is visible as soon as the user browses to the relevant folder, since `EntryBarViewModel.Refresh()` always re-queries the database).
+
+**Key responsibilities**:
+- `GetPackages(driveRootPath)` — returns every `IExportService.PackageExtension` file directly under the drive root as an `ImportPackageInfo` (`FileName`, `FullPath`), ordered by file name. Returns an empty list (never throws) if the path is inaccessible.
+- `Import(packagePath, resolveConflict)` — opens the package and, for each JSON entry (its `EntryType` is parsed from the `{index}_{EntryType}_{id}.json` file name), applies per-type conflict resolution:
+  | Entry type | Match key | On conflict |
+  |---|---|---|
+  | Message | `MessageId` + direction (`IsOutbound`), and the same calendar date (`ReceivedAt.Date`) | Skipped — no prompt |
+  | Draft | `Subject`, trimmed | Invokes `resolveConflict` (unless a prior conflict in this call chose `OverwriteAll`) |
+  | Note | First line of `Body`, trimmed (same rule `EntryBarViewModel` uses for a note's display title) | Invokes `resolveConflict` (unless a prior conflict in this call chose `OverwriteAll`) |
+  | Activity log | `Date` | Always merged (see below) — no prompt |
+
+  For a draft/note conflict, `resolveConflict` is awaited once and the returned `DraftNoteConflictResolution` applied: `KeepExisting` skips the imported entry; `Overwrite` replaces the existing entry's content fields (keeping its `Id` and `FolderId`); `OverwriteAll` overwrites this entry and is remembered for the rest of this `Import` call, so every subsequent draft/note conflict overwrites without asking again. New (non-conflicting) drafts/notes/messages are inserted into the corresponding root folder (`root-drafts`/`root-notes`/`root-inbox`/`root-outbox`); imported folder IDs are not preserved, since they are opaque to the source installation.
+- Activity log merge: when an existing log exists for the imported log's `Date`, each imported `ActivityLogEntry` is checked against the existing entries — an exact match (`At` and `Message` both equal) is skipped, otherwise the line is inserted into the existing (already chronologically ordered) list at the position where its `At` timestamp keeps the list sorted. When no log exists for that date, the imported log is inserted as-is.
+- Returns an `ImportSummary` (`Imported`, `Skipped`, `Overwritten` counts) once every entry in the package has been processed.
+
+```csharp
+IReadOnlyList<ImportPackageInfo> packages = importService.GetPackages("/media/usb");
+ImportSummary summary = await importService.Import(packages[0].FullPath, conflict =>
+{
+    // Prompt the user; return their choice.
+    return Task.FromResult(DraftNoteConflictResolution.Overwrite);
+});
+```
+
+---
+
 ## ConnectionModels
 
 DTOs used across the service layer:
@@ -145,3 +194,30 @@ DTOs used across the service layer:
 | `DeliveryStatusChangedEvent` | `MessageId`, `UserName`, `Status`, `OverallStatus` — an empty `UserName` marks a local read-status notification for this user's own Inbox record rather than a remote destination (see [Peer.md](Peer.md#read-confirmation)) |
 | `SendMessagePayload` | `Subject`, `Body`, `Addresses[]` (of `AddressPayload`), `IsAlert` |
 | `AddressPayload` | `UserName`, `Type` |
+
+---
+
+## ExportModels
+
+DTOs used by `ExportService` (`Engine/src/Services/ExportModels.cs`):
+
+| Type | Fields |
+|------|--------|
+| `ExportEntryRef` | `Id`, `EntryType`, `IsOutboundMessage` — identifies one entry to export |
+| `MessageExportData` | `MessageId`, `IsOutbound`, `FromUser`, `Subject`, `Body`, `Addresses[]`, `SentAt`, `IsAlert`, `ReceivedAt`, `ReadStatus`, `DeliveryStatuses[]` |
+| `DraftExportData` | `Id`, `Subject`, `Body`, `Addresses[]`, `IsSent`, `IsAlert`, `SentAt`, `CreatedAt`, `ModifiedAt` |
+| `NoteExportData` | `Id`, `Body`, `CreatedAt`, `ModifiedAt` |
+| `ActivityLogExportData` | `Id`, `Date`, `EventEntries[]` |
+
+---
+
+## ImportModels
+
+DTOs used by `ImportService` (`Engine/src/Services/ImportModels.cs`):
+
+| Type | Fields |
+|------|--------|
+| `ImportPackageInfo` | `FileName`, `FullPath` — an export package found on a drive |
+| `ImportConflict` | `EntryType` (always `Draft` or `Note`), `Name` (the conflicting subject or note first line) |
+| `DraftNoteConflictResolution` (enum) | `KeepExisting`, `Overwrite`, `OverwriteAll` |
+| `ImportSummary` | `Imported`, `Skipped`, `Overwritten` (counts) |

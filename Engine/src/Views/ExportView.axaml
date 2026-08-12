@@ -1,0 +1,157 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:vm="using:BlueHeighliner.Comlink.Engine.ViewModels"
+             x:Class="BlueHeighliner.Comlink.Engine.Views.ExportView"
+             x:DataType="vm:ExportViewModel"
+             Background="#1E1E1E">
+
+  <DockPanel Margin="24,20">
+
+    <!-- Toolbar -->
+    <Border DockPanel.Dock="Top"
+            BorderBrush="#3E3E42"
+            BorderThickness="0,0,0,1"
+            Padding="0,0,0,10"
+            Margin="0,0,0,16">
+      <DockPanel>
+        <StackPanel DockPanel.Dock="Right"
+                    Orientation="Horizontal"
+                    Spacing="8"
+                    VerticalAlignment="Center">
+          <TextBlock Text="{Binding StatusMessage}"
+                     FontSize="12"
+                     Foreground="#858585"
+                     VerticalAlignment="Center" />
+          <Button Content="CANCEL"
+                  Command="{Binding CancelExportCommand}"
+                  IsVisible="{Binding IsExporting}"
+                  FontWeight="SemiBold"
+                  FontSize="12" />
+          <Button Classes="accent"
+                  Content="START EXPORT"
+                  Command="{Binding StartExportCommand}"
+                  IsEnabled="{Binding !IsExporting}"
+                  FontWeight="SemiBold"
+                  FontSize="12" />
+          <Button Content="×"
+                  Command="{Binding $parent[Window].DataContext.ShowHomeCommand}"
+                  ToolTip.Tip="Close"
+                  FontSize="16"
+                  Padding="8,0"
+                  Foreground="#858585" />
+        </StackPanel>
+        <TextBlock Text="EXPORT"
+                   FontSize="11"
+                   FontWeight="SemiBold"
+                   Foreground="#858585"
+                   LetterSpacing="1"
+                   VerticalAlignment="Center" />
+      </DockPanel>
+    </Border>
+
+    <ProgressBar DockPanel.Dock="Top"
+                 IsIndeterminate="True"
+                 IsVisible="{Binding IsExporting}"
+                 Height="4"
+                 Margin="0,0,0,16" />
+
+    <StackPanel DockPanel.Dock="Top"
+                Spacing="16"
+                IsEnabled="{Binding !IsExporting}"
+                Margin="0,0,0,16">
+
+      <!-- Destination drive -->
+      <StackPanel Spacing="6">
+        <TextBlock Text="DESTINATION DRIVE" FontSize="11" FontWeight="SemiBold" Foreground="#858585" LetterSpacing="1" />
+        <Grid ColumnDefinitions="*,Auto">
+          <ComboBox Grid.Column="0"
+                    ItemsSource="{Binding AvailableDrives}"
+                    SelectedItem="{Binding SelectedDrive}"
+                    PlaceholderText="Select a drive..."
+                    Background="#3C3C3C"
+                    BorderThickness="0"
+                    FontSize="13"
+                    HorizontalAlignment="Stretch">
+            <ComboBox.ItemTemplate>
+              <DataTemplate>
+                <TextBlock Text="{Binding DisplayName}" />
+              </DataTemplate>
+            </ComboBox.ItemTemplate>
+          </ComboBox>
+          <Button Grid.Column="1"
+                  Content="REFRESH"
+                  Command="{Binding RefreshDrivesCommand}"
+                  FontSize="12"
+                  Margin="8,0,0,0" />
+        </Grid>
+      </StackPanel>
+
+      <!-- File name -->
+      <StackPanel Spacing="6">
+        <TextBlock Text="FILE NAME" FontSize="11" FontWeight="SemiBold" Foreground="#858585" LetterSpacing="1" />
+        <Grid ColumnDefinitions="*,Auto">
+          <TextBox Grid.Column="0"
+                    Text="{Binding FileName}"
+                    Watermark="export"
+                    Background="#3C3C3C"
+                    BorderThickness="0"
+                    FontSize="13" />
+          <TextBlock Grid.Column="1"
+                     Text=".export.zip"
+                     FontSize="13"
+                     Foreground="#858585"
+                     VerticalAlignment="Center"
+                     Margin="8,0,0,0" />
+        </Grid>
+      </StackPanel>
+
+      <!-- Scope -->
+      <StackPanel Spacing="6">
+        <TextBlock Text="ENTRIES TO EXPORT" FontSize="11" FontWeight="SemiBold" Foreground="#858585" LetterSpacing="1" />
+        <StackPanel Orientation="Horizontal" Spacing="16">
+          <RadioButton Content="All entries" GroupName="ExportScope" IsChecked="{Binding IsAllScope}" />
+          <RadioButton Content="Some entries" GroupName="ExportScope" IsChecked="{Binding IsSomeScope}" />
+        </StackPanel>
+      </StackPanel>
+
+    </StackPanel>
+
+    <!-- Selected entries (Some scope only) -->
+    <StackPanel IsVisible="{Binding IsSomeScope}" Spacing="6">
+      <Grid ColumnDefinitions="*,Auto">
+        <TextBlock Grid.Column="0"
+                   Text="Click an entry in the list to add it to the export — shift/ctrl click to select several at once"
+                   FontSize="12"
+                   Foreground="#858585"
+                   VerticalAlignment="Center"
+                   IsVisible="{Binding IsCollectingEntries}" />
+        <Button Grid.Column="1"
+                Content="CLEAR"
+                Command="{Binding ClearEntriesCommand}"
+                FontSize="12"
+                Margin="8,0,0,0" />
+      </Grid>
+      <ItemsControl ItemsSource="{Binding SelectedEntries}">
+        <ItemsControl.ItemTemplate>
+          <DataTemplate DataType="{x:Type vm:EntryItemViewModel}">
+            <Grid ColumnDefinitions="*,Auto" Margin="0,2">
+              <TextBlock Grid.Column="0"
+                         Text="{Binding Title}"
+                         FontSize="13"
+                         TextTrimming="CharacterEllipsis"
+                         ToolTip.Tip="{Binding Title}" />
+              <Button Grid.Column="1"
+                      Content="×"
+                      Command="{Binding $parent[UserControl].DataContext.RemoveEntryCommand}"
+                      CommandParameter="{Binding}"
+                      FontSize="14"
+                      Padding="4,0"
+                      Foreground="#858585" />
+            </Grid>
+          </DataTemplate>
+        </ItemsControl.ItemTemplate>
+      </ItemsControl>
+    </StackPanel>
+
+  </DockPanel>
+</UserControl>

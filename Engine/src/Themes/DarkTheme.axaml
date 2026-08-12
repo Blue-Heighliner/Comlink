@@ -11,6 +11,7 @@
     <Color x:Key="BorderColor">#3E3E42</Color>
     <Color x:Key="HoverColor">#2A2D2E</Color>
     <Color x:Key="SelectedBgColor">#094771</Color>
+    <Color x:Key="SelectedHoverBgColor">#12588C</Color>
     <Color x:Key="PrimaryTextColor">#CCCCCC</Color>
     <Color x:Key="DimTextColor">#858585</Color>
     <Color x:Key="AccentColor">#007ACC</Color>
@@ -31,6 +32,7 @@
     <SolidColorBrush x:Key="AccentBrush" Color="{StaticResource AccentColor}" />
     <SolidColorBrush x:Key="HoverBrush" Color="{StaticResource HoverColor}" />
     <SolidColorBrush x:Key="SelectedBg" Color="{StaticResource SelectedBgColor}" />
+    <SolidColorBrush x:Key="SelectedHoverBg" Color="{StaticResource SelectedHoverBgColor}" />
     <SolidColorBrush x:Key="WindowControlHoverBrush" Color="{StaticResource WindowControlHoverColor}" />
     <SolidColorBrush x:Key="WindowCloseHoverBrush" Color="{StaticResource WindowCloseHoverColor}" />
   </Styles.Resources>
@@ -115,6 +117,11 @@
   </Style>
   <Style Selector="ListBoxItem:pointerover /template/ ContentPresenter">
     <Setter Property="Background" Value="{StaticResource HoverBrush}" />
+  </Style>
+  <!-- Higher specificity (two pseudo-classes) than the plain :pointerover rule above, so hovering a
+       selected item stays visibly distinct from hovering an unselected one instead of both looking alike. -->
+  <Style Selector="ListBoxItem:selected:pointerover /template/ ContentPresenter">
+    <Setter Property="Background" Value="{StaticResource SelectedHoverBg}" />
   </Style>
 
   <!-- TreeView -->

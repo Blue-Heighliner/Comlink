@@ -7,6 +7,8 @@ public interface INoteRepository
     Task<List<NoteEntity>> GetPage(string folderId, int page, bool alphabetical);
     /// <summary>Returns the count of notes in the specified folder.</summary>
     Task<int> Count(string folderId);
+    /// <summary>Returns every note document in the database, across all folders.</summary>
+    Task<List<NoteEntity>> GetAll();
     /// <summary>Returns the note with the given identifier, or <c>null</c> if not found.</summary>
     Task<NoteEntity?> Get(ObjectId id);
     /// <summary>Inserts a new note document and returns it.</summary>
@@ -42,6 +44,10 @@ public sealed class NoteRepository : INoteRepository
     /// <inheritdoc />
     public Task<int> Count(string folderId) =>
         Task.Run(() => _ctx.Notes.Count(n => n.FolderId == folderId));
+
+    /// <inheritdoc />
+    public Task<List<NoteEntity>> GetAll() =>
+        Task.Run(() => _ctx.Notes.FindAll().ToList());
 
     /// <inheritdoc />
     public Task<NoteEntity?> Get(ObjectId id) =>
