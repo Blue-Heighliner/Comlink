@@ -29,6 +29,8 @@ internal static class Program
                 services.AddSingleton<IDebugUserOverride, SampleDebugUserOverride>();
                 services.AddSingleton<IMessageTagConfiguration, SampleMessageTagConfiguration>();
                 services.AddSingleton<IMessageTagPriorityPolicy, SampleMessageTagPriorityPolicy>();
+                services.AddSingleton<IPrintReceivedDefaultProvider, SamplePrintReceivedDefaultProvider>();
+                services.AddSingleton<IPrintReceivedRule, SamplePrintReceivedRule>();
             },
             new Uri("avares://BlueHeighliner.Comlink.Sample/Assets/envelope.png"));
     }

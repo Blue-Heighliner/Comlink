@@ -43,9 +43,9 @@ graph TD
 
 Root coordinator. Registered as singleton via `IMainViewModel → MainViewModel`; bound to `MainWindow(IMainViewModel)`.
 
-**Properties**: `IsInstallScreenVisible`, `IsKioskMode`, `UserName`, `EnvironmentTitle`, `EnvironmentColor`, `AppVersion`, plus `FolderBar (IFolderBarViewModel)`, `EntryBar (IEntryBarViewModel)`, `ContentArea (IContentAreaViewModel)`, `InstallView (IInstallViewModel)`, `Alert (IAlertViewModel)`, `Export (IExportViewModel)`, `Import (IImportViewModel)`.
+**Properties**: `IsInstallScreenVisible`, `IsKioskMode`, `UserName`, `EnvironmentTitle`, `EnvironmentColor`, `AppVersion`, plus `FolderBar (IFolderBarViewModel)`, `EntryBar (IEntryBarViewModel)`, `ContentArea (IContentAreaViewModel)`, `InstallView (IInstallViewModel)`, `Alert (IAlertViewModel)`, `Export (IExportViewModel)`, `Import (IImportViewModel)`, `PrintManager (IPrintManagerViewModel)`.
 
-**Commands**: `CreateDraftCommand`, `CreateNoteCommand` (`IAsyncRelayCommand`); `ShowExportCommand`/`ShowImportCommand` (`IRelayCommand`) — each deselects the current folder and entry (`IFolderBarViewModel.DeselectFolder`/`IEntryBarViewModel.DeselectEntry`), refreshes its ViewModel's drive list (`RefreshDrivesCommand`), then displays it in the content area (see [IExportViewModel](#iexportviewmodel--exportviewmodel), [IImportViewModel](#iimportviewmodel--importviewmodel)); `ShowHomeCommand` (`IRelayCommand`) — calls `ContentAreaViewModel.ShowHome()` and nothing else. Bound to the "×" close button in `ExportView`/`ImportView` (via `$parent[Window].DataContext.ShowHomeCommand`, since those views' own `DataContext` is the export/import ViewModel, not `MainViewModel`) — closing restores the content area to its default state exactly as if the user had navigated away by picking a folder, without touching `Export`/`Import`'s own state (drive, file name, scope, collected entries, an import in progress, etc.), which remains intact for next time.
+**Commands**: `CreateDraftCommand`, `CreateNoteCommand` (`IAsyncRelayCommand`); `ShowExportCommand`/`ShowImportCommand` (`IRelayCommand`) — each deselects the current folder and entry (`IFolderBarViewModel.DeselectFolder`/`IEntryBarViewModel.DeselectEntry`), refreshes its ViewModel's drive list (`RefreshDrivesCommand`), then displays it in the content area (see [IExportViewModel](#iexportviewmodel--exportviewmodel), [IImportViewModel](#iimportviewmodel--importviewmodel)); `ShowPrintManagerCommand` (`IRelayCommand`) — deselects the current folder and entry, then displays `PrintManager` in the content area (see [IPrintManagerViewModel](#iprintmanagerviewmodel--printmanagerviewmodel)); `PrintEntryCommand` (`IRelayCommand<EntryItemViewModel>`) — calls `PrintManager.EnqueueManual(entry)`, bound to the entry list's right-click "Print" context menu item (`EntryBar.axaml`, via `$parent[Window].DataContext.PrintEntryCommand`); `ShowHomeCommand` (`IRelayCommand`) — calls `ContentAreaViewModel.ShowHome()` and nothing else. Bound to the "×" close button in `ExportView`/`ImportView`/`PrintManagerView` (via `$parent[Window].DataContext.ShowHomeCommand`, since those views' own `DataContext` is the export/import/print-manager ViewModel, not `MainViewModel`) — closing restores the content area to its default state exactly as if the user had navigated away by picking a folder, without touching `Export`/`Import`/`PrintManager`'s own state, which remains intact for next time.
 
 **Method**: `Task Initialize()` — connects, loads user info, shows main UI or install screen.
 
@@ -243,6 +243,34 @@ Drives the import screen: choosing a source drive, then an `IExportService.Packa
 - `RefreshDrivesCommand (IRelayCommand)` — same behavior as `ExportViewModel`'s
 - `StartImportCommand (IAsyncRelayCommand<ImportPackageInfo>)` — calls `IImportService.Import(package.FullPath, resolveConflict)`, where `resolveConflict` creates a `TaskCompletionSource<DraftNoteConflictResolution>`, sets `PendingConflict`, and awaits it — so the import genuinely pauses mid-package until `ResolveConflictCommand` completes it, including across content-area navigation away and back, since the awaited `Task` lives on this singleton, not on any view. On completion, sets `StatusMessage` to `"Imported {Imported}, overwrote {Overwritten}, skipped {Skipped}"` or `"Import failed: {message}"`. `CanExecute` is `!IsImporting`.
 - `ResolveConflictCommand (IRelayCommand<DraftNoteConflictResolution>)` — clears `PendingConflict` and completes the pending `TaskCompletionSource` with the given resolution, resuming `IImportService.Import`.
+
+---
+
+## IPrintManagerViewModel / PrintManagerViewModel
+
+Drives the print manager screen: printer selection, the "print received" toggle, and the print queue. Registered as `IPrintManagerViewModel → PrintManagerViewModel` singleton; exposed as `MainViewModel.PrintManager` and shown in the content area the same way as `Export`/`Import` (`PrintManagerView.axaml`, `DataTemplate`d on `PrintManagerViewModel` in `ContentArea.axaml`). Unlike `Export`/`Import`, this ViewModel does real background work regardless of whether its screen is ever shown: it subscribes to `IEntryService.MessageInserted` directly in its own constructor (the same pattern `AlertViewModel` uses) and runs its print loop for as long as the app is running, since being a singleton keeps exactly one instance alive for the app's lifetime.
+
+**Properties**:
+- `Queue (ObservableCollection<PrintQueueEntry>)` — the current print queue, always kept in next-to-print-first order (see `PrintQueueEntry` below)
+- `PrintReceivedEnabled (bool)` — initializes from `IPrintReceivedDefaultProvider.DefaultEnabled` (`false` by default); while `true`, every message `IEntryService.MessageInserted` raises is auto-queued (see below)
+- `AvailablePrinters (IReadOnlyList<string>)` — from `IPrinterProvider.GetAvailablePrinters()`, read once at construction
+- `SelectedPrinter (string?)` — initializes from `IPrinterProvider.GetDefaultPrinter()`; setting it (re)starts the print loop if the queue is non-empty and no job is currently printing
+
+**Commands**:
+- `PurgeCommand (IRelayCommand)` — clears every entry from the queue; if a job is mid-print, the loop detects this the next time it checks between lines (see below) and treats it as an interruption with no restart, since the job is gone
+- `RemoveCommand (IRelayCommand<PrintQueueEntry>)` — removes one specific entry; if it is the one currently printing, handled the same way as `PurgeCommand` above
+
+**Method**: `EnqueueManual(EntryItemViewModel entry)` — adds `entry` to the queue as a manual print. Called by `MainViewModel.PrintEntryCommand`, bound to the entry list's right-click "Print" context menu item.
+
+### `PrintQueueEntry`
+
+A single queued print job: `Id` (unique per queue entry — the same underlying entry can be queued more than once), `EntryId`/`EntryType`/`IsOutboundMessage` (identify the underlying entry, mirroring `EntryItemViewModel`), `Title`, `IsManual`, `Priority`, `QueuedAt`, and a computed `BadgeText` (`"MANUAL"` or `"P{Priority}"`, shown in `PrintManagerView`).
+
+**Queue ordering** (next-to-print first): manual entries (`IsManual = true`) always sort ahead of every automatically-queued entry, regardless of priority; among entries with the same `IsManual` value, higher `Priority` sorts first; ties break by `QueuedAt` ascending (first queued, first printed). Manual entries all share `Priority = 0`, which is irrelevant to their ordering since `IsManual` alone already places them ahead of every automatic entry.
+
+**Automatic "print received" queuing**: on `IEntryService.MessageInserted`, if `PrintReceivedEnabled` is `true`, calls `IPrintReceivedRule.GetPrintCount(entity.Message)` and enqueues that many separate `PrintQueueEntry` copies (each `IsManual = false`, `Priority` set to `IMessageFormat.GetPriority(entity.Message)`) — `0` enqueues nothing, `2` enqueues two independent copies that print (and can be individually removed) separately.
+
+**Line-by-line printing loop**: adding to the queue, or setting `SelectedPrinter`, starts the loop if it is not already running (a `SelectedPrinter` is required — the loop stays idle otherwise). Each iteration: peek the entry at the front of the queue, load its printable lines (`Subject` + blank line + `Body` for a message or draft, just `Body` for a note, or `"HH:mm {Message}"` per entry for an activity log — each split on newlines), then print them one at a time via `ILinePrinter.PrintLine`, **awaiting each call as the confirmation that line finished printing** before checking whether the front of the queue is still the same entry. If a higher-priority entry was added (or the current one was removed/purged) while a line was printing, the loop breaks out of the entry's line list — this is the "interrupt" — and always calls `ILinePrinter.PageFeed` next, whether the entry finished normally or was interrupted partway through. If the entry finished normally (not interrupted), it is removed from the queue; if it was interrupted, it stays in the queue exactly where its priority places it, and **when it is picked up again it restarts printing from its first line** — there is no partial-progress tracking. See `ILinePrinter` in `Docs/Control.md`.
 
 ---
 

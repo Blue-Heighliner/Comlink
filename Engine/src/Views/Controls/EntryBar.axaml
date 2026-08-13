@@ -69,6 +69,13 @@
       <ListBox.ItemTemplate>
         <DataTemplate DataType="{x:Type vm:EntryItemViewModel}">
           <Grid ColumnDefinitions="*,Auto" Margin="0,2">
+            <Grid.ContextMenu>
+              <ContextMenu>
+                <MenuItem Header="Print"
+                          Command="{Binding $parent[Window].DataContext.PrintEntryCommand}"
+                          CommandParameter="{Binding}" />
+              </ContextMenu>
+            </Grid.ContextMenu>
             <StackPanel Grid.Column="0" Margin="0,0,8,0">
               <TextBlock Text="{Binding Title}"
                          FontSize="13"

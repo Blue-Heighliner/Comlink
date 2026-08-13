@@ -28,6 +28,7 @@
                        CreateNoteCommand="{Binding CreateNoteCommand}"
                        ShowExportCommand="{Binding ShowExportCommand}"
                        ShowImportCommand="{Binding ShowImportCommand}"
+                       ShowPrintManagerCommand="{Binding ShowPrintManagerCommand}"
                        IsInstallScreenVisible="{Binding IsInstallScreenVisible}"
                        IsKioskMode="{Binding IsKioskMode}"
                        IsAlerting="{Binding Alert.IsAlerting}"

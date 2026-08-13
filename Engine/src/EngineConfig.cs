@@ -64,6 +64,12 @@ public sealed class EngineConfig
     public string? MessageTagLabel { get; init; }
 
     /// <summary>
+    /// Whether the print manager's "print received" toggle starts enabled, automatically adding every
+    /// received message to the print queue. <see langword="null"/> uses the Engine default (<see langword="false"/>).
+    /// </summary>
+    public bool? PrintReceivedEnabled { get; init; }
+
+    /// <summary>
     /// User definitions and endpoint overrides. Keys are user names (case-insensitive).
     /// Entries may override an existing user's endpoint or introduce an entirely new user.
     /// </summary>

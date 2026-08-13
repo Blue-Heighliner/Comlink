@@ -249,6 +249,39 @@ public sealed class ControlProviderTests
         Assert.False(blocks.IsBlocked("OK", 0));
     }
 
+    // PrinterProvider (also the ILinePrinter implementation — see Docs/Control.md) is not unit tested
+    // directly: it shells out to the operating system's own printing facilities (WinSpool via P/Invoke on
+    // Windows, lp/lpstat/CUPS on Linux), so its behavior is inherently environment- and OS-dependent — the
+    // same reasoning that leaves OftCertificateProvider untested here.
+
+    // ── PrintReceivedDefaultProvider ──────────────────────────────────────────
+
+    /// <summary>DefaultEnabled defaults to false when not configured.</summary>
+    [Fact]
+    public void PrintReceivedDefaultProvider_DefaultsToDisabled()
+    {
+        PrintReceivedDefaultProvider provider = new(new EngineConfig());
+        Assert.False(provider.DefaultEnabled);
+    }
+
+    /// <summary>DefaultEnabled reflects an explicit true override from config.</summary>
+    [Fact]
+    public void PrintReceivedDefaultProvider_ReturnsTrueWhenEnabledInConfig()
+    {
+        PrintReceivedDefaultProvider provider = new(new EngineConfig { PrintReceivedEnabled = true });
+        Assert.True(provider.DefaultEnabled);
+    }
+
+    // ── PrintReceivedRule ─────────────────────────────────────────────────────
+
+    /// <summary>Engine default prints every received message exactly once.</summary>
+    [Fact]
+    public void PrintReceivedRule_ReturnsOne()
+    {
+        PrintReceivedRule rule = new();
+        Assert.Equal(1, rule.GetPrintCount(new object()));
+    }
+
     // ── OftPeerCertificateName ───────────────────────────────────────────────
 
     /// <summary>Null config → auto name "USER-{userName}".</summary>

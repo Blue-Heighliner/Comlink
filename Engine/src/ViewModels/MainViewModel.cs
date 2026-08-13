@@ -29,6 +29,8 @@ public interface IMainViewModel
     IExportViewModel Export { get; }
     /// <summary>Gets the import ViewModel driving the import screen.</summary>
     IImportViewModel Import { get; }
+    /// <summary>Gets the print manager ViewModel driving the print queue screen.</summary>
+    IPrintManagerViewModel PrintManager { get; }
     /// <summary>Creates a new draft and displays it in the content area.</summary>
     IAsyncRelayCommand CreateDraftCommand { get; }
     /// <summary>Creates a new note and displays it in the content area.</summary>
@@ -37,8 +39,12 @@ public interface IMainViewModel
     IRelayCommand ShowExportCommand { get; }
     /// <summary>Displays the import screen in the content area, refreshing the available drive list first.</summary>
     IRelayCommand ShowImportCommand { get; }
+    /// <summary>Displays the print manager screen in the content area.</summary>
+    IRelayCommand ShowPrintManagerCommand { get; }
     /// <summary>Restores the content area to its default (home) state, without disturbing any other ViewModel's state.</summary>
     IRelayCommand ShowHomeCommand { get; }
+    /// <summary>Adds the given entry to the print queue as a manual print.</summary>
+    IRelayCommand<EntryItemViewModel> PrintEntryCommand { get; }
     /// <summary>Connects to the service, loads user info, and initializes either the main UI or the install screen.</summary>
     Task Initialize();
 }
@@ -56,6 +62,7 @@ public sealed partial class MainViewModel : ObservableObject, IMainViewModel
     private readonly IAlertViewModel _alert;
     private readonly IExportViewModel _export;
     private readonly IImportViewModel _import;
+    private readonly IPrintManagerViewModel _printManager;
     private readonly ICurrentUserProvider _currentUserProvider;
     private readonly IAppNameProvider _appNameProvider;
     private readonly IBodyDocumentFactory _bodyDocumentFactory;
@@ -90,6 +97,8 @@ public sealed partial class MainViewModel : ObservableObject, IMainViewModel
     public IExportViewModel Export => _export;
     /// <inheritdoc />
     public IImportViewModel Import => _import;
+    /// <inheritdoc />
+    public IPrintManagerViewModel PrintManager => _printManager;
 
     /// <summary>Initializes a new <see cref="MainViewModel"/> with all required engine and UI dependencies.</summary>
     /// <param name="connection">Service connection used for user and messaging operations.</param>
@@ -102,6 +111,7 @@ public sealed partial class MainViewModel : ObservableObject, IMainViewModel
     /// <param name="alert">Alert ViewModel driving the title bar's alarm box and sound.</param>
     /// <param name="export">Export ViewModel driving the export screen.</param>
     /// <param name="import">Import ViewModel driving the import screen.</param>
+    /// <param name="printManager">Print manager ViewModel driving the print queue screen.</param>
     /// <param name="currentUserProvider">Provides and accepts the current user name.</param>
     /// <param name="appNameProvider">Provides the application display name.</param>
     /// <param name="kioskModeProvider">Determines whether the UI should run in kiosk mode.</param>
@@ -124,6 +134,7 @@ public sealed partial class MainViewModel : ObservableObject, IMainViewModel
         IAlertViewModel alert,
         IExportViewModel export,
         IImportViewModel import,
+        IPrintManagerViewModel printManager,
         ICurrentUserProvider currentUserProvider,
         IAppNameProvider appNameProvider,
         IKioskModeProvider kioskModeProvider,
@@ -146,6 +157,7 @@ public sealed partial class MainViewModel : ObservableObject, IMainViewModel
         _alert = alert;
         _export = export;
         _import = import;
+        _printManager = printManager;
         _currentUserProvider = currentUserProvider;
         _appNameProvider = appNameProvider;
         _bodyDocumentFactory = bodyDocumentFactory;
@@ -343,6 +355,16 @@ public sealed partial class MainViewModel : ObservableObject, IMainViewModel
         _import.RefreshDrivesCommand.Execute(null);
         _contentArea.ShowEntry(_import);
     }
+
+    [RelayCommand]
+    private void ShowPrintManager()
+    {
+        DeselectFolderAndEntry();
+        _contentArea.ShowEntry(_printManager);
+    }
+
+    [RelayCommand]
+    private void PrintEntry(EntryItemViewModel entry) => _printManager.EnqueueManual(entry);
 
     [RelayCommand]
     private void ShowHome() => _contentArea.ShowHome();

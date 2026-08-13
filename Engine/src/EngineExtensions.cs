@@ -28,6 +28,9 @@ public static class EngineExtensions
             services.AddOpenFrameTransport();
 
             services.AddSingleton<IServiceConnection, DirectServiceConnection>();
+            // ILinePrinter has no same-named implementing class (PrinterProvider implements both
+            // IPrinterProvider and ILinePrinter), so the convention scanner only picks up IPrinterProvider.
+            services.TryAddSingleton<ILinePrinter, PrinterProvider>();
             if (mode == EngineMode.Client)
                 services.TryAddSingleton<IBodyDocumentFactory, BodyDocumentFactory>();
 

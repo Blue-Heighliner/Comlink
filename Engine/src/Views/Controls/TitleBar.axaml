@@ -32,6 +32,11 @@
               Content="IMPORT"
               Foreground="#CCCCCC"
               Click="OnImportClick" />
+      <Button x:Name="PrintManagerButton"
+              Classes="titlebar-action"
+              Content="PRINTS"
+              Foreground="#CCCCCC"
+              Click="OnPrintManagerClick" />
     </StackPanel>
 
     <!-- Center: Drag area (transparent, fills space) -->

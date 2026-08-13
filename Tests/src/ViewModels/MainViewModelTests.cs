@@ -26,6 +26,7 @@ public sealed class MainViewModelTests
         public Mock<IAlertViewModel> Alert { get; } = new();
         public Mock<IExportViewModel> Export { get; } = new();
         public Mock<IImportViewModel> Import { get; } = new();
+        public Mock<IPrintManagerViewModel> PrintManager { get; } = new();
         public Mock<ICurrentUserProvider> UserProvider { get; } = new();
         public Mock<IAppNameProvider> AppName { get; } = new();
         public Mock<IKioskModeProvider> KioskMode { get; } = new();
@@ -60,6 +61,7 @@ public sealed class MainViewModelTests
                 Alert.Object,
                 Export.Object,
                 Import.Object,
+                PrintManager.Object,
                 UserProvider.Object,
                 AppName.Object,
                 KioskMode.Object,
@@ -387,6 +389,48 @@ public sealed class MainViewModelTests
 
         s.FolderBar.Verify(f => f.DeselectFolder(), Times.Once);
         s.EntryBar.Verify(e => e.DeselectEntry(), Times.Once);
+    }
+
+    // ── ShowPrintManagerCommand ────────────────────────────────────────────────
+
+    /// <summary>ShowPrintManagerCommand displays the print manager ViewModel in the content area.</summary>
+    [Fact]
+    public void ShowPrintManagerCommand_ShowsPrintManagerView()
+    {
+        Setup s = new();
+        MainViewModel vm = s.BuildVm();
+
+        vm.ShowPrintManagerCommand.Execute(null);
+
+        s.ContentArea.Verify(c => c.ShowEntry((object)s.PrintManager.Object), Times.Once);
+    }
+
+    /// <summary>ShowPrintManagerCommand deselects the currently selected folder and entry.</summary>
+    [Fact]
+    public void ShowPrintManagerCommand_DeselectsFolderAndEntry()
+    {
+        Setup s = new();
+        MainViewModel vm = s.BuildVm();
+
+        vm.ShowPrintManagerCommand.Execute(null);
+
+        s.FolderBar.Verify(f => f.DeselectFolder(), Times.Once);
+        s.EntryBar.Verify(e => e.DeselectEntry(), Times.Once);
+    }
+
+    // ── PrintEntryCommand ─────────────────────────────────────────────────────
+
+    /// <summary>PrintEntryCommand adds the given entry to the print manager's queue as a manual print.</summary>
+    [Fact]
+    public void PrintEntryCommand_EnqueuesEntryAsManual()
+    {
+        Setup s = new();
+        MainViewModel vm = s.BuildVm();
+        EntryItemViewModel entry = new("N1", "My Note", EntryType.Note, DateTime.UtcNow);
+
+        vm.PrintEntryCommand.Execute(entry);
+
+        s.PrintManager.Verify(p => p.EnqueueManual(entry), Times.Once);
     }
 
     // ── ShowHomeCommand ───────────────────────────────────────────────────────

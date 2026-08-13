@@ -267,6 +267,62 @@ Enumerates the external (removable/optical) drives currently available as a dest
 
 ---
 
+#### `IPrinterProvider` / `ILinePrinter`
+
+```csharp
+// IPrinterProvider
+IReadOnlyList<string> GetAvailablePrinters();
+string? GetDefaultPrinter();
+
+// ILinePrinter
+Task PrintLine(string printerName, string line, CancellationToken cancellation = default);
+Task PageFeed(string printerName, CancellationToken cancellation = default);
+```
+
+`IPrinterProvider` enumerates the printers available on this computer for the print manager to target (see `Docs/ViewModels.md`, `IPrintManagerViewModel`): `GetAvailablePrinters` populates the printer picker, `GetDefaultPrinter` selects the initial `SelectedPrinter` automatically. `ILinePrinter` drives the selected printer for the print queue: prints one line at a time, and the returned task from `PrintLine` completing is treated as confirmation that the line finished printing — the queue will not print the next line, or check whether a higher-priority job should interrupt the current one, until it completes. `PageFeed` is called after the last line of an entry and also when a job is interrupted partway through.
+
+Unlike most other control interfaces, printing is one Engine handles directly rather than leaving to a host — printer discovery is a genuine operating-system resource (like `IExternalDriveProvider`'s drives), not app-specific configuration, and driving a printer line-by-line with real completion confirmation only makes sense against the operating system's own print spooler, not a bundled library. Both interfaces are implemented by the single internal `PrinterProvider` class (`Engine/src/Control/PrinterProvider.cs`) — it is the one case in this codebase where a class implements two control interfaces that don't share its name (`ILinePrinter` has no matching `LinePrinter` class), so `EngineExtensions.UseEngine` registers `ILinePrinter → PrinterProvider` explicitly alongside the usual convention-scanned `IPrinterProvider → PrinterProvider`.
+
+**Engine default:** OS-branched via `OperatingSystem.IsWindows()`/`IsLinux()`:
+- **Windows:** printer discovery shells out to PowerShell, querying WMI's `Win32_Printer` class (`Get-CimInstance -ClassName Win32_Printer`) for the printer list and the entry with `Default = true` for the default printer — no extra module dependency (unlike `Get-Printer`, which requires the PrintManagement module). Line printing uses the Windows Print Spooler (WinSpool) directly via P/Invoke (`OpenPrinter`/`StartDocPrinter`/`StartPagePrinter`/`WritePrinter`/`EndPagePrinter`/`EndDocPrinter`): each line (and each page feed, sent as a form-feed byte `\f`) is submitted as its own raw print job, and `PrintLine`/`PageFeed` don't return until polling `GetJob` reports the job has reached a terminal status (`JOB_STATUS_PRINTED`, `JOB_STATUS_COMPLETE`, `JOB_STATUS_DELETED`, or `JOB_STATUS_ERROR`) — a genuine OS-confirmed completion, not just "the app handed the bytes off."
+- **Linux:** printer discovery shells out to `lpstat -p`/`lpstat -d` (CUPS). Line printing submits each line (and each page feed, as `\f`) as its own raw job via `lp -d {printer} -o raw` (parsing the returned job ID from `lp`'s "request id is …" output), then polls `lpstat -W not-completed -o {printer}` until that specific job ID no longer appears among the printer's pending jobs — the CUPS-level equivalent of the same "wait for OS-confirmed completion" contract.
+- **Other platforms:** printer discovery returns an empty list/no default; line printing is a no-op.
+- Both platforms poll every 150ms with a 30-second-per-line safety timeout, so a stuck or offline printer cannot hang the print queue forever; discovery and printing are both best-effort — any failure (missing tooling, no printers configured, permission error) degrades gracefully (empty list / no default / a line that times out and moves on) rather than throwing.
+
+Not unit tested directly, for the same reason as `IOftCertificateProvider` below: both are inherently environment- and OS-dependent, so a unit test could only meaningfully assert against whatever printers happen to be installed (and reachable) on the machine running the test — `Docs/ViewModels.md`'s `PrintManagerViewModelTests` instead test the print queue's own logic (ordering, interruption, restart) against a fake `ILinePrinter`.
+
+**Sample override:** none — Sample uses the Engine default for both interfaces.
+
+---
+
+#### `IPrintReceivedDefaultProvider`
+
+```csharp
+bool DefaultEnabled { get; }
+```
+
+Controls the starting state of the print manager's "print received" toggle (`IPrintManagerViewModel.PrintReceivedEnabled`) — whether every received message is automatically added to the print queue from the moment the app starts. The user can still toggle it at any time.
+
+**Engine default:** `false`, or the `PrintReceivedEnabled` value from `config.json` when set (via `PrintReceivedDefaultProvider`). See [Config.md](Config.md).
+
+**Sample override:** `SamplePrintReceivedDefaultProvider` — same `config.json` value, falling back to the `PRINT_RECEIVED_ENABLED` environment variable (`"1"`/`"true"` to enable), then `false`.
+
+---
+
+#### `IPrintReceivedRule`
+
+```csharp
+int GetPrintCount(object message);
+```
+
+Decides how many times each received message is automatically added to the print queue while the "print received" toggle is enabled — `0` to not print it, `1` to print it once, `2` for two copies, and so on. Consulted once per received message via `IEntryService.MessageInserted`.
+
+**Engine default:** `1` for every message (via `PrintReceivedRule`).
+
+**Sample override:** `SamplePrintReceivedRule` — prints an alert message (`IMessageFormat.GetIsAlert`) twice and every other received message once, demonstrating a rule that inspects the message itself.
+
+---
+
 #### `IOftPeerCertificateName`
 
 ```csharp

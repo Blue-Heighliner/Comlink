@@ -28,6 +28,10 @@ public partial class TitleBar : UserControl
     public static readonly StyledProperty<ICommand?> ShowImportCommandProperty =
         AvaloniaProperty.Register<TitleBar, ICommand?>(nameof(ShowImportCommand));
 
+    /// <summary>Identifies the <see cref="ShowPrintManagerCommand"/> styled property.</summary>
+    public static readonly StyledProperty<ICommand?> ShowPrintManagerCommandProperty =
+        AvaloniaProperty.Register<TitleBar, ICommand?>(nameof(ShowPrintManagerCommand));
+
     /// <summary>Identifies the <see cref="IsInstallScreenVisible"/> styled property.</summary>
     public static readonly StyledProperty<bool> IsInstallScreenVisibleProperty =
         AvaloniaProperty.Register<TitleBar, bool>(nameof(IsInstallScreenVisible));
@@ -92,6 +96,13 @@ public partial class TitleBar : UserControl
     {
         get => GetValue(ShowImportCommandProperty);
         set => SetValue(ShowImportCommandProperty, value);
+    }
+
+    /// <summary>Gets or sets the command invoked when the user clicks the Prints button.</summary>
+    public ICommand? ShowPrintManagerCommand
+    {
+        get => GetValue(ShowPrintManagerCommandProperty);
+        set => SetValue(ShowPrintManagerCommandProperty, value);
     }
 
     /// <summary>Gets or sets a value indicating whether the install screen is currently visible, which hides action buttons.</summary>
@@ -185,6 +196,9 @@ public partial class TitleBar : UserControl
 
     private void OnImportClick(object? sender, Avalonia.Interactivity.RoutedEventArgs e) =>
         ShowImportCommand?.Execute(null);
+
+    private void OnPrintManagerClick(object? sender, Avalonia.Interactivity.RoutedEventArgs e) =>
+        ShowPrintManagerCommand?.Execute(null);
 
     private void OnAlertBoxPressed(object? sender, PointerPressedEventArgs e)
     {

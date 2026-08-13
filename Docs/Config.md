@@ -26,6 +26,7 @@ All property names are PascalCase; deserialization is case-insensitive. Unrecogn
   "ComposeAlertsEnabled": null,
   "MessageTagsEnabled": null,
   "MessageTagLabel": null,
+  "PrintReceivedEnabled": null,
   "Users": {
     "USER-A": { "IpAddress": "192.168.1.10", "Port": 7890 }
   },
@@ -146,6 +147,14 @@ Whether message tags are shown anywhere in the UI: the draft editor's tag input,
 **Type:** `string | null` | **Default:** `null` (uses Engine default of `"Tag"`)
 
 Label used for the tag input's watermark in the draft editor. Lets a host call the concept something other than "Tag" (e.g. `"Category"`, `"Type"`) without changing engine behavior.
+
+---
+
+### `PrintReceivedEnabled`
+
+**Type:** `bool | null` | **Default:** `null` (uses Engine default of `false`)
+
+Whether the print manager's "print received" toggle starts enabled, automatically adding every received message to the print queue (subject to the registered `IPrintReceivedRule`). The user can still toggle it off at any time in the print manager.
 
 ---
 

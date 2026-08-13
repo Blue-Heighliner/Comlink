@@ -1,0 +1,102 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:vm="using:BlueHeighliner.Comlink.Engine.ViewModels"
+             x:Class="BlueHeighliner.Comlink.Engine.Views.PrintManagerView"
+             x:DataType="vm:PrintManagerViewModel"
+             Background="#1E1E1E">
+
+  <DockPanel Margin="24,20">
+
+    <!-- Toolbar -->
+    <Border DockPanel.Dock="Top"
+            BorderBrush="#3E3E42"
+            BorderThickness="0,0,0,1"
+            Padding="0,0,0,10"
+            Margin="0,0,0,16">
+      <DockPanel>
+        <StackPanel DockPanel.Dock="Right"
+                    Orientation="Horizontal"
+                    Spacing="8"
+                    VerticalAlignment="Center">
+          <Button Content="PURGE"
+                  Command="{Binding PurgeCommand}"
+                  FontWeight="SemiBold"
+                  FontSize="12" />
+          <Button Content="×"
+                  Command="{Binding $parent[Window].DataContext.ShowHomeCommand}"
+                  ToolTip.Tip="Close"
+                  FontSize="16"
+                  Padding="8,0"
+                  Foreground="#858585" />
+        </StackPanel>
+        <TextBlock Text="PRINT MANAGER"
+                   FontSize="11"
+                   FontWeight="SemiBold"
+                   Foreground="#858585"
+                   LetterSpacing="1"
+                   VerticalAlignment="Center" />
+      </DockPanel>
+    </Border>
+
+    <StackPanel DockPanel.Dock="Top"
+                Spacing="16"
+                Margin="0,0,0,16">
+
+      <!-- Printer selection -->
+      <StackPanel Spacing="6">
+        <TextBlock Text="PRINTER" FontSize="11" FontWeight="SemiBold" Foreground="#858585" LetterSpacing="1" />
+        <ComboBox ItemsSource="{Binding AvailablePrinters}"
+                  SelectedItem="{Binding SelectedPrinter}"
+                  PlaceholderText="Select a printer..."
+                  Background="#3C3C3C"
+                  BorderThickness="0"
+                  FontSize="13"
+                  HorizontalAlignment="Stretch" />
+      </StackPanel>
+
+      <!-- Print received toggle -->
+      <CheckBox Content="Automatically print received messages"
+                IsChecked="{Binding PrintReceivedEnabled}"
+                FontSize="13" />
+
+    </StackPanel>
+
+    <!-- Queue -->
+    <StackPanel DockPanel.Dock="Top" Spacing="6">
+      <TextBlock Text="QUEUE (next to print at top)" FontSize="11" FontWeight="SemiBold" Foreground="#858585" LetterSpacing="1" />
+      <ItemsControl ItemsSource="{Binding Queue}">
+        <ItemsControl.ItemTemplate>
+          <DataTemplate DataType="{x:Type vm:PrintQueueEntry}">
+            <Grid ColumnDefinitions="Auto,*,Auto" Margin="0,4">
+              <Border Grid.Column="0"
+                      Background="#3C3C3C"
+                      CornerRadius="3"
+                      Padding="6,2"
+                      Margin="0,0,8,0"
+                      HorizontalAlignment="Left">
+                <TextBlock Text="{Binding BadgeText}"
+                           FontSize="11"
+                           FontWeight="SemiBold"
+                           Foreground="#CCCCCC" />
+              </Border>
+              <TextBlock Grid.Column="1"
+                         Text="{Binding Title}"
+                         FontSize="13"
+                         TextTrimming="CharacterEllipsis"
+                         ToolTip.Tip="{Binding Title}"
+                         VerticalAlignment="Center" />
+              <Button Grid.Column="2"
+                      Content="×"
+                      Command="{Binding $parent[UserControl].DataContext.RemoveCommand}"
+                      CommandParameter="{Binding}"
+                      FontSize="14"
+                      Padding="4,0"
+                      Foreground="#858585" />
+            </Grid>
+          </DataTemplate>
+        </ItemsControl.ItemTemplate>
+      </ItemsControl>
+    </StackPanel>
+
+  </DockPanel>
+</UserControl>

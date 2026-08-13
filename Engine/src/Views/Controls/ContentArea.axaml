@@ -51,6 +51,10 @@
           <views:ImportView DataContext="{Binding}" />
         </DataTemplate>
 
+        <DataTemplate DataType="{x:Type vm:PrintManagerViewModel}">
+          <views:PrintManagerView DataContext="{Binding}" />
+        </DataTemplate>
+
       </ContentControl.DataTemplates>
     </ContentControl>
 
