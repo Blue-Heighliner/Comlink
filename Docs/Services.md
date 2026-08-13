@@ -59,7 +59,7 @@ UserInfo? installed = await service.Install("SN01", cancellation);
 Routes outbound messages to peer nodes and surfaces their delivery status. OFT-level delivery status comes entirely from OFT's own delivery status stream (see [Peer.md](Peer.md#delivery-status)); the one application-level status above that — `Read` — comes from the user-read confirmation message flow (see [Peer.md](Peer.md#read-confirmation)).
 
 **Key responsibilities**:
-- Build the outbound message via `IMessageFormat` (`CreateMessage()` then the `Set*` logical-field setters, including `SetIsAlert`) so it can be sent as whatever concrete type the host has configured (see [Control.md](Control.md#imessageformat))
+- Build the outbound message via `IMessageFormat` (`CreateMessage()` then the `Set*` logical-field setters, including `SetIsAlert`, `SetPriority`, `SetTag`) so it can be sent as whatever concrete type the host has configured (see [Control.md](Control.md#imessageformat))
 - For each recipient in `SendMessagePayload.Addresses`, deliver via `IPeerService.Send`
 - Subscribe to `IPeerService.DeliveryStatusChanged` and map each `OftDeliveryStatus` to a `DestinationStatus`, re-raising its own `DeliveryStatusChanged`
 - Subscribe to `IPeerService.ConfirmationReceived` and re-raise it as `DeliveryStatusChanged(messageId, confirmingUser, DestinationStatus.Read)` — reusing the same event as OFT-driven status changes
@@ -96,8 +96,8 @@ Both `StoreIncomingMessage` and `StoreSentMessage` take the message's logical fi
 
 | Method | Description |
 |--------|-------------|
-| `StoreIncomingMessage(messageId, fromUser, subject, body, addresses, sentAt, isAlert = false)` | Creates a `MessageEntity` in the Inbox folder (`IsOutbound = false`, `ReadStatus = Received`), fires `MessageInserted` |
-| `StoreSentMessage(messageId, subject, body, addresses, sentAt, userResults, isAlert = false)` | Creates a `MessageEntity` in the Outbox (`IsOutbound = true`) with per-user delivery statuses seeded from the routing result — `Confirmed` when `Success` is `true` (a successful send already implies full OFT delivery, see `Docs/Peer.md`), otherwise `Failed` |
+| `StoreIncomingMessage(messageId, fromUser, subject, body, addresses, sentAt, isAlert = false, priority = 0, tag = "")` | Creates a `MessageEntity` in the Inbox folder (`IsOutbound = false`, `ReadStatus = Received`), fires `MessageInserted` |
+| `StoreSentMessage(messageId, subject, body, addresses, sentAt, userResults, isAlert = false, priority = 0, tag = "")` | Creates a `MessageEntity` in the Outbox (`IsOutbound = true`) with per-user delivery statuses seeded from the routing result — `Confirmed` when `Success` is `true` (a successful send already implies full OFT delivery, see `Docs/Peer.md`), otherwise `Failed` |
 | `UpdateDeliveryStatus(messageId, userName, status)` | Updates per-user delivery status on the Outbox record for `messageId` — always scoped to the outbound record, since a self-addressed message also has an Inbox record sharing the same `messageId` |
 | `MarkMessageRead(messageId)` | Transitions the Inbox record's `ReadStatus` from `Received` to `Read` and fires `MessageRead`. A no-op (returns `null`) if the record is missing or already `Read` — see [Peer.md](Peer.md#read-confirmation) |
 | `CreateDraft()` | Creates a blank draft in the Drafts folder, fires `DraftInserted` |
@@ -118,7 +118,7 @@ Both `StoreIncomingMessage` and `StoreSentMessage` take the message's logical fi
 Implements `IServiceConnection`, registered in both `Client` and `Headless` mode. Wires engine internals to the interface consumed by ViewModels (Client) or embedding host code (Headless).
 
 **Responsibilities**:
-- Forwards `IServiceConnection.SendMessage(subject, body, addresses, isAlert)` → `MessageRoutingService.Route` and returns the result. It does not persist anything itself — in Client mode, `DraftViewModel` calls `EntryService.StoreSentMessage` after a successful send
+- Forwards `IServiceConnection.SendMessage(subject, body, addresses, isAlert, priority, tag)` → `MessageRoutingService.Route` and returns the result. It does not persist anything itself — in Client mode, `DraftViewModel` calls `EntryService.StoreSentMessage` after a successful send
 - Translates `PeerService.MessageDelivered` → fires `IServiceConnection.MessageReceived`. It does not persist the message itself — in Client mode, `MainViewModel`'s handler for that event calls `EntryService.StoreIncomingMessage`
 - On `MessageRoutingService.DeliveryStatusChanged`, updates the Outbox record via `EntryService.UpdateDeliveryStatus`, then fires `IServiceConnection.DeliveryStatusChanged` with the resulting `OverallStatus`
 - `MarkMessageRead(messageId)`: calls `EntryService.MarkMessageRead`, fires `IServiceConnection.DeliveryStatusChanged` locally (empty `UserName`, status `Read`) so Client-mode UI reflects the read state immediately, then sends a user-read confirmation message to the original sender via `IPeerService.Send` directly — or, for a self-addressed message, calls `EntryService.UpdateDeliveryStatus` directly with no network round-trip. See [Peer.md](Peer.md#read-confirmation)
@@ -187,12 +187,12 @@ DTOs used across the service layer:
 
 | Type | Fields |
 |------|--------|
-| `MessageReceivedEvent` | `MessageId`, `FromUser`, `Subject`, `Body`, `Addresses[]`, `SentAt`, `IsAlert` |
+| `MessageReceivedEvent` | `MessageId`, `FromUser`, `Subject`, `Body`, `Addresses[]`, `SentAt`, `IsAlert`, `Priority`, `Tag` |
 | `AddressRequest` | `UserName`, `Type` |
 | `UserDeliveryResult` | `UserName`, `Success (bool)`, `AddressedVia[]` |
 | `SendMessageResult` | `MessageId`, `UserResults[]` |
 | `DeliveryStatusChangedEvent` | `MessageId`, `UserName`, `Status`, `OverallStatus` — an empty `UserName` marks a local read-status notification for this user's own Inbox record rather than a remote destination (see [Peer.md](Peer.md#read-confirmation)) |
-| `SendMessagePayload` | `Subject`, `Body`, `Addresses[]` (of `AddressPayload`), `IsAlert` |
+| `SendMessagePayload` | `Subject`, `Body`, `Addresses[]` (of `AddressPayload`), `IsAlert`, `Priority`, `Tag` |
 | `AddressPayload` | `UserName`, `Type` |
 
 ---
@@ -204,8 +204,8 @@ DTOs used by `ExportService` (`Engine/src/Services/ExportModels.cs`):
 | Type | Fields |
 |------|--------|
 | `ExportEntryRef` | `Id`, `EntryType`, `IsOutboundMessage` — identifies one entry to export |
-| `MessageExportData` | `MessageId`, `IsOutbound`, `FromUser`, `Subject`, `Body`, `Addresses[]`, `SentAt`, `IsAlert`, `ReceivedAt`, `ReadStatus`, `DeliveryStatuses[]` |
-| `DraftExportData` | `Id`, `Subject`, `Body`, `Addresses[]`, `IsSent`, `IsAlert`, `SentAt`, `CreatedAt`, `ModifiedAt` |
+| `MessageExportData` | `MessageId`, `IsOutbound`, `FromUser`, `Subject`, `Body`, `Addresses[]`, `SentAt`, `IsAlert`, `Priority`, `Tag`, `ReceivedAt`, `ReadStatus`, `DeliveryStatuses[]` |
+| `DraftExportData` | `Id`, `Subject`, `Body`, `Addresses[]`, `IsSent`, `IsAlert`, `Priority`, `Tag`, `SentAt`, `CreatedAt`, `ModifiedAt` |
 | `NoteExportData` | `Id`, `Body`, `CreatedAt`, `ModifiedAt` |
 | `ActivityLogExportData` | `Id`, `Date`, `EventEntries[]` |
 

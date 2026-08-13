@@ -29,13 +29,31 @@ public sealed class DraftViewModelTests
         return mock.Object;
     }
 
+    private static IMessageTagConfiguration MakeTagConfiguration(bool tagsEnabled = true, string tagLabel = "Tag")
+    {
+        Mock<IMessageTagConfiguration> mock = new();
+        mock.Setup(t => t.TagsEnabled).Returns(tagsEnabled);
+        mock.Setup(t => t.TagLabel).Returns(tagLabel);
+        return mock.Object;
+    }
+
+    private static IMessageTagPriorityPolicy MakeTagPriorityPolicy(IReadOnlyList<TagPriorityBlock>? blocks = null)
+    {
+        Mock<IMessageTagPriorityPolicy> mock = new();
+        mock.Setup(p => p.GetBlockedCombinations()).Returns(blocks ?? []);
+        return mock.Object;
+    }
+
     private static DraftViewModel Build(
         out Mock<IEntryService> entryMock,
         out Mock<IServiceConnection> connMock,
         DraftEntity? entity = null,
         IReadOnlyList<string>? userNames = null,
         string alertText = "ALERT",
-        bool composeAlertsEnabled = true)
+        bool composeAlertsEnabled = true,
+        bool tagsEnabled = true,
+        string tagLabel = "Tag",
+        IReadOnlyList<TagPriorityBlock>? blockedCombinations = null)
     {
         entryMock = new Mock<IEntryService>();
         connMock = new Mock<IServiceConnection>();
@@ -49,7 +67,8 @@ public sealed class DraftViewModelTests
             FolderId = "root-drafts"
         };
         return new DraftViewModel(ent, entryMock.Object, connMock.Object, userNames ?? [], NoLogger, MakePriorityProvider(),
-            MakeAlertConfiguration(alertText), MakeAlertComposeConfiguration(composeAlertsEnabled));
+            MakeAlertConfiguration(alertText), MakeAlertComposeConfiguration(composeAlertsEnabled),
+            MakeTagConfiguration(tagsEnabled, tagLabel), MakeTagPriorityPolicy(blockedCombinations));
     }
 
     // ── Construction ──────────────────────────────────────────────────────────
@@ -106,6 +125,97 @@ public sealed class DraftViewModelTests
         DraftEntity entity = new() { Subject = "X", Priority = 99 };
         DraftViewModel vm = Build(out _, out _, entity: entity);
         Assert.Equal("ROUTINE", vm.SelectedPriority.Name);
+    }
+
+    /// <summary>Constructor sets Tag from entity.</summary>
+    [Fact]
+    public void Constructor_SetsTagFromEntity()
+    {
+        DraftEntity entity = new() { Subject = "X", Tag = "URGENT" };
+        DraftViewModel vm = Build(out _, out _, entity: entity);
+        Assert.Equal("URGENT", vm.Tag);
+    }
+
+    /// <summary>TagsEnabled is sourced from IMessageTagConfiguration.</summary>
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public void Constructor_TagsEnabledFromTagConfiguration(bool enabled)
+    {
+        DraftViewModel vm = Build(out _, out _, tagsEnabled: enabled);
+        Assert.Equal(enabled, vm.TagsEnabled);
+    }
+
+    /// <summary>TagLabel is sourced from IMessageTagConfiguration.TagLabel, so a host can rename the tag input.</summary>
+    [Fact]
+    public void Constructor_TagLabelFromTagConfiguration()
+    {
+        DraftViewModel vm = Build(out _, out _, tagLabel: "Category");
+        Assert.Equal("Category", vm.TagLabel);
+    }
+
+    /// <summary>AvailablePriorities excludes a priority blocked for the entity's stored tag, even at construction.</summary>
+    [Fact]
+    public void Constructor_AvailablePrioritiesExcludesPriorityBlockedForStoredTag()
+    {
+        DraftEntity entity = new() { Subject = "X", Tag = "URGENT", Priority = 3 };
+        IReadOnlyList<TagPriorityBlock> blocks = [new TagPriorityBlock { Tag = "URGENT", Priority = 3 }];
+        DraftViewModel vm = Build(out _, out _, entity: entity, blockedCombinations: blocks);
+
+        Assert.DoesNotContain(vm.AvailablePriorities, p => p.Name == "FLASH");
+        Assert.Equal("ROUTINE", vm.SelectedPriority.Name);
+    }
+
+    /// <summary>Setting Tag to a value blocked for the currently selected priority is rejected, reverting to the previous tag.</summary>
+    [Fact]
+    public void Tag_SetToValueBlockedForCurrentPriority_RevertsToPreviousValue()
+    {
+        IReadOnlyList<TagPriorityBlock> blocks = [new TagPriorityBlock { Tag = "SPAM", Priority = null }];
+        DraftViewModel vm = Build(out _, out _, blockedCombinations: blocks);
+
+        vm.Tag = "SPAM";
+
+        Assert.Equal(string.Empty, vm.Tag);
+    }
+
+    /// <summary>Setting Tag to a value not blocked for the current priority is accepted.</summary>
+    [Fact]
+    public void Tag_SetToUnblockedValue_IsAccepted()
+    {
+        IReadOnlyList<TagPriorityBlock> blocks = [new TagPriorityBlock { Tag = "SPAM", Priority = null }];
+        DraftViewModel vm = Build(out _, out _, blockedCombinations: blocks);
+
+        vm.Tag = "URGENT";
+
+        Assert.Equal("URGENT", vm.Tag);
+    }
+
+    /// <summary>Setting Tag to a value that blocks another (not currently selected) priority hides that priority from AvailablePriorities.</summary>
+    [Fact]
+    public void Tag_SetToValueBlockingAnotherPriority_RemovesItFromAvailablePriorities()
+    {
+        IReadOnlyList<TagPriorityBlock> blocks = [new TagPriorityBlock { Tag = "URGENT", Priority = 3 }];
+        DraftViewModel vm = Build(out _, out _, blockedCombinations: blocks);
+        Assert.Contains(vm.AvailablePriorities, p => p.Name == "FLASH");
+
+        vm.Tag = "URGENT";
+
+        Assert.Equal("URGENT", vm.Tag);
+        Assert.DoesNotContain(vm.AvailablePriorities, p => p.Name == "FLASH");
+        Assert.Equal("ROUTINE", vm.SelectedPriority.Name);
+    }
+
+    /// <summary>Reverting a rejected Tag change does not lose a previously accepted valid tag.</summary>
+    [Fact]
+    public void Tag_RejectedChangeAfterAcceptedChange_RevertsToLastAcceptedValue()
+    {
+        IReadOnlyList<TagPriorityBlock> blocks = [new TagPriorityBlock { Tag = "SPAM", Priority = null }];
+        DraftViewModel vm = Build(out _, out _, blockedCombinations: blocks);
+        vm.Tag = "URGENT";
+
+        vm.Tag = "SPAM";
+
+        Assert.Equal("URGENT", vm.Tag);
     }
 
     /// <summary>AlertLabel is sourced from IAlertConfiguration.AlertText — the same text used in the title bar's alert box.</summary>
@@ -318,6 +428,20 @@ public sealed class DraftViewModelTests
         entryMock.Verify(e => e.SaveDraft(It.Is<DraftEntity>(d => d.Priority == 3)), Times.Once);
     }
 
+    /// <summary>SaveCommand persists the current Tag value onto the draft entity.</summary>
+    [Fact]
+    public async Task SaveCommand_PersistsTagOnEntity()
+    {
+        DraftEntity entity = new() { Subject = "X", FolderId = "root-drafts" };
+        DraftViewModel vm = Build(out Mock<IEntryService> entryMock, out _, entity: entity);
+        entryMock.Setup(e => e.SaveDraft(It.IsAny<DraftEntity>())).Returns(Task.CompletedTask);
+        vm.Tag = "URGENT";
+
+        await vm.SaveCommand.ExecuteAsync(null);
+
+        entryMock.Verify(e => e.SaveDraft(It.Is<DraftEntity>(d => d.Tag == "URGENT")), Times.Once);
+    }
+
     // ── SendCommand ───────────────────────────────────────────────────────────
 
     /// <summary>SendCommand with no addresses sets StatusMessage and does not send.</summary>
@@ -329,7 +453,7 @@ public sealed class DraftViewModelTests
         await vm.SendCommand.ExecuteAsync(null);
 
         Assert.Equal("Add at least one recipient", vm.StatusMessage);
-        connMock.Verify(c => c.SendMessage(It.IsAny<string>(), It.IsAny<string>(), It.IsAny<List<AddressRequest>>(), It.IsAny<bool>(), It.IsAny<int>(), It.IsAny<CancellationToken>()), Times.Never);
+        connMock.Verify(c => c.SendMessage(It.IsAny<string>(), It.IsAny<string>(), It.IsAny<List<AddressRequest>>(), It.IsAny<bool>(), It.IsAny<int>(), It.IsAny<string>(), It.IsAny<CancellationToken>()), Times.Never);
     }
 
     /// <summary>SendCommand with addresses and successful send sets IsSent and StatusMessage.</summary>
@@ -351,14 +475,14 @@ public sealed class DraftViewModelTests
             UserResults = [new UserDeliveryResult { UserName = "ALPHA", Success = true, AddressedVia = [] }]
         };
         connMock.Setup(c => c.SendMessage(It.IsAny<string>(), It.IsAny<string>(),
-                It.IsAny<List<AddressRequest>>(), It.IsAny<bool>(), It.IsAny<int>(), It.IsAny<CancellationToken>()))
+                It.IsAny<List<AddressRequest>>(), It.IsAny<bool>(), It.IsAny<int>(), It.IsAny<string>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync(sendResult);
 
         MessageEntity sentMessage = new() { MessageId = "MSG-001" };
         entryMock.Setup(e => e.SaveDraft(It.IsAny<DraftEntity>())).Returns(Task.CompletedTask);
         entryMock.Setup(e => e.StoreSentMessage(It.IsAny<string>(), It.IsAny<string>(), It.IsAny<string>(),
                 It.IsAny<List<AddressData>>(), It.IsAny<DateTime>(),
-                It.IsAny<IReadOnlyList<UserDeliveryResult>>(), It.IsAny<bool>(), It.IsAny<int>()))
+                It.IsAny<IReadOnlyList<UserDeliveryResult>>(), It.IsAny<bool>(), It.IsAny<int>(), It.IsAny<string>()))
             .ReturnsAsync(sentMessage);
 
         await vm.SendCommand.ExecuteAsync(null);
@@ -388,23 +512,88 @@ public sealed class DraftViewModelTests
             UserResults = [new UserDeliveryResult { UserName = "ALPHA", Success = true, AddressedVia = [] }]
         };
         connMock.Setup(c => c.SendMessage(It.IsAny<string>(), It.IsAny<string>(),
-                It.IsAny<List<AddressRequest>>(), It.IsAny<bool>(), 3, It.IsAny<CancellationToken>()))
+                It.IsAny<List<AddressRequest>>(), It.IsAny<bool>(), 3, It.IsAny<string>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync(sendResult);
 
         MessageEntity sentMessage = new() { MessageId = "MSG-001" };
         entryMock.Setup(e => e.SaveDraft(It.IsAny<DraftEntity>())).Returns(Task.CompletedTask);
         entryMock.Setup(e => e.StoreSentMessage(It.IsAny<string>(), It.IsAny<string>(), It.IsAny<string>(),
                 It.IsAny<List<AddressData>>(), It.IsAny<DateTime>(),
-                It.IsAny<IReadOnlyList<UserDeliveryResult>>(), It.IsAny<bool>(), 3))
+                It.IsAny<IReadOnlyList<UserDeliveryResult>>(), It.IsAny<bool>(), 3, It.IsAny<string>()))
             .ReturnsAsync(sentMessage);
 
         await vm.SendCommand.ExecuteAsync(null);
 
         connMock.Verify(c => c.SendMessage(It.IsAny<string>(), It.IsAny<string>(),
-            It.IsAny<List<AddressRequest>>(), It.IsAny<bool>(), 3, It.IsAny<CancellationToken>()), Times.Once);
+            It.IsAny<List<AddressRequest>>(), It.IsAny<bool>(), 3, It.IsAny<string>(), It.IsAny<CancellationToken>()), Times.Once);
         entryMock.Verify(e => e.StoreSentMessage(It.IsAny<string>(), It.IsAny<string>(), It.IsAny<string>(),
             It.IsAny<List<AddressData>>(), It.IsAny<DateTime>(),
-            It.IsAny<IReadOnlyList<UserDeliveryResult>>(), It.IsAny<bool>(), 3), Times.Once);
+            It.IsAny<IReadOnlyList<UserDeliveryResult>>(), It.IsAny<bool>(), 3, It.IsAny<string>()), Times.Once);
         Assert.True(vm.IsSent);
+    }
+
+    /// <summary>SendCommand passes the current Tag to both SendMessage and StoreSentMessage.</summary>
+    [Fact]
+    public async Task SendCommand_PassesTagToSendAndStore()
+    {
+        DraftEntity entity = new()
+        {
+            Subject = "Hello",
+            Body = "World",
+            Addresses = [new AddressData { UserName = "ALPHA", Type = "To" }],
+            FolderId = "root-drafts"
+        };
+        DraftViewModel vm = Build(out Mock<IEntryService> entryMock, out Mock<IServiceConnection> connMock, entity: entity);
+        vm.Tag = "URGENT";
+
+        SendMessageResult sendResult = new()
+        {
+            MessageId = "MSG-001",
+            UserResults = [new UserDeliveryResult { UserName = "ALPHA", Success = true, AddressedVia = [] }]
+        };
+        connMock.Setup(c => c.SendMessage(It.IsAny<string>(), It.IsAny<string>(),
+                It.IsAny<List<AddressRequest>>(), It.IsAny<bool>(), It.IsAny<int>(), "URGENT", It.IsAny<CancellationToken>()))
+            .ReturnsAsync(sendResult);
+
+        MessageEntity sentMessage = new() { MessageId = "MSG-001" };
+        entryMock.Setup(e => e.SaveDraft(It.IsAny<DraftEntity>())).Returns(Task.CompletedTask);
+        entryMock.Setup(e => e.StoreSentMessage(It.IsAny<string>(), It.IsAny<string>(), It.IsAny<string>(),
+                It.IsAny<List<AddressData>>(), It.IsAny<DateTime>(),
+                It.IsAny<IReadOnlyList<UserDeliveryResult>>(), It.IsAny<bool>(), It.IsAny<int>(), "URGENT"))
+            .ReturnsAsync(sentMessage);
+
+        await vm.SendCommand.ExecuteAsync(null);
+
+        connMock.Verify(c => c.SendMessage(It.IsAny<string>(), It.IsAny<string>(),
+            It.IsAny<List<AddressRequest>>(), It.IsAny<bool>(), It.IsAny<int>(), "URGENT", It.IsAny<CancellationToken>()), Times.Once);
+        entryMock.Verify(e => e.StoreSentMessage(It.IsAny<string>(), It.IsAny<string>(), It.IsAny<string>(),
+            It.IsAny<List<AddressData>>(), It.IsAny<DateTime>(),
+            It.IsAny<IReadOnlyList<UserDeliveryResult>>(), It.IsAny<bool>(), It.IsAny<int>(), "URGENT"), Times.Once);
+        Assert.True(vm.IsSent);
+    }
+
+    /// <summary>
+    /// SendCommand refuses to send when Tag/SelectedPriority form a blocked combination, as a defense-in-depth
+    /// safety net behind the live UI-level prevention (which SelectedPriority's plain setter does not itself enforce).
+    /// </summary>
+    [Fact]
+    public async Task SendCommand_BlockedTagPriorityCombination_SetsStatusMessageAndDoesNotSend()
+    {
+        DraftEntity entity = new()
+        {
+            Subject = "Hello",
+            Body = "World",
+            Addresses = [new AddressData { UserName = "ALPHA", Type = "To" }],
+            FolderId = "root-drafts"
+        };
+        IReadOnlyList<TagPriorityBlock> blocks = [new TagPriorityBlock { Tag = "URGENT", Priority = 3 }];
+        DraftViewModel vm = Build(out _, out Mock<IServiceConnection> connMock, entity: entity, blockedCombinations: blocks);
+        vm.Tag = "URGENT";
+        vm.SelectedPriority = new MessagePriorityOption { Name = "FLASH", Value = 3 };
+
+        await vm.SendCommand.ExecuteAsync(null);
+
+        Assert.Equal("This tag/priority combination is not allowed", vm.StatusMessage);
+        connMock.Verify(c => c.SendMessage(It.IsAny<string>(), It.IsAny<string>(), It.IsAny<List<AddressRequest>>(), It.IsAny<bool>(), It.IsAny<int>(), It.IsAny<string>(), It.IsAny<CancellationToken>()), Times.Never);
     }
 }

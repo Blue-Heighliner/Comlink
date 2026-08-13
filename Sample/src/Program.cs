@@ -27,6 +27,8 @@ internal static class Program
                 services.AddSingleton<IExternalDriveProvider, SampleExternalDriveProvider>();
                 services.AddSingleton<IOftPeerCertificateName, SampleOftPeerCertificateName>();
                 services.AddSingleton<IDebugUserOverride, SampleDebugUserOverride>();
+                services.AddSingleton<IMessageTagConfiguration, SampleMessageTagConfiguration>();
+                services.AddSingleton<IMessageTagPriorityPolicy, SampleMessageTagPriorityPolicy>();
             },
             new Uri("avares://BlueHeighliner.Comlink.Sample/Assets/envelope.png"));
     }

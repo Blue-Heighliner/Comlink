@@ -222,6 +222,37 @@ Returns the set of selectable message priority levels — each a `MessagePriorit
 
 ---
 
+#### `IMessageTagConfiguration`
+
+```csharp
+bool TagsEnabled { get; }
+string TagLabel { get; }
+```
+
+Controls whether message tags (`IMessageFormat.GetTag`/`SetTag` — a short, user-inputted string identifying the type of message) are shown anywhere in the UI: the draft editor's tag input, and each Inbox/Outbox entry's tag label next to its priority in the entry listing (`EntryItemViewModel.TagText`). When `TagsEnabled` is `false`, tags are hidden everywhere — existing stored tag values are left untouched, just not surfaced. `TagLabel` is the watermark text shown in the draft editor's tag input (`IDraftViewModel.TagLabel`), letting a host call the concept something other than "Tag" (e.g. "Category", "Type") without changing engine behavior.
+
+**Engine default:** `TagsEnabled` is `true`, or the `MessageTagsEnabled` value from `config.json` when set; `TagLabel` is `"Tag"`, or the `MessageTagLabel` value from `config.json` when set (via `MessageTagConfiguration`). See [Config.md](Config.md).
+
+**Sample override:** `SampleMessageTagConfiguration` — same `config.json` value for `TagsEnabled`, falling back to the `TAGS_ENABLED` environment variable (`"0"`/`"false"` to disable), then `true`; `TagLabel` defaults to `"Category"` (or the `config.json` value when set).
+
+---
+
+#### `IMessageTagPriorityPolicy`
+
+```csharp
+IReadOnlyList<TagPriorityBlock> GetBlockedCombinations();
+```
+
+Returns the set of blocked message tag/priority combinations, enforced when composing a draft. Each `TagPriorityBlock` pairs an optional `Tag` (case-insensitive exact match) with an optional `Priority` value; leaving either `null` matches any value for that field, so a single rule can block a specific tag regardless of priority, a specific priority regardless of tag, or one specific tag/priority pair. The `TagPriorityBlockExtensions.IsBlocked(tag, priority)` extension method evaluates a rule set against a combination.
+
+`DraftViewModel` enforces this proactively rather than only at send time: `AvailablePriorities` (see `IMessagePriorityProvider` above) excludes any priority blocked for the currently-entered tag, and setting `Tag` to a value blocked for the currently-selected priority is rejected outright (the value reverts) — so a blocked combination can never actually be entered in the draft editor. `SendCommand` also re-checks before sending, as a defense-in-depth safety net. See `Docs/ViewModels.md`.
+
+**Engine default:** no blocked combinations (via `MessageTagPriorityPolicy`)
+
+**Sample override:** `SampleMessageTagPriorityPolicy` — demonstrates both block kinds: the `"SPAM"` tag is blocked regardless of priority, and `High` priority (value 2) is blocked regardless of tag. Unlike Sample's other control interface overrides, this one deliberately changes default behavior from the Engine's permissive "no blocks" default, since that is the only way to usefully demonstrate the interface.
+
+---
+
 #### `IExternalDriveProvider`
 
 ```csharp
@@ -300,9 +331,13 @@ string GetConfirmationMessageId(object message);
 void SetConfirmationMessageId(object message, string value);
 bool GetIsAlert(object message);
 void SetIsAlert(object message, bool value);
+int GetPriority(object message);
+void SetPriority(object message, int value);
+string GetTag(object message);
+void SetTag(object message, string value);
 ```
 
-Supplies the concrete message type used throughout the engine — transmitted between peers and interfaces (see [Peer.md](Peer.md#message-format) and [Interface.md](Interface.md)) and stored in the database (see [Data.md](Data.md)) — and maps the engine's logical fields onto that type's real ones. `MessageType` must be protobuf-net serializable (`[ProtoContract]`/`[ProtoMember]`) for wire transport and LiteDB-serializable for storage. `GetConfirmationMessageId`/`SetConfirmationMessageId` and `GetIsAlert`/`SetIsAlert` back the user-read confirmation and alert-message features — see [Peer.md](Peer.md#read-confirmation) and [Peer.md](Peer.md#alert-messages).
+Supplies the concrete message type used throughout the engine — transmitted between peers and interfaces (see [Peer.md](Peer.md#message-format) and [Interface.md](Interface.md)) and stored in the database (see [Data.md](Data.md)) — and maps the engine's logical fields onto that type's real ones. `MessageType` must be protobuf-net serializable (`[ProtoContract]`/`[ProtoMember]`) for wire transport and LiteDB-serializable for storage. `GetConfirmationMessageId`/`SetConfirmationMessageId` and `GetIsAlert`/`SetIsAlert` back the user-read confirmation and alert-message features — see [Peer.md](Peer.md#read-confirmation) and [Peer.md](Peer.md#alert-messages). `GetPriority`/`SetPriority` back `IMessagePriorityProvider` and the OFT send priority; `GetTag`/`SetTag` back `IMessageTagConfiguration` and `IMessageTagPriorityPolicy` — see above.
 
 The engine has no message DTO of its own; every access to a message's content goes through this interface, so a host must register an implementation to use the engine at all.
 
@@ -345,7 +380,7 @@ Task Connect(CancellationToken cancellation = default);
 Task<UserInfo?> GetUserInfo(CancellationToken cancellation = default);
 Task<List<string>> GetUserNames(CancellationToken cancellation = default);
 Task<UserInfo?> InstallUser(string userCode, CancellationToken cancellation = default);
-Task<SendMessageResult?> SendMessage(string subject, string body, List<AddressRequest> addresses, bool isAlert = false, int priority = 0, CancellationToken cancellation = default);
+Task<SendMessageResult?> SendMessage(string subject, string body, List<AddressRequest> addresses, bool isAlert = false, int priority = 0, string tag = "", CancellationToken cancellation = default);
 Task<bool> MarkMessageRead(string messageId, CancellationToken cancellation = default);
 ```
 

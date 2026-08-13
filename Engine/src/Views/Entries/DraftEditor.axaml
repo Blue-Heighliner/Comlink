@@ -23,6 +23,21 @@
                      FontSize="12"
                      Foreground="#858585"
                      VerticalAlignment="Center" />
+          <TextBox Text="{Binding Tag}"
+                   Watermark="{Binding TagLabel}"
+                   Width="90"
+                   Background="#3C3C3C"
+                   BorderThickness="0"
+                   FontSize="12"
+                   Height="26"
+                   VerticalAlignment="Center">
+            <TextBox.IsVisible>
+              <MultiBinding Converter="{x:Static BoolConverters.And}">
+                <Binding Path="!IsSent" />
+                <Binding Path="TagsEnabled" />
+              </MultiBinding>
+            </TextBox.IsVisible>
+          </TextBox>
           <ComboBox ItemsSource="{Binding AvailablePriorities}"
                     SelectedItem="{Binding SelectedPriority}"
                     IsVisible="{Binding !IsSent}"

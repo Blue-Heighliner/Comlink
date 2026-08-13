@@ -19,6 +19,19 @@ public interface IMessagePriorityProvider
     IReadOnlyList<MessagePriorityOption> GetPriorities();
 }
 
+/// <summary>Extension helpers for looking up display information from a set of <see cref="MessagePriorityOption"/> values.</summary>
+public static class MessagePriorityOptionExtensions
+{
+    /// <summary>
+    /// Returns the display <see cref="MessagePriorityOption.Name"/> matching <paramref name="value"/>, or the
+    /// plain numeric value as a string if no option in <paramref name="priorities"/> matches — e.g. after a
+    /// host changes its <see cref="IMessagePriorityProvider"/> registration and an older stored value no
+    /// longer has a corresponding option.
+    /// </summary>
+    public static string GetLabel(this IReadOnlyList<MessagePriorityOption> priorities, int value) =>
+        priorities.FirstOrDefault(p => p.Value == value)?.Name ?? value.ToString();
+}
+
 /// <summary>
 /// Default <see cref="IMessagePriorityProvider"/> offering a single "Normal" priority level. Hosts that need
 /// multiple selectable levels should override this registration with their own <see cref="IMessagePriorityProvider"/>.

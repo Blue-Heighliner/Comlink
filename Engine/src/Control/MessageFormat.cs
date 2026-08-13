@@ -69,6 +69,13 @@ public interface IMessageFormat
     int GetPriority(object message);
     /// <summary>Sets the priority number on <paramref name="message"/>.</summary>
     void SetPriority(object message, int value);
+    /// <summary>
+    /// Gets the short, user-inputted tag identifying the type of message this is, or an empty string if
+    /// none was set. See <see cref="IMessageTagConfiguration"/> and <see cref="IMessageTagPriorityPolicy"/>.
+    /// </summary>
+    string GetTag(object message);
+    /// <summary>Sets the tag on <paramref name="message"/>.</summary>
+    void SetTag(object message, string value);
 }
 
 /// <summary>
@@ -126,6 +133,10 @@ public abstract class MessageFormat<TMessage> : IMessageFormat where TMessage : 
     protected abstract int GetPriority(TMessage message);
     /// <summary>Sets the priority number on <paramref name="message"/>.</summary>
     protected abstract void SetPriority(TMessage message, int value);
+    /// <summary>Gets the tag identifying the type of <paramref name="message"/>, or an empty string if none was set.</summary>
+    protected abstract string GetTag(TMessage message);
+    /// <summary>Sets the tag on <paramref name="message"/>.</summary>
+    protected abstract void SetTag(TMessage message, string value);
 
     object IMessageFormat.CreateMessage() => CreateMessage();
     string IMessageFormat.GetMessageId(object message) => GetMessageId((TMessage)message);
@@ -146,4 +157,6 @@ public abstract class MessageFormat<TMessage> : IMessageFormat where TMessage : 
     void IMessageFormat.SetIsAlert(object message, bool value) => SetIsAlert((TMessage)message, value);
     int IMessageFormat.GetPriority(object message) => GetPriority((TMessage)message);
     void IMessageFormat.SetPriority(object message, int value) => SetPriority((TMessage)message, value);
+    string IMessageFormat.GetTag(object message) => GetTag((TMessage)message);
+    void IMessageFormat.SetTag(object message, string value) => SetTag((TMessage)message, value);
 }

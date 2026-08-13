@@ -22,6 +22,8 @@ internal sealed class TestMessage
     [ProtoMember(8)] public bool IsAlert { get; set; }
     /// <summary>Priority number of this message.</summary>
     [ProtoMember(9)] public int Priority { get; set; }
+    /// <summary>Tag identifying the type of this message.</summary>
+    [ProtoMember(10)] public string Tag { get; set; } = string.Empty;
 }
 
 /// <summary>A single address entry within a <see cref="TestMessage"/>.</summary>
@@ -82,4 +84,8 @@ internal sealed class TestMessageFormat : MessageFormat<TestMessage>
     protected override int GetPriority(TestMessage message) => message.Priority;
     /// <inheritdoc />
     protected override void SetPriority(TestMessage message, int value) => message.Priority = value;
+    /// <inheritdoc />
+    protected override string GetTag(TestMessage message) => message.Tag;
+    /// <inheritdoc />
+    protected override void SetTag(TestMessage message, string value) => message.Tag = value;
 }

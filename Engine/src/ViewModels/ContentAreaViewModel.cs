@@ -33,6 +33,8 @@ public sealed partial class ContentAreaViewModel : ObservableObject, IContentAre
     private readonly IMessagePriorityProvider _priorityProvider;
     private readonly IAlertConfiguration _alertConfiguration;
     private readonly IAlertComposeConfiguration _alertComposeConfiguration;
+    private readonly IMessageTagConfiguration _tagConfiguration;
+    private readonly IMessageTagPriorityPolicy _tagPriorityPolicy;
     private readonly ILoggerFactory _loggerFactory;
 
     [ObservableProperty] private object? _activeContent;
@@ -55,6 +57,8 @@ public sealed partial class ContentAreaViewModel : ObservableObject, IContentAre
     /// <param name="priorityProvider">Provides the available message priority levels to choose from.</param>
     /// <param name="alertConfiguration">Provides the shared alert label text.</param>
     /// <param name="alertComposeConfiguration">Controls whether the alert checkbox is shown.</param>
+    /// <param name="tagConfiguration">Controls whether the tag input is shown.</param>
+    /// <param name="tagPriorityPolicy">Provides the set of blocked tag/priority combinations enforced on send.</param>
     /// <param name="loggerFactory">Factory for creating named loggers.</param>
     public ContentAreaViewModel(
         IHomeContentProvider homeContent,
@@ -68,6 +72,8 @@ public sealed partial class ContentAreaViewModel : ObservableObject, IContentAre
         IMessagePriorityProvider priorityProvider,
         IAlertConfiguration alertConfiguration,
         IAlertComposeConfiguration alertComposeConfiguration,
+        IMessageTagConfiguration tagConfiguration,
+        IMessageTagPriorityPolicy tagPriorityPolicy,
         ILoggerFactory loggerFactory)
     {
         _homeContent = homeContent;
@@ -81,6 +87,8 @@ public sealed partial class ContentAreaViewModel : ObservableObject, IContentAre
         _priorityProvider = priorityProvider;
         _alertConfiguration = alertConfiguration;
         _alertComposeConfiguration = alertComposeConfiguration;
+        _tagConfiguration = tagConfiguration;
+        _tagPriorityPolicy = tagPriorityPolicy;
         _loggerFactory = loggerFactory;
         HomeText = _homeContent.GetHomeText();
         connection.DeliveryStatusChanged += OnDeliveryStatusChanged;
@@ -158,7 +166,7 @@ public sealed partial class ContentAreaViewModel : ObservableObject, IContentAre
         DraftEntity? entity = await _drafts.Get(oid);
         if (entity is null) return null;
         List<string> userNames = await _connection.GetUserNames();
-        DraftViewModel vm = new(entity, _entryService, _connection, userNames, _loggerFactory, _priorityProvider, _alertConfiguration, _alertComposeConfiguration);
+        DraftViewModel vm = new(entity, _entryService, _connection, userNames, _loggerFactory, _priorityProvider, _alertConfiguration, _alertComposeConfiguration, _tagConfiguration, _tagPriorityPolicy);
         vm.DraftSent += async (IDraftViewModel _, MessageEntity msg) =>
         {
             ShowEntry(new MessageViewModel(msg, _messageFormat));

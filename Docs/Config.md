@@ -24,6 +24,8 @@ All property names are PascalCase; deserialization is case-insensitive. Unrecogn
   "AlarmSoundSeconds":   null,
   "QuickConfirmationEnabled": null,
   "ComposeAlertsEnabled": null,
+  "MessageTagsEnabled": null,
+  "MessageTagLabel": null,
   "Users": {
     "USER-A": { "IpAddress": "192.168.1.10", "Port": 7890 }
   },
@@ -128,6 +130,22 @@ Whether clicking the alert box, or pressing Space/Enter while not focused in a t
 **Type:** `bool | null` | **Default:** `null` (uses Engine default of `true`)
 
 Whether the draft editor's alert checkbox is shown, letting the user mark and send a draft as an alert. Setting this to `false` only affects local origination — the app can still receive and alarm on an alert sent by a peer.
+
+---
+
+### `MessageTagsEnabled`
+
+**Type:** `bool | null` | **Default:** `null` (uses Engine default of `true`)
+
+Whether message tags are shown anywhere in the UI: the draft editor's tag input, and each message's tag label next to its priority in the entry listing.
+
+---
+
+### `MessageTagLabel`
+
+**Type:** `string | null` | **Default:** `null` (uses Engine default of `"Tag"`)
+
+Label used for the tag input's watermark in the draft editor. Lets a host call the concept something other than "Tag" (e.g. `"Category"`, `"Type"`) without changing engine behavior.
 
 ---
 

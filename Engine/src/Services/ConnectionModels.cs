@@ -19,6 +19,8 @@ public sealed class MessageReceivedEvent
     public bool IsAlert { get; set; }
     /// <summary>Priority number of this message; see <see cref="Control.IMessageFormat.GetPriority"/>.</summary>
     public int Priority { get; set; }
+    /// <summary>Tag identifying the type of this message; see <see cref="Control.IMessageFormat.GetTag"/>.</summary>
+    public string Tag { get; set; } = string.Empty;
 }
 
 /// <summary>Represents a single addressee in a send or receive operation.</summary>
@@ -81,6 +83,8 @@ public sealed class SendMessagePayload
     public bool IsAlert { get; set; }
     /// <summary>Priority number of this message; see <see cref="Control.IMessageFormat.GetPriority"/>.</summary>
     public int Priority { get; set; }
+    /// <summary>Tag identifying the type of this message; see <see cref="Control.IMessageFormat.GetTag"/>.</summary>
+    public string Tag { get; set; } = string.Empty;
 }
 
 /// <summary>A single recipient address entry used in <see cref="SendMessagePayload"/>.</summary>

@@ -62,6 +62,8 @@ public sealed partial class MainViewModel : ObservableObject, IMainViewModel
     private readonly IMessagePriorityProvider _priorityProvider;
     private readonly IAlertConfiguration _alertConfiguration;
     private readonly IAlertComposeConfiguration _alertComposeConfiguration;
+    private readonly IMessageTagConfiguration _tagConfiguration;
+    private readonly IMessageTagPriorityPolicy _tagPriorityPolicy;
     private readonly IMessageFormat _messageFormat;
     private readonly ILoggerFactory _loggerFactory;
     private readonly ILogger _logger;
@@ -108,6 +110,8 @@ public sealed partial class MainViewModel : ObservableObject, IMainViewModel
     /// <param name="priorityProvider">Provides the available message priority levels to choose from.</param>
     /// <param name="alertConfiguration">Provides the shared alert label text.</param>
     /// <param name="alertComposeConfiguration">Controls whether the alert checkbox is shown.</param>
+    /// <param name="tagConfiguration">Controls whether message tags are shown.</param>
+    /// <param name="tagPriorityPolicy">Provides the set of blocked tag/priority combinations enforced on send.</param>
     /// <param name="messageFormat">Maps logical fields onto a message entity's stored message.</param>
     public MainViewModel(
         IServiceConnection connection,
@@ -128,6 +132,8 @@ public sealed partial class MainViewModel : ObservableObject, IMainViewModel
         IMessagePriorityProvider priorityProvider,
         IAlertConfiguration alertConfiguration,
         IAlertComposeConfiguration alertComposeConfiguration,
+        IMessageTagConfiguration tagConfiguration,
+        IMessageTagPriorityPolicy tagPriorityPolicy,
         IMessageFormat messageFormat)
     {
         _connection = connection;
@@ -146,6 +152,8 @@ public sealed partial class MainViewModel : ObservableObject, IMainViewModel
         _priorityProvider = priorityProvider;
         _alertConfiguration = alertConfiguration;
         _alertComposeConfiguration = alertComposeConfiguration;
+        _tagConfiguration = tagConfiguration;
+        _tagPriorityPolicy = tagPriorityPolicy;
         _messageFormat = messageFormat;
         _loggerFactory = loggerFactory;
         _logger = loggerFactory.CreateLogger("APP");
@@ -207,14 +215,16 @@ public sealed partial class MainViewModel : ObservableObject, IMainViewModel
                 MessageEntity entity = await _entryService.StoreIncomingMessage(
                     evt.MessageId, evt.FromUser, evt.Subject, evt.Body,
                     evt.Addresses.Select(a => new Data.Entities.AddressData { UserName = a.UserName, Type = a.Type }).ToList(),
-                    evt.SentAt, evt.IsAlert, evt.Priority);
+                    evt.SentAt, evt.IsAlert, evt.Priority, evt.Tag);
 
                 FolderItemViewModel? inboxFolder = _folderBar.RootFolders.FirstOrDefault(f => f.RootType == FolderType.Inbox);
                 if (inboxFolder is not null && _folderBar.SelectedFolder?.Id == inboxFolder.Id)
                 {
                     string timeText = entity.ReceivedAt.ToString("dd-MMM-yyyy HH:mm").ToUpperInvariant();
+                    string priorityText = _priorityProvider.GetPriorities().GetLabel(evt.Priority);
+                    string? tagText = _tagConfiguration.TagsEnabled && !string.IsNullOrEmpty(evt.Tag) ? evt.Tag : null;
                     EntryItemViewModel item = new(entity.MessageId, evt.FromUser, EntryType.Message, entity.ReceivedAt,
-                        secondaryText: evt.Subject, timeText: timeText);
+                        secondaryText: evt.Subject, priorityText: priorityText, tagText: tagText, timeText: timeText);
                     item.OverallStatus = entity.ReadStatus;
                     await _entryBar.PrependEntry(item);
                 }
@@ -301,7 +311,7 @@ public sealed partial class MainViewModel : ObservableObject, IMainViewModel
     {
         DraftEntity entity = await _entryService.CreateDraft();
         List<string> userNames = await _connection.GetUserNames();
-        Entries.DraftViewModel vm = new(entity, _entryService, _connection, userNames, _loggerFactory, _priorityProvider, _alertConfiguration, _alertComposeConfiguration, _bodyDocumentFactory.Create());
+        Entries.DraftViewModel vm = new(entity, _entryService, _connection, userNames, _loggerFactory, _priorityProvider, _alertConfiguration, _alertComposeConfiguration, _tagConfiguration, _tagPriorityPolicy, _bodyDocumentFactory.Create());
         vm.DraftSent += async (IDraftViewModel _, MessageEntity msg) =>
         {
             _contentArea.ShowEntry(new Entries.MessageViewModel(msg, _messageFormat));

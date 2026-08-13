@@ -22,10 +22,26 @@ public interface IDraftViewModel
     string AlertLabel { get; }
     /// <summary>Gets a value indicating whether the alert checkbox is shown; see <see cref="IAlertComposeConfiguration"/>.</summary>
     bool ComposeAlertsEnabled { get; }
-    /// <summary>Gets the message priority levels available to choose from; see <see cref="IMessagePriorityProvider"/>.</summary>
+    /// <summary>
+    /// Gets the message priority levels available to choose from; see <see cref="IMessagePriorityProvider"/>.
+    /// Excludes any priority that <see cref="IMessageTagPriorityPolicy"/> blocks for the current <see cref="Tag"/>,
+    /// so a blocked tag/priority combination can never be selected in the first place. Recomputed whenever
+    /// <see cref="Tag"/> changes.
+    /// </summary>
     IReadOnlyList<MessagePriorityOption> AvailablePriorities { get; }
     /// <summary>Gets or sets the priority level this draft will be sent at.</summary>
     MessagePriorityOption SelectedPriority { get; set; }
+    /// <summary>
+    /// Gets or sets the short, user-inputted tag identifying the type of this message; see
+    /// <see cref="IMessageFormat.GetTag"/>. Setting a tag that <see cref="IMessageTagPriorityPolicy"/> blocks
+    /// for the current <see cref="SelectedPriority"/> is rejected — the value silently reverts to the last
+    /// valid tag — so a blocked combination can never be entered.
+    /// </summary>
+    string Tag { get; set; }
+    /// <summary>Gets a value indicating whether the tag input is shown; see <see cref="IMessageTagConfiguration"/>.</summary>
+    bool TagsEnabled { get; }
+    /// <summary>Gets the label for the tag input's watermark, sourced from <see cref="IMessageTagConfiguration.TagLabel"/>.</summary>
+    string TagLabel { get; }
     /// <summary>
     /// Gets or sets the PLSO (Phonetic Language Spell Out) mode active in the body editor: when not
     /// <see cref="Entries.PlsoMode.Off"/>, typing a letter or digit inserts its phonetic word (see
@@ -69,8 +85,11 @@ public sealed partial class DraftViewModel : ObservableObject, IDraftViewModel
 {
     private readonly IEntryService _entryService;
     private readonly IServiceConnection _connection;
+    private readonly IMessageTagPriorityPolicy _tagPriorityPolicy;
+    private readonly IReadOnlyList<MessagePriorityOption> _allPriorities;
     private readonly ILogger _activityLogger;
     private DraftEntity _entity;
+    private string _lastValidTag = string.Empty;
 
     // Marker format:  (Unicode PUA U+E001) + 8 lowercase hex chars = 9 chars per fill-in
     private const char FillInSentinel = '';
@@ -83,6 +102,8 @@ public sealed partial class DraftViewModel : ObservableObject, IDraftViewModel
     [ObservableProperty] private bool _isSent;
     [ObservableProperty] private bool _isAlert;
     [ObservableProperty] private MessagePriorityOption _selectedPriority;
+    [ObservableProperty] private IReadOnlyList<MessagePriorityOption> _availablePriorities = [];
+    [ObservableProperty] private string _tag = string.Empty;
     [ObservableProperty] private PlsoMode _plsoMode;
     [ObservableProperty] private bool _isSaving;
     [ObservableProperty] private string? _statusMessage;
@@ -102,11 +123,13 @@ public sealed partial class DraftViewModel : ObservableObject, IDraftViewModel
     /// <inheritdoc />
     public IReadOnlyList<string> AddressTypes { get; } = ["To", "Cc"];
     /// <inheritdoc />
-    public IReadOnlyList<MessagePriorityOption> AvailablePriorities { get; }
-    /// <inheritdoc />
     public string AlertLabel { get; }
     /// <inheritdoc />
     public bool ComposeAlertsEnabled { get; }
+    /// <inheritdoc />
+    public bool TagsEnabled { get; }
+    /// <inheritdoc />
+    public string TagLabel { get; }
     /// <inheritdoc />
     public string PlsoButtonText => PlsoMode switch
     {
@@ -128,6 +151,8 @@ public sealed partial class DraftViewModel : ObservableObject, IDraftViewModel
     /// <param name="priorityProvider">Provides the available message priority levels to choose from.</param>
     /// <param name="alertConfiguration">Provides the shared alert label text.</param>
     /// <param name="alertComposeConfiguration">Controls whether the alert checkbox is shown.</param>
+    /// <param name="tagConfiguration">Controls whether the tag input is shown.</param>
+    /// <param name="tagPriorityPolicy">Provides the set of blocked tag/priority combinations enforced on send.</param>
     /// <param name="bodyDocument">Optional body document implementation; defaults to <see cref="StringBodyDocument"/> when <see langword="null"/>.</param>
     public DraftViewModel(
         DraftEntity entity,
@@ -138,21 +163,29 @@ public sealed partial class DraftViewModel : ObservableObject, IDraftViewModel
         IMessagePriorityProvider priorityProvider,
         IAlertConfiguration alertConfiguration,
         IAlertComposeConfiguration alertComposeConfiguration,
+        IMessageTagConfiguration tagConfiguration,
+        IMessageTagPriorityPolicy tagPriorityPolicy,
         IBodyDocument? bodyDocument = null)
     {
         _entity = entity;
         _entryService = entryService;
         _connection = connection;
+        _tagPriorityPolicy = tagPriorityPolicy;
         _activityLogger = loggerFactory.CreateLogger("ACTIVITY");
         _subject = entity.Subject;
         _isSent = entity.IsSent;
         _isAlert = entity.IsAlert;
+        _tag = entity.Tag;
+        _lastValidTag = entity.Tag;
         AllUserNames = userNames;
         BodyDocument = bodyDocument ?? new StringBodyDocument();
         AlertLabel = alertConfiguration.AlertText;
         ComposeAlertsEnabled = alertComposeConfiguration.ComposeAlertsEnabled;
+        TagsEnabled = tagConfiguration.TagsEnabled;
+        TagLabel = tagConfiguration.TagLabel;
 
-        AvailablePriorities = priorityProvider.GetPriorities();
+        _allPriorities = priorityProvider.GetPriorities();
+        _availablePriorities = FilterPriorities(entity.Tag);
         _selectedPriority = AvailablePriorities.FirstOrDefault(p => p.Value == entity.Priority)
             ?? AvailablePriorities.FirstOrDefault()
             ?? new MessagePriorityOption { Name = "Normal", Value = 0 };
@@ -199,6 +232,26 @@ public sealed partial class DraftViewModel : ObservableObject, IDraftViewModel
     }
 
     partial void OnPlsoModeChanged(PlsoMode value) => OnPropertyChanged(nameof(PlsoButtonText));
+
+    private IReadOnlyList<MessagePriorityOption> FilterPriorities(string tag) =>
+        _allPriorities.Where(p => !_tagPriorityPolicy.GetBlockedCombinations().IsBlocked(tag, p.Value)).ToList();
+
+    partial void OnTagChanged(string value)
+    {
+        if (_tagPriorityPolicy.GetBlockedCombinations().IsBlocked(value, SelectedPriority.Value))
+        {
+            // Reject the change: this combination is blocked, so revert to the last valid tag instead of
+            // letting the blocked value stand. Re-enters this method with a value that is never blocked
+            // (by invariant, _lastValidTag was itself accepted previously), so this does not recurse further.
+            Tag = _lastValidTag;
+            return;
+        }
+
+        _lastValidTag = value;
+        AvailablePriorities = FilterPriorities(value);
+        if (!AvailablePriorities.Contains(SelectedPriority))
+            SelectedPriority = AvailablePriorities.FirstOrDefault() ?? SelectedPriority;
+    }
 
     /// <inheritdoc />
     public void InsertFillIn(int caretOffset)
@@ -293,6 +346,7 @@ public sealed partial class DraftViewModel : ObservableObject, IDraftViewModel
             _entity.Addresses = [.. Addresses];
             _entity.IsAlert = IsAlert;
             _entity.Priority = SelectedPriority.Value;
+            _entity.Tag = Tag;
             await _entryService.SaveDraft(_entity);
             StatusMessage = "Saved";
         }
@@ -311,6 +365,12 @@ public sealed partial class DraftViewModel : ObservableObject, IDraftViewModel
             return;
         }
 
+        if (_tagPriorityPolicy.GetBlockedCombinations().IsBlocked(Tag, SelectedPriority.Value))
+        {
+            StatusMessage = "This tag/priority combination is not allowed";
+            return;
+        }
+
         IsSaving = true;
         try
         {
@@ -321,11 +381,12 @@ public sealed partial class DraftViewModel : ObservableObject, IDraftViewModel
             _entity.Addresses = [.. Addresses];
             _entity.IsAlert = IsAlert;
             _entity.Priority = SelectedPriority.Value;
+            _entity.Tag = Tag;
 
             SendMessageResult? result = await _connection.SendMessage(
                 Subject, body,
                 Addresses.Select(a => new AddressRequest { UserName = a.UserName, Type = a.Type }).ToList(),
-                IsAlert, SelectedPriority.Value);
+                IsAlert, SelectedPriority.Value, Tag);
 
             _entity.IsSent = true;
             _entity.SentAt = DateTime.UtcNow;
@@ -333,7 +394,7 @@ public sealed partial class DraftViewModel : ObservableObject, IDraftViewModel
 
             DateTime sentAt = _entity.SentAt ?? DateTime.UtcNow;
             MessageEntity sentMessage = await _entryService.StoreSentMessage(
-                result!.MessageId, Subject, body, [.. Addresses], sentAt, result.UserResults, IsAlert, SelectedPriority.Value);
+                result!.MessageId, Subject, body, [.. Addresses], sentAt, result.UserResults, IsAlert, SelectedPriority.Value, Tag);
 
             IsSent = true;
             StatusMessage = "Sent";

@@ -33,6 +33,8 @@ public sealed class MainViewModelTests
         public Mock<IMessagePriorityProvider> PriorityProvider { get; } = new();
         public Mock<IAlertConfiguration> AlertConfiguration { get; } = new();
         public Mock<IAlertComposeConfiguration> AlertComposeConfiguration { get; } = new();
+        public Mock<IMessageTagConfiguration> TagConfiguration { get; } = new();
+        public Mock<IMessageTagPriorityPolicy> TagPriorityPolicy { get; } = new();
         public IMessageFormat MessageFormat { get; } = new TestMessageFormat();
 
         public MainViewModel BuildVm()
@@ -43,6 +45,9 @@ public sealed class MainViewModelTests
             PriorityProvider.Setup(p => p.GetPriorities()).Returns([new MessagePriorityOption { Name = "Normal", Value = 0 }]);
             AlertConfiguration.Setup(a => a.AlertText).Returns("ALERT");
             AlertComposeConfiguration.Setup(a => a.ComposeAlertsEnabled).Returns(true);
+            TagConfiguration.Setup(t => t.TagsEnabled).Returns(true);
+            TagConfiguration.Setup(t => t.TagLabel).Returns("Tag");
+            TagPriorityPolicy.Setup(p => p.GetBlockedCombinations()).Returns([]);
 
             return new MainViewModel(
                 Connection.Object,
@@ -63,6 +68,8 @@ public sealed class MainViewModelTests
                 PriorityProvider.Object,
                 AlertConfiguration.Object,
                 AlertComposeConfiguration.Object,
+                TagConfiguration.Object,
+                TagPriorityPolicy.Object,
                 MessageFormat);
         }
     }

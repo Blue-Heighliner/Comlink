@@ -112,6 +112,8 @@ If `--config` is omitted, all settings use their defaults (Client mode, default 
   "AlarmSoundSeconds":   null,
   "QuickConfirmationEnabled": null,
   "ComposeAlertsEnabled": null,
+  "MessageTagsEnabled": null,
+  "MessageTagLabel": null,
   "Users": {
     "USER-A": { "IpAddress": "192.168.1.10", "Port": 7890 }
   },
@@ -133,6 +135,8 @@ If `--config` is omitted, all settings use their defaults (Client mode, default 
 | `AlarmSoundSeconds` | double? | `null` | Seconds the alarm sound plays before auto-stopping, reset on each new alert (`null` = 30) |
 | `QuickConfirmationEnabled` | bool? | `null` | Whether click/Space/Enter quick-confirms the latest pending alert (`null` = `true`) |
 | `ComposeAlertsEnabled` | bool? | `null` | Whether the draft editor's alert checkbox is shown (`null` = `true`); disabling only affects local origination, not receiving peer alerts |
+| `MessageTagsEnabled` | bool? | `null` | Whether message tags are shown anywhere in the UI (`null` = `true`) |
+| `MessageTagLabel` | string? | `null` | Label for the tag input's watermark in the draft editor (`null` = `"Tag"`) |
 | `Users` | object | `{}` | Map of user name → `{ IpAddress, Port }` — overrides or defines user endpoints |
 | `UserGroups` | object | `{}` | Map of group name → member list (user or group names); groups are addressable destinations and are expanded recursively on send |
 

@@ -89,7 +89,8 @@ internal sealed class InterfaceService : IInterfaceService
             Body = _messageFormat.GetBody(message),
             Addresses = _messageFormat.GetAddresses(message).Select(a => new AddressPayload { UserName = a.UserName, Type = a.Type.ToString() }).ToList(),
             IsAlert = _messageFormat.GetIsAlert(message),
-            Priority = _messageFormat.GetPriority(message)
+            Priority = _messageFormat.GetPriority(message),
+            Tag = _messageFormat.GetTag(message)
         };
 
         await _routingService.Route(userInfo.Name, payload, CancellationToken.None);

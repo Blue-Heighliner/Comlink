@@ -52,6 +52,18 @@ public sealed class EngineConfig
     public bool? ComposeAlertsEnabled { get; init; }
 
     /// <summary>
+    /// Whether message tags are shown anywhere in the UI (draft tag input, entry listing tag label).
+    /// <see langword="null"/> uses the Engine default (<see langword="true"/>).
+    /// </summary>
+    public bool? MessageTagsEnabled { get; init; }
+
+    /// <summary>
+    /// Label used for the tag input's watermark in the draft editor. <see langword="null"/> or empty uses
+    /// the Engine default (<c>"Tag"</c>).
+    /// </summary>
+    public string? MessageTagLabel { get; init; }
+
+    /// <summary>
     /// User definitions and endpoint overrides. Keys are user names (case-insensitive).
     /// Entries may override an existing user's endpoint or introduce an entirely new user.
     /// </summary>

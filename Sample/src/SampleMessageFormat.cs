@@ -29,6 +29,8 @@ public sealed class SampleMessage
     [ProtoMember(8)] public bool Alert { get; set; }
     /// <summary>Priority number of this message.</summary>
     [ProtoMember(9)] public int Importance { get; set; }
+    /// <summary>Short user-inputted tag identifying the type of this message.</summary>
+    [ProtoMember(10)] public string Category { get; set; } = string.Empty;
 }
 
 /// <summary>A single recipient entry within a <see cref="SampleMessage"/>.</summary>
@@ -89,4 +91,8 @@ internal sealed class SampleMessageFormat : MessageFormat<SampleMessage>
     protected override int GetPriority(SampleMessage message) => message.Importance;
     /// <inheritdoc />
     protected override void SetPriority(SampleMessage message, int value) => message.Importance = value;
+    /// <inheritdoc />
+    protected override string GetTag(SampleMessage message) => message.Category;
+    /// <inheritdoc />
+    protected override void SetTag(SampleMessage message, string value) => message.Category = value;
 }

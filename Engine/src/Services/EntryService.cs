@@ -16,11 +16,11 @@ public interface IEntryService
     /// <summary>Raised after an Inbox message's <see cref="MessageEntity.ReadStatus"/> transitions from <c>Received</c> to <c>Read</c>.</summary>
     event Func<MessageEntity, Task>? MessageRead;
     /// <summary>Persists a sent message to the Outbox folder, including per-user delivery status entries.</summary>
-    Task<MessageEntity> StoreSentMessage(string messageId, string subject, string body, List<AddressData> addresses, DateTime sentAt, IReadOnlyList<UserDeliveryResult> userResults, bool isAlert = false, int priority = 0);
+    Task<MessageEntity> StoreSentMessage(string messageId, string subject, string body, List<AddressData> addresses, DateTime sentAt, IReadOnlyList<UserDeliveryResult> userResults, bool isAlert = false, int priority = 0, string tag = "");
     /// <summary>Updates the delivery status for a specific user on an existing message entity.</summary>
     Task<MessageEntity?> UpdateDeliveryStatus(string messageId, string userName, DestinationStatus status);
     /// <summary>Persists a received message to the Inbox folder with <see cref="MessageEntity.ReadStatus"/> set to <see cref="DestinationStatus.Received"/>, and raises <see cref="MessageInserted"/>.</summary>
-    Task<MessageEntity> StoreIncomingMessage(string messageId, string fromUser, string subject, string body, List<AddressData> addresses, DateTime sentAt, bool isAlert = false, int priority = 0);
+    Task<MessageEntity> StoreIncomingMessage(string messageId, string fromUser, string subject, string body, List<AddressData> addresses, DateTime sentAt, bool isAlert = false, int priority = 0, string tag = "");
     /// <summary>
     /// Transitions the Inbox record for <paramref name="messageId"/> from <see cref="DestinationStatus.Received"/>
     /// to <see cref="DestinationStatus.Read"/> and raises <see cref="MessageRead"/>. Returns <see langword="null"/>
@@ -102,7 +102,7 @@ public sealed class EntryService : IEntryService
         _messageFormat = messageFormat;
     }
 
-    private object BuildMessage(string messageId, string fromUser, string subject, string body, List<AddressData> addresses, DateTime sentAt, bool isAlert, int priority)
+    private object BuildMessage(string messageId, string fromUser, string subject, string body, List<AddressData> addresses, DateTime sentAt, bool isAlert, int priority, string tag)
     {
         object message = _messageFormat.CreateMessage();
         _messageFormat.SetMessageId(message, messageId);
@@ -113,11 +113,12 @@ public sealed class EntryService : IEntryService
         _messageFormat.SetSentAt(message, sentAt);
         _messageFormat.SetIsAlert(message, isAlert);
         _messageFormat.SetPriority(message, priority);
+        _messageFormat.SetTag(message, tag);
         return message;
     }
 
     /// <summary>Persists a sent message to the Outbox folder, including per-user delivery status entries.</summary>
-    public async Task<MessageEntity> StoreSentMessage(string messageId, string subject, string body, List<AddressData> addresses, DateTime sentAt, IReadOnlyList<UserDeliveryResult> userResults, bool isAlert = false, int priority = 0)
+    public async Task<MessageEntity> StoreSentMessage(string messageId, string subject, string body, List<AddressData> addresses, DateTime sentAt, IReadOnlyList<UserDeliveryResult> userResults, bool isAlert = false, int priority = 0, string tag = "")
     {
         string outboxId = await _folders.GetRootId(FolderType.Outbox);
         List<DeliveryStatus> deliveryStatuses = userResults
@@ -131,7 +132,7 @@ public sealed class EntryService : IEntryService
         MessageEntity entity = new()
         {
             MessageId = messageId,
-            Message = BuildMessage(messageId, _currentUserProvider.UserName ?? string.Empty, subject, body, addresses, sentAt, isAlert, priority),
+            Message = BuildMessage(messageId, _currentUserProvider.UserName ?? string.Empty, subject, body, addresses, sentAt, isAlert, priority, tag),
             DeliveryStatuses = deliveryStatuses,
             ReceivedAt = sentAt,
             FolderId = outboxId,
@@ -168,13 +169,13 @@ public sealed class EntryService : IEntryService
     }
 
     /// <summary>Persists a received message to the Inbox folder and raises <see cref="MessageInserted"/>.</summary>
-    public async Task<MessageEntity> StoreIncomingMessage(string messageId, string fromUser, string subject, string body, List<AddressData> addresses, DateTime sentAt, bool isAlert = false, int priority = 0)
+    public async Task<MessageEntity> StoreIncomingMessage(string messageId, string fromUser, string subject, string body, List<AddressData> addresses, DateTime sentAt, bool isAlert = false, int priority = 0, string tag = "")
     {
         string inboxId = await _folders.GetRootId(FolderType.Inbox);
         MessageEntity entity = new()
         {
             MessageId = messageId,
-            Message = BuildMessage(messageId, fromUser, subject, body, addresses, sentAt, isAlert, priority),
+            Message = BuildMessage(messageId, fromUser, subject, body, addresses, sentAt, isAlert, priority, tag),
             ReceivedAt = sentAt,
             FolderId = inboxId,
             ReadStatus = DestinationStatus.Received

@@ -136,6 +136,7 @@ public sealed class ImportService : IImportService
         _messageFormat.SetSentAt(message, data.SentAt);
         _messageFormat.SetIsAlert(message, data.IsAlert);
         _messageFormat.SetPriority(message, data.Priority);
+        _messageFormat.SetTag(message, data.Tag);
 
         MessageEntity entity = new()
         {
@@ -172,6 +173,7 @@ public sealed class ImportService : IImportService
                 IsSent = data.IsSent,
                 IsAlert = data.IsAlert,
                 Priority = data.Priority,
+                Tag = data.Tag,
                 SentAt = data.SentAt,
                 FolderId = await _folders.GetRootId(FolderType.Drafts)
             };
@@ -195,6 +197,7 @@ public sealed class ImportService : IImportService
         existing.IsSent = data.IsSent;
         existing.IsAlert = data.IsAlert;
         existing.Priority = data.Priority;
+        existing.Tag = data.Tag;
         existing.SentAt = data.SentAt;
         existing.ModifiedAt = DateTime.UtcNow;
         await _drafts.Update(existing);

@@ -29,6 +29,10 @@ public interface IMessageFormat
     void SetConfirmationMessageId(object message, string value);
     bool GetIsAlert(object message);
     void SetIsAlert(object message, bool value);
+    int GetPriority(object message);
+    void SetPriority(object message, int value);
+    string GetTag(object message);
+    void SetTag(object message, string value);
 }
 ```
 
@@ -51,7 +55,7 @@ The `Sample` project registers `SampleMessageFormat` over a `SampleMessage` DTO 
 4. Deserialization failures are caught and simply dropped; OFT itself handles connection-level errors and retries.
 
 ### Outbound
-- `PeerService.Send(userName, message)` takes `message` as `object` (an instance of `IMessageFormat.MessageType`), resolves `userName` to a `UserEndpoint` via `IUserLocator`, reads `IMessageFormat.GetMessageId(message)` for the delivery-status tag, then calls `IOftPeer.Send(host, port, data, tag: (messageId, userName))`.
+- `PeerService.Send(userName, message)` takes `message` as `object` (an instance of `IMessageFormat.MessageType`), resolves `userName` to a `UserEndpoint` via `IUserLocator`, reads `IMessageFormat.GetMessageId(message)` for the delivery-status tag, then calls `IOftPeer.Send(host, port, data, priority: IMessageFormat.GetPriority(message), tag: (messageId, userName))`. `IMessageFormat.GetPriority(message)` is passed verbatim as OFT's own `priority` argument — larger values are sent first by OFT — so the message's stored priority number (see `IMessagePriorityProvider` in `Docs/Control.md`) directly controls OFT-level send ordering, independent of the same value also being embedded inside the serialized message content itself.
 - `IOftPeer` maintains its own connection cache internally, keyed by `host:port`, reusing an existing connection or creating one as needed.
 - The `Send` call does not return until OFT has fully delivered the message (see [Delivery status](#delivery-status)) — a resolution failure (unknown user) or an OFT-level send failure (e.g. `OftDisconnectedException`) both cause `PeerService.Send` to return `false`.
 

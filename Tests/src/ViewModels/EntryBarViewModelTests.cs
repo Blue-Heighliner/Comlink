@@ -5,11 +5,12 @@ public sealed class EntryBarViewModelTests
 {
     private static readonly IMessageFormat Format = new TestMessageFormat();
     private static readonly IMessagePriorityProvider PriorityProvider = new MessagePriorityProvider();
+    private static readonly IMessageTagConfiguration TagConfiguration = new MessageTagConfiguration(new EngineConfig());
 
     private static FolderItemViewModel MakeFolder(string id, FolderType type)
         => new(id, type.ToString(), type, null);
 
-    private static MessageEntity MakeMessage(string id = "MSG1", string fromUser = "ALPHA", string subject = "Hello", int priority = 0)
+    private static MessageEntity MakeMessage(string id = "MSG1", string fromUser = "ALPHA", string subject = "Hello", int priority = 0, string tag = "")
     {
         object message = Format.CreateMessage();
         Format.SetMessageId(message, id);
@@ -17,6 +18,7 @@ public sealed class EntryBarViewModelTests
         Format.SetSubject(message, subject);
         Format.SetBody(message, "body");
         Format.SetPriority(message, priority);
+        Format.SetTag(message, tag);
         return new MessageEntity
         {
             MessageId = id,
@@ -55,7 +57,7 @@ public sealed class EntryBarViewModelTests
         Mock<IEntryService> svc = new();
         svc.Setup(s => s.GetMessages(It.IsAny<string>(), It.IsAny<int>()))
            .ReturnsAsync((Items: new List<MessageEntity> { MakeMessage("M1") }, Total: 1));
-        EntryBarViewModel vm = new(svc.Object, Format, PriorityProvider);
+        EntryBarViewModel vm = new(svc.Object, Format, PriorityProvider, TagConfiguration);
         FolderItemViewModel inbox = MakeFolder("root-inbox", FolderType.Inbox);
 
         await vm.LoadFolder(inbox);
@@ -74,7 +76,7 @@ public sealed class EntryBarViewModelTests
         DraftEntity draft = MakeDraft("My draft");
         svc.Setup(s => s.GetDrafts(It.IsAny<string>(), It.IsAny<int>(), It.IsAny<bool>()))
            .ReturnsAsync((Items: new List<DraftEntity> { draft }, Total: 1));
-        EntryBarViewModel vm = new(svc.Object, Format, PriorityProvider);
+        EntryBarViewModel vm = new(svc.Object, Format, PriorityProvider, TagConfiguration);
         FolderItemViewModel drafts = MakeFolder("root-drafts", FolderType.Drafts);
 
         await vm.LoadFolder(drafts);
@@ -94,7 +96,7 @@ public sealed class EntryBarViewModelTests
         NoteEntity note = MakeNote("Line one\nLine two");
         svc.Setup(s => s.GetNotes(It.IsAny<string>(), It.IsAny<int>(), It.IsAny<bool>()))
            .ReturnsAsync((Items: new List<NoteEntity> { note }, Total: 1));
-        EntryBarViewModel vm = new(svc.Object, Format, PriorityProvider);
+        EntryBarViewModel vm = new(svc.Object, Format, PriorityProvider, TagConfiguration);
 
         await vm.LoadFolder(MakeFolder("root-notes", FolderType.Notes));
 
@@ -110,7 +112,7 @@ public sealed class EntryBarViewModelTests
         Mock<IEntryService> svc = new();
         svc.Setup(s => s.GetMessages(It.IsAny<string>(), It.IsAny<int>()))
            .ReturnsAsync((Items: new List<MessageEntity> { MakeMessage("M1") }, Total: 1));
-        EntryBarViewModel vm = new(svc.Object, Format, PriorityProvider);
+        EntryBarViewModel vm = new(svc.Object, Format, PriorityProvider, TagConfiguration);
         await vm.LoadFolder(MakeFolder("root-inbox", FolderType.Inbox));
         EntryItemViewModel entry = vm.Entries[0];
         IReadOnlyList<EntryItemViewModel>? received = null;
@@ -130,7 +132,7 @@ public sealed class EntryBarViewModelTests
         Mock<IEntryService> svc = new();
         svc.Setup(s => s.GetMessages(It.IsAny<string>(), It.IsAny<int>()))
            .ReturnsAsync((Items: new List<MessageEntity> { MakeMessage("M1"), MakeMessage("M2") }, Total: 2));
-        EntryBarViewModel vm = new(svc.Object, Format, PriorityProvider);
+        EntryBarViewModel vm = new(svc.Object, Format, PriorityProvider, TagConfiguration);
         await vm.LoadFolder(MakeFolder("root-inbox", FolderType.Inbox));
         EntryItemViewModel first = vm.Entries[0];
         vm.SelectEntry(first);
@@ -147,7 +149,7 @@ public sealed class EntryBarViewModelTests
         Mock<IEntryService> svc = new();
         svc.Setup(s => s.GetMessages(It.IsAny<string>(), It.IsAny<int>()))
            .ReturnsAsync((Items: new List<MessageEntity> { MakeMessage("M1"), MakeMessage("M2"), MakeMessage("M3") }, Total: 3));
-        EntryBarViewModel vm = new(svc.Object, Format, PriorityProvider);
+        EntryBarViewModel vm = new(svc.Object, Format, PriorityProvider, TagConfiguration);
         await vm.LoadFolder(MakeFolder("root-inbox", FolderType.Inbox));
         vm.SelectEntries([vm.Entries[0], vm.Entries[1]], []);
 
@@ -167,7 +169,7 @@ public sealed class EntryBarViewModelTests
         Mock<IEntryService> svc = new();
         svc.Setup(s => s.GetMessages(It.IsAny<string>(), It.IsAny<int>()))
            .ReturnsAsync((Items: new List<MessageEntity> { MakeMessage("M1"), MakeMessage("M2"), MakeMessage("M3") }, Total: 3));
-        EntryBarViewModel vm = new(svc.Object, Format, PriorityProvider);
+        EntryBarViewModel vm = new(svc.Object, Format, PriorityProvider, TagConfiguration);
         await vm.LoadFolder(MakeFolder("root-inbox", FolderType.Inbox));
         IReadOnlyList<EntryItemViewModel>? received = null;
         vm.EntriesSelected += e => received = e;
@@ -187,7 +189,7 @@ public sealed class EntryBarViewModelTests
         Mock<IEntryService> svc = new();
         svc.Setup(s => s.GetMessages(It.IsAny<string>(), It.IsAny<int>()))
            .ReturnsAsync((Items: new List<MessageEntity> { MakeMessage("M1"), MakeMessage("M2") }, Total: 2));
-        EntryBarViewModel vm = new(svc.Object, Format, PriorityProvider);
+        EntryBarViewModel vm = new(svc.Object, Format, PriorityProvider, TagConfiguration);
         await vm.LoadFolder(MakeFolder("root-inbox", FolderType.Inbox));
         vm.SelectEntries([vm.Entries[0], vm.Entries[1]], []);
 
@@ -204,7 +206,7 @@ public sealed class EntryBarViewModelTests
         Mock<IEntryService> svc = new();
         svc.Setup(s => s.GetMessages(It.IsAny<string>(), It.IsAny<int>()))
            .ReturnsAsync((Items: new List<MessageEntity> { MakeMessage("M1") }, Total: 1));
-        EntryBarViewModel vm = new(svc.Object, Format, PriorityProvider);
+        EntryBarViewModel vm = new(svc.Object, Format, PriorityProvider, TagConfiguration);
         await vm.LoadFolder(MakeFolder("root-inbox", FolderType.Inbox));
         vm.SelectEntries([vm.Entries[0]], []);
         bool raised = false;
@@ -227,7 +229,7 @@ public sealed class EntryBarViewModelTests
         Mock<IEntryService> svc = new();
         svc.Setup(s => s.GetMessages(It.IsAny<string>(), It.IsAny<int>()))
            .ReturnsAsync((Items: new List<MessageEntity> { MakeMessage("M1"), MakeMessage("M2") }, Total: 2));
-        EntryBarViewModel vm = new(svc.Object, Format, PriorityProvider);
+        EntryBarViewModel vm = new(svc.Object, Format, PriorityProvider, TagConfiguration);
         await vm.LoadFolder(MakeFolder("root-inbox", FolderType.Inbox));
 
         vm.SelectEntries([vm.Entries[0], vm.Entries[1]], []);
@@ -242,7 +244,7 @@ public sealed class EntryBarViewModelTests
         Mock<IEntryService> svc = new();
         svc.Setup(s => s.GetMessages(It.IsAny<string>(), It.IsAny<int>()))
            .ReturnsAsync((Items: new List<MessageEntity> { MakeMessage("M1"), MakeMessage("M2"), MakeMessage("M3") }, Total: 3));
-        EntryBarViewModel vm = new(svc.Object, Format, PriorityProvider);
+        EntryBarViewModel vm = new(svc.Object, Format, PriorityProvider, TagConfiguration);
         await vm.LoadFolder(MakeFolder("root-inbox", FolderType.Inbox));
         vm.SelectEntry(vm.Entries[0]);
 
@@ -258,7 +260,7 @@ public sealed class EntryBarViewModelTests
         Mock<IEntryService> svc = new();
         svc.Setup(s => s.GetMessages(It.IsAny<string>(), It.IsAny<int>()))
            .ReturnsAsync((Items: new List<MessageEntity> { MakeMessage("M1"), MakeMessage("M2") }, Total: 2));
-        EntryBarViewModel vm = new(svc.Object, Format, PriorityProvider);
+        EntryBarViewModel vm = new(svc.Object, Format, PriorityProvider, TagConfiguration);
         await vm.LoadFolder(MakeFolder("root-inbox", FolderType.Inbox));
 
         // Plain click on entry A (as the View's SelectionChanged would report it).
@@ -279,7 +281,7 @@ public sealed class EntryBarViewModelTests
         Mock<IEntryService> svc = new();
         svc.Setup(s => s.GetMessages(It.IsAny<string>(), It.IsAny<int>()))
            .ReturnsAsync((Items: new List<MessageEntity> { MakeMessage("M1") }, Total: 1));
-        EntryBarViewModel vm = new(svc.Object, Format, PriorityProvider);
+        EntryBarViewModel vm = new(svc.Object, Format, PriorityProvider, TagConfiguration);
         await vm.LoadFolder(MakeFolder("root-inbox", FolderType.Inbox));
         EntryItemViewModel entry = vm.Entries[0];
         vm.SelectEntry(entry);
@@ -297,7 +299,7 @@ public sealed class EntryBarViewModelTests
         Mock<IEntryService> svc = new();
         svc.Setup(s => s.GetMessages(It.IsAny<string>(), It.IsAny<int>()))
            .ReturnsAsync((Items: new List<MessageEntity> { MakeMessage("M1"), MakeMessage("M2") }, Total: 2));
-        EntryBarViewModel vm = new(svc.Object, Format, PriorityProvider);
+        EntryBarViewModel vm = new(svc.Object, Format, PriorityProvider, TagConfiguration);
         await vm.LoadFolder(MakeFolder("root-inbox", FolderType.Inbox));
         vm.SelectEntries([vm.Entries[0], vm.Entries[1]], []);
 
@@ -315,7 +317,7 @@ public sealed class EntryBarViewModelTests
         Mock<IEntryService> svc = new();
         svc.Setup(s => s.GetMessages(It.IsAny<string>(), It.IsAny<int>()))
            .ReturnsAsync((Items: new List<MessageEntity> { MakeMessage("M1") }, Total: 1));
-        EntryBarViewModel vm = new(svc.Object, Format, PriorityProvider);
+        EntryBarViewModel vm = new(svc.Object, Format, PriorityProvider, TagConfiguration);
         await vm.LoadFolder(MakeFolder("root-inbox", FolderType.Inbox));
         vm.SelectEntry(vm.Entries[0]);
         bool raised = false;
@@ -330,7 +332,7 @@ public sealed class EntryBarViewModelTests
     [Fact]
     public void DeselectEntry_NothingSelected_IsNoOp()
     {
-        EntryBarViewModel vm = new(new Mock<IEntryService>().Object, Format, PriorityProvider);
+        EntryBarViewModel vm = new(new Mock<IEntryService>().Object, Format, PriorityProvider, TagConfiguration);
 
         Exception? ex = Record.Exception(() => vm.DeselectEntry());
 
@@ -347,7 +349,7 @@ public sealed class EntryBarViewModelTests
         Mock<IEntryService> svc = new();
         svc.Setup(s => s.GetMessages(It.IsAny<string>(), It.IsAny<int>()))
            .ReturnsAsync((Items: new List<MessageEntity> { MakeMessage("M1") }, Total: 1));
-        EntryBarViewModel vm = new(svc.Object, Format, PriorityProvider);
+        EntryBarViewModel vm = new(svc.Object, Format, PriorityProvider, TagConfiguration);
 
         await vm.LoadFolder(MakeFolder("root-outbox", FolderType.Outbox));
         Assert.True(vm.Entries[0].IsOutboundMessage);
@@ -371,7 +373,7 @@ public sealed class EntryBarViewModelTests
         Mock<IEntryService> svc = new();
         svc.Setup(s => s.GetMessages(It.IsAny<string>(), It.IsAny<int>()))
            .ReturnsAsync((Items: new List<MessageEntity> { MakeMessage("M1", priority: 2) }, Total: 1));
-        EntryBarViewModel vm = new(svc.Object, Format, priorityProvider.Object);
+        EntryBarViewModel vm = new(svc.Object, Format, priorityProvider.Object, TagConfiguration);
 
         await vm.LoadFolder(MakeFolder("root-inbox", FolderType.Inbox));
 
@@ -391,7 +393,7 @@ public sealed class EntryBarViewModelTests
         Mock<IEntryService> svc = new();
         svc.Setup(s => s.GetMessages(It.IsAny<string>(), It.IsAny<int>()))
            .ReturnsAsync((Items: new List<MessageEntity> { MakeMessage("M1", priority: 1) }, Total: 1));
-        EntryBarViewModel vm = new(svc.Object, Format, priorityProvider.Object);
+        EntryBarViewModel vm = new(svc.Object, Format, priorityProvider.Object, TagConfiguration);
 
         await vm.LoadFolder(MakeFolder("root-outbox", FolderType.Outbox));
 
@@ -407,11 +409,71 @@ public sealed class EntryBarViewModelTests
         Mock<IEntryService> svc = new();
         svc.Setup(s => s.GetMessages(It.IsAny<string>(), It.IsAny<int>()))
            .ReturnsAsync((Items: new List<MessageEntity> { MakeMessage("M1", priority: 99) }, Total: 1));
-        EntryBarViewModel vm = new(svc.Object, Format, priorityProvider.Object);
+        EntryBarViewModel vm = new(svc.Object, Format, priorityProvider.Object, TagConfiguration);
 
         await vm.LoadFolder(MakeFolder("root-inbox", FolderType.Inbox));
 
         Assert.Equal("99", vm.Entries[0].PriorityText);
+    }
+
+    // ── TagText ───────────────────────────────────────────────────────────────
+
+    /// <summary>Inbox entries carry a TagText label from the message's stored tag when tags are enabled.</summary>
+    [Fact]
+    public async Task LoadFolder_Inbox_TagsEnabled_SetsTagTextFromMessage()
+    {
+        Mock<IEntryService> svc = new();
+        svc.Setup(s => s.GetMessages(It.IsAny<string>(), It.IsAny<int>()))
+           .ReturnsAsync((Items: new List<MessageEntity> { MakeMessage("M1", tag: "URGENT") }, Total: 1));
+        EntryBarViewModel vm = new(svc.Object, Format, PriorityProvider, TagConfiguration);
+
+        await vm.LoadFolder(MakeFolder("root-inbox", FolderType.Inbox));
+
+        Assert.Equal("URGENT", vm.Entries[0].TagText);
+    }
+
+    /// <summary>Outbox entries carry a TagText label the same way as Inbox entries.</summary>
+    [Fact]
+    public async Task LoadFolder_Outbox_TagsEnabled_SetsTagTextFromMessage()
+    {
+        Mock<IEntryService> svc = new();
+        svc.Setup(s => s.GetMessages(It.IsAny<string>(), It.IsAny<int>()))
+           .ReturnsAsync((Items: new List<MessageEntity> { MakeMessage("M1", tag: "URGENT") }, Total: 1));
+        EntryBarViewModel vm = new(svc.Object, Format, PriorityProvider, TagConfiguration);
+
+        await vm.LoadFolder(MakeFolder("root-outbox", FolderType.Outbox));
+
+        Assert.Equal("URGENT", vm.Entries[0].TagText);
+    }
+
+    /// <summary>An empty stored tag yields a null TagText rather than an empty string.</summary>
+    [Fact]
+    public async Task LoadFolder_Inbox_EmptyTag_TagTextIsNull()
+    {
+        Mock<IEntryService> svc = new();
+        svc.Setup(s => s.GetMessages(It.IsAny<string>(), It.IsAny<int>()))
+           .ReturnsAsync((Items: new List<MessageEntity> { MakeMessage("M1") }, Total: 1));
+        EntryBarViewModel vm = new(svc.Object, Format, PriorityProvider, TagConfiguration);
+
+        await vm.LoadFolder(MakeFolder("root-inbox", FolderType.Inbox));
+
+        Assert.Null(vm.Entries[0].TagText);
+    }
+
+    /// <summary>When tags are disabled, TagText is null even for a message with a stored tag.</summary>
+    [Fact]
+    public async Task LoadFolder_Inbox_TagsDisabled_TagTextIsNull()
+    {
+        Mock<IMessageTagConfiguration> tagConfiguration = new();
+        tagConfiguration.Setup(t => t.TagsEnabled).Returns(false);
+        Mock<IEntryService> svc = new();
+        svc.Setup(s => s.GetMessages(It.IsAny<string>(), It.IsAny<int>()))
+           .ReturnsAsync((Items: new List<MessageEntity> { MakeMessage("M1", tag: "URGENT") }, Total: 1));
+        EntryBarViewModel vm = new(svc.Object, Format, PriorityProvider, tagConfiguration.Object);
+
+        await vm.LoadFolder(MakeFolder("root-inbox", FolderType.Inbox));
+
+        Assert.Null(vm.Entries[0].TagText);
     }
 
     // ── DeleteEntry – outbound disambiguation ────────────────────────────────
@@ -424,7 +486,7 @@ public sealed class EntryBarViewModelTests
         svc.Setup(s => s.GetMessages(It.IsAny<string>(), It.IsAny<int>()))
            .ReturnsAsync((Items: new List<MessageEntity> { MakeMessage("M1") }, Total: 1));
         svc.Setup(s => s.DeleteEntry(It.IsAny<string>(), It.IsAny<EntryType>(), It.IsAny<bool>())).Returns(Task.CompletedTask);
-        EntryBarViewModel vm = new(svc.Object, Format, PriorityProvider);
+        EntryBarViewModel vm = new(svc.Object, Format, PriorityProvider, TagConfiguration);
         await vm.LoadFolder(MakeFolder("root-outbox", FolderType.Outbox));
         EntryItemViewModel entry = vm.Entries[0];
 
@@ -442,7 +504,7 @@ public sealed class EntryBarViewModelTests
         Mock<IEntryService> svc = new();
         svc.Setup(s => s.GetMessages(It.IsAny<string>(), It.IsAny<int>()))
            .ReturnsAsync((Items: new List<MessageEntity> { MakeMessage("MSG42") }, Total: 1));
-        EntryBarViewModel vm = new(svc.Object, Format, PriorityProvider);
+        EntryBarViewModel vm = new(svc.Object, Format, PriorityProvider, TagConfiguration);
         await vm.LoadFolder(MakeFolder("root-outbox", FolderType.Outbox));
 
         await vm.UpdateEntryStatus("MSG42", DestinationStatus.Confirmed);
@@ -457,7 +519,7 @@ public sealed class EntryBarViewModelTests
         Mock<IEntryService> svc = new();
         svc.Setup(s => s.GetMessages(It.IsAny<string>(), It.IsAny<int>()))
            .ReturnsAsync((Items: new List<MessageEntity>(), Total: 0));
-        EntryBarViewModel vm = new(svc.Object, Format, PriorityProvider);
+        EntryBarViewModel vm = new(svc.Object, Format, PriorityProvider, TagConfiguration);
         await vm.LoadFolder(MakeFolder("root-outbox", FolderType.Outbox));
 
         Exception? ex = await Record.ExceptionAsync(() => vm.UpdateEntryStatus("UNKNOWN", DestinationStatus.Failed));
@@ -474,7 +536,7 @@ public sealed class EntryBarViewModelTests
         svc.Setup(s => s.GetMessages(It.IsAny<string>(), It.IsAny<int>()))
            .ReturnsAsync((Items: new List<MessageEntity> { MakeMessage("M1") }, Total: 1));
         svc.Setup(s => s.DeleteEntry(It.IsAny<string>(), It.IsAny<EntryType>())).Returns(Task.CompletedTask);
-        EntryBarViewModel vm = new(svc.Object, Format, PriorityProvider);
+        EntryBarViewModel vm = new(svc.Object, Format, PriorityProvider, TagConfiguration);
         await vm.LoadFolder(MakeFolder("root-inbox", FolderType.Inbox));
         EntryItemViewModel entry = vm.Entries[0];
 
@@ -493,7 +555,7 @@ public sealed class EntryBarViewModelTests
         Mock<IEntryService> svc = new();
         svc.Setup(s => s.GetDrafts(It.IsAny<string>(), It.IsAny<int>(), It.IsAny<bool>()))
            .ReturnsAsync((Items: new List<DraftEntity> { MakeDraft() }, Total: 1));
-        EntryBarViewModel vm = new(svc.Object, Format, PriorityProvider);
+        EntryBarViewModel vm = new(svc.Object, Format, PriorityProvider, TagConfiguration);
         await vm.LoadFolder(MakeFolder("root-drafts", FolderType.Drafts));
         string id = vm.Entries[0].Id;
 

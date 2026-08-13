@@ -132,6 +132,123 @@ public sealed class ControlProviderTests
         Assert.True(provider.ComposeAlertsEnabled);
     }
 
+    // ── MessagePriorityOptionExtensions ──────────────────────────────────────
+
+    /// <summary>GetLabel returns the matching option's Name.</summary>
+    [Fact]
+    public void MessagePriorityOptionExtensions_GetLabel_ReturnsMatchingName()
+    {
+        IReadOnlyList<MessagePriorityOption> priorities =
+        [
+            new MessagePriorityOption { Name = "Low", Value = 0 },
+            new MessagePriorityOption { Name = "High", Value = 2 }
+        ];
+
+        Assert.Equal("High", priorities.GetLabel(2));
+    }
+
+    /// <summary>GetLabel falls back to the plain numeric value when no option matches.</summary>
+    [Fact]
+    public void MessagePriorityOptionExtensions_GetLabel_NoMatch_FallsBackToNumber()
+    {
+        IReadOnlyList<MessagePriorityOption> priorities = [new MessagePriorityOption { Name = "Normal", Value = 0 }];
+
+        Assert.Equal("99", priorities.GetLabel(99));
+    }
+
+    // ── MessageTagConfiguration ───────────────────────────────────────────────
+
+    /// <summary>TagsEnabled defaults to true when not configured.</summary>
+    [Fact]
+    public void MessageTagConfiguration_DefaultsToEnabled()
+    {
+        MessageTagConfiguration provider = new(new EngineConfig());
+        Assert.True(provider.TagsEnabled);
+    }
+
+    /// <summary>TagsEnabled reflects an explicit false override from config.</summary>
+    [Fact]
+    public void MessageTagConfiguration_ReturnsFalseWhenDisabledInConfig()
+    {
+        MessageTagConfiguration provider = new(new EngineConfig { MessageTagsEnabled = false });
+        Assert.False(provider.TagsEnabled);
+    }
+
+    /// <summary>TagLabel defaults to "Tag" when not configured.</summary>
+    [Fact]
+    public void MessageTagConfiguration_TagLabel_DefaultsToTag()
+    {
+        MessageTagConfiguration provider = new(new EngineConfig());
+        Assert.Equal("Tag", provider.TagLabel);
+    }
+
+    /// <summary>TagLabel reflects an explicit override from config.</summary>
+    [Fact]
+    public void MessageTagConfiguration_TagLabel_ReturnsConfiguredValue()
+    {
+        MessageTagConfiguration provider = new(new EngineConfig { MessageTagLabel = "Category" });
+        Assert.Equal("Category", provider.TagLabel);
+    }
+
+    // ── MessageTagPriorityPolicy / TagPriorityBlockExtensions ────────────────
+
+    /// <summary>Default MessageTagPriorityPolicy returns no blocked combinations.</summary>
+    [Fact]
+    public void MessageTagPriorityPolicy_ReturnsNoBlocksByDefault()
+    {
+        MessageTagPriorityPolicy policy = new();
+        Assert.Empty(policy.GetBlockedCombinations());
+    }
+
+    /// <summary>A rule with only Tag set blocks that tag regardless of priority.</summary>
+    [Theory]
+    [InlineData(0)]
+    [InlineData(1)]
+    [InlineData(99)]
+    public void TagPriorityBlockExtensions_IsBlocked_TagWithNullPriority_BlocksAnyPriority(int priority)
+    {
+        IReadOnlyList<TagPriorityBlock> blocks = [new TagPriorityBlock { Tag = "SPAM", Priority = null }];
+        Assert.True(blocks.IsBlocked("SPAM", priority));
+    }
+
+    /// <summary>A rule with only Priority set blocks that priority regardless of tag.</summary>
+    [Theory]
+    [InlineData("URGENT")]
+    [InlineData("")]
+    [InlineData(null)]
+    public void TagPriorityBlockExtensions_IsBlocked_PriorityWithNullTag_BlocksAnyTag(string? tag)
+    {
+        IReadOnlyList<TagPriorityBlock> blocks = [new TagPriorityBlock { Tag = null, Priority = 2 }];
+        Assert.True(blocks.IsBlocked(tag, 2));
+    }
+
+    /// <summary>A rule with both fields set only blocks that exact tag/priority pair.</summary>
+    [Fact]
+    public void TagPriorityBlockExtensions_IsBlocked_SpecificPair_OnlyBlocksExactMatch()
+    {
+        IReadOnlyList<TagPriorityBlock> blocks = [new TagPriorityBlock { Tag = "URGENT", Priority = 2 }];
+
+        Assert.True(blocks.IsBlocked("URGENT", 2));
+        Assert.False(blocks.IsBlocked("URGENT", 1));
+        Assert.False(blocks.IsBlocked("OTHER", 2));
+    }
+
+    /// <summary>Tag matching is case-insensitive.</summary>
+    [Fact]
+    public void TagPriorityBlockExtensions_IsBlocked_TagMatchIsCaseInsensitive()
+    {
+        IReadOnlyList<TagPriorityBlock> blocks = [new TagPriorityBlock { Tag = "SPAM", Priority = null }];
+        Assert.True(blocks.IsBlocked("spam", 0));
+    }
+
+    /// <summary>No rule matches → not blocked.</summary>
+    [Fact]
+    public void TagPriorityBlockExtensions_IsBlocked_NoMatchingRule_ReturnsFalse()
+    {
+        IReadOnlyList<TagPriorityBlock> blocks = [new TagPriorityBlock { Tag = "SPAM", Priority = null }];
+        Assert.False(blocks.IsBlocked("OK", 0));
+    }
+
     // ── OftPeerCertificateName ───────────────────────────────────────────────
 
     /// <summary>Null config → auto name "USER-{userName}".</summary>

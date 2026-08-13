@@ -23,6 +23,8 @@ public sealed class DraftEntity
     public bool IsAlert { get; set; }
     /// <summary>Priority number this draft should be sent at; see <see cref="IMessageFormat.GetPriority"/>.</summary>
     public int Priority { get; set; }
+    /// <summary>Tag identifying the type of this draft; see <see cref="IMessageFormat.GetTag"/>.</summary>
+    public string Tag { get; set; } = string.Empty;
     /// <summary>UTC timestamp when the draft was sent, or <c>null</c> if not yet sent.</summary>
     public DateTime? SentAt { get; set; }
     /// <summary>Identifier of the folder this draft belongs to.</summary>

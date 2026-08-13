@@ -94,6 +94,8 @@ Stored in both Inbox (received) and Outbox (sent).
 | `Addresses` | `List<AddressData>` | |
 | `IsSent` | `bool` | `true` after successful send |
 | `IsAlert` | `bool` | Whether this draft will be sent as an alert; see `Docs/Peer.md#alert-messages` |
+| `Priority` | `int` | Priority number this draft should be sent at; see `Docs/Control.md#imessagepriorityprovider` |
+| `Tag` | `string` | Short user-inputted tag identifying the type of this message; see `Docs/Control.md#imessagetagconfiguration` |
 | `SentAt` | `DateTime?` | UTC send time |
 | `ModifiedAt` | `DateTime` | UTC last edit time |
 | `FolderId` | `string` | |
