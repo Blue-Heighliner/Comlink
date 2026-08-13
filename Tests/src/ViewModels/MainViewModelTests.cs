@@ -30,6 +30,9 @@ public sealed class MainViewModelTests
         public Mock<IAppNameProvider> AppName { get; } = new();
         public Mock<IKioskModeProvider> KioskMode { get; } = new();
         public Mock<IBodyDocumentFactory> BodyDocumentFactory { get; } = new();
+        public Mock<IMessagePriorityProvider> PriorityProvider { get; } = new();
+        public Mock<IAlertConfiguration> AlertConfiguration { get; } = new();
+        public Mock<IAlertComposeConfiguration> AlertComposeConfiguration { get; } = new();
         public IMessageFormat MessageFormat { get; } = new TestMessageFormat();
 
         public MainViewModel BuildVm()
@@ -37,6 +40,9 @@ public sealed class MainViewModelTests
             AppName.Setup(a => a.AppName).Returns("TestApp");
             FolderBar.Setup(f => f.RootFolders).Returns([]);
             BodyDocumentFactory.Setup(f => f.Create()).Returns(new StringBodyDocument());
+            PriorityProvider.Setup(p => p.GetPriorities()).Returns([new MessagePriorityOption { Name = "Normal", Value = 0 }]);
+            AlertConfiguration.Setup(a => a.AlertText).Returns("ALERT");
+            AlertComposeConfiguration.Setup(a => a.ComposeAlertsEnabled).Returns(true);
 
             return new MainViewModel(
                 Connection.Object,
@@ -54,6 +60,9 @@ public sealed class MainViewModelTests
                 KioskMode.Object,
                 NoLogger,
                 BodyDocumentFactory.Object,
+                PriorityProvider.Object,
+                AlertConfiguration.Object,
+                AlertComposeConfiguration.Object,
                 MessageFormat);
         }
     }

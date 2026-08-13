@@ -18,9 +18,10 @@ public interface IServiceConnection
     /// <summary>
     /// Sends a message with the given <paramref name="subject"/> and <paramref name="body"/> to the specified
     /// <paramref name="addresses"/>. When <paramref name="isAlert"/> is <see langword="true"/>, recipients'
-    /// Client-mode UI alarms until the message is read; see <c>Docs/ViewModels.md</c>.
+    /// Client-mode UI alarms until the message is read; see <c>Docs/ViewModels.md</c>. <paramref name="priority"/>
+    /// is used verbatim as the OFT send priority (see <see cref="IMessageFormat.GetPriority"/>).
     /// </summary>
-    Task<SendMessageResult?> SendMessage(string subject, string body, List<AddressRequest> addresses, bool isAlert = false, CancellationToken cancellation = default);
+    Task<SendMessageResult?> SendMessage(string subject, string body, List<AddressRequest> addresses, bool isAlert = false, int priority = 0, CancellationToken cancellation = default);
     /// <summary>
     /// Marks the Inbox record for <paramref name="messageId"/> as read (no-op if already read or not
     /// found) and sends a user-read confirmation message back to the original sender so it can advance

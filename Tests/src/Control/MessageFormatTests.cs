@@ -47,6 +47,7 @@ public sealed class MessageFormatTests
         Format.SetSentAt(message, sentAt);
         Format.SetConfirmationMessageId(message, "MSG0");
         Format.SetIsAlert(message, true);
+        Format.SetPriority(message, 3);
 
         Assert.Equal("MSG1", Format.GetMessageId(message));
         Assert.Equal("ALPHA", Format.GetFromUser(message));
@@ -55,6 +56,7 @@ public sealed class MessageFormatTests
         Assert.Equal(sentAt, Format.GetSentAt(message));
         Assert.Equal("MSG0", Format.GetConfirmationMessageId(message));
         Assert.True(Format.GetIsAlert(message));
+        Assert.Equal(3, Format.GetPriority(message));
 
         List<MessageAddress> roundTripped = Format.GetAddresses(message);
         Assert.Equal(2, roundTripped.Count);

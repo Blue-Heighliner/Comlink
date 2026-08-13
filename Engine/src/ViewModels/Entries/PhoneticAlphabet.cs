@@ -1,7 +1,7 @@
 namespace BlueHeighliner.Comlink.Engine.ViewModels.Entries;
 
 /// <summary>
-/// ICAO/NATO phonetic alphabet and spelled-out digit lookup, used by the draft body editor's PLSO
+/// Standard phonetic spelling alphabet and spelled-out digit lookup, used by the draft body editor's PLSO
 /// (Phonetic Language Spell Out) mode to substitute a typed letter or digit with its phonetic word.
 /// </summary>
 public static class PhoneticAlphabet

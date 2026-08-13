@@ -20,6 +20,8 @@ internal sealed class TestMessage
     [ProtoMember(7)] public string ConfirmationMessageId { get; set; } = string.Empty;
     /// <summary>Whether this message is an alert.</summary>
     [ProtoMember(8)] public bool IsAlert { get; set; }
+    /// <summary>Priority number of this message.</summary>
+    [ProtoMember(9)] public int Priority { get; set; }
 }
 
 /// <summary>A single address entry within a <see cref="TestMessage"/>.</summary>
@@ -76,4 +78,8 @@ internal sealed class TestMessageFormat : MessageFormat<TestMessage>
     protected override bool GetIsAlert(TestMessage message) => message.IsAlert;
     /// <inheritdoc />
     protected override void SetIsAlert(TestMessage message, bool value) => message.IsAlert = value;
+    /// <inheritdoc />
+    protected override int GetPriority(TestMessage message) => message.Priority;
+    /// <inheritdoc />
+    protected override void SetPriority(TestMessage message, int value) => message.Priority = value;
 }

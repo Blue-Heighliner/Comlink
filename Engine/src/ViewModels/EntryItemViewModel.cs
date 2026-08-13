@@ -16,6 +16,8 @@ public sealed partial class EntryItemViewModel : ObservableObject
     public string Title { get; }
     /// <summary>Gets an optional secondary line of text shown below the title.</summary>
     public string? SecondaryText { get; }
+    /// <summary>Gets an optional priority label shown below <see cref="SecondaryText"/>; see <see cref="IMessagePriorityProvider"/>.</summary>
+    public string? PriorityText { get; }
     /// <summary>Gets an optional formatted timestamp string for display.</summary>
     public string? TimeText { get; }
     /// <summary>Gets a static status string that takes precedence when no overall status is set.</summary>
@@ -49,17 +51,19 @@ public sealed partial class EntryItemViewModel : ObservableObject
     /// <param name="entryType">Type of this entry.</param>
     /// <param name="sortDate">Date used for chronological ordering.</param>
     /// <param name="secondaryText">Optional secondary line of text shown below the title.</param>
+    /// <param name="priorityText">Optional priority label shown below <paramref name="secondaryText"/>.</param>
     /// <param name="timeText">Optional formatted timestamp string.</param>
     /// <param name="fixedStatusText">Optional static status string that takes precedence when no overall status is set.</param>
     /// <param name="isOutboundMessage">For Message entries, whether this row represents the Outbox (sent) record rather than the Inbox (received) record.</param>
     public EntryItemViewModel(string id, string title, EntryType entryType, DateTime sortDate,
-        string? secondaryText = null, string? timeText = null, string? fixedStatusText = null, bool isOutboundMessage = false)
+        string? secondaryText = null, string? priorityText = null, string? timeText = null, string? fixedStatusText = null, bool isOutboundMessage = false)
     {
         Id = id;
         Title = title;
         EntryType = entryType;
         SortDate = sortDate;
         SecondaryText = secondaryText;
+        PriorityText = priorityText;
         TimeText = timeText;
         FixedStatusText = fixedStatusText;
         IsOutboundMessage = isOutboundMessage;

@@ -45,6 +45,13 @@ public sealed class EngineConfig
     public bool? QuickConfirmationEnabled { get; init; }
 
     /// <summary>
+    /// Whether the draft editor's alert checkbox is shown, letting the user mark and send a draft as an
+    /// alert. <see langword="null"/> uses the Engine default (<see langword="true"/>). Disabling this never
+    /// prevents receiving and alarming on alerts sent by a peer.
+    /// </summary>
+    public bool? ComposeAlertsEnabled { get; init; }
+
+    /// <summary>
     /// User definitions and endpoint overrides. Keys are user names (case-insensitive).
     /// Entries may override an existing user's endpoint or introduce an entirely new user.
     /// </summary>

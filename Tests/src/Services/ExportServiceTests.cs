@@ -38,11 +38,12 @@ public sealed class ExportServiceTests : IDisposable
 
     private string ZipPath() => Path.Combine(_exportDir, "export" + IExportService.PackageExtension);
 
-    private async Task<MessageEntity> InsertMessage(string messageId, string subject, bool isOutbound)
+    private async Task<MessageEntity> InsertMessage(string messageId, string subject, bool isOutbound, int priority = 0)
     {
         object message = MessageFormat.CreateMessage();
         MessageFormat.SetMessageId(message, messageId);
         MessageFormat.SetSubject(message, subject);
+        MessageFormat.SetPriority(message, priority);
         MessageEntity entity = new() { MessageId = messageId, Message = message, FolderId = "root-inbox", IsOutbound = isOutbound };
         await _messages.Insert(entity);
         return entity;
@@ -88,8 +89,8 @@ public sealed class ExportServiceTests : IDisposable
     [Fact]
     public async Task Export_WritesOneJsonFilePerEntry()
     {
-        await InsertMessage("M1", "Hello World", isOutbound: false);
-        DraftEntity draft = await _drafts.Insert(new DraftEntity { Subject = "Draft Subject", FolderId = "root-drafts" });
+        await InsertMessage("M1", "Hello World", isOutbound: false, priority: 3);
+        DraftEntity draft = await _drafts.Insert(new DraftEntity { Subject = "Draft Subject", FolderId = "root-drafts", Priority = 2 });
         string zipPath = ZipPath();
 
         List<ExportEntryRef> refs =
@@ -109,6 +110,7 @@ public sealed class ExportServiceTests : IDisposable
         {
             MessageExportData? data = JsonSerializer.Deserialize<MessageExportData>(reader.ReadToEnd());
             Assert.Equal("Hello World", data!.Subject);
+            Assert.Equal(3, data.Priority);
         }
 
         ZipArchiveEntry draftEntry = Assert.Single(archive.Entries, e => e.Name.Contains("Draft"));
@@ -116,6 +118,7 @@ public sealed class ExportServiceTests : IDisposable
         {
             DraftExportData? data = JsonSerializer.Deserialize<DraftExportData>(reader.ReadToEnd());
             Assert.Equal("Draft Subject", data!.Subject);
+            Assert.Equal(2, data.Priority);
         }
     }
 

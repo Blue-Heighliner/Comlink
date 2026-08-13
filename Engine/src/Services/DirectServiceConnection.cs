@@ -54,7 +54,8 @@ internal sealed class DirectServiceConnection : IServiceConnection
             Body = _messageFormat.GetBody(payload),
             Addresses = _messageFormat.GetAddresses(payload).Select(a => new AddressRequest { UserName = a.UserName, Type = a.Type.ToString() }).ToList(),
             SentAt = _messageFormat.GetSentAt(payload),
-            IsAlert = _messageFormat.GetIsAlert(payload)
+            IsAlert = _messageFormat.GetIsAlert(payload),
+            Priority = _messageFormat.GetPriority(payload)
         };
         await MessageReceived(evt);
     }
@@ -89,7 +90,7 @@ internal sealed class DirectServiceConnection : IServiceConnection
         => _userService.Install(userCode, cancellation);
 
     /// <inheritdoc />
-    public async Task<SendMessageResult?> SendMessage(string subject, string body, List<AddressRequest> addresses, bool isAlert = false, CancellationToken cancellation = default)
+    public async Task<SendMessageResult?> SendMessage(string subject, string body, List<AddressRequest> addresses, bool isAlert = false, int priority = 0, CancellationToken cancellation = default)
     {
         UserInfo? userInfo = _userService.GetCurrentUserInfo();
         if (userInfo is null) return null;
@@ -99,7 +100,8 @@ internal sealed class DirectServiceConnection : IServiceConnection
             Subject = subject,
             Body = body,
             Addresses = addresses.Select(a => new AddressPayload { UserName = a.UserName, Type = a.Type }).ToList(),
-            IsAlert = isAlert
+            IsAlert = isAlert,
+            Priority = priority
         };
 
         (string messageId, IReadOnlyList<UserDeliveryResult> userResults) = await _messageRouting.Route(userInfo.Name, payload, cancellation);

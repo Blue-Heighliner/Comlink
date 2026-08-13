@@ -62,14 +62,15 @@ public sealed class InterfaceServiceTests
             Subject = "Hi",
             Body = "Body",
             Addresses = [new TestAddressEntry { UserName = "DEST", Type = "To" }],
-            IsAlert = true
+            IsAlert = true,
+            Priority = 2
         };
         using OwnedBuffer buf = PeerSerializer.Serialize(incoming);
 
         await svc.HandleInterfaceMessage(buf.Memory.ToArray());
 
         routing.Verify(r => r.Route("LOCAL", It.Is<SendMessagePayload>(p =>
-            p.Subject == "Hi" && p.Body == "Body" && p.Addresses.Count == 1 && p.Addresses[0].UserName == "DEST" && p.IsAlert),
+            p.Subject == "Hi" && p.Body == "Body" && p.Addresses.Count == 1 && p.Addresses[0].UserName == "DEST" && p.IsAlert && p.Priority == 2),
             It.IsAny<CancellationToken>()), Times.Once);
     }
 
@@ -105,6 +106,45 @@ public sealed class InterfaceServiceTests
         await svc.HandleInterfaceMessage(new byte[] { 0xFF, 0xFE, 0xFD });
 
         routing.Verify(r => r.Route(It.IsAny<string>(), It.IsAny<SendMessagePayload>(), It.IsAny<CancellationToken>()), Times.Never);
+    }
+
+    // ── Mirroring to connected interfaces ────────────────────────────────────
+
+    /// <summary>An inbound peer message mirrored to a connected interface is sent at the message's own OFT priority.</summary>
+    [Fact]
+    public async Task OnMessageDelivered_MirrorsToConnectedInterface_AtMessagePriority()
+    {
+        Mock<IOftListener> listener = new();
+        listener.SetupProperty(l => l.ConnectedHandler);
+        Mock<IOftHoster> hoster = new();
+        hoster.Setup(h => h.Host(It.IsAny<IPEndPoint>(), It.IsAny<OftConnectionOptions>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(listener.Object);
+        Mock<IMessageRoutingService> routing = new();
+        Mock<IUserService> user = new();
+        FakePeerService peer = new();
+
+        InterfaceService svc = new(hoster.Object, new PortConfiguration(new EngineConfig()), routing.Object, user.Object, Format, peer);
+
+        using CancellationTokenSource cts = new();
+        _ = svc.Start(cts.Token);
+
+        using CancellationTokenSource timeout = new(TimeSpan.FromSeconds(5));
+        while (listener.Object.ConnectedHandler is null)
+        {
+            timeout.Token.ThrowIfCancellationRequested();
+            await Task.Delay(10);
+        }
+
+        Mock<IOftConnection> connection = new();
+        connection.Setup(c => c.Send(It.IsAny<ReadOnlyMemory<byte>>(), It.IsAny<int>(), It.IsAny<object?>(), It.IsAny<CancellationToken>()))
+            .Returns(Task.CompletedTask);
+        listener.Object.ConnectedHandler!(connection.Object);
+
+        await peer.FireMessageDelivered(new TestMessage { MessageId = "M1", FromUser = "REMOTE", Priority = 3 });
+
+        connection.Verify(c => c.Send(It.IsAny<ReadOnlyMemory<byte>>(), 3, It.IsAny<object?>(), It.IsAny<CancellationToken>()), Times.Once);
+
+        cts.Cancel();
     }
 
     // ── End-to-end over real OFT ──────────────────────────────────────────────

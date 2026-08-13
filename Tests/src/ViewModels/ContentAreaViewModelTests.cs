@@ -17,7 +17,7 @@ public sealed class ContentAreaViewModelTests
         public Task<UserInfo?> GetUserInfo(CancellationToken cancellation = default) => Task.FromResult<UserInfo?>(null);
         public Task<List<string>> GetUserNames(CancellationToken cancellation = default) => Task.FromResult(new List<string>());
         public Task<UserInfo?> InstallUser(string userCode, CancellationToken cancellation = default) => Task.FromResult<UserInfo?>(null);
-        public Task<SendMessageResult?> SendMessage(string subject, string body, List<AddressRequest> addresses, bool isAlert = false, CancellationToken cancellation = default) => Task.FromResult<SendMessageResult?>(null);
+        public Task<SendMessageResult?> SendMessage(string subject, string body, List<AddressRequest> addresses, bool isAlert = false, int priority = 0, CancellationToken cancellation = default) => Task.FromResult<SendMessageResult?>(null);
 
         public Task<bool> MarkMessageRead(string messageId, CancellationToken cancellation = default)
         {
@@ -33,6 +33,27 @@ public sealed class ContentAreaViewModelTests
 
     private static readonly IMessageFormat Format = new TestMessageFormat();
 
+    private static IMessagePriorityProvider MakePriorityProvider()
+    {
+        Mock<IMessagePriorityProvider> mock = new();
+        mock.Setup(p => p.GetPriorities()).Returns([new MessagePriorityOption { Name = "Normal", Value = 0 }]);
+        return mock.Object;
+    }
+
+    private static IAlertConfiguration MakeAlertConfiguration()
+    {
+        Mock<IAlertConfiguration> mock = new();
+        mock.Setup(a => a.AlertText).Returns("ALERT");
+        return mock.Object;
+    }
+
+    private static IAlertComposeConfiguration MakeAlertComposeConfiguration()
+    {
+        Mock<IAlertComposeConfiguration> mock = new();
+        mock.Setup(a => a.ComposeAlertsEnabled).Returns(true);
+        return mock.Object;
+    }
+
     private static ContentAreaViewModel Build(out FakeServiceConnection connection, string homeText = "HOME")
     {
         connection = new FakeServiceConnection();
@@ -45,7 +66,7 @@ public sealed class ContentAreaViewModelTests
         Mock<IActivityLogRepository> activityLogs = new();
         ILoggerFactory loggerFactory = LoggerFactory.Create(_ => { });
         return new ContentAreaViewModel(home.Object, entry.Object, connection, messages.Object,
-            drafts.Object, notes.Object, activityLogs.Object, Format, loggerFactory);
+            drafts.Object, notes.Object, activityLogs.Object, Format, MakePriorityProvider(), MakeAlertConfiguration(), MakeAlertComposeConfiguration(), loggerFactory);
     }
 
     // ── HomeText ──────────────────────────────────────────────────────────────
@@ -113,7 +134,7 @@ public sealed class ContentAreaViewModelTests
         MessageEntity outboundEntity = new() { MessageId = "MSG1", Message = new TestMessage(), IsOutbound = true };
         messages.Setup(m => m.Get("MSG1", true)).ReturnsAsync(outboundEntity);
         ContentAreaViewModel vm = new(home.Object, entry.Object, new FakeServiceConnection(), messages.Object,
-            drafts.Object, notes.Object, activityLogs.Object, Format, loggerFactory);
+            drafts.Object, notes.Object, activityLogs.Object, Format, MakePriorityProvider(), MakeAlertConfiguration(), MakeAlertComposeConfiguration(), loggerFactory);
         EntryItemViewModel item = new("MSG1", "Title", EntryType.Message, DateTime.UtcNow, isOutboundMessage: true);
 
         await vm.ShowEntry(item);
@@ -136,7 +157,7 @@ public sealed class ContentAreaViewModelTests
         MessageEntity inboundEntity = new() { MessageId = "MSG1", Message = new TestMessage(), IsOutbound = false };
         messages.Setup(m => m.Get("MSG1", false)).ReturnsAsync(inboundEntity);
         ContentAreaViewModel vm = new(home.Object, entry.Object, new FakeServiceConnection(), messages.Object,
-            drafts.Object, notes.Object, activityLogs.Object, Format, loggerFactory);
+            drafts.Object, notes.Object, activityLogs.Object, Format, MakePriorityProvider(), MakeAlertConfiguration(), MakeAlertComposeConfiguration(), loggerFactory);
         EntryItemViewModel item = new("MSG1", "Title", EntryType.Message, DateTime.UtcNow);
 
         await vm.ShowEntry(item);
@@ -160,7 +181,7 @@ public sealed class ContentAreaViewModelTests
         messages.Setup(m => m.Get("MSG1", false)).ReturnsAsync(inboundEntity);
         FakeServiceConnection connection = new();
         ContentAreaViewModel vm = new(home.Object, entry.Object, connection, messages.Object,
-            drafts.Object, notes.Object, activityLogs.Object, Format, loggerFactory);
+            drafts.Object, notes.Object, activityLogs.Object, Format, MakePriorityProvider(), MakeAlertConfiguration(), MakeAlertComposeConfiguration(), loggerFactory);
         EntryItemViewModel item = new("MSG1", "Title", EntryType.Message, DateTime.UtcNow);
 
         await vm.ShowEntry(item);
@@ -185,7 +206,7 @@ public sealed class ContentAreaViewModelTests
         messages.Setup(m => m.Get("MSG1", false)).ReturnsAsync(inboundEntity);
         FakeServiceConnection connection = new();
         ContentAreaViewModel vm = new(home.Object, entry.Object, connection, messages.Object,
-            drafts.Object, notes.Object, activityLogs.Object, Format, loggerFactory);
+            drafts.Object, notes.Object, activityLogs.Object, Format, MakePriorityProvider(), MakeAlertConfiguration(), MakeAlertComposeConfiguration(), loggerFactory);
         EntryItemViewModel item = new("MSG1", "Title", EntryType.Message, DateTime.UtcNow);
 
         await vm.ShowEntry(item);
@@ -208,7 +229,7 @@ public sealed class ContentAreaViewModelTests
         messages.Setup(m => m.Get("MSG1", true)).ReturnsAsync(outboundEntity);
         FakeServiceConnection connection = new();
         ContentAreaViewModel vm = new(home.Object, entry.Object, connection, messages.Object,
-            drafts.Object, notes.Object, activityLogs.Object, Format, loggerFactory);
+            drafts.Object, notes.Object, activityLogs.Object, Format, MakePriorityProvider(), MakeAlertConfiguration(), MakeAlertComposeConfiguration(), loggerFactory);
         EntryItemViewModel item = new("MSG1", "Title", EntryType.Message, DateTime.UtcNow, isOutboundMessage: true);
 
         await vm.ShowEntry(item);

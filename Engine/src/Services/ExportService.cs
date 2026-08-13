@@ -133,6 +133,7 @@ public sealed class ExportService : IExportService
             .ToList(),
         SentAt = _messageFormat.GetSentAt(entity.Message),
         IsAlert = _messageFormat.GetIsAlert(entity.Message),
+        Priority = _messageFormat.GetPriority(entity.Message),
         ReceivedAt = entity.ReceivedAt,
         ReadStatus = entity.ReadStatus,
         DeliveryStatuses = entity.DeliveryStatuses
@@ -146,6 +147,7 @@ public sealed class ExportService : IExportService
         Addresses = entity.Addresses,
         IsSent = entity.IsSent,
         IsAlert = entity.IsAlert,
+        Priority = entity.Priority,
         SentAt = entity.SentAt,
         CreatedAt = entity.CreatedAt,
         ModifiedAt = entity.ModifiedAt

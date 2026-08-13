@@ -61,6 +61,19 @@ public sealed class EntryServiceTests : IDisposable
         Assert.True(Format.GetIsAlert(sent.Message));
     }
 
+    /// <summary>StoreIncomingMessage/StoreSentMessage round-trip the Priority number onto the stored message.</summary>
+    [Fact]
+    public async Task StoreMessage_Priority_RoundTripsOnStoredMessage()
+    {
+        MessageEntity incoming = await _service.StoreIncomingMessage(
+            Guid.NewGuid().ToString(), "SenderUser", "Hello", "Body", [], DateTime.UtcNow, priority: 2);
+        Assert.Equal(2, Format.GetPriority(incoming.Message));
+
+        MessageEntity sent = await _service.StoreSentMessage(
+            Guid.NewGuid().ToString("N"), "Subj", "Body", [], DateTime.UtcNow, [], priority: 3);
+        Assert.Equal(3, Format.GetPriority(sent.Message));
+    }
+
     /// <summary>MarkMessageRead transitions an Inbox record from Received to Read and fires MessageRead.</summary>
     [Fact]
     public async Task MarkMessageRead_ReceivedMessage_TransitionsToReadAndFiresEvent()

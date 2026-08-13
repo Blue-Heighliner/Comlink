@@ -3,7 +3,7 @@ namespace BlueHeighliner.Comlink.Tests.ViewModels;
 /// <summary>Unit tests for <see cref="PhoneticAlphabet"/>.</summary>
 public sealed class PhoneticAlphabetTests
 {
-    /// <summary>Every letter A-Z maps to its correct ICAO/NATO phonetic word.</summary>
+    /// <summary>Every letter A-Z maps to its correct phonetic word.</summary>
     [Theory]
     [InlineData('A', "ALFA")]
     [InlineData('B', "BRAVO")]

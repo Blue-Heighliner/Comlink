@@ -50,6 +50,7 @@ public sealed partial class EntryBarViewModel : ObservableObject, IEntryBarViewM
 {
     private readonly IEntryService _entryService;
     private readonly IMessageFormat _messageFormat;
+    private readonly IMessagePriorityProvider _priorityProvider;
     private const int PageSize = 50;
 
     [ObservableProperty] private EntryItemViewModel? _selectedEntry;
@@ -71,10 +72,18 @@ public sealed partial class EntryBarViewModel : ObservableObject, IEntryBarViewM
     /// <summary>Initializes a new <see cref="EntryBarViewModel"/> with the required entry service.</summary>
     /// <param name="entryService">Entry service for data loading and delete operations.</param>
     /// <param name="messageFormat">Maps logical fields onto a message entity's stored message.</param>
-    public EntryBarViewModel(IEntryService entryService, IMessageFormat messageFormat)
+    /// <param name="priorityProvider">Provides the available message priority levels, used to label each Inbox/Outbox entry's priority.</param>
+    public EntryBarViewModel(IEntryService entryService, IMessageFormat messageFormat, IMessagePriorityProvider priorityProvider)
     {
         _entryService = entryService;
         _messageFormat = messageFormat;
+        _priorityProvider = priorityProvider;
+    }
+
+    private string GetPriorityLabel(object message)
+    {
+        int value = _messageFormat.GetPriority(message);
+        return _priorityProvider.GetPriorities().FirstOrDefault(p => p.Value == value)?.Name ?? value.ToString();
     }
 
     /// <summary>Loads the first page of entries for the given folder and resets pagination.</summary>
@@ -138,7 +147,7 @@ public sealed partial class EntryBarViewModel : ObservableObject, IEntryBarViewM
                 {
                     string timeText = m.ReceivedAt.ToString("dd-MMM-yyyy HH:mm").ToUpperInvariant();
                     EntryItemViewModel item = new(m.MessageId, _messageFormat.GetFromUser(m.Message), EntryType.Message, m.ReceivedAt,
-                        secondaryText: _messageFormat.GetSubject(m.Message), timeText: timeText);
+                        secondaryText: _messageFormat.GetSubject(m.Message), priorityText: GetPriorityLabel(m.Message), timeText: timeText);
                     item.OverallStatus = m.ReadStatus;
                     Entries.Add(item);
                 }
@@ -152,7 +161,7 @@ public sealed partial class EntryBarViewModel : ObservableObject, IEntryBarViewM
                     string destinations = string.Join(", ", _messageFormat.GetAddresses(m.Message).Select(a => a.UserName).Distinct());
                     string timeText = m.ReceivedAt.ToString("dd-MMM-yyyy HH:mm").ToUpperInvariant();
                     EntryItemViewModel item = new(m.MessageId, destinations, EntryType.Message, m.ReceivedAt,
-                        secondaryText: _messageFormat.GetSubject(m.Message), timeText: timeText, isOutboundMessage: true);
+                        secondaryText: _messageFormat.GetSubject(m.Message), priorityText: GetPriorityLabel(m.Message), timeText: timeText, isOutboundMessage: true);
                     item.OverallStatus = m.OverallStatus;
                     Entries.Add(item);
                 }

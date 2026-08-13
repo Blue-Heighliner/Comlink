@@ -23,13 +23,33 @@
                      FontSize="12"
                      Foreground="#858585"
                      VerticalAlignment="Center" />
-          <CheckBox Content="ALERT"
+          <ComboBox ItemsSource="{Binding AvailablePriorities}"
+                    SelectedItem="{Binding SelectedPriority}"
+                    IsVisible="{Binding !IsSent}"
+                    Background="#3C3C3C"
+                    BorderThickness="0"
+                    FontSize="12"
+                    Height="26"
+                    VerticalAlignment="Center">
+            <ComboBox.ItemTemplate>
+              <DataTemplate>
+                <TextBlock Text="{Binding Name}" />
+              </DataTemplate>
+            </ComboBox.ItemTemplate>
+          </ComboBox>
+          <CheckBox Content="{Binding AlertLabel}"
                      IsChecked="{Binding IsAlert}"
-                     IsVisible="{Binding !IsSent}"
                      Foreground="#E06C75"
                      FontSize="12"
                      FontWeight="SemiBold"
-                     VerticalAlignment="Center" />
+                     VerticalAlignment="Center">
+            <CheckBox.IsVisible>
+              <MultiBinding Converter="{x:Static BoolConverters.And}">
+                <Binding Path="!IsSent" />
+                <Binding Path="ComposeAlertsEnabled" />
+              </MultiBinding>
+            </CheckBox.IsVisible>
+          </CheckBox>
           <Button Classes="accent"
                   Content="SAVE"
                   Command="{Binding SaveCommand}"

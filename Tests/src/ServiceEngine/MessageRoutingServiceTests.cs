@@ -63,6 +63,25 @@ public sealed class MessageRoutingServiceTests
         Assert.True(Guid.TryParseExact(messageId, "N", out _));
     }
 
+    /// <summary>Verifies that Route sets the built message's priority from the payload's Priority.</summary>
+    [Fact]
+    public async Task RouteAsync_SetsMessagePriorityFromPayload()
+    {
+        FakePeerService fake = new();
+        MessageRoutingService service = new(fake, _noGroups, Format, _loggerFactory);
+        SendMessagePayload payload = new()
+        {
+            Subject = "Hello",
+            Body = "World",
+            Addresses = [new AddressPayload { UserName = "TargetUser", Type = "To" }],
+            Priority = 2
+        };
+
+        await service.Route("SourceUser", payload, default);
+
+        Assert.Equal(2, fake.Sent[0].Message.Priority);
+    }
+
     /// <summary>Verifies that Route sends exactly once to each unique destination user, deduplicating addresses.</summary>
     [Fact]
     public async Task RouteAsync_SendsToEachUniqueTargetUser()

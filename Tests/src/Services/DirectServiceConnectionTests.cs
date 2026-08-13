@@ -34,10 +34,12 @@ public sealed class DirectServiceConnectionTests
         public event Func<string, string, DestinationStatus, Task>? DeliveryStatusChanged;
 
         public (string MessageId, IReadOnlyList<UserDeliveryResult> UserResults)? RouteResult;
+        public SendMessagePayload? LastPayload;
 
         public Task<(string MessageId, IReadOnlyList<UserDeliveryResult> UserResults)> Route(
             string fromUser, SendMessagePayload payload, CancellationToken cancellation)
         {
+            LastPayload = payload;
             if (RouteResult is null) throw new InvalidOperationException("RouteResult not configured");
             return Task.FromResult(RouteResult.Value);
         }
@@ -154,7 +156,8 @@ public sealed class DirectServiceConnectionTests
             Subject = "Hi",
             Body = "Body text",
             Addresses = [new TestAddressEntry { UserName = "LOCAL", Type = "To" }],
-            SentAt = new DateTime(2025, 7, 4, 12, 0, 0, DateTimeKind.Utc)
+            SentAt = new DateTime(2025, 7, 4, 12, 0, 0, DateTimeKind.Utc),
+            Priority = 2
         };
         await peer.FireMessageDelivered(payload);
 
@@ -165,6 +168,7 @@ public sealed class DirectServiceConnectionTests
         Assert.Equal("Body text", received.Body);
         Assert.Single(received.Addresses);
         Assert.Equal("LOCAL", received.Addresses[0].UserName);
+        Assert.Equal(2, received.Priority);
     }
 
     // ── DeliveryStatusChanged event wiring ────────────────────────────────────
@@ -232,6 +236,24 @@ public sealed class DirectServiceConnectionTests
         Assert.Single(result.UserResults);
         Assert.Equal("DEST", result.UserResults[0].UserName);
         Assert.True(result.UserResults[0].Success);
+    }
+
+    /// <summary>SendMessage passes the priority argument through to the routing payload.</summary>
+    [Fact]
+    public async Task SendMessage_PassesPriorityThroughToPayload()
+    {
+        DirectServiceConnection conn = Build(out _, out FakeMessageRoutingService routing,
+            out Mock<IUserService> user, out _, out _);
+        user.Setup(s => s.GetCurrentUserInfo()).Returns(new UserInfo
+        {
+            Name = "ALPHA", Code = "A", EnvironmentTitle = "T", EnvironmentColor = "#000"
+        });
+        routing.RouteResult = ("MSGID1", []);
+
+        await conn.SendMessage("Hi", "Body", [new AddressRequest { UserName = "DEST" }], priority: 3);
+
+        Assert.NotNull(routing.LastPayload);
+        Assert.Equal(3, routing.LastPayload.Priority);
     }
 
     // ── MarkMessageRead ───────────────────────────────────────────────────────

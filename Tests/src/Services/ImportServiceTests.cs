@@ -73,11 +73,12 @@ public sealed class ImportServiceTests : IDisposable
         return path;
     }
 
-    private async Task<MessageEntity> InsertSourceMessage(string messageId, string subject, bool isOutbound, DateTime? receivedAt = null)
+    private async Task<MessageEntity> InsertSourceMessage(string messageId, string subject, bool isOutbound, DateTime? receivedAt = null, int priority = 0)
     {
         object message = MessageFormat.CreateMessage();
         MessageFormat.SetMessageId(message, messageId);
         MessageFormat.SetSubject(message, subject);
+        MessageFormat.SetPriority(message, priority);
         MessageEntity entity = new()
         {
             MessageId = messageId,
@@ -127,7 +128,7 @@ public sealed class ImportServiceTests : IDisposable
     [Fact]
     public async Task Import_NewMessage_IsInserted()
     {
-        await InsertSourceMessage("M1", "Hello", isOutbound: false);
+        await InsertSourceMessage("M1", "Hello", isOutbound: false, priority: 2);
         string package = await BuildPackage(new ExportEntryRef { Id = "M1", EntryType = EntryType.Message });
 
         ImportSummary summary = await _import.Import(package, NeverAsked);
@@ -137,6 +138,7 @@ public sealed class ImportServiceTests : IDisposable
         MessageEntity? imported = await _destMessages.Get("M1", outbound: false);
         Assert.NotNull(imported);
         Assert.Equal("Hello", MessageFormat.GetSubject(imported.Message));
+        Assert.Equal(2, MessageFormat.GetPriority(imported.Message));
     }
 
     /// <summary>A message matching an existing message's ID, direction, and date is skipped.</summary>
@@ -183,7 +185,7 @@ public sealed class ImportServiceTests : IDisposable
     [Fact]
     public async Task Import_NewDraft_IsInserted()
     {
-        DraftEntity source = await _sourceDrafts.Insert(new DraftEntity { Subject = "Plan", Body = "Body", FolderId = "root-drafts" });
+        DraftEntity source = await _sourceDrafts.Insert(new DraftEntity { Subject = "Plan", Body = "Body", FolderId = "root-drafts", Priority = 2 });
         string package = await BuildPackage(new ExportEntryRef { Id = source.Id.ToString(), EntryType = EntryType.Draft });
 
         ImportSummary summary = await _import.Import(package, NeverAsked);
@@ -192,6 +194,7 @@ public sealed class ImportServiceTests : IDisposable
         DraftEntity? imported = (await _destDrafts.GetAll()).SingleOrDefault(d => d.Subject == "Plan");
         Assert.NotNull(imported);
         Assert.Equal("Body", imported.Body);
+        Assert.Equal(2, imported.Priority);
     }
 
     /// <summary>KeepExisting leaves the existing draft untouched and counts as skipped.</summary>
@@ -215,9 +218,9 @@ public sealed class ImportServiceTests : IDisposable
     [Fact]
     public async Task Import_DraftConflict_Overwrite_ReplacesContent()
     {
-        DraftEntity source = await _sourceDrafts.Insert(new DraftEntity { Subject = "Plan", Body = "New", FolderId = "root-drafts" });
+        DraftEntity source = await _sourceDrafts.Insert(new DraftEntity { Subject = "Plan", Body = "New", FolderId = "root-drafts", Priority = 3 });
         string package = await BuildPackage(new ExportEntryRef { Id = source.Id.ToString(), EntryType = EntryType.Draft });
-        DraftEntity existing = await _destDrafts.Insert(new DraftEntity { Subject = "Plan", Body = "Old", FolderId = "root-drafts" });
+        DraftEntity existing = await _destDrafts.Insert(new DraftEntity { Subject = "Plan", Body = "Old", FolderId = "root-drafts", Priority = 0 });
 
         ImportSummary summary = await _import.Import(package, _ => Task.FromResult(DraftNoteConflictResolution.Overwrite));
 
@@ -226,6 +229,7 @@ public sealed class ImportServiceTests : IDisposable
         DraftEntity? found = await _destDrafts.Get(existing.Id);
         Assert.Equal("New", found!.Body);
         Assert.Equal(existing.Id, found.Id);
+        Assert.Equal(3, found.Priority);
     }
 
     /// <summary>The conflict prompt receives the draft's subject as the conflict name.</summary>

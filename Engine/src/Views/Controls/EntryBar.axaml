@@ -79,6 +79,11 @@
                          TextTrimming="CharacterEllipsis"
                          Foreground="#CCCCCC"
                          IsVisible="{Binding SecondaryText, Converter={x:Static StringConverters.IsNotNullOrEmpty}}" />
+              <TextBlock Text="{Binding PriorityText}"
+                         FontSize="11"
+                         TextTrimming="CharacterEllipsis"
+                         Foreground="#858585"
+                         IsVisible="{Binding PriorityText, Converter={x:Static StringConverters.IsNotNullOrEmpty}}" />
             </StackPanel>
             <StackPanel Grid.Column="1" HorizontalAlignment="Right">
               <TextBlock Text="{Binding TimeText}"

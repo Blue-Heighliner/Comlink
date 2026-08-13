@@ -21,6 +21,8 @@ public sealed class DraftEntity
     public bool IsSent { get; set; }
     /// <summary>Whether this draft should be sent as an alert; see <see cref="IMessageFormat.GetIsAlert"/>.</summary>
     public bool IsAlert { get; set; }
+    /// <summary>Priority number this draft should be sent at; see <see cref="IMessageFormat.GetPriority"/>.</summary>
+    public int Priority { get; set; }
     /// <summary>UTC timestamp when the draft was sent, or <c>null</c> if not yet sent.</summary>
     public DateTime? SentAt { get; set; }
     /// <summary>Identifier of the folder this draft belongs to.</summary>

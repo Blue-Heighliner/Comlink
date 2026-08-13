@@ -127,6 +127,25 @@ public sealed class PeerServiceTests
         peer.Verify(p => p.Send("127.0.0.1", 12345, It.IsAny<ReadOnlyMemory<byte>>(), 0, It.IsAny<object?>(), default), Times.Once);
     }
 
+    /// <summary>Send passes the message's IMessageFormat.GetPriority value through as the OFT send priority.</summary>
+    [Fact]
+    public async Task Send_UsesMessagePriorityAsOftPriority()
+    {
+        Mock<IOftPeer> peer = new();
+        peer.Setup(p => p.Send("127.0.0.1", 12345, It.IsAny<ReadOnlyMemory<byte>>(), 3, It.IsAny<object?>(), default))
+            .Returns(Task.CompletedTask);
+        Mock<IUserLocator> userLocator = new();
+        userLocator.Setup(l => l.GetEndpoint("DEST", default)).ReturnsAsync(FakeUserEndpoint);
+
+        PeerService svc = BuildService(peer, userLocator);
+        TestMessage msg = new() { MessageId = "M1", FromUser = "SOURCE", Priority = 3 };
+
+        bool ok = await svc.Send("DEST", msg);
+
+        Assert.True(ok);
+        peer.Verify(p => p.Send("127.0.0.1", 12345, It.IsAny<ReadOnlyMemory<byte>>(), 3, It.IsAny<object?>(), default), Times.Once);
+    }
+
     /// <summary>Send returns false without contacting the peer when the user cannot be resolved.</summary>
     [Fact]
     public async Task Send_UnknownUser_ReturnsFalse()

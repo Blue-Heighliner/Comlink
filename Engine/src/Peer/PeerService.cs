@@ -89,7 +89,10 @@ internal sealed class PeerService : IPeerService, IAsyncDisposable
         using OwnedBuffer buf = PeerSerializer.Serialize(message);
         try
         {
-            await _peer.Send(endpoint.IpAddress, endpoint.Port, buf.Memory, tag: new DeliveryTag(_messageFormat.GetMessageId(message), userName), cancellationToken: cancellation);
+            await _peer.Send(endpoint.IpAddress, endpoint.Port, buf.Memory,
+                priority: _messageFormat.GetPriority(message),
+                tag: new DeliveryTag(_messageFormat.GetMessageId(message), userName),
+                cancellationToken: cancellation);
             return true;
         }
         catch

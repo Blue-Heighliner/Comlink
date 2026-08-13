@@ -16,6 +16,17 @@ public interface IDraftViewModel
     /// <summary>Gets or sets a value indicating whether this draft will be sent as an alert.</summary>
     bool IsAlert { get; set; }
     /// <summary>
+    /// Gets the label for the alert checkbox, sourced from <see cref="IAlertConfiguration.AlertText"/> — the
+    /// same text shown in the title bar's alert box, so both surfaces always agree on what "alert" is called.
+    /// </summary>
+    string AlertLabel { get; }
+    /// <summary>Gets a value indicating whether the alert checkbox is shown; see <see cref="IAlertComposeConfiguration"/>.</summary>
+    bool ComposeAlertsEnabled { get; }
+    /// <summary>Gets the message priority levels available to choose from; see <see cref="IMessagePriorityProvider"/>.</summary>
+    IReadOnlyList<MessagePriorityOption> AvailablePriorities { get; }
+    /// <summary>Gets or sets the priority level this draft will be sent at.</summary>
+    MessagePriorityOption SelectedPriority { get; set; }
+    /// <summary>
     /// Gets or sets the PLSO (Phonetic Language Spell Out) mode active in the body editor: when not
     /// <see cref="Entries.PlsoMode.Off"/>, typing a letter or digit inserts its phonetic word (see
     /// <see cref="PhoneticAlphabet"/>) instead of the character itself, with a trailing space added
@@ -71,6 +82,7 @@ public sealed partial class DraftViewModel : ObservableObject, IDraftViewModel
     [ObservableProperty] private string _newAddressType = "To";
     [ObservableProperty] private bool _isSent;
     [ObservableProperty] private bool _isAlert;
+    [ObservableProperty] private MessagePriorityOption _selectedPriority;
     [ObservableProperty] private PlsoMode _plsoMode;
     [ObservableProperty] private bool _isSaving;
     [ObservableProperty] private string? _statusMessage;
@@ -90,6 +102,12 @@ public sealed partial class DraftViewModel : ObservableObject, IDraftViewModel
     /// <inheritdoc />
     public IReadOnlyList<string> AddressTypes { get; } = ["To", "Cc"];
     /// <inheritdoc />
+    public IReadOnlyList<MessagePriorityOption> AvailablePriorities { get; }
+    /// <inheritdoc />
+    public string AlertLabel { get; }
+    /// <inheritdoc />
+    public bool ComposeAlertsEnabled { get; }
+    /// <inheritdoc />
     public string PlsoButtonText => PlsoMode switch
     {
         PlsoMode.Off => "PLSO OFF",
@@ -107,8 +125,20 @@ public sealed partial class DraftViewModel : ObservableObject, IDraftViewModel
     /// <param name="connection">Service connection for sending messages.</param>
     /// <param name="userNames">All known user names available for recipient auto-complete.</param>
     /// <param name="loggerFactory">Factory for creating named loggers.</param>
+    /// <param name="priorityProvider">Provides the available message priority levels to choose from.</param>
+    /// <param name="alertConfiguration">Provides the shared alert label text.</param>
+    /// <param name="alertComposeConfiguration">Controls whether the alert checkbox is shown.</param>
     /// <param name="bodyDocument">Optional body document implementation; defaults to <see cref="StringBodyDocument"/> when <see langword="null"/>.</param>
-    public DraftViewModel(DraftEntity entity, IEntryService entryService, IServiceConnection connection, IReadOnlyList<string> userNames, ILoggerFactory loggerFactory, IBodyDocument? bodyDocument = null)
+    public DraftViewModel(
+        DraftEntity entity,
+        IEntryService entryService,
+        IServiceConnection connection,
+        IReadOnlyList<string> userNames,
+        ILoggerFactory loggerFactory,
+        IMessagePriorityProvider priorityProvider,
+        IAlertConfiguration alertConfiguration,
+        IAlertComposeConfiguration alertComposeConfiguration,
+        IBodyDocument? bodyDocument = null)
     {
         _entity = entity;
         _entryService = entryService;
@@ -119,6 +149,13 @@ public sealed partial class DraftViewModel : ObservableObject, IDraftViewModel
         _isAlert = entity.IsAlert;
         AllUserNames = userNames;
         BodyDocument = bodyDocument ?? new StringBodyDocument();
+        AlertLabel = alertConfiguration.AlertText;
+        ComposeAlertsEnabled = alertComposeConfiguration.ComposeAlertsEnabled;
+
+        AvailablePriorities = priorityProvider.GetPriorities();
+        _selectedPriority = AvailablePriorities.FirstOrDefault(p => p.Value == entity.Priority)
+            ?? AvailablePriorities.FirstOrDefault()
+            ?? new MessagePriorityOption { Name = "Normal", Value = 0 };
 
         foreach (AddressData a in entity.Addresses)
             Addresses.Add(a);
@@ -255,6 +292,7 @@ public sealed partial class DraftViewModel : ObservableObject, IDraftViewModel
             _entity.BodySegmentsJson = SerializeBody();
             _entity.Addresses = [.. Addresses];
             _entity.IsAlert = IsAlert;
+            _entity.Priority = SelectedPriority.Value;
             await _entryService.SaveDraft(_entity);
             StatusMessage = "Saved";
         }
@@ -282,11 +320,12 @@ public sealed partial class DraftViewModel : ObservableObject, IDraftViewModel
             _entity.BodySegmentsJson = SerializeBody();
             _entity.Addresses = [.. Addresses];
             _entity.IsAlert = IsAlert;
+            _entity.Priority = SelectedPriority.Value;
 
             SendMessageResult? result = await _connection.SendMessage(
                 Subject, body,
                 Addresses.Select(a => new AddressRequest { UserName = a.UserName, Type = a.Type }).ToList(),
-                IsAlert);
+                IsAlert, SelectedPriority.Value);
 
             _entity.IsSent = true;
             _entity.SentAt = DateTime.UtcNow;
@@ -294,7 +333,7 @@ public sealed partial class DraftViewModel : ObservableObject, IDraftViewModel
 
             DateTime sentAt = _entity.SentAt ?? DateTime.UtcNow;
             MessageEntity sentMessage = await _entryService.StoreSentMessage(
-                result!.MessageId, Subject, body, [.. Addresses], sentAt, result.UserResults, IsAlert);
+                result!.MessageId, Subject, body, [.. Addresses], sentAt, result.UserResults, IsAlert, SelectedPriority.Value);
 
             IsSent = true;
             StatusMessage = "Sent";

@@ -80,6 +80,58 @@ public sealed class ControlProviderTests
         Assert.Equal("HOME", provider.GetHomeText());
     }
 
+    // ── MessagePriorityProvider ──────────────────────────────────────────────
+
+    /// <summary>Returns the single default "Normal" priority level.</summary>
+    [Fact]
+    public void MessagePriorityProvider_ReturnsSingleNormalLevel()
+    {
+        MessagePriorityProvider provider = new();
+
+        IReadOnlyList<MessagePriorityOption> priorities = provider.GetPriorities();
+
+        Assert.Equal(["Normal"], priorities.Select(p => p.Name).ToList());
+        Assert.Equal([0], priorities.Select(p => p.Value).ToList());
+    }
+
+    /// <summary>GetPriorities returns the same list instance/values on every call.</summary>
+    [Fact]
+    public void MessagePriorityProvider_IsStableAcrossCalls()
+    {
+        MessagePriorityProvider provider = new();
+
+        IReadOnlyList<MessagePriorityOption> first = provider.GetPriorities();
+        IReadOnlyList<MessagePriorityOption> second = provider.GetPriorities();
+
+        Assert.Equal(first, second);
+    }
+
+    // ── AlertComposeConfiguration ────────────────────────────────────────────
+
+    /// <summary>ComposeAlertsEnabled defaults to true when not configured.</summary>
+    [Fact]
+    public void AlertComposeConfiguration_DefaultsToEnabled()
+    {
+        AlertComposeConfiguration provider = new(new EngineConfig());
+        Assert.True(provider.ComposeAlertsEnabled);
+    }
+
+    /// <summary>ComposeAlertsEnabled reflects an explicit false override from config.</summary>
+    [Fact]
+    public void AlertComposeConfiguration_ReturnsFalseWhenDisabledInConfig()
+    {
+        AlertComposeConfiguration provider = new(new EngineConfig { ComposeAlertsEnabled = false });
+        Assert.False(provider.ComposeAlertsEnabled);
+    }
+
+    /// <summary>ComposeAlertsEnabled reflects an explicit true override from config.</summary>
+    [Fact]
+    public void AlertComposeConfiguration_ReturnsTrueWhenEnabledInConfig()
+    {
+        AlertComposeConfiguration provider = new(new EngineConfig { ComposeAlertsEnabled = true });
+        Assert.True(provider.ComposeAlertsEnabled);
+    }
+
     // ── OftPeerCertificateName ───────────────────────────────────────────────
 
     /// <summary>Null config → auto name "USER-{userName}".</summary>

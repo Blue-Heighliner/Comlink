@@ -30,6 +30,8 @@ public sealed record MessageExportData
     public required DateTime SentAt { get; init; }
     /// <summary>Whether this message was sent as an alert.</summary>
     public required bool IsAlert { get; init; }
+    /// <summary>Priority number of this message; see <see cref="Control.IMessageFormat.GetPriority"/>.</summary>
+    public required int Priority { get; init; }
     /// <summary>UTC timestamp when this record was received or created.</summary>
     public required DateTime ReceivedAt { get; init; }
     /// <summary>Inbox-only read status; <see langword="null"/> on Outbox records.</summary>
@@ -53,6 +55,8 @@ public sealed record DraftExportData
     public required bool IsSent { get; init; }
     /// <summary>Whether this draft is marked to send as an alert.</summary>
     public required bool IsAlert { get; init; }
+    /// <summary>Priority number this draft should be sent at; see <see cref="Control.IMessageFormat.GetPriority"/>.</summary>
+    public required int Priority { get; init; }
     /// <summary>UTC timestamp when the draft was sent, or <see langword="null"/> if not yet sent.</summary>
     public DateTime? SentAt { get; init; }
     /// <summary>UTC timestamp when this draft was first created.</summary>

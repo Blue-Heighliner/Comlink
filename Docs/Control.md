@@ -97,6 +97,8 @@ When a message is sent to a group, the Engine records which addressed groups eac
 
 **Engine default:** reads `UserGroups` from `config.json`; returns empty map when no groups are defined (via `UserGroupProvider`)
 
+**Sample override:** `SampleUserGroupProvider` — unions config groups with groups defined via `GROUP_{NAME}` environment variables (comma-separated member list).
+
 ---
 
 #### `IAppNameProvider`
@@ -109,7 +111,7 @@ The application name used as the default data folder name and in log headers.
 
 **Engine default:** derives from entry assembly name (via `AppNameProvider`)
 
-**Sample override:** `SampleAppNameProvider` — returns `"Sample"`, so data lands in `%APPDATA%\Sample`.
+**Sample override:** `SampleAppNameProvider` — reproduces the Engine default exactly (entry assembly name) unless the `APP_NAME` environment variable is set, so the data folder location does not change unless an operator opts in.
 
 ---
 
@@ -122,6 +124,8 @@ string AppDataPath { get; }
 Absolute path to the root data directory. All persistent state (LiteDB, user state, logs) is written under this path.
 
 **Engine default:** `%APPDATA%\{AppName}` when `DataFolder` is null; supports absolute paths and the `@`-prefix shorthand (see [Config.md](Config.md)) via `AppDataPathProvider`
+
+**Sample override:** `SampleAppDataPathProvider` — reproduces the Engine default resolution exactly, plus a `DATA_FOLDER` environment variable fallback (same absolute-path/`@`-prefix rules) used only when `config.json` does not set `DataFolder`. Byte-identical to the Engine default when neither is set.
 
 ---
 
@@ -141,6 +145,8 @@ TCP port numbers for the peer listener and the local interface listener (always 
 
 **Engine default:** uses `PeerPort`/`InterfacePort` from `config.json`, falling back to 50021/50020 (via `PortConfiguration`)
 
+**Sample override:** `SamplePortConfiguration` — same `config.json` values, falling back to `PEER_LISTEN_PORT`/`INTERFACE_LISTEN_PORT` environment variables, then the same 50021/50020 defaults.
+
 ---
 
 #### `IKioskModeProvider`
@@ -153,7 +159,7 @@ When `true`, the main window hides its chrome (title bar, resize handles) and re
 
 **Engine default:** `false` (via `KioskModeProvider`)
 
-**Sample override:** none — Sample uses the Engine default.
+**Sample override:** `SampleKioskModeProvider` — `true` when the `KIOSK_MODE` environment variable is `"1"` or `"true"`; `false` otherwise, matching the Engine default.
 
 ---
 
@@ -165,11 +171,25 @@ TimeSpan AlarmSoundDuration { get; }
 bool QuickConfirmationEnabled { get; }
 ```
 
-Configures the alarm triggered by alert messages (`IMessageFormat.GetIsAlert`) in Client mode: the text shown in the title bar's alert box, how long the alarm sound plays before automatically stopping (resetting whenever a new alert arrives), and whether click/Space/Enter quick confirmation is enabled. See [Peer.md](Peer.md#alert-messages) and `Docs/ViewModels.md`.
+Configures the alarm triggered by alert messages (`IMessageFormat.GetIsAlert`) in Client mode: the text shown in the title bar's alert box, how long the alarm sound plays before automatically stopping (resetting whenever a new alert arrives), and whether click/Space/Enter quick confirmation is enabled. `AlertText` is also the shared source for the draft editor's alert checkbox label (`IDraftViewModel.AlertLabel`) — both surfaces always show the same word for "alert". See [Peer.md](Peer.md#alert-messages) and `Docs/ViewModels.md`.
 
 **Engine default:** reads `AlertText`/`AlarmSoundSeconds`/`QuickConfirmationEnabled` from `config.json`, falling back to `"ALERT"` / 30 seconds / `true` (via `AlertConfiguration`). See [Config.md](Config.md).
 
-**Sample override:** none — Sample uses the Engine default.
+**Sample override:** `SampleAlertConfiguration` — hardcodes `AlertText` to `"!ALERT!"`, so both the title bar's alert box and the draft editor's alert checkbox read `"!ALERT!"`; delegates `AlarmSoundDuration`/`QuickConfirmationEnabled` to the same `config.json` fields as the Engine default.
+
+---
+
+#### `IAlertComposeConfiguration`
+
+```csharp
+bool ComposeAlertsEnabled { get; }
+```
+
+Controls whether the draft editor shows its alert checkbox (labeled via `IAlertConfiguration.AlertText`), letting the user mark and send a draft as an alert. Disabling this only affects local origination — the app can still receive and alarm on an alert sent by a peer regardless of this setting.
+
+**Engine default:** `true`, or the `ComposeAlertsEnabled` value from `config.json` when set (via `AlertComposeConfiguration`). See [Config.md](Config.md).
+
+**Sample override:** `SampleAlertComposeConfiguration` — same `config.json` value, falling back to the `COMPOSE_ALERTS_ENABLED` environment variable (`"0"`/`"false"` to disable), then `true`.
 
 ---
 
@@ -188,6 +208,20 @@ Starts and stops the looping alarm sound triggered by alert messages. Actual aud
 
 ---
 
+#### `IMessagePriorityProvider`
+
+```csharp
+IReadOnlyList<MessagePriorityOption> GetPriorities();
+```
+
+Returns the set of selectable message priority levels — each a `MessagePriorityOption` pairing a display `Name` with the `Value` stored via `IMessageFormat.SetPriority` and used verbatim as the OFT send priority (larger values are sent first — see [Peer.md](Peer.md)). The draft editor's priority picker (`IDraftViewModel.AvailablePriorities`) is populated from this list; see `Docs/ViewModels.md`.
+
+**Engine default:** a single `"Normal"` (value `0`) level (via `MessagePriorityProvider`)
+
+**Sample override:** `SampleMessagePriorityProvider` — three levels: `"Low"` (0), `"Medium"` (1), `"High"` (2).
+
+---
+
 #### `IExternalDriveProvider`
 
 ```csharp
@@ -198,7 +232,7 @@ Enumerates the external (removable/optical) drives currently available as a dest
 
 **Engine default:** `DriveInfo.GetDrives()` filtered to ready `Removable`/`CDRom` drives that pass a live write probe (a small temp file is written and deleted at the drive root) (via `ExternalDriveProvider`).
 
-**Sample override:** none — Sample uses the Engine default.
+**Sample override:** `SampleExternalDriveProvider` — same `DriveInfo`-based enumeration, plus an extra pseudo-drive at the path named by the `EXPORT_DRIVE_PATH` environment variable (if set and the directory exists) — useful for exercising export/import without physical removable media.
 
 ---
 
@@ -217,6 +251,8 @@ Maps the local user name to a certificate subject name (CN) to look up in the sy
 
 **Engine default:** `$"USER-{userName}"` when `PeerCertificateName` is null; `"disable"` → `null`; explicit string → use it as-is (via `OftPeerCertificateName`). See [Config.md](Config.md).
 
+**Sample override:** `SampleOftPeerCertificateName` — honors an explicit `config.json` `PeerCertificateName` exactly like the Engine default; in auto mode (config value `null`), additionally checks a `CERT_NAME_{USERNAME}` environment variable before falling back to the same `USER-{userName}` default.
+
 ---
 
 #### `IOftCertificateProvider`
@@ -231,7 +267,7 @@ Override this interface only when you need custom certificate pinning, a non-sto
 
 **Engine default:** `OftCertificateProvider`
 
-**Sample override:** none — Sample uses the Engine default.
+**Sample override:** none, deliberately — this is the one control interface Sample does not override. It duplicates ~60 lines of security-sensitive X.509 store-lookup and chain-validation logic that Engine's internal `OftCertificateProvider` cannot expose for reuse (it is `internal`, and only `Tests` has `InternalsVisibleTo` access — not `Sample`), and this doc's own guidance above says overriding `IOftPeerCertificateName` is sufficient for the vast majority of customization needs. Sample overrides that interface instead. A host that genuinely needs custom certificate pinning should still override this interface directly.
 
 ---
 
@@ -292,6 +328,8 @@ Supplies a fixed user name to `UserService`, bypassing the normal `State.json` l
 
 The Engine default (`DebugUserOverride`) returns `config.UserName`, which is `null` when not set and therefore has no effect. Intended for development and testing only.
 
+**Sample override:** `SampleDebugUserOverride` — honors `config.json`'s `UserName` exactly like the Engine default, falling back to the `DEBUG_USER` environment variable. Registering a host implementation here takes the place of — rather than adds to — the Engine's own default, because `AddConventionSingletons` registers it via `TryAddSingleton`, which is a no-op once any registration for `IDebugUserOverride` exists (the `IEnumerable<IDebugUserOverride>` consumption pattern above only yields more than one instance if a host explicitly registers more than one itself). `SampleDebugUserOverride` therefore reproduces the config-driven behavior itself, so registering it does not silently stop `config.json`'s `UserName` field from working.
+
 ---
 
 ### Client API
@@ -307,7 +345,7 @@ Task Connect(CancellationToken cancellation = default);
 Task<UserInfo?> GetUserInfo(CancellationToken cancellation = default);
 Task<List<string>> GetUserNames(CancellationToken cancellation = default);
 Task<UserInfo?> InstallUser(string userCode, CancellationToken cancellation = default);
-Task<SendMessageResult?> SendMessage(string subject, string body, List<AddressRequest> addresses, bool isAlert = false, CancellationToken cancellation = default);
+Task<SendMessageResult?> SendMessage(string subject, string body, List<AddressRequest> addresses, bool isAlert = false, int priority = 0, CancellationToken cancellation = default);
 Task<bool> MarkMessageRead(string messageId, CancellationToken cancellation = default);
 ```
 
@@ -317,7 +355,7 @@ Host applications resolve `IServiceConnection` from the container to send messag
 
 **Engine default:** `DirectServiceConnection`, registered in both Client and Headless mode.
 
-**Sample override:** none — Sample resolves `IServiceConnection` directly from the container.
+**Sample override:** none, deliberately — unlike the interfaces above, this is not a small piece of *external configuration* a host swaps in (the "Concept" section's definition of a control interface); it is the client-facing API surface a host *consumes* to drive the running Engine, backed by `DirectServiceConnection`'s substantial in-process orchestration of Engine services. Sample resolves `IServiceConnection` directly from the container instead of replacing it. This is why it is documented in its own "Client API" section rather than "Optional"/"Required"/"Conditional" above.
 
 ---
 

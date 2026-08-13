@@ -60,6 +60,15 @@ public interface IMessageFormat
     bool GetIsAlert(object message);
     /// <summary>Sets whether <paramref name="message"/> is an alert.</summary>
     void SetIsAlert(object message, bool value);
+    /// <summary>
+    /// Gets the priority number of <paramref name="message"/>. One of the values returned by
+    /// <see cref="IMessagePriorityProvider.GetPriorities"/>; used verbatim as the OFT send priority
+    /// (larger values are sent first — see <c>Docs/Peer.md</c>) whenever this message is sent over an
+    /// OFT connection.
+    /// </summary>
+    int GetPriority(object message);
+    /// <summary>Sets the priority number on <paramref name="message"/>.</summary>
+    void SetPriority(object message, int value);
 }
 
 /// <summary>
@@ -113,6 +122,10 @@ public abstract class MessageFormat<TMessage> : IMessageFormat where TMessage : 
     protected abstract bool GetIsAlert(TMessage message);
     /// <summary>Sets whether <paramref name="message"/> is an alert.</summary>
     protected abstract void SetIsAlert(TMessage message, bool value);
+    /// <summary>Gets the priority number of <paramref name="message"/>.</summary>
+    protected abstract int GetPriority(TMessage message);
+    /// <summary>Sets the priority number on <paramref name="message"/>.</summary>
+    protected abstract void SetPriority(TMessage message, int value);
 
     object IMessageFormat.CreateMessage() => CreateMessage();
     string IMessageFormat.GetMessageId(object message) => GetMessageId((TMessage)message);
@@ -131,4 +144,6 @@ public abstract class MessageFormat<TMessage> : IMessageFormat where TMessage : 
     void IMessageFormat.SetConfirmationMessageId(object message, string value) => SetConfirmationMessageId((TMessage)message, value);
     bool IMessageFormat.GetIsAlert(object message) => GetIsAlert((TMessage)message);
     void IMessageFormat.SetIsAlert(object message, bool value) => SetIsAlert((TMessage)message, value);
+    int IMessageFormat.GetPriority(object message) => GetPriority((TMessage)message);
+    void IMessageFormat.SetPriority(object message, int value) => SetPriority((TMessage)message, value);
 }

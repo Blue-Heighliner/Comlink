@@ -48,7 +48,7 @@ When making changes that affect the interface wire format, peer protocol, data s
 - One type per file, with these exceptions: an interface and its implementing class are co-located in one file named after the class (e.g. `IThing` and `Thing` both live in `Thing.cs`); extension classes are co-located with the class they extend (e.g. `ThingExtensions` also lives in `Thing.cs`); a standalone interface with no co-located implementation is named after its concept without the `I` prefix (e.g. `IOther` lives in `Other.cs`).
 
 ### Patterns
-- **DI first**: all external configuration is expressed as an interface in `Engine/src/Control/`. Register defaults with `TryAddSingleton` so hosts can override. Never read environment variables or hardcode paths inside Engine — go through a provider.
+- **DI first**: all external configuration is expressed as an interface in `Engine/src/Control/`. Register defaults with `TryAddSingleton` so hosts can override. Never read environment variables or hardcode paths inside Engine — go through a provider. Whenever a new control interface is added (or an existing one's default behavior meaningfully changes), also add a corresponding `Sample*` implementation in `Sample/src/` and register it in `Sample/src/Program.cs`, so Sample continues to demonstrate how to override every control interface — see `Docs/Control.md` for the current full set and the two narrow, explicitly-documented exceptions (`IOftCertificateProvider`, `IServiceConnection`). Prefer reproducing the Engine default's exact behavior with one small additive customization (e.g. an environment-variable fallback) over anything that changes Sample's default runtime behavior, especially for anything touching the app data path — that has caused real data loss in this project before.
 - **Async all the way**: all I/O is async. Avoid `Task.Result` and `.GetAwaiter().GetResult()` except at the top-level host startup where a synchronization context deadlock is explicitly being avoided (and that case is already present in `EngineApp.axaml.cs`). Do not append `Async` to method names — name methods by what they do, not how they do it (`Load`, not `LoadAsync`). Name `CancellationToken` parameters `cancellation` (not `ct` or `cancellationToken`); framework-required overrides (e.g. `IHostedService.StartAsync(CancellationToken cancellationToken)`) are the only exception.
 - **Events for cross-layer communication**: services expose C# events; ViewModels subscribe. Do not call ViewModel methods from services.
 - **Repository pattern**: all LiteDB access goes through a repository. No direct collection access outside `LiteDbContext` and the repository classes.
@@ -111,6 +111,7 @@ If `--config` is omitted, all settings use their defaults (Client mode, default 
   "AlertText":           null,
   "AlarmSoundSeconds":   null,
   "QuickConfirmationEnabled": null,
+  "ComposeAlertsEnabled": null,
   "Users": {
     "USER-A": { "IpAddress": "192.168.1.10", "Port": 7890 }
   },
@@ -131,6 +132,7 @@ If `--config` is omitted, all settings use their defaults (Client mode, default 
 | `AlertText` | string? | `null` | Alert box text in the title bar while alarming (`null` = `"ALERT"`) |
 | `AlarmSoundSeconds` | double? | `null` | Seconds the alarm sound plays before auto-stopping, reset on each new alert (`null` = 30) |
 | `QuickConfirmationEnabled` | bool? | `null` | Whether click/Space/Enter quick-confirms the latest pending alert (`null` = `true`) |
+| `ComposeAlertsEnabled` | bool? | `null` | Whether the draft editor's alert checkbox is shown (`null` = `true`); disabling only affects local origination, not receiving peer alerts |
 | `Users` | object | `{}` | Map of user name → `{ IpAddress, Port }` — overrides or defines user endpoints |
 | `UserGroups` | object | `{}` | Map of group name → member list (user or group names); groups are addressable destinations and are expanded recursively on send |
 

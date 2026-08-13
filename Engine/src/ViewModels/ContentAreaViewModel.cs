@@ -30,6 +30,9 @@ public sealed partial class ContentAreaViewModel : ObservableObject, IContentAre
     private readonly INoteRepository _notes;
     private readonly IActivityLogRepository _activityLogs;
     private readonly IMessageFormat _messageFormat;
+    private readonly IMessagePriorityProvider _priorityProvider;
+    private readonly IAlertConfiguration _alertConfiguration;
+    private readonly IAlertComposeConfiguration _alertComposeConfiguration;
     private readonly ILoggerFactory _loggerFactory;
 
     [ObservableProperty] private object? _activeContent;
@@ -49,6 +52,9 @@ public sealed partial class ContentAreaViewModel : ObservableObject, IContentAre
     /// <param name="notes">Repository for loading note entries.</param>
     /// <param name="activityLogs">Repository for loading activity log entries.</param>
     /// <param name="messageFormat">Maps logical fields onto a message entity's stored message.</param>
+    /// <param name="priorityProvider">Provides the available message priority levels to choose from.</param>
+    /// <param name="alertConfiguration">Provides the shared alert label text.</param>
+    /// <param name="alertComposeConfiguration">Controls whether the alert checkbox is shown.</param>
     /// <param name="loggerFactory">Factory for creating named loggers.</param>
     public ContentAreaViewModel(
         IHomeContentProvider homeContent,
@@ -59,6 +65,9 @@ public sealed partial class ContentAreaViewModel : ObservableObject, IContentAre
         INoteRepository notes,
         IActivityLogRepository activityLogs,
         IMessageFormat messageFormat,
+        IMessagePriorityProvider priorityProvider,
+        IAlertConfiguration alertConfiguration,
+        IAlertComposeConfiguration alertComposeConfiguration,
         ILoggerFactory loggerFactory)
     {
         _homeContent = homeContent;
@@ -69,6 +78,9 @@ public sealed partial class ContentAreaViewModel : ObservableObject, IContentAre
         _notes = notes;
         _activityLogs = activityLogs;
         _messageFormat = messageFormat;
+        _priorityProvider = priorityProvider;
+        _alertConfiguration = alertConfiguration;
+        _alertComposeConfiguration = alertComposeConfiguration;
         _loggerFactory = loggerFactory;
         HomeText = _homeContent.GetHomeText();
         connection.DeliveryStatusChanged += OnDeliveryStatusChanged;
@@ -146,7 +158,7 @@ public sealed partial class ContentAreaViewModel : ObservableObject, IContentAre
         DraftEntity? entity = await _drafts.Get(oid);
         if (entity is null) return null;
         List<string> userNames = await _connection.GetUserNames();
-        DraftViewModel vm = new(entity, _entryService, _connection, userNames, _loggerFactory);
+        DraftViewModel vm = new(entity, _entryService, _connection, userNames, _loggerFactory, _priorityProvider, _alertConfiguration, _alertComposeConfiguration);
         vm.DraftSent += async (IDraftViewModel _, MessageEntity msg) =>
         {
             ShowEntry(new MessageViewModel(msg, _messageFormat));

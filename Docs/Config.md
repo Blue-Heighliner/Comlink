@@ -23,6 +23,7 @@ All property names are PascalCase; deserialization is case-insensitive. Unrecogn
   "AlertText":           null,
   "AlarmSoundSeconds":   null,
   "QuickConfirmationEnabled": null,
+  "ComposeAlertsEnabled": null,
   "Users": {
     "USER-A": { "IpAddress": "192.168.1.10", "Port": 7890 }
   },
@@ -119,6 +120,14 @@ Seconds the alarm sound plays after an alert is received before automatically st
 **Type:** `bool | null` | **Default:** `null` (uses Engine default of `true`)
 
 Whether clicking the alert box, or pressing Space/Enter while not focused in a text input, confirms (marks read) the latest unconfirmed alert.
+
+---
+
+### `ComposeAlertsEnabled`
+
+**Type:** `bool | null` | **Default:** `null` (uses Engine default of `true`)
+
+Whether the draft editor's alert checkbox is shown, letting the user mark and send a draft as an alert. Setting this to `false` only affects local origination — the app can still receive and alarm on an alert sent by a peer.
 
 ---
 

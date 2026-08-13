@@ -17,6 +17,8 @@ public sealed class MessageReceivedEvent
     public DateTime SentAt { get; set; }
     /// <summary>Whether this message is an alert; see <see cref="Control.IMessageFormat.GetIsAlert"/>.</summary>
     public bool IsAlert { get; set; }
+    /// <summary>Priority number of this message; see <see cref="Control.IMessageFormat.GetPriority"/>.</summary>
+    public int Priority { get; set; }
 }
 
 /// <summary>Represents a single addressee in a send or receive operation.</summary>
@@ -77,6 +79,8 @@ public sealed class SendMessagePayload
     public List<AddressPayload> Addresses { get; set; } = [];
     /// <summary>Whether this message is an alert; see <see cref="Control.IMessageFormat.GetIsAlert"/>.</summary>
     public bool IsAlert { get; set; }
+    /// <summary>Priority number of this message; see <see cref="Control.IMessageFormat.GetPriority"/>.</summary>
+    public int Priority { get; set; }
 }
 
 /// <summary>A single recipient address entry used in <see cref="SendMessagePayload"/>.</summary>

@@ -88,7 +88,8 @@ internal sealed class InterfaceService : IInterfaceService
             Subject = _messageFormat.GetSubject(message),
             Body = _messageFormat.GetBody(message),
             Addresses = _messageFormat.GetAddresses(message).Select(a => new AddressPayload { UserName = a.UserName, Type = a.Type.ToString() }).ToList(),
-            IsAlert = _messageFormat.GetIsAlert(message)
+            IsAlert = _messageFormat.GetIsAlert(message),
+            Priority = _messageFormat.GetPriority(message)
         };
 
         await _routingService.Route(userInfo.Name, payload, CancellationToken.None);
@@ -98,10 +99,11 @@ internal sealed class InterfaceService : IInterfaceService
     {
         if (_connections.IsEmpty) return;
 
+        int priority = _messageFormat.GetPriority(message);
         using OwnedBuffer buf = PeerSerializer.Serialize(message);
         foreach (IOftConnection connection in _connections.Values)
         {
-            try { await connection.Send(buf.Memory); }
+            try { await connection.Send(buf.Memory, priority); }
             catch { }
         }
     }

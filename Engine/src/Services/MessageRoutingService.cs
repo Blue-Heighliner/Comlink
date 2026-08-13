@@ -108,6 +108,7 @@ internal sealed class MessageRoutingService : IMessageRoutingService
         _messageFormat.SetAddresses(message, payload.Addresses.Select(a => new MessageAddress { UserName = a.UserName, Type = a.Type.ParseAddressType() }).ToList());
         _messageFormat.SetSentAt(message, sentAt);
         _messageFormat.SetIsAlert(message, payload.IsAlert);
+        _messageFormat.SetPriority(message, payload.Priority);
 
         string? selfUser = targetUsers.FirstOrDefault(user => string.Equals(user, fromUser, StringComparison.OrdinalIgnoreCase));
         List<string> remoteUsers = selfUser is null ? targetUsers : targetUsers.Where(user => !string.Equals(user, fromUser, StringComparison.OrdinalIgnoreCase)).ToList();

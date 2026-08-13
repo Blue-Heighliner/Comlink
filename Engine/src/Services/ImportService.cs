@@ -135,6 +135,7 @@ public sealed class ImportService : IImportService
             .ToList());
         _messageFormat.SetSentAt(message, data.SentAt);
         _messageFormat.SetIsAlert(message, data.IsAlert);
+        _messageFormat.SetPriority(message, data.Priority);
 
         MessageEntity entity = new()
         {
@@ -170,6 +171,7 @@ public sealed class ImportService : IImportService
                 Addresses = data.Addresses,
                 IsSent = data.IsSent,
                 IsAlert = data.IsAlert,
+                Priority = data.Priority,
                 SentAt = data.SentAt,
                 FolderId = await _folders.GetRootId(FolderType.Drafts)
             };
@@ -192,6 +194,7 @@ public sealed class ImportService : IImportService
         existing.Addresses = data.Addresses;
         existing.IsSent = data.IsSent;
         existing.IsAlert = data.IsAlert;
+        existing.Priority = data.Priority;
         existing.SentAt = data.SentAt;
         existing.ModifiedAt = DateTime.UtcNow;
         await _drafts.Update(existing);

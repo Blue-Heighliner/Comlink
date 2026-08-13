@@ -27,6 +27,8 @@ public sealed class SampleMessage
     [ProtoMember(7)] public string ConfirmsId { get; set; } = string.Empty;
     /// <summary>Whether this message is an alert.</summary>
     [ProtoMember(8)] public bool Alert { get; set; }
+    /// <summary>Priority number of this message.</summary>
+    [ProtoMember(9)] public int Importance { get; set; }
 }
 
 /// <summary>A single recipient entry within a <see cref="SampleMessage"/>.</summary>
@@ -83,4 +85,8 @@ internal sealed class SampleMessageFormat : MessageFormat<SampleMessage>
     protected override bool GetIsAlert(SampleMessage message) => message.Alert;
     /// <inheritdoc />
     protected override void SetIsAlert(SampleMessage message, bool value) => message.Alert = value;
+    /// <inheritdoc />
+    protected override int GetPriority(SampleMessage message) => message.Importance;
+    /// <inheritdoc />
+    protected override void SetPriority(SampleMessage message, int value) => message.Importance = value;
 }
