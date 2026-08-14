@@ -1,22 +1,17 @@
 # Configuration Interfaces
 
-All external configuration points are expressed as interfaces in `Engine/src/Control/`. The engine registers defaults for each using `TryAddSingleton`, so any host can override by registering its own implementation.
+All external configuration points are expressed as interfaces in `Engine/src/Control/`. The engine registers defaults for each using `TryAddSingleton`, so any host can override by registering its own implementation. See [Control.md](Control.md) for the full reference — including the `Configured*` decorators that apply `config.json` on top of whichever implementation is registered, the `Default*` naming convention (virtual members a host can inherit and override just one of), and which interfaces have no default at all.
 
 ## Interfaces
 
-### `IAppNameProvider`
+### `IAppSettings`
 ```csharp
 string AppName { get; }
-```
-Human-readable application name. Used in log output and the default app data path. Default: `"App"`.
-
----
-
-### `IAppDataPathProvider`
-```csharp
 string AppDataPath { get; }
+bool IsKioskMode { get; }
+string GetHomeText();
 ```
-Root directory for all persistent data (database, state file, logs). Default: `%APPDATA%/{AppName}`. Can be overridden via `--data-folder` in the Sample host.
+This app's own identity and top-level presentation: display/data-folder name, the root directory persistent data (database, state file, logs) is written under, whether the UI runs in kiosk mode, and the home screen's placeholder text. Default: entry assembly name / `%APPDATA%/{AppName}` (`AppDataPath` reads `AppName` through virtual dispatch, so overriding `AppName` alone keeps them in sync) / `false` / `"HOME"`. `AppDataPath` is overridable via `config.json`'s `DataFolder`.
 
 ---
 
@@ -29,51 +24,28 @@ Network ports for the local interface listener (always active, in every mode; se
 
 ---
 
-### `IUserLocator`
+### `IUserDirectory`
 ```csharp
 Task<UserEndpoint?> GetEndpoint(string userName, CancellationToken cancellation = default);
-```
-Resolves a user name to a `UserEndpoint` (`IpAddress`, `Port`). Called by `PeerService` when opening an outbound peer connection. No default — must be provided by the host.
-
----
-
-### `IUserCodeResolver`
-```csharp
-Task<UserInfo?> Resolve(string userCode, CancellationToken cancellation = default);
-```
-Resolves an installation code to a `UserInfo` (name, environment title, color). Called during user installation. No default — must be provided by the host.
-
----
-
-### `IUserNameDirectory`
-```csharp
+Task<IReadOnlyDictionary<string, IReadOnlyList<string>>> GetGroups(CancellationToken cancellation = default);
 Task<IReadOnlyList<string>> GetAllUserNames(CancellationToken cancellation = default);
 ```
-Returns all known user names. Used to populate address autocomplete in the UI and `IServiceConnection.GetUserNames`. No default — must be provided by the host.
+Everything the engine knows about addressable users and groups: resolving a user name to its peer endpoint (called by `PeerService` when opening an outbound connection), group membership for address expansion, and the full list of known user/group names (used to populate address autocomplete and `IServiceConnection.GetUserNames`). Default: none known for any of the three: overridable via `config.json`'s `Users`/`UserGroups`.
 
 ---
 
-### `IHomeContentProvider`
+### `IUserIdentity`
 ```csharp
-string GetHomeText();
+string? DebugUserName { get; }
+Task<UserInfo?> ResolveCode(string userCode, CancellationToken cancellation = default);
 ```
-Text shown on the home screen in Client mode. No default — must be provided by the host.
+How this instance's own local user identity is established: a fixed debug override that bypasses `State.json` (`config.json`'s `UserName`), and resolving a user activation code to a `UserInfo` during installation. Default: no debug override; only the code `"CODE"` resolves (to user `"TEST"`).
 
 ---
 
-### `IKioskModeProvider`
-```csharp
-bool IsKioskMode { get; }
-```
-When `true`, the UI hides navigation and limits functionality to a single-purpose view. Default: `false`.
+### `IHomeContentProvider` / `IKioskModeProvider` / `IAppNameProvider` / `IAppDataPathProvider` / `IDebugUserOverride` / `IUserCodeResolver` / `IUserLocator` / `IUserNameDirectory`
 
----
-
-### `IDebugUserOverride`
-```csharp
-string UserName { get; }
-```
-When registered, `UserService` skips `State.json` and uses this user name directly without installing. Intended for development/testing. Only one instance is expected; the first registered wins.
+Consolidated into `IAppSettings`, `IUserIdentity`, and `IUserDirectory` above — these no longer exist as separate interfaces. See [Control.md](Control.md) for the full mapping.
 
 ---
 
@@ -121,27 +93,61 @@ string GetConfirmationMessageId(object message);
 void SetConfirmationMessageId(object message, string value);
 bool GetIsAlert(object message);
 void SetIsAlert(object message, bool value);
+int GetPriority(object message);
+void SetPriority(object message, int value);
+string GetTag(object message);
+void SetTag(object message, string value);
 ```
 Supplies the concrete message type used throughout the engine — on the wire (peer and interface connections) and in the database — and maps the engine's logical fields onto that type's real fields. No default — the engine has no message DTO of its own and fails at startup if a host does not register an implementation. See [Peer.md](Peer.md#message-format).
 
 ---
 
-### `IAlertConfiguration`
+### `IAlertSettings`
 ```csharp
 string AlertText { get; }
 TimeSpan AlarmSoundDuration { get; }
 bool QuickConfirmationEnabled { get; }
+bool ComposeAlertsEnabled { get; }
 ```
-Configures the title bar's alarm box text, how long the alarm sound plays before auto-stopping, and whether click/Space/Enter quick confirmation is enabled. Default: `"ALERT"` / 30 seconds / `true`, overridable via `config.json`. See [Peer.md](Peer.md#alert-messages).
+Configuration for the alert-message feature: the title bar's alarm box text (and draft editor's alert checkbox label), how long the alarm sound plays before auto-stopping, whether click/Space/Enter quick confirmation is enabled, and whether the draft editor can originate alerts at all. Default: `"ALERT"` / 30 seconds / `true` / `true` — all four are overridable via `config.json`. See [Peer.md](Peer.md#alert-messages). Actually playing the alarm sound is real platform behavior, not configuration — see `IAlertSoundPlayer` in [Control.md](Control.md), which is not a control interface and is always provided by the engine itself.
 
 ---
 
-### `IAlertSoundPlayer`
+### `IMessageComposition`
 ```csharp
-void Play();
-void Stop();
+IReadOnlyList<MessagePriorityOption> GetPriorities();
+bool TagsEnabled { get; }
+string TagLabel { get; }
+IReadOnlyList<TagPriorityBlock> GetBlockedCombinations();
 ```
-Starts/stops the looping alarm sound for alert messages. Default: silent no-op — audio playback is platform-specific, so a host must register an implementation for real sound.
+How messages are composed and displayed: selectable priority levels, whether message tags are shown and what the tag input is labeled, and which tag/priority combinations are blocked outright. Default: a single `"Normal"` (0) priority level / tags enabled with label `"Tag"` / no blocked combinations. `TagsEnabled`/`TagLabel` are overridable via `config.json`.
+
+---
+
+### `IPrintPolicy`
+```csharp
+bool PrintReceivedDefaultEnabled { get; }
+int GetPrintCount(object message);
+```
+The print manager's automatic "print received" behavior: whether it starts enabled, and how many copies of each received message to add to the print queue while it is. Default: disabled / `1` copy per message. `PrintReceivedDefaultEnabled` is overridable via `config.json`.
+
+---
+
+### `INetworkTopology`
+```csharp
+NodeRole Role { get; }
+UserEndpoint? GetServerEndpoint();
+Task<IReadOnlyDictionary<string, ServerUserConfig>> GetServerUsers(CancellationToken cancellation = default);
+```
+This instance's place in the peer/client/server networking topology — see [Peer.md](Peer.md#node-roles). Default: `NodeRole.Peer`, no server endpoint, no server users. Overridable via `config.json`'s `NodeRole`/`ServerEndpoint`/`ServerUsers`.
+
+---
+
+### `IConfigFileProvider`
+```csharp
+bool Enabled { get; }
+```
+Whether the `--config` command-line argument is honored at all. Resolved before `EngineConfig` itself exists, so an implementation must never depend on it. Default: `true`.
 
 ---
 

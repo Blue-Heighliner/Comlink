@@ -1,6 +1,46 @@
 # Peer Networking
 
-The peer layer handles direct node-to-node message delivery. Every running instance — in both `Client` and `Headless` modes — runs a `PeerService` that wraps a single [OFT](Oft.md) `IOftPeer`, accepting inbound connections from other nodes and sending outbound ones. Every instance also runs `InterfaceService`, which hosts a local interface listener that mirrors and injects into this same message stream, regardless of mode — see [Interface.md](Interface.md).
+The peer layer handles node-to-node message delivery. Every running instance — in both `Client` and `Headless` modes — runs an `IPeerService` and exposes the same `MessageDelivered`/`ConfirmationReceived`/`DeliveryStatusChanged`/`Send`/`DeliverLocal` surface to the rest of the engine (`MessageRoutingService`, `InterfaceService`, `EntryService`) regardless of topology. Which concrete implementation is registered is controlled by `INetworkTopology.Role` (see [Node Roles](#node-roles) below) — the default, `NodeRole.Peer`, is direct peer-to-peer networking via `PeerService`, described in the rest of this document. Every instance also runs `InterfaceService`, which hosts a local interface listener that mirrors and injects into this same message stream, regardless of mode or role — see [Interface.md](Interface.md).
+
+## Node Roles
+
+`NodeRole` (`INetworkTopology`, see [Control.md](Control.md)) selects one of three networking topologies for a running instance. It is resolved once, synchronously, from `EngineConfig.NodeRole` at DI composition time in `EngineExtensions.UseEngine` — before the convention scanner runs — so the correct `IPeerService` implementation is registered from the start; nothing re-checks the role at runtime.
+
+| Role | `IPeerService` implementation | Behavior |
+|------|-------------------------------|----------|
+| `Peer` (default) | `PeerService` | Direct peer-to-peer, as described in the rest of this document. |
+| `Client` | `ClientPeerService` | All traffic flows through one long-term connection to a configured server. |
+| `Server` | `ServerRoutingService` | Routes between this server's child clients and other servers. |
+
+### Client
+
+A `Client`-role instance has the exact same GUI and application flow as `Peer` — `MessageRoutingService`, `EntryService`, and the ViewModels are unaware of the difference — but `ClientPeerService` replaces per-recipient direct connections with a single long-term outbound [OFT](Oft.md) `IOftConnection` to the server endpoint from `INetworkTopology`:
+
+1. `Start` loops indefinitely: dial the server via `IOftConnector.Connect` using `IOftCertificateProvider.GetPeerOptions()`, then await the connection's own `DisconnectedHandler` firing. Whether the dial fails or an established connection later disconnects, the loop simply retries after a fixed interval — there is no give-up condition.
+2. `Send(userName, message)` ignores `userName` for addressing purposes — the message is transmitted as-is over the one shared connection, and the *server* performs the actual user-to-connection routing (see [Server](#server) below). Because `MessageRoutingService.Route` still calls `IPeerService.Send` once per resolved recipient (e.g. once per member of an addressed group), `ClientPeerService` coalesces concurrent `Send` calls that share the same `IMessageFormat.GetMessageId(message)` into a single physical transmission, so a group-addressed message is not sent to the server multiple times.
+3. Inbound messages received over the connection are dispatched through the same confirmation-vs-ordinary classification `PeerService` uses (shared via `PeerMessageDispatcher`), raising `MessageDelivered`/`ConfirmationReceived` identically.
+4. `Send` returns `false` immediately whenever no connection is currently established — it does not block waiting for a reconnect.
+
+No per-message OFT delivery-status tracking is performed across the hop to the server — `DeliveryStatusChanged` is declared (to satisfy `IPeerService`) but never raised.
+
+### Server
+
+A `Server`-role instance runs no message-composing GUI flow of its own in practice — `ServerRoutingService` is a routing hub between this server's child clients and every other server in the cluster, driven entirely by `INetworkTopology.GetServerUsers()`. That map is keyed by server user name and describes the **whole cluster topology**: every server's listen endpoint and full child-client list, not just the local server's own.
+
+1. **Startup**: `Start` looks up this instance's own entry (by `ICurrentUserProvider.UserName`) to find its listen endpoint, then calls `IOftHoster.Host` on it — the same endpoint child clients dial in on *and* that other servers dial in on. For every *other* server in the map, it spawns an independent retry loop (`IOftConnector.Connect`, same disconnect-and-retry pattern as Client) forming a full mesh of outbound server-to-server connections.
+2. **Classifying inbound connections**: `IOftListener.ConnectedHandler` inspects each accepted connection's `Identity.Info` (the remote side's hail payload, which — via `IOftCertificateProvider.GetPeerOptions()` — carries its user name) against this server's own `ChildClients` list and the user map's server names:
+   - A known child client is tracked and its `ReceivedHandler` routed to the from-child path.
+   - A known other server is used purely as an inbound receive source — the corresponding *outbound* leg the retry loop already owns is what's used to *send* to that server, so each ordered server pair can have both an inbound- and outbound-established connection without conflict.
+   - Anything else is disposed and ignored.
+3. **Routing from a child client**: the raw address list (`IMessageFormat.GetAddresses`, unexpanded — group addressing is not resolved at the server) is checked against (a) this server's other children, each addressed one delivered to directly, and (b) every other server that owns at least one addressed child, each forwarded the same raw bytes exactly once regardless of how many of its children are addressed.
+4. **Routing from another server**: assumed already routed by that server — only delivered to this server's own children that are addressed, and never re-forwarded to any other server, so a message can never loop.
+5. Messages are relayed as raw bytes (re-deserialized only to read `GetAddresses`/`GetPriority`) — a server does not persist, mirror to interfaces, or otherwise treat routed traffic as its own inbox, and `ConfirmationReceived`/`DeliveryStatusChanged` are never raised for it.
+
+`IPeerService.Send`/`DeliverLocal` are still implemented (an instance in `Server` role composing its own message is treated exactly like a message arriving from a child), for interface completeness, though this is not part of the role's intended usage.
+
+### Retry behavior (Client and Server)
+
+Both `ClientPeerService`'s connection to its server and `ServerRoutingService`'s per-remote-server connections use the same shape of retry loop: dial, and if that succeeds, wait for the connection's `DisconnectedHandler` to fire; either a failed dial or a later disconnect leads back to a fixed retry delay before dialing again, forever, until the instance shuts down. There is no backoff and no maximum retry count — a server or client that is temporarily unreachable is expected to eventually come back.
 
 ## Message Format
 
@@ -55,7 +95,7 @@ The `Sample` project registers `SampleMessageFormat` over a `SampleMessage` DTO 
 4. Deserialization failures are caught and simply dropped; OFT itself handles connection-level errors and retries.
 
 ### Outbound
-- `PeerService.Send(userName, message)` takes `message` as `object` (an instance of `IMessageFormat.MessageType`), resolves `userName` to a `UserEndpoint` via `IUserLocator`, reads `IMessageFormat.GetMessageId(message)` for the delivery-status tag, then calls `IOftPeer.Send(host, port, data, priority: IMessageFormat.GetPriority(message), tag: (messageId, userName))`. `IMessageFormat.GetPriority(message)` is passed verbatim as OFT's own `priority` argument — larger values are sent first by OFT — so the message's stored priority number (see `IMessagePriorityProvider` in `Docs/Control.md`) directly controls OFT-level send ordering, independent of the same value also being embedded inside the serialized message content itself.
+- `PeerService.Send(userName, message)` takes `message` as `object` (an instance of `IMessageFormat.MessageType`), resolves `userName` to a `UserEndpoint` via `IUserDirectory`, reads `IMessageFormat.GetMessageId(message)` for the delivery-status tag, then calls `IOftPeer.Send(host, port, data, priority: IMessageFormat.GetPriority(message), tag: (messageId, userName))`. `IMessageFormat.GetPriority(message)` is passed verbatim as OFT's own `priority` argument — larger values are sent first by OFT — so the message's stored priority number (see `IMessageComposition` in `Docs/Control.md`) directly controls OFT-level send ordering, independent of the same value also being embedded inside the serialized message content itself.
 - `IOftPeer` maintains its own connection cache internally, keyed by `host:port`, reusing an existing connection or creating one as needed.
 - The `Send` call does not return until OFT has fully delivered the message (see [Delivery status](#delivery-status)) — a resolution failure (unknown user) or an OFT-level send failure (e.g. `OftDisconnectedException`) both cause `PeerService.Send` to return `false`.
 
@@ -90,7 +130,7 @@ Beyond OFT's own delivery status, the engine tracks one more step per recipient:
 
 ## Alert Messages
 
-An alert is an ordinary message with `IMessageFormat.GetIsAlert` set to `true` — nothing about its wire format, routing, or storage differs from a non-alert message. The only difference is client-side: a Client-mode UI that receives an alert message alarms (a red box in the title bar, plus a looping sound) until the user reads it, via the same Read Confirmation flow described above. See `Docs/ViewModels.md` for `AlertViewModel` and the `IAlertConfiguration`/`IAlertSoundPlayer` control interfaces that drive this.
+An alert is an ordinary message with `IMessageFormat.GetIsAlert` set to `true` — nothing about its wire format, routing, or storage differs from a non-alert message. The only difference is client-side: a Client-mode UI that receives an alert message alarms (a red box in the title bar, plus a looping sound) until the user reads it, via the same Read Confirmation flow described above. See `Docs/ViewModels.md` for `AlertViewModel` and the `IAlertSettings` control interfaces that drive this.
 
 ## Events
 

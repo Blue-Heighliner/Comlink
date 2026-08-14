@@ -16,9 +16,9 @@ public sealed partial class EntryItemViewModel : ObservableObject
     public string Title { get; }
     /// <summary>Gets an optional secondary line of text shown below the title.</summary>
     public string? SecondaryText { get; }
-    /// <summary>Gets an optional priority label shown below <see cref="SecondaryText"/>; see <see cref="IMessagePriorityProvider"/>.</summary>
+    /// <summary>Gets an optional priority label shown below <see cref="SecondaryText"/>; see <see cref="Control.IMessageComposition"/>.</summary>
     public string? PriorityText { get; }
-    /// <summary>Gets an optional tag label shown next to <see cref="PriorityText"/>; see <see cref="IMessageTagConfiguration"/>.</summary>
+    /// <summary>Gets an optional tag label shown next to <see cref="PriorityText"/>; see <see cref="Control.IMessageComposition"/>.</summary>
     public string? TagText { get; }
     /// <summary>Gets an optional formatted timestamp string for display.</summary>
     public string? TimeText { get; }

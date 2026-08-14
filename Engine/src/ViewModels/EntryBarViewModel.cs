@@ -50,8 +50,7 @@ public sealed partial class EntryBarViewModel : ObservableObject, IEntryBarViewM
 {
     private readonly IEntryService _entryService;
     private readonly IMessageFormat _messageFormat;
-    private readonly IMessagePriorityProvider _priorityProvider;
-    private readonly IMessageTagConfiguration _tagConfiguration;
+    private readonly IMessageComposition _messageComposition;
     private const int PageSize = 50;
 
     [ObservableProperty] private EntryItemViewModel? _selectedEntry;
@@ -73,21 +72,19 @@ public sealed partial class EntryBarViewModel : ObservableObject, IEntryBarViewM
     /// <summary>Initializes a new <see cref="EntryBarViewModel"/> with the required entry service.</summary>
     /// <param name="entryService">Entry service for data loading and delete operations.</param>
     /// <param name="messageFormat">Maps logical fields onto a message entity's stored message.</param>
-    /// <param name="priorityProvider">Provides the available message priority levels, used to label each Inbox/Outbox entry's priority.</param>
-    /// <param name="tagConfiguration">Controls whether each Inbox/Outbox entry's tag is shown.</param>
-    public EntryBarViewModel(IEntryService entryService, IMessageFormat messageFormat, IMessagePriorityProvider priorityProvider, IMessageTagConfiguration tagConfiguration)
+    /// <param name="messageComposition">Provides the available message priority levels, used to label each Inbox/Outbox entry's priority, and whether each entry's tag is shown.</param>
+    public EntryBarViewModel(IEntryService entryService, IMessageFormat messageFormat, IMessageComposition messageComposition)
     {
         _entryService = entryService;
         _messageFormat = messageFormat;
-        _priorityProvider = priorityProvider;
-        _tagConfiguration = tagConfiguration;
+        _messageComposition = messageComposition;
     }
 
-    private string GetPriorityLabel(object message) => _priorityProvider.GetPriorities().GetLabel(_messageFormat.GetPriority(message));
+    private string GetPriorityLabel(object message) => _messageComposition.GetPriorities().GetLabel(_messageFormat.GetPriority(message));
 
     private string? GetTagLabel(object message)
     {
-        if (!_tagConfiguration.TagsEnabled) return null;
+        if (!_messageComposition.TagsEnabled) return null;
         string tag = _messageFormat.GetTag(message);
         return string.IsNullOrEmpty(tag) ? null : tag;
     }

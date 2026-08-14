@@ -16,11 +16,15 @@ public interface IExternalDriveProvider
     IReadOnlyList<ExternalDriveInfo> GetDrives();
 }
 
-/// <summary>Default <see cref="IExternalDriveProvider"/> backed by <see cref="DriveInfo"/>, filtered to ready removable and optical drives that pass a live write probe.</summary>
-internal sealed class ExternalDriveProvider : IExternalDriveProvider
+/// <summary>
+/// Default <see cref="IExternalDriveProvider"/> backed by <see cref="DriveInfo"/>, filtered to ready
+/// removable and optical drives that pass a live write probe. Members are <see langword="virtual"/> so a
+/// host can inherit and override — see <c>Docs/Control.md</c>.
+/// </summary>
+public class DefaultExternalDriveProvider : IExternalDriveProvider
 {
     /// <inheritdoc />
-    public IReadOnlyList<ExternalDriveInfo> GetDrives()
+    public virtual IReadOnlyList<ExternalDriveInfo> GetDrives()
     {
         List<ExternalDriveInfo> drives = [];
         foreach (DriveInfo drive in DriveInfo.GetDrives())

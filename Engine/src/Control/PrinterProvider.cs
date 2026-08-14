@@ -40,16 +40,17 @@ public interface ILinePrinter
 /// on Linux. Printer discovery is best-effort (see <see cref="GetAvailablePrinters"/>); line printing submits
 /// each line as its own raw print job and polls the OS's own job status until it reports the job finished
 /// printing before returning, so the print queue's "wait for confirmation" semantics reflect genuine
-/// OS-reported completion rather than just "the app handed the bytes off."
+/// OS-reported completion rather than just "the app handed the bytes off." Members are <see langword="virtual"/>
+/// so a host can inherit and override — see <c>Docs/Control.md</c>.
 /// </summary>
 [ExcludeFromCodeCoverage]
-internal sealed partial class PrinterProvider : IPrinterProvider, ILinePrinter
+public partial class DefaultPrinterProvider : IPrinterProvider, ILinePrinter
 {
     private static readonly TimeSpan PollInterval = TimeSpan.FromMilliseconds(150);
     private static readonly TimeSpan MaxWait = TimeSpan.FromSeconds(30);
 
     /// <inheritdoc />
-    public IReadOnlyList<string> GetAvailablePrinters()
+    public virtual IReadOnlyList<string> GetAvailablePrinters()
     {
         if (OperatingSystem.IsWindows()) return GetWindowsPrinters();
         if (OperatingSystem.IsLinux()) return GetLinuxPrinters();
@@ -57,7 +58,7 @@ internal sealed partial class PrinterProvider : IPrinterProvider, ILinePrinter
     }
 
     /// <inheritdoc />
-    public string? GetDefaultPrinter()
+    public virtual string? GetDefaultPrinter()
     {
         if (OperatingSystem.IsWindows()) return GetWindowsDefaultPrinter();
         if (OperatingSystem.IsLinux()) return GetLinuxDefaultPrinter();
@@ -65,11 +66,11 @@ internal sealed partial class PrinterProvider : IPrinterProvider, ILinePrinter
     }
 
     /// <inheritdoc />
-    public Task PrintLine(string printerName, string line, CancellationToken cancellation = default) =>
+    public virtual Task PrintLine(string printerName, string line, CancellationToken cancellation = default) =>
         PrintRaw(printerName, line + "\r\n", cancellation);
 
     /// <inheritdoc />
-    public Task PageFeed(string printerName, CancellationToken cancellation = default) =>
+    public virtual Task PageFeed(string printerName, CancellationToken cancellation = default) =>
         PrintRaw(printerName, "\f", cancellation);
 
     private static Task PrintRaw(string printerName, string content, CancellationToken cancellation)
@@ -108,13 +109,18 @@ internal sealed partial class PrinterProvider : IPrinterProvider, ILinePrinter
                     FileName = "powershell",
                     Arguments = $"-NoProfile -NonInteractive -Command \"{command}\"",
                     RedirectStandardOutput = true,
+                    RedirectStandardError = true,
                     UseShellExecute = false,
                     CreateNoWindow = true
                 }
             };
             process.Start();
+            // Drain (rather than inherit) stderr too, so a tool's own diagnostic chatter never leaks to
+            // the app's console — this is a best-effort discovery call, so it's discarded, not logged.
+            Task<string> stderr = process.StandardError.ReadToEndAsync();
             string output = process.StandardOutput.ReadToEnd();
             process.WaitForExit();
+            stderr.Wait();
             return output;
         }
         catch
@@ -349,6 +355,7 @@ internal sealed partial class PrinterProvider : IPrinterProvider, ILinePrinter
                 FileName = "lp",
                 RedirectStandardInput = true,
                 RedirectStandardOutput = true,
+                RedirectStandardError = true,
                 UseShellExecute = false,
                 CreateNoWindow = true
             }
@@ -362,10 +369,14 @@ internal sealed partial class PrinterProvider : IPrinterProvider, ILinePrinter
         process.StartInfo.ArgumentList.Add("raw");
 
         process.Start();
+        // Drain (rather than inherit) stderr too, so lp's own diagnostic chatter never leaks to the app's
+        // console — PrintRawLinux's caller already treats a submission failure as best-effort.
+        Task<string> stderr = process.StandardError.ReadToEndAsync(cancellation);
         await process.StandardInput.WriteAsync(content.AsMemory(), cancellation);
         process.StandardInput.Close();
         string output = await process.StandardOutput.ReadToEndAsync(cancellation);
         await process.WaitForExitAsync(cancellation);
+        await stderr;
 
         // Output format: "request id is PRINTER-123 (1 file(s))"
         const string marker = "request id is ";
@@ -386,6 +397,7 @@ internal sealed partial class PrinterProvider : IPrinterProvider, ILinePrinter
                 {
                     FileName = fileName,
                     RedirectStandardOutput = true,
+                    RedirectStandardError = true,
                     UseShellExecute = false,
                     CreateNoWindow = true
                 }
@@ -393,8 +405,13 @@ internal sealed partial class PrinterProvider : IPrinterProvider, ILinePrinter
             foreach (string argument in arguments)
                 process.StartInfo.ArgumentList.Add(argument);
             process.Start();
+            // Drain (rather than inherit) stderr too, so a tool's own diagnostic chatter — e.g. lpstat's
+            // "No destinations added." when no printer is configured — never leaks to the app's console;
+            // this is a best-effort discovery/status call, so it's discarded, not logged.
+            Task<string> stderr = process.StandardError.ReadToEndAsync();
             string output = process.StandardOutput.ReadToEnd();
             process.WaitForExit();
+            stderr.Wait();
             return output;
         }
         catch

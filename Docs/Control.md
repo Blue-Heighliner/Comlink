@@ -1,131 +1,109 @@
 # Control Interfaces
 
-Control interfaces are the extension points through which a host application customises Engine behaviour without modifying Engine code. They live in `Engine/src/Control/` and follow a consistent DI-first pattern.
+Control interfaces are the extension points through which a host application customises Engine behaviour without modifying Engine code. They live in `Engine/src/Control/` and follow a consistent DI-first pattern. Related concerns are consolidated into a small number of interfaces per app area (e.g. all alert-related settings live on one `IAlertSettings`) rather than one interface per individual field — see each interface's members below for what it covers.
 
 ## Concept
 
-Engine never reads environment variables, hardcodes paths, or calls host-specific APIs directly. Instead, every piece of external configuration is expressed as a small `public interface`. Each interface has a single co-located default implementation driven by `EngineConfig`. The convention scanner in `AddConventionSingletons` automatically registers every `IThing → Thing` pair it finds in the Engine assembly with `TryAddSingleton`, so hosts can override any interface simply by registering their own implementation before calling `UseEngine`.
+Engine never reads environment variables, hardcodes paths, or calls host-specific APIs directly. Instead, every piece of external configuration is expressed as a small `public interface`. Each interface has a single co-located default implementation, named `Default{Thing}`. The convention scanner in `AddConventionSingletons` automatically registers every `IThing → Thing`/`IThing → DefaultThing` pair it finds in the Engine assembly with `TryAddSingleton`, so hosts can override any interface simply by registering their own implementation.
 
 ```csharp
-// Host registers its implementation first
-services.AddSingleton<IAppNameProvider, MyAppNameProvider>();
-
-// UseEngine sees an existing registration and skips the Engine default
-builder.UseEngine(EngineMode.Client);
+services.AddSingleton<IAppSettings, MyAppSettings>();
 ```
 
-Config-based settings flow automatically through `EngineConfig`. Call `UseEngineConfig` before `UseEngine` so the config is present when the convention-registered implementations resolve it:
+**A control-interface implementation — Engine's default or a host's override — describes non-config-file behavior only. It must never read `EngineConfig` itself, and it must never read an environment variable.** Where an interface has a corresponding `config.json` field, that override is applied separately, at the Engine level, as a decorator layered on top of whichever implementation ends up registered — see [Config Overrides](#config-overrides) below. This split keeps "what does this app do out of the box" (a control interface) and "what does `config.json` change about that" (a decorator Engine owns) as two independent, separately testable concerns, and means a host is never tempted to reimplement `config.json` parsing itself just to add one small piece of non-config behavior.
+
+**Every `Default{Thing}` class is `public` (not `sealed`) with `virtual` members**, specifically so a host can inherit from it and override just the one member it actually wants to change, instead of reimplementing the whole interface. `AddConventionSingletons` treats a class named `Default{Thing}` (or a class named exactly `{Thing}`, matching the interface's own name) as the default registration for `I{Thing}` — see `EngineExtensions.AddConventionSingletons`. For example:
+
+```csharp
+// Only overrides AlertText; AlarmSoundDuration, QuickConfirmationEnabled, and ComposeAlertsEnabled
+// all keep DefaultAlertSettings' own behavior.
+public sealed class SampleAlertSettings : DefaultAlertSettings
+{
+    public override string AlertText => "!ALERT!";
+}
+```
+
+A base class's own virtual members may call each other, so overriding one can affect another by design — e.g. `DefaultAppSettings.AppDataPath` computes `Path.Combine(..., AppName)` by reading the (possibly overridden) `AppName` property through virtual dispatch, so a host overriding only `AppName` automatically gets a matching default data folder without needing to also override `AppDataPath`.
+
+## Config Overrides
+
+`EngineExtensions.UseEngineConfigOverrides()` registers a small decorator for every control interface that has a corresponding `config.json` field. Call it last, after `UseEngine` and after any host `ConfigureServices` callback that registers control-interface overrides, so it wraps whichever implementation actually ends up registered for each interface:
 
 ```csharp
 var config = EngineConfig.Load(args);
-builder.UseEngineConfig(config).UseEngine(EngineMode.Client);
+Host.CreateDefaultBuilder()
+    .UseEngineConfig(config)
+    .UseEngine(EngineMode.Client)
+    .ConfigureServices((_, services) => configureServices(services)) // host overrides, e.g. Sample's
+    .UseEngineConfigOverrides()                                      // config.json overlaid last
+    .Build();
 ```
+
+Internally, for each affected interface `IThing`, this moves whichever `IThing` registration currently exists (the Engine default, or a host override — if both were registered, the host's, matching normal last-registration-wins resolution) into a keyed "fallback" slot, then registers a `Configured{Thing}` class as the new unkeyed `IThing` — the one everything else in the container actually resolves. Each `Configured{Thing}` takes the keyed fallback and `EngineConfig` as constructor dependencies and, field by field, returns the config value when it is non-null and the fallback's value otherwise; a member with no corresponding `config.json` field always delegates straight to the fallback. These decorator classes are co-located with their interface and default implementation (e.g. `ConfiguredPortConfiguration` lives in `PortConfiguration.cs` alongside `IPortConfiguration`/`DefaultPortConfiguration`) but are registered only by `UseEngineConfigOverrides()`, never by convention scanning (their own name doesn't match the `I{Thing}`/`Default{Thing}` convention).
+
+`EngineApplication.Start` (the entry point `Sample` uses) calls `UseEngineConfigOverrides()` for you in both Client and Headless mode; a host bypassing `EngineApplication` and composing its own `IHostBuilder` must call it explicitly.
 
 ## Interface Reference
 
 ### Optional (Engine provides a default)
 
-These interfaces have a built-in default driven by `EngineConfig`. Override them by registering a replacement before calling `UseEngine`.
+These interfaces have a built-in default. Override them by registering a replacement, or by inheriting from the `Default{Thing}` class and overriding just the members you want to change.
 
 ---
 
-#### `IHomeContentProvider`
-
-```csharp
-string GetHomeText();
-```
-
-Returns the placeholder text displayed in the content area when no entry is selected.
-
-**Engine default:** `"HOME"` (via `HomeContentProvider`)
-
-**Sample override:** `SampleHomeContentProvider` — returns a product-appropriate instruction string.
-
----
-
-#### `IUserCodeResolver`
-
-```csharp
-Task<UserInfo?> Resolve(string userCode, CancellationToken cancellation = default);
-```
-
-Converts a user activation code (entered by the user during installation) into a `UserInfo` record, or returns `null` if the code is unrecognised. The result sets the user name, display environment title, and environment accent color.
-
-**Engine default:** accepts code `"CODE"` → user `"TEST"` (via `UserCodeResolver`)
-
-**Sample override:** `SampleUserCodeResolver` — checks hard-coded codes (`CODE1`/`CODE2`/`CODE3`) and falls back to `USER_{CODE}_NAME` environment variables.
-
----
-
-#### `IUserLocator`
-
-```csharp
-Task<UserEndpoint?> GetEndpoint(string userName, CancellationToken cancellation = default);
-```
-
-Resolves a user name to its TCP peer endpoint (`IpAddress` + `Port`) for outbound P2P delivery. Returns `null` when the user is unknown and the message cannot be delivered.
-
-**Engine default:** resolves users defined in `config.json` `Users`; returns `null` for unknown names (via `UserLocator`)
-
-**Sample override:** `SampleUserLocator` — checks the `Users` map from `config.json` first, then falls back to `PEER_{USERNAME}=ip:port` environment variables.
-
----
-
-#### `IUserNameDirectory`
-
-```csharp
-Task<IReadOnlyList<string>> GetAllUserNames(CancellationToken cancellation = default);
-```
-
-Returns the names of every known user **and group** in the messaging system. Used to populate the destination auto-complete in the draft editor.
-
-**Engine default:** returns user names from `config.json` `Users` and group names from `UserGroups` (via `UserNameDirectory`)
-
-**Sample override:** `SampleUserNameDirectory` — unions config users/groups with users inferred from `PEER_*` environment variables.
-
----
-
-#### `IUserGroupProvider`
-
-```csharp
-Task<IReadOnlyDictionary<string, IReadOnlyList<string>>> GetGroups(CancellationToken cancellation = default);
-```
-
-Returns all defined user groups as a map of group name → member names. Members may be user names or other group names, enabling nested group hierarchies. Engine uses this to expand group addresses to their constituent users before delivery, deduplicating across overlapping groups and direct addresses.
-
-When a message is sent to a group, the Engine records which addressed groups each user was reached through. The sent message view shows this context — e.g. `USER-A (OPS)` — so the operator can see which group membership drove delivery.
-
-**Engine default:** reads `UserGroups` from `config.json`; returns empty map when no groups are defined (via `UserGroupProvider`)
-
-**Sample override:** `SampleUserGroupProvider` — unions config groups with groups defined via `GROUP_{NAME}` environment variables (comma-separated member list).
-
----
-
-#### `IAppNameProvider`
+#### `IAppSettings`
 
 ```csharp
 string AppName { get; }
+string AppDataPath { get; }
+bool IsKioskMode { get; }
+string GetHomeText();
 ```
 
-The application name used as the default data folder name and in log headers.
+This app's own identity and top-level presentation: the display/data-folder name, the root directory persistent state (LiteDB, user state, logs) is written under, whether the main window runs in kiosk mode (hides window chrome and restricts navigation), and the placeholder text shown in the content area when no entry is selected.
 
-**Engine default:** derives from entry assembly name (via `AppNameProvider`)
+**Engine default:** `AppName` derives from the entry assembly name; `AppDataPath` is `%APPDATA%\{AppName}` (computed from `AppName` via virtual dispatch — see [Concept](#concept)); `IsKioskMode` is `false`; `GetHomeText()` returns `"HOME"` (via `DefaultAppSettings`).
 
-**Sample override:** `SampleAppNameProvider` — reproduces the Engine default exactly (entry assembly name) unless the `APP_NAME` environment variable is set, so the data folder location does not change unless an operator opts in.
+**Config override:** `ConfiguredAppSettings` applies `config.json`'s `DataFolder` over the wrapped provider's `AppDataPath` when set: `null` uses it unchanged; an absolute path is used verbatim; an `@`-prefixed path is relative to it (see [Config.md](Config.md)) — supporting the `@`-prefix shorthand this way, rather than reading `AppName` again itself, is what lets a host override *both* `AppName` and `DataFolder` at once and have them compose correctly. `AppName`, `IsKioskMode`, and `GetHomeText()` have no corresponding `config.json` field and always delegate to the wrapped provider.
+
+**Sample override:** `SampleAppSettings` — overrides `GetHomeText()` with a product-appropriate instruction string; every other member uses the Engine default. Changing the app data path's default runtime behavior has caused real data loss in this project before, so Sample deliberately never touches `AppDataPath`/`AppName`.
 
 ---
 
-#### `IAppDataPathProvider`
+#### `IUserIdentity`
 
 ```csharp
-string AppDataPath { get; }
+string? DebugUserName { get; }
+Task<UserInfo?> ResolveCode(string userCode, CancellationToken cancellation = default);
 ```
 
-Absolute path to the root data directory. All persistent state (LiteDB, user state, logs) is written under this path.
+How this instance's own local user identity is established: a fixed debug override that bypasses the normal `State.json` lookup, and resolving a user activation code (entered during installation) to a `UserInfo`. See `Services.UserService`.
 
-**Engine default:** `%APPDATA%\{AppName}` when `DataFolder` is null; supports absolute paths and the `@`-prefix shorthand (see [Config.md](Config.md)) via `AppDataPathProvider`
+**Engine default:** no debug override (`DebugUserName` is `null`); `ResolveCode` accepts code `"CODE"` → user `"TEST"` (via `DefaultUserIdentity`).
 
-**Sample override:** `SampleAppDataPathProvider` — reproduces the Engine default resolution exactly, plus a `DATA_FOLDER` environment variable fallback (same absolute-path/`@`-prefix rules) used only when `config.json` does not set `DataFolder`. Byte-identical to the Engine default when neither is set.
+**Config override:** `ConfiguredUserIdentity` applies `config.json`'s `UserName` over the wrapped provider's `DebugUserName` when set. See [Config.md](Config.md). `ResolveCode` has no corresponding `config.json` field and always delegates to the wrapped provider.
+
+**Sample override:** `SampleUserIdentity` — overrides `ResolveCode` to recognize three hard-coded test codes (`CODE1`/`CODE2`/`CODE3`) instead of the Engine default's one; `DebugUserName` uses the Engine default (`null`, `config.json`'s `UserName` applied automatically on top).
+
+---
+
+#### `IUserDirectory`
+
+```csharp
+Task<UserEndpoint?> GetEndpoint(string userName, CancellationToken cancellation = default);
+Task<IReadOnlyDictionary<string, IReadOnlyList<string>>> GetGroups(CancellationToken cancellation = default);
+Task<IReadOnlyList<string>> GetAllUserNames(CancellationToken cancellation = default);
+```
+
+Everything the engine knows about addressable users and groups: resolving a user name to its TCP peer endpoint for outbound P2P delivery (`GetEndpoint` returns `null` when the user is unknown), group membership for address expansion (members may be user names or other group names, enabling nested hierarchies), and the full list of known user and group names for the destination auto-complete in the draft editor.
+
+When a message is sent to a group, the Engine records which addressed groups each user was reached through. The sent message view shows this context — e.g. `USER-A (OPS)` — so the operator can see which group membership drove delivery.
+
+**Engine default:** no known users, groups, or names for any of the three members (via `DefaultUserDirectory`).
+
+**Config override:** `ConfiguredUserDirectory` resolves `config.json`'s `Users` map before falling back to the wrapped provider for `GetEndpoint`; merges `config.json`'s `UserGroups` over the wrapped provider's own groups for `GetGroups` (a config entry replaces a same-named group from the wrapped provider; groups only defined by the wrapped provider still pass through); and unions the wrapped provider's names with `config.json`'s `Users`/`UserGroups` keys, deduplicated and sorted, for `GetAllUserNames`. See [Config.md](Config.md).
+
+**Sample override:** none — the Engine default plus the automatic config override already cover every genuinely useful case (a fixed, non-config user/group directory has no sensible non-config content to demonstrate).
 
 ---
 
@@ -143,113 +121,64 @@ TCP port numbers for the peer listener and the local interface listener (always 
 | `PeerPort` | `50021` |
 | `InterfacePort` | `50020` |
 
-**Engine default:** uses `PeerPort`/`InterfacePort` from `config.json`, falling back to 50021/50020 (via `PortConfiguration`)
+**Engine default:** fixed `50021`/`50020` (via `DefaultPortConfiguration`)
 
-**Sample override:** `SamplePortConfiguration` — same `config.json` values, falling back to `PEER_LISTEN_PORT`/`INTERFACE_LISTEN_PORT` environment variables, then the same 50021/50020 defaults.
+**Config override:** `ConfiguredPortConfiguration` applies `config.json`'s `PeerPort`/`InterfacePort` over the wrapped provider's ports, field by field, when set. See [Config.md](Config.md).
 
----
-
-#### `IKioskModeProvider`
-
-```csharp
-bool IsKioskMode { get; }
-```
-
-When `true`, the main window hides its chrome (title bar, resize handles) and restricts navigation to prevent the user from leaving the application. Intended for locked-down deployments.
-
-**Engine default:** `false` (via `KioskModeProvider`)
-
-**Sample override:** `SampleKioskModeProvider` — `true` when the `KIOSK_MODE` environment variable is `"1"` or `"true"`; `false` otherwise, matching the Engine default.
+**Sample override:** none — the Engine default plus the automatic config override already cover every genuinely useful case.
 
 ---
 
-#### `IAlertConfiguration`
+#### `IAlertSettings`
 
 ```csharp
 string AlertText { get; }
 TimeSpan AlarmSoundDuration { get; }
 bool QuickConfirmationEnabled { get; }
-```
-
-Configures the alarm triggered by alert messages (`IMessageFormat.GetIsAlert`) in Client mode: the text shown in the title bar's alert box, how long the alarm sound plays before automatically stopping (resetting whenever a new alert arrives), and whether click/Space/Enter quick confirmation is enabled. `AlertText` is also the shared source for the draft editor's alert checkbox label (`IDraftViewModel.AlertLabel`) — both surfaces always show the same word for "alert". See [Peer.md](Peer.md#alert-messages) and `Docs/ViewModels.md`.
-
-**Engine default:** reads `AlertText`/`AlarmSoundSeconds`/`QuickConfirmationEnabled` from `config.json`, falling back to `"ALERT"` / 30 seconds / `true` (via `AlertConfiguration`). See [Config.md](Config.md).
-
-**Sample override:** `SampleAlertConfiguration` — hardcodes `AlertText` to `"!ALERT!"`, so both the title bar's alert box and the draft editor's alert checkbox read `"!ALERT!"`; delegates `AlarmSoundDuration`/`QuickConfirmationEnabled` to the same `config.json` fields as the Engine default.
-
----
-
-#### `IAlertComposeConfiguration`
-
-```csharp
 bool ComposeAlertsEnabled { get; }
 ```
 
-Controls whether the draft editor shows its alert checkbox (labeled via `IAlertConfiguration.AlertText`), letting the user mark and send a draft as an alert. Disabling this only affects local origination — the app can still receive and alarm on an alert sent by a peer regardless of this setting.
+Configuration for the alert-message feature (`IMessageFormat.GetIsAlert`) in Client mode: the title bar's alarm box text (also the draft editor's alert checkbox label — both surfaces always show the same word for "alert"), how long the alarm sound plays before automatically stopping (resetting whenever a new alert arrives while already alarming), whether click/Space/Enter quick confirmation is enabled, and whether the draft editor shows its alert checkbox at all (disabling only affects local origination — the app can still receive and alarm on a peer-originated alert). See [Peer.md](Peer.md#alert-messages) and `Docs/ViewModels.md`. Actually playing the alarm sound is real platform behavior, not configuration — see [`IAlertSoundPlayer`](#ialertsoundplayer-not-a-control-interface) below.
 
-**Engine default:** `true`, or the `ComposeAlertsEnabled` value from `config.json` when set (via `AlertComposeConfiguration`). See [Config.md](Config.md).
+**Engine default:** `"ALERT"` / 30 seconds / `true` / `true` (via `DefaultAlertSettings`).
 
-**Sample override:** `SampleAlertComposeConfiguration` — same `config.json` value, falling back to the `COMPOSE_ALERTS_ENABLED` environment variable (`"0"`/`"false"` to disable), then `true`.
+**Config override:** `ConfiguredAlertSettings` applies `config.json`'s `AlertText`/`AlarmSoundSeconds`/`QuickConfirmationEnabled`/`ComposeAlertsEnabled` over the wrapped provider's values, field by field, when set. See [Config.md](Config.md).
+
+**Sample override:** `SampleAlertSettings` — overrides `AlertText` to `"!ALERT!"` (so both the title bar's alert box and the draft editor's alert checkbox read `"!ALERT!"` unless overridden by config). `AlarmSoundDuration`/`QuickConfirmationEnabled`/`ComposeAlertsEnabled` use the Engine default, since this override isn't meant to change them — `config.json` can still override any of them, applied automatically by the config override on top.
 
 ---
 
-#### `IAlertSoundPlayer`
+#### `IAlertSoundPlayer` (not a control interface)
 
 ```csharp
 void Play();
 void Stop();
 ```
 
-Starts and stops the looping alarm sound triggered by alert messages. Actual audio playback is platform-specific, so the engine ships no built-in implementation.
+Starts/stops the alarm sound itself while one or more alerts are pending. Unlike `IAlertSettings` above, this is real OS-level audio playback, not configuration or rules, so it does not live in `Engine/src/Control/` and is not registered/overridable the way control interfaces are — it lives in `Engine/src/Audio/`, and Engine always provides real behavior for it directly, the same way it always provides real behavior for [`IPrinterProvider`/`ILinePrinter`](#iprinterprovider--ilineprinter) rather than leaving it to a host. It is `public` only because `AlertViewModel` (itself `public`) takes it as a separate constructor dependency alongside `IAlertSettings`, not because it is meant to be overridden.
 
-**Engine default:** silent no-op (via `AlertSoundPlayer`).
-
-**Sample override:** `SampleAlertSoundPlayer` — loops a synthesized beep tone through `paplay` (PulseAudio); any failure (missing binary, no audio device) is swallowed so the alert box and quick confirmation still work with no sound.
+**Engine implementation:** `AlertSoundPlayer` (`Engine/src/Audio/AlertSoundPlayer.cs`) loops a synthesized beep tone using the operating system's own audio facilities — `paplay` (PulseAudio) on Linux, `winmm.dll`'s `PlaySound` (via P/Invoke, with the same raw tone data wrapped in a WAV header) on Windows, a no-op on any other platform. Best-effort: any failure (missing binary, no audio device, unsupported platform) is swallowed so the alert box and quick confirmation still work with no sound rather than crashing the app. Not unit tested directly, for the same reason as `IPrinterProvider`/`IOftCertificateProvider` above — inherently environment- and OS-dependent.
 
 ---
 
-#### `IMessagePriorityProvider`
+#### `IMessageComposition`
 
 ```csharp
 IReadOnlyList<MessagePriorityOption> GetPriorities();
-```
-
-Returns the set of selectable message priority levels — each a `MessagePriorityOption` pairing a display `Name` with the `Value` stored via `IMessageFormat.SetPriority` and used verbatim as the OFT send priority (larger values are sent first — see [Peer.md](Peer.md)). The draft editor's priority picker (`IDraftViewModel.AvailablePriorities`) is populated from this list; see `Docs/ViewModels.md`.
-
-**Engine default:** a single `"Normal"` (value `0`) level (via `MessagePriorityProvider`)
-
-**Sample override:** `SampleMessagePriorityProvider` — three levels: `"Low"` (0), `"Medium"` (1), `"High"` (2).
-
----
-
-#### `IMessageTagConfiguration`
-
-```csharp
 bool TagsEnabled { get; }
 string TagLabel { get; }
-```
-
-Controls whether message tags (`IMessageFormat.GetTag`/`SetTag` — a short, user-inputted string identifying the type of message) are shown anywhere in the UI: the draft editor's tag input, and each Inbox/Outbox entry's tag label next to its priority in the entry listing (`EntryItemViewModel.TagText`). When `TagsEnabled` is `false`, tags are hidden everywhere — existing stored tag values are left untouched, just not surfaced. `TagLabel` is the watermark text shown in the draft editor's tag input (`IDraftViewModel.TagLabel`), letting a host call the concept something other than "Tag" (e.g. "Category", "Type") without changing engine behavior.
-
-**Engine default:** `TagsEnabled` is `true`, or the `MessageTagsEnabled` value from `config.json` when set; `TagLabel` is `"Tag"`, or the `MessageTagLabel` value from `config.json` when set (via `MessageTagConfiguration`). See [Config.md](Config.md).
-
-**Sample override:** `SampleMessageTagConfiguration` — same `config.json` value for `TagsEnabled`, falling back to the `TAGS_ENABLED` environment variable (`"0"`/`"false"` to disable), then `true`; `TagLabel` defaults to `"Category"` (or the `config.json` value when set).
-
----
-
-#### `IMessageTagPriorityPolicy`
-
-```csharp
 IReadOnlyList<TagPriorityBlock> GetBlockedCombinations();
 ```
 
-Returns the set of blocked message tag/priority combinations, enforced when composing a draft. Each `TagPriorityBlock` pairs an optional `Tag` (case-insensitive exact match) with an optional `Priority` value; leaving either `null` matches any value for that field, so a single rule can block a specific tag regardless of priority, a specific priority regardless of tag, or one specific tag/priority pair. The `TagPriorityBlockExtensions.IsBlocked(tag, priority)` extension method evaluates a rule set against a combination.
+How messages are composed and displayed: the set of selectable priority levels (each a `MessagePriorityOption` pairing a display `Name` with the `Value` stored via `IMessageFormat.SetPriority` and used verbatim as the OFT send priority — larger values are sent first, see [Peer.md](Peer.md)); whether message tags (`IMessageFormat.GetTag`/`SetTag`) are shown anywhere in the UI and what the tag input's watermark says; and which tag/priority combinations are blocked outright when composing a draft (each `TagPriorityBlock` pairs an optional `Tag` — case-insensitive exact match — with an optional `Priority`; leaving either `null` matches any value for that field). The `TagPriorityBlockExtensions.IsBlocked(tag, priority)` and `MessagePriorityOptionExtensions.GetLabel(value)` extension methods evaluate a set of either type.
 
-`DraftViewModel` enforces this proactively rather than only at send time: `AvailablePriorities` (see `IMessagePriorityProvider` above) excludes any priority blocked for the currently-entered tag, and setting `Tag` to a value blocked for the currently-selected priority is rejected outright (the value reverts) — so a blocked combination can never actually be entered in the draft editor. `SendCommand` also re-checks before sending, as a defense-in-depth safety net. See `Docs/ViewModels.md`.
+`DraftViewModel` enforces the blocked-combination rules proactively rather than only at send time: `AvailablePriorities` excludes any priority blocked for the currently-entered tag, and setting `Tag` to a value blocked for the currently-selected priority is rejected outright (the value reverts) — so a blocked combination can never actually be entered in the draft editor. `SendCommand` also re-checks before sending, as a defense-in-depth safety net. See `Docs/ViewModels.md`.
 
-**Engine default:** no blocked combinations (via `MessageTagPriorityPolicy`)
+**Engine default:** a single `"Normal"` (value `0`) priority level; tags enabled with label `"Tag"`; no blocked combinations (via `DefaultMessageComposition`). Hosts that need multiple selectable priority levels or blocked combinations should override this registration.
 
-**Sample override:** `SampleMessageTagPriorityPolicy` — demonstrates both block kinds: the `"SPAM"` tag is blocked regardless of priority, and `High` priority (value 2) is blocked regardless of tag. Unlike Sample's other control interface overrides, this one deliberately changes default behavior from the Engine's permissive "no blocks" default, since that is the only way to usefully demonstrate the interface.
+**Config override:** `ConfiguredMessageComposition` applies `config.json`'s `MessageTagsEnabled`/`MessageTagLabel` over the wrapped provider's `TagsEnabled`/`TagLabel`, field by field, when set. See [Config.md](Config.md). `GetPriorities`/`GetBlockedCombinations` have no corresponding `config.json` field and always delegate to the wrapped provider.
+
+**Sample override:** `SampleMessageComposition` — three priority levels (`"Low"`/`"Medium"`/`"High"`, values 0/1/2) instead of the Engine default's one; renames the tag label to `"Category"` (tags left enabled, matching the Engine default); demonstrates both blocked-combination kinds — the `"SPAM"` tag is blocked regardless of priority, and `High` priority is blocked regardless of tag. Unlike Sample's other control interface overrides, the blocked combinations deliberately change default behavior from the Engine's permissive "no blocks" default, since that is the only way to usefully demonstrate that part of the interface.
 
 ---
 
@@ -259,11 +188,11 @@ Returns the set of blocked message tag/priority combinations, enforced when comp
 IReadOnlyList<ExternalDriveInfo> GetDrives();
 ```
 
-Enumerates the external (removable/optical) drives currently available as a destination for the export feature or a source for the import feature (see `Docs/ViewModels.md`, `IExportViewModel`/`IImportViewModel`) — both share this same provider and drive list. Each `ExternalDriveInfo` carries a `RootPath` (to write to or read from) and a `DisplayName` (volume label + drive name, for the drive picker).
+Enumerates the external (removable/optical) drives currently available as a destination for the export feature or a source for the import feature (see `Docs/ViewModels.md`, `IExportViewModel`/`IImportViewModel`) — both share this same provider and drive list. Each `ExternalDriveInfo` carries a `RootPath` (to write to or read from) and a `DisplayName` (volume label + drive name, for the drive picker). No `config.json` field — not affected by config overrides.
 
-**Engine default:** `DriveInfo.GetDrives()` filtered to ready `Removable`/`CDRom` drives that pass a live write probe (a small temp file is written and deleted at the drive root) (via `ExternalDriveProvider`).
+**Engine default:** `DriveInfo.GetDrives()` filtered to ready `Removable`/`CDRom` drives that pass a live write probe (a small temp file is written and deleted at the drive root) (via `DefaultExternalDriveProvider`).
 
-**Sample override:** `SampleExternalDriveProvider` — same `DriveInfo`-based enumeration, plus an extra pseudo-drive at the path named by the `EXPORT_DRIVE_PATH` environment variable (if set and the directory exists) — useful for exercising export/import without physical removable media.
+**Sample override:** none — Sample uses the Engine default.
 
 ---
 
@@ -279,9 +208,9 @@ Task PrintLine(string printerName, string line, CancellationToken cancellation =
 Task PageFeed(string printerName, CancellationToken cancellation = default);
 ```
 
-`IPrinterProvider` enumerates the printers available on this computer for the print manager to target (see `Docs/ViewModels.md`, `IPrintManagerViewModel`): `GetAvailablePrinters` populates the printer picker, `GetDefaultPrinter` selects the initial `SelectedPrinter` automatically. `ILinePrinter` drives the selected printer for the print queue: prints one line at a time, and the returned task from `PrintLine` completing is treated as confirmation that the line finished printing — the queue will not print the next line, or check whether a higher-priority job should interrupt the current one, until it completes. `PageFeed` is called after the last line of an entry and also when a job is interrupted partway through.
+`IPrinterProvider` enumerates the printers available on this computer for the print manager to target (see `Docs/ViewModels.md`, `IPrintManagerViewModel`): `GetAvailablePrinters` populates the printer picker, `GetDefaultPrinter` selects the initial `SelectedPrinter` automatically. `ILinePrinter` drives the selected printer for the print queue: prints one line at a time, and the returned task from `PrintLine` completing is treated as confirmation that the line finished printing — the queue will not print the next line, or check whether a higher-priority job should interrupt the current one, until it completes. `PageFeed` is called after the last line of an entry and also when a job is interrupted partway through. Neither has a `config.json` field — not affected by config overrides.
 
-Unlike most other control interfaces, printing is one Engine handles directly rather than leaving to a host — printer discovery is a genuine operating-system resource (like `IExternalDriveProvider`'s drives), not app-specific configuration, and driving a printer line-by-line with real completion confirmation only makes sense against the operating system's own print spooler, not a bundled library. Both interfaces are implemented by the single internal `PrinterProvider` class (`Engine/src/Control/PrinterProvider.cs`) — it is the one case in this codebase where a class implements two control interfaces that don't share its name (`ILinePrinter` has no matching `LinePrinter` class), so `EngineExtensions.UseEngine` registers `ILinePrinter → PrinterProvider` explicitly alongside the usual convention-scanned `IPrinterProvider → PrinterProvider`.
+Unlike most other control interfaces, printing is one Engine handles directly rather than leaving to a host — printer discovery is a genuine operating-system resource (like `IExternalDriveProvider`'s drives), not app-specific configuration, and driving a printer line-by-line with real completion confirmation only makes sense against the operating system's own print spooler, not a bundled library. Both interfaces are implemented by the single `DefaultPrinterProvider` class (`Engine/src/Control/PrinterProvider.cs`) — it is the one case in this codebase where a class implements two control interfaces that don't share its name (`ILinePrinter` has no matching `DefaultLinePrinter` class), so `EngineExtensions.UseEngine` registers `ILinePrinter → DefaultPrinterProvider` explicitly alongside the usual convention-scanned `IPrinterProvider → DefaultPrinterProvider`.
 
 **Engine default:** OS-branched via `OperatingSystem.IsWindows()`/`IsLinux()`:
 - **Windows:** printer discovery shells out to PowerShell, querying WMI's `Win32_Printer` class (`Get-CimInstance -ClassName Win32_Printer`) for the printer list and the entry with `Default = true` for the default printer — no extra module dependency (unlike `Get-Printer`, which requires the PrintManagement module). Line printing uses the Windows Print Spooler (WinSpool) directly via P/Invoke (`OpenPrinter`/`StartDocPrinter`/`StartPagePrinter`/`WritePrinter`/`EndPagePrinter`/`EndDocPrinter`): each line (and each page feed, sent as a form-feed byte `\f`) is submitted as its own raw print job, and `PrintLine`/`PageFeed` don't return until polling `GetJob` reports the job has reached a terminal status (`JOB_STATUS_PRINTED`, `JOB_STATUS_COMPLETE`, `JOB_STATUS_DELETED`, or `JOB_STATUS_ERROR`) — a genuine OS-confirmed completion, not just "the app handed the bytes off."
@@ -295,31 +224,20 @@ Not unit tested directly, for the same reason as `IOftCertificateProvider` below
 
 ---
 
-#### `IPrintReceivedDefaultProvider`
+#### `IPrintPolicy`
 
 ```csharp
-bool DefaultEnabled { get; }
-```
-
-Controls the starting state of the print manager's "print received" toggle (`IPrintManagerViewModel.PrintReceivedEnabled`) — whether every received message is automatically added to the print queue from the moment the app starts. The user can still toggle it at any time.
-
-**Engine default:** `false`, or the `PrintReceivedEnabled` value from `config.json` when set (via `PrintReceivedDefaultProvider`). See [Config.md](Config.md).
-
-**Sample override:** `SamplePrintReceivedDefaultProvider` — same `config.json` value, falling back to the `PRINT_RECEIVED_ENABLED` environment variable (`"1"`/`"true"` to enable), then `false`.
-
----
-
-#### `IPrintReceivedRule`
-
-```csharp
+bool PrintReceivedDefaultEnabled { get; }
 int GetPrintCount(object message);
 ```
 
-Decides how many times each received message is automatically added to the print queue while the "print received" toggle is enabled — `0` to not print it, `1` to print it once, `2` for two copies, and so on. Consulted once per received message via `IEntryService.MessageInserted`.
+The print manager's automatic "print received" behavior: whether its toggle (`IPrintManagerViewModel.PrintReceivedEnabled`) starts enabled — automatically adding every received message to the print queue from the moment the app starts, though the user can still toggle it at any time — and how many times each received message is added to the print queue while it is (`0` to not print it, `1` to print it once, `2` for two copies, and so on). Consulted once per received message via `IEntryService.MessageInserted`.
 
-**Engine default:** `1` for every message (via `PrintReceivedRule`).
+**Engine default:** `false` / `1` for every message (via `DefaultPrintPolicy`).
 
-**Sample override:** `SamplePrintReceivedRule` — prints an alert message (`IMessageFormat.GetIsAlert`) twice and every other received message once, demonstrating a rule that inspects the message itself.
+**Config override:** `ConfiguredPrintPolicy` applies `config.json`'s `PrintReceivedEnabled` over the wrapped provider's `PrintReceivedDefaultEnabled` when set. See [Config.md](Config.md). `GetPrintCount` has no corresponding `config.json` field and always delegates to the wrapped provider.
+
+**Sample override:** `SamplePrintPolicy` — overrides `GetPrintCount` to print an alert message (`IMessageFormat.GetIsAlert`) twice and every other received message once, demonstrating a rule that inspects the message itself; `PrintReceivedDefaultEnabled` uses the Engine default.
 
 ---
 
@@ -336,9 +254,11 @@ Maps the local user name to a certificate subject name (CN) to look up in the sy
 | `null` | Disable authentication (ephemeral cert, no client cert required) |
 | Any string | Require the cert with that CN; startup throws if it is not found |
 
-**Engine default:** `$"USER-{userName}"` when `PeerCertificateName` is null; `"disable"` → `null`; explicit string → use it as-is (via `OftPeerCertificateName`). See [Config.md](Config.md).
+**Engine default:** always `$"USER-{userName}"` (via `DefaultOftPeerCertificateName`)
 
-**Sample override:** `SampleOftPeerCertificateName` — honors an explicit `config.json` `PeerCertificateName` exactly like the Engine default; in auto mode (config value `null`), additionally checks a `CERT_NAME_{USERNAME}` environment variable before falling back to the same `USER-{userName}` default.
+**Config override:** `ConfiguredOftPeerCertificateName` applies `config.json`'s `PeerCertificateName`: `null` falls back to the wrapped provider; `"disable"` forces `null` (no authentication); an explicit name is used as-is. See [Config.md](Config.md).
+
+**Sample override:** none — the Engine default plus the automatic config override already cover every genuinely useful case.
 
 ---
 
@@ -348,13 +268,47 @@ Maps the local user name to a certificate subject name (CN) to look up in the sy
 OftPeerOptions GetPeerOptions();
 ```
 
-Produces the [OFT](Oft.md) `OftPeerOptions` (certificate, certificate validation, and security mode) used for both inbound and outbound peer connections. The default implementation looks up the certificate returned by `IOftPeerCertificateName` in the system certificate store, enforces chain validation (`SslPolicyErrors.None`), and selects `OftSecurityMode.DualAuthentication` when a certificate is found or `OftSecurityMode.Secure` (encrypted, unauthenticated) otherwise.
+Produces the [OFT](Oft.md) `OftPeerOptions` (certificate, certificate validation, and security mode) used for both inbound and outbound peer connections. The default implementation looks up the certificate returned by `IOftPeerCertificateName` in the system certificate store, enforces chain validation (`SslPolicyErrors.None`), and selects `OftSecurityMode.DualAuthentication` when a certificate is found or `OftSecurityMode.Secure` (encrypted, unauthenticated) otherwise. No `config.json` field of its own — not affected by config overrides (it consumes the already-config-overridden `IOftPeerCertificateName`). `GetPeerOptions` is `virtual` (on `DefaultOftCertificateProvider`) so a host can inherit and override it, though for most customization needs, overriding `IOftPeerCertificateName` instead is sufficient and does not require touching this security-sensitive class at all.
 
-Override this interface only when you need custom certificate pinning, a non-store certificate source, or a different validation policy. In most cases, overriding `IOftPeerCertificateName` is sufficient.
+Override this interface only when you need custom certificate pinning, a non-store certificate source, or a different validation policy.
 
-**Engine default:** `OftCertificateProvider`
+**Engine default:** `DefaultOftCertificateProvider`
 
-**Sample override:** none, deliberately — this is the one control interface Sample does not override. It duplicates ~60 lines of security-sensitive X.509 store-lookup and chain-validation logic that Engine's internal `OftCertificateProvider` cannot expose for reuse (it is `internal`, and only `Tests` has `InternalsVisibleTo` access — not `Sample`), and this doc's own guidance above says overriding `IOftPeerCertificateName` is sufficient for the vast majority of customization needs. Sample overrides that interface instead. A host that genuinely needs custom certificate pinning should still override this interface directly.
+**Sample override:** none, deliberately — this is the one control interface Sample does not override. It would duplicate ~60 lines of security-sensitive X.509 store-lookup and chain-validation logic, and this doc's own guidance above says overriding `IOftPeerCertificateName` is sufficient for the vast majority of customization needs. Sample overrides that interface instead. A host that genuinely needs custom certificate pinning should still override this interface directly.
+
+---
+
+#### `INetworkTopology`
+
+```csharp
+NodeRole Role { get; }
+UserEndpoint? GetServerEndpoint();
+Task<IReadOnlyDictionary<string, ServerUserConfig>> GetServerUsers(CancellationToken cancellation = default);
+```
+
+This instance's place in the peer/client/server networking topology — see [Peer.md](Peer.md#node-roles). `Role` selects one of `NodeRole.Peer`/`Client`/`Server`; `GetServerEndpoint` is the server endpoint a `Client`-role instance forms its single long-term connection to (unused outside `Client`); `GetServerUsers` is the full server-user map a `Server`-role instance routes with, keyed by server user name — every server in the cluster, not just the local one (unused outside `Server`).
+
+This control interface is the read-only surface a host's own code can use to query the resolved topology at runtime; it is not what actually selects the `IPeerService` implementation (`PeerService`/`ClientPeerService`/`ServerRoutingService`) — that happens earlier, directly from `EngineConfig.NodeRole`, synchronously in `EngineExtensions.UseEngine`, before the container (and therefore this interface) exists to consult.
+
+**Engine default:** always `NodeRole.Peer`, no server endpoint, no server users (via `DefaultNetworkTopology`).
+
+**Config override:** `ConfiguredNetworkTopology` applies `config.json`'s `NodeRole` over the wrapped provider's `Role` when set and recognized (`"Peer"`/`"Client"`/`"Server"`, case-insensitive; an unrecognized value falls back to the wrapped provider rather than forcing `Peer`); applies `ServerEndpoint` over `GetServerEndpoint` when set; and merges `ServerUsers` over `GetServerUsers`'s own server users (a config entry replaces a same-named server user from the wrapped provider; server users only defined by the wrapped provider still pass through). See [Config.md](Config.md).
+
+**Sample override:** none — the Engine default plus the automatic config override already cover every genuinely useful case.
+
+---
+
+#### `IConfigFileProvider`
+
+```csharp
+bool Enabled { get; }
+```
+
+Determines whether the `--config` command-line argument is honored at all. Resolved once, before any other control interface — before `EngineConfig.Load` even runs — from a minimal, throwaway service provider built in `EngineApplication.Start` (see `Docs/Architecture.md`), since the real host container cannot be built until `EngineConfig` itself exists. Because of this ordering, **an implementation of this interface must never depend on `EngineConfig`** — the one interface in this codebase for which that restriction is structural, not just a style choice. When `Enabled` is `false`, `--config` is ignored entirely and every setting uses its default, as if the argument had never been passed.
+
+**Engine default:** `true` (via `DefaultConfigFileProvider`)
+
+**Sample override:** none — Sample uses the Engine default (config file reading enabled). A host wanting to lock down a deployment to never read `--config` would register its own implementation returning `false`.
 
 ---
 
@@ -393,7 +347,7 @@ string GetTag(object message);
 void SetTag(object message, string value);
 ```
 
-Supplies the concrete message type used throughout the engine — transmitted between peers and interfaces (see [Peer.md](Peer.md#message-format) and [Interface.md](Interface.md)) and stored in the database (see [Data.md](Data.md)) — and maps the engine's logical fields onto that type's real ones. `MessageType` must be protobuf-net serializable (`[ProtoContract]`/`[ProtoMember]`) for wire transport and LiteDB-serializable for storage. `GetConfirmationMessageId`/`SetConfirmationMessageId` and `GetIsAlert`/`SetIsAlert` back the user-read confirmation and alert-message features — see [Peer.md](Peer.md#read-confirmation) and [Peer.md](Peer.md#alert-messages). `GetPriority`/`SetPriority` back `IMessagePriorityProvider` and the OFT send priority; `GetTag`/`SetTag` back `IMessageTagConfiguration` and `IMessageTagPriorityPolicy` — see above.
+Supplies the concrete message type used throughout the engine — transmitted between peers and interfaces (see [Peer.md](Peer.md#message-format) and [Interface.md](Interface.md)) and stored in the database (see [Data.md](Data.md)) — and maps the engine's logical fields onto that type's real ones. `MessageType` must be protobuf-net serializable (`[ProtoContract]`/`[ProtoMember]`) for wire transport and LiteDB-serializable for storage. `GetConfirmationMessageId`/`SetConfirmationMessageId` and `GetIsAlert`/`SetIsAlert` back the user-read confirmation and alert-message features — see [Peer.md](Peer.md#read-confirmation) and [Peer.md](Peer.md#alert-messages). `GetPriority`/`SetPriority` back `IMessageComposition` and the OFT send priority; `GetTag`/`SetTag` back `IMessageComposition` too — see above.
 
 The engine has no message DTO of its own; every access to a message's content goes through this interface, so a host must register an implementation to use the engine at all.
 
@@ -402,24 +356,6 @@ The engine has no message DTO of its own; every access to a message's content go
 **`MessageFormat<TMessage>`** (also in `Engine/src/Control/MessageFormat.cs`) is an abstract base class that implements `IMessageFormat` against a concrete `TMessage` for you: it casts `object` to `TMessage` once, behind `protected abstract` members typed directly as `TMessage` (e.g. `protected abstract string GetSubject(TMessage message);`) instead of `object`, so a derived class never writes a cast itself. `MessageType` is implemented for you as `typeof(TMessage)`; `CreateMessage()` defaults to `new TMessage()` (requires a public parameterless constructor) and can be overridden for custom construction. Prefer deriving from this over implementing `IMessageFormat` directly.
 
 **Sample implementation:** `SampleMessageFormat : MessageFormat<SampleMessage>`, demonstrating the mapping. See `Sample/src/SampleMessageFormat.cs`.
-
----
-
-### Conditional / Auxiliary
-
----
-
-#### `IDebugUserOverride`
-
-```csharp
-string? UserName { get; }
-```
-
-Supplies a fixed user name to `UserService`, bypassing the normal `State.json` lookup. Injected as `IEnumerable<IDebugUserOverride>` so registering multiple implementations is valid. When any registered implementation returns a non-null `UserName`, `UserService` uses that name instead of reading from disk — the user is considered permanently installed.
-
-The Engine default (`DebugUserOverride`) returns `config.UserName`, which is `null` when not set and therefore has no effect. Intended for development and testing only.
-
-**Sample override:** `SampleDebugUserOverride` — honors `config.json`'s `UserName` exactly like the Engine default, falling back to the `DEBUG_USER` environment variable. Registering a host implementation here takes the place of — rather than adds to — the Engine's own default, because `AddConventionSingletons` registers it via `TryAddSingleton`, which is a no-op once any registration for `IDebugUserOverride` exists (the `IEnumerable<IDebugUserOverride>` consumption pattern above only yields more than one instance if a host explicitly registers more than one itself). `SampleDebugUserOverride` therefore reproduces the config-driven behavior itself, so registering it does not silently stop `config.json`'s `UserName` field from working.
 
 ---
 
@@ -446,7 +382,7 @@ Host applications resolve `IServiceConnection` from the container to send messag
 
 **Engine default:** `DirectServiceConnection`, registered in both Client and Headless mode.
 
-**Sample override:** none, deliberately — unlike the interfaces above, this is not a small piece of *external configuration* a host swaps in (the "Concept" section's definition of a control interface); it is the client-facing API surface a host *consumes* to drive the running Engine, backed by `DirectServiceConnection`'s substantial in-process orchestration of Engine services. Sample resolves `IServiceConnection` directly from the container instead of replacing it. This is why it is documented in its own "Client API" section rather than "Optional"/"Required"/"Conditional" above.
+**Sample override:** none, deliberately — unlike the interfaces above, this is not a small piece of *external configuration* a host swaps in (the "Concept" section's definition of a control interface); it is the client-facing API surface a host *consumes* to drive the running Engine, backed by `DirectServiceConnection`'s substantial in-process orchestration of Engine services. Sample resolves `IServiceConnection` directly from the container instead of replacing it. This is why it is documented in its own "Client API" section rather than "Optional"/"Required" above.
 
 ---
 

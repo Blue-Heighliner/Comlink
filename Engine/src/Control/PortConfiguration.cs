@@ -9,19 +9,40 @@ public interface IPortConfiguration
     int PeerPort { get; }
 }
 
-/// <summary>Implements <see cref="IPortConfiguration"/> using port values from engine configuration, falling back to well-known defaults.</summary>
-internal sealed class PortConfiguration : IPortConfiguration
+/// <summary>
+/// Implements <see cref="IPortConfiguration"/> using well-known default ports. Describes non-config-file
+/// behavior; see <see cref="ConfiguredPortConfiguration"/> for how <c>config.json</c> overrides this.
+/// Members are <see langword="virtual"/> so a host can inherit and override just one — see <c>Docs/Control.md</c>.
+/// </summary>
+public class DefaultPortConfiguration : IPortConfiguration
 {
-    /// <summary>Initializes a new instance applying configured port values, falling back to defaults when <see langword="null"/>.</summary>
+    /// <inheritdoc />
+    public virtual int PeerPort => 50021;
+    /// <inheritdoc />
+    public virtual int InterfacePort => 50020;
+}
+
+/// <summary>
+/// Engine-level decorator applying <see cref="EngineConfig.PeerPort"/>/<see cref="EngineConfig.InterfacePort"/>
+/// over whichever <see cref="IPortConfiguration"/> is registered (Engine default or a host override), when set.
+/// Registered by <see cref="EngineExtensions.UseEngineConfigOverrides"/>, not by control-interface convention scanning.
+/// </summary>
+internal sealed class ConfiguredPortConfiguration : IPortConfiguration
+{
+    private readonly IPortConfiguration _fallback;
+    private readonly EngineConfig _config;
+
+    /// <summary>Initializes a new instance wrapping <paramref name="fallback"/> with config overrides.</summary>
+    /// <param name="fallback">The registered control-interface implementation to fall back to when config does not override.</param>
     /// <param name="config">Engine configuration providing port overrides.</param>
-    public PortConfiguration(EngineConfig config)
+    public ConfiguredPortConfiguration(IPortConfiguration fallback, EngineConfig config)
     {
-        PeerPort = config.PeerPort ?? 50021;
-        InterfacePort = config.InterfacePort ?? 50020;
+        _fallback = fallback;
+        _config = config;
     }
 
     /// <inheritdoc />
-    public int PeerPort { get; }
+    public int PeerPort => _config.PeerPort ?? _fallback.PeerPort;
     /// <inheritdoc />
-    public int InterfacePort { get; }
+    public int InterfacePort => _config.InterfacePort ?? _fallback.InterfacePort;
 }

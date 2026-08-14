@@ -4,7 +4,7 @@ The data layer is active in `Client` mode only. It uses LiteDB (a single-file em
 
 ## Database File
 
-A single file `Data.db` in `IAppDataPathProvider.AppDataPath`. The file is created on first `LiteDbContext.Initialize()` call.
+A single file `Data.db` in `IAppSettings.AppDataPath`. The file is created on first `LiteDbContext.Initialize()` call.
 
 ## LiteDbContext
 

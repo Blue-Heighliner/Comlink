@@ -29,7 +29,6 @@ public static class EngineApplication
         Uri? windowIconUri = null)
         where TMessageFormat : class, IMessageFormat
     {
-        Config = EngineConfig.Load(args);
         ConfigureServices = services =>
         {
             services.AddSingleton<IMessageFormat, TMessageFormat>();
@@ -37,10 +36,27 @@ public static class EngineApplication
         };
         WindowIconUri = windowIconUri;
 
+        IConfigFileProvider configFileProvider = ResolveConfigFileProvider();
+        Config = configFileProvider.Enabled ? EngineConfig.Load(args) : new EngineConfig();
+
         if (Config.HeadlessMode)
             await RunHeadless();
         else
             RunGui(args);
+    }
+
+    /// <summary>
+    /// Resolves <see cref="IConfigFileProvider"/> from a minimal, throwaway service provider built from
+    /// <see cref="ConfigureServices"/> alone — <see cref="Config"/> does not exist yet at this point, so
+    /// this must happen before the real host container (which depends on <see cref="Config"/>) is built.
+    /// </summary>
+    private static IConfigFileProvider ResolveConfigFileProvider()
+    {
+        ServiceCollection services = new();
+        ConfigureServices?.Invoke(services);
+        services.TryAddSingleton<IConfigFileProvider, DefaultConfigFileProvider>();
+        using ServiceProvider provider = services.BuildServiceProvider();
+        return provider.GetRequiredService<IConfigFileProvider>();
     }
 
     private static async Task RunHeadless()
@@ -49,6 +65,7 @@ public static class EngineApplication
             .UseEngineConfig(Config)
             .UseEngine(EngineMode.Headless)
             .ConfigureServices((_, services) => ConfigureServices?.Invoke(services))
+            .UseEngineConfigOverrides()
             .ConfigureLogging(logging => logging.SetMinimumLevel(LogLevel.Information))
             .Build();
         await host.RunAsync();

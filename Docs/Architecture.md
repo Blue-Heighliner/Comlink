@@ -58,7 +58,7 @@ sequenceDiagram
     participant DVM as DraftViewModel
     participant SC as IServiceConnection
     participant MRS as MessageRoutingService
-    participant SL as IUserLocator
+    participant SL as IUserDirectory
     participant PS as PeerService
     participant RP as Remote IOftPeer
     DVM->>SC: SendMessage
@@ -122,7 +122,9 @@ sequenceDiagram
 
 ## Startup Sequence
 
-`EngineExtensions.UseEngine()` registers the core services. For Client mode, `EngineUiExtensions.UseEngineUi()` additionally registers `MainWindow` and overrides `IBodyDocumentFactory`. `EngineHost` (an `IHostedService`) runs at startup:
+Before any host container exists, `EngineApplication.Start` resolves `IConfigFileProvider` from a minimal, throwaway service provider built from the host's `configureServices` callback alone (this interface must never depend on `EngineConfig` — see [Control.md](Control.md#iconfigfileprovider) — since that's exactly what it decides whether to load). If enabled (the default), `EngineConfig.Load(args)` reads `--config`; otherwise `--config` is ignored and every setting uses its default.
+
+`EngineExtensions.UseEngine()` registers the core services. For Client mode, `EngineUiExtensions.UseEngineUi()` additionally registers `MainWindow` and overrides `IBodyDocumentFactory`. After the host's own `configureServices` callback registers its control-interface overrides, `EngineExtensions.UseEngineConfigOverrides()` layers `EngineConfig` on top of every control interface that has a corresponding `config.json` field — see [Control.md](Control.md#config-overrides). `EngineHost` (an `IHostedService`) runs at startup:
 
 ```mermaid
 sequenceDiagram
@@ -141,13 +143,13 @@ sequenceDiagram
     EH->>IS: Start()
 ```
 
-1. `UserService.Load` — restores installed user from `State.json` (or applies `IDebugUserOverride`)
+1. `UserService.Load` — restores installed user from `State.json` (or applies `IUserIdentity.DebugUserName`)
 2. `PeerService.Start` — begins accepting peer connections
 3. `InterfaceService.Start` — begins accepting interface connections (always, regardless of mode)
 
 ## Data Storage
 
-All persistent data lives under `IAppDataPathProvider.AppDataPath` (default: `%APPDATA%/{AppName}`):
+All persistent data lives under `IAppSettings.AppDataPath` (default: `%APPDATA%/{AppName}`):
 
 ```
 {AppDataPath}/
@@ -161,7 +163,7 @@ Export packages (`{name}.export.zip`, one JSON file per entry) are written to an
 
 ## Dependency Injection
 
-All external configuration is expressed as interfaces in `Engine/src/Control/`. `EngineExtensions.UseEngine` registers defaults with `TryAddSingleton`, so a host can override any of them by registering its own implementation before or after calling `UseEngine` (later registrations win with `AddSingleton`).
+All external configuration is expressed as interfaces in `Engine/src/Control/`. `EngineExtensions.UseEngine` registers defaults with `TryAddSingleton`, so a host can override any of them by registering its own implementation before or after calling `UseEngine` (later registrations win with `AddSingleton`). A control-interface implementation — Engine's default or a host's override — never reads `EngineConfig` or an environment variable itself; where an interface has a corresponding `config.json` field, `EngineExtensions.UseEngineConfigOverrides()` (called last, after every other registration) layers a small decorator on top instead. See [Control.md](Control.md#config-overrides).
 
 One control interface, `IMessageFormat`, is not a settings provider but a message-shape provider: it supplies the concrete DTO type used to represent a message everywhere in the engine — on the wire (peer and interface connections) and in `MessageEntity.Message` in the database — and maps the engine's logical fields (subject, body, addresses, etc.) onto that type's real fields. Unlike the other control interfaces, it has no Engine default at all. Hosts using the `EngineApplication` entry point supply it as a required generic type parameter to `EngineApplication.Start<TMessageFormat>`, which registers it before running; omitting it is a compile error. See `Sample/src/SampleMessageFormat.cs` for a working example and [Control.md](Control.md#required-no-default).
 

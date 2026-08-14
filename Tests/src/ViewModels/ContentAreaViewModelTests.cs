@@ -33,60 +33,42 @@ public sealed class ContentAreaViewModelTests
 
     private static readonly IMessageFormat Format = new TestMessageFormat();
 
-    private static IMessagePriorityProvider MakePriorityProvider()
+    private static IMessageComposition MakeMessageComposition()
     {
-        Mock<IMessagePriorityProvider> mock = new();
+        Mock<IMessageComposition> mock = new();
         mock.Setup(p => p.GetPriorities()).Returns([new MessagePriorityOption { Name = "Normal", Value = 0 }]);
-        return mock.Object;
-    }
-
-    private static IAlertConfiguration MakeAlertConfiguration()
-    {
-        Mock<IAlertConfiguration> mock = new();
-        mock.Setup(a => a.AlertText).Returns("ALERT");
-        return mock.Object;
-    }
-
-    private static IAlertComposeConfiguration MakeAlertComposeConfiguration()
-    {
-        Mock<IAlertComposeConfiguration> mock = new();
-        mock.Setup(a => a.ComposeAlertsEnabled).Returns(true);
-        return mock.Object;
-    }
-
-    private static IMessageTagConfiguration MakeTagConfiguration()
-    {
-        Mock<IMessageTagConfiguration> mock = new();
         mock.Setup(t => t.TagsEnabled).Returns(true);
         mock.Setup(t => t.TagLabel).Returns("Tag");
+        mock.Setup(p => p.GetBlockedCombinations()).Returns([]);
         return mock.Object;
     }
 
-    private static IMessageTagPriorityPolicy MakeTagPriorityPolicy()
+    private static IAlertSettings MakeAlertSettings()
     {
-        Mock<IMessageTagPriorityPolicy> mock = new();
-        mock.Setup(p => p.GetBlockedCombinations()).Returns([]);
+        Mock<IAlertSettings> mock = new();
+        mock.Setup(a => a.AlertText).Returns("ALERT");
+        mock.Setup(a => a.ComposeAlertsEnabled).Returns(true);
         return mock.Object;
     }
 
     private static ContentAreaViewModel Build(out FakeServiceConnection connection, string homeText = "HOME")
     {
         connection = new FakeServiceConnection();
-        Mock<IHomeContentProvider> home = new();
-        home.Setup(h => h.GetHomeText()).Returns(homeText);
+        Mock<IAppSettings> appSettings = new();
+        appSettings.Setup(h => h.GetHomeText()).Returns(homeText);
         Mock<IEntryService> entry = new();
         Mock<IMessageRepository> messages = new();
         Mock<IDraftRepository> drafts = new();
         Mock<INoteRepository> notes = new();
         Mock<IActivityLogRepository> activityLogs = new();
         ILoggerFactory loggerFactory = LoggerFactory.Create(_ => { });
-        return new ContentAreaViewModel(home.Object, entry.Object, connection, messages.Object,
-            drafts.Object, notes.Object, activityLogs.Object, Format, MakePriorityProvider(), MakeAlertConfiguration(), MakeAlertComposeConfiguration(), MakeTagConfiguration(), MakeTagPriorityPolicy(), loggerFactory);
+        return new ContentAreaViewModel(appSettings.Object, entry.Object, connection, messages.Object,
+            drafts.Object, notes.Object, activityLogs.Object, Format, MakeAlertSettings(), MakeMessageComposition(), loggerFactory);
     }
 
     // ── HomeText ──────────────────────────────────────────────────────────────
 
-    /// <summary>HomeText is set from the IHomeContentProvider on construction.</summary>
+    /// <summary>HomeText is set from IAppSettings on construction.</summary>
     [Fact]
     public void HomeText_SetFromProvider()
     {
@@ -139,7 +121,7 @@ public sealed class ContentAreaViewModelTests
     [Fact]
     public async Task ShowEntry_OutboundMessage_LooksUpOutboundRecord()
     {
-        Mock<IHomeContentProvider> home = new();
+        Mock<IAppSettings> home = new();
         Mock<IEntryService> entry = new();
         Mock<IMessageRepository> messages = new();
         Mock<IDraftRepository> drafts = new();
@@ -149,7 +131,7 @@ public sealed class ContentAreaViewModelTests
         MessageEntity outboundEntity = new() { MessageId = "MSG1", Message = new TestMessage(), IsOutbound = true };
         messages.Setup(m => m.Get("MSG1", true)).ReturnsAsync(outboundEntity);
         ContentAreaViewModel vm = new(home.Object, entry.Object, new FakeServiceConnection(), messages.Object,
-            drafts.Object, notes.Object, activityLogs.Object, Format, MakePriorityProvider(), MakeAlertConfiguration(), MakeAlertComposeConfiguration(), MakeTagConfiguration(), MakeTagPriorityPolicy(), loggerFactory);
+            drafts.Object, notes.Object, activityLogs.Object, Format, MakeAlertSettings(), MakeMessageComposition(), loggerFactory);
         EntryItemViewModel item = new("MSG1", "Title", EntryType.Message, DateTime.UtcNow, isOutboundMessage: true);
 
         await vm.ShowEntry(item);
@@ -162,7 +144,7 @@ public sealed class ContentAreaViewModelTests
     [Fact]
     public async Task ShowEntry_InboundMessage_LooksUpInboundRecord()
     {
-        Mock<IHomeContentProvider> home = new();
+        Mock<IAppSettings> home = new();
         Mock<IEntryService> entry = new();
         Mock<IMessageRepository> messages = new();
         Mock<IDraftRepository> drafts = new();
@@ -172,7 +154,7 @@ public sealed class ContentAreaViewModelTests
         MessageEntity inboundEntity = new() { MessageId = "MSG1", Message = new TestMessage(), IsOutbound = false };
         messages.Setup(m => m.Get("MSG1", false)).ReturnsAsync(inboundEntity);
         ContentAreaViewModel vm = new(home.Object, entry.Object, new FakeServiceConnection(), messages.Object,
-            drafts.Object, notes.Object, activityLogs.Object, Format, MakePriorityProvider(), MakeAlertConfiguration(), MakeAlertComposeConfiguration(), MakeTagConfiguration(), MakeTagPriorityPolicy(), loggerFactory);
+            drafts.Object, notes.Object, activityLogs.Object, Format, MakeAlertSettings(), MakeMessageComposition(), loggerFactory);
         EntryItemViewModel item = new("MSG1", "Title", EntryType.Message, DateTime.UtcNow);
 
         await vm.ShowEntry(item);
@@ -185,7 +167,7 @@ public sealed class ContentAreaViewModelTests
     [Fact]
     public async Task ShowEntry_UnreadInboundMessage_MarksRead()
     {
-        Mock<IHomeContentProvider> home = new();
+        Mock<IAppSettings> home = new();
         Mock<IEntryService> entry = new();
         Mock<IMessageRepository> messages = new();
         Mock<IDraftRepository> drafts = new();
@@ -196,7 +178,7 @@ public sealed class ContentAreaViewModelTests
         messages.Setup(m => m.Get("MSG1", false)).ReturnsAsync(inboundEntity);
         FakeServiceConnection connection = new();
         ContentAreaViewModel vm = new(home.Object, entry.Object, connection, messages.Object,
-            drafts.Object, notes.Object, activityLogs.Object, Format, MakePriorityProvider(), MakeAlertConfiguration(), MakeAlertComposeConfiguration(), MakeTagConfiguration(), MakeTagPriorityPolicy(), loggerFactory);
+            drafts.Object, notes.Object, activityLogs.Object, Format, MakeAlertSettings(), MakeMessageComposition(), loggerFactory);
         EntryItemViewModel item = new("MSG1", "Title", EntryType.Message, DateTime.UtcNow);
 
         await vm.ShowEntry(item);
@@ -210,7 +192,7 @@ public sealed class ContentAreaViewModelTests
     [Fact]
     public async Task ShowEntry_AlreadyReadInboundMessage_DoesNotMarkReadAgain()
     {
-        Mock<IHomeContentProvider> home = new();
+        Mock<IAppSettings> home = new();
         Mock<IEntryService> entry = new();
         Mock<IMessageRepository> messages = new();
         Mock<IDraftRepository> drafts = new();
@@ -221,7 +203,7 @@ public sealed class ContentAreaViewModelTests
         messages.Setup(m => m.Get("MSG1", false)).ReturnsAsync(inboundEntity);
         FakeServiceConnection connection = new();
         ContentAreaViewModel vm = new(home.Object, entry.Object, connection, messages.Object,
-            drafts.Object, notes.Object, activityLogs.Object, Format, MakePriorityProvider(), MakeAlertConfiguration(), MakeAlertComposeConfiguration(), MakeTagConfiguration(), MakeTagPriorityPolicy(), loggerFactory);
+            drafts.Object, notes.Object, activityLogs.Object, Format, MakeAlertSettings(), MakeMessageComposition(), loggerFactory);
         EntryItemViewModel item = new("MSG1", "Title", EntryType.Message, DateTime.UtcNow);
 
         await vm.ShowEntry(item);
@@ -233,7 +215,7 @@ public sealed class ContentAreaViewModelTests
     [Fact]
     public async Task ShowEntry_OutboundMessage_DoesNotCallMarkMessageRead()
     {
-        Mock<IHomeContentProvider> home = new();
+        Mock<IAppSettings> home = new();
         Mock<IEntryService> entry = new();
         Mock<IMessageRepository> messages = new();
         Mock<IDraftRepository> drafts = new();
@@ -244,7 +226,7 @@ public sealed class ContentAreaViewModelTests
         messages.Setup(m => m.Get("MSG1", true)).ReturnsAsync(outboundEntity);
         FakeServiceConnection connection = new();
         ContentAreaViewModel vm = new(home.Object, entry.Object, connection, messages.Object,
-            drafts.Object, notes.Object, activityLogs.Object, Format, MakePriorityProvider(), MakeAlertConfiguration(), MakeAlertComposeConfiguration(), MakeTagConfiguration(), MakeTagPriorityPolicy(), loggerFactory);
+            drafts.Object, notes.Object, activityLogs.Object, Format, MakeAlertSettings(), MakeMessageComposition(), loggerFactory);
         EntryItemViewModel item = new("MSG1", "Title", EntryType.Message, DateTime.UtcNow, isOutboundMessage: true);
 
         await vm.ShowEntry(item);

@@ -1,7 +1,7 @@
 namespace BlueHeighliner.Comlink.Tests;
 
-/// <summary>Test implementation of <see cref="IAppDataPathProvider"/> that uses a GUID-named directory under <c>%APPDATA%</c> for test isolation.</summary>
-internal sealed class TestAppDataPathProvider : IAppDataPathProvider
+/// <summary>Test implementation of <see cref="IAppSettings"/> that uses a GUID-named directory under <c>%APPDATA%</c> for test isolation.</summary>
+internal sealed class TestAppDataPathProvider : DefaultAppSettings
 {
     /// <summary>Initializes the provider with a path derived from the given app name.</summary>
     public TestAppDataPathProvider(string appName)
@@ -12,5 +12,5 @@ internal sealed class TestAppDataPathProvider : IAppDataPathProvider
     }
 
     /// <inheritdoc />
-    public string AppDataPath { get; }
+    public override string AppDataPath { get; }
 }

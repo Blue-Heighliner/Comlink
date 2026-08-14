@@ -3,6 +3,7 @@ global using Moq;
 global using ProtoBuf;
 global using BlueHeighliner.Comlink.Engine;
 global using BlueHeighliner.OpenFrameTransport;
+global using BlueHeighliner.Comlink.Engine.Audio;
 global using BlueHeighliner.Comlink.Engine.Control;
 global using BlueHeighliner.Comlink.Engine.Data;
 global using BlueHeighliner.Comlink.Engine.Data.Entities;

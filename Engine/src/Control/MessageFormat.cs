@@ -62,7 +62,7 @@ public interface IMessageFormat
     void SetIsAlert(object message, bool value);
     /// <summary>
     /// Gets the priority number of <paramref name="message"/>. One of the values returned by
-    /// <see cref="IMessagePriorityProvider.GetPriorities"/>; used verbatim as the OFT send priority
+    /// <see cref="IMessageComposition.GetPriorities"/>; used verbatim as the OFT send priority
     /// (larger values are sent first — see <c>Docs/Peer.md</c>) whenever this message is sent over an
     /// OFT connection.
     /// </summary>
@@ -71,7 +71,7 @@ public interface IMessageFormat
     void SetPriority(object message, int value);
     /// <summary>
     /// Gets the short, user-inputted tag identifying the type of message this is, or an empty string if
-    /// none was set. See <see cref="IMessageTagConfiguration"/> and <see cref="IMessageTagPriorityPolicy"/>.
+    /// none was set. See <see cref="IMessageComposition"/>.
     /// </summary>
     string GetTag(object message);
     /// <summary>Sets the tag on <paramref name="message"/>.</summary>

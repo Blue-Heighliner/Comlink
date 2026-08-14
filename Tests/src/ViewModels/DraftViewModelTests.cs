@@ -5,41 +5,23 @@ public sealed class DraftViewModelTests
 {
     private static readonly ILoggerFactory NoLogger = LoggerFactory.Create(_ => { });
 
-    private static IMessagePriorityProvider MakePriorityProvider()
+    private static IAlertSettings MakeAlertSettings(string alertText = "ALERT", bool composeAlertsEnabled = true)
     {
-        Mock<IMessagePriorityProvider> mock = new();
-        mock.Setup(p => p.GetPriorities()).Returns([
-            new MessagePriorityOption { Name = "ROUTINE", Value = 0 },
-            new MessagePriorityOption { Name = "FLASH", Value = 3 }
-        ]);
-        return mock.Object;
-    }
-
-    private static IAlertConfiguration MakeAlertConfiguration(string alertText = "ALERT")
-    {
-        Mock<IAlertConfiguration> mock = new();
+        Mock<IAlertSettings> mock = new();
         mock.Setup(a => a.AlertText).Returns(alertText);
-        return mock.Object;
-    }
-
-    private static IAlertComposeConfiguration MakeAlertComposeConfiguration(bool composeAlertsEnabled = true)
-    {
-        Mock<IAlertComposeConfiguration> mock = new();
         mock.Setup(a => a.ComposeAlertsEnabled).Returns(composeAlertsEnabled);
         return mock.Object;
     }
 
-    private static IMessageTagConfiguration MakeTagConfiguration(bool tagsEnabled = true, string tagLabel = "Tag")
+    private static IMessageComposition MakeMessageComposition(bool tagsEnabled = true, string tagLabel = "Tag", IReadOnlyList<TagPriorityBlock>? blocks = null)
     {
-        Mock<IMessageTagConfiguration> mock = new();
+        Mock<IMessageComposition> mock = new();
+        mock.Setup(p => p.GetPriorities()).Returns([
+            new MessagePriorityOption { Name = "ROUTINE", Value = 0 },
+            new MessagePriorityOption { Name = "FLASH", Value = 3 }
+        ]);
         mock.Setup(t => t.TagsEnabled).Returns(tagsEnabled);
         mock.Setup(t => t.TagLabel).Returns(tagLabel);
-        return mock.Object;
-    }
-
-    private static IMessageTagPriorityPolicy MakeTagPriorityPolicy(IReadOnlyList<TagPriorityBlock>? blocks = null)
-    {
-        Mock<IMessageTagPriorityPolicy> mock = new();
         mock.Setup(p => p.GetBlockedCombinations()).Returns(blocks ?? []);
         return mock.Object;
     }
@@ -66,9 +48,9 @@ public sealed class DraftViewModelTests
             Addresses = [],
             FolderId = "root-drafts"
         };
-        return new DraftViewModel(ent, entryMock.Object, connMock.Object, userNames ?? [], NoLogger, MakePriorityProvider(),
-            MakeAlertConfiguration(alertText), MakeAlertComposeConfiguration(composeAlertsEnabled),
-            MakeTagConfiguration(tagsEnabled, tagLabel), MakeTagPriorityPolicy(blockedCombinations));
+        return new DraftViewModel(ent, entryMock.Object, connMock.Object, userNames ?? [], NoLogger,
+            MakeAlertSettings(alertText, composeAlertsEnabled),
+            MakeMessageComposition(tagsEnabled, tagLabel, blockedCombinations));
     }
 
     // ── Construction ──────────────────────────────────────────────────────────
@@ -100,7 +82,7 @@ public sealed class DraftViewModelTests
         Assert.Equal(PlsoMode.Off, vm.PlsoMode);
     }
 
-    /// <summary>AvailablePriorities is populated from IMessagePriorityProvider.GetPriorities().</summary>
+    /// <summary>AvailablePriorities is populated from IMessageComposition.GetPriorities().</summary>
     [Fact]
     public void Constructor_AvailablePrioritiesFromProvider()
     {
@@ -136,7 +118,7 @@ public sealed class DraftViewModelTests
         Assert.Equal("URGENT", vm.Tag);
     }
 
-    /// <summary>TagsEnabled is sourced from IMessageTagConfiguration.</summary>
+    /// <summary>TagsEnabled is sourced from IMessageComposition.</summary>
     [Theory]
     [InlineData(true)]
     [InlineData(false)]
@@ -146,7 +128,7 @@ public sealed class DraftViewModelTests
         Assert.Equal(enabled, vm.TagsEnabled);
     }
 
-    /// <summary>TagLabel is sourced from IMessageTagConfiguration.TagLabel, so a host can rename the tag input.</summary>
+    /// <summary>TagLabel is sourced from IMessageComposition.TagLabel, so a host can rename the tag input.</summary>
     [Fact]
     public void Constructor_TagLabelFromTagConfiguration()
     {
@@ -218,7 +200,7 @@ public sealed class DraftViewModelTests
         Assert.Equal("URGENT", vm.Tag);
     }
 
-    /// <summary>AlertLabel is sourced from IAlertConfiguration.AlertText — the same text used in the title bar's alert box.</summary>
+    /// <summary>AlertLabel is sourced from IAlertSettings.AlertText — the same text used in the title bar's alert box.</summary>
     [Fact]
     public void Constructor_AlertLabelFromAlertConfiguration()
     {
@@ -226,7 +208,7 @@ public sealed class DraftViewModelTests
         Assert.Equal("!ALERT!", vm.AlertLabel);
     }
 
-    /// <summary>ComposeAlertsEnabled is sourced from IAlertComposeConfiguration.</summary>
+    /// <summary>ComposeAlertsEnabled is sourced from IAlertSettings.</summary>
     [Theory]
     [InlineData(true)]
     [InlineData(false)]

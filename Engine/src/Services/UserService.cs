@@ -16,9 +16,8 @@ public interface IUserService
 /// <summary>Manages the local user identity: loading persisted state, applying debug overrides, and installing a new user.</summary>
 public sealed class UserService : IUserService
 {
-    private readonly IUserCodeResolver _resolver;
-    private readonly IEnumerable<IDebugUserOverride> _debugOverrides;
-    private readonly IAppDataPathProvider _appDataPathProvider;
+    private readonly IUserIdentity _userIdentity;
+    private readonly IAppSettings _appSettings;
     private readonly ICurrentUserProvider _currentUserProvider;
     private readonly ILogger _logger;
     private UserState _state = new();
@@ -28,20 +27,18 @@ public sealed class UserService : IUserService
 
     /// <summary>Initializes a new <see cref="UserService"/> with the required infrastructure dependencies.</summary>
     public UserService(
-        IUserCodeResolver resolver,
-        IEnumerable<IDebugUserOverride> debugOverrides,
-        IAppDataPathProvider appDataPathProvider,
+        IUserIdentity userIdentity,
+        IAppSettings appSettings,
         ICurrentUserProvider currentUserProvider,
         ILoggerFactory loggerFactory)
     {
-        _resolver = resolver;
-        _debugOverrides = debugOverrides;
-        _appDataPathProvider = appDataPathProvider;
+        _userIdentity = userIdentity;
+        _appSettings = appSettings;
         _currentUserProvider = currentUserProvider;
         _logger = loggerFactory.CreateLogger("APP");
     }
 
-    private string StateFilePath => Path.Combine(_appDataPathProvider.AppDataPath, "State.json");
+    private string StateFilePath => Path.Combine(_appSettings.AppDataPath, "State.json");
 
     /// <summary>Gets the currently loaded user state.</summary>
     public UserState CurrentState => _state;
@@ -62,7 +59,7 @@ public sealed class UserService : IUserService
     /// <summary>Loads the persisted user state from disk, or applies a debug override if one is registered.</summary>
     public async Task Load(CancellationToken cancellation = default)
     {
-        string? debugUserName = _debugOverrides.Select(o => o.UserName).FirstOrDefault(n => n is not null);
+        string? debugUserName = _userIdentity.DebugUserName;
         if (debugUserName is not null)
         {
             string name = debugUserName.ToUpperInvariant();
@@ -96,7 +93,7 @@ public sealed class UserService : IUserService
         await _lock.WaitAsync(cancellation);
         try
         {
-            UserInfo? userInfo = await _resolver.Resolve(userCode, cancellation);
+            UserInfo? userInfo = await _userIdentity.ResolveCode(userCode, cancellation);
             if (userInfo is null) return null;
 
             _state = new UserState

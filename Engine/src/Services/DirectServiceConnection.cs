@@ -4,8 +4,7 @@ namespace BlueHeighliner.Comlink.Engine.Services;
 internal sealed class DirectServiceConnection : IServiceConnection
 {
     private readonly IUserService _userService;
-    private readonly IUserCodeResolver _userCodeResolver;
-    private readonly IUserNameDirectory _userNameDirectory;
+    private readonly IUserDirectory _userDirectory;
     private readonly IMessageRoutingService _messageRouting;
     private readonly IPeerService _peerService;
     private readonly IEntryService _entryService;
@@ -19,16 +18,14 @@ internal sealed class DirectServiceConnection : IServiceConnection
     /// <summary>Initializes a new <see cref="DirectServiceConnection"/> with the required engine services.</summary>
     public DirectServiceConnection(
         IUserService userService,
-        IUserCodeResolver userCodeResolver,
-        IUserNameDirectory userNameDirectory,
+        IUserDirectory userDirectory,
         IMessageRoutingService messageRouting,
         IPeerService peerService,
         IEntryService entryService,
         IMessageFormat messageFormat)
     {
         _userService = userService;
-        _userCodeResolver = userCodeResolver;
-        _userNameDirectory = userNameDirectory;
+        _userDirectory = userDirectory;
         _messageRouting = messageRouting;
         _peerService = peerService;
         _entryService = entryService;
@@ -77,7 +74,7 @@ internal sealed class DirectServiceConnection : IServiceConnection
     {
         try
         {
-            IReadOnlyList<string> names = await _userNameDirectory.GetAllUserNames(cancellation);
+            IReadOnlyList<string> names = await _userDirectory.GetAllUserNames(cancellation);
             return [.. names];
         }
         catch

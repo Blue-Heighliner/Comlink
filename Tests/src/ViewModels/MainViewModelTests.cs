@@ -28,27 +28,23 @@ public sealed class MainViewModelTests
         public Mock<IImportViewModel> Import { get; } = new();
         public Mock<IPrintManagerViewModel> PrintManager { get; } = new();
         public Mock<ICurrentUserProvider> UserProvider { get; } = new();
-        public Mock<IAppNameProvider> AppName { get; } = new();
-        public Mock<IKioskModeProvider> KioskMode { get; } = new();
+        public Mock<IAppSettings> AppSettings { get; } = new();
         public Mock<IBodyDocumentFactory> BodyDocumentFactory { get; } = new();
-        public Mock<IMessagePriorityProvider> PriorityProvider { get; } = new();
-        public Mock<IAlertConfiguration> AlertConfiguration { get; } = new();
-        public Mock<IAlertComposeConfiguration> AlertComposeConfiguration { get; } = new();
-        public Mock<IMessageTagConfiguration> TagConfiguration { get; } = new();
-        public Mock<IMessageTagPriorityPolicy> TagPriorityPolicy { get; } = new();
+        public Mock<IAlertSettings> AlertSettings { get; } = new();
+        public Mock<IMessageComposition> MessageComposition { get; } = new();
         public IMessageFormat MessageFormat { get; } = new TestMessageFormat();
 
         public MainViewModel BuildVm()
         {
-            AppName.Setup(a => a.AppName).Returns("TestApp");
+            AppSettings.Setup(a => a.AppName).Returns("TestApp");
             FolderBar.Setup(f => f.RootFolders).Returns([]);
             BodyDocumentFactory.Setup(f => f.Create()).Returns(new StringBodyDocument());
-            PriorityProvider.Setup(p => p.GetPriorities()).Returns([new MessagePriorityOption { Name = "Normal", Value = 0 }]);
-            AlertConfiguration.Setup(a => a.AlertText).Returns("ALERT");
-            AlertComposeConfiguration.Setup(a => a.ComposeAlertsEnabled).Returns(true);
-            TagConfiguration.Setup(t => t.TagsEnabled).Returns(true);
-            TagConfiguration.Setup(t => t.TagLabel).Returns("Tag");
-            TagPriorityPolicy.Setup(p => p.GetBlockedCombinations()).Returns([]);
+            MessageComposition.Setup(p => p.GetPriorities()).Returns([new MessagePriorityOption { Name = "Normal", Value = 0 }]);
+            AlertSettings.Setup(a => a.AlertText).Returns("ALERT");
+            AlertSettings.Setup(a => a.ComposeAlertsEnabled).Returns(true);
+            MessageComposition.Setup(t => t.TagsEnabled).Returns(true);
+            MessageComposition.Setup(t => t.TagLabel).Returns("Tag");
+            MessageComposition.Setup(p => p.GetBlockedCombinations()).Returns([]);
 
             return new MainViewModel(
                 Connection.Object,
@@ -63,15 +59,11 @@ public sealed class MainViewModelTests
                 Import.Object,
                 PrintManager.Object,
                 UserProvider.Object,
-                AppName.Object,
-                KioskMode.Object,
+                AppSettings.Object,
                 NoLogger,
                 BodyDocumentFactory.Object,
-                PriorityProvider.Object,
-                AlertConfiguration.Object,
-                AlertComposeConfiguration.Object,
-                TagConfiguration.Object,
-                TagPriorityPolicy.Object,
+                AlertSettings.Object,
+                MessageComposition.Object,
                 MessageFormat);
         }
     }
@@ -96,12 +88,12 @@ public sealed class MainViewModelTests
 
     // ── KioskMode ─────────────────────────────────────────────────────────────
 
-    /// <summary>IsKioskMode reflects the value from IKioskModeProvider at construction time.</summary>
+    /// <summary>IsKioskMode reflects the value from IAppSettings at construction time.</summary>
     [Fact]
     public void IsKioskMode_ReflectsProvider()
     {
         Setup s = new();
-        s.KioskMode.Setup(k => k.IsKioskMode).Returns(true);
+        s.AppSettings.Setup(a => a.IsKioskMode).Returns(true);
         MainViewModel vm = s.BuildVm();
 
         Assert.True(vm.IsKioskMode);

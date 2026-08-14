@@ -55,7 +55,7 @@ public sealed class InterfaceServiceTests
         user.Setup(s => s.GetCurrentUserInfo()).Returns(MakeUserInfo("LOCAL"));
         FakePeerService peer = new();
 
-        InterfaceService svc = new(hoster.Object, new PortConfiguration(new EngineConfig()), routing.Object, user.Object, Format, peer);
+        InterfaceService svc = new(hoster.Object, new DefaultPortConfiguration(), routing.Object, user.Object, Format, peer);
 
         TestMessage incoming = new()
         {
@@ -84,7 +84,7 @@ public sealed class InterfaceServiceTests
         user.Setup(s => s.GetCurrentUserInfo()).Returns((UserInfo?)null);
         FakePeerService peer = new();
 
-        InterfaceService svc = new(hoster.Object, new PortConfiguration(new EngineConfig()), routing.Object, user.Object, Format, peer);
+        InterfaceService svc = new(hoster.Object, new DefaultPortConfiguration(), routing.Object, user.Object, Format, peer);
 
         using OwnedBuffer buf = PeerSerializer.Serialize(new TestMessage { Subject = "Hi" });
         await svc.HandleInterfaceMessage(buf.Memory.ToArray());
@@ -101,7 +101,7 @@ public sealed class InterfaceServiceTests
         Mock<IUserService> user = new();
         FakePeerService peer = new();
 
-        InterfaceService svc = new(hoster.Object, new PortConfiguration(new EngineConfig()), routing.Object, user.Object, Format, peer);
+        InterfaceService svc = new(hoster.Object, new DefaultPortConfiguration(), routing.Object, user.Object, Format, peer);
 
         await svc.HandleInterfaceMessage(new byte[] { 0xFF, 0xFE, 0xFD });
 
@@ -123,7 +123,7 @@ public sealed class InterfaceServiceTests
         Mock<IUserService> user = new();
         FakePeerService peer = new();
 
-        InterfaceService svc = new(hoster.Object, new PortConfiguration(new EngineConfig()), routing.Object, user.Object, Format, peer);
+        InterfaceService svc = new(hoster.Object, new DefaultPortConfiguration(), routing.Object, user.Object, Format, peer);
 
         using CancellationTokenSource cts = new();
         _ = svc.Start(cts.Token);
@@ -158,7 +158,7 @@ public sealed class InterfaceServiceTests
         Mock<IUserService> user = new();
         FakePeerService peer = new();
 
-        await using InterfaceService svc = new(new OftHoster(), new PortConfiguration(new EngineConfig { InterfacePort = port }), routing.Object, user.Object, Format, peer);
+        await using InterfaceService svc = new(new OftHoster(), new ConfiguredPortConfiguration(new DefaultPortConfiguration(), new EngineConfig { InterfacePort = port }), routing.Object, user.Object, Format, peer);
 
         using CancellationTokenSource cts = new();
         _ = svc.Start(cts.Token);
@@ -213,7 +213,7 @@ public sealed class InterfaceServiceTests
         user.Setup(s => s.GetCurrentUserInfo()).Returns(MakeUserInfo("LOCAL"));
         FakePeerService peer = new();
 
-        await using InterfaceService svc = new(new OftHoster(), new PortConfiguration(new EngineConfig { InterfacePort = port }), routing.Object, user.Object, Format, peer);
+        await using InterfaceService svc = new(new OftHoster(), new ConfiguredPortConfiguration(new DefaultPortConfiguration(), new EngineConfig { InterfacePort = port }), routing.Object, user.Object, Format, peer);
 
         using CancellationTokenSource cts = new();
         _ = svc.Start(cts.Token);

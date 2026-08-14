@@ -38,7 +38,7 @@ await peer.Send(host, port, payload, cancellationToken: cancellation);
 
 | Component | Role |
 |-----------|------|
-| `PeerService` (`Engine/src/Peer/PeerService.cs`) | Wraps a single `IOftPeer`; resolves user names to endpoints via `IUserLocator`, serializes/deserializes instances of `IMessageFormat.MessageType` (see [Control.md](Control.md#imessageformat)), and dispatches `MessageDelivered`/`DeliveryStatusChanged` events driven by OFT's own delivery status. |
+| `PeerService` (`Engine/src/Peer/PeerService.cs`) | Wraps a single `IOftPeer`; resolves user names to endpoints via `IUserDirectory`, serializes/deserializes instances of `IMessageFormat.MessageType` (see [Control.md](Control.md#imessageformat)), and dispatches `MessageDelivered`/`DeliveryStatusChanged` events driven by OFT's own delivery status. |
 | `InterfaceService` (`Engine/src/Interface/InterfaceService.cs`, always active) | Uses `IOftHoster` directly (not `IOftPeer`, since interface connections are inbound-only and represent no user) to host the local interface listener described in [Interface.md](Interface.md). |
 | `IOftCertificateProvider` / `OftCertificateProvider` | Builds the `OftPeerOptions` (certificate, certificate validation, security mode) used for both inbound and outbound peer connections. See [Control.md](Control.md). |
 | `IOftPeerCertificateName` / `OftPeerCertificateName` | Maps the local user name to a certificate subject name to look up in the system store. See [Control.md](Control.md). |

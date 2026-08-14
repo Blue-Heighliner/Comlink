@@ -20,7 +20,7 @@ public interface ILiteDbContext : IDisposable
 /// <summary>Owns the LiteDB connection and exposes typed collections for all Engine entities.</summary>
 public sealed class LiteDbContext : ILiteDbContext
 {
-    private readonly IAppDataPathProvider _appDataPathProvider;
+    private readonly IAppSettings _appSettings;
     private LiteDatabase? _db;
 
     /// <summary>Collection of persisted messages.</summary>
@@ -35,16 +35,16 @@ public sealed class LiteDbContext : ILiteDbContext
     public ILiteCollection<FolderEntity> Folders { get; private set; } = null!;
 
     /// <summary>Initializes a new <see cref="LiteDbContext"/> using the provided path provider.</summary>
-    public LiteDbContext(IAppDataPathProvider appDataPathProvider)
+    public LiteDbContext(IAppSettings appSettings)
     {
-        _appDataPathProvider = appDataPathProvider;
+        _appSettings = appSettings;
     }
 
     /// <summary>Opens the database file, binds all collections, and ensures indexes and root folders exist.</summary>
     public void Initialize()
     {
         _db?.Dispose();
-        string dataDir = _appDataPathProvider.AppDataPath;
+        string dataDir = _appSettings.AppDataPath;
         Directory.CreateDirectory(dataDir);
         _db = new LiteDatabase(Path.Combine(dataDir, "Data.db"));
 

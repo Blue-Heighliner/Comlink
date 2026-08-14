@@ -16,15 +16,15 @@ public interface IDraftViewModel
     /// <summary>Gets or sets a value indicating whether this draft will be sent as an alert.</summary>
     bool IsAlert { get; set; }
     /// <summary>
-    /// Gets the label for the alert checkbox, sourced from <see cref="IAlertConfiguration.AlertText"/> — the
+    /// Gets the label for the alert checkbox, sourced from <see cref="IAlertSettings.AlertText"/> — the
     /// same text shown in the title bar's alert box, so both surfaces always agree on what "alert" is called.
     /// </summary>
     string AlertLabel { get; }
-    /// <summary>Gets a value indicating whether the alert checkbox is shown; see <see cref="IAlertComposeConfiguration"/>.</summary>
+    /// <summary>Gets a value indicating whether the alert checkbox is shown; see <see cref="IAlertSettings"/>.</summary>
     bool ComposeAlertsEnabled { get; }
     /// <summary>
-    /// Gets the message priority levels available to choose from; see <see cref="IMessagePriorityProvider"/>.
-    /// Excludes any priority that <see cref="IMessageTagPriorityPolicy"/> blocks for the current <see cref="Tag"/>,
+    /// Gets the message priority levels available to choose from; see <see cref="IMessageComposition"/>.
+    /// Excludes any priority that <see cref="IMessageComposition"/> blocks for the current <see cref="Tag"/>,
     /// so a blocked tag/priority combination can never be selected in the first place. Recomputed whenever
     /// <see cref="Tag"/> changes.
     /// </summary>
@@ -33,14 +33,14 @@ public interface IDraftViewModel
     MessagePriorityOption SelectedPriority { get; set; }
     /// <summary>
     /// Gets or sets the short, user-inputted tag identifying the type of this message; see
-    /// <see cref="IMessageFormat.GetTag"/>. Setting a tag that <see cref="IMessageTagPriorityPolicy"/> blocks
+    /// <see cref="IMessageFormat.GetTag"/>. Setting a tag that <see cref="IMessageComposition"/> blocks
     /// for the current <see cref="SelectedPriority"/> is rejected — the value silently reverts to the last
     /// valid tag — so a blocked combination can never be entered.
     /// </summary>
     string Tag { get; set; }
-    /// <summary>Gets a value indicating whether the tag input is shown; see <see cref="IMessageTagConfiguration"/>.</summary>
+    /// <summary>Gets a value indicating whether the tag input is shown; see <see cref="IMessageComposition"/>.</summary>
     bool TagsEnabled { get; }
-    /// <summary>Gets the label for the tag input's watermark, sourced from <see cref="IMessageTagConfiguration.TagLabel"/>.</summary>
+    /// <summary>Gets the label for the tag input's watermark, sourced from <see cref="IMessageComposition.TagLabel"/>.</summary>
     string TagLabel { get; }
     /// <summary>
     /// Gets or sets the PLSO (Phonetic Language Spell Out) mode active in the body editor: when not
@@ -85,7 +85,7 @@ public sealed partial class DraftViewModel : ObservableObject, IDraftViewModel
 {
     private readonly IEntryService _entryService;
     private readonly IServiceConnection _connection;
-    private readonly IMessageTagPriorityPolicy _tagPriorityPolicy;
+    private readonly IMessageComposition _messageComposition;
     private readonly IReadOnlyList<MessagePriorityOption> _allPriorities;
     private readonly ILogger _activityLogger;
     private DraftEntity _entity;
@@ -148,11 +148,8 @@ public sealed partial class DraftViewModel : ObservableObject, IDraftViewModel
     /// <param name="connection">Service connection for sending messages.</param>
     /// <param name="userNames">All known user names available for recipient auto-complete.</param>
     /// <param name="loggerFactory">Factory for creating named loggers.</param>
-    /// <param name="priorityProvider">Provides the available message priority levels to choose from.</param>
-    /// <param name="alertConfiguration">Provides the shared alert label text.</param>
-    /// <param name="alertComposeConfiguration">Controls whether the alert checkbox is shown.</param>
-    /// <param name="tagConfiguration">Controls whether the tag input is shown.</param>
-    /// <param name="tagPriorityPolicy">Provides the set of blocked tag/priority combinations enforced on send.</param>
+    /// <param name="alertSettings">Provides the shared alert label text and whether the alert checkbox is shown.</param>
+    /// <param name="messageComposition">Provides the available message priority levels, tag input visibility/label, and blocked tag/priority combinations enforced on send.</param>
     /// <param name="bodyDocument">Optional body document implementation; defaults to <see cref="StringBodyDocument"/> when <see langword="null"/>.</param>
     public DraftViewModel(
         DraftEntity entity,
@@ -160,17 +157,14 @@ public sealed partial class DraftViewModel : ObservableObject, IDraftViewModel
         IServiceConnection connection,
         IReadOnlyList<string> userNames,
         ILoggerFactory loggerFactory,
-        IMessagePriorityProvider priorityProvider,
-        IAlertConfiguration alertConfiguration,
-        IAlertComposeConfiguration alertComposeConfiguration,
-        IMessageTagConfiguration tagConfiguration,
-        IMessageTagPriorityPolicy tagPriorityPolicy,
+        IAlertSettings alertSettings,
+        IMessageComposition messageComposition,
         IBodyDocument? bodyDocument = null)
     {
         _entity = entity;
         _entryService = entryService;
         _connection = connection;
-        _tagPriorityPolicy = tagPriorityPolicy;
+        _messageComposition = messageComposition;
         _activityLogger = loggerFactory.CreateLogger("ACTIVITY");
         _subject = entity.Subject;
         _isSent = entity.IsSent;
@@ -179,12 +173,12 @@ public sealed partial class DraftViewModel : ObservableObject, IDraftViewModel
         _lastValidTag = entity.Tag;
         AllUserNames = userNames;
         BodyDocument = bodyDocument ?? new StringBodyDocument();
-        AlertLabel = alertConfiguration.AlertText;
-        ComposeAlertsEnabled = alertComposeConfiguration.ComposeAlertsEnabled;
-        TagsEnabled = tagConfiguration.TagsEnabled;
-        TagLabel = tagConfiguration.TagLabel;
+        AlertLabel = alertSettings.AlertText;
+        ComposeAlertsEnabled = alertSettings.ComposeAlertsEnabled;
+        TagsEnabled = messageComposition.TagsEnabled;
+        TagLabel = messageComposition.TagLabel;
 
-        _allPriorities = priorityProvider.GetPriorities();
+        _allPriorities = messageComposition.GetPriorities();
         _availablePriorities = FilterPriorities(entity.Tag);
         _selectedPriority = AvailablePriorities.FirstOrDefault(p => p.Value == entity.Priority)
             ?? AvailablePriorities.FirstOrDefault()
@@ -234,11 +228,11 @@ public sealed partial class DraftViewModel : ObservableObject, IDraftViewModel
     partial void OnPlsoModeChanged(PlsoMode value) => OnPropertyChanged(nameof(PlsoButtonText));
 
     private IReadOnlyList<MessagePriorityOption> FilterPriorities(string tag) =>
-        _allPriorities.Where(p => !_tagPriorityPolicy.GetBlockedCombinations().IsBlocked(tag, p.Value)).ToList();
+        _allPriorities.Where(p => !_messageComposition.GetBlockedCombinations().IsBlocked(tag, p.Value)).ToList();
 
     partial void OnTagChanged(string value)
     {
-        if (_tagPriorityPolicy.GetBlockedCombinations().IsBlocked(value, SelectedPriority.Value))
+        if (_messageComposition.GetBlockedCombinations().IsBlocked(value, SelectedPriority.Value))
         {
             // Reject the change: this combination is blocked, so revert to the last valid tag instead of
             // letting the blocked value stand. Re-enters this method with a value that is never blocked
@@ -365,7 +359,7 @@ public sealed partial class DraftViewModel : ObservableObject, IDraftViewModel
             return;
         }
 
-        if (_tagPriorityPolicy.GetBlockedCombinations().IsBlocked(Tag, SelectedPriority.Value))
+        if (_messageComposition.GetBlockedCombinations().IsBlocked(Tag, SelectedPriority.Value))
         {
             StatusMessage = "This tag/priority combination is not allowed";
             return;

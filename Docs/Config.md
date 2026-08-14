@@ -27,6 +27,9 @@ All property names are PascalCase; deserialization is case-insensitive. Unrecogn
   "MessageTagsEnabled": null,
   "MessageTagLabel": null,
   "PrintReceivedEnabled": null,
+  "NodeRole": null,
+  "ServerEndpoint": null,
+  "ServerUsers": {},
   "Users": {
     "USER-A": { "IpAddress": "192.168.1.10", "Port": 7890 }
   },
@@ -154,7 +157,53 @@ Label used for the tag input's watermark in the draft editor. Lets a host call t
 
 **Type:** `bool | null` | **Default:** `null` (uses Engine default of `false`)
 
-Whether the print manager's "print received" toggle starts enabled, automatically adding every received message to the print queue (subject to the registered `IPrintReceivedRule`). The user can still toggle it off at any time in the print manager.
+Whether the print manager's "print received" toggle starts enabled, automatically adding every received message to the print queue (subject to the registered `IPrintPolicy`). The user can still toggle it off at any time in the print manager.
+
+---
+
+### `NodeRole`
+
+**Type:** `string | null` | **Default:** `null` (uses Engine default of `"Peer"`)
+
+Networking topology role: `"Peer"`, `"Client"`, or `"Server"` (case-insensitive). `null` or an unrecognized value uses `"Peer"` — direct peer-to-peer networking, unchanged from prior versions. See [Peer.md](Peer.md#node-roles) for the full description of each role.
+
+---
+
+### `ServerEndpoint`
+
+**Type:** `object | null` | **Default:** `null`
+
+The server endpoint a `"Client"`-role instance forms its long-term connection through. Required when `NodeRole` is `"Client"`; ignored otherwise.
+
+```json
+"ServerEndpoint": { "IpAddress": "10.0.0.1", "Port": 50021 }
+```
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `IpAddress` | `string` | IPv4 or IPv6 address of the server |
+| `Port` | `int` | TCP port the server listens on |
+
+---
+
+### `ServerUsers`
+
+**Type:** `object` | **Default:** `{}`
+
+The full server-user-map topology for a `"Server"`-role instance: a map of server user name → endpoint and child client list. Describes **every** server in the cluster, not just the local one — see [Peer.md](Peer.md#server). Required (with at least an entry for the local server user) when `NodeRole` is `"Server"`; ignored otherwise.
+
+```json
+"ServerUsers": {
+  "SERVER-A": { "IpAddress": "10.0.0.1", "Port": 50021, "ChildClients": ["CLIENT-A1", "CLIENT-A2"] },
+  "SERVER-B": { "IpAddress": "10.0.0.2", "Port": 50021, "ChildClients": ["CLIENT-B1"] }
+}
+```
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `IpAddress` | `string` | IPv4 or IPv6 address this server user listens on and other servers dial to reach it |
+| `Port` | `int` | TCP port this server user listens on and other servers dial to reach it |
+| `ChildClients` | `string[]` | Names of the client users that belong to this server |
 
 ---
 
@@ -162,7 +211,7 @@ Whether the print manager's "print received" toggle starts enabled, automaticall
 
 **Type:** `object` | **Default:** `{}`
 
-A map of user name → endpoint used by the `IUserLocator` implementation. Keys are user names (case-insensitive). Entries may override the endpoint of an existing known user or introduce an entirely new user that does not appear in environment variables.
+A map of user name → endpoint used by the `IUserDirectory` implementation. Keys are user names (case-insensitive). Entries may override the endpoint of an existing known user or introduce an entirely new user.
 
 ```json
 "Users": {
@@ -246,6 +295,31 @@ Sending to `ALL` delivers to `USER-A`, `USER-B`, and `NEW-USER`. Cycles are igno
   "PeerCertificateName": "MY-CUSTOM-CERT",
   "Users": {
     "USER-B": { "IpAddress": "192.168.1.11", "Port": 50021 }
+  }
+}
+```
+
+### Client/Server hierarchy
+
+A client, running as user `CLIENT-A1`, pointed at its server:
+
+```json
+{
+  "UserName": "CLIENT-A1",
+  "NodeRole": "Client",
+  "ServerEndpoint": { "IpAddress": "10.0.0.1", "Port": 50021 }
+}
+```
+
+The server it connects to, running as user `SERVER-A`, with the full cluster's topology — including the other server, `SERVER-B`, and its own children:
+
+```json
+{
+  "UserName": "SERVER-A",
+  "NodeRole": "Server",
+  "ServerUsers": {
+    "SERVER-A": { "IpAddress": "10.0.0.1", "Port": 50021, "ChildClients": ["CLIENT-A1", "CLIENT-A2"] },
+    "SERVER-B": { "IpAddress": "10.0.0.2", "Port": 50021, "ChildClients": ["CLIENT-B1"] }
   }
 }
 ```

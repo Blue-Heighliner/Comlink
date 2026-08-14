@@ -16,7 +16,7 @@ internal sealed class EngineHost : IHostedService
         IUserService userService,
         IPeerService peerService,
         IInterfaceService interfaceService,
-        IAppNameProvider appNameProvider,
+        IAppSettings appSettings,
         EngineMode mode,
         ILoggerFactory loggerFactory)
     {
@@ -24,7 +24,7 @@ internal sealed class EngineHost : IHostedService
         _peerService = peerService;
         _interfaceService = interfaceService;
         _logger = loggerFactory.CreateLogger("APP");
-        _displayName = mode == EngineMode.Headless ? $"{appNameProvider.AppName} (Headless)" : appNameProvider.AppName;
+        _displayName = mode == EngineMode.Headless ? $"{appSettings.AppName} (Headless)" : appSettings.AppName;
     }
 
     /// <inheritdoc />

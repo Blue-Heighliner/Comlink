@@ -22,7 +22,6 @@ public interface IContentAreaViewModel
 /// <summary>ViewModel for the main content area that displays the active entry or home screen.</summary>
 public sealed partial class ContentAreaViewModel : ObservableObject, IContentAreaViewModel
 {
-    private readonly IHomeContentProvider _homeContent;
     private readonly IEntryService _entryService;
     private readonly IServiceConnection _connection;
     private readonly IMessageRepository _messages;
@@ -30,11 +29,8 @@ public sealed partial class ContentAreaViewModel : ObservableObject, IContentAre
     private readonly INoteRepository _notes;
     private readonly IActivityLogRepository _activityLogs;
     private readonly IMessageFormat _messageFormat;
-    private readonly IMessagePriorityProvider _priorityProvider;
-    private readonly IAlertConfiguration _alertConfiguration;
-    private readonly IAlertComposeConfiguration _alertComposeConfiguration;
-    private readonly IMessageTagConfiguration _tagConfiguration;
-    private readonly IMessageTagPriorityPolicy _tagPriorityPolicy;
+    private readonly IAlertSettings _alertSettings;
+    private readonly IMessageComposition _messageComposition;
     private readonly ILoggerFactory _loggerFactory;
 
     [ObservableProperty] private object? _activeContent;
@@ -46,7 +42,7 @@ public sealed partial class ContentAreaViewModel : ObservableObject, IContentAre
     public string HomeText { get; }
 
     /// <summary>Initializes a new <see cref="ContentAreaViewModel"/> with the required repositories and services.</summary>
-    /// <param name="homeContent">Provides the home screen welcome text.</param>
+    /// <param name="appSettings">Provides the home screen welcome text.</param>
     /// <param name="entryService">Entry service for save and send operations.</param>
     /// <param name="connection">Service connection for delivery status events.</param>
     /// <param name="messages">Repository for loading message entries.</param>
@@ -54,14 +50,11 @@ public sealed partial class ContentAreaViewModel : ObservableObject, IContentAre
     /// <param name="notes">Repository for loading note entries.</param>
     /// <param name="activityLogs">Repository for loading activity log entries.</param>
     /// <param name="messageFormat">Maps logical fields onto a message entity's stored message.</param>
-    /// <param name="priorityProvider">Provides the available message priority levels to choose from.</param>
-    /// <param name="alertConfiguration">Provides the shared alert label text.</param>
-    /// <param name="alertComposeConfiguration">Controls whether the alert checkbox is shown.</param>
-    /// <param name="tagConfiguration">Controls whether the tag input is shown.</param>
-    /// <param name="tagPriorityPolicy">Provides the set of blocked tag/priority combinations enforced on send.</param>
+    /// <param name="alertSettings">Provides the shared alert label text and whether the alert checkbox is shown.</param>
+    /// <param name="messageComposition">Provides the available message priority levels, tag input visibility/label, and blocked tag/priority combinations enforced on send.</param>
     /// <param name="loggerFactory">Factory for creating named loggers.</param>
     public ContentAreaViewModel(
-        IHomeContentProvider homeContent,
+        IAppSettings appSettings,
         IEntryService entryService,
         IServiceConnection connection,
         IMessageRepository messages,
@@ -69,14 +62,10 @@ public sealed partial class ContentAreaViewModel : ObservableObject, IContentAre
         INoteRepository notes,
         IActivityLogRepository activityLogs,
         IMessageFormat messageFormat,
-        IMessagePriorityProvider priorityProvider,
-        IAlertConfiguration alertConfiguration,
-        IAlertComposeConfiguration alertComposeConfiguration,
-        IMessageTagConfiguration tagConfiguration,
-        IMessageTagPriorityPolicy tagPriorityPolicy,
+        IAlertSettings alertSettings,
+        IMessageComposition messageComposition,
         ILoggerFactory loggerFactory)
     {
-        _homeContent = homeContent;
         _entryService = entryService;
         _connection = connection;
         _messages = messages;
@@ -84,13 +73,10 @@ public sealed partial class ContentAreaViewModel : ObservableObject, IContentAre
         _notes = notes;
         _activityLogs = activityLogs;
         _messageFormat = messageFormat;
-        _priorityProvider = priorityProvider;
-        _alertConfiguration = alertConfiguration;
-        _alertComposeConfiguration = alertComposeConfiguration;
-        _tagConfiguration = tagConfiguration;
-        _tagPriorityPolicy = tagPriorityPolicy;
+        _alertSettings = alertSettings;
+        _messageComposition = messageComposition;
         _loggerFactory = loggerFactory;
-        HomeText = _homeContent.GetHomeText();
+        HomeText = appSettings.GetHomeText();
         connection.DeliveryStatusChanged += OnDeliveryStatusChanged;
     }
 
@@ -166,7 +152,7 @@ public sealed partial class ContentAreaViewModel : ObservableObject, IContentAre
         DraftEntity? entity = await _drafts.Get(oid);
         if (entity is null) return null;
         List<string> userNames = await _connection.GetUserNames();
-        DraftViewModel vm = new(entity, _entryService, _connection, userNames, _loggerFactory, _priorityProvider, _alertConfiguration, _alertComposeConfiguration, _tagConfiguration, _tagPriorityPolicy);
+        DraftViewModel vm = new(entity, _entryService, _connection, userNames, _loggerFactory, _alertSettings, _messageComposition);
         vm.DraftSent += async (IDraftViewModel _, MessageEntity msg) =>
         {
             ShowEntry(new MessageViewModel(msg, _messageFormat));

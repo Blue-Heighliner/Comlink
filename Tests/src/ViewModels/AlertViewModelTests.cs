@@ -9,18 +9,18 @@ public sealed class AlertViewModelTests
     {
         public Mock<IEntryService> EntryService { get; } = new();
         public Mock<IServiceConnection> Connection { get; } = new();
+        public Mock<IAlertSettings> AlertSettings { get; } = new();
         public Mock<IAlertSoundPlayer> SoundPlayer { get; } = new();
-        public Mock<IAlertConfiguration> Configuration { get; } = new();
 
         public Setup()
         {
-            Configuration.Setup(c => c.AlertText).Returns("ALERT");
-            Configuration.Setup(c => c.AlarmSoundDuration).Returns(TimeSpan.FromMinutes(10));
-            Configuration.Setup(c => c.QuickConfirmationEnabled).Returns(true);
+            AlertSettings.Setup(c => c.AlertText).Returns("ALERT");
+            AlertSettings.Setup(c => c.AlarmSoundDuration).Returns(TimeSpan.FromMinutes(10));
+            AlertSettings.Setup(c => c.QuickConfirmationEnabled).Returns(true);
         }
 
         public AlertViewModel Build() =>
-            new(EntryService.Object, Connection.Object, Format, SoundPlayer.Object, Configuration.Object);
+            new(EntryService.Object, Connection.Object, Format, AlertSettings.Object, SoundPlayer.Object);
     }
 
     private static MessageEntity MakeMessage(string messageId, bool isAlert)
@@ -43,13 +43,13 @@ public sealed class AlertViewModelTests
         Assert.Equal(0, vm.PendingCount);
     }
 
-    /// <summary>AlertText and QuickConfirmationEnabled are read from IAlertConfiguration.</summary>
+    /// <summary>AlertText and QuickConfirmationEnabled are read from IAlertSettings.</summary>
     [Fact]
     public void Ctor_ExposesConfigurationValues()
     {
         Setup s = new();
-        s.Configuration.Setup(c => c.AlertText).Returns("INCOMING");
-        s.Configuration.Setup(c => c.QuickConfirmationEnabled).Returns(false);
+        s.AlertSettings.Setup(c => c.AlertText).Returns("INCOMING");
+        s.AlertSettings.Setup(c => c.QuickConfirmationEnabled).Returns(false);
 
         AlertViewModel vm = s.Build();
 
@@ -163,7 +163,7 @@ public sealed class AlertViewModelTests
     public void ConfirmLatestCommand_QuickConfirmationDisabled_CannotExecute()
     {
         Setup s = new();
-        s.Configuration.Setup(c => c.QuickConfirmationEnabled).Returns(false);
+        s.AlertSettings.Setup(c => c.QuickConfirmationEnabled).Returns(false);
         AlertViewModel vm = s.Build();
         s.EntryService.Raise(e => e.MessageInserted += null, MakeMessage("MSG1", isAlert: true));
 

@@ -30,7 +30,7 @@ internal interface IPeerService
 internal sealed class PeerService : IPeerService, IAsyncDisposable
 {
     private readonly IOftPeer _peer;
-    private readonly IUserLocator _userLocator;
+    private readonly IUserDirectory _userDirectory;
     private readonly IPortConfiguration _ports;
     private readonly IMessageFormat _messageFormat;
     private readonly ILogger _logger;
@@ -46,12 +46,12 @@ internal sealed class PeerService : IPeerService, IAsyncDisposable
     public PeerService(
         IOftPeerFactory peerFactory,
         IPortConfiguration ports,
-        IUserLocator userLocator,
+        IUserDirectory userDirectory,
         IOftCertificateProvider certProvider,
         IMessageFormat messageFormat,
         ILoggerFactory loggerFactory)
     {
-        _userLocator = userLocator;
+        _userDirectory = userDirectory;
         _ports = ports;
         _messageFormat = messageFormat;
         _logger = loggerFactory.CreateLogger("ACTIVITY");
@@ -61,10 +61,10 @@ internal sealed class PeerService : IPeerService, IAsyncDisposable
     }
 
     /// <summary>Initializes a <see cref="PeerService"/> with a pre-built peer; intended for unit testing.</summary>
-    internal PeerService(IOftPeer peer, IUserLocator userLocator, IPortConfiguration ports, IMessageFormat messageFormat, ILoggerFactory loggerFactory)
+    internal PeerService(IOftPeer peer, IUserDirectory userDirectory, IPortConfiguration ports, IMessageFormat messageFormat, ILoggerFactory loggerFactory)
     {
         _peer = peer;
-        _userLocator = userLocator;
+        _userDirectory = userDirectory;
         _ports = ports;
         _messageFormat = messageFormat;
         _logger = loggerFactory.CreateLogger("ACTIVITY");
@@ -83,7 +83,7 @@ internal sealed class PeerService : IPeerService, IAsyncDisposable
     /// <inheritdoc />
     public async Task<bool> Send(string userName, object message, CancellationToken cancellation = default)
     {
-        UserEndpoint? endpoint = await _userLocator.GetEndpoint(userName, cancellation);
+        UserEndpoint? endpoint = await _userDirectory.GetEndpoint(userName, cancellation);
         if (endpoint is null) return false;
 
         using OwnedBuffer buf = PeerSerializer.Serialize(message);
@@ -116,33 +116,8 @@ internal sealed class PeerService : IPeerService, IAsyncDisposable
         _ = Task.Run(() => HandleMessage(copy));
     }
 
-    internal async Task<bool> HandleMessage(ReadOnlyMemory<byte> data)
-    {
-        try
-        {
-            object? message = PeerSerializer.Deserialize(_messageFormat.MessageType, data);
-            if (message is null) return false;
-
-            string confirmationMessageId = _messageFormat.GetConfirmationMessageId(message);
-            if (!string.IsNullOrEmpty(confirmationMessageId))
-            {
-                string confirmingUser = _messageFormat.GetFromUser(message);
-                _logger.LogInformation("{MessageId} read confirmation received from {User}", confirmationMessageId, confirmingUser);
-                if (ConfirmationReceived is not null)
-                    await ConfirmationReceived(confirmationMessageId, confirmingUser);
-                return true;
-            }
-
-            _logger.LogInformation("{MessageId} received from {FromUser}", _messageFormat.GetMessageId(message), _messageFormat.GetFromUser(message));
-            if (MessageDelivered is not null)
-                await MessageDelivered(message);
-            return true;
-        }
-        catch
-        {
-            return false;
-        }
-    }
+    internal Task<bool> HandleMessage(ReadOnlyMemory<byte> data) =>
+        PeerMessageDispatcher.Dispatch(data, _messageFormat, _logger, MessageDelivered, ConfirmationReceived);
 
     private void OnDeliveryStatus(object tag, OftDeliveryStatus status)
     {

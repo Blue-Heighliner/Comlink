@@ -4,9 +4,9 @@ namespace BlueHeighliner.Comlink.Tests.ServiceEngine;
 public sealed class UserServiceTests : IDisposable
 {
     private readonly string _appName = Guid.NewGuid().ToString();
-    private readonly Mock<IUserCodeResolver> _resolverMock = new();
+    private readonly Mock<IUserIdentity> _resolverMock = new();
     private UserService CreateService() =>
-        new(_resolverMock.Object, [], new TestAppDataPathProvider(_appName), new BlueHeighliner.Comlink.Engine.Control.CurrentUserProvider(), LoggerFactory.Create(_ => { }));
+        new(_resolverMock.Object, new TestAppDataPathProvider(_appName), new BlueHeighliner.Comlink.Engine.Control.CurrentUserProvider(), LoggerFactory.Create(_ => { }));
 
     /// <summary>Verifies that GetCurrentUserInfo returns null when the user has not been installed.</summary>
     [Fact]
@@ -27,7 +27,7 @@ public sealed class UserServiceTests : IDisposable
             EnvironmentTitle = "Test",
             EnvironmentColor = "#FF0000"
         };
-        _resolverMock.Setup(r => r.Resolve("TS01", default)).ReturnsAsync(expected);
+        _resolverMock.Setup(r => r.ResolveCode("TS01", default)).ReturnsAsync(expected);
 
         UserService service = CreateService();
         UserInfo? result = await service.Install("TS01");
@@ -41,7 +41,7 @@ public sealed class UserServiceTests : IDisposable
     [Fact]
     public async Task InstallAsync_WithInvalidCode_ReturnsNull()
     {
-        _resolverMock.Setup(r => r.Resolve("INVALID", default)).ReturnsAsync((UserInfo?)null);
+        _resolverMock.Setup(r => r.ResolveCode("INVALID", default)).ReturnsAsync((UserInfo?)null);
 
         UserService service = CreateService();
         UserInfo? result = await service.Install("INVALID");
@@ -60,7 +60,7 @@ public sealed class UserServiceTests : IDisposable
             EnvironmentTitle = "Prod",
             EnvironmentColor = "#00FF00"
         };
-        _resolverMock.Setup(r => r.Resolve("MN01", default)).ReturnsAsync(userInfo);
+        _resolverMock.Setup(r => r.ResolveCode("MN01", default)).ReturnsAsync(userInfo);
 
         UserService service = CreateService();
         await service.Install("MN01");
@@ -81,7 +81,7 @@ public sealed class UserServiceTests : IDisposable
             EnvironmentTitle = "QA",
             EnvironmentColor = "#0000FF"
         };
-        _resolverMock.Setup(r => r.Resolve("RS01", default)).ReturnsAsync(userInfo);
+        _resolverMock.Setup(r => r.ResolveCode("RS01", default)).ReturnsAsync(userInfo);
 
         UserService service = CreateService();
         await service.Install("RS01");

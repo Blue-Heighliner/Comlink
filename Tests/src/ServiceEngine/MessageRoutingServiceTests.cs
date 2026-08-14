@@ -4,7 +4,7 @@ namespace BlueHeighliner.Comlink.Tests.ServiceEngine;
 public sealed class MessageRoutingServiceTests
 {
     private static readonly ILoggerFactory _loggerFactory = LoggerFactory.Create(_ => { });
-    private static readonly IUserGroupProvider _noGroups = new UserGroupProvider(new EngineConfig());
+    private static readonly IUserDirectory _noGroups = new DefaultUserDirectory();
     private static readonly IMessageFormat Format = new TestMessageFormat();
 
     private sealed class FakePeerService : IPeerService
@@ -139,7 +139,7 @@ public sealed class MessageRoutingServiceTests
                 ["OPS"] = ["ALPHA", "BETA"]
             }
         };
-        IUserGroupProvider groups = new UserGroupProvider(config);
+        IUserDirectory groups = new ConfiguredUserDirectory(new DefaultUserDirectory(), config);
         FakePeerService fake = new();
         MessageRoutingService service = new(fake, groups, Format, _loggerFactory);
 
@@ -171,7 +171,7 @@ public sealed class MessageRoutingServiceTests
                 ["OUTER"] = ["INNER", "BETA"]
             }
         };
-        IUserGroupProvider groups = new UserGroupProvider(config);
+        IUserDirectory groups = new ConfiguredUserDirectory(new DefaultUserDirectory(), config);
         FakePeerService fake = new();
         MessageRoutingService service = new(fake, groups, Format, _loggerFactory);
 

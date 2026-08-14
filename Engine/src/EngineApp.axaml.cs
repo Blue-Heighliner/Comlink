@@ -20,6 +20,7 @@ public partial class EngineApp : Application
             .UseEngine(EngineMode.Client)
             .UseEngineUi()
             .ConfigureServices((_, services) => EngineApplication.ConfigureServices?.Invoke(services))
+            .UseEngineConfigOverrides()
             .ConfigureLogging(logging => logging.SetMinimumLevel(LogLevel.Information))
             .Build();
 

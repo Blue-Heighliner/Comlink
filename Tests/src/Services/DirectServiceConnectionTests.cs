@@ -55,15 +55,14 @@ public sealed class DirectServiceConnectionTests
         out FakeMessageRoutingService fakeRouting,
         out Mock<IUserService> userMock,
         out Mock<IEntryService> entryMock,
-        out Mock<IUserNameDirectory> dirMock)
+        out Mock<IUserDirectory> dirMock)
     {
         fakePeer = new FakePeerService();
         fakeRouting = new FakeMessageRoutingService();
         userMock = new Mock<IUserService>();
         entryMock = new Mock<IEntryService>();
-        dirMock = new Mock<IUserNameDirectory>();
-        Mock<IUserCodeResolver> resolverMock = new();
-        return new DirectServiceConnection(userMock.Object, resolverMock.Object, dirMock.Object,
+        dirMock = new Mock<IUserDirectory>();
+        return new DirectServiceConnection(userMock.Object, dirMock.Object,
             fakeRouting, fakePeer, entryMock.Object, new TestMessageFormat());
     }
 
@@ -100,7 +99,7 @@ public sealed class DirectServiceConnectionTests
     [Fact]
     public async Task GetUserNames_ReturnsUserNamesFromDirectory()
     {
-        DirectServiceConnection conn = Build(out _, out _, out _, out _, out Mock<IUserNameDirectory> dir);
+        DirectServiceConnection conn = Build(out _, out _, out _, out _, out Mock<IUserDirectory> dir);
         dir.Setup(d => d.GetAllUserNames(It.IsAny<CancellationToken>()))
            .ReturnsAsync((IReadOnlyList<string>)["ALPHA", "BETA"]);
 
@@ -113,7 +112,7 @@ public sealed class DirectServiceConnectionTests
     [Fact]
     public async Task GetUserNames_WhenDirectoryThrows_ReturnsEmptyList()
     {
-        DirectServiceConnection conn = Build(out _, out _, out _, out _, out Mock<IUserNameDirectory> dir);
+        DirectServiceConnection conn = Build(out _, out _, out _, out _, out Mock<IUserDirectory> dir);
         dir.Setup(d => d.GetAllUserNames(It.IsAny<CancellationToken>()))
            .ThrowsAsync(new IOException("network error"));
 

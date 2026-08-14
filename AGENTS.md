@@ -48,7 +48,7 @@ When making changes that affect the interface wire format, peer protocol, data s
 - One type per file, with these exceptions: an interface and its implementing class are co-located in one file named after the class (e.g. `IThing` and `Thing` both live in `Thing.cs`); extension classes are co-located with the class they extend (e.g. `ThingExtensions` also lives in `Thing.cs`); a standalone interface with no co-located implementation is named after its concept without the `I` prefix (e.g. `IOther` lives in `Other.cs`).
 
 ### Patterns
-- **DI first**: all external configuration is expressed as an interface in `Engine/src/Control/`. Register defaults with `TryAddSingleton` so hosts can override. Never read environment variables or hardcode paths inside Engine — go through a provider. Whenever a new control interface is added (or an existing one's default behavior meaningfully changes), also add a corresponding `Sample*` implementation in `Sample/src/` and register it in `Sample/src/Program.cs`, so Sample continues to demonstrate how to override every control interface — see `Docs/Control.md` for the current full set and the narrow, explicitly-documented exceptions (`IOftCertificateProvider`, `IServiceConnection`, `IPrinterProvider`/`ILinePrinter`). Prefer reproducing the Engine default's exact behavior with one small additive customization (e.g. an environment-variable fallback) over anything that changes Sample's default runtime behavior, especially for anything touching the app data path — that has caused real data loss in this project before. Note that `IPrinterProvider`/`ILinePrinter` are the one exception where Engine itself provides real, OS-specific behavior (Windows/Linux) rather than a safe no-op — treat this as a deliberate one-off (printer discovery and driving is genuine OS resource interaction, not app-specific configuration), not a precedent for moving other control interfaces' real behavior into Engine by default. Both interfaces are implemented by the single `PrinterProvider` class, which is also this codebase's one example of a class implementing two control interfaces that don't share its name — see `Docs/Control.md` for how that's registered.
+- **DI first**: all external configuration is expressed as an interface in `Engine/src/Control/`. Register defaults with `TryAddSingleton` so hosts can override. Never read environment variables anywhere in the codebase (Engine or Sample) — all behavior is controlled either through `config.json` or a control-interface implementation; hardcoded paths inside Engine are likewise disallowed — go through a provider. A control-interface implementation (Engine's default or a host's override) describes **non-config-file behavior only** — it must never read `EngineConfig` itself. Control interfaces are for configuration and rules only — a component that provides genuine real-world/OS-level behavior (e.g. audio playback, printer discovery/driving) is not a control interface: it belongs outside `Engine/src/Control/` (its own top-level `Engine/src/` folder, e.g. `Engine/src/Audio/`), is `internal` unless a `public` type needs it as a constructor dependency (C# doesn't allow a less-accessible parameter type on a `public` member) — Engine always provides the real implementation directly; there is nothing for a host to sensibly swap — and is not documented as a control interface in `Docs/Control.md`/`Docs/Configuration.md` even if it's still described there for completeness (e.g. `IAlertSoundPlayer`, `Engine/src/Audio/AlertSoundPlayer.cs`). `IPrinterProvider`/`ILinePrinter` predate this split and still live in `Engine/src/Control/` as a deliberate, documented one-off (see `Docs/Control.md`) — do not move them without being asked, but treat `Engine/src/Audio/`'s placement, not `Control/`'s, as the template for any *new* real-behavior component. Where a `config.json` field exists for an interface, `EngineConfig` overrides are instead applied as a separate, Engine-owned decorator layer registered by `EngineExtensions.UseEngineConfigOverrides()` (call it last, after every other `ConfigureServices` call, so it sees whichever implementation — Engine default or host override — ends up registered) — see `Docs/Control.md` for the full mechanism and the `Configured*` decorator classes co-located with each affected interface. Only add a `Sample*` implementation in `Sample/src/` (registered in `Sample/src/Program.cs`) for a control interface where Sample genuinely has distinct, non-config-file behavior worth demonstrating (e.g. a different hardcoded label, extra built-in test users) — do not add one just to exist; see `Docs/Control.md` for the current set and why each one is or isn't overridden. Never let a `Sample*` override change the app data path's default runtime behavior — that has caused real data loss in this project before. Whether `config.json` is read at all is itself gated by `IConfigFileProvider` (default enabled) — see `Docs/Control.md`.
 - **Async all the way**: all I/O is async. Avoid `Task.Result` and `.GetAwaiter().GetResult()` except at the top-level host startup where a synchronization context deadlock is explicitly being avoided (and that case is already present in `EngineApp.axaml.cs`). Do not append `Async` to method names — name methods by what they do, not how they do it (`Load`, not `LoadAsync`). Name `CancellationToken` parameters `cancellation` (not `ct` or `cancellationToken`); framework-required overrides (e.g. `IHostedService.StartAsync(CancellationToken cancellationToken)`) are the only exception.
 - **Events for cross-layer communication**: services expose C# events; ViewModels subscribe. Do not call ViewModel methods from services.
 - **Repository pattern**: all LiteDB access goes through a repository. No direct collection access outside `LiteDbContext` and the repository classes.
@@ -68,7 +68,7 @@ When making changes that affect the interface wire format, peer protocol, data s
 
 ### Windows Compatibility
 - File I/O that may be accessed by multiple processes must use `FileShare.ReadWrite` and a named Mutex. See `DailyFileLoggerProvider` for the pattern.
-- Avoid `Environment.SpecialFolder` paths hardcoded as strings — use `IAppDataPathProvider`.
+- Avoid `Environment.SpecialFolder` paths hardcoded as strings — use `IAppSettings`.
 
 ## Packaging
 
@@ -96,7 +96,7 @@ Engine supports `--config <path-to-config.json>` to load configuration from a JS
 Sample.exe --config <path-to-config.json>
 ```
 
-If `--config` is omitted, all settings use their defaults (Client mode, default ports, system app data folder). An empty config file behaves identically to omitting the argument entirely.
+If `--config` is omitted, all settings use their defaults (Client mode, default ports, system app data folder). An empty config file behaves identically to omitting the argument entirely. Reading `--config` at all is itself gated by `IConfigFileProvider` (`Docs/Control.md`), enabled by default; a host that registers an implementation returning `false` makes `EngineConfig` always use its defaults, regardless of `--config`.
 
 ### Config file schema
 
@@ -115,6 +115,9 @@ If `--config` is omitted, all settings use their defaults (Client mode, default 
   "MessageTagsEnabled": null,
   "MessageTagLabel": null,
   "PrintReceivedEnabled": null,
+  "NodeRole": null,
+  "ServerEndpoint": null,
+  "ServerUsers": {},
   "Users": {
     "USER-A": { "IpAddress": "192.168.1.10", "Port": 7890 }
   },
@@ -139,6 +142,9 @@ If `--config` is omitted, all settings use their defaults (Client mode, default 
 | `MessageTagsEnabled` | bool? | `null` | Whether message tags are shown anywhere in the UI (`null` = `true`) |
 | `MessageTagLabel` | string? | `null` | Label for the tag input's watermark in the draft editor (`null` = `"Tag"`) |
 | `PrintReceivedEnabled` | bool? | `null` | Whether the print manager's "print received" toggle starts enabled (`null` = `false`) |
+| `NodeRole` | string? | `null` | Networking topology: `"Peer"`, `"Client"`, or `"Server"` (`null`/unrecognized = `"Peer"`). See `Docs/Peer.md#node-roles`. |
+| `ServerEndpoint` | object? | `null` | Server endpoint a `"Client"`-role instance connects through: `{ IpAddress, Port }`. Required when `NodeRole` is `"Client"`. |
+| `ServerUsers` | object | `{}` | Full server-user-map topology for a `"Server"`-role instance: map of server user name → `{ IpAddress, Port, ChildClients }`, describing every server in the cluster. Required when `NodeRole` is `"Server"`. |
 | `Users` | object | `{}` | Map of user name → `{ IpAddress, Port }` — overrides or defines user endpoints |
 | `UserGroups` | object | `{}` | Map of group name → member list (user or group names); groups are addressable destinations and are expanded recursively on send |
 

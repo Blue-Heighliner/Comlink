@@ -11,26 +11,15 @@ internal static class Program
             args,
             services =>
             {
-                services.AddSingleton<IUserLocator, SampleUserLocator>();
-                services.AddSingleton<IUserCodeResolver, SampleUserCodeResolver>();
-                services.AddSingleton<IUserNameDirectory, SampleUserNameDirectory>();
-                services.AddSingleton<IUserGroupProvider, SampleUserGroupProvider>();
-                services.AddSingleton<IHomeContentProvider, SampleHomeContentProvider>();
-                services.AddSingleton<IAlertSoundPlayer, SampleAlertSoundPlayer>();
-                services.AddSingleton<IMessagePriorityProvider, SampleMessagePriorityProvider>();
-                services.AddSingleton<IAlertConfiguration, SampleAlertConfiguration>();
-                services.AddSingleton<IAlertComposeConfiguration, SampleAlertComposeConfiguration>();
-                services.AddSingleton<IAppNameProvider, SampleAppNameProvider>();
-                services.AddSingleton<IAppDataPathProvider, SampleAppDataPathProvider>();
-                services.AddSingleton<IPortConfiguration, SamplePortConfiguration>();
-                services.AddSingleton<IKioskModeProvider, SampleKioskModeProvider>();
-                services.AddSingleton<IExternalDriveProvider, SampleExternalDriveProvider>();
-                services.AddSingleton<IOftPeerCertificateName, SampleOftPeerCertificateName>();
-                services.AddSingleton<IDebugUserOverride, SampleDebugUserOverride>();
-                services.AddSingleton<IMessageTagConfiguration, SampleMessageTagConfiguration>();
-                services.AddSingleton<IMessageTagPriorityPolicy, SampleMessageTagPriorityPolicy>();
-                services.AddSingleton<IPrintReceivedDefaultProvider, SamplePrintReceivedDefaultProvider>();
-                services.AddSingleton<IPrintReceivedRule, SamplePrintReceivedRule>();
+                // Only control interfaces where Sample has a genuinely distinct, non-config-file behavior
+                // to demonstrate are overridden here — see Docs/Control.md. Every other interface uses the
+                // Engine default, with config.json applied on top automatically (UseEngineConfigOverrides).
+                services.AddSingleton<IUserIdentity, SampleUserIdentity>();
+                services.AddSingleton<IUserDirectory, SampleUserDirectory>();
+                services.AddSingleton<IAppSettings, SampleAppSettings>();
+                services.AddSingleton<IAlertSettings, SampleAlertSettings>();
+                services.AddSingleton<IMessageComposition, SampleMessageComposition>();
+                services.AddSingleton<IPrintPolicy, SamplePrintPolicy>();
             },
             new Uri("avares://BlueHeighliner.Comlink.Sample/Assets/envelope.png"));
     }

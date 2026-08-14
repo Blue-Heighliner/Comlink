@@ -10,14 +10,19 @@ public interface IOftCertificateProvider
     OftPeerOptions GetPeerOptions();
 }
 
-/// <summary>Implements <see cref="IOftCertificateProvider"/> locating certificates by name in the system certificate store.</summary>
+/// <summary>
+/// Implements <see cref="IOftCertificateProvider"/> locating certificates by name in the system certificate
+/// store. <see cref="GetPeerOptions"/> is <see langword="virtual"/> so a host can inherit and override it —
+/// see <c>Docs/Control.md</c> — though for most customization needs, overriding <see cref="IOftPeerCertificateName"/>
+/// instead is sufficient and does not require touching this security-sensitive class at all.
+/// </summary>
 [ExcludeFromCodeCoverage]
-internal sealed class OftCertificateProvider(
+public class DefaultOftCertificateProvider(
     IOftPeerCertificateName certNameProvider,
     ICurrentUserProvider currentUserProvider) : IOftCertificateProvider
 {
     /// <inheritdoc />
-    public OftPeerOptions GetPeerOptions()
+    public virtual OftPeerOptions GetPeerOptions()
     {
         X509Certificate2? cert = GetOwnCertificate();
         return new OftPeerOptions

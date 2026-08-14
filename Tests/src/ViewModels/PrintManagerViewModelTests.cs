@@ -34,15 +34,14 @@ public sealed class PrintManagerViewModelTests
         public Mock<IActivityLogRepository> ActivityLogs { get; } = new();
         public Mock<IPrinterProvider> PrinterProvider { get; } = new();
         public FakeLinePrinter LinePrinter { get; } = new();
-        public Mock<IPrintReceivedDefaultProvider> PrintReceivedDefault { get; } = new();
-        public Mock<IPrintReceivedRule> PrintReceivedRule { get; } = new();
+        public Mock<IPrintPolicy> PrintPolicy { get; } = new();
 
         public Setup()
         {
             PrinterProvider.Setup(p => p.GetAvailablePrinters()).Returns(["PRINTER-A", "PRINTER-B"]);
             PrinterProvider.Setup(p => p.GetDefaultPrinter()).Returns("PRINTER-A");
-            PrintReceivedDefault.Setup(p => p.DefaultEnabled).Returns(false);
-            PrintReceivedRule.Setup(r => r.GetPrintCount(It.IsAny<object>())).Returns(1);
+            PrintPolicy.Setup(p => p.PrintReceivedDefaultEnabled).Returns(false);
+            PrintPolicy.Setup(r => r.GetPrintCount(It.IsAny<object>())).Returns(1);
         }
 
         public PrintManagerViewModel Build() => new(
@@ -54,8 +53,7 @@ public sealed class PrintManagerViewModelTests
             Format,
             PrinterProvider.Object,
             LinePrinter,
-            PrintReceivedDefault.Object,
-            PrintReceivedRule.Object,
+            PrintPolicy.Object,
             NoLogger);
     }
 
@@ -90,14 +88,14 @@ public sealed class PrintManagerViewModelTests
         Assert.Equal(["PRINTER-A", "PRINTER-B"], vm.AvailablePrinters);
     }
 
-    /// <summary>PrintReceivedEnabled initializes from IPrintReceivedDefaultProvider.DefaultEnabled.</summary>
+    /// <summary>PrintReceivedEnabled initializes from IPrintPolicy.PrintReceivedDefaultEnabled.</summary>
     [Theory]
     [InlineData(false)]
     [InlineData(true)]
     public void Ctor_PrintReceivedEnabledFromDefaultProvider(bool enabled)
     {
         Setup s = new();
-        s.PrintReceivedDefault.Setup(p => p.DefaultEnabled).Returns(enabled);
+        s.PrintPolicy.Setup(p => p.PrintReceivedDefaultEnabled).Returns(enabled);
 
         PrintManagerViewModel vm = s.Build();
 
@@ -136,7 +134,7 @@ public sealed class PrintManagerViewModelTests
     {
         Setup s = new();
         s.PrinterProvider.Setup(p => p.GetDefaultPrinter()).Returns((string?)null);
-        s.PrintReceivedDefault.Setup(p => p.DefaultEnabled).Returns(true);
+        s.PrintPolicy.Setup(p => p.PrintReceivedDefaultEnabled).Returns(true);
         PrintManagerViewModel vm = s.Build();
 
         s.EntryService.Raise(e => e.MessageInserted += null, MakeMessage("MSG1", "High priority", "body", 99));
@@ -168,7 +166,7 @@ public sealed class PrintManagerViewModelTests
     {
         Setup s = new();
         s.PrinterProvider.Setup(p => p.GetDefaultPrinter()).Returns((string?)null);
-        s.PrintReceivedRule.Setup(r => r.GetPrintCount(It.IsAny<object>())).Returns(3);
+        s.PrintPolicy.Setup(r => r.GetPrintCount(It.IsAny<object>())).Returns(3);
         PrintManagerViewModel vm = s.Build();
         vm.PrintReceivedEnabled = true;
 
@@ -185,7 +183,7 @@ public sealed class PrintManagerViewModelTests
     {
         Setup s = new();
         s.PrinterProvider.Setup(p => p.GetDefaultPrinter()).Returns((string?)null);
-        s.PrintReceivedRule.Setup(r => r.GetPrintCount(It.IsAny<object>())).Returns(0);
+        s.PrintPolicy.Setup(r => r.GetPrintCount(It.IsAny<object>())).Returns(0);
         PrintManagerViewModel vm = s.Build();
         vm.PrintReceivedEnabled = true;
 
@@ -200,7 +198,7 @@ public sealed class PrintManagerViewModelTests
     {
         Setup s = new();
         s.PrinterProvider.Setup(p => p.GetDefaultPrinter()).Returns((string?)null);
-        s.PrintReceivedDefault.Setup(p => p.DefaultEnabled).Returns(true);
+        s.PrintPolicy.Setup(p => p.PrintReceivedDefaultEnabled).Returns(true);
         PrintManagerViewModel vm = s.Build();
 
         s.EntryService.Raise(e => e.MessageInserted += null, MakeMessage("LOW", "Low", "body", 1));
@@ -215,7 +213,7 @@ public sealed class PrintManagerViewModelTests
     {
         Setup s = new();
         s.PrinterProvider.Setup(p => p.GetDefaultPrinter()).Returns((string?)null);
-        s.PrintReceivedDefault.Setup(p => p.DefaultEnabled).Returns(true);
+        s.PrintPolicy.Setup(p => p.PrintReceivedDefaultEnabled).Returns(true);
         PrintManagerViewModel vm = s.Build();
 
         s.EntryService.Raise(e => e.MessageInserted += null, MakeMessage("FIRST", "First", "body", 5));
@@ -299,7 +297,7 @@ public sealed class PrintManagerViewModelTests
     public async Task PrintLoop_HigherPriorityReceivedJob_InterruptsAndRestartsLowerPriorityJob()
     {
         Setup s = new();
-        s.PrintReceivedDefault.Setup(p => p.DefaultEnabled).Returns(true);
+        s.PrintPolicy.Setup(p => p.PrintReceivedDefaultEnabled).Returns(true);
         s.Messages.Setup(m => m.Get("LOW", false))
             .ReturnsAsync(MakeMessage("LOW", "Low", "L1\nL2", 1));
         s.Messages.Setup(m => m.Get("HIGH", false))

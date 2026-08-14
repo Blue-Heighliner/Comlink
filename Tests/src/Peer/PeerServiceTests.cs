@@ -7,12 +7,12 @@ public sealed class PeerServiceTests
     private static readonly UserEndpoint FakeUserEndpoint = new() { IpAddress = "127.0.0.1", Port = 12345 };
     private static readonly IMessageFormat Format = new TestMessageFormat();
 
-    private static PeerService BuildService(Mock<IOftPeer> peerMock, Mock<IUserLocator> userLocatorMock)
-        => new(peerMock.Object, userLocatorMock.Object, new PortConfiguration(new EngineConfig()), Format, NoLogger);
+    private static PeerService BuildService(Mock<IOftPeer> peerMock, Mock<IUserDirectory> userDirectoryMock)
+        => new(peerMock.Object, userDirectoryMock.Object, new DefaultPortConfiguration(), Format, NoLogger);
 
-    private static Mock<IUserLocator> BuildUserLocator()
+    private static Mock<IUserDirectory> BuildUserDirectory()
     {
-        Mock<IUserLocator> locator = new();
+        Mock<IUserDirectory> locator = new();
         locator.Setup(l => l.GetEndpoint(It.IsAny<string>(), It.IsAny<CancellationToken>())).ReturnsAsync(FakeUserEndpoint);
         return locator;
     }
@@ -30,9 +30,9 @@ public sealed class PeerServiceTests
     public async Task HandleMessage_ValidMessage_RaisesMessageDeliveredEvent()
     {
         Mock<IOftPeer> peer = new();
-        Mock<IUserLocator> userLocator = BuildUserLocator();
+        Mock<IUserDirectory> userDirectory = BuildUserDirectory();
 
-        PeerService svc = BuildService(peer, userLocator);
+        PeerService svc = BuildService(peer, userDirectory);
         object? received = null;
         svc.MessageDelivered += p => { received = p; return Task.CompletedTask; };
 
@@ -57,9 +57,9 @@ public sealed class PeerServiceTests
     public async Task HandleMessage_CorruptData_ReturnsFalse()
     {
         Mock<IOftPeer> peer = new();
-        Mock<IUserLocator> userLocator = BuildUserLocator();
+        Mock<IUserDirectory> userDirectory = BuildUserDirectory();
 
-        PeerService svc = BuildService(peer, userLocator);
+        PeerService svc = BuildService(peer, userDirectory);
         bool ok = await svc.HandleMessage(new byte[] { 0xFF, 0xFE, 0xFD });
 
         Assert.False(ok);
@@ -70,9 +70,9 @@ public sealed class PeerServiceTests
     public async Task HandleMessage_ConfirmationMessage_RaisesConfirmationReceivedNotMessageDelivered()
     {
         Mock<IOftPeer> peer = new();
-        Mock<IUserLocator> userLocator = BuildUserLocator();
+        Mock<IUserDirectory> userDirectory = BuildUserDirectory();
 
-        PeerService svc = BuildService(peer, userLocator);
+        PeerService svc = BuildService(peer, userDirectory);
         object? delivered = null;
         svc.MessageDelivered += p => { delivered = p; return Task.CompletedTask; };
         (string MessageId, string ConfirmingUser)? confirmation = null;
@@ -93,9 +93,9 @@ public sealed class PeerServiceTests
     public async Task HandleMessage_OrdinaryMessage_RaisesMessageDeliveredNotConfirmationReceived()
     {
         Mock<IOftPeer> peer = new();
-        Mock<IUserLocator> userLocator = BuildUserLocator();
+        Mock<IUserDirectory> userDirectory = BuildUserDirectory();
 
-        PeerService svc = BuildService(peer, userLocator);
+        PeerService svc = BuildService(peer, userDirectory);
         bool confirmationFired = false;
         svc.ConfirmationReceived += (_, _) => { confirmationFired = true; return Task.CompletedTask; };
 
@@ -115,10 +115,10 @@ public sealed class PeerServiceTests
         Mock<IOftPeer> peer = new();
         peer.Setup(p => p.Send("127.0.0.1", 12345, It.IsAny<ReadOnlyMemory<byte>>(), 0, It.IsAny<object?>(), default))
             .Returns(Task.CompletedTask);
-        Mock<IUserLocator> userLocator = new();
-        userLocator.Setup(l => l.GetEndpoint("DEST", default)).ReturnsAsync(FakeUserEndpoint);
+        Mock<IUserDirectory> userDirectory = new();
+        userDirectory.Setup(l => l.GetEndpoint("DEST", default)).ReturnsAsync(FakeUserEndpoint);
 
-        PeerService svc = BuildService(peer, userLocator);
+        PeerService svc = BuildService(peer, userDirectory);
         TestMessage msg = new() { MessageId = "M1", FromUser = "SOURCE" };
 
         bool ok = await svc.Send("DEST", msg);
@@ -134,10 +134,10 @@ public sealed class PeerServiceTests
         Mock<IOftPeer> peer = new();
         peer.Setup(p => p.Send("127.0.0.1", 12345, It.IsAny<ReadOnlyMemory<byte>>(), 3, It.IsAny<object?>(), default))
             .Returns(Task.CompletedTask);
-        Mock<IUserLocator> userLocator = new();
-        userLocator.Setup(l => l.GetEndpoint("DEST", default)).ReturnsAsync(FakeUserEndpoint);
+        Mock<IUserDirectory> userDirectory = new();
+        userDirectory.Setup(l => l.GetEndpoint("DEST", default)).ReturnsAsync(FakeUserEndpoint);
 
-        PeerService svc = BuildService(peer, userLocator);
+        PeerService svc = BuildService(peer, userDirectory);
         TestMessage msg = new() { MessageId = "M1", FromUser = "SOURCE", Priority = 3 };
 
         bool ok = await svc.Send("DEST", msg);
@@ -151,10 +151,10 @@ public sealed class PeerServiceTests
     public async Task Send_UnknownUser_ReturnsFalse()
     {
         Mock<IOftPeer> peer = new();
-        Mock<IUserLocator> userLocator = new();
-        userLocator.Setup(l => l.GetEndpoint("UNKNOWN", default)).ReturnsAsync((UserEndpoint?)null);
+        Mock<IUserDirectory> userDirectory = new();
+        userDirectory.Setup(l => l.GetEndpoint("UNKNOWN", default)).ReturnsAsync((UserEndpoint?)null);
 
-        PeerService svc = BuildService(peer, userLocator);
+        PeerService svc = BuildService(peer, userDirectory);
         TestMessage msg = new() { MessageId = "M1", FromUser = "SOURCE" };
 
         bool ok = await svc.Send("UNKNOWN", msg);
@@ -170,9 +170,9 @@ public sealed class PeerServiceTests
         Mock<IOftPeer> peer = new();
         peer.Setup(p => p.Send(It.IsAny<string>(), It.IsAny<int>(), It.IsAny<ReadOnlyMemory<byte>>(), It.IsAny<int>(), It.IsAny<object?>(), It.IsAny<CancellationToken>()))
             .ThrowsAsync(new OftDisconnectedException());
-        Mock<IUserLocator> userLocator = BuildUserLocator();
+        Mock<IUserDirectory> userDirectory = BuildUserDirectory();
 
-        PeerService svc = BuildService(peer, userLocator);
+        PeerService svc = BuildService(peer, userDirectory);
         TestMessage msg = new() { MessageId = "M1", FromUser = "SOURCE" };
 
         bool ok = await svc.Send("DEST", msg);
@@ -194,10 +194,10 @@ public sealed class PeerServiceTests
         peer.Setup(p => p.Send(It.IsAny<string>(), It.IsAny<int>(), It.IsAny<ReadOnlyMemory<byte>>(), It.IsAny<int>(), It.IsAny<object?>(), It.IsAny<CancellationToken>()))
             .Callback<string, int, ReadOnlyMemory<byte>, int, object?, CancellationToken>((_, _, _, _, tag, _) => capturedTag = tag)
             .Returns(Task.CompletedTask);
-        Mock<IUserLocator> userLocator = BuildUserLocator();
+        Mock<IUserDirectory> userDirectory = BuildUserDirectory();
 
         // The DeliveryStatusHandler setter runs during construction, so Setup above must be in place first.
-        PeerService svc = BuildService(peer, userLocator);
+        PeerService svc = BuildService(peer, userDirectory);
 
         TaskCompletionSource<(string MessageId, string UserName, OftDeliveryStatus Status)> tcs = new();
         svc.DeliveryStatusChanged += (messageId, userName, status) =>

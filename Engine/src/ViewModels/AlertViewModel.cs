@@ -28,8 +28,8 @@ public sealed partial class AlertViewModel : ObservableObject, IAlertViewModel
     private readonly IEntryService _entryService;
     private readonly IServiceConnection _connection;
     private readonly IMessageFormat _messageFormat;
+    private readonly IAlertSettings _alertSettings;
     private readonly IAlertSoundPlayer _soundPlayer;
-    private readonly IAlertConfiguration _configuration;
     private readonly List<string> _pending = [];
     private Timer? _soundTimer;
 
@@ -41,28 +41,28 @@ public sealed partial class AlertViewModel : ObservableObject, IAlertViewModel
     /// <inheritdoc />
     public bool IsAlerting => PendingCount > 0;
     /// <inheritdoc />
-    public string AlertText => _configuration.AlertText;
+    public string AlertText => _alertSettings.AlertText;
     /// <inheritdoc />
-    public bool QuickConfirmationEnabled => _configuration.QuickConfirmationEnabled;
+    public bool QuickConfirmationEnabled => _alertSettings.QuickConfirmationEnabled;
 
     /// <summary>Initializes a new <see cref="AlertViewModel"/> and subscribes to entry read/insert events.</summary>
     /// <param name="entryService">Entry service raising the insert/read events that drive the pending list.</param>
     /// <param name="connection">Service connection used to mark an alert read via quick confirmation.</param>
     /// <param name="messageFormat">Maps logical fields onto a message entity's stored message.</param>
+    /// <param name="alertSettings">Provides alert box text, alarm sound duration, and quick-confirmation setting.</param>
     /// <param name="soundPlayer">Plays and stops the alarm sound.</param>
-    /// <param name="configuration">Provides alert box text, alarm sound duration, and quick-confirmation setting.</param>
     public AlertViewModel(
         IEntryService entryService,
         IServiceConnection connection,
         IMessageFormat messageFormat,
-        IAlertSoundPlayer soundPlayer,
-        IAlertConfiguration configuration)
+        IAlertSettings alertSettings,
+        IAlertSoundPlayer soundPlayer)
     {
         _entryService = entryService;
         _connection = connection;
         _messageFormat = messageFormat;
+        _alertSettings = alertSettings;
         _soundPlayer = soundPlayer;
-        _configuration = configuration;
 
         entryService.MessageInserted += OnMessageInserted;
         entryService.MessageRead += OnMessageRead;
@@ -99,7 +99,7 @@ public sealed partial class AlertViewModel : ObservableObject, IAlertViewModel
 
     private void ResetSoundTimer()
     {
-        TimeSpan duration = _configuration.AlarmSoundDuration;
+        TimeSpan duration = _alertSettings.AlarmSoundDuration;
         if (_soundTimer is null)
             _soundTimer = new Timer(_ => _soundPlayer.Stop(), null, duration, Timeout.InfiniteTimeSpan);
         else

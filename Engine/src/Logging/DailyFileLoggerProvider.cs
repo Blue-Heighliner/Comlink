@@ -4,7 +4,7 @@ namespace BlueHeighliner.Comlink.Engine.Logging;
 [ExcludeFromCodeCoverage]
 public sealed class DailyFileLoggerProvider : ILoggerProvider
 {
-    private readonly IAppDataPathProvider _appDataPathProvider;
+    private readonly IAppSettings _appSettings;
     private readonly ICurrentUserProvider _currentUser;
     private readonly ConcurrentDictionary<string, DailyFileLogger> _loggers = new();
     private readonly object _writeLock = new();
@@ -14,9 +14,9 @@ public sealed class DailyFileLoggerProvider : ILoggerProvider
     private StreamWriter? _writer;
 
     /// <summary>Initializes a new <see cref="DailyFileLoggerProvider"/> using the provided path and user providers.</summary>
-    public DailyFileLoggerProvider(IAppDataPathProvider appDataPathProvider, ICurrentUserProvider currentUser)
+    public DailyFileLoggerProvider(IAppSettings appSettings, ICurrentUserProvider currentUser)
     {
-        _appDataPathProvider = appDataPathProvider;
+        _appSettings = appSettings;
         _currentUser = currentUser;
     }
 
@@ -25,7 +25,7 @@ public sealed class DailyFileLoggerProvider : ILoggerProvider
         get
         {
             if (_logDirectory is not null) return _logDirectory;
-            string dir = Path.Combine(_appDataPathProvider.AppDataPath, "Logs");
+            string dir = Path.Combine(_appSettings.AppDataPath, "Logs");
             Directory.CreateDirectory(dir);
             _logDirectory = dir;
             // Named mutex keyed on log directory for cross-process write serialization.

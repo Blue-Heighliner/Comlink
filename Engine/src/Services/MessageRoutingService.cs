@@ -19,7 +19,7 @@ internal interface IMessageRoutingService
 internal sealed class MessageRoutingService : IMessageRoutingService
 {
     private readonly IPeerService _peerService;
-    private readonly IUserGroupProvider _groupProvider;
+    private readonly IUserDirectory _userDirectory;
     private readonly IMessageFormat _messageFormat;
     private readonly ILogger _logger;
 
@@ -28,13 +28,13 @@ internal sealed class MessageRoutingService : IMessageRoutingService
 
     /// <summary>Initializes a new <see cref="MessageRoutingService"/> and subscribes to peer delivery status events.</summary>
     /// <param name="peerService">Peer service for sending and receiving messages.</param>
-    /// <param name="groupProvider">Provides group definitions for address expansion.</param>
+    /// <param name="userDirectory">Provides group definitions for address expansion.</param>
     /// <param name="messageFormat">Maps logical fields onto the engine's message type when building outbound messages.</param>
     /// <param name="loggerFactory">Factory for creating named loggers.</param>
-    public MessageRoutingService(IPeerService peerService, IUserGroupProvider groupProvider, IMessageFormat messageFormat, ILoggerFactory loggerFactory)
+    public MessageRoutingService(IPeerService peerService, IUserDirectory userDirectory, IMessageFormat messageFormat, ILoggerFactory loggerFactory)
     {
         _peerService = peerService;
-        _groupProvider = groupProvider;
+        _userDirectory = userDirectory;
         _messageFormat = messageFormat;
         _logger = loggerFactory.CreateLogger("ACTIVITY");
 
@@ -70,7 +70,7 @@ internal sealed class MessageRoutingService : IMessageRoutingService
         string messageId = Guid.NewGuid().ToString("N").ToUpperInvariant();
         DateTime sentAt = DateTime.UtcNow;
 
-        IReadOnlyDictionary<string, IReadOnlyList<string>> groupMap = await _groupProvider.GetGroups(cancellation);
+        IReadOnlyDictionary<string, IReadOnlyList<string>> groupMap = await _userDirectory.GetGroups(cancellation);
 
         // Expand group addresses to individual users, tracking which top-level addressed groups contain each user.
         Dictionary<string, List<string>> userAddressedVia = new(StringComparer.OrdinalIgnoreCase);

@@ -36,13 +36,13 @@ Manages user installation and persists user identity to `State.json`.
 **Key responsibilities**:
 - Load existing user state on startup (`Load`)
 - Install a new user by resolving a code (`Install`)
-- Apply a debug override (`IDebugUserOverride`) that bypasses `State.json`
+- Apply a debug override (`IUserIdentity.DebugUserName`) that bypasses `State.json`
 
 **State file**: `{AppDataPath}/State.json` — contains `UserName`, `UserCode`, `EnvironmentTitle`, `EnvironmentColor`. `IsInstalled` is a computed property: `true` when `UserName` is non-null.
 
 **Thread safety**: `Install` uses a `SemaphoreSlim(1,1)` to prevent concurrent installs.
 
-**Debug override**: If any `IDebugUserOverride` is registered, `Load` skips the state file entirely and uses the override's `UserName` (uppercased) with a synthetic `EnvironmentTitle = "DEBUG"` and color `#FF6200`. Useful for development without a real user code.
+**Debug override**: If `IUserIdentity.DebugUserName` is non-null, `Load` skips the state file entirely and uses it (uppercased) with a synthetic `EnvironmentTitle = "DEBUG"` and color `#FF6200`. Useful for development without a real user code.
 
 ```csharp
 // Consumers call:
@@ -122,7 +122,7 @@ Implements `IServiceConnection`, registered in both `Client` and `Headless` mode
 - Translates `PeerService.MessageDelivered` → fires `IServiceConnection.MessageReceived`. It does not persist the message itself — in Client mode, `MainViewModel`'s handler for that event calls `EntryService.StoreIncomingMessage`
 - On `MessageRoutingService.DeliveryStatusChanged`, updates the Outbox record via `EntryService.UpdateDeliveryStatus`, then fires `IServiceConnection.DeliveryStatusChanged` with the resulting `OverallStatus`
 - `MarkMessageRead(messageId)`: calls `EntryService.MarkMessageRead`, fires `IServiceConnection.DeliveryStatusChanged` locally (empty `UserName`, status `Read`) so Client-mode UI reflects the read state immediately, then sends a user-read confirmation message to the original sender via `IPeerService.Send` directly — or, for a self-addressed message, calls `EntryService.UpdateDeliveryStatus` directly with no network round-trip. See [Peer.md](Peer.md#read-confirmation)
-- Implements install, user info query, and user names query by delegating to `UserService` / `IUserNameDirectory`
+- Implements install, user info query, and user names query by delegating to `UserService` / `IUserDirectory`
 
 ---
 

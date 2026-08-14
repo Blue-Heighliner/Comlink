@@ -26,6 +26,7 @@ global using Microsoft.Extensions.DependencyInjection;
 global using Microsoft.Extensions.DependencyInjection.Extensions;
 global using Microsoft.Extensions.Hosting;
 global using Microsoft.Extensions.Logging;
+global using BlueHeighliner.Comlink.Engine.Audio;
 global using BlueHeighliner.Comlink.Engine.Control;
 global using BlueHeighliner.Comlink.Engine.Data;
 global using BlueHeighliner.Comlink.Engine.Data.Entities;

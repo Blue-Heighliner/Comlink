@@ -82,6 +82,25 @@ public sealed class EngineConfig
     public Dictionary<string, List<string>> UserGroups { get; init; } = [];
 
     /// <summary>
+    /// Networking topology role: <c>"Peer"</c>, <c>"Client"</c>, or <c>"Server"</c> (case-insensitive).
+    /// <see langword="null"/> or unrecognized uses the Engine default (<see cref="NodeRole.Peer"/>).
+    /// </summary>
+    public string? NodeRole { get; init; }
+
+    /// <summary>
+    /// The server endpoint a <see cref="Control.NodeRole.Client"/> instance forms its long-term OFT
+    /// connection to. Required when <see cref="NodeRole"/> is <c>"Client"</c>; unused otherwise.
+    /// </summary>
+    public UserEndpointConfig? ServerEndpoint { get; init; }
+
+    /// <summary>
+    /// Full server-user-map topology for a <see cref="Control.NodeRole.Server"/> instance. Keys are
+    /// server user names (case-insensitive); describes every server in the cluster, including the
+    /// local one. Required when <see cref="NodeRole"/> is <c>"Server"</c>; unused otherwise.
+    /// </summary>
+    public Dictionary<string, ServerUserConfigEntry> ServerUsers { get; init; } = [];
+
+    /// <summary>
     /// Loads configuration from a file specified by the <c>--config</c> argument.
     /// Returns a default <see cref="EngineConfig"/> if the argument is absent or config loading is not enabled for this build.
     /// </summary>
@@ -104,6 +123,21 @@ public sealed class EngineConfig
             kvp => kvp.Key,
             kvp => new UserEndpoint { IpAddress = kvp.Value.IpAddress, Port = kvp.Value.Port },
             StringComparer.OrdinalIgnoreCase);
+
+    /// <summary>Parses <see cref="NodeRole"/>, defaulting to <see cref="Control.NodeRole.Peer"/> when unset or unrecognized.</summary>
+    public Control.NodeRole GetNodeRole() =>
+        Enum.TryParse(NodeRole, ignoreCase: true, out Control.NodeRole role) ? role : Control.NodeRole.Peer;
+
+    /// <summary>Returns the configured server user map as Engine model types, with case-insensitive key lookup.</summary>
+    public IReadOnlyDictionary<string, ServerUserConfig> GetServerUsers() =>
+        ServerUsers.ToDictionary(
+            kvp => kvp.Key,
+            kvp => new ServerUserConfig
+            {
+                Endpoint = new UserEndpoint { IpAddress = kvp.Value.IpAddress, Port = kvp.Value.Port },
+                ChildClients = kvp.Value.ChildClients
+            },
+            StringComparer.OrdinalIgnoreCase);
 }
 
 /// <summary>JSON deserialization shape for a user endpoint entry in the config file.</summary>
@@ -113,4 +147,15 @@ public sealed class UserEndpointConfig
     public string IpAddress { get; init; } = string.Empty;
     /// <summary>TCP port of the remote peer node's peer server.</summary>
     public int Port { get; init; }
+}
+
+/// <summary>JSON deserialization shape for a server user map entry in the config file.</summary>
+public sealed class ServerUserConfigEntry
+{
+    /// <summary>IPv4 or IPv6 address this server user listens on and other servers dial to reach it.</summary>
+    public string IpAddress { get; init; } = string.Empty;
+    /// <summary>TCP port this server user listens on and other servers dial to reach it.</summary>
+    public int Port { get; init; }
+    /// <summary>Names of the client users that belong to this server.</summary>
+    public List<string> ChildClients { get; init; } = [];
 }

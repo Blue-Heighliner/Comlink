@@ -20,7 +20,7 @@ public sealed record PrintQueueEntry
     public required bool IsManual { get; init; }
     /// <summary>
     /// For automatically-queued received messages, the message's priority value (see
-    /// <see cref="Control.IMessagePriorityProvider"/>) — higher prints first among other automatically-queued
+    /// <see cref="Control.IMessageComposition"/>) — higher prints first among other automatically-queued
     /// entries. Unused (and irrelevant to ordering) for manual entries.
     /// </summary>
     public required int Priority { get; init; }
@@ -42,8 +42,7 @@ public interface IPrintManagerViewModel
     ObservableCollection<PrintQueueEntry> Queue { get; }
     /// <summary>
     /// Gets or sets whether every received message is automatically added to the print queue (the number of
-    /// copies decided by <see cref="Control.IPrintReceivedRule"/>). Off by default; see
-    /// <see cref="Control.IPrintReceivedDefaultProvider"/>.
+    /// copies decided by <see cref="Control.IPrintPolicy"/>). Off by default; see <see cref="Control.IPrintPolicy"/>.
     /// </summary>
     bool PrintReceivedEnabled { get; set; }
     /// <summary>Gets the printers available on this computer; see <see cref="Control.IPrinterProvider"/>.</summary>
@@ -78,7 +77,7 @@ public sealed partial class PrintManagerViewModel : ObservableObject, IPrintMana
     private readonly IActivityLogRepository _activityLogs;
     private readonly IMessageFormat _messageFormat;
     private readonly ILinePrinter _linePrinter;
-    private readonly IPrintReceivedRule _printReceivedRule;
+    private readonly IPrintPolicy _printPolicy;
     private readonly ILogger _activityLogger;
     private readonly List<PrintQueueEntry> _queue = [];
     private readonly Lock _gate = new();
@@ -101,8 +100,7 @@ public sealed partial class PrintManagerViewModel : ObservableObject, IPrintMana
     /// <param name="messageFormat">Maps logical fields onto a message entity's stored message.</param>
     /// <param name="printerProvider">Enumerates available printers and this computer's default.</param>
     /// <param name="linePrinter">Drives the selected printer line by line.</param>
-    /// <param name="printReceivedDefaultProvider">Provides the starting state of <see cref="PrintReceivedEnabled"/>.</param>
-    /// <param name="printReceivedRule">Decides how many copies of each received message to auto-queue.</param>
+    /// <param name="printPolicy">Provides the starting state of <see cref="PrintReceivedEnabled"/> and how many copies of each received message to auto-queue.</param>
     /// <param name="loggerFactory">Factory for creating named loggers.</param>
     public PrintManagerViewModel(
         IEntryService entryService,
@@ -113,8 +111,7 @@ public sealed partial class PrintManagerViewModel : ObservableObject, IPrintMana
         IMessageFormat messageFormat,
         IPrinterProvider printerProvider,
         ILinePrinter linePrinter,
-        IPrintReceivedDefaultProvider printReceivedDefaultProvider,
-        IPrintReceivedRule printReceivedRule,
+        IPrintPolicy printPolicy,
         ILoggerFactory loggerFactory)
     {
         _messages = messages;
@@ -123,10 +120,10 @@ public sealed partial class PrintManagerViewModel : ObservableObject, IPrintMana
         _activityLogs = activityLogs;
         _messageFormat = messageFormat;
         _linePrinter = linePrinter;
-        _printReceivedRule = printReceivedRule;
+        _printPolicy = printPolicy;
         _activityLogger = loggerFactory.CreateLogger("ACTIVITY");
 
-        _printReceivedEnabled = printReceivedDefaultProvider.DefaultEnabled;
+        _printReceivedEnabled = printPolicy.PrintReceivedDefaultEnabled;
         AvailablePrinters = printerProvider.GetAvailablePrinters();
         _selectedPrinter = printerProvider.GetDefaultPrinter();
 
@@ -137,7 +134,7 @@ public sealed partial class PrintManagerViewModel : ObservableObject, IPrintMana
     {
         if (!PrintReceivedEnabled) return Task.CompletedTask;
 
-        int count = _printReceivedRule.GetPrintCount(entity.Message);
+        int count = _printPolicy.GetPrintCount(entity.Message);
         if (count <= 0) return Task.CompletedTask;
 
         int priority = _messageFormat.GetPriority(entity.Message);
