@@ -1,0 +1,13 @@
+{
+  "UserName": "TESTPEER1",
+  "PeerPort": 50021,
+  "InterfacePort": 50020,
+  "DataFolder": "@TESTPEER1",
+  "PeerCertificateName": "disable",
+  "Users": {
+    "TESTPEER2": { "IpAddress": "127.0.0.1", "Port": 50023 }
+  },
+  "UserGroups": {
+    "TEST": [ "TESTPEER1", "TESTPEER2" ]
+  }
+}

@@ -1,0 +1,9 @@
+{
+  "UserName": "SCCLIENT1",
+  "PeerPort": 50225,
+  "InterfacePort": 50224,
+  "DataFolder": "@SCCLIENT1",
+  "PeerCertificateName": "disable",
+  "NodeRole": "Client",
+  "ServerEndpoint": { "IpAddress": "127.0.0.1", "Port": 50221 }
+}

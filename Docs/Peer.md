@@ -14,7 +14,7 @@ The peer layer handles node-to-node message delivery. Every running instance —
 
 ### Client
 
-A `Client`-role instance has the exact same GUI and application flow as `Peer` — `MessageRoutingService`, `EntryService`, and the ViewModels are unaware of the difference — but `ClientPeerService` replaces per-recipient direct connections with a single long-term outbound [OFT](Oft.md) `IOftConnection` to the server endpoint from `IEngineController`:
+A `Client`-role instance has the same inbox/outbox/notes/drafts GUI and application flow as `Peer` — `MessageRoutingService`, `EntryService`, and the ViewModels are unaware of the difference — except for one addition: a single connection-status row pinned to the bottom of the window, tracking the connection described below (see [IConnectionStatusViewModel](ViewModels.md#iconnectionstatusviewmodel--connectionstatusviewmodel) and [Connection Status](#connection-status-client-and-server) below). `ClientPeerService` replaces per-recipient direct connections with a single long-term outbound [OFT](Oft.md) `IOftConnection` to the server endpoint from `IEngineController`:
 
 1. `Start` loops indefinitely: dial the server via `IOftConnector.Connect` using `IEngineController.ConnectionOptions`, then await the connection's own `DisconnectedHandler` firing. Whether the dial fails or an established connection later disconnects, the loop simply retries after a fixed interval — there is no give-up condition.
 2. `Send(userName, message)` ignores `userName` for addressing purposes — the message is transmitted as-is over the one shared connection, and the *server* performs the actual user-to-connection routing (see [Server](#server) below). Because `MessageRoutingService.Route` still calls `IPeerService.Send` once per resolved recipient (e.g. once per member of an addressed group), `ClientPeerService` coalesces concurrent `Send` calls that share the same `IEngineController.GetMessageId(message)` into a single physical transmission, so a group-addressed message is not sent to the server multiple times.
@@ -25,7 +25,7 @@ No per-message OFT delivery-status tracking is performed across the hop to the s
 
 ### Server
 
-A `Server`-role instance runs no message-composing GUI flow of its own in practice — `ServerRoutingService` is a routing hub between this server's child clients and every other server in the cluster, driven entirely by `IEngineController.Servers`. That map is keyed by server user name and describes the **whole cluster topology**: every server's listen endpoint and full child-client list, not just the local server's own.
+A `Server`-role instance has no inbox/outbox/notes/drafts GUI at all — `MainWindow` shows up to two connections tables instead of the normal 3-panel layout and hides the title bar's compose/export/import/print controls entirely, since `ServerRoutingService` is a routing hub between this server's child clients and every other server in the cluster, not a message-composing peer (see [Connection Status](#connection-status-client-and-server) below). It is driven entirely by `IEngineController.Servers`, a map keyed by server user name describing the **whole cluster topology**: every server's listen endpoint and full child-client list, not just the local server's own.
 
 1. **Startup**: `Start` looks up this instance's own entry (by `ICurrentUserProvider.UserName`) to find its listen endpoint, then calls `IOftHoster.Host` on it — the same endpoint child clients dial in on *and* that other servers dial in on. For every *other* server in the map, it spawns an independent retry loop (`IOftConnector.Connect`, same disconnect-and-retry pattern as Client) forming a full mesh of outbound server-to-server connections.
 2. **Classifying inbound connections**: `IOftListener.ConnectedHandler` inspects each accepted connection's `Identity.Info` (the remote side's hail payload, which — via `IEngineController.ConnectionOptions` — carries its user name) against this server's own `ChildClients` list and the user map's server names:
@@ -41,6 +41,15 @@ A `Server`-role instance runs no message-composing GUI flow of its own in practi
 ### Retry behavior (Client and Server)
 
 Both `ClientPeerService`'s connection to its server and `ServerRoutingService`'s per-remote-server connections use the same shape of retry loop: dial, and if that succeeds, wait for the connection's `DisconnectedHandler` to fire; either a failed dial or a later disconnect leads back to a fixed retry delay before dialing again, forever, until the instance shuts down. There is no backoff and no maximum retry count — a server or client that is temporarily unreachable is expected to eventually come back.
+
+### Connection Status (Client and Server)
+
+`ClientPeerService` and `ServerRoutingService` each also implement `Peer.IConnectionStatusService` directly, tracking every connect and disconnect they already drive above so the UI can display it live (see [IConnectionStatusViewModel](ViewModels.md#iconnectionstatusviewmodel--connectionstatusviewmodel)). Each reported `Peer.PeerConnectionStatus` carries a `Peer.PeerConnectionKind` (`Server` or `Client`), which the ViewModel layer uses to split rows into two separate tables:
+
+- **Client**: one `Server`-kind entry for its single server connection — `UserName` is the server's own hailed identity (`IOftConnection.Identity.Info`, populated the moment the connection is established; empty string beforehand), `IsConnected` reflects whether the connection is currently live, and `LastConnectedAt`/`LastDisconnectedAt` record when it last transitioned. There is never a `Client`-kind entry, since a client has no children of its own.
+- **Server**: one `Client`-kind entry per own child client (from `ChildClients` on this server's own entry in `IEngineController.Servers`) plus one `Server`-kind entry per other server in the cluster — the same `UserName`/`IsConnected`/`LastConnectedAt`/`LastDisconnectedAt` shape, tracked independently per remote name. `MainWindow` shows the `Server`-kind entries in a "SERVER CONNECTIONS" table and the `Client`-kind entries in a "CLIENT CONNECTIONS" table below it, each hidden outright while it has no rows (e.g. a standalone server with no peer servers configured shows only the client table, and vice versa).
+
+`NodeRole.Peer` registers `Peer.NullConnectionStatusService` instead (always an empty list) — direct peer-to-peer connections are formed ad hoc per send, not configured, long-term links worth a status row.
 
 ## Message Format
 

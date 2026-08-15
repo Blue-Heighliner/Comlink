@@ -1,0 +1,17 @@
+# Manual test scenario: a two-server cluster (SCSERVER1, SCSERVER2), each with one Client child (SCCLIENT1
+# under SCSERVER1, SCCLIENT2 under SCSERVER2). Both servers form a long-term connection to each other in
+# addition to hosting their own child, so each server's connections table shows one row for the other server.
+
+script SCSERVER1
+	run dotnet run --project Sample -- --config Tasks/ServerCluster/SCSERVER1.json
+
+script SCSERVER2
+	run dotnet run --project Sample -- --config Tasks/ServerCluster/SCSERVER2.json
+
+script SCCLIENT1
+	wait 2
+	run dotnet run --project Sample -- --config Tasks/ServerCluster/SCCLIENT1.json
+
+script SCCLIENT2
+	wait 2
+	run dotnet run --project Sample -- --config Tasks/ServerCluster/SCCLIENT2.json

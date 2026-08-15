@@ -43,7 +43,9 @@ graph TD
 
 Root coordinator. Registered as singleton via `IMainViewModel → MainViewModel`; bound to `MainWindow(IMainViewModel)`.
 
-**Properties**: `IsInstallScreenVisible`, `IsKioskMode`, `UserName`, `EnvironmentTitle`, `EnvironmentColor`, `AppVersion`, plus `FolderBar (IFolderBarViewModel)`, `EntryBar (IEntryBarViewModel)`, `ContentArea (IContentAreaViewModel)`, `InstallView (IInstallViewModel)`, `Alert (IAlertViewModel)`, `Export (IExportViewModel)`, `Import (IImportViewModel)`, `PrintManager (IPrintManagerViewModel)`.
+**Properties**: `IsInstallScreenVisible`, `IsKioskMode`, `UserName`, `EnvironmentTitle`, `EnvironmentColor`, `AppVersion`, `IsServerMode`/`IsClientMode` (fixed for the process's lifetime, from `IEngineController.Role`), `ShowMainLayout` (`!IsServerMode && !IsInstallScreenVisible`), `ShowConnectionsTable` (`IsServerMode && !IsInstallScreenVisible`), plus `FolderBar (IFolderBarViewModel)`, `EntryBar (IEntryBarViewModel)`, `ContentArea (IContentAreaViewModel)`, `InstallView (IInstallViewModel)`, `Alert (IAlertViewModel)`, `Export (IExportViewModel)`, `Import (IImportViewModel)`, `PrintManager (IPrintManagerViewModel)`, `ConnectionStatus (IConnectionStatusViewModel)`.
+
+**Server/Client mode UI** (see [IConnectionStatusViewModel](#iconnectionstatusviewmodel--connectionstatusviewmodel)): `MainWindow.axaml` binds `ShowMainLayout` to the normal 3-panel folder/entry/content layout and `TitleBar`'s visibility — a `NodeRole.Server` instance routes messages only and has no inbox/outbox/notes/drafts of its own, so both are hidden and `ShowConnectionsTable` instead shows up to two tables, stacked: a "SERVER CONNECTIONS" table bound to `ConnectionStatus.ServerRows` (visible only while `ConnectionStatus.HasServerRows`) and a "CLIENT CONNECTIONS" table bound to `ConnectionStatus.ClientRows` (visible only while `ConnectionStatus.HasClientRows`) — either table is hidden outright while it has no rows (e.g. no other servers configured, or no children configured). A `NodeRole.Client` instance keeps the normal layout, with a single `ConnectionRow` (bound to `ConnectionStatus.ServerRows[0]`, since a client's own connection is to a server) pinned to the bottom of the window, visible only while `IsClientMode` is `true`.
 
 **Commands**: `CreateDraftCommand`, `CreateNoteCommand` (`IAsyncRelayCommand`); `ShowExportCommand`/`ShowImportCommand` (`IRelayCommand`) — each deselects the current folder and entry (`IFolderBarViewModel.DeselectFolder`/`IEntryBarViewModel.DeselectEntry`), refreshes its ViewModel's drive list (`RefreshDrivesCommand`), then displays it in the content area (see [IExportViewModel](#iexportviewmodel--exportviewmodel), [IImportViewModel](#iimportviewmodel--importviewmodel)); `ShowPrintManagerCommand` (`IRelayCommand`) — deselects the current folder and entry, then displays `PrintManager` in the content area (see [IPrintManagerViewModel](#iprintmanagerviewmodel--printmanagerviewmodel)); `PrintEntryCommand` (`IRelayCommand<EntryItemViewModel>`) — calls `PrintManager.EnqueueManual(entry)`, bound to the entry list's right-click "Print" context menu item (`EntryBar.axaml`, via `$parent[Window].DataContext.PrintEntryCommand`); `ShowHomeCommand` (`IRelayCommand`) — calls `ContentAreaViewModel.ShowHome()` and nothing else. Bound to the "×" close button in `ExportView`/`ImportView`/`PrintManagerView` (via `$parent[Window].DataContext.ShowHomeCommand`, since those views' own `DataContext` is the export/import/print-manager ViewModel, not `MainViewModel`) — closing restores the content area to its default state exactly as if the user had navigated away by picking a folder, without touching `Export`/`Import`/`PrintManager`'s own state, which remains intact for next time.
 
@@ -276,6 +278,32 @@ A single queued print job: `Id` (unique per queue entry — the same underlying 
 
 ---
 
+## IConnectionStatusViewModel / ConnectionStatusViewModel
+
+Drives the connection status display described above: `MainViewModel.ConnectionStatus`'s two row
+collections, split by `Peer.PeerConnectionKind` — one per configured peer connection. Registered as
+`IConnectionStatusViewModel → ConnectionStatusViewModel` singleton (`ConnectionStatusViewModel` itself is
+`internal` — only the interface is `public`, since it is exposed through `IMainViewModel.ConnectionStatus`);
+like `PrintManagerViewModel`, it does real work regardless of whether it is currently shown, subscribing
+directly in its constructor.
+
+**Properties**:
+- `ServerRows (ObservableCollection<ConnectionRowViewModel>)` — connections to other servers: one entry in `NodeRole.Client` mode (the connection to its configured server — a client's own connection is itself "to a server"), one entry per other server in the cluster in `NodeRole.Server` mode.
+- `ClientRows (ObservableCollection<ConnectionRowViewModel>)` — connections from own child clients; only ever populated in `NodeRole.Server` mode.
+- `HasServerRows`/`HasClientRows (bool)` — `true` while the corresponding collection is non-empty; `MainWindow.axaml` binds each table's visibility to these, so a table with nothing to show (e.g. a server configured with no children) is hidden outright rather than rendered empty.
+
+Both collections are rebuilt from scratch (clear, then re-add, split by `status.Kind`) every time the
+underlying `Peer.IConnectionStatusService.StatusesChanged` fires, from that same service's `GetStatuses()`
+snapshot — always marshaled onto the UI thread first (`Dispatcher.UIThread`), since `StatusesChanged` can
+fire from a background connection thread but these collections are bound to a live Avalonia `ItemsControl`.
+`Peer.IConnectionStatusService` is registered per `NodeRole` (see `Docs/Peer.md#node-roles`): for
+`NodeRole.Client`, `ClientPeerService` itself implements it; for `NodeRole.Server`, `ServerRoutingService`
+itself implements it; for `NodeRole.Peer`, `Peer.NullConnectionStatusService` is registered instead (always
+an empty list), since peer-to-peer connections are not configured, long-term links worth showing a status
+row for.
+
+---
+
 ## IFillInViewModel / FillInViewModel
 
 One fill-in slot within a draft. Constructed with `new FillInViewModel(...)` — not DI-registered.
@@ -304,6 +332,15 @@ For `EntryType.Message` rows, `IsOutboundMessage` records whether the row is the
 
 ### `DeliveryStatusRow`
 Display row for per-user delivery tracking: `UserName`, `DisplayName` (with group context), `Status (DestinationStatus)`, `StatusText`.
+
+### `ConnectionRowViewModel`
+One row of `IConnectionStatusViewModel.ServerRows`/`ClientRows` (Server mode's connections tables) or the
+single row pinned to the bottom of the window (Client mode): `UserName` (set once, at construction), `IsConnected`,
+`LastConnectedAt`/`LastDisconnectedAt` (`DateTime?`), plus computed `StatusText` (`"UP"`/`"DN"`),
+`StatusColorHex` (`#98C379` green while connected, `#E06C75` red otherwise — the same row is rendered by
+`Views/Controls/ConnectionRow.axaml` in both places, with its `Border.Background` bound directly to this),
+and `LastConnectedText`/`LastDisconnectedText` (formatted `dd-MMM-yyyy HH:mm`, uppercased; an em dash when
+`null`). Treated as a lightweight display-model DTO — constructed freely by `ConnectionStatusViewModel`, no DI.
 
 ### `FillInOptionViewModel`
 A single selectable option within a `FillInViewModel`: `Value`, `IsSelected`.

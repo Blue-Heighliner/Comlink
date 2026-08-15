@@ -7,7 +7,7 @@ namespace BlueHeighliner.Comlink.Engine.Peer;
 /// sent through this one connection regardless of addressee — the server performs the actual
 /// user-to-connection routing. See <c>Docs/Peer.md</c>.
 /// </summary>
-internal sealed class ClientPeerService : IPeerService, IAsyncDisposable
+internal sealed class ClientPeerService : IPeerService, IConnectionStatusService, IAsyncDisposable
 {
     private static readonly TimeSpan defaultRetryInterval = TimeSpan.FromSeconds(5);
 
@@ -41,6 +41,9 @@ internal sealed class ClientPeerService : IPeerService, IAsyncDisposable
     private readonly ConcurrentDictionary<string, Task<bool>> inFlightSends = new();
 
     private volatile IOftConnection? activeConnection;
+    private volatile string? remoteUserName;
+    private DateTime? lastConnectedAt;
+    private DateTime? lastDisconnectedAt;
 
     /// <inheritdoc />
     public event Func<object, Task>? MessageDelivered;
@@ -53,6 +56,8 @@ internal sealed class ClientPeerService : IPeerService, IAsyncDisposable
     public event Func<string, string, OftDeliveryStatus, Task>? DeliveryStatusChanged;
 
 #pragma warning restore CS0067
+    /// <inheritdoc />
+    public event Action? StatusesChanged;
 
     /// <inheritdoc />
     public async Task Start(CancellationToken cancellation)
@@ -71,6 +76,9 @@ internal sealed class ClientPeerService : IPeerService, IAsyncDisposable
             {
                 connection = await connector.Connect(endpoint.IpAddress, endpoint.Port, engineController.ConnectionOptions, cancellation);
                 activeConnection = connection;
+                remoteUserName = connection.Identity.Info;
+                lastConnectedAt = DateTime.UtcNow;
+                StatusesChanged?.Invoke();
                 TaskCompletionSource disconnected = new(TaskCreationOptions.RunContinuationsAsynchronously);
                 connection.ReceivedHandler = OnReceived;
                 connection.DisconnectedHandler = _ => disconnected.TrySetResult();
@@ -88,7 +96,12 @@ internal sealed class ClientPeerService : IPeerService, IAsyncDisposable
             finally
             {
                 activeConnection = null;
-                if (connection is not null) { await connection.DisposeAsync(); }
+                if (connection is not null)
+                {
+                    lastDisconnectedAt = DateTime.UtcNow;
+                    StatusesChanged?.Invoke();
+                    await connection.DisposeAsync();
+                }
             }
 
             try { await Task.Delay(retryInterval, cancellation); }
@@ -112,6 +125,17 @@ internal sealed class ClientPeerService : IPeerService, IAsyncDisposable
         try { return await SendOnce(message, cancellation); }
         finally { inFlightSends.TryRemove(messageId, out _); }
     }
+
+    /// <inheritdoc />
+    public IReadOnlyList<PeerConnectionStatus> GetStatuses()
+        => [new PeerConnectionStatus
+        {
+            UserName = remoteUserName ?? string.Empty,
+            Kind = PeerConnectionKind.Server,
+            IsConnected = activeConnection is not null,
+            LastConnectedAt = lastConnectedAt,
+            LastDisconnectedAt = lastDisconnectedAt
+        }];
 
     private async Task<bool> SendOnce(object message, CancellationToken cancellation)
     {

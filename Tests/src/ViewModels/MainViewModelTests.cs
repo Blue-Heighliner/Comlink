@@ -27,6 +27,7 @@ public sealed class MainViewModelTests
         public Mock<IExportViewModel> Export { get; } = new();
         public Mock<IImportViewModel> Import { get; } = new();
         public Mock<IPrintManagerViewModel> PrintManager { get; } = new();
+        public Mock<IConnectionStatusViewModel> ConnectionStatus { get; } = new();
         public Mock<ICurrentUserProvider> UserProvider { get; } = new();
         public Mock<TestEngineController> EngineController { get; } = new() { CallBase = true };
         public Mock<IBodyDocumentFactory> BodyDocumentFactory { get; } = new();
@@ -55,6 +56,7 @@ public sealed class MainViewModelTests
                 Export.Object,
                 Import.Object,
                 PrintManager.Object,
+                ConnectionStatus.Object,
                 UserProvider.Object,
                 EngineController.Object,
                 noLogger,

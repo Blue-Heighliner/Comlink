@@ -8,10 +8,11 @@ namespace BlueHeighliner.Comlink.Engine.Peer;
 /// other local child it addresses and, once per remote server, forwarded to any other server that owns
 /// an addressed child; a message received from another server is assumed already routed and is only
 /// delivered to local children it addresses, never re-forwarded to other servers. Addressing operates on
-/// the message's raw (unexpanded) address list — group expansion is not performed at the server. See
-/// <c>Docs/Peer.md</c>.
+/// the message's raw (unexpanded) address list — group expansion is not performed at the server. Also
+/// implements <see cref="IConnectionStatusService"/>, tracking connect/disconnect status and timestamps
+/// for every own child client and every other server in the cluster. See <c>Docs/Peer.md</c>.
 /// </summary>
-internal sealed class ServerRoutingService : IPeerService, IAsyncDisposable
+internal sealed class ServerRoutingService : IPeerService, IConnectionStatusService, IAsyncDisposable
 {
     private static readonly TimeSpan defaultRetryInterval = TimeSpan.FromSeconds(5);
 
@@ -53,6 +54,10 @@ internal sealed class ServerRoutingService : IPeerService, IAsyncDisposable
     private readonly ConcurrentDictionary<string, IOftConnection> childConnections = new(StringComparer.OrdinalIgnoreCase);
     private readonly ConcurrentDictionary<string, IOftConnection> serverConnections = new(StringComparer.OrdinalIgnoreCase);
     private readonly ConcurrentDictionary<string, Task<bool>> inFlightSends = new();
+    private readonly ConcurrentDictionary<string, DateTime> serverLastConnectedAt = new(StringComparer.OrdinalIgnoreCase);
+    private readonly ConcurrentDictionary<string, DateTime> serverLastDisconnectedAt = new(StringComparer.OrdinalIgnoreCase);
+    private readonly ConcurrentDictionary<string, DateTime> childLastConnectedAt = new(StringComparer.OrdinalIgnoreCase);
+    private readonly ConcurrentDictionary<string, DateTime> childLastDisconnectedAt = new(StringComparer.OrdinalIgnoreCase);
     private IReadOnlyDictionary<string, ServerUserConfig> userMap = new Dictionary<string, ServerUserConfig>();
     private IOftListener? listener;
 
@@ -66,6 +71,8 @@ internal sealed class ServerRoutingService : IPeerService, IAsyncDisposable
     /// <inheritdoc />
     public event Func<string, string, OftDeliveryStatus, Task>? DeliveryStatusChanged;
 #pragma warning restore CS0067
+    /// <inheritdoc />
+    public event Action? StatusesChanged;
 
     /// <inheritdoc />
     public async Task Start(CancellationToken cancellation)
@@ -100,6 +107,8 @@ internal sealed class ServerRoutingService : IPeerService, IAsyncDisposable
             {
                 connection = await connector.Connect(endpoint.IpAddress, endpoint.Port, engineController.ConnectionOptions, cancellation);
                 serverConnections[serverName] = connection;
+                serverLastConnectedAt[serverName] = DateTime.UtcNow;
+                StatusesChanged?.Invoke();
                 TaskCompletionSource disconnected = new(TaskCreationOptions.RunContinuationsAsynchronously);
                 connection.ReceivedHandler = data => OnReceivedFromServer(serverName, data);
                 connection.DisconnectedHandler = _ => disconnected.TrySetResult();
@@ -117,7 +126,12 @@ internal sealed class ServerRoutingService : IPeerService, IAsyncDisposable
             finally
             {
                 serverConnections.TryRemove(serverName, out _);
-                if (connection is not null) { await connection.DisposeAsync(); }
+                if (connection is not null)
+                {
+                    serverLastDisconnectedAt[serverName] = DateTime.UtcNow;
+                    StatusesChanged?.Invoke();
+                    await connection.DisposeAsync();
+                }
             }
 
             try { await Task.Delay(retryInterval, cancellation); }
@@ -137,8 +151,15 @@ internal sealed class ServerRoutingService : IPeerService, IAsyncDisposable
         if (isChild)
         {
             childConnections[remoteName] = connection;
+            childLastConnectedAt[remoteName] = DateTime.UtcNow;
+            StatusesChanged?.Invoke();
             connection.ReceivedHandler = data => OnReceivedFromChild(remoteName, data);
-            connection.DisconnectedHandler = ex => childConnections.TryRemove(remoteName, out _);
+            connection.DisconnectedHandler = ex =>
+            {
+                childConnections.TryRemove(remoteName, out _);
+                childLastDisconnectedAt[remoteName] = DateTime.UtcNow;
+                StatusesChanged?.Invoke();
+            };
             logger.LogInformation("Child client {ClientName} connected", remoteName);
         }
         else if (isServer)
@@ -241,6 +262,43 @@ internal sealed class ServerRoutingService : IPeerService, IAsyncDisposable
     {
         string messageId = engineController.GetMessageId(message);
         return inFlightSends.GetOrAdd(messageId, _ => SendOnceAndCleanup(messageId, message, cancellation));
+    }
+
+    /// <inheritdoc />
+    public IReadOnlyList<PeerConnectionStatus> GetStatuses()
+    {
+        string myName = currentUserProvider.UserName ?? string.Empty;
+        List<PeerConnectionStatus> statuses = [];
+
+        if (userMap.TryGetValue(myName, out ServerUserConfig? myConfig))
+        {
+            foreach (string childName in myConfig.ChildClients)
+            {
+                statuses.Add(new PeerConnectionStatus
+                {
+                    UserName = childName,
+                    Kind = PeerConnectionKind.Client,
+                    IsConnected = childConnections.ContainsKey(childName),
+                    LastConnectedAt = childLastConnectedAt.TryGetValue(childName, out DateTime connectedAt) ? connectedAt : null,
+                    LastDisconnectedAt = childLastDisconnectedAt.TryGetValue(childName, out DateTime disconnectedAt) ? disconnectedAt : null
+                });
+            }
+        }
+
+        foreach (string serverName in userMap.Keys)
+        {
+            if (string.Equals(serverName, myName, StringComparison.OrdinalIgnoreCase)) { continue; }
+            statuses.Add(new PeerConnectionStatus
+            {
+                UserName = serverName,
+                Kind = PeerConnectionKind.Server,
+                IsConnected = serverConnections.ContainsKey(serverName),
+                LastConnectedAt = serverLastConnectedAt.TryGetValue(serverName, out DateTime connectedAt) ? connectedAt : null,
+                LastDisconnectedAt = serverLastDisconnectedAt.TryGetValue(serverName, out DateTime disconnectedAt) ? disconnectedAt : null
+            });
+        }
+
+        return statuses;
     }
 
     private async Task<bool> SendOnceAndCleanup(string messageId, object message, CancellationToken cancellation)

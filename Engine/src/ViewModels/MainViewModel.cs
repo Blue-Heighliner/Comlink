@@ -15,6 +15,24 @@ public interface IMainViewModel
     string EnvironmentColor { get; set; }
     /// <summary>Gets or sets the application version string.</summary>
     string AppVersion { get; set; }
+    /// <summary>
+    /// Gets a value indicating whether this instance is running as a <see cref="NodeRole.Server"/> — a
+    /// routing-only node with no inbox/outbox/notes/drafts UI of its own. When <see langword="true"/>, the
+    /// main window shows only <see cref="ConnectionStatus"/>'s connections table.
+    /// </summary>
+    bool IsServerMode { get; }
+    /// <summary>
+    /// Gets a value indicating whether this instance is running as a <see cref="NodeRole.Client"/>. When
+    /// <see langword="true"/>, the main window additionally shows a single connection-status row, from
+    /// <see cref="ConnectionStatus"/>, pinned to the bottom of the window.
+    /// </summary>
+    bool IsClientMode { get; }
+    /// <summary>Gets the connection status ViewModel — see <see cref="IsServerMode"/>/<see cref="IsClientMode"/>.</summary>
+    IConnectionStatusViewModel ConnectionStatus { get; }
+    /// <summary>Gets a value indicating whether the normal 3-panel folder/entry/content layout should be shown — never in <see cref="IsServerMode"/>, and never while the install screen is visible.</summary>
+    bool ShowMainLayout { get; }
+    /// <summary>Gets a value indicating whether the <see cref="IsServerMode"/> connections table should be shown in place of the normal 3-panel layout.</summary>
+    bool ShowConnectionsTable { get; }
     /// <summary>Gets the folder bar ViewModel.</summary>
     IFolderBarViewModel FolderBar { get; }
     /// <summary>Gets the entry bar ViewModel.</summary>
@@ -70,8 +88,9 @@ public sealed partial class MainViewModel : ObservableObject, IMainViewModel
     /// <param name="export">Export ViewModel driving the export screen.</param>
     /// <param name="import">Import ViewModel driving the import screen.</param>
     /// <param name="printManager">Print manager ViewModel driving the print queue screen.</param>
+    /// <param name="connectionStatus">Connection status ViewModel driving <see cref="IsServerMode"/>'s connections table and <see cref="IsClientMode"/>'s connection row.</param>
     /// <param name="currentUserProvider">Provides and accepts the current user name.</param>
-    /// <param name="engineController">Provides the application display name, whether the UI should run in kiosk mode, alert settings, and message composition settings.</param>
+    /// <param name="engineController">Provides the application display name, whether the UI should run in kiosk mode, alert settings, message composition settings, and the configured node role.</param>
     /// <param name="loggerFactory">Factory for creating named loggers.</param>
     /// <param name="bodyDocumentFactory">Factory for creating the body document for new drafts.</param>
     public MainViewModel(
@@ -86,6 +105,7 @@ public sealed partial class MainViewModel : ObservableObject, IMainViewModel
         IExportViewModel export,
         IImportViewModel import,
         IPrintManagerViewModel printManager,
+        IConnectionStatusViewModel connectionStatus,
         ICurrentUserProvider currentUserProvider,
         IEngineController engineController,
         ILoggerFactory loggerFactory,
@@ -102,6 +122,7 @@ public sealed partial class MainViewModel : ObservableObject, IMainViewModel
         this.export = export;
         this.import = import;
         this.printManager = printManager;
+        this.connectionStatus = connectionStatus;
         this.currentUserProvider = currentUserProvider;
         this.engineController = engineController;
         this.bodyDocumentFactory = bodyDocumentFactory;
@@ -111,6 +132,8 @@ public sealed partial class MainViewModel : ObservableObject, IMainViewModel
 
         isKioskMode = engineController.IsKioskMode;
         appVersion = GetAppVersion();
+        IsServerMode = engineController.Role == NodeRole.Server;
+        IsClientMode = engineController.Role == NodeRole.Client;
         WireEvents();
     }
 
@@ -125,6 +148,7 @@ public sealed partial class MainViewModel : ObservableObject, IMainViewModel
     private readonly IExportViewModel export;
     private readonly IImportViewModel import;
     private readonly IPrintManagerViewModel printManager;
+    private readonly IConnectionStatusViewModel connectionStatus;
     private readonly ICurrentUserProvider currentUserProvider;
     private readonly IEngineController engineController;
     private readonly IBodyDocumentFactory bodyDocumentFactory;
@@ -132,13 +156,26 @@ public sealed partial class MainViewModel : ObservableObject, IMainViewModel
     private readonly ILogger logger;
     private readonly ILogger activityLogger;
 
-    [ObservableProperty] private bool isInstallScreenVisible;
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(ShowMainLayout))]
+    [NotifyPropertyChangedFor(nameof(ShowConnectionsTable))]
+    private bool isInstallScreenVisible;
     [ObservableProperty] private bool isKioskMode;
     [ObservableProperty] private string userName = string.Empty;
     [ObservableProperty] private string environmentTitle = string.Empty;
     [ObservableProperty] private string environmentColor = "#1565C0";
     [ObservableProperty] private string appVersion;
 
+    /// <inheritdoc />
+    public bool IsServerMode { get; }
+    /// <inheritdoc />
+    public bool IsClientMode { get; }
+    /// <inheritdoc />
+    public IConnectionStatusViewModel ConnectionStatus => connectionStatus;
+    /// <inheritdoc />
+    public bool ShowMainLayout => !IsServerMode && !IsInstallScreenVisible;
+    /// <inheritdoc />
+    public bool ShowConnectionsTable => IsServerMode && !IsInstallScreenVisible;
     /// <inheritdoc />
     public IFolderBarViewModel FolderBar => folderBar;
     /// <inheritdoc />

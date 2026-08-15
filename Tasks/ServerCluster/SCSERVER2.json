@@ -1,0 +1,12 @@
+{
+  "UserName": "SCSERVER2",
+  "PeerPort": 50223,
+  "InterfacePort": 50222,
+  "DataFolder": "@SCSERVER2",
+  "PeerCertificateName": "disable",
+  "NodeRole": "Server",
+  "ServerUsers": {
+    "SCSERVER1": { "IpAddress": "127.0.0.1", "Port": 50221, "ChildClients": [ "SCCLIENT1" ] },
+    "SCSERVER2": { "IpAddress": "127.0.0.1", "Port": 50223, "ChildClients": [ "SCCLIENT2" ] }
+  }
+}

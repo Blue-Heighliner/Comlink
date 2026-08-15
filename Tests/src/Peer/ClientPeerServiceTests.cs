@@ -12,6 +12,7 @@ public sealed class ClientPeerServiceTests
         connection.SetupProperty(c => c.ReceivedHandler);
         connection.SetupProperty(c => c.DisconnectedHandler);
         connection.SetupGet(c => c.IsConnected).Returns(true);
+        connection.SetupGet(c => c.Identity).Returns(new OftIdentity { EndPoint = new IPEndPoint(IPAddress.Loopback, 0), Certificate = null, Info = "SERVER" });
         connection.Setup(c => c.DisposeAsync()).Returns(ValueTask.CompletedTask);
         connection.Setup(c => c.Send(It.IsAny<ReadOnlyMemory<byte>>(), It.IsAny<int>(), It.IsAny<object?>(), It.IsAny<CancellationToken>()))
             .Returns(Task.CompletedTask);
@@ -159,6 +160,84 @@ public sealed class ClientPeerServiceTests
         object received = await tcs.Task.WaitAsync(TimeSpan.FromSeconds(2));
         TestMessage receivedMessage = Assert.IsType<TestMessage>(received);
         Assert.Equal("MSG1", receivedMessage.MessageId);
+
+        cts.Cancel();
+        await startTask;
+    }
+
+    /// <summary>Before Start ever connects, GetStatuses reports a single disconnected row with no user name and no timestamps.</summary>
+    [Fact]
+    public void GetStatuses_BeforeConnecting_ReturnsDisconnectedRowWithNoUserName()
+    {
+        Mock<IOftConnection> connection = BuildConnection();
+        (ClientPeerService service, _) = Build(connection);
+
+        PeerConnectionStatus status = Assert.Single(service.GetStatuses());
+
+        Assert.Equal(string.Empty, status.UserName);
+        Assert.False(status.IsConnected);
+        Assert.Null(status.LastConnectedAt);
+        Assert.Null(status.LastDisconnectedAt);
+    }
+
+    /// <summary>Once connected, GetStatuses reports the connected row with the remote's hailed identity and a LastConnectedAt timestamp.</summary>
+    [Fact]
+    public async Task GetStatuses_Connected_ReturnsConnectedRowWithRemoteIdentity()
+    {
+        Mock<IOftConnection> connection = BuildConnection();
+        (ClientPeerService service, _) = Build(connection);
+        using CancellationTokenSource cts = new();
+        Task startTask = service.Start(cts.Token);
+
+        await WaitUntil(() => service.GetStatuses()[0].IsConnected, TimeSpan.FromSeconds(2));
+        PeerConnectionStatus status = Assert.Single(service.GetStatuses());
+
+        Assert.Equal("SERVER", status.UserName);
+        Assert.True(status.IsConnected);
+        Assert.NotNull(status.LastConnectedAt);
+        Assert.Null(status.LastDisconnectedAt);
+
+        cts.Cancel();
+        await startTask;
+    }
+
+    /// <summary>After disconnecting, GetStatuses reports the row as disconnected with a LastDisconnectedAt timestamp, retaining the last known remote identity.</summary>
+    [Fact]
+    public async Task GetStatuses_Disconnected_ReturnsDisconnectedRowWithLastDisconnectedAt()
+    {
+        Mock<IOftConnection> connection = BuildConnection();
+        (ClientPeerService service, _) = Build(connection, retryInterval: TimeSpan.FromSeconds(30));
+        using CancellationTokenSource cts = new();
+        Task startTask = service.Start(cts.Token);
+
+        await WaitUntil(() => service.GetStatuses()[0].IsConnected, TimeSpan.FromSeconds(2));
+        connection.Object.DisconnectedHandler!(null);
+        await WaitUntil(() => !service.GetStatuses()[0].IsConnected, TimeSpan.FromSeconds(2));
+
+        PeerConnectionStatus status = Assert.Single(service.GetStatuses());
+
+        Assert.Equal("SERVER", status.UserName);
+        Assert.False(status.IsConnected);
+        Assert.NotNull(status.LastConnectedAt);
+        Assert.NotNull(status.LastDisconnectedAt);
+
+        cts.Cancel();
+        await startTask;
+    }
+
+    /// <summary>StatusesChanged fires when the connection is established.</summary>
+    [Fact]
+    public async Task StatusesChanged_OnConnect_Fires()
+    {
+        Mock<IOftConnection> connection = BuildConnection();
+        (ClientPeerService service, _) = Build(connection);
+        using CancellationTokenSource cts = new();
+
+        TaskCompletionSource raised = new();
+        service.StatusesChanged += () => raised.TrySetResult();
+
+        Task startTask = service.Start(cts.Token);
+        await raised.Task.WaitAsync(TimeSpan.FromSeconds(2));
 
         cts.Cancel();
         await startTask;

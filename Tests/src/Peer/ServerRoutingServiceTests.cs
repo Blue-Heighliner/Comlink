@@ -197,6 +197,70 @@ public sealed class ServerRoutingServiceTests
         await fx.StartTask;
     }
 
+    /// <summary>GetStatuses returns one row per own child client (ClientA1, ClientA2) plus one connected row for the other server (ServerB), excluding this instance's own name.</summary>
+    [Fact]
+    public async Task GetStatuses_Started_ReturnsChildRowsAndConnectedServerRow()
+    {
+        Mock<IOftConnection> serverB = BuildConnection("ServerB");
+        Fixture fx = await BuildStarted(serverB);
+
+        await WaitUntil(() => fx.Service.GetStatuses().Any(s => s.UserName == "ServerB" && s.IsConnected), TimeSpan.FromSeconds(2));
+        IReadOnlyList<PeerConnectionStatus> statuses = fx.Service.GetStatuses();
+
+        Assert.Equal(3, statuses.Count);
+        Assert.Contains(statuses, s => s.UserName == "ClientA1" && !s.IsConnected);
+        Assert.Contains(statuses, s => s.UserName == "ClientA2" && !s.IsConnected);
+        PeerConnectionStatus serverStatus = Assert.Single(statuses, s => s.UserName == "ServerB");
+        Assert.True(serverStatus.IsConnected);
+        Assert.NotNull(serverStatus.LastConnectedAt);
+        Assert.Null(serverStatus.LastDisconnectedAt);
+
+        fx.Cts.Cancel();
+        await fx.StartTask;
+    }
+
+    /// <summary>After the outbound server connection disconnects, GetStatuses reports it disconnected with a LastDisconnectedAt timestamp.</summary>
+    [Fact]
+    public async Task GetStatuses_AfterServerDisconnects_ReturnsDisconnectedRowWithLastDisconnectedAt()
+    {
+        Mock<IOftConnection> serverB = BuildConnection("ServerB");
+        Fixture fx = await BuildStarted(serverB);
+        await WaitUntil(() => fx.Service.GetStatuses().Any(s => s.UserName == "ServerB" && s.IsConnected), TimeSpan.FromSeconds(2));
+
+        serverB.Object.DisconnectedHandler!(null);
+        await WaitUntil(() => fx.Service.GetStatuses().Any(s => s.UserName == "ServerB" && !s.IsConnected), TimeSpan.FromSeconds(2));
+
+        PeerConnectionStatus status = Assert.Single(fx.Service.GetStatuses(), s => s.UserName == "ServerB");
+
+        Assert.False(status.IsConnected);
+        Assert.NotNull(status.LastConnectedAt);
+        Assert.NotNull(status.LastDisconnectedAt);
+
+        fx.Cts.Cancel();
+        await fx.StartTask;
+    }
+
+    /// <summary>Once a known child client connects, GetStatuses reports its row as connected with a LastConnectedAt timestamp.</summary>
+    [Fact]
+    public async Task GetStatuses_ChildConnects_ReturnsConnectedChildRow()
+    {
+        Mock<IOftConnection> serverB = BuildConnection("ServerB");
+        Fixture fx = await BuildStarted(serverB);
+        Mock<IOftConnection> clientA1 = BuildConnection("ClientA1");
+
+        fx.Listener.Object.ConnectedHandler!(clientA1.Object);
+
+        await WaitUntil(() => fx.Service.GetStatuses().Any(s => s.UserName == "ClientA1" && s.IsConnected), TimeSpan.FromSeconds(2));
+        PeerConnectionStatus status = Assert.Single(fx.Service.GetStatuses(), s => s.UserName == "ClientA1");
+
+        Assert.True(status.IsConnected);
+        Assert.NotNull(status.LastConnectedAt);
+        Assert.Null(status.LastDisconnectedAt);
+
+        fx.Cts.Cancel();
+        await fx.StartTask;
+    }
+
     private sealed class UnownedMemory(ReadOnlyMemory<byte> data) : IMemoryOwner<byte>
     {
         public Memory<byte> Memory { get; } = data.ToArray();

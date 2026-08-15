@@ -1,0 +1,34 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:vm="using:BlueHeighliner.Comlink.Engine.ViewModels"
+             x:Class="BlueHeighliner.Comlink.Engine.Views.Controls.ConnectionRow"
+             x:DataType="vm:ConnectionRowViewModel">
+
+  <Border Background="{Binding StatusColorHex}" Padding="12,8">
+    <Grid ColumnDefinitions="*,80,180,180">
+      <TextBlock Grid.Column="0"
+                 Text="{Binding UserName}"
+                 FontSize="13"
+                 FontWeight="SemiBold"
+                 Foreground="#1E1E1E"
+                 VerticalAlignment="Center" />
+      <TextBlock Grid.Column="1"
+                 Text="{Binding StatusText}"
+                 FontSize="13"
+                 FontWeight="Bold"
+                 Foreground="#1E1E1E"
+                 VerticalAlignment="Center" />
+      <TextBlock Grid.Column="2"
+                 Text="{Binding LastConnectedText}"
+                 FontSize="12"
+                 Foreground="#1E1E1E"
+                 VerticalAlignment="Center" />
+      <TextBlock Grid.Column="3"
+                 Text="{Binding LastDisconnectedText}"
+                 FontSize="12"
+                 Foreground="#1E1E1E"
+                 VerticalAlignment="Center" />
+    </Grid>
+  </Border>
+
+</UserControl>

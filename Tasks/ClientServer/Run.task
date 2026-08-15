@@ -1,0 +1,14 @@
+# Manual test scenario: one Server (CSSERVER) with two Client children (CSCLIENT1, CSCLIENT2). Both clients
+# form a single long-term connection to the server; the server routes messages between them and does not
+# expose an inbox/outbox/notes/drafts UI of its own.
+
+script CSSERVER
+	run dotnet run --project Sample -- --config Tasks/ClientServer/CSSERVER.json
+
+script CSCLIENT1
+	wait 2
+	run dotnet run --project Sample -- --config Tasks/ClientServer/CSCLIENT1.json
+
+script CSCLIENT2
+	wait 2
+	run dotnet run --project Sample -- --config Tasks/ClientServer/CSCLIENT2.json

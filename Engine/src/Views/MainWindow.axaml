@@ -12,7 +12,7 @@
         TransparencyLevelHint="None"
         WindowState="Maximized">
 
-  <Grid RowDefinitions="Auto,Auto,*">
+  <Grid RowDefinitions="Auto,Auto,*,Auto">
 
     <!-- Environment Banner (row 0) -->
     <controls:EnvironmentBanner Grid.Row="0"
@@ -20,8 +20,9 @@
                                 BannerColor="{Binding EnvironmentColor}"
                                 IsVisible="{Binding EnvironmentTitle, Converter={x:Static StringConverters.IsNotNullOrEmpty}}" />
 
-    <!-- Custom Title Bar (row 1) -->
+    <!-- Custom Title Bar (row 1) - hidden in Server mode, which has no drafts/notes/export/import/print UI -->
     <controls:TitleBar Grid.Row="1"
+                       IsVisible="{Binding !IsServerMode}"
                        UserName="{Binding UserName}"
                        AppVersion="{Binding AppVersion}"
                        CreateDraftCommand="{Binding CreateDraftCommand}"
@@ -43,8 +44,8 @@
       <installViews:InstallView DataContext="{Binding InstallView}"
                                 IsVisible="{Binding $parent[Window].DataContext.IsInstallScreenVisible}" />
 
-      <!-- Main 3-panel layout -->
-      <Grid IsVisible="{Binding !IsInstallScreenVisible}"
+      <!-- Main 3-panel layout: inbox/outbox/notes/drafts UI, never shown in Server mode -->
+      <Grid IsVisible="{Binding ShowMainLayout}"
             ColumnDefinitions="220,4,300,4,*">
 
         <!-- Folder Bar -->
@@ -71,7 +72,65 @@
         <controls:ContentArea Grid.Column="4"
                               DataContext="{Binding ContentArea}" />
       </Grid>
+
+      <!-- Server mode: two connections tables replace the normal layout — a routing-only server has no
+           inbox/outbox/notes/drafts of its own. Each table is hidden outright while it has no rows
+           (e.g. no other servers configured, or no children configured). -->
+      <StackPanel IsVisible="{Binding ShowConnectionsTable}" Margin="24,20" Spacing="24">
+
+        <!-- Server connections: other servers in the cluster this instance dials out to. -->
+        <DockPanel IsVisible="{Binding ConnectionStatus.HasServerRows}">
+          <TextBlock DockPanel.Dock="Top"
+                     Text="SERVER CONNECTIONS"
+                     FontSize="11" FontWeight="SemiBold" Foreground="#858585" LetterSpacing="1"
+                     Margin="0,0,0,12" />
+
+          <Grid DockPanel.Dock="Top" ColumnDefinitions="*,80,180,180" Margin="12,0,12,4">
+            <TextBlock Grid.Column="0" Text="USER" FontSize="11" FontWeight="SemiBold" Foreground="#858585" LetterSpacing="1" />
+            <TextBlock Grid.Column="1" Text="STATUS" FontSize="11" FontWeight="SemiBold" Foreground="#858585" LetterSpacing="1" />
+            <TextBlock Grid.Column="2" Text="LAST CONNECTED" FontSize="11" FontWeight="SemiBold" Foreground="#858585" LetterSpacing="1" />
+            <TextBlock Grid.Column="3" Text="LAST DISCONNECTED" FontSize="11" FontWeight="SemiBold" Foreground="#858585" LetterSpacing="1" />
+          </Grid>
+
+          <ItemsControl ItemsSource="{Binding ConnectionStatus.ServerRows}">
+            <ItemsControl.ItemTemplate>
+              <DataTemplate DataType="{x:Type vm:ConnectionRowViewModel}">
+                <controls:ConnectionRow DataContext="{Binding}" Margin="0,2" />
+              </DataTemplate>
+            </ItemsControl.ItemTemplate>
+          </ItemsControl>
+        </DockPanel>
+
+        <!-- Client connections: this server's own configured child clients. -->
+        <DockPanel IsVisible="{Binding ConnectionStatus.HasClientRows}">
+          <TextBlock DockPanel.Dock="Top"
+                     Text="CLIENT CONNECTIONS"
+                     FontSize="11" FontWeight="SemiBold" Foreground="#858585" LetterSpacing="1"
+                     Margin="0,0,0,12" />
+
+          <Grid DockPanel.Dock="Top" ColumnDefinitions="*,80,180,180" Margin="12,0,12,4">
+            <TextBlock Grid.Column="0" Text="USER" FontSize="11" FontWeight="SemiBold" Foreground="#858585" LetterSpacing="1" />
+            <TextBlock Grid.Column="1" Text="STATUS" FontSize="11" FontWeight="SemiBold" Foreground="#858585" LetterSpacing="1" />
+            <TextBlock Grid.Column="2" Text="LAST CONNECTED" FontSize="11" FontWeight="SemiBold" Foreground="#858585" LetterSpacing="1" />
+            <TextBlock Grid.Column="3" Text="LAST DISCONNECTED" FontSize="11" FontWeight="SemiBold" Foreground="#858585" LetterSpacing="1" />
+          </Grid>
+
+          <ItemsControl ItemsSource="{Binding ConnectionStatus.ClientRows}">
+            <ItemsControl.ItemTemplate>
+              <DataTemplate DataType="{x:Type vm:ConnectionRowViewModel}">
+                <controls:ConnectionRow DataContext="{Binding}" Margin="0,2" />
+              </DataTemplate>
+            </ItemsControl.ItemTemplate>
+          </ItemsControl>
+        </DockPanel>
+      </StackPanel>
     </Panel>
+
+    <!-- Client mode: a single row tracking the connection to the configured server, pinned to the bottom
+         of the window, visually matching a row in Server mode's connections tables. -->
+    <controls:ConnectionRow Grid.Row="3"
+                            IsVisible="{Binding $parent[Window].DataContext.IsClientMode}"
+                            DataContext="{Binding ConnectionStatus.ServerRows[0]}" />
 
   </Grid>
 </Window>

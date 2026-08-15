@@ -29,9 +29,14 @@ public static class EngineExtensions
             {
                 case NodeRole.Client:
                     services.AddSingleton<IPeerService, ClientPeerService>();
+                    services.AddSingleton<IConnectionStatusService>(sp => (IConnectionStatusService)sp.GetRequiredService<IPeerService>());
                     break;
                 case NodeRole.Server:
                     services.AddSingleton<IPeerService, ServerRoutingService>();
+                    services.AddSingleton<IConnectionStatusService>(sp => (IConnectionStatusService)sp.GetRequiredService<IPeerService>());
+                    break;
+                default:
+                    services.AddSingleton<IConnectionStatusService, NullConnectionStatusService>();
                     break;
             }
 

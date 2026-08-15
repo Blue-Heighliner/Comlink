@@ -1,0 +1,9 @@
+{
+  "UserName": "CSCLIENT2",
+  "PeerPort": 50125,
+  "InterfacePort": 50124,
+  "DataFolder": "@CSCLIENT2",
+  "PeerCertificateName": "disable",
+  "NodeRole": "Client",
+  "ServerEndpoint": { "IpAddress": "127.0.0.1", "Port": 50121 }
+}
