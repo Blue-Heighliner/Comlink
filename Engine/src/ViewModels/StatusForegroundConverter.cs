@@ -7,9 +7,9 @@ public sealed class StatusForegroundConverter : IValueConverter
     /// <summary>Gets the shared singleton instance.</summary>
     public static readonly StatusForegroundConverter Instance = new();
 
-    private static readonly IBrush RedBrush = new SolidColorBrush(Color.Parse("#E06C75"));
-    private static readonly IBrush GreenBrush = new SolidColorBrush(Color.Parse("#98C379"));
-    private static readonly IBrush DefaultBrush = new SolidColorBrush(Color.Parse("#858585"));
+    private readonly SolidColorBrush redBrush = new(Color.Parse("#E06C75"));
+    private readonly SolidColorBrush greenBrush = new(Color.Parse("#98C379"));
+    private readonly SolidColorBrush defaultBrush = new(Color.Parse("#858585"));
 
     /// <inheritdoc />
     public object? Convert(object? value, Type targetType, object? parameter, CultureInfo culture)
@@ -18,12 +18,12 @@ public sealed class StatusForegroundConverter : IValueConverter
         {
             return status switch
             {
-                DestinationStatus.Failed => RedBrush,
-                DestinationStatus.Confirmed or DestinationStatus.Read or DestinationStatus.Received => GreenBrush,
-                _ => DefaultBrush
+                DestinationStatus.Failed => redBrush,
+                DestinationStatus.Confirmed or DestinationStatus.Read or DestinationStatus.Received => greenBrush,
+                _ => defaultBrush
             };
         }
-        return DefaultBrush;
+        return defaultBrush;
     }
 
     /// <inheritdoc />

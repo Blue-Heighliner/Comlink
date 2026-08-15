@@ -8,10 +8,10 @@ internal sealed class ColorHexToBrushConverter : IValueConverter
     public static readonly ColorHexToBrushConverter Instance = new();
 
     /// <inheritdoc />
-    public object Convert(object? value, Type targetType, object? parameter, CultureInfo culture) =>
-        new SolidColorBrush(Color.Parse(value as string ?? "#858585"));
+    public object Convert(object? value, Type targetType, object? parameter, CultureInfo culture)
+        => new SolidColorBrush(Color.Parse(value as string ?? "#858585"));
 
     /// <inheritdoc />
-    public object ConvertBack(object? value, Type targetType, object? parameter, CultureInfo culture) =>
-        throw new NotSupportedException();
+    public object ConvertBack(object? value, Type targetType, object? parameter, CultureInfo culture)
+        => throw new NotSupportedException();
 }

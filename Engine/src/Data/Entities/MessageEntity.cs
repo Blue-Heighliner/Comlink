@@ -7,14 +7,14 @@ public sealed class MessageEntity
     public ObjectId Id { get; set; } = ObjectId.NewObjectId();
     /// <summary>
     /// Application-level message identifier shared with peers. Denormalized from <see cref="Message"/>
-    /// (via <see cref="IMessageFormat.GetMessageId"/>) so LiteDB can query and index on it directly,
+    /// (via <see cref="IEngineController.GetMessageId"/>) so LiteDB can query and index on it directly,
     /// since <see cref="Message"/>'s concrete shape is chosen by the host and not known to LiteDB's typed API.
     /// </summary>
     public string MessageId { get; set; } = string.Empty;
     /// <summary>
     /// The message content — subject, body, sender, addresses, sent time — as an instance of
-    /// <see cref="IMessageFormat.MessageType"/>. This is the canonical representation of the message;
-    /// read its logical fields via the registered <see cref="IMessageFormat"/>.
+    /// <see cref="IEngineController.MessageType"/>. This is the canonical representation of the message;
+    /// read its logical fields via the registered <see cref="IEngineController"/>.
     /// </summary>
     public object Message { get; set; } = default!;
     /// <summary>Per-user delivery statuses for outbound messages.</summary>
@@ -34,7 +34,7 @@ public sealed class MessageEntity
     public bool IsOutbound { get; set; }
     /// <summary>
     /// Inbox-only read status: <see cref="DestinationStatus.Received"/> when stored, <see cref="DestinationStatus.Read"/>
-    /// once the user opens it (which also sends a user-read confirmation message back to <see cref="IMessageFormat.GetFromUser"/>
+    /// once the user opens it (which also sends a user-read confirmation message back to <see cref="IEngineController.GetFromUser"/>
     /// — see <c>Docs/Peer.md</c>). Always <see langword="null"/> on Outbox records; per-destination read state
     /// there lives in <see cref="DeliveryStatuses"/> instead.
     /// </summary>
@@ -46,11 +46,11 @@ public sealed class MessageEntity
     {
         get
         {
-            if (DeliveryStatuses.Count == 0) return null;
-            if (DeliveryStatuses.Any(d => d.Status == DestinationStatus.Failed)) return DestinationStatus.Failed;
-            if (DeliveryStatuses.All(d => d.Status == DestinationStatus.Read)) return DestinationStatus.Read;
-            if (DeliveryStatuses.All(d => d.Status is DestinationStatus.Confirmed or DestinationStatus.Read)) return DestinationStatus.Confirmed;
-            if (DeliveryStatuses.All(d => d.Status != DestinationStatus.Sending)) return DestinationStatus.Sent;
+            if (DeliveryStatuses.Count == 0) { return null; }
+            if (DeliveryStatuses.Any(d => d.Status == DestinationStatus.Failed)) { return DestinationStatus.Failed; }
+            if (DeliveryStatuses.All(d => d.Status == DestinationStatus.Read)) { return DestinationStatus.Read; }
+            if (DeliveryStatuses.All(d => d.Status is DestinationStatus.Confirmed or DestinationStatus.Read)) { return DestinationStatus.Confirmed; }
+            if (DeliveryStatuses.All(d => d.Status != DestinationStatus.Sending)) { return DestinationStatus.Sent; }
             return DestinationStatus.Sending;
         }
     }

@@ -16,11 +16,11 @@ public sealed class InterfaceServiceTests
 
         public async Task FireMessageDelivered(object payload)
         {
-            if (MessageDelivered is not null) await MessageDelivered(payload);
+            if (MessageDelivered is not null) { await MessageDelivered(payload); }
         }
     }
 
-    private static readonly IMessageFormat Format = new TestMessageFormat();
+    private readonly IEngineController format = new TestEngineController();
 
     private static UserInfo MakeUserInfo(string name) => new() { Name = name, Code = "C1", EnvironmentTitle = "T", EnvironmentColor = "#000" };
 
@@ -41,8 +41,6 @@ public sealed class InterfaceServiceTests
         }
     }
 
-    // ── HandleInterfaceMessage ────────────────────────────────────────────────
-
     /// <summary>A message received from an interface is routed as if sent by the currently installed user.</summary>
     [Fact]
     public async Task HandleInterfaceMessage_ValidMessage_RoutesAsCurrentUser()
@@ -55,7 +53,7 @@ public sealed class InterfaceServiceTests
         user.Setup(s => s.GetCurrentUserInfo()).Returns(MakeUserInfo("LOCAL"));
         FakePeerService peer = new();
 
-        InterfaceService svc = new(hoster.Object, new DefaultPortConfiguration(), routing.Object, user.Object, Format, peer);
+        InterfaceService svc = new(hoster.Object, format, routing.Object, user.Object, peer);
 
         TestMessage incoming = new()
         {
@@ -84,7 +82,7 @@ public sealed class InterfaceServiceTests
         user.Setup(s => s.GetCurrentUserInfo()).Returns((UserInfo?)null);
         FakePeerService peer = new();
 
-        InterfaceService svc = new(hoster.Object, new DefaultPortConfiguration(), routing.Object, user.Object, Format, peer);
+        InterfaceService svc = new(hoster.Object, format, routing.Object, user.Object, peer);
 
         using OwnedBuffer buf = PeerSerializer.Serialize(new TestMessage { Subject = "Hi" });
         await svc.HandleInterfaceMessage(buf.Memory.ToArray());
@@ -101,14 +99,12 @@ public sealed class InterfaceServiceTests
         Mock<IUserService> user = new();
         FakePeerService peer = new();
 
-        InterfaceService svc = new(hoster.Object, new DefaultPortConfiguration(), routing.Object, user.Object, Format, peer);
+        InterfaceService svc = new(hoster.Object, format, routing.Object, user.Object, peer);
 
         await svc.HandleInterfaceMessage(new byte[] { 0xFF, 0xFE, 0xFD });
 
         routing.Verify(r => r.Route(It.IsAny<string>(), It.IsAny<SendMessagePayload>(), It.IsAny<CancellationToken>()), Times.Never);
     }
-
-    // ── Mirroring to connected interfaces ────────────────────────────────────
 
     /// <summary>An inbound peer message mirrored to a connected interface is sent at the message's own OFT priority.</summary>
     [Fact]
@@ -123,7 +119,7 @@ public sealed class InterfaceServiceTests
         Mock<IUserService> user = new();
         FakePeerService peer = new();
 
-        InterfaceService svc = new(hoster.Object, new DefaultPortConfiguration(), routing.Object, user.Object, Format, peer);
+        InterfaceService svc = new(hoster.Object, format, routing.Object, user.Object, peer);
 
         using CancellationTokenSource cts = new();
         _ = svc.Start(cts.Token);
@@ -147,8 +143,6 @@ public sealed class InterfaceServiceTests
         cts.Cancel();
     }
 
-    // ── End-to-end over real OFT ──────────────────────────────────────────────
-
     /// <summary>A message the user receives from a peer is mirrored, unmodified, to a connected interface.</summary>
     [Fact]
     public async Task RealOft_MessageDeliveredFromPeer_IsMirroredToConnectedInterface()
@@ -158,7 +152,7 @@ public sealed class InterfaceServiceTests
         Mock<IUserService> user = new();
         FakePeerService peer = new();
 
-        await using InterfaceService svc = new(new OftHoster(), new ConfiguredPortConfiguration(new DefaultPortConfiguration(), new EngineConfig { InterfacePort = port }), routing.Object, user.Object, Format, peer);
+        await using InterfaceService svc = new(new OftHoster(), new ConfiguredEngineController(format, new EngineConfig { InterfacePort = port }, new CurrentUserProvider()), routing.Object, user.Object, peer);
 
         using CancellationTokenSource cts = new();
         _ = svc.Start(cts.Token);
@@ -171,7 +165,7 @@ public sealed class InterfaceServiceTests
             byte[] copy;
             using (data) { copy = data.Memory.ToArray(); }
             TestMessage? message = PeerSerializer.Deserialize(typeof(TestMessage), copy) as TestMessage;
-            if (message is not null) tcs.TrySetResult(message);
+            if (message is not null) { tcs.TrySetResult(message); }
         };
 
         // The client's Connect() completing does not happen-before the server's ConnectedHandler
@@ -213,7 +207,7 @@ public sealed class InterfaceServiceTests
         user.Setup(s => s.GetCurrentUserInfo()).Returns(MakeUserInfo("LOCAL"));
         FakePeerService peer = new();
 
-        await using InterfaceService svc = new(new OftHoster(), new ConfiguredPortConfiguration(new DefaultPortConfiguration(), new EngineConfig { InterfacePort = port }), routing.Object, user.Object, Format, peer);
+        await using InterfaceService svc = new(new OftHoster(), new ConfiguredEngineController(format, new EngineConfig { InterfacePort = port }, new CurrentUserProvider()), routing.Object, user.Object, peer);
 
         using CancellationTokenSource cts = new();
         _ = svc.Start(cts.Token);

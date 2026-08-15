@@ -27,29 +27,43 @@ public interface IImportService
 /// <summary>Lists export packages on a drive and restores their entries into the local database.</summary>
 public sealed class ImportService : IImportService
 {
-    private readonly IMessageRepository _messages;
-    private readonly IDraftRepository _drafts;
-    private readonly INoteRepository _notes;
-    private readonly IActivityLogRepository _activityLogs;
-    private readonly IFolderRepository _folders;
-    private readonly IMessageFormat _messageFormat;
+    private static string FirstLine(string? body) => (body ?? string.Empty).Split('\n').FirstOrDefault()?.Trim() ?? string.Empty;
 
-    /// <summary>Initializes a new <see cref="ImportService"/> with the repositories and message format needed to restore every entry type.</summary>
+    private static EntryType? ParseEntryType(string fileName)
+    {
+        string[] parts = fileName.Split('_', 3);
+        return parts.Length >= 2 && Enum.TryParse(parts[1], out EntryType type) ? type : null;
+    }
+
+    private static async Task<T?> ReadEntry<T>(ZipArchiveEntry zipEntry)
+    {
+        using Stream stream = zipEntry.Open();
+        return await JsonSerializer.DeserializeAsync<T>(stream);
+    }
+
+    /// <summary>Initializes a new <see cref="ImportService"/> with the repositories and engine controller needed to restore every entry type.</summary>
     public ImportService(
         IMessageRepository messages,
         IDraftRepository drafts,
         INoteRepository notes,
         IActivityLogRepository activityLogs,
         IFolderRepository folders,
-        IMessageFormat messageFormat)
+        IEngineController engineController)
     {
-        _messages = messages;
-        _drafts = drafts;
-        _notes = notes;
-        _activityLogs = activityLogs;
-        _folders = folders;
-        _messageFormat = messageFormat;
+        this.messages = messages;
+        this.drafts = drafts;
+        this.notes = notes;
+        this.activityLogs = activityLogs;
+        this.folders = folders;
+        this.engineController = engineController;
     }
+
+    private readonly IMessageRepository messages;
+    private readonly IDraftRepository drafts;
+    private readonly INoteRepository notes;
+    private readonly IActivityLogRepository activityLogs;
+    private readonly IFolderRepository folders;
+    private readonly IEngineController engineController;
 
     /// <inheritdoc />
     public IReadOnlyList<ImportPackageInfo> GetPackages(string driveRootPath)
@@ -79,29 +93,30 @@ public sealed class ImportService : IImportService
         foreach (ZipArchiveEntry zipEntry in archive.Entries)
         {
             EntryType? entryType = ParseEntryType(zipEntry.Name);
-            if (entryType is null) continue;
+            if (entryType is null) { continue; }
 
             switch (entryType)
             {
                 case EntryType.Message:
                 {
-                    if (await ImportMessage(zipEntry)) imported++; else skipped++;
+                    if (await ImportMessage(zipEntry)) { imported++; }
+                    else { skipped++; }
                     break;
                 }
                 case EntryType.Draft:
                 {
                     (bool wasImported, bool wasOverwritten) = await ImportDraft(zipEntry, resolveConflict, () => overwriteAll, v => overwriteAll = v);
-                    if (wasOverwritten) overwritten++;
-                    else if (wasImported) imported++;
-                    else skipped++;
+                    if (wasOverwritten) { overwritten++; }
+                    else if (wasImported) { imported++; }
+                    else { skipped++; }
                     break;
                 }
                 case EntryType.Note:
                 {
                     (bool wasImported, bool wasOverwritten) = await ImportNote(zipEntry, resolveConflict, () => overwriteAll, v => overwriteAll = v);
-                    if (wasOverwritten) overwritten++;
-                    else if (wasImported) imported++;
-                    else skipped++;
+                    if (wasOverwritten) { overwritten++; }
+                    else if (wasImported) { imported++; }
+                    else { skipped++; }
                     break;
                 }
                 case EntryType.Activity:
@@ -119,24 +134,26 @@ public sealed class ImportService : IImportService
     private async Task<bool> ImportMessage(ZipArchiveEntry zipEntry)
     {
         MessageExportData? data = await ReadEntry<MessageExportData>(zipEntry);
-        if (data is null) return false;
+        if (data is null) { return false; }
 
-        MessageEntity? existing = await _messages.Get(data.MessageId, data.IsOutbound);
+        MessageEntity? existing = await messages.Get(data.MessageId, data.IsOutbound);
         if (existing is not null && existing.ReceivedAt.Date == data.ReceivedAt.Date)
+        {
             return false;
+        }
 
-        object message = _messageFormat.CreateMessage();
-        _messageFormat.SetMessageId(message, data.MessageId);
-        _messageFormat.SetFromUser(message, data.FromUser);
-        _messageFormat.SetSubject(message, data.Subject);
-        _messageFormat.SetBody(message, data.Body);
-        _messageFormat.SetAddresses(message, data.Addresses
+        object message = engineController.CreateMessage();
+        engineController.SetMessageId(message, data.MessageId);
+        engineController.SetFromUser(message, data.FromUser);
+        engineController.SetSubject(message, data.Subject);
+        engineController.SetBody(message, data.Body);
+        engineController.SetAddresses(message, data.Addresses
             .Select(a => new MessageAddress { UserName = a.UserName, Type = a.Type.ParseAddressType() })
             .ToList());
-        _messageFormat.SetSentAt(message, data.SentAt);
-        _messageFormat.SetIsAlert(message, data.IsAlert);
-        _messageFormat.SetPriority(message, data.Priority);
-        _messageFormat.SetTag(message, data.Tag);
+        engineController.SetSentAt(message, data.SentAt);
+        engineController.SetIsAlert(message, data.IsAlert);
+        engineController.SetPriority(message, data.Priority);
+        engineController.SetTag(message, data.Tag);
 
         MessageEntity entity = new()
         {
@@ -144,11 +161,11 @@ public sealed class ImportService : IImportService
             Message = message,
             DeliveryStatuses = data.DeliveryStatuses,
             ReceivedAt = data.ReceivedAt,
-            FolderId = await _folders.GetRootId(data.IsOutbound ? FolderType.Outbox : FolderType.Inbox),
+            FolderId = await folders.GetRootId(data.IsOutbound ? FolderType.Outbox : FolderType.Inbox),
             IsOutbound = data.IsOutbound,
             ReadStatus = data.ReadStatus
         };
-        await _messages.Insert(entity);
+        await messages.Insert(entity);
         return true;
     }
 
@@ -159,10 +176,10 @@ public sealed class ImportService : IImportService
         Action<bool> setOverwriteAll)
     {
         DraftExportData? data = await ReadEntry<DraftExportData>(zipEntry);
-        if (data is null) return (false, false);
+        if (data is null) { return (false, false); }
 
         string subject = data.Subject.Trim();
-        DraftEntity? existing = (await _drafts.GetAll()).FirstOrDefault(d => d.Subject.Trim() == subject);
+        DraftEntity? existing = (await drafts.GetAll()).FirstOrDefault(d => d.Subject.Trim() == subject);
         if (existing is null)
         {
             DraftEntity entity = new()
@@ -175,9 +192,9 @@ public sealed class ImportService : IImportService
                 Priority = data.Priority,
                 Tag = data.Tag,
                 SentAt = data.SentAt,
-                FolderId = await _folders.GetRootId(FolderType.Drafts)
+                FolderId = await folders.GetRootId(FolderType.Drafts)
             };
-            await _drafts.Insert(entity);
+            await drafts.Insert(entity);
             return (true, false);
         }
 
@@ -186,10 +203,14 @@ public sealed class ImportService : IImportService
             : await resolveConflict(new ImportConflict { EntryType = EntryType.Draft, Name = subject });
 
         if (resolution == DraftNoteConflictResolution.KeepExisting)
+        {
             return (false, false);
+        }
 
         if (resolution == DraftNoteConflictResolution.OverwriteAll)
+        {
             setOverwriteAll(true);
+        }
 
         existing.Subject = data.Subject;
         existing.Body = data.Body;
@@ -200,7 +221,7 @@ public sealed class ImportService : IImportService
         existing.Tag = data.Tag;
         existing.SentAt = data.SentAt;
         existing.ModifiedAt = DateTime.UtcNow;
-        await _drafts.Update(existing);
+        await drafts.Update(existing);
         return (false, true);
     }
 
@@ -211,14 +232,14 @@ public sealed class ImportService : IImportService
         Action<bool> setOverwriteAll)
     {
         NoteExportData? data = await ReadEntry<NoteExportData>(zipEntry);
-        if (data is null) return (false, false);
+        if (data is null) { return (false, false); }
 
         string firstLine = FirstLine(data.Body);
-        NoteEntity? existing = (await _notes.GetAll()).FirstOrDefault(n => FirstLine(n.Body) == firstLine);
+        NoteEntity? existing = (await notes.GetAll()).FirstOrDefault(n => FirstLine(n.Body) == firstLine);
         if (existing is null)
         {
-            NoteEntity entity = new() { Body = data.Body, FolderId = await _folders.GetRootId(FolderType.Notes) };
-            await _notes.Insert(entity);
+            NoteEntity entity = new() { Body = data.Body, FolderId = await folders.GetRootId(FolderType.Notes) };
+            await notes.Insert(entity);
             return (true, false);
         }
 
@@ -227,55 +248,51 @@ public sealed class ImportService : IImportService
             : await resolveConflict(new ImportConflict { EntryType = EntryType.Note, Name = firstLine });
 
         if (resolution == DraftNoteConflictResolution.KeepExisting)
+        {
             return (false, false);
+        }
 
         if (resolution == DraftNoteConflictResolution.OverwriteAll)
+        {
             setOverwriteAll(true);
+        }
 
         existing.Body = data.Body;
         existing.ModifiedAt = DateTime.UtcNow;
-        await _notes.Update(existing);
+        await notes.Update(existing);
         return (false, true);
     }
 
     private async Task ImportActivityLog(ZipArchiveEntry zipEntry)
     {
         ActivityLogExportData? data = await ReadEntry<ActivityLogExportData>(zipEntry);
-        if (data is null) return;
+        if (data is null) { return; }
 
-        ActivityLogEntity? existing = (await _activityLogs.GetAll()).FirstOrDefault(a => a.Date == data.Date);
+        ActivityLogEntity? existing = (await activityLogs.GetAll()).FirstOrDefault(a => a.Date == data.Date);
         if (existing is null)
         {
             ActivityLogEntity entity = new() { Date = data.Date, EventEntries = data.EventEntries };
-            await _activityLogs.Insert(entity);
+            await activityLogs.Insert(entity);
             return;
         }
 
         foreach (ActivityLogEntry entry in data.EventEntries)
         {
             if (existing.EventEntries.Any(e => e.At == entry.At && e.Message == entry.Message))
+            {
                 continue;
+            }
 
             int insertIndex = existing.EventEntries.FindIndex(e => e.At > entry.At);
             if (insertIndex < 0)
+            {
                 existing.EventEntries.Add(entry);
+            }
             else
+            {
                 existing.EventEntries.Insert(insertIndex, entry);
+            }
         }
-        await _activityLogs.Update(existing);
-    }
-
-    private static string FirstLine(string? body) => (body ?? string.Empty).Split('\n').FirstOrDefault()?.Trim() ?? string.Empty;
-
-    private static EntryType? ParseEntryType(string fileName)
-    {
-        string[] parts = fileName.Split('_', 3);
-        return parts.Length >= 2 && Enum.TryParse(parts[1], out EntryType type) ? type : null;
-    }
-
-    private static async Task<T?> ReadEntry<T>(ZipArchiveEntry zipEntry)
-    {
-        using Stream stream = zipEntry.Open();
-        return await JsonSerializer.DeserializeAsync<T>(stream);
+        await activityLogs.Update(existing);
     }
 }

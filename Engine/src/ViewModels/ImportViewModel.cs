@@ -31,54 +31,56 @@ public interface IImportViewModel
 /// <inheritdoc cref="IImportViewModel" />
 public sealed partial class ImportViewModel : ObservableObject, IImportViewModel
 {
-    private readonly IExternalDriveProvider _driveProvider;
-    private readonly IImportService _importService;
-    private TaskCompletionSource<DraftNoteConflictResolution>? _pendingResolution;
-
-    [ObservableProperty] private IReadOnlyList<ExternalDriveInfo> _availableDrives = [];
-    [ObservableProperty] private ExternalDriveInfo? _selectedDrive;
-    [ObservableProperty] private IReadOnlyList<ImportPackageInfo> _availablePackages = [];
-
-    [ObservableProperty]
-    [NotifyCanExecuteChangedFor(nameof(StartImportCommand))]
-    private bool _isImporting;
-
-    [ObservableProperty] private string? _statusMessage;
-    [ObservableProperty] private ImportConflict? _pendingConflict;
+    [ObservableProperty] private string? statusMessage;
+    [ObservableProperty] private ImportConflict? pendingConflict;
 
     /// <summary>Initializes a new <see cref="ImportViewModel"/> with the drive provider and import service.</summary>
     /// <param name="driveProvider">Enumerates available external drives.</param>
     /// <param name="importService">Lists export packages on a drive and restores their entries.</param>
     public ImportViewModel(IExternalDriveProvider driveProvider, IImportService importService)
     {
-        _driveProvider = driveProvider;
-        _importService = importService;
+        this.driveProvider = driveProvider;
+        this.importService = importService;
     }
+
+    private readonly IExternalDriveProvider driveProvider;
+    private readonly IImportService importService;
+    private TaskCompletionSource<DraftNoteConflictResolution>? pendingResolution;
+
+    [ObservableProperty] private IReadOnlyList<ExternalDriveInfo> availableDrives = [];
+    [ObservableProperty] private ExternalDriveInfo? selectedDrive;
+    [ObservableProperty] private IReadOnlyList<ImportPackageInfo> availablePackages = [];
+
+    [ObservableProperty]
+    [NotifyCanExecuteChangedFor(nameof(StartImportCommand))]
+    private bool isImporting;
 
     partial void OnSelectedDriveChanged(ExternalDriveInfo? value) => RefreshPackages();
 
     [RelayCommand]
     private void RefreshDrives()
     {
-        IReadOnlyList<ExternalDriveInfo> drives = _driveProvider.GetDrives();
+        IReadOnlyList<ExternalDriveInfo> drives = driveProvider.GetDrives();
         AvailableDrives = drives;
         if (SelectedDrive is not null && !drives.Any(d => d.RootPath == SelectedDrive.RootPath))
+        {
             SelectedDrive = null;
+        }
     }
 
-    private void RefreshPackages() =>
-        AvailablePackages = SelectedDrive is null ? [] : _importService.GetPackages(SelectedDrive.RootPath);
+    private void RefreshPackages()
+        => AvailablePackages = SelectedDrive is null ? [] : importService.GetPackages(SelectedDrive.RootPath);
 
     [RelayCommand(CanExecute = nameof(CanStartImport))]
     private async Task StartImport(ImportPackageInfo? package)
     {
-        if (package is null) return;
+        if (package is null) { return; }
 
         IsImporting = true;
         StatusMessage = null;
         try
         {
-            ImportSummary summary = await _importService.Import(package.FullPath, AwaitConflictResolution);
+            ImportSummary summary = await importService.Import(package.FullPath, AwaitConflictResolution);
             StatusMessage = $"Imported {summary.Imported}, overwrote {summary.Overwritten}, skipped {summary.Skipped}";
         }
         catch (Exception ex)
@@ -89,7 +91,7 @@ public sealed partial class ImportViewModel : ObservableObject, IImportViewModel
         {
             IsImporting = false;
             PendingConflict = null;
-            _pendingResolution = null;
+            pendingResolution = null;
         }
     }
 
@@ -98,7 +100,7 @@ public sealed partial class ImportViewModel : ObservableObject, IImportViewModel
     private Task<DraftNoteConflictResolution> AwaitConflictResolution(ImportConflict conflict)
     {
         TaskCompletionSource<DraftNoteConflictResolution> tcs = new();
-        _pendingResolution = tcs;
+        pendingResolution = tcs;
         PendingConflict = conflict;
         return tcs.Task;
     }
@@ -107,8 +109,8 @@ public sealed partial class ImportViewModel : ObservableObject, IImportViewModel
     private void ResolveConflict(DraftNoteConflictResolution resolution)
     {
         PendingConflict = null;
-        TaskCompletionSource<DraftNoteConflictResolution>? pending = _pendingResolution;
-        _pendingResolution = null;
+        TaskCompletionSource<DraftNoteConflictResolution>? pending = pendingResolution;
+        pendingResolution = null;
         pending?.TrySetResult(resolution);
     }
 }

@@ -3,7 +3,6 @@ namespace BlueHeighliner.Comlink.Tests.Services;
 /// <summary>Unit tests for <see cref="DirectServiceConnection"/> event wiring and delegation.</summary>
 public sealed class DirectServiceConnectionTests
 {
-    // ── Test fakes for Func<T, Task> events ───────────────────────────────────
 
     private sealed class FakePeerService : IPeerService
     {
@@ -25,7 +24,7 @@ public sealed class DirectServiceConnectionTests
 
         public async Task FireMessageDelivered(object payload)
         {
-            if (MessageDelivered is not null) await MessageDelivered(payload);
+            if (MessageDelivered is not null) { await MessageDelivered(payload); }
         }
     }
 
@@ -40,13 +39,13 @@ public sealed class DirectServiceConnectionTests
             string fromUser, SendMessagePayload payload, CancellationToken cancellation)
         {
             LastPayload = payload;
-            if (RouteResult is null) throw new InvalidOperationException("RouteResult not configured");
+            if (RouteResult is null) { throw new InvalidOperationException("RouteResult not configured"); }
             return Task.FromResult(RouteResult.Value);
         }
 
         public async Task FireDeliveryStatusChanged(string messageId, string user, DestinationStatus status)
         {
-            if (DeliveryStatusChanged is not null) await DeliveryStatusChanged(messageId, user, status);
+            if (DeliveryStatusChanged is not null) { await DeliveryStatusChanged(messageId, user, status); }
         }
     }
 
@@ -55,18 +54,16 @@ public sealed class DirectServiceConnectionTests
         out FakeMessageRoutingService fakeRouting,
         out Mock<IUserService> userMock,
         out Mock<IEntryService> entryMock,
-        out Mock<IUserDirectory> dirMock)
+        out Mock<TestEngineController> dirMock)
     {
         fakePeer = new FakePeerService();
         fakeRouting = new FakeMessageRoutingService();
         userMock = new Mock<IUserService>();
         entryMock = new Mock<IEntryService>();
-        dirMock = new Mock<IUserDirectory>();
+        dirMock = new Mock<TestEngineController> { CallBase = true };
         return new DirectServiceConnection(userMock.Object, dirMock.Object,
-            fakeRouting, fakePeer, entryMock.Object, new TestMessageFormat());
+            fakeRouting, fakePeer, entryMock.Object);
     }
-
-    // ── GetUserInfo ───────────────────────────────────────────────────────────
 
     /// <summary>GetUserInfo delegates to IUserService.GetCurrentUserInfo and returns the result.</summary>
     [Fact]
@@ -93,15 +90,12 @@ public sealed class DirectServiceConnectionTests
         Assert.Null(result);
     }
 
-    // ── GetUserNames ──────────────────────────────────────────────────────────
-
     /// <summary>GetUserNames returns the names from the directory as a list.</summary>
     [Fact]
     public async Task GetUserNames_ReturnsUserNamesFromDirectory()
     {
-        DirectServiceConnection conn = Build(out _, out _, out _, out _, out Mock<IUserDirectory> dir);
-        dir.Setup(d => d.GetAllUserNames(It.IsAny<CancellationToken>()))
-           .ReturnsAsync((IReadOnlyList<string>)["ALPHA", "BETA"]);
+        DirectServiceConnection conn = Build(out _, out _, out _, out _, out Mock<TestEngineController> dir);
+        dir.Setup(d => d.Users).Returns((IReadOnlyList<string>)["ALPHA", "BETA"]);
 
         List<string> names = await conn.GetUserNames();
 
@@ -112,16 +106,13 @@ public sealed class DirectServiceConnectionTests
     [Fact]
     public async Task GetUserNames_WhenDirectoryThrows_ReturnsEmptyList()
     {
-        DirectServiceConnection conn = Build(out _, out _, out _, out _, out Mock<IUserDirectory> dir);
-        dir.Setup(d => d.GetAllUserNames(It.IsAny<CancellationToken>()))
-           .ThrowsAsync(new IOException("network error"));
+        DirectServiceConnection conn = Build(out _, out _, out _, out _, out Mock<TestEngineController> dir);
+        dir.Setup(d => d.Users).Throws(new IOException("network error"));
 
         List<string> names = await conn.GetUserNames();
 
         Assert.Empty(names);
     }
-
-    // ── InstallUser ───────────────────────────────────────────────────────────
 
     /// <summary>InstallUser delegates to IUserService.Install and returns its result.</summary>
     [Fact]
@@ -135,8 +126,6 @@ public sealed class DirectServiceConnectionTests
 
         Assert.Same(info, result);
     }
-
-    // ── MessageReceived event wiring ──────────────────────────────────────────
 
     /// <summary>After Connect, a MessageDelivered peer event is converted and re-raised as MessageReceived.</summary>
     [Fact]
@@ -170,8 +159,6 @@ public sealed class DirectServiceConnectionTests
         Assert.Equal(2, received.Priority);
     }
 
-    // ── DeliveryStatusChanged event wiring ────────────────────────────────────
-
     /// <summary>After Connect, a DeliveryStatusChanged routing event updates the entry service and fires the connection event.</summary>
     [Fact]
     public async Task Connect_ThenDeliveryStatusChanged_UpdatesEntryAndRaisesEvent()
@@ -199,8 +186,6 @@ public sealed class DirectServiceConnectionTests
         Assert.Equal(DestinationStatus.Confirmed, evt.Status);
         entry.Verify(e => e.UpdateDeliveryStatus("MSG2", "DEST", DestinationStatus.Confirmed), Times.Once);
     }
-
-    // ── SendMessage ───────────────────────────────────────────────────────────
 
     /// <summary>SendMessage returns null when no user is installed.</summary>
     [Fact]
@@ -254,8 +239,6 @@ public sealed class DirectServiceConnectionTests
         Assert.NotNull(routing.LastPayload);
         Assert.Equal(3, routing.LastPayload.Priority);
     }
-
-    // ── MarkMessageRead ───────────────────────────────────────────────────────
 
     /// <summary>MarkMessageRead returns false and sends nothing when EntryService reports no change (already read or not found).</summary>
     [Fact]

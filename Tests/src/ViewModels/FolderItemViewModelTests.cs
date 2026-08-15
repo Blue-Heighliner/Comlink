@@ -3,7 +3,6 @@ namespace BlueHeighliner.Comlink.Tests.ViewModels;
 /// <summary>Unit tests for <see cref="FolderItemViewModel"/> computed properties.</summary>
 public sealed class FolderItemViewModelTests
 {
-    // ── Root folder properties ────────────────────────────────────────────────
 
     /// <summary>Root folders have IsRootFolder=true, IsSubfolder=false, IsExpanded=true.</summary>
     [Fact]
@@ -27,8 +26,6 @@ public sealed class FolderItemViewModelTests
         Assert.False(vm.IsExpanded);
     }
 
-    // ── Icon ──────────────────────────────────────────────────────────────────
-
     /// <summary>Root folder icons match the defined glyphs.</summary>
     [Theory]
     [InlineData(FolderType.Inbox,    "↓")]
@@ -49,8 +46,6 @@ public sealed class FolderItemViewModelTests
         FolderItemViewModel vm = new("child", "Sub", FolderType.Inbox, "root");
         Assert.Equal(string.Empty, vm.Icon);
     }
-
-    // ── CanCreateSubfolder ────────────────────────────────────────────────────
 
     /// <summary>Activity root folders cannot create subfolders.</summary>
     [Fact]
@@ -87,8 +82,6 @@ public sealed class FolderItemViewModelTests
         Assert.True(vm.CanCreateSubfolder);
     }
 
-    // ── Label style ───────────────────────────────────────────────────────────
-
     /// <summary>Root folders are bold and use 15pt size.</summary>
     [Fact]
     public void RootFolder_LabelStyle_IsBoldAndLarge()
@@ -106,8 +99,6 @@ public sealed class FolderItemViewModelTests
         Assert.False(vm.IsLabelBold);
         Assert.Equal(13.0, vm.LabelFontSize);
     }
-
-    // ── ObservableObject ──────────────────────────────────────────────────────
 
     /// <summary>IsExpanded and IsSelected are observable.</summary>
     [Fact]

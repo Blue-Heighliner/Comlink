@@ -1,8 +1,8 @@
 namespace BlueHeighliner.Comlink.Tests;
 
-/// <summary>Test message DTO standing in for a host-supplied <see cref="IMessageFormat.MessageType"/>.</summary>
+/// <summary>Test message DTO standing in for a host-supplied <see cref="IEngineController.MessageType"/>.</summary>
 [ProtoContract]
-internal sealed class TestMessage
+public sealed class TestMessage
 {
     /// <summary>Application-level message identifier.</summary>
     [ProtoMember(1)] public string MessageId { get; set; } = string.Empty;
@@ -28,7 +28,7 @@ internal sealed class TestMessage
 
 /// <summary>A single address entry within a <see cref="TestMessage"/>.</summary>
 [ProtoContract]
-internal sealed class TestAddressEntry
+public sealed class TestAddressEntry
 {
     /// <summary>User name of the addressee.</summary>
     [ProtoMember(1)] public string UserName { get; set; } = string.Empty;
@@ -36,8 +36,16 @@ internal sealed class TestAddressEntry
     [ProtoMember(2)] public string Type { get; set; } = "To";
 }
 
-/// <summary>Test <see cref="IMessageFormat"/> implementation backed by <see cref="TestMessage"/>, with no casting required.</summary>
-internal sealed class TestMessageFormat : MessageFormat<TestMessage>
+/// <summary>
+/// Test <see cref="IEngineController"/> mapping logical message fields onto <see cref="TestMessage"/>, with
+/// no casting required. Not <see langword="sealed"/> so tests needing to also override a non-message
+/// member per test case can do so via <c>Mock&lt;TestEngineController&gt; { CallBase = true }</c>, which
+/// falls back to this class's own (or the inherited default) behavior for anything not explicitly stubbed.
+/// <see langword="public"/> (not <see langword="internal"/>) because Moq's Castle DynamicProxy needs to
+/// generate a subclass of it, and the Tests assembly is not strong-named so it cannot grant
+/// <c>InternalsVisibleTo</c> to Moq's dynamically-generated, unsigned proxy assembly.
+/// </summary>
+public class TestEngineController() : DefaultEngineController<TestMessage>(new CurrentUserProvider())
 {
     /// <inheritdoc />
     protected override string GetMessageId(TestMessage message) => message.MessageId;
@@ -57,14 +65,14 @@ internal sealed class TestMessageFormat : MessageFormat<TestMessage>
     protected override void SetBody(TestMessage message, string value) => message.Body = value;
 
     /// <inheritdoc />
-    protected override List<MessageAddress> GetAddresses(TestMessage message) =>
-        message.Addresses
+    protected override List<MessageAddress> GetAddresses(TestMessage message)
+        => message.Addresses
             .Select(a => new MessageAddress { UserName = a.UserName, Type = a.Type.ParseAddressType() })
             .ToList();
 
     /// <inheritdoc />
-    protected override void SetAddresses(TestMessage message, List<MessageAddress> value) =>
-        message.Addresses = value
+    protected override void SetAddresses(TestMessage message, List<MessageAddress> value)
+        => message.Addresses = value
             .Select(a => new TestAddressEntry { UserName = a.UserName, Type = a.Type.ToString() })
             .ToList();
 

@@ -3,7 +3,6 @@ namespace BlueHeighliner.Comlink.Tests.Logging;
 /// <summary>Unit tests for <see cref="ActivityLogger"/> and <see cref="ActivityLoggerProvider"/>.</summary>
 public sealed class ActivityLoggerTests
 {
-    // ── ActivityLogger.IsEnabled ──────────────────────────────────────────────
 
     /// <summary>ACTIVITY category at Info level is enabled.</summary>
     [Fact]
@@ -44,8 +43,6 @@ public sealed class ActivityLoggerTests
         Assert.True(logger.IsEnabled(LogLevel.Information));
     }
 
-    // ── ActivityLogger.BeginScope ─────────────────────────────────────────────
-
     /// <summary>BeginScope always returns null.</summary>
     [Fact]
     public void BeginScope_ReturnsNull()
@@ -54,8 +51,6 @@ public sealed class ActivityLoggerTests
         ActivityLogger logger = new("ACTIVITY", repo.Object);
         Assert.Null(logger.BeginScope("state"));
     }
-
-    // ── ActivityLogger.Log ────────────────────────────────────────────────────
 
     /// <summary>Log at Info level calls AppendEvent on the repository.</summary>
     [Fact]
@@ -96,8 +91,6 @@ public sealed class ActivityLoggerTests
         await Task.Delay(50);
         repo.Verify(r => r.AppendEvent(It.IsAny<string>()), Times.Never);
     }
-
-    // ── ActivityLoggerProvider ────────────────────────────────────────────────
 
     /// <summary>CreateLogger returns an ActivityLogger instance.</summary>
     [Fact]

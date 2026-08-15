@@ -3,35 +3,33 @@ namespace BlueHeighliner.Comlink.Tests.ViewModels;
 /// <summary>Unit tests for <see cref="AlertViewModel"/>.</summary>
 public sealed class AlertViewModelTests
 {
-    private static readonly IMessageFormat Format = new TestMessageFormat();
+    private static readonly IEngineController format = new TestEngineController();
 
     private sealed class Setup
     {
-        public Mock<IEntryService> EntryService { get; } = new();
-        public Mock<IServiceConnection> Connection { get; } = new();
-        public Mock<IAlertSettings> AlertSettings { get; } = new();
-        public Mock<IAlertSoundPlayer> SoundPlayer { get; } = new();
-
         public Setup()
         {
-            AlertSettings.Setup(c => c.AlertText).Returns("ALERT");
+            AlertSettings.Setup(c => c.AlertLabel).Returns("ALERT");
             AlertSettings.Setup(c => c.AlarmSoundDuration).Returns(TimeSpan.FromMinutes(10));
             AlertSettings.Setup(c => c.QuickConfirmationEnabled).Returns(true);
         }
 
-        public AlertViewModel Build() =>
-            new(EntryService.Object, Connection.Object, Format, AlertSettings.Object, SoundPlayer.Object);
+        public Mock<IEntryService> EntryService { get; } = new();
+        public Mock<IServiceConnection> Connection { get; } = new();
+        public Mock<TestEngineController> AlertSettings { get; } = new() { CallBase = true };
+        public Mock<IAlertSoundPlayer> SoundPlayer { get; } = new();
+
+        public AlertViewModel Build()
+            => new(EntryService.Object, Connection.Object, AlertSettings.Object, SoundPlayer.Object);
     }
 
     private static MessageEntity MakeMessage(string messageId, bool isAlert)
     {
-        object message = Format.CreateMessage();
-        Format.SetMessageId(message, messageId);
-        Format.SetIsAlert(message, isAlert);
+        object message = format.CreateMessage();
+        format.SetMessageId(message, messageId);
+        format.SetIsAlert(message, isAlert);
         return new MessageEntity { MessageId = messageId, Message = message };
     }
-
-    // ── Initial state ─────────────────────────────────────────────────────────
 
     /// <summary>A freshly constructed ViewModel has no pending alerts.</summary>
     [Fact]
@@ -43,12 +41,12 @@ public sealed class AlertViewModelTests
         Assert.Equal(0, vm.PendingCount);
     }
 
-    /// <summary>AlertText and QuickConfirmationEnabled are read from IAlertSettings.</summary>
+    /// <summary>AlertText and QuickConfirmationEnabled are read from IEngineController.</summary>
     [Fact]
     public void Ctor_ExposesConfigurationValues()
     {
         Setup s = new();
-        s.AlertSettings.Setup(c => c.AlertText).Returns("INCOMING");
+        s.AlertSettings.Setup(c => c.AlertLabel).Returns("INCOMING");
         s.AlertSettings.Setup(c => c.QuickConfirmationEnabled).Returns(false);
 
         AlertViewModel vm = s.Build();
@@ -56,8 +54,6 @@ public sealed class AlertViewModelTests
         Assert.Equal("INCOMING", vm.AlertText);
         Assert.False(vm.QuickConfirmationEnabled);
     }
-
-    // ── MessageInserted ───────────────────────────────────────────────────────
 
     /// <summary>An inserted alert message becomes pending, starts alarming, and plays the sound.</summary>
     [Fact]
@@ -100,8 +96,6 @@ public sealed class AlertViewModelTests
         Assert.Equal(2, vm.PendingCount);
         s.SoundPlayer.Verify(p => p.Stop(), Times.Never);
     }
-
-    // ── MessageRead ───────────────────────────────────────────────────────────
 
     /// <summary>Reading the only pending alert clears IsAlerting and stops the sound.</summary>
     [Fact]
@@ -146,8 +140,6 @@ public sealed class AlertViewModelTests
         Assert.False(vm.IsAlerting);
         Assert.Equal(0, vm.PendingCount);
     }
-
-    // ── ConfirmLatestCommand ──────────────────────────────────────────────────
 
     /// <summary>ConfirmLatestCommand cannot execute while no alerts are pending.</summary>
     [Fact]

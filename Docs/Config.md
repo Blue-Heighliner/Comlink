@@ -157,7 +157,7 @@ Label used for the tag input's watermark in the draft editor. Lets a host call t
 
 **Type:** `bool | null` | **Default:** `null` (uses Engine default of `false`)
 
-Whether the print manager's "print received" toggle starts enabled, automatically adding every received message to the print queue (subject to the registered `IPrintPolicy`). The user can still toggle it off at any time in the print manager.
+Whether the print manager's "print received" toggle starts enabled, automatically adding every received message to the print queue (subject to `IEngineController.GetPrintCount`). The user can still toggle it off at any time in the print manager.
 
 ---
 
@@ -211,7 +211,7 @@ The full server-user-map topology for a `"Server"`-role instance: a map of serve
 
 **Type:** `object` | **Default:** `{}`
 
-A map of user name → endpoint used by the `IUserDirectory` implementation. Keys are user names (case-insensitive). Entries may override the endpoint of an existing known user or introduce an entirely new user.
+A map of user name → endpoint used by the `IEngineController.GetEndpoint` implementation. Keys are user names (case-insensitive). Entries may override the endpoint of an existing known user or introduce an entirely new user.
 
 ```json
 "Users": {

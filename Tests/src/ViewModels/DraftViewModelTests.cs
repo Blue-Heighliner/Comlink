@@ -3,26 +3,22 @@ namespace BlueHeighliner.Comlink.Tests.ViewModels;
 /// <summary>Unit tests for <see cref="DraftViewModel"/>.</summary>
 public sealed class DraftViewModelTests
 {
-    private static readonly ILoggerFactory NoLogger = LoggerFactory.Create(_ => { });
+    private static readonly ILoggerFactory noLogger = LoggerFactory.Create(_ => { });
 
-    private static IAlertSettings MakeAlertSettings(string alertText = "ALERT", bool composeAlertsEnabled = true)
+    private static IEngineController MakeEngineController(
+        string alertText = "ALERT", bool composeAlertsEnabled = true,
+        bool tagsEnabled = true, string tagLabel = "Tag", IReadOnlyList<TagPriorityBlock>? blocks = null)
     {
-        Mock<IAlertSettings> mock = new();
-        mock.Setup(a => a.AlertText).Returns(alertText);
+        Mock<IEngineController> mock = new();
+        mock.Setup(a => a.AlertLabel).Returns(alertText);
         mock.Setup(a => a.ComposeAlertsEnabled).Returns(composeAlertsEnabled);
-        return mock.Object;
-    }
-
-    private static IMessageComposition MakeMessageComposition(bool tagsEnabled = true, string tagLabel = "Tag", IReadOnlyList<TagPriorityBlock>? blocks = null)
-    {
-        Mock<IMessageComposition> mock = new();
-        mock.Setup(p => p.GetPriorities()).Returns([
+        mock.Setup(p => p.Priorities).Returns([
             new MessagePriorityOption { Name = "ROUTINE", Value = 0 },
             new MessagePriorityOption { Name = "FLASH", Value = 3 }
         ]);
         mock.Setup(t => t.TagsEnabled).Returns(tagsEnabled);
         mock.Setup(t => t.TagLabel).Returns(tagLabel);
-        mock.Setup(p => p.GetBlockedCombinations()).Returns(blocks ?? []);
+        mock.Setup(p => p.BlockedCombinations).Returns(blocks ?? []);
         return mock.Object;
     }
 
@@ -48,12 +44,9 @@ public sealed class DraftViewModelTests
             Addresses = [],
             FolderId = "root-drafts"
         };
-        return new DraftViewModel(ent, entryMock.Object, connMock.Object, userNames ?? [], NoLogger,
-            MakeAlertSettings(alertText, composeAlertsEnabled),
-            MakeMessageComposition(tagsEnabled, tagLabel, blockedCombinations));
+        return new DraftViewModel(ent, entryMock.Object, connMock.Object, userNames ?? [], noLogger,
+            MakeEngineController(alertText, composeAlertsEnabled, tagsEnabled, tagLabel, blockedCombinations));
     }
-
-    // ── Construction ──────────────────────────────────────────────────────────
 
     /// <summary>Constructor sets Subject from entity.</summary>
     [Fact]
@@ -82,7 +75,7 @@ public sealed class DraftViewModelTests
         Assert.Equal(PlsoMode.Off, vm.PlsoMode);
     }
 
-    /// <summary>AvailablePriorities is populated from IMessageComposition.GetPriorities().</summary>
+    /// <summary>AvailablePriorities is populated from IEngineController.Priorities.</summary>
     [Fact]
     public void Constructor_AvailablePrioritiesFromProvider()
     {
@@ -118,7 +111,7 @@ public sealed class DraftViewModelTests
         Assert.Equal("URGENT", vm.Tag);
     }
 
-    /// <summary>TagsEnabled is sourced from IMessageComposition.</summary>
+    /// <summary>TagsEnabled is sourced from IEngineController.</summary>
     [Theory]
     [InlineData(true)]
     [InlineData(false)]
@@ -128,7 +121,7 @@ public sealed class DraftViewModelTests
         Assert.Equal(enabled, vm.TagsEnabled);
     }
 
-    /// <summary>TagLabel is sourced from IMessageComposition.TagLabel, so a host can rename the tag input.</summary>
+    /// <summary>TagLabel is sourced from IEngineController.TagLabel, so a host can rename the tag input.</summary>
     [Fact]
     public void Constructor_TagLabelFromTagConfiguration()
     {
@@ -200,7 +193,7 @@ public sealed class DraftViewModelTests
         Assert.Equal("URGENT", vm.Tag);
     }
 
-    /// <summary>AlertLabel is sourced from IAlertSettings.AlertText — the same text used in the title bar's alert box.</summary>
+    /// <summary>AlertLabel is sourced from IEngineController.AlertLabel — the same text used in the title bar's alert box.</summary>
     [Fact]
     public void Constructor_AlertLabelFromAlertConfiguration()
     {
@@ -208,7 +201,7 @@ public sealed class DraftViewModelTests
         Assert.Equal("!ALERT!", vm.AlertLabel);
     }
 
-    /// <summary>ComposeAlertsEnabled is sourced from IAlertSettings.</summary>
+    /// <summary>ComposeAlertsEnabled is sourced from IEngineController.</summary>
     [Theory]
     [InlineData(true)]
     [InlineData(false)]
@@ -285,8 +278,6 @@ public sealed class DraftViewModelTests
         Assert.NotEmpty(vm.Id);
     }
 
-    // ── NewAddressUser auto-uppercase ─────────────────────────────────────────
-
     /// <summary>Setting NewAddressUser to lowercase auto-uppercases it.</summary>
     [Fact]
     public void NewAddressUser_Lowercase_AutoUppercased()
@@ -304,8 +295,6 @@ public sealed class DraftViewModelTests
         vm.NewAddressUser = "ALPHA";
         Assert.Equal("ALPHA", vm.NewAddressUser);
     }
-
-    // ── AddAddressCommand ─────────────────────────────────────────────────────
 
     /// <summary>AddAddressCommand with a valid user adds to Addresses.</summary>
     [Fact]
@@ -335,8 +324,6 @@ public sealed class DraftViewModelTests
         Assert.Empty(vm.Addresses);
     }
 
-    // ── RemoveAddressCommand ──────────────────────────────────────────────────
-
     /// <summary>RemoveAddressCommand removes the specified address.</summary>
     [Fact]
     public void RemoveAddressCommand_RemovesAddress()
@@ -353,8 +340,6 @@ public sealed class DraftViewModelTests
 
         Assert.Empty(vm.Addresses);
     }
-
-    // ── InsertFillIn ──────────────────────────────────────────────────────────
 
     /// <summary>InsertFillIn adds a new entry to the FillIns dictionary.</summary>
     [Fact]
@@ -379,8 +364,6 @@ public sealed class DraftViewModelTests
 
         Assert.Equal(2, vm.FillIns.Count);
     }
-
-    // ── SaveCommand ───────────────────────────────────────────────────────────
 
     /// <summary>SaveCommand calls entryService.SaveDraft and sets StatusMessage to "Saved".</summary>
     [Fact]
@@ -423,8 +406,6 @@ public sealed class DraftViewModelTests
 
         entryMock.Verify(e => e.SaveDraft(It.Is<DraftEntity>(d => d.Tag == "URGENT")), Times.Once);
     }
-
-    // ── SendCommand ───────────────────────────────────────────────────────────
 
     /// <summary>SendCommand with no addresses sets StatusMessage and does not send.</summary>
     [Fact]

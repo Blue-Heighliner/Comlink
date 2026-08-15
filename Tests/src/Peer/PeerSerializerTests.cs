@@ -10,8 +10,6 @@ public sealed class PeerSerializerTests
         [ProtoMember(2)] public int Count { get; set; }
     }
 
-    // ── TestMessage ───────────────────────────────────────────────────────────
-
     /// <summary>TestMessage round-trips all fields including nested addresses.</summary>
     [Fact]
     public void TestMessage_SerializeDeserialize_RoundTrip()
@@ -45,8 +43,6 @@ public sealed class PeerSerializerTests
         Assert.Equal("Cc", decoded.Addresses[1].Type);
     }
 
-    // ── Arbitrary runtime type ───────────────────────────────────────────────
-
     /// <summary>Serialize/Deserialize work for any protobuf-net type resolved at runtime, not just TestMessage.</summary>
     [Fact]
     public void OtherType_SerializeDeserialize_RoundTrip()
@@ -61,8 +57,6 @@ public sealed class PeerSerializerTests
         Assert.Equal(42, decoded.Count);
     }
 
-    // ── Serialize produces bytes ──────────────────────────────────────────────
-
     /// <summary>Serialize produces a non-empty byte sequence for a populated message.</summary>
     [Fact]
     public void Serialize_ProducesNonEmptyBytes()
@@ -71,8 +65,6 @@ public sealed class PeerSerializerTests
         using OwnedBuffer buf = PeerSerializer.Serialize(msg);
         Assert.True(buf.Memory.Length > 0);
     }
-
-    // ── Deserialize edge cases ────────────────────────────────────────────────
 
     /// <summary>Deserializing an empty span returns a default instance (protobuf-net treats empty bytes as all-default values).</summary>
     [Fact]

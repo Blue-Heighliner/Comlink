@@ -3,10 +3,17 @@ namespace BlueHeighliner.Comlink.Tests.ServiceEngine;
 /// <summary>Integration tests for <see cref="UserService"/> covering install, load, and state queries.</summary>
 public sealed class UserServiceTests : IDisposable
 {
-    private readonly string _appName = Guid.NewGuid().ToString();
-    private readonly Mock<IUserIdentity> _resolverMock = new();
-    private UserService CreateService() =>
-        new(_resolverMock.Object, new TestAppDataPathProvider(_appName), new BlueHeighliner.Comlink.Engine.Control.CurrentUserProvider(), LoggerFactory.Create(_ => { }));
+    public UserServiceTests()
+    {
+        string path = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), appName);
+        engineControllerMock.Setup(e => e.AppDataPath).Returns(path);
+    }
+
+    private readonly string appName = Guid.NewGuid().ToString();
+    private readonly Mock<IEngineController> engineControllerMock = new();
+
+    private UserService CreateService()
+        => new(engineControllerMock.Object, new BlueHeighliner.Comlink.Engine.Control.CurrentUserProvider(), LoggerFactory.Create(_ => { }));
 
     /// <summary>Verifies that GetCurrentUserInfo returns null when the user has not been installed.</summary>
     [Fact]
@@ -27,7 +34,7 @@ public sealed class UserServiceTests : IDisposable
             EnvironmentTitle = "Test",
             EnvironmentColor = "#FF0000"
         };
-        _resolverMock.Setup(r => r.ResolveCode("TS01", default)).ReturnsAsync(expected);
+        engineControllerMock.Setup(r => r.ResolveCode("TS01")).Returns(expected);
 
         UserService service = CreateService();
         UserInfo? result = await service.Install("TS01");
@@ -41,7 +48,7 @@ public sealed class UserServiceTests : IDisposable
     [Fact]
     public async Task InstallAsync_WithInvalidCode_ReturnsNull()
     {
-        _resolverMock.Setup(r => r.ResolveCode("INVALID", default)).ReturnsAsync((UserInfo?)null);
+        engineControllerMock.Setup(r => r.ResolveCode("INVALID")).Returns((UserInfo?)null);
 
         UserService service = CreateService();
         UserInfo? result = await service.Install("INVALID");
@@ -60,7 +67,7 @@ public sealed class UserServiceTests : IDisposable
             EnvironmentTitle = "Prod",
             EnvironmentColor = "#00FF00"
         };
-        _resolverMock.Setup(r => r.ResolveCode("MN01", default)).ReturnsAsync(userInfo);
+        engineControllerMock.Setup(r => r.ResolveCode("MN01")).Returns(userInfo);
 
         UserService service = CreateService();
         await service.Install("MN01");
@@ -81,7 +88,7 @@ public sealed class UserServiceTests : IDisposable
             EnvironmentTitle = "QA",
             EnvironmentColor = "#0000FF"
         };
-        _resolverMock.Setup(r => r.ResolveCode("RS01", default)).ReturnsAsync(userInfo);
+        engineControllerMock.Setup(r => r.ResolveCode("RS01")).Returns(userInfo);
 
         UserService service = CreateService();
         await service.Install("RS01");
@@ -98,7 +105,7 @@ public sealed class UserServiceTests : IDisposable
     public void Dispose()
     {
         string appData = Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData);
-        string dir = Path.Combine(appData, _appName);
-        if (Directory.Exists(dir)) Directory.Delete(dir, recursive: true);
+        string dir = Path.Combine(appData, appName);
+        if (Directory.Exists(dir)) { Directory.Delete(dir, recursive: true); }
     }
 }

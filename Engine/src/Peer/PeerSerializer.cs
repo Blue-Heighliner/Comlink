@@ -2,7 +2,7 @@ namespace BlueHeighliner.Comlink.Engine.Peer;
 
 /// <summary>
 /// Provides protobuf serialization and deserialization helpers for the engine's message type, whichever
-/// concrete type <see cref="IMessageFormat"/> resolves it to. Works from the runtime <see cref="Type"/>
+/// concrete type <see cref="IEngineController"/> resolves it to. Works from the runtime <see cref="Type"/>
 /// rather than a compile-time generic parameter, since the concrete type is chosen by the host.
 /// </summary>
 internal static class PeerSerializer

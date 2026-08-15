@@ -3,14 +3,16 @@ namespace BlueHeighliner.Comlink.Engine.ViewModels;
 /// <summary>ViewModel interface for the main content area that displays the active entry or home screen.</summary>
 public interface IContentAreaViewModel
 {
+    /// <summary>Raised when a draft is successfully sent and produces a message entity.</summary>
+    event Func<MessageEntity, Task>? DraftSent;
+
     /// <summary>Gets or sets the currently displayed entry ViewModel, or <see langword="null"/> when showing the home screen.</summary>
     object? ActiveContent { get; set; }
     /// <summary>Gets or sets a value indicating whether the home screen placeholder is visible.</summary>
     bool IsHomeVisible { get; set; }
     /// <summary>Gets the welcome text supplied by the host's home content provider.</summary>
     string HomeText { get; }
-    /// <summary>Raised when a draft is successfully sent and produces a message entity.</summary>
-    event Func<MessageEntity, Task>? DraftSent;
+
     /// <summary>Resets the content area to the home screen.</summary>
     void ShowHome();
     /// <summary>Loads and displays the full entry ViewModel for the given entry item.</summary>
@@ -22,75 +24,77 @@ public interface IContentAreaViewModel
 /// <summary>ViewModel for the main content area that displays the active entry or home screen.</summary>
 public sealed partial class ContentAreaViewModel : ObservableObject, IContentAreaViewModel
 {
-    private readonly IEntryService _entryService;
-    private readonly IServiceConnection _connection;
-    private readonly IMessageRepository _messages;
-    private readonly IDraftRepository _drafts;
-    private readonly INoteRepository _notes;
-    private readonly IActivityLogRepository _activityLogs;
-    private readonly IMessageFormat _messageFormat;
-    private readonly IAlertSettings _alertSettings;
-    private readonly IMessageComposition _messageComposition;
-    private readonly ILoggerFactory _loggerFactory;
-
-    [ObservableProperty] private object? _activeContent;
-    [ObservableProperty] private bool _isHomeVisible = true;
-
-    /// <summary>Raised when a draft is successfully sent and produces a message entity.</summary>
-    public event Func<MessageEntity, Task>? DraftSent;
-    /// <summary>Gets the welcome text supplied by the host's home content provider.</summary>
-    public string HomeText { get; }
+    private static ObjectId? TryParseObjectId(string id)
+    {
+        try { return new ObjectId(id); }
+        catch { return null; }
+    }
 
     /// <summary>Initializes a new <see cref="ContentAreaViewModel"/> with the required repositories and services.</summary>
-    /// <param name="appSettings">Provides the home screen welcome text.</param>
+    /// <param name="engineController">Provides the home screen welcome text, the shared alert label text, whether the alert checkbox is shown, and message composition settings.</param>
     /// <param name="entryService">Entry service for save and send operations.</param>
     /// <param name="connection">Service connection for delivery status events.</param>
     /// <param name="messages">Repository for loading message entries.</param>
     /// <param name="drafts">Repository for loading draft entries.</param>
     /// <param name="notes">Repository for loading note entries.</param>
     /// <param name="activityLogs">Repository for loading activity log entries.</param>
-    /// <param name="messageFormat">Maps logical fields onto a message entity's stored message.</param>
-    /// <param name="alertSettings">Provides the shared alert label text and whether the alert checkbox is shown.</param>
-    /// <param name="messageComposition">Provides the available message priority levels, tag input visibility/label, and blocked tag/priority combinations enforced on send.</param>
     /// <param name="loggerFactory">Factory for creating named loggers.</param>
     public ContentAreaViewModel(
-        IAppSettings appSettings,
+        IEngineController engineController,
         IEntryService entryService,
         IServiceConnection connection,
         IMessageRepository messages,
         IDraftRepository drafts,
         INoteRepository notes,
         IActivityLogRepository activityLogs,
-        IMessageFormat messageFormat,
-        IAlertSettings alertSettings,
-        IMessageComposition messageComposition,
         ILoggerFactory loggerFactory)
     {
-        _entryService = entryService;
-        _connection = connection;
-        _messages = messages;
-        _drafts = drafts;
-        _notes = notes;
-        _activityLogs = activityLogs;
-        _messageFormat = messageFormat;
-        _alertSettings = alertSettings;
-        _messageComposition = messageComposition;
-        _loggerFactory = loggerFactory;
-        HomeText = appSettings.GetHomeText();
+        this.entryService = entryService;
+        this.connection = connection;
+        this.messages = messages;
+        this.drafts = drafts;
+        this.notes = notes;
+        this.activityLogs = activityLogs;
+        this.engineController = engineController;
+        this.loggerFactory = loggerFactory;
+        HomeText = engineController.HomeText;
         connection.DeliveryStatusChanged += OnDeliveryStatusChanged;
     }
+
+    private readonly IEntryService entryService;
+    private readonly IServiceConnection connection;
+    private readonly IMessageRepository messages;
+    private readonly IDraftRepository drafts;
+    private readonly INoteRepository notes;
+    private readonly IActivityLogRepository activityLogs;
+    private readonly IEngineController engineController;
+    private readonly ILoggerFactory loggerFactory;
+
+    [ObservableProperty] private object? activeContent;
+    [ObservableProperty] private bool isHomeVisible = true;
+
+    /// <summary>Raised when a draft is successfully sent and produces a message entity.</summary>
+    public event Func<MessageEntity, Task>? DraftSent;
+    /// <summary>Gets the welcome text supplied by the host's home content provider.</summary>
+    public string HomeText { get; }
 
     private Task OnDeliveryStatusChanged(DeliveryStatusChangedEvent evt)
     {
         if (ActiveContent is not IMessageViewModel msgVm || msgVm.MessageId != evt.MessageId)
+        {
             return Task.CompletedTask;
+        }
 
         // An empty UserName marks a local read-status notification for this user's own Inbox record
         // (see DirectServiceConnection.MarkMessageRead), not a remote destination's delivery status.
         if (string.IsNullOrEmpty(evt.UserName))
+        {
             msgVm.ReadStatus = evt.Status;
+        }
         else
+        {
             msgVm.UpdateDeliveryStatus(evt.UserName, evt.Status);
+        }
         return Task.CompletedTask;
     }
 
@@ -129,34 +133,36 @@ public sealed partial class ContentAreaViewModel : ObservableObject, IContentAre
 
     private async Task<MessageViewModel?> BuildMessageViewModel(string id, bool isOutboundMessage)
     {
-        MessageEntity? entity = await _messages.Get(id, isOutboundMessage);
-        if (entity is null) return null;
+        MessageEntity? entity = await messages.Get(id, isOutboundMessage);
+        if (entity is null) { return null; }
 
         if (!entity.IsOutbound && entity.ReadStatus == DestinationStatus.Received)
         {
             try
             {
-                if (await _connection.MarkMessageRead(entity.MessageId))
+                if (await connection.MarkMessageRead(entity.MessageId))
+                {
                     entity.ReadStatus = DestinationStatus.Read;
+                }
             }
             catch { }
         }
 
-        return new MessageViewModel(entity, _messageFormat);
+        return new MessageViewModel(entity, engineController);
     }
 
     private async Task<DraftViewModel?> BuildDraftViewModel(string id)
     {
         ObjectId? oid = TryParseObjectId(id);
-        if (oid is null) return null;
-        DraftEntity? entity = await _drafts.Get(oid);
-        if (entity is null) return null;
-        List<string> userNames = await _connection.GetUserNames();
-        DraftViewModel vm = new(entity, _entryService, _connection, userNames, _loggerFactory, _alertSettings, _messageComposition);
+        if (oid is null) { return null; }
+        DraftEntity? entity = await drafts.Get(oid);
+        if (entity is null) { return null; }
+        List<string> userNames = await connection.GetUserNames();
+        DraftViewModel vm = new(entity, entryService, connection, userNames, loggerFactory, engineController);
         vm.DraftSent += async (IDraftViewModel _, MessageEntity msg) =>
         {
-            ShowEntry(new MessageViewModel(msg, _messageFormat));
-            if (DraftSent is not null) await DraftSent(msg);
+            ShowEntry(new MessageViewModel(msg, engineController));
+            if (DraftSent is not null) { await DraftSent(msg); }
         };
         return vm;
     }
@@ -164,22 +170,16 @@ public sealed partial class ContentAreaViewModel : ObservableObject, IContentAre
     private async Task<NoteViewModel?> BuildNoteViewModel(string id)
     {
         ObjectId? oid = TryParseObjectId(id);
-        if (oid is null) return null;
-        NoteEntity? entity = await _notes.Get(oid);
-        return entity is null ? null : new NoteViewModel(entity, _entryService);
+        if (oid is null) { return null; }
+        NoteEntity? entity = await notes.Get(oid);
+        return entity is null ? null : new NoteViewModel(entity, entryService);
     }
 
     private async Task<ActivityLogViewModel?> BuildActivityLogViewModel(string id)
     {
         ObjectId? oid = TryParseObjectId(id);
-        if (oid is null) return null;
-        ActivityLogEntity? entity = await _activityLogs.Get(oid);
+        if (oid is null) { return null; }
+        ActivityLogEntity? entity = await activityLogs.Get(oid);
         return entity is null ? null : new ActivityLogViewModel(entity);
-    }
-
-    private static ObjectId? TryParseObjectId(string id)
-    {
-        try { return new ObjectId(id); }
-        catch { return null; }
     }
 }

@@ -11,8 +11,6 @@ public sealed class InstallViewModelTests
         EnvironmentColor = "#FF0000"
     };
 
-    // ── Validation ────────────────────────────────────────────────────────────
-
     /// <summary>Empty UserCode sets ErrorMessage without calling the service.</summary>
     [Fact]
     public async Task Install_EmptyUserCode_SetsErrorMessage()
@@ -26,8 +24,6 @@ public sealed class InstallViewModelTests
         Assert.NotNull(vm.ErrorMessage);
         connMock.Verify(c => c.InstallUser(It.IsAny<string>(), It.IsAny<CancellationToken>()), Times.Never);
     }
-
-    // ── Success ───────────────────────────────────────────────────────────────
 
     /// <summary>Valid code fires InstallSucceeded with the returned UserInfo.</summary>
     [Fact]
@@ -48,8 +44,6 @@ public sealed class InstallViewModelTests
         Assert.Null(vm.ErrorMessage);
     }
 
-    // ── Invalid code ──────────────────────────────────────────────────────────
-
     /// <summary>Unrecognised code (null result) sets ErrorMessage and does not fire event.</summary>
     [Fact]
     public async Task Install_InvalidCode_SetsErrorMessage()
@@ -68,8 +62,6 @@ public sealed class InstallViewModelTests
         Assert.False(eventFired);
     }
 
-    // ── IsLoading lifecycle ───────────────────────────────────────────────────
-
     /// <summary>IsLoading is true during install and false after completion.</summary>
     [Fact]
     public async Task Install_IsLoadingLifecycle()
@@ -87,8 +79,6 @@ public sealed class InstallViewModelTests
         await installTask;
         Assert.False(vm.IsLoading);
     }
-
-    // ── Auto-uppercase ────────────────────────────────────────────────────────
 
     /// <summary>UserCode is automatically uppercased when set.</summary>
     [Fact]

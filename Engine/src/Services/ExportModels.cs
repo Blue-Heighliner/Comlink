@@ -30,9 +30,9 @@ public sealed record MessageExportData
     public required DateTime SentAt { get; init; }
     /// <summary>Whether this message was sent as an alert.</summary>
     public required bool IsAlert { get; init; }
-    /// <summary>Priority number of this message; see <see cref="Control.IMessageFormat.GetPriority"/>.</summary>
+    /// <summary>Priority number of this message; see <see cref="Control.IEngineController.GetPriority"/>.</summary>
     public required int Priority { get; init; }
-    /// <summary>Tag identifying the type of this message; see <see cref="Control.IMessageFormat.GetTag"/>.</summary>
+    /// <summary>Tag identifying the type of this message; see <see cref="Control.IEngineController.GetTag"/>.</summary>
     public required string Tag { get; init; }
     /// <summary>UTC timestamp when this record was received or created.</summary>
     public required DateTime ReceivedAt { get; init; }
@@ -57,9 +57,9 @@ public sealed record DraftExportData
     public required bool IsSent { get; init; }
     /// <summary>Whether this draft is marked to send as an alert.</summary>
     public required bool IsAlert { get; init; }
-    /// <summary>Priority number this draft should be sent at; see <see cref="Control.IMessageFormat.GetPriority"/>.</summary>
+    /// <summary>Priority number this draft should be sent at; see <see cref="Control.IEngineController.GetPriority"/>.</summary>
     public required int Priority { get; init; }
-    /// <summary>Tag identifying the type of this draft; see <see cref="Control.IMessageFormat.GetTag"/>.</summary>
+    /// <summary>Tag identifying the type of this draft; see <see cref="Control.IEngineController.GetTag"/>.</summary>
     public required string Tag { get; init; }
     /// <summary>UTC timestamp when the draft was sent, or <see langword="null"/> if not yet sent.</summary>
     public DateTime? SentAt { get; init; }

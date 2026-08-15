@@ -32,21 +32,6 @@ public interface IFillInViewModel
 /// <summary>ViewModel for a fill-in field embedded in a draft body, managing options and selection state.</summary>
 public sealed partial class FillInViewModel : ObservableObject, IFillInViewModel
 {
-    /// <summary>Gets the unique 8-character hex identifier for this fill-in.</summary>
-    public string Id { get; }
-
-    /// <summary>Gets the ordered list of option ViewModels for this fill-in.</summary>
-    public ObservableCollection<FillInOptionViewModel> Options { get; } = [];
-
-    [ObservableProperty] private bool _isPopupOpen;
-    [ObservableProperty] private string _newOption = string.Empty;
-
-    /// <summary>Gets the value of the currently selected option, or <see langword="null"/> if none is selected.</summary>
-    public string? SelectedOption => Options.FirstOrDefault(o => o.IsSelected)?.Value;
-
-    /// <summary>Gets the text to show for this fill-in: the selected option value or a blank placeholder.</summary>
-    public string DisplayText => SelectedOption ?? "______";
-
     /// <summary>Initializes a new fill-in with a generated GUID identifier and no options.</summary>
     public FillInViewModel()
     {
@@ -58,14 +43,33 @@ public sealed partial class FillInViewModel : ObservableObject, IFillInViewModel
     {
         Id = id;
         foreach (string opt in options)
+        {
             Options.Add(new FillInOptionViewModel(opt, opt == selected));
+        }
     }
+
+    /// <summary>Gets the unique 8-character hex identifier for this fill-in.</summary>
+    public string Id { get; }
+
+    /// <summary>Gets the ordered list of option ViewModels for this fill-in.</summary>
+    public ObservableCollection<FillInOptionViewModel> Options { get; } = [];
+
+    [ObservableProperty] private bool isPopupOpen;
+    [ObservableProperty] private string newOption = string.Empty;
+
+    /// <summary>Gets the value of the currently selected option, or <see langword="null"/> if none is selected.</summary>
+    public string? SelectedOption => Options.FirstOrDefault(o => o.IsSelected)?.Value;
+
+    /// <summary>Gets the text to show for this fill-in: the selected option value or a blank placeholder.</summary>
+    public string DisplayText => SelectedOption ?? "______";
 
     [RelayCommand]
     private void SelectOption(string value)
     {
         foreach (FillInOptionViewModel opt in Options)
+        {
             opt.IsSelected = opt.Value == value && !opt.IsSelected;
+        }
 
         OnPropertyChanged(nameof(SelectedOption));
         OnPropertyChanged(nameof(DisplayText));
@@ -75,7 +79,7 @@ public sealed partial class FillInViewModel : ObservableObject, IFillInViewModel
     private void RemoveOption(string value)
     {
         FillInOptionViewModel? opt = Options.FirstOrDefault(o => o.Value == value);
-        if (opt is null) return;
+        if (opt is null) { return; }
         Options.Remove(opt);
         OnPropertyChanged(nameof(SelectedOption));
         OnPropertyChanged(nameof(DisplayText));
@@ -85,7 +89,7 @@ public sealed partial class FillInViewModel : ObservableObject, IFillInViewModel
     private void AddOption()
     {
         string trimmed = NewOption.Trim();
-        if (string.IsNullOrEmpty(trimmed)) return;
+        if (string.IsNullOrEmpty(trimmed)) { return; }
         Options.Add(new FillInOptionViewModel(trimmed));
         NewOption = string.Empty;
     }
@@ -94,9 +98,9 @@ public sealed partial class FillInViewModel : ObservableObject, IFillInViewModel
     private void MoveOptionUp(string value)
     {
         FillInOptionViewModel? item = Options.FirstOrDefault(o => o.Value == value);
-        if (item is null) return;
+        if (item is null) { return; }
         int idx = Options.IndexOf(item);
-        if (idx <= 0) return;
+        if (idx <= 0) { return; }
         Options.RemoveAt(idx);
         Options.Insert(idx - 1, item);
     }
@@ -105,9 +109,9 @@ public sealed partial class FillInViewModel : ObservableObject, IFillInViewModel
     private void MoveOptionDown(string value)
     {
         FillInOptionViewModel? item = Options.FirstOrDefault(o => o.Value == value);
-        if (item is null) return;
+        if (item is null) { return; }
         int idx = Options.IndexOf(item);
-        if (idx < 0 || idx >= Options.Count - 1) return;
+        if (idx < 0 || idx >= Options.Count - 1) { return; }
         Options.RemoveAt(idx);
         Options.Insert(idx + 1, item);
     }

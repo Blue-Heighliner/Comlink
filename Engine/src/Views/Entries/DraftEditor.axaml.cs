@@ -4,7 +4,36 @@ namespace BlueHeighliner.Comlink.Engine.Views.Entries;
 [ExcludeFromCodeCoverage]
 public partial class DraftEditor : UserControl
 {
-    private FillInElementGenerator? _fillInGenerator;
+    private static IFillInViewModel? GetActiveFillIn(IDraftViewModel? vm)
+        => vm?.FillIns.Values.FirstOrDefault(f => f.IsPopupOpen);
+
+    /// <summary>
+    /// Finds the longest phonetic word (see <see cref="PhoneticAlphabet"/>) ending exactly at
+    /// <paramref name="caret"/>, if any — checked against the raw document text regardless of how it
+    /// got there (typed via PLSO, pasted, etc.), per PLSO's whole-word backspace behavior.
+    /// </summary>
+    private static bool TryFindPhoneticWordBeforeCaret(TextDocument doc, int caret, out int wordLength)
+    {
+        foreach (int length in PhoneticAlphabet.Lengths)
+        {
+            if (caret - length < 0) { continue; }
+            if (PhoneticAlphabet.IsWord(doc.GetText(caret - length, length)))
+            {
+                wordLength = length;
+                return true;
+            }
+        }
+        wordLength = 0;
+        return false;
+    }
+
+    private static void OnUserInputTextInput(object? sender, TextInputEventArgs e)
+    {
+        if (e.Text is not null)
+        {
+            e.Text = e.Text.ToUpperInvariant();
+        }
+    }
 
     /// <summary>Initializes the control, loads the AXAML layout, and wires up input handlers.</summary>
     public DraftEditor()
@@ -24,23 +53,25 @@ public partial class DraftEditor : UserControl
         DataContextChanged += OnDataContextChanged;
     }
 
+    private FillInElementGenerator? fillInGenerator;
+
     private void OnDataContextChanged(object? sender, EventArgs e)
     {
-        if (_fillInGenerator is not null)
+        if (fillInGenerator is not null)
         {
-            BodyEditor.TextArea.TextView.ElementGenerators.Remove(_fillInGenerator);
+            BodyEditor.TextArea.TextView.ElementGenerators.Remove(fillInGenerator);
             BodyEditor.TextArea.RemoveHandler(InputElement.KeyDownEvent, OnBodyEditorKeyDown);
             BodyEditor.TextArea.RemoveHandler(InputElement.TextInputEvent, OnBodyEditorTextInput);
-            _fillInGenerator = null;
+            fillInGenerator = null;
         }
 
-        if (DataContext is not IDraftViewModel vm) return;
+        if (DataContext is not IDraftViewModel vm) { return; }
 
         // Set document explicitly — AXAML binding alone can miss timing edge cases
         BodyEditor.Document = ((TextDocumentBodyDocument)vm.BodyDocument).Document;
 
-        _fillInGenerator = new FillInElementGenerator(vm.FillIns);
-        BodyEditor.TextArea.TextView.ElementGenerators.Add(_fillInGenerator);
+        fillInGenerator = new FillInElementGenerator(vm.FillIns);
+        BodyEditor.TextArea.TextView.ElementGenerators.Add(fillInGenerator);
         // Tunnel priority ensures our handlers fire before AvaloniaEdit's own input handling
         BodyEditor.TextArea.AddHandler(InputElement.KeyDownEvent, OnBodyEditorKeyDown, RoutingStrategies.Tunnel);
         BodyEditor.TextArea.AddHandler(InputElement.TextInputEvent, OnBodyEditorTextInput, RoutingStrategies.Tunnel);
@@ -56,9 +87,6 @@ public partial class DraftEditor : UserControl
         BodyEditor.FontFamily = monoFont;
         BodyEditor.TextArea.FontFamily = monoFont;
     }
-
-    private static IFillInViewModel? GetActiveFillIn(IDraftViewModel? vm) =>
-        vm?.FillIns.Values.FirstOrDefault(f => f.IsPopupOpen);
 
     private void OnBodyEditorTextInput(object? sender, TextInputEventArgs e)
     {
@@ -78,7 +106,9 @@ public partial class DraftEditor : UserControl
         // PLSO (Phonetic Language Spell Out): substitute a single typed letter or digit with its
         // phonetic word instead of inserting the character itself.
         if (vm is not { PlsoMode: not PlsoMode.Off } || e.Text is not { Length: 1 } text || !PhoneticAlphabet.TryGetWord(text[0], out string word))
+        {
             return;
+        }
 
         TextDocument doc = BodyEditor.Document;
         int caret = BodyEditor.CaretOffset;
@@ -86,26 +116,6 @@ public partial class DraftEditor : UserControl
         doc.Insert(caret, insertion);
         BodyEditor.CaretOffset = caret + insertion.Length;
         e.Handled = true;
-    }
-
-    /// <summary>
-    /// Finds the longest phonetic word (see <see cref="PhoneticAlphabet"/>) ending exactly at
-    /// <paramref name="caret"/>, if any — checked against the raw document text regardless of how it
-    /// got there (typed via PLSO, pasted, etc.), per PLSO's whole-word backspace behavior.
-    /// </summary>
-    private static bool TryFindPhoneticWordBeforeCaret(TextDocument doc, int caret, out int wordLength)
-    {
-        foreach (int length in PhoneticAlphabet.Lengths)
-        {
-            if (caret - length < 0) continue;
-            if (PhoneticAlphabet.IsWord(doc.GetText(caret - length, length)))
-            {
-                wordLength = length;
-                return true;
-            }
-        }
-        wordLength = 0;
-        return false;
     }
 
     private void OnBodyEditorKeyDown(object? sender, KeyEventArgs e)
@@ -121,14 +131,18 @@ public partial class DraftEditor : UserControl
             if (e.Key == Key.Back)
             {
                 if (activeFillIn.NewOption.Length > 0)
+                {
                     activeFillIn.NewOption = activeFillIn.NewOption[..^1];
+                }
                 e.Handled = true;
                 return;
             }
             if (e.Key is Key.Return or Key.Enter)
             {
                 if (activeFillIn.AddOptionCommand.CanExecute(null))
+                {
                     activeFillIn.AddOptionCommand.Execute(null);
+                }
                 e.Handled = true;
                 return;
             }
@@ -176,22 +190,18 @@ public partial class DraftEditor : UserControl
         }
     }
 
-    private static void OnUserInputTextInput(object? sender, TextInputEventArgs e)
-    {
-        if (e.Text is not null)
-            e.Text = e.Text.ToUpperInvariant();
-    }
-
     private void OnUserInputKeyDown(object? sender, KeyEventArgs e)
     {
-        if (e.Key != Key.Return) return;
+        if (e.Key != Key.Return) { return; }
         if (DataContext is IDraftViewModel vm && vm.AddAddressCommand.CanExecute(null))
+        {
             vm.AddAddressCommand.Execute(null);
+        }
     }
 
     private void OnAddFillInClick(object? sender, RoutedEventArgs e)
     {
-        if (DataContext is not IDraftViewModel vm) return;
+        if (DataContext is not IDraftViewModel vm) { return; }
         int offset = BodyEditor.CaretOffset;
         vm.InsertFillIn(offset);
         BodyEditor.CaretOffset = offset + FillInElementGenerator.MarkerLength;
@@ -200,7 +210,7 @@ public partial class DraftEditor : UserControl
 
     private void OnPlsoButtonClick(object? sender, RoutedEventArgs e)
     {
-        if (DataContext is not IDraftViewModel vm) return;
+        if (DataContext is not IDraftViewModel vm) { return; }
         vm.PlsoMode = vm.PlsoMode switch
         {
             PlsoMode.Off => PlsoMode.On,

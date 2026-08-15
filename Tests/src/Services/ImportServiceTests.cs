@@ -7,78 +7,77 @@ namespace BlueHeighliner.Comlink.Tests.Services;
 /// </summary>
 public sealed class ImportServiceTests : IDisposable
 {
-    private static readonly IMessageFormat MessageFormat = new TestMessageFormat();
-
-    private readonly string _sourceAppName = Guid.NewGuid().ToString();
-    private readonly string _destAppName = Guid.NewGuid().ToString();
-    private readonly string _packageDir = Path.Combine(Path.GetTempPath(), $"comlink-import-tests-{Guid.NewGuid():N}");
-    private readonly LiteDbContext _sourceCtx;
-    private readonly LiteDbContext _destCtx;
-    private readonly MessageRepository _sourceMessages;
-    private readonly DraftRepository _sourceDrafts;
-    private readonly NoteRepository _sourceNotes;
-    private readonly ActivityLogRepository _sourceActivityLogs;
-    private readonly MessageRepository _destMessages;
-    private readonly DraftRepository _destDrafts;
-    private readonly NoteRepository _destNotes;
-    private readonly ActivityLogRepository _destActivityLogs;
-    private readonly FolderRepository _destFolders;
-    private readonly ExportService _export;
-    private readonly ImportService _import;
+    private static Task<DraftNoteConflictResolution> NeverAsked(ImportConflict conflict)
+        => throw new InvalidOperationException($"Unexpected conflict prompt for {conflict.EntryType} '{conflict.Name}'");
 
     /// <summary>Initializes two fresh isolated LiteDB databases (source and destination) and a temp package directory.</summary>
     public ImportServiceTests()
     {
-        _sourceCtx = new LiteDbContext(new TestAppDataPathProvider(_sourceAppName));
-        _sourceCtx.Initialize();
-        _sourceMessages = new MessageRepository(_sourceCtx);
-        _sourceDrafts = new DraftRepository(_sourceCtx);
-        _sourceNotes = new NoteRepository(_sourceCtx);
-        _sourceActivityLogs = new ActivityLogRepository(_sourceCtx);
-        _export = new ExportService(_sourceMessages, _sourceDrafts, _sourceNotes, _sourceActivityLogs, MessageFormat);
+        sourceCtx = new LiteDbContext(new TestAppDataPathProvider(sourceAppName));
+        sourceCtx.Initialize();
+        sourceMessages = new MessageRepository(sourceCtx);
+        sourceDrafts = new DraftRepository(sourceCtx);
+        sourceNotes = new NoteRepository(sourceCtx);
+        sourceActivityLogs = new ActivityLogRepository(sourceCtx);
+        export = new ExportService(sourceMessages, sourceDrafts, sourceNotes, sourceActivityLogs, messageFormat);
 
-        _destCtx = new LiteDbContext(new TestAppDataPathProvider(_destAppName));
-        _destCtx.Initialize();
-        _destMessages = new MessageRepository(_destCtx);
-        _destDrafts = new DraftRepository(_destCtx);
-        _destNotes = new NoteRepository(_destCtx);
-        _destActivityLogs = new ActivityLogRepository(_destCtx);
-        _destFolders = new FolderRepository(_destCtx);
-        _import = new ImportService(_destMessages, _destDrafts, _destNotes, _destActivityLogs, _destFolders, MessageFormat);
+        destCtx = new LiteDbContext(new TestAppDataPathProvider(destAppName));
+        destCtx.Initialize();
+        destMessages = new MessageRepository(destCtx);
+        destDrafts = new DraftRepository(destCtx);
+        destNotes = new NoteRepository(destCtx);
+        destActivityLogs = new ActivityLogRepository(destCtx);
+        destFolders = new FolderRepository(destCtx);
+        import = new ImportService(destMessages, destDrafts, destNotes, destActivityLogs, destFolders, messageFormat);
 
-        Directory.CreateDirectory(_packageDir);
+        Directory.CreateDirectory(packageDir);
     }
+
+    private readonly IEngineController messageFormat = new TestEngineController();
+    private readonly string sourceAppName = Guid.NewGuid().ToString();
+    private readonly string destAppName = Guid.NewGuid().ToString();
+    private readonly string packageDir = Path.Combine(Path.GetTempPath(), $"comlink-import-tests-{Guid.NewGuid():N}");
+    private readonly LiteDbContext sourceCtx;
+    private readonly LiteDbContext destCtx;
+    private readonly MessageRepository sourceMessages;
+    private readonly DraftRepository sourceDrafts;
+    private readonly NoteRepository sourceNotes;
+    private readonly ActivityLogRepository sourceActivityLogs;
+    private readonly MessageRepository destMessages;
+    private readonly DraftRepository destDrafts;
+    private readonly NoteRepository destNotes;
+    private readonly ActivityLogRepository destActivityLogs;
+    private readonly FolderRepository destFolders;
+    private readonly ExportService export;
+    private readonly ImportService import;
 
     /// <inheritdoc />
     public void Dispose()
     {
-        _sourceCtx.Dispose();
-        _destCtx.Dispose();
+        sourceCtx.Dispose();
+        destCtx.Dispose();
         string appData = Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData);
-        foreach (string appName in new[] { _sourceAppName, _destAppName })
+        foreach (string appName in new[] { sourceAppName, destAppName })
         {
             string dir = Path.Combine(appData, appName);
-            if (Directory.Exists(dir)) Directory.Delete(dir, recursive: true);
+            if (Directory.Exists(dir)) { Directory.Delete(dir, recursive: true); }
         }
-        if (Directory.Exists(_packageDir)) Directory.Delete(_packageDir, recursive: true);
+        if (Directory.Exists(packageDir)) { Directory.Delete(packageDir, recursive: true); }
     }
-
-    private static Task<DraftNoteConflictResolution> NeverAsked(ImportConflict conflict) =>
-        throw new InvalidOperationException($"Unexpected conflict prompt for {conflict.EntryType} '{conflict.Name}'");
 
     private async Task<string> BuildPackage(params ExportEntryRef[] refs)
     {
-        string path = Path.Combine(_packageDir, $"{Guid.NewGuid():N}{IExportService.PackageExtension}");
-        await _export.Export(refs, path);
+        string path = Path.Combine(packageDir, $"{Guid.NewGuid():N}{IExportService.PackageExtension}");
+        await export.Export(refs, path);
         return path;
     }
 
     private async Task<MessageEntity> InsertSourceMessage(string messageId, string subject, bool isOutbound, DateTime? receivedAt = null, int priority = 0)
     {
-        object message = MessageFormat.CreateMessage();
-        MessageFormat.SetMessageId(message, messageId);
-        MessageFormat.SetSubject(message, subject);
-        MessageFormat.SetPriority(message, priority);
+        object message = messageFormat.CreateMessage();
+        messageFormat.SetMessageId(message, messageId);
+        messageFormat.SetSubject(message, subject);
+        messageFormat.SetPriority(message, priority);
         MessageEntity entity = new()
         {
             MessageId = messageId,
@@ -87,28 +86,26 @@ public sealed class ImportServiceTests : IDisposable
             IsOutbound = isOutbound,
             ReceivedAt = receivedAt ?? DateTime.UtcNow
         };
-        await _sourceMessages.Insert(entity);
+        await sourceMessages.Insert(entity);
         return entity;
     }
-
-    // ── GetPackages ──────────────────────────────────────────────────────────
 
     /// <summary>GetPackages returns an empty list for a directory with no export packages.</summary>
     [Fact]
     public void GetPackages_NoPackages_ReturnsEmpty()
     {
-        Assert.Empty(_import.GetPackages(_packageDir));
+        Assert.Empty(import.GetPackages(packageDir));
     }
 
     /// <summary>GetPackages finds only files ending in the export package extension, ignoring plain zips and other files.</summary>
     [Fact]
     public async Task GetPackages_FindsOnlyExportPackages()
     {
-        await File.WriteAllTextAsync(Path.Combine(_packageDir, "notes.txt"), "hello");
-        await File.WriteAllTextAsync(Path.Combine(_packageDir, "plain.zip"), "not a package");
+        await File.WriteAllTextAsync(Path.Combine(packageDir, "notes.txt"), "hello");
+        await File.WriteAllTextAsync(Path.Combine(packageDir, "plain.zip"), "not a package");
         string packagePath = await BuildPackage();
 
-        IReadOnlyList<ImportPackageInfo> packages = _import.GetPackages(_packageDir);
+        IReadOnlyList<ImportPackageInfo> packages = import.GetPackages(packageDir);
 
         ImportPackageInfo found = Assert.Single(packages);
         Assert.Equal(Path.GetFileName(packagePath), found.FileName);
@@ -119,10 +116,8 @@ public sealed class ImportServiceTests : IDisposable
     [Fact]
     public void GetPackages_NonexistentDirectory_ReturnsEmpty()
     {
-        Assert.Empty(_import.GetPackages(Path.Combine(_packageDir, "does-not-exist")));
+        Assert.Empty(import.GetPackages(Path.Combine(packageDir, "does-not-exist")));
     }
-
-    // ── Message import ───────────────────────────────────────────────────────
 
     /// <summary>A message with no existing counterpart in the destination is inserted.</summary>
     [Fact]
@@ -131,14 +126,14 @@ public sealed class ImportServiceTests : IDisposable
         await InsertSourceMessage("M1", "Hello", isOutbound: false, priority: 2);
         string package = await BuildPackage(new ExportEntryRef { Id = "M1", EntryType = EntryType.Message });
 
-        ImportSummary summary = await _import.Import(package, NeverAsked);
+        ImportSummary summary = await import.Import(package, NeverAsked);
 
         Assert.Equal(1, summary.Imported);
         Assert.Equal(0, summary.Skipped);
-        MessageEntity? imported = await _destMessages.Get("M1", outbound: false);
+        MessageEntity? imported = await destMessages.Get("M1", outbound: false);
         Assert.NotNull(imported);
-        Assert.Equal("Hello", MessageFormat.GetSubject(imported.Message));
-        Assert.Equal(2, MessageFormat.GetPriority(imported.Message));
+        Assert.Equal("Hello", messageFormat.GetSubject(imported.Message));
+        Assert.Equal(2, messageFormat.GetPriority(imported.Message));
     }
 
     /// <summary>A message matching an existing message's ID, direction, and date is skipped.</summary>
@@ -149,16 +144,16 @@ public sealed class ImportServiceTests : IDisposable
         await InsertSourceMessage("M1", "Source Version", isOutbound: false, receivedAt);
         string package = await BuildPackage(new ExportEntryRef { Id = "M1", EntryType = EntryType.Message });
 
-        await _destMessages.Insert(new MessageEntity
+        await destMessages.Insert(new MessageEntity
         {
             MessageId = "M1",
-            Message = MessageFormat.CreateMessage(),
+            Message = messageFormat.CreateMessage(),
             FolderId = "root-inbox",
             IsOutbound = false,
             ReceivedAt = receivedAt
         });
 
-        ImportSummary summary = await _import.Import(package, NeverAsked);
+        ImportSummary summary = await import.Import(package, NeverAsked);
 
         Assert.Equal(0, summary.Imported);
         Assert.Equal(1, summary.Skipped);
@@ -174,24 +169,22 @@ public sealed class ImportServiceTests : IDisposable
             new ExportEntryRef { Id = "M1", EntryType = EntryType.Message, IsOutboundMessage = false },
             new ExportEntryRef { Id = "M1", EntryType = EntryType.Message, IsOutboundMessage = true });
 
-        ImportSummary summary = await _import.Import(package, NeverAsked);
+        ImportSummary summary = await import.Import(package, NeverAsked);
 
         Assert.Equal(2, summary.Imported);
     }
-
-    // ── Draft import / conflicts ─────────────────────────────────────────────
 
     /// <summary>A draft with no existing entry of the same subject is inserted.</summary>
     [Fact]
     public async Task Import_NewDraft_IsInserted()
     {
-        DraftEntity source = await _sourceDrafts.Insert(new DraftEntity { Subject = "Plan", Body = "Body", FolderId = "root-drafts", Priority = 2 });
+        DraftEntity source = await sourceDrafts.Insert(new DraftEntity { Subject = "Plan", Body = "Body", FolderId = "root-drafts", Priority = 2 });
         string package = await BuildPackage(new ExportEntryRef { Id = source.Id.ToString(), EntryType = EntryType.Draft });
 
-        ImportSummary summary = await _import.Import(package, NeverAsked);
+        ImportSummary summary = await import.Import(package, NeverAsked);
 
         Assert.Equal(1, summary.Imported);
-        DraftEntity? imported = (await _destDrafts.GetAll()).SingleOrDefault(d => d.Subject == "Plan");
+        DraftEntity? imported = (await destDrafts.GetAll()).SingleOrDefault(d => d.Subject == "Plan");
         Assert.NotNull(imported);
         Assert.Equal("Body", imported.Body);
         Assert.Equal(2, imported.Priority);
@@ -201,16 +194,16 @@ public sealed class ImportServiceTests : IDisposable
     [Fact]
     public async Task Import_DraftConflict_KeepExisting_PreservesExistingContent()
     {
-        DraftEntity source = await _sourceDrafts.Insert(new DraftEntity { Subject = "Plan", Body = "New", FolderId = "root-drafts" });
+        DraftEntity source = await sourceDrafts.Insert(new DraftEntity { Subject = "Plan", Body = "New", FolderId = "root-drafts" });
         string package = await BuildPackage(new ExportEntryRef { Id = source.Id.ToString(), EntryType = EntryType.Draft });
-        DraftEntity existing = await _destDrafts.Insert(new DraftEntity { Subject = "Plan", Body = "Old", FolderId = "root-drafts" });
+        DraftEntity existing = await destDrafts.Insert(new DraftEntity { Subject = "Plan", Body = "Old", FolderId = "root-drafts" });
 
-        ImportSummary summary = await _import.Import(package, _ => Task.FromResult(DraftNoteConflictResolution.KeepExisting));
+        ImportSummary summary = await import.Import(package, _ => Task.FromResult(DraftNoteConflictResolution.KeepExisting));
 
         Assert.Equal(0, summary.Imported);
         Assert.Equal(1, summary.Skipped);
         Assert.Equal(0, summary.Overwritten);
-        DraftEntity? found = await _destDrafts.Get(existing.Id);
+        DraftEntity? found = await destDrafts.Get(existing.Id);
         Assert.Equal("Old", found!.Body);
     }
 
@@ -218,15 +211,15 @@ public sealed class ImportServiceTests : IDisposable
     [Fact]
     public async Task Import_DraftConflict_Overwrite_ReplacesContent()
     {
-        DraftEntity source = await _sourceDrafts.Insert(new DraftEntity { Subject = "Plan", Body = "New", FolderId = "root-drafts", Priority = 3 });
+        DraftEntity source = await sourceDrafts.Insert(new DraftEntity { Subject = "Plan", Body = "New", FolderId = "root-drafts", Priority = 3 });
         string package = await BuildPackage(new ExportEntryRef { Id = source.Id.ToString(), EntryType = EntryType.Draft });
-        DraftEntity existing = await _destDrafts.Insert(new DraftEntity { Subject = "Plan", Body = "Old", FolderId = "root-drafts", Priority = 0 });
+        DraftEntity existing = await destDrafts.Insert(new DraftEntity { Subject = "Plan", Body = "Old", FolderId = "root-drafts", Priority = 0 });
 
-        ImportSummary summary = await _import.Import(package, _ => Task.FromResult(DraftNoteConflictResolution.Overwrite));
+        ImportSummary summary = await import.Import(package, _ => Task.FromResult(DraftNoteConflictResolution.Overwrite));
 
         Assert.Equal(0, summary.Imported);
         Assert.Equal(1, summary.Overwritten);
-        DraftEntity? found = await _destDrafts.Get(existing.Id);
+        DraftEntity? found = await destDrafts.Get(existing.Id);
         Assert.Equal("New", found!.Body);
         Assert.Equal(existing.Id, found.Id);
         Assert.Equal(3, found.Priority);
@@ -236,12 +229,12 @@ public sealed class ImportServiceTests : IDisposable
     [Fact]
     public async Task Import_DraftConflict_PromptCarriesSubjectAndType()
     {
-        DraftEntity source = await _sourceDrafts.Insert(new DraftEntity { Subject = "Plan", Body = "New", FolderId = "root-drafts" });
+        DraftEntity source = await sourceDrafts.Insert(new DraftEntity { Subject = "Plan", Body = "New", FolderId = "root-drafts" });
         string package = await BuildPackage(new ExportEntryRef { Id = source.Id.ToString(), EntryType = EntryType.Draft });
-        await _destDrafts.Insert(new DraftEntity { Subject = "Plan", Body = "Old", FolderId = "root-drafts" });
+        await destDrafts.Insert(new DraftEntity { Subject = "Plan", Body = "Old", FolderId = "root-drafts" });
 
         ImportConflict? seen = null;
-        await _import.Import(package, c => { seen = c; return Task.FromResult(DraftNoteConflictResolution.KeepExisting); });
+        await import.Import(package, c => { seen = c; return Task.FromResult(DraftNoteConflictResolution.KeepExisting); });
 
         Assert.NotNull(seen);
         Assert.Equal(EntryType.Draft, seen.EntryType);
@@ -252,16 +245,16 @@ public sealed class ImportServiceTests : IDisposable
     [Fact]
     public async Task Import_OverwriteAll_AppliesToAllRemainingConflictsWithoutPrompting()
     {
-        DraftEntity source1 = await _sourceDrafts.Insert(new DraftEntity { Subject = "A", Body = "New A", FolderId = "root-drafts" });
-        DraftEntity source2 = await _sourceDrafts.Insert(new DraftEntity { Subject = "B", Body = "New B", FolderId = "root-drafts" });
+        DraftEntity source1 = await sourceDrafts.Insert(new DraftEntity { Subject = "A", Body = "New A", FolderId = "root-drafts" });
+        DraftEntity source2 = await sourceDrafts.Insert(new DraftEntity { Subject = "B", Body = "New B", FolderId = "root-drafts" });
         string package = await BuildPackage(
             new ExportEntryRef { Id = source1.Id.ToString(), EntryType = EntryType.Draft },
             new ExportEntryRef { Id = source2.Id.ToString(), EntryType = EntryType.Draft });
-        DraftEntity existing1 = await _destDrafts.Insert(new DraftEntity { Subject = "A", Body = "Old A", FolderId = "root-drafts" });
-        DraftEntity existing2 = await _destDrafts.Insert(new DraftEntity { Subject = "B", Body = "Old B", FolderId = "root-drafts" });
+        DraftEntity existing1 = await destDrafts.Insert(new DraftEntity { Subject = "A", Body = "Old A", FolderId = "root-drafts" });
+        DraftEntity existing2 = await destDrafts.Insert(new DraftEntity { Subject = "B", Body = "Old B", FolderId = "root-drafts" });
 
         int promptCount = 0;
-        ImportSummary summary = await _import.Import(package, _ =>
+        ImportSummary summary = await import.Import(package, _ =>
         {
             promptCount++;
             return Task.FromResult(DraftNoteConflictResolution.OverwriteAll);
@@ -269,24 +262,22 @@ public sealed class ImportServiceTests : IDisposable
 
         Assert.Equal(1, promptCount);
         Assert.Equal(2, summary.Overwritten);
-        Assert.Equal("New A", (await _destDrafts.Get(existing1.Id))!.Body);
-        Assert.Equal("New B", (await _destDrafts.Get(existing2.Id))!.Body);
+        Assert.Equal("New A", (await destDrafts.Get(existing1.Id))!.Body);
+        Assert.Equal("New B", (await destDrafts.Get(existing2.Id))!.Body);
     }
-
-    // ── Note import / conflicts ──────────────────────────────────────────────
 
     /// <summary>Notes are matched by the first line of their body text.</summary>
     [Fact]
     public async Task Import_NoteConflict_MatchedByFirstLine()
     {
-        NoteEntity source = await _sourceNotes.Insert(new NoteEntity { Body = "Groceries\nMilk\nEggs", FolderId = "root-notes" });
+        NoteEntity source = await sourceNotes.Insert(new NoteEntity { Body = "Groceries\nMilk\nEggs", FolderId = "root-notes" });
         string package = await BuildPackage(new ExportEntryRef { Id = source.Id.ToString(), EntryType = EntryType.Note });
-        NoteEntity existing = await _destNotes.Insert(new NoteEntity { Body = "Groceries\nBread", FolderId = "root-notes" });
+        NoteEntity existing = await destNotes.Insert(new NoteEntity { Body = "Groceries\nBread", FolderId = "root-notes" });
 
-        ImportSummary summary = await _import.Import(package, _ => Task.FromResult(DraftNoteConflictResolution.Overwrite));
+        ImportSummary summary = await import.Import(package, _ => Task.FromResult(DraftNoteConflictResolution.Overwrite));
 
         Assert.Equal(1, summary.Overwritten);
-        NoteEntity? found = await _destNotes.Get(existing.Id);
+        NoteEntity? found = await destNotes.Get(existing.Id);
         Assert.Equal("Groceries\nMilk\nEggs", found!.Body);
     }
 
@@ -294,32 +285,30 @@ public sealed class ImportServiceTests : IDisposable
     [Fact]
     public async Task Import_NewNote_IsInserted()
     {
-        NoteEntity source = await _sourceNotes.Insert(new NoteEntity { Body = "Unique note", FolderId = "root-notes" });
+        NoteEntity source = await sourceNotes.Insert(new NoteEntity { Body = "Unique note", FolderId = "root-notes" });
         string package = await BuildPackage(new ExportEntryRef { Id = source.Id.ToString(), EntryType = EntryType.Note });
 
-        ImportSummary summary = await _import.Import(package, NeverAsked);
+        ImportSummary summary = await import.Import(package, NeverAsked);
 
         Assert.Equal(1, summary.Imported);
-        Assert.Contains(await _destNotes.GetAll(), n => n.Body == "Unique note");
+        Assert.Contains(await destNotes.GetAll(), n => n.Body == "Unique note");
     }
-
-    // ── Activity log merge ───────────────────────────────────────────────────
 
     /// <summary>An activity log for a date with no existing log is inserted as-is.</summary>
     [Fact]
     public async Task Import_ActivityLog_NoExisting_InsertsAsNew()
     {
         DateTime date = new(2025, 6, 1);
-        ActivityLogEntity source = await _sourceActivityLogs.Insert(new ActivityLogEntity
+        ActivityLogEntity source = await sourceActivityLogs.Insert(new ActivityLogEntity
         {
             Date = date,
             EventEntries = [new ActivityLogEntry { At = date.AddHours(10), Message = "A" }]
         });
         string package = await BuildPackage(new ExportEntryRef { Id = source.Id.ToString(), EntryType = EntryType.Activity });
 
-        await _import.Import(package, NeverAsked);
+        await import.Import(package, NeverAsked);
 
-        ActivityLogEntity? found = (await _destActivityLogs.GetAll()).SingleOrDefault(a => a.Date == date);
+        ActivityLogEntity? found = (await destActivityLogs.GetAll()).SingleOrDefault(a => a.Date == date);
         Assert.NotNull(found);
         Assert.Single(found.EventEntries);
     }
@@ -332,7 +321,7 @@ public sealed class ImportServiceTests : IDisposable
     public async Task Import_ActivityLog_MergesInTimestampOrderAndSkipsExactDuplicates()
     {
         DateTime date = new(2025, 6, 1);
-        ActivityLogEntity source = await _sourceActivityLogs.Insert(new ActivityLogEntity
+        ActivityLogEntity source = await sourceActivityLogs.Insert(new ActivityLogEntity
         {
             Date = date,
             EventEntries =
@@ -344,7 +333,7 @@ public sealed class ImportServiceTests : IDisposable
         });
         string package = await BuildPackage(new ExportEntryRef { Id = source.Id.ToString(), EntryType = EntryType.Activity });
 
-        ActivityLogEntity existing = await _destActivityLogs.Insert(new ActivityLogEntity
+        ActivityLogEntity existing = await destActivityLogs.Insert(new ActivityLogEntity
         {
             Date = date,
             EventEntries =
@@ -354,9 +343,9 @@ public sealed class ImportServiceTests : IDisposable
             ]
         });
 
-        await _import.Import(package, NeverAsked);
+        await import.Import(package, NeverAsked);
 
-        ActivityLogEntity merged = (await _destActivityLogs.Get(existing.Id))!;
+        ActivityLogEntity merged = (await destActivityLogs.Get(existing.Id))!;
         Assert.Equal(4, merged.EventEntries.Count);
         Assert.Equal(["A", "B", "C", "D"], merged.EventEntries.Select(e => e.Message).ToList());
     }
@@ -367,22 +356,22 @@ public sealed class ImportServiceTests : IDisposable
     {
         DateTime date = new(2025, 6, 1);
         DateTime at = date.AddHours(10);
-        ActivityLogEntity source = await _sourceActivityLogs.Insert(new ActivityLogEntity
+        ActivityLogEntity source = await sourceActivityLogs.Insert(new ActivityLogEntity
         {
             Date = date,
             EventEntries = [new ActivityLogEntry { At = at, Message = "Different" }]
         });
         string package = await BuildPackage(new ExportEntryRef { Id = source.Id.ToString(), EntryType = EntryType.Activity });
 
-        ActivityLogEntity existing = await _destActivityLogs.Insert(new ActivityLogEntity
+        ActivityLogEntity existing = await destActivityLogs.Insert(new ActivityLogEntity
         {
             Date = date,
             EventEntries = [new ActivityLogEntry { At = at, Message = "Original" }]
         });
 
-        await _import.Import(package, NeverAsked);
+        await import.Import(package, NeverAsked);
 
-        ActivityLogEntity merged = (await _destActivityLogs.Get(existing.Id))!;
+        ActivityLogEntity merged = (await destActivityLogs.Get(existing.Id))!;
         Assert.Equal(2, merged.EventEntries.Count);
         Assert.Contains(merged.EventEntries, e => e.Message == "Original");
         Assert.Contains(merged.EventEntries, e => e.Message == "Different");

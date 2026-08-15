@@ -20,8 +20,14 @@ public interface ILiteDbContext : IDisposable
 /// <summary>Owns the LiteDB connection and exposes typed collections for all Engine entities.</summary>
 public sealed class LiteDbContext : ILiteDbContext
 {
-    private readonly IAppSettings _appSettings;
-    private LiteDatabase? _db;
+    /// <summary>Initializes a new <see cref="LiteDbContext"/> using the provided path provider.</summary>
+    public LiteDbContext(IEngineController engineController)
+    {
+        this.engineController = engineController;
+    }
+
+    private readonly IEngineController engineController;
+    private LiteDatabase? db;
 
     /// <summary>Collection of persisted messages.</summary>
     public ILiteCollection<MessageEntity> Messages { get; private set; } = null!;
@@ -34,25 +40,20 @@ public sealed class LiteDbContext : ILiteDbContext
     /// <summary>Collection of persisted folders.</summary>
     public ILiteCollection<FolderEntity> Folders { get; private set; } = null!;
 
-    /// <summary>Initializes a new <see cref="LiteDbContext"/> using the provided path provider.</summary>
-    public LiteDbContext(IAppSettings appSettings)
-    {
-        _appSettings = appSettings;
-    }
 
     /// <summary>Opens the database file, binds all collections, and ensures indexes and root folders exist.</summary>
     public void Initialize()
     {
-        _db?.Dispose();
-        string dataDir = _appSettings.AppDataPath;
+        db?.Dispose();
+        string dataDir = engineController.AppDataPath;
         Directory.CreateDirectory(dataDir);
-        _db = new LiteDatabase(Path.Combine(dataDir, "Data.db"));
+        db = new LiteDatabase(Path.Combine(dataDir, "Data.db"));
 
-        Messages = _db.GetCollection<MessageEntity>("messages");
-        Drafts = _db.GetCollection<DraftEntity>("drafts");
-        Notes = _db.GetCollection<NoteEntity>("notes");
-        ActivityLogs = _db.GetCollection<ActivityLogEntity>("activity_logs");
-        Folders = _db.GetCollection<FolderEntity>("folders");
+        Messages = db.GetCollection<MessageEntity>("messages");
+        Drafts = db.GetCollection<DraftEntity>("drafts");
+        Notes = db.GetCollection<NoteEntity>("notes");
+        ActivityLogs = db.GetCollection<ActivityLogEntity>("activity_logs");
+        Folders = db.GetCollection<FolderEntity>("folders");
 
         EnsureIndexes();
         EnsureRootFolders();
@@ -101,5 +102,5 @@ public sealed class LiteDbContext : ILiteDbContext
     }
 
     /// <inheritdoc />
-    public void Dispose() => _db?.Dispose();
+    public void Dispose() => db?.Dispose();
 }

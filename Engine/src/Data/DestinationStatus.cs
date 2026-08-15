@@ -24,7 +24,7 @@ public enum DestinationStatus
     /// <summary>
     /// The user has opened the message. On an Inbox record this is set locally when the user opens it.
     /// On an Outbox record's per-destination status, this is set only after the sender receives that
-    /// destination's user-read confirmation message (see <see cref="Control.IMessageFormat.GetConfirmationMessageId"/>).
+    /// destination's user-read confirmation message (see <see cref="Control.IEngineController.GetConfirmationMessageId"/>).
     /// </summary>
     Read
 }

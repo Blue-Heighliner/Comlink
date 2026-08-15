@@ -33,7 +33,7 @@ Writes structured activity events to the LiteDB database. Active in `Client` mod
 
 **Filter**: only handles the `"ACTIVITY"` log category at `LogLevel.Information` and above. All other log calls are no-ops.
 
-**Storage**: appends one `ActivityLogEntry { At, Message }` to today's `ActivityLogEntity` via `ActivityLogRepository.AppendEventAsync`. Creates the day's record if it doesn't exist.
+**Storage**: appends one `ActivityLogEntry { At, Message }` to today's `ActivityLogEntity` via `ActivityLogRepository.AppendEvent`. Creates the day's record if it doesn't exist.
 
 ## Usage
 

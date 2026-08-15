@@ -4,40 +4,48 @@ namespace BlueHeighliner.Comlink.Engine.Views.Controls;
 [ExcludeFromCodeCoverage]
 public partial class FillInInlineControl : UserControl
 {
-    private FillInViewModel? _vm;
-    private double _targetWidth;
-
-    /// <summary>Gets or sets the advance width of a single monospace character, used to size the control to match its display text.</summary>
-    public double CharWidth { get; set; }
-
     /// <summary>Initializes the control and loads the AXAML layout.</summary>
     public FillInInlineControl()
     {
         InitializeComponent();
     }
 
+    private FillInViewModel? vm;
+    private double targetWidth;
+
+    /// <summary>Gets or sets the advance width of a single monospace character, used to size the control to match its display text.</summary>
+    public double CharWidth { get; set; }
+
     /// <inheritdoc />
     protected override void OnDataContextChanged(EventArgs e)
     {
         base.OnDataContextChanged(e);
-        if (_vm is not null)
-            _vm.PropertyChanged -= OnVmPropertyChanged;
-        _vm = DataContext as FillInViewModel;
-        if (_vm is not null)
-            _vm.PropertyChanged += OnVmPropertyChanged;
+        if (vm is not null)
+        {
+            vm.PropertyChanged -= OnVmPropertyChanged;
+        }
+        vm = DataContext as FillInViewModel;
+        if (vm is not null)
+        {
+            vm.PropertyChanged += OnVmPropertyChanged;
+        }
         RefreshWidth();
     }
 
     private void OnVmPropertyChanged(object? sender, PropertyChangedEventArgs e)
     {
         if (e.PropertyName == nameof(FillInViewModel.DisplayText))
+        {
             RefreshWidth();
+        }
     }
 
     private void RefreshWidth()
     {
-        if (_vm is not null && CharWidth > 0)
-            _targetWidth = _vm.DisplayText.Length * CharWidth;
+        if (vm is not null && CharWidth > 0)
+        {
+            targetWidth = vm.DisplayText.Length * CharWidth;
+        }
     }
 
     /// <summary>
@@ -50,10 +58,10 @@ public partial class FillInInlineControl : UserControl
     protected override Size MeasureOverride(Size availableSize)
     {
         Size childSize = base.MeasureOverride(new Size(
-            _targetWidth > 0 ? _targetWidth : double.PositiveInfinity,
+            targetWidth > 0 ? targetWidth : double.PositiveInfinity,
             availableSize.Height));
-        return _targetWidth > 0
-            ? new Size(_targetWidth, childSize.Height)
+        return targetWidth > 0
+            ? new Size(targetWidth, childSize.Height)
             : childSize;
     }
 }

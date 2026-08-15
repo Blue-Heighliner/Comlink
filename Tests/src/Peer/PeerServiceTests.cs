@@ -3,17 +3,16 @@ namespace BlueHeighliner.Comlink.Tests.Peer;
 /// <summary>Unit tests for <see cref="PeerService"/> message routing and delivery-status dispatch.</summary>
 public sealed class PeerServiceTests
 {
-    private static readonly ILoggerFactory NoLogger = LoggerFactory.Create(_ => { });
-    private static readonly UserEndpoint FakeUserEndpoint = new() { IpAddress = "127.0.0.1", Port = 12345 };
-    private static readonly IMessageFormat Format = new TestMessageFormat();
+    private static readonly ILoggerFactory noLogger = LoggerFactory.Create(_ => { });
+    private static readonly UserEndpoint fakeUserEndpoint = new() { IpAddress = "127.0.0.1", Port = 12345 };
 
-    private static PeerService BuildService(Mock<IOftPeer> peerMock, Mock<IUserDirectory> userDirectoryMock)
-        => new(peerMock.Object, userDirectoryMock.Object, new DefaultPortConfiguration(), Format, NoLogger);
+    private static PeerService BuildService(Mock<IOftPeer> peerMock, Mock<TestEngineController> engineControllerMock)
+        => new(peerMock.Object, engineControllerMock.Object, noLogger);
 
-    private static Mock<IUserDirectory> BuildUserDirectory()
+    private static Mock<TestEngineController> BuildUserDirectory()
     {
-        Mock<IUserDirectory> locator = new();
-        locator.Setup(l => l.GetEndpoint(It.IsAny<string>(), It.IsAny<CancellationToken>())).ReturnsAsync(FakeUserEndpoint);
+        Mock<TestEngineController> locator = new() { CallBase = true };
+        locator.Setup(l => l.GetEndpoint(It.IsAny<string>())).Returns(fakeUserEndpoint);
         return locator;
     }
 
@@ -23,14 +22,12 @@ public sealed class PeerServiceTests
         return buf.Memory.ToArray();
     }
 
-    // ── HandleMessage ─────────────────────────────────────────────────────────
-
     /// <summary>A valid message fires MessageDelivered with the correct fields.</summary>
     [Fact]
     public async Task HandleMessage_ValidMessage_RaisesMessageDeliveredEvent()
     {
         Mock<IOftPeer> peer = new();
-        Mock<IUserDirectory> userDirectory = BuildUserDirectory();
+        Mock<TestEngineController> userDirectory = BuildUserDirectory();
 
         PeerService svc = BuildService(peer, userDirectory);
         object? received = null;
@@ -57,7 +54,7 @@ public sealed class PeerServiceTests
     public async Task HandleMessage_CorruptData_ReturnsFalse()
     {
         Mock<IOftPeer> peer = new();
-        Mock<IUserDirectory> userDirectory = BuildUserDirectory();
+        Mock<TestEngineController> userDirectory = BuildUserDirectory();
 
         PeerService svc = BuildService(peer, userDirectory);
         bool ok = await svc.HandleMessage(new byte[] { 0xFF, 0xFE, 0xFD });
@@ -70,7 +67,7 @@ public sealed class PeerServiceTests
     public async Task HandleMessage_ConfirmationMessage_RaisesConfirmationReceivedNotMessageDelivered()
     {
         Mock<IOftPeer> peer = new();
-        Mock<IUserDirectory> userDirectory = BuildUserDirectory();
+        Mock<TestEngineController> userDirectory = BuildUserDirectory();
 
         PeerService svc = BuildService(peer, userDirectory);
         object? delivered = null;
@@ -93,7 +90,7 @@ public sealed class PeerServiceTests
     public async Task HandleMessage_OrdinaryMessage_RaisesMessageDeliveredNotConfirmationReceived()
     {
         Mock<IOftPeer> peer = new();
-        Mock<IUserDirectory> userDirectory = BuildUserDirectory();
+        Mock<TestEngineController> userDirectory = BuildUserDirectory();
 
         PeerService svc = BuildService(peer, userDirectory);
         bool confirmationFired = false;
@@ -106,8 +103,6 @@ public sealed class PeerServiceTests
         Assert.False(confirmationFired);
     }
 
-    // ── Send ──────────────────────────────────────────────────────────────────
-
     /// <summary>Send resolves the user's endpoint, serializes the message, and forwards it to the peer.</summary>
     [Fact]
     public async Task Send_ForwardsSerializedMessageToPeer()
@@ -115,8 +110,8 @@ public sealed class PeerServiceTests
         Mock<IOftPeer> peer = new();
         peer.Setup(p => p.Send("127.0.0.1", 12345, It.IsAny<ReadOnlyMemory<byte>>(), 0, It.IsAny<object?>(), default))
             .Returns(Task.CompletedTask);
-        Mock<IUserDirectory> userDirectory = new();
-        userDirectory.Setup(l => l.GetEndpoint("DEST", default)).ReturnsAsync(FakeUserEndpoint);
+        Mock<TestEngineController> userDirectory = new() { CallBase = true };
+        userDirectory.Setup(l => l.GetEndpoint("DEST")).Returns(fakeUserEndpoint);
 
         PeerService svc = BuildService(peer, userDirectory);
         TestMessage msg = new() { MessageId = "M1", FromUser = "SOURCE" };
@@ -127,15 +122,15 @@ public sealed class PeerServiceTests
         peer.Verify(p => p.Send("127.0.0.1", 12345, It.IsAny<ReadOnlyMemory<byte>>(), 0, It.IsAny<object?>(), default), Times.Once);
     }
 
-    /// <summary>Send passes the message's IMessageFormat.GetPriority value through as the OFT send priority.</summary>
+    /// <summary>Send passes the message's IEngineController.GetPriority value through as the OFT send priority.</summary>
     [Fact]
     public async Task Send_UsesMessagePriorityAsOftPriority()
     {
         Mock<IOftPeer> peer = new();
         peer.Setup(p => p.Send("127.0.0.1", 12345, It.IsAny<ReadOnlyMemory<byte>>(), 3, It.IsAny<object?>(), default))
             .Returns(Task.CompletedTask);
-        Mock<IUserDirectory> userDirectory = new();
-        userDirectory.Setup(l => l.GetEndpoint("DEST", default)).ReturnsAsync(FakeUserEndpoint);
+        Mock<TestEngineController> userDirectory = new() { CallBase = true };
+        userDirectory.Setup(l => l.GetEndpoint("DEST")).Returns(fakeUserEndpoint);
 
         PeerService svc = BuildService(peer, userDirectory);
         TestMessage msg = new() { MessageId = "M1", FromUser = "SOURCE", Priority = 3 };
@@ -151,8 +146,8 @@ public sealed class PeerServiceTests
     public async Task Send_UnknownUser_ReturnsFalse()
     {
         Mock<IOftPeer> peer = new();
-        Mock<IUserDirectory> userDirectory = new();
-        userDirectory.Setup(l => l.GetEndpoint("UNKNOWN", default)).ReturnsAsync((UserEndpoint?)null);
+        Mock<TestEngineController> userDirectory = new() { CallBase = true };
+        userDirectory.Setup(l => l.GetEndpoint("UNKNOWN")).Returns((UserEndpoint?)null);
 
         PeerService svc = BuildService(peer, userDirectory);
         TestMessage msg = new() { MessageId = "M1", FromUser = "SOURCE" };
@@ -170,7 +165,7 @@ public sealed class PeerServiceTests
         Mock<IOftPeer> peer = new();
         peer.Setup(p => p.Send(It.IsAny<string>(), It.IsAny<int>(), It.IsAny<ReadOnlyMemory<byte>>(), It.IsAny<int>(), It.IsAny<object?>(), It.IsAny<CancellationToken>()))
             .ThrowsAsync(new OftDisconnectedException());
-        Mock<IUserDirectory> userDirectory = BuildUserDirectory();
+        Mock<TestEngineController> userDirectory = BuildUserDirectory();
 
         PeerService svc = BuildService(peer, userDirectory);
         TestMessage msg = new() { MessageId = "M1", FromUser = "SOURCE" };
@@ -179,8 +174,6 @@ public sealed class PeerServiceTests
 
         Assert.False(ok);
     }
-
-    // ── DeliveryStatusChanged ────────────────────────────────────────────────
 
     /// <summary>Raising the peer's DeliveryStatusHandler for a tag from a Send call re-raises DeliveryStatusChanged with the matching message and user.</summary>
     [Fact]
@@ -194,7 +187,7 @@ public sealed class PeerServiceTests
         peer.Setup(p => p.Send(It.IsAny<string>(), It.IsAny<int>(), It.IsAny<ReadOnlyMemory<byte>>(), It.IsAny<int>(), It.IsAny<object?>(), It.IsAny<CancellationToken>()))
             .Callback<string, int, ReadOnlyMemory<byte>, int, object?, CancellationToken>((_, _, _, _, tag, _) => capturedTag = tag)
             .Returns(Task.CompletedTask);
-        Mock<IUserDirectory> userDirectory = BuildUserDirectory();
+        Mock<TestEngineController> userDirectory = BuildUserDirectory();
 
         // The DeliveryStatusHandler setter runs during construction, so Setup above must be in place first.
         PeerService svc = BuildService(peer, userDirectory);

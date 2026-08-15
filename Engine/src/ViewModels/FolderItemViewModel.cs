@@ -3,8 +3,22 @@ namespace BlueHeighliner.Comlink.Engine.ViewModels;
 /// <summary>ViewModel representing a single folder node in the folder tree.</summary>
 public sealed partial class FolderItemViewModel : ObservableObject
 {
-    [ObservableProperty] private bool _isExpanded = true;
-    [ObservableProperty] private bool _isSelected;
+    /// <summary>Initializes a new folder item with the given identity and classification.</summary>
+    /// <param name="id">Unique folder identifier.</param>
+    /// <param name="name">Display name of the folder.</param>
+    /// <param name="rootType">Root content type this folder belongs to.</param>
+    /// <param name="parentId">Identifier of the parent folder, or <see langword="null"/> for root folders.</param>
+    public FolderItemViewModel(string id, string name, FolderType rootType, string? parentId = null)
+    {
+        Id = id;
+        Name = name;
+        RootType = rootType;
+        ParentId = parentId;
+        isExpanded = parentId is null;
+    }
+
+    [ObservableProperty] private bool isExpanded = true;
+    [ObservableProperty] private bool isSelected;
 
     /// <summary>Gets the unique folder identifier.</summary>
     public string Id { get; }
@@ -38,18 +52,4 @@ public sealed partial class FolderItemViewModel : ObservableObject
         FolderType.Activity  => "≡",
         _                    => ""
     } : "";
-
-    /// <summary>Initializes a new folder item with the given identity and classification.</summary>
-    /// <param name="id">Unique folder identifier.</param>
-    /// <param name="name">Display name of the folder.</param>
-    /// <param name="rootType">Root content type this folder belongs to.</param>
-    /// <param name="parentId">Identifier of the parent folder, or <see langword="null"/> for root folders.</param>
-    public FolderItemViewModel(string id, string name, FolderType rootType, string? parentId = null)
-    {
-        Id = id;
-        Name = name;
-        RootType = rootType;
-        ParentId = parentId;
-        _isExpanded = parentId is null;
-    }
 }

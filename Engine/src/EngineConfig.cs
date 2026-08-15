@@ -3,7 +3,7 @@ namespace BlueHeighliner.Comlink.Engine;
 /// <summary>Configuration loaded from a JSON file via the <c>--config</c> command-line argument.</summary>
 public sealed class EngineConfig
 {
-    private static readonly JsonSerializerOptions _jsonOptions = new() { PropertyNameCaseInsensitive = true };
+    private static readonly JsonSerializerOptions jsonOptions = new() { PropertyNameCaseInsensitive = true };
 
     /// <summary>Run headless — as a normal peer client, with no GUI — instead of launching the desktop GUI.</summary>
     public bool HeadlessMode { get; init; }
@@ -111,26 +111,26 @@ public sealed class EngineConfig
         if (idx >= 0 && idx + 1 < args.Length)
         {
             string json = File.ReadAllText(args[idx + 1]);
-            return JsonSerializer.Deserialize<EngineConfig>(json, _jsonOptions) ?? new EngineConfig();
+            return JsonSerializer.Deserialize<EngineConfig>(json, jsonOptions) ?? new EngineConfig();
         }
 #endif
         return new EngineConfig();
     }
 
     /// <summary>Returns the configured user entries as Engine model types, with case-insensitive key lookup.</summary>
-    public IReadOnlyDictionary<string, UserEndpoint> GetUserEndpoints() =>
-        Users.ToDictionary(
+    public IReadOnlyDictionary<string, UserEndpoint> GetUserEndpoints()
+        => Users.ToDictionary(
             kvp => kvp.Key,
             kvp => new UserEndpoint { IpAddress = kvp.Value.IpAddress, Port = kvp.Value.Port },
             StringComparer.OrdinalIgnoreCase);
 
     /// <summary>Parses <see cref="NodeRole"/>, defaulting to <see cref="Control.NodeRole.Peer"/> when unset or unrecognized.</summary>
-    public Control.NodeRole GetNodeRole() =>
-        Enum.TryParse(NodeRole, ignoreCase: true, out Control.NodeRole role) ? role : Control.NodeRole.Peer;
+    public Control.NodeRole GetNodeRole()
+        => Enum.TryParse(NodeRole, ignoreCase: true, out Control.NodeRole role) ? role : Control.NodeRole.Peer;
 
     /// <summary>Returns the configured server user map as Engine model types, with case-insensitive key lookup.</summary>
-    public IReadOnlyDictionary<string, ServerUserConfig> GetServerUsers() =>
-        ServerUsers.ToDictionary(
+    public IReadOnlyDictionary<string, ServerUserConfig> GetServerUsers()
+        => ServerUsers.ToDictionary(
             kvp => kvp.Key,
             kvp => new ServerUserConfig
             {

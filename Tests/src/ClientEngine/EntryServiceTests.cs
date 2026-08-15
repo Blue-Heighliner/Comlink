@@ -3,38 +3,37 @@ namespace BlueHeighliner.Comlink.Tests.ClientEngine;
 /// <summary>Integration tests for <see cref="EntryService"/> using a real LiteDB database.</summary>
 public sealed class EntryServiceTests : IDisposable
 {
-    private static readonly IMessageFormat Format = new TestMessageFormat();
-
-    private readonly string _appName = Guid.NewGuid().ToString();
-    private readonly LiteDbContext _ctx;
-    private readonly EntryService _service;
-
     /// <summary>Initializes the test with a real <see cref="LiteDbContext"/> and a fresh <see cref="EntryService"/>.</summary>
     public EntryServiceTests()
     {
-        _ctx = new LiteDbContext(new TestAppDataPathProvider(_appName));
-        _ctx.Initialize();
+        ctx = new LiteDbContext(new TestAppDataPathProvider(appName));
+        ctx.Initialize();
 
-        MessageRepository messages = new(_ctx);
-        DraftRepository drafts = new(_ctx);
-        NoteRepository notes = new(_ctx);
-        ActivityLogRepository activityLogs = new(_ctx);
-        FolderRepository folders = new(_ctx);
-        _service = new EntryService(messages, drafts, notes, activityLogs, folders, new BlueHeighliner.Comlink.Engine.Control.CurrentUserProvider(), Format);
+        MessageRepository messages = new(ctx);
+        DraftRepository drafts = new(ctx);
+        NoteRepository notes = new(ctx);
+        ActivityLogRepository activityLogs = new(ctx);
+        FolderRepository folders = new(ctx);
+        service = new EntryService(messages, drafts, notes, activityLogs, folders, new BlueHeighliner.Comlink.Engine.Control.CurrentUserProvider(), format);
     }
+
+    private readonly IEngineController format = new TestEngineController();
+    private readonly string appName = Guid.NewGuid().ToString();
+    private readonly LiteDbContext ctx;
+    private readonly EntryService service;
 
     /// <summary>Verifies that StoreIncomingMessage creates a message in the Inbox folder.</summary>
     [Fact]
     public async Task StoreIncomingMessageAsync_CreatesMessageInInbox()
     {
-        MessageEntity entity = await _service.StoreIncomingMessage(
+        MessageEntity entity = await service.StoreIncomingMessage(
             Guid.NewGuid().ToString(), "SenderUser", "Hello", "Body text",
             [new AddressData { UserName = "LocalUser", Type = "To" }],
             DateTime.UtcNow);
 
         Assert.NotNull(entity);
-        Assert.Equal("SenderUser", Format.GetFromUser(entity.Message));
-        Assert.Equal("Hello", Format.GetSubject(entity.Message));
+        Assert.Equal("SenderUser", format.GetFromUser(entity.Message));
+        Assert.Equal("Hello", format.GetSubject(entity.Message));
         Assert.Contains("root-inbox", entity.FolderId);
     }
 
@@ -42,7 +41,7 @@ public sealed class EntryServiceTests : IDisposable
     [Fact]
     public async Task StoreIncomingMessageAsync_SetsReadStatusReceived()
     {
-        MessageEntity entity = await _service.StoreIncomingMessage(
+        MessageEntity entity = await service.StoreIncomingMessage(
             Guid.NewGuid().ToString(), "SenderUser", "Hello", "Body", [], DateTime.UtcNow);
 
         Assert.Equal(DestinationStatus.Received, entity.ReadStatus);
@@ -52,26 +51,26 @@ public sealed class EntryServiceTests : IDisposable
     [Fact]
     public async Task StoreMessage_IsAlertTrue_RoundTripsOnStoredMessage()
     {
-        MessageEntity incoming = await _service.StoreIncomingMessage(
+        MessageEntity incoming = await service.StoreIncomingMessage(
             Guid.NewGuid().ToString(), "SenderUser", "Hello", "Body", [], DateTime.UtcNow, isAlert: true);
-        Assert.True(Format.GetIsAlert(incoming.Message));
+        Assert.True(format.GetIsAlert(incoming.Message));
 
-        MessageEntity sent = await _service.StoreSentMessage(
+        MessageEntity sent = await service.StoreSentMessage(
             Guid.NewGuid().ToString("N"), "Subj", "Body", [], DateTime.UtcNow, [], isAlert: true);
-        Assert.True(Format.GetIsAlert(sent.Message));
+        Assert.True(format.GetIsAlert(sent.Message));
     }
 
     /// <summary>StoreIncomingMessage/StoreSentMessage round-trip the Priority number onto the stored message.</summary>
     [Fact]
     public async Task StoreMessage_Priority_RoundTripsOnStoredMessage()
     {
-        MessageEntity incoming = await _service.StoreIncomingMessage(
+        MessageEntity incoming = await service.StoreIncomingMessage(
             Guid.NewGuid().ToString(), "SenderUser", "Hello", "Body", [], DateTime.UtcNow, priority: 2);
-        Assert.Equal(2, Format.GetPriority(incoming.Message));
+        Assert.Equal(2, format.GetPriority(incoming.Message));
 
-        MessageEntity sent = await _service.StoreSentMessage(
+        MessageEntity sent = await service.StoreSentMessage(
             Guid.NewGuid().ToString("N"), "Subj", "Body", [], DateTime.UtcNow, [], priority: 3);
-        Assert.Equal(3, Format.GetPriority(sent.Message));
+        Assert.Equal(3, format.GetPriority(sent.Message));
     }
 
     /// <summary>MarkMessageRead transitions an Inbox record from Received to Read and fires MessageRead.</summary>
@@ -79,12 +78,12 @@ public sealed class EntryServiceTests : IDisposable
     public async Task MarkMessageRead_ReceivedMessage_TransitionsToReadAndFiresEvent()
     {
         string messageId = Guid.NewGuid().ToString("N");
-        await _service.StoreIncomingMessage(messageId, "Sender", "Subj", "Body", [], DateTime.UtcNow);
+        await service.StoreIncomingMessage(messageId, "Sender", "Subj", "Body", [], DateTime.UtcNow);
 
         MessageEntity? readEntity = null;
-        _service.MessageRead += entity => { readEntity = entity; return Task.CompletedTask; };
+        service.MessageRead += entity => { readEntity = entity; return Task.CompletedTask; };
 
-        MessageEntity? result = await _service.MarkMessageRead(messageId);
+        MessageEntity? result = await service.MarkMessageRead(messageId);
 
         Assert.NotNull(result);
         Assert.Equal(DestinationStatus.Read, result.ReadStatus);
@@ -97,13 +96,13 @@ public sealed class EntryServiceTests : IDisposable
     public async Task MarkMessageRead_AlreadyRead_IsNoOp()
     {
         string messageId = Guid.NewGuid().ToString("N");
-        await _service.StoreIncomingMessage(messageId, "Sender", "Subj", "Body", [], DateTime.UtcNow);
-        await _service.MarkMessageRead(messageId);
+        await service.StoreIncomingMessage(messageId, "Sender", "Subj", "Body", [], DateTime.UtcNow);
+        await service.MarkMessageRead(messageId);
 
         int eventCount = 0;
-        _service.MessageRead += _ => { eventCount++; return Task.CompletedTask; };
+        service.MessageRead += _ => { eventCount++; return Task.CompletedTask; };
 
-        MessageEntity? result = await _service.MarkMessageRead(messageId);
+        MessageEntity? result = await service.MarkMessageRead(messageId);
 
         Assert.Null(result);
         Assert.Equal(0, eventCount);
@@ -113,7 +112,7 @@ public sealed class EntryServiceTests : IDisposable
     [Fact]
     public async Task MarkMessageRead_UnknownMessageId_ReturnsNull()
     {
-        MessageEntity? result = await _service.MarkMessageRead("does-not-exist");
+        MessageEntity? result = await service.MarkMessageRead("does-not-exist");
         Assert.Null(result);
     }
 
@@ -121,7 +120,7 @@ public sealed class EntryServiceTests : IDisposable
     [Fact]
     public async Task CreateDraftAsync_CreatesDraftInDraftsFolder()
     {
-        DraftEntity entity = await _service.CreateDraft();
+        DraftEntity entity = await service.CreateDraft();
 
         Assert.NotNull(entity);
         Assert.Contains("root-drafts", entity.FolderId);
@@ -132,7 +131,7 @@ public sealed class EntryServiceTests : IDisposable
     [Fact]
     public async Task CreateNoteAsync_CreatesNoteInNotesFolder()
     {
-        NoteEntity entity = await _service.CreateNote();
+        NoteEntity entity = await service.CreateNote();
 
         Assert.NotNull(entity);
         Assert.Contains("root-notes", entity.FolderId);
@@ -145,12 +144,12 @@ public sealed class EntryServiceTests : IDisposable
         string inboxId = "root-inbox";
         for (int i = 0; i < 5; i++)
         {
-            await _service.StoreIncomingMessage(
+            await service.StoreIncomingMessage(
                 Guid.NewGuid().ToString(), "Sender", $"Subject {i}", "Body",
                 [], DateTime.UtcNow.AddMinutes(-i));
         }
 
-        (List<MessageEntity> items, int total) = await _service.GetMessages(inboxId, page: 1);
+        (List<MessageEntity> items, int total) = await service.GetMessages(inboxId, page: 1);
 
         Assert.Equal(5, total);
         Assert.Equal(5, items.Count);
@@ -160,15 +159,15 @@ public sealed class EntryServiceTests : IDisposable
     [Fact]
     public async Task GetMessagesAsync_SortsNewestFirst()
     {
-        MessageEntity first = await _service.StoreIncomingMessage(
+        MessageEntity first = await service.StoreIncomingMessage(
             Guid.NewGuid().ToString(), "S", "First", "", [], DateTime.UtcNow.AddHours(-2));
-        MessageEntity second = await _service.StoreIncomingMessage(
+        MessageEntity second = await service.StoreIncomingMessage(
             Guid.NewGuid().ToString(), "S", "Second", "", [], DateTime.UtcNow);
 
-        (List<MessageEntity> items, int _) = await _service.GetMessages("root-inbox", 1);
+        (List<MessageEntity> items, int _) = await service.GetMessages("root-inbox", 1);
 
-        Assert.Equal("Second", Format.GetSubject(items[0].Message));
-        Assert.Equal("First", Format.GetSubject(items[1].Message));
+        Assert.Equal("Second", format.GetSubject(items[0].Message));
+        Assert.Equal("First", format.GetSubject(items[1].Message));
     }
 
     /// <summary>Verifies that StoreIncomingMessage fires the MessageInserted event after persisting.</summary>
@@ -176,13 +175,13 @@ public sealed class EntryServiceTests : IDisposable
     public async Task StoreIncomingMessageAsync_FiresMessageInsertedEvent()
     {
         string? receivedSubject = null;
-        _service.MessageInserted += entity =>
+        service.MessageInserted += entity =>
         {
-            receivedSubject = Format.GetSubject(entity.Message);
+            receivedSubject = format.GetSubject(entity.Message);
             return Task.CompletedTask;
         };
 
-        await _service.StoreIncomingMessage(
+        await service.StoreIncomingMessage(
             Guid.NewGuid().ToString(), "S", "EventTest", "", [], DateTime.UtcNow);
 
         Assert.Equal("EventTest", receivedSubject);
@@ -193,19 +192,19 @@ public sealed class EntryServiceTests : IDisposable
     public async Task UpdateDeliveryStatus_SelfAddressedMessage_OnlyUpdatesOutboundRecord()
     {
         string messageId = Guid.NewGuid().ToString("N");
-        await _service.StoreIncomingMessage(messageId, "SELF", "Hello", "Body",
+        await service.StoreIncomingMessage(messageId, "SELF", "Hello", "Body",
             [new AddressData { UserName = "SELF", Type = "To" }], DateTime.UtcNow);
-        await _service.StoreSentMessage(messageId, "Hello", "Body",
+        await service.StoreSentMessage(messageId, "Hello", "Body",
             [new AddressData { UserName = "SELF", Type = "To" }], DateTime.UtcNow,
             [new UserDeliveryResult { UserName = "SELF", Success = true, AddressedVia = [] }]);
 
-        MessageEntity? updated = await _service.UpdateDeliveryStatus(messageId, "SELF", DestinationStatus.Confirmed);
+        MessageEntity? updated = await service.UpdateDeliveryStatus(messageId, "SELF", DestinationStatus.Confirmed);
 
         Assert.NotNull(updated);
         Assert.True(updated.IsOutbound);
         Assert.Equal(DestinationStatus.Confirmed, Assert.Single(updated.DeliveryStatuses).Status);
 
-        (List<MessageEntity> inboxItems, _) = await _service.GetMessages("root-inbox", 1);
+        (List<MessageEntity> inboxItems, _) = await service.GetMessages("root-inbox", 1);
         MessageEntity inboxCopy = Assert.Single(inboxItems);
         Assert.False(inboxCopy.IsOutbound);
         Assert.Empty(inboxCopy.DeliveryStatuses);
@@ -215,7 +214,7 @@ public sealed class EntryServiceTests : IDisposable
     [Fact]
     public async Task StoreSentMessage_SuccessfulUserResult_SeedsConfirmedStatusImmediately()
     {
-        MessageEntity entity = await _service.StoreSentMessage(
+        MessageEntity entity = await service.StoreSentMessage(
             Guid.NewGuid().ToString("N"), "Subj", "Body", [],
             DateTime.UtcNow, [new UserDeliveryResult { UserName = "SELF", Success = true, AddressedVia = [] }]);
 
@@ -227,7 +226,7 @@ public sealed class EntryServiceTests : IDisposable
     [Fact]
     public async Task StoreSentMessage_FailedUserResult_SeedsFailedStatusImmediately()
     {
-        MessageEntity entity = await _service.StoreSentMessage(
+        MessageEntity entity = await service.StoreSentMessage(
             Guid.NewGuid().ToString("N"), "Subj", "Body", [],
             DateTime.UtcNow, [new UserDeliveryResult { UserName = "UNREACHABLE", Success = false, AddressedVia = [] }]);
 
@@ -238,9 +237,9 @@ public sealed class EntryServiceTests : IDisposable
     /// <inheritdoc />
     public void Dispose()
     {
-        _ctx.Dispose();
+        ctx.Dispose();
         string appData = Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData);
-        string dir = Path.Combine(appData, _appName);
-        if (Directory.Exists(dir)) Directory.Delete(dir, recursive: true);
+        string dir = Path.Combine(appData, appName);
+        if (Directory.Exists(dir)) { Directory.Delete(dir, recursive: true); }
     }
 }

@@ -46,9 +46,9 @@ public static class PhoneticAlphabet
         ['9'] = "NINE"
     };
 
-    private static readonly HashSet<string> WordSet = new(Words.Values, StringComparer.OrdinalIgnoreCase);
+    private static readonly HashSet<string> wordSet = new(Words.Values, StringComparer.OrdinalIgnoreCase);
 
-    private static readonly IReadOnlyList<int> WordLengths =
+    private static readonly List<int> wordLengths =
         Words.Values.Select(w => w.Length).Distinct().OrderByDescending(l => l).ToList();
 
     /// <summary>
@@ -67,8 +67,8 @@ public static class PhoneticAlphabet
 
     /// <summary>Gets a value indicating whether <paramref name="candidate"/> is one of the phonetic words (case-insensitive).</summary>
     /// <param name="candidate">The text to test.</param>
-    public static bool IsWord(string candidate) => WordSet.Contains(candidate);
+    public static bool IsWord(string candidate) => wordSet.Contains(candidate);
 
     /// <summary>Gets the distinct lengths, in characters, of all phonetic words, ordered longest first.</summary>
-    public static IReadOnlyList<int> Lengths => WordLengths;
+    public static IReadOnlyList<int> Lengths => wordLengths;
 }

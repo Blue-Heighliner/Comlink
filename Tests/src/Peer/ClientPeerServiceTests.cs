@@ -3,9 +3,8 @@ namespace BlueHeighliner.Comlink.Tests.Peer;
 /// <summary>Unit tests for <see cref="ClientPeerService"/> connection retry, send coalescing, and message dispatch.</summary>
 public sealed class ClientPeerServiceTests
 {
-    private static readonly ILoggerFactory NoLogger = LoggerFactory.Create(_ => { });
-    private static readonly IMessageFormat Format = new TestMessageFormat();
-    private static readonly UserEndpoint ServerEndpoint = new() { IpAddress = "10.0.0.1", Port = 9000 };
+    private static readonly ILoggerFactory noLogger = LoggerFactory.Create(_ => { });
+    private static readonly UserEndpoint serverEndpoint = new() { IpAddress = "10.0.0.1", Port = 9000 };
 
     private static Mock<IOftConnection> BuildConnection()
     {
@@ -25,13 +24,11 @@ public sealed class ClientPeerServiceTests
         connector.Setup(c => c.Connect(It.IsAny<string>(), It.IsAny<int>(), It.IsAny<OftConnectionOptions?>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync(connection.Object);
 
-        Mock<INetworkTopology> endpointProvider = new();
-        endpointProvider.Setup(p => p.GetServerEndpoint()).Returns(endpointConfigured ? ServerEndpoint : null);
+        Mock<TestEngineController> engineController = new() { CallBase = true };
+        engineController.Setup(p => p.ServerEndpoint).Returns(endpointConfigured ? serverEndpoint : null);
+        engineController.Setup(p => p.ConnectionOptions).Returns(new OftPeerOptions { Info = "CLIENT" });
 
-        Mock<IOftCertificateProvider> certProvider = new();
-        certProvider.Setup(p => p.GetPeerOptions()).Returns(new OftPeerOptions { Info = "CLIENT" });
-
-        ClientPeerService service = new(connector.Object, endpointProvider.Object, certProvider.Object, Format, NoLogger, retryInterval ?? TimeSpan.FromMilliseconds(20));
+        ClientPeerService service = new(connector.Object, engineController.Object, noLogger, retryInterval ?? TimeSpan.FromMilliseconds(20));
         return (service, connector);
     }
 
@@ -63,7 +60,7 @@ public sealed class ClientPeerServiceTests
 
         Task startTask = service.Start(cts.Token);
 
-        connector.Verify(c => c.Connect(ServerEndpoint.IpAddress, ServerEndpoint.Port, It.IsAny<OftConnectionOptions?>(), It.IsAny<CancellationToken>()), Times.Once);
+        connector.Verify(c => c.Connect(serverEndpoint.IpAddress, serverEndpoint.Port, It.IsAny<OftConnectionOptions?>(), It.IsAny<CancellationToken>()), Times.Once);
         Assert.NotNull(connection.Object.ReceivedHandler);
         Assert.NotNull(connection.Object.DisconnectedHandler);
 
@@ -83,7 +80,7 @@ public sealed class ClientPeerServiceTests
         connection.Object.DisconnectedHandler!(null);
 
         await WaitUntil(() => connector.Invocations.Count >= 2, TimeSpan.FromSeconds(2));
-        connector.Verify(c => c.Connect(ServerEndpoint.IpAddress, ServerEndpoint.Port, It.IsAny<OftConnectionOptions?>(), It.IsAny<CancellationToken>()), Times.AtLeast(2));
+        connector.Verify(c => c.Connect(serverEndpoint.IpAddress, serverEndpoint.Port, It.IsAny<OftConnectionOptions?>(), It.IsAny<CancellationToken>()), Times.AtLeast(2));
 
         cts.Cancel();
         await startTask;
@@ -172,7 +169,7 @@ public sealed class ClientPeerServiceTests
         DateTime deadline = DateTime.UtcNow + timeout;
         while (!condition())
         {
-            if (DateTime.UtcNow > deadline) throw new TimeoutException("Condition was not met in time.");
+            if (DateTime.UtcNow > deadline) { throw new TimeoutException("Condition was not met in time."); }
             await Task.Delay(10);
         }
     }

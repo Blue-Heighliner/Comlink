@@ -4,7 +4,7 @@ namespace BlueHeighliner.Comlink.Engine;
 [ExcludeFromCodeCoverage]
 public partial class EngineApp : Application
 {
-    private IHost? _host;
+    private IHost? host;
 
     /// <inheritdoc />
     public override void Initialize()
@@ -15,7 +15,7 @@ public partial class EngineApp : Application
     /// <inheritdoc />
     public override void OnFrameworkInitializationCompleted()
     {
-        _host = Host.CreateDefaultBuilder()
+        host = Host.CreateDefaultBuilder()
             .UseEngineConfig(EngineApplication.Config)
             .UseEngine(EngineMode.Client)
             .UseEngineUi()
@@ -29,7 +29,7 @@ public partial class EngineApp : Application
             Exception? ex = e.ExceptionObject as Exception;
             try
             {
-                _host.Services.GetService<ILoggerFactory>()
+                host.Services.GetService<ILoggerFactory>()
                     ?.CreateLogger("ACTIVITY")
                     ?.LogCritical(ex, "Unhandled exception: {Message}", ex?.Message ?? "Unknown error");
             }
@@ -37,15 +37,17 @@ public partial class EngineApp : Application
         };
 
         // Run startup on thread pool to avoid SynchronizationContext deadlock with async continuations
-        Task.Run(() => _host.StartAsync(CancellationToken.None)).GetAwaiter().GetResult();
+        Task.Run(() => host.StartAsync(CancellationToken.None)).GetAwaiter().GetResult();
 
         if (ApplicationLifetime is IClassicDesktopStyleApplicationLifetime desktop)
         {
-            MainWindow mainWindow = _host.Services.GetRequiredService<MainWindow>();
+            MainWindow mainWindow = host.Services.GetRequiredService<MainWindow>();
             if (EngineApplication.WindowIconUri is { } iconUri)
+            {
                 mainWindow.Icon = new WindowIcon(AssetLoader.Open(iconUri));
+            }
             desktop.MainWindow = mainWindow;
-            desktop.Exit += async (_, _) => await _host.StopAsync();
+            desktop.Exit += async (_, _) => await host.StopAsync();
         }
 
         base.OnFrameworkInitializationCompleted();

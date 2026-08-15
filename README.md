@@ -35,7 +35,7 @@ dotnet build
 ## Running
 
 ```sh
-dotnet run --project Sample -- --config Configs/example.json
+dotnet run --project Sample -- --config Configs/TEST1.json
 ```
 
 Omit `--config` to use all defaults (GUI mode, default ports, system app data folder).

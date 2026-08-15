@@ -3,9 +3,8 @@ namespace BlueHeighliner.Comlink.Tests.ServiceEngine;
 /// <summary>Unit tests for <see cref="MessageRoutingService"/> using mocked peer infrastructure.</summary>
 public sealed class MessageRoutingServiceTests
 {
-    private static readonly ILoggerFactory _loggerFactory = LoggerFactory.Create(_ => { });
-    private static readonly IUserDirectory _noGroups = new DefaultUserDirectory();
-    private static readonly IMessageFormat Format = new TestMessageFormat();
+    private readonly ILoggerFactory loggerFactory = LoggerFactory.Create(_ => { });
+    private readonly IEngineController format = new TestEngineController();
 
     private sealed class FakePeerService : IPeerService
     {
@@ -28,28 +27,26 @@ public sealed class MessageRoutingServiceTests
         public async Task DeliverLocal(object payload)
         {
             DeliveredLocally.Add((TestMessage)payload);
-            if (MessageDelivered is not null) await MessageDelivered(payload);
+            if (MessageDelivered is not null) { await MessageDelivered(payload); }
         }
 
         public async Task FireDeliveryStatusChanged(string messageId, string user, OftDeliveryStatus status)
         {
-            if (DeliveryStatusChanged is not null) await DeliveryStatusChanged(messageId, user, status);
+            if (DeliveryStatusChanged is not null) { await DeliveryStatusChanged(messageId, user, status); }
         }
 
         public async Task FireConfirmationReceived(string messageId, string confirmingUser)
         {
-            if (ConfirmationReceived is not null) await ConfirmationReceived(messageId, confirmingUser);
+            if (ConfirmationReceived is not null) { await ConfirmationReceived(messageId, confirmingUser); }
         }
     }
-
-    // ── Route basics ──────────────────────────────────────────────────────────
 
     /// <summary>Verifies that Route returns a non-empty uppercase hex GUID as the message ID.</summary>
     [Fact]
     public async Task RouteAsync_ReturnsNonEmptyMessageId()
     {
         FakePeerService fake = new();
-        MessageRoutingService service = new(fake, _noGroups, Format, _loggerFactory);
+        MessageRoutingService service = new(fake, format, loggerFactory);
         SendMessagePayload payload = new()
         {
             Subject = "Hello",
@@ -68,7 +65,7 @@ public sealed class MessageRoutingServiceTests
     public async Task RouteAsync_SetsMessagePriorityFromPayload()
     {
         FakePeerService fake = new();
-        MessageRoutingService service = new(fake, _noGroups, Format, _loggerFactory);
+        MessageRoutingService service = new(fake, format, loggerFactory);
         SendMessagePayload payload = new()
         {
             Subject = "Hello",
@@ -87,7 +84,7 @@ public sealed class MessageRoutingServiceTests
     public async Task RouteAsync_SendsToEachUniqueTargetUser()
     {
         FakePeerService fake = new();
-        MessageRoutingService service = new(fake, _noGroups, Format, _loggerFactory);
+        MessageRoutingService service = new(fake, format, loggerFactory);
         SendMessagePayload payload = new()
         {
             Subject = "Multi",
@@ -112,7 +109,7 @@ public sealed class MessageRoutingServiceTests
     public async Task RouteAsync_WhenPeerSendFails_StillReturnsMessageId()
     {
         FakePeerService fake = new() { ReturnSuccess = false };
-        MessageRoutingService service = new(fake, _noGroups, Format, _loggerFactory);
+        MessageRoutingService service = new(fake, format, loggerFactory);
         SendMessagePayload payload = new()
         {
             Subject = "Fail",
@@ -126,8 +123,6 @@ public sealed class MessageRoutingServiceTests
         Assert.False(results[0].Success);
     }
 
-    // ── Group expansion ───────────────────────────────────────────────────────
-
     /// <summary>Addressing a group sends to all member users with AddressedVia populated.</summary>
     [Fact]
     public async Task RouteAsync_GroupAddress_ExpandsToMemberUsers()
@@ -139,9 +134,9 @@ public sealed class MessageRoutingServiceTests
                 ["OPS"] = ["ALPHA", "BETA"]
             }
         };
-        IUserDirectory groups = new ConfiguredUserDirectory(new DefaultUserDirectory(), config);
+        IEngineController groups = new ConfiguredEngineController(format, config, new CurrentUserProvider());
         FakePeerService fake = new();
-        MessageRoutingService service = new(fake, groups, Format, _loggerFactory);
+        MessageRoutingService service = new(fake, groups, loggerFactory);
 
         SendMessagePayload payload = new()
         {
@@ -171,9 +166,9 @@ public sealed class MessageRoutingServiceTests
                 ["OUTER"] = ["INNER", "BETA"]
             }
         };
-        IUserDirectory groups = new ConfiguredUserDirectory(new DefaultUserDirectory(), config);
+        IEngineController groups = new ConfiguredEngineController(format, config, new CurrentUserProvider());
         FakePeerService fake = new();
-        MessageRoutingService service = new(fake, groups, Format, _loggerFactory);
+        MessageRoutingService service = new(fake, groups, loggerFactory);
 
         SendMessagePayload payload = new()
         {
@@ -189,14 +184,12 @@ public sealed class MessageRoutingServiceTests
         Assert.Contains(fake.Sent, s => s.User.Equals("BETA", StringComparison.OrdinalIgnoreCase));
     }
 
-    // ── Self-delivery ─────────────────────────────────────────────────────────
-
     /// <summary>Sending to the current user skips the network entirely, delivers locally, and confirms immediately.</summary>
     [Fact]
     public async Task RouteAsync_ToOwnUser_DeliversLocallyAndConfirmsImmediately()
     {
         FakePeerService fake = new();
-        MessageRoutingService service = new(fake, _noGroups, Format, _loggerFactory);
+        MessageRoutingService service = new(fake, format, loggerFactory);
 
         List<(string MessageId, string User, DestinationStatus Status)> statusEvents = [];
         service.DeliveryStatusChanged += (msgId, user, status) =>
@@ -232,7 +225,7 @@ public sealed class MessageRoutingServiceTests
     public async Task RouteAsync_ToSelfAndRemoteUser_HandlesBothIndependently()
     {
         FakePeerService fake = new();
-        MessageRoutingService service = new(fake, _noGroups, Format, _loggerFactory);
+        MessageRoutingService service = new(fake, format, loggerFactory);
 
         SendMessagePayload payload = new()
         {
@@ -256,14 +249,12 @@ public sealed class MessageRoutingServiceTests
         Assert.Contains(results, r => r.UserName.Equals("REMOTE", StringComparison.OrdinalIgnoreCase) && r.Success);
     }
 
-    // ── OFT delivery status ──────────────────────────────────────────────────
-
     /// <summary>An Acknowledged OFT status from the peer service is mapped to Confirmed.</summary>
     [Fact]
     public async Task PeerDeliveryStatusChanged_Acknowledged_MapsToConfirmed()
     {
         FakePeerService fake = new();
-        MessageRoutingService service = new(fake, _noGroups, Format, _loggerFactory);
+        MessageRoutingService service = new(fake, format, loggerFactory);
 
         List<DestinationStatus> statuses = [];
         service.DeliveryStatusChanged += (_, _, status) =>
@@ -283,7 +274,7 @@ public sealed class MessageRoutingServiceTests
     public async Task PeerDeliveryStatusChanged_Cancelled_MapsToFailed()
     {
         FakePeerService fake = new();
-        MessageRoutingService service = new(fake, _noGroups, Format, _loggerFactory);
+        MessageRoutingService service = new(fake, format, loggerFactory);
 
         List<DestinationStatus> statuses = [];
         service.DeliveryStatusChanged += (_, _, status) =>
@@ -303,7 +294,7 @@ public sealed class MessageRoutingServiceTests
     public async Task PeerDeliveryStatusChanged_Sent_MapsToSent()
     {
         FakePeerService fake = new();
-        MessageRoutingService service = new(fake, _noGroups, Format, _loggerFactory);
+        MessageRoutingService service = new(fake, format, loggerFactory);
 
         List<DestinationStatus> statuses = [];
         service.DeliveryStatusChanged += (_, _, status) =>
@@ -327,7 +318,7 @@ public sealed class MessageRoutingServiceTests
     public async Task PeerDeliveryStatusChanged_InFlightStatuses_MapToSending(OftDeliveryStatus oftStatus)
     {
         FakePeerService fake = new();
-        MessageRoutingService service = new(fake, _noGroups, Format, _loggerFactory);
+        MessageRoutingService service = new(fake, format, loggerFactory);
 
         List<DestinationStatus> statuses = [];
         service.DeliveryStatusChanged += (_, _, status) =>
@@ -342,14 +333,12 @@ public sealed class MessageRoutingServiceTests
         Assert.Equal(DestinationStatus.Sending, statuses[0]);
     }
 
-    // ── Read confirmation ─────────────────────────────────────────────────────
-
     /// <summary>A confirmation received from the peer service is re-raised as a Read status change for the confirming user.</summary>
     [Fact]
     public async Task PeerConfirmationReceived_ReRaisesAsReadStatus()
     {
         FakePeerService fake = new();
-        MessageRoutingService service = new(fake, _noGroups, Format, _loggerFactory);
+        MessageRoutingService service = new(fake, format, loggerFactory);
 
         List<(string MessageId, string User, DestinationStatus Status)> changes = [];
         service.DeliveryStatusChanged += (messageId, user, status) =>

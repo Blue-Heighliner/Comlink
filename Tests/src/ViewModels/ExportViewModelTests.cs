@@ -3,8 +3,8 @@ namespace BlueHeighliner.Comlink.Tests.ViewModels;
 /// <summary>Unit tests for <see cref="ExportViewModel"/>.</summary>
 public sealed class ExportViewModelTests
 {
-    private static readonly ExternalDriveInfo DriveA = new() { RootPath = "/media/a", DisplayName = "Drive A" };
-    private static readonly ExternalDriveInfo DriveB = new() { RootPath = "/media/b", DisplayName = "Drive B" };
+    private readonly ExternalDriveInfo driveA = new() { RootPath = "/media/a", DisplayName = "Drive A" };
+    private readonly ExternalDriveInfo driveB = new() { RootPath = "/media/b", DisplayName = "Drive B" };
 
     private sealed class Setup
     {
@@ -14,10 +14,8 @@ public sealed class ExportViewModelTests
         public ExportViewModel Build() => new(DriveProvider.Object, ExportService.Object);
     }
 
-    private static EntryItemViewModel MakeEntry(string id, EntryType type = EntryType.Message, bool outbound = false) =>
-        new(id, $"Title-{id}", type, DateTime.UtcNow, isOutboundMessage: outbound);
-
-    // ── Initial state ─────────────────────────────────────────────────────────
+    private static EntryItemViewModel MakeEntry(string id, EntryType type = EntryType.Message, bool outbound = false)
+        => new(id, $"Title-{id}", type, DateTime.UtcNow, isOutboundMessage: outbound);
 
     /// <summary>A freshly constructed ViewModel defaults to All scope, an "export" file name, and is not exporting.</summary>
     [Fact]
@@ -34,19 +32,17 @@ public sealed class ExportViewModelTests
         Assert.False(vm.IsCollectingEntries);
     }
 
-    // ── RefreshDrivesCommand ─────────────────────────────────────────────────
-
     /// <summary>RefreshDrivesCommand populates AvailableDrives from the provider.</summary>
     [Fact]
     public void RefreshDrivesCommand_PopulatesAvailableDrives()
     {
         Setup s = new();
-        s.DriveProvider.Setup(d => d.GetDrives()).Returns([DriveA, DriveB]);
+        s.DriveProvider.Setup(d => d.GetDrives()).Returns([driveA, driveB]);
         ExportViewModel vm = s.Build();
 
         vm.RefreshDrivesCommand.Execute(null);
 
-        Assert.Equal([DriveA, DriveB], vm.AvailableDrives);
+        Assert.Equal([driveA, driveB], vm.AvailableDrives);
     }
 
     /// <summary>RefreshDrivesCommand clears SelectedDrive when it is no longer present in the new list.</summary>
@@ -55,11 +51,11 @@ public sealed class ExportViewModelTests
     {
         Setup s = new();
         s.DriveProvider.SetupSequence(d => d.GetDrives())
-            .Returns([DriveA])
-            .Returns([DriveB]);
+            .Returns([driveA])
+            .Returns([driveB]);
         ExportViewModel vm = s.Build();
         vm.RefreshDrivesCommand.Execute(null);
-        vm.SelectedDrive = DriveA;
+        vm.SelectedDrive = driveA;
 
         vm.RefreshDrivesCommand.Execute(null);
 
@@ -71,17 +67,15 @@ public sealed class ExportViewModelTests
     public void RefreshDrivesCommand_SelectedDriveStillPresent_PreservesSelection()
     {
         Setup s = new();
-        s.DriveProvider.Setup(d => d.GetDrives()).Returns([DriveA, DriveB]);
+        s.DriveProvider.Setup(d => d.GetDrives()).Returns([driveA, driveB]);
         ExportViewModel vm = s.Build();
         vm.RefreshDrivesCommand.Execute(null);
-        vm.SelectedDrive = DriveA;
+        vm.SelectedDrive = driveA;
 
         vm.RefreshDrivesCommand.Execute(null);
 
-        Assert.Equal(DriveA, vm.SelectedDrive);
+        Assert.Equal(driveA, vm.SelectedDrive);
     }
-
-    // ── Scope ────────────────────────────────────────────────────────────────
 
     /// <summary>Setting IsSomeScope switches Scope to Some.</summary>
     [Fact]
@@ -118,8 +112,6 @@ public sealed class ExportViewModelTests
         vm.Scope = ExportScope.Some;
         Assert.True(vm.IsCollectingEntries);
     }
-
-    // ── AddEntry / RemoveEntryCommand ───────────────────────────────────────
 
     /// <summary>AddEntry appends a new entry to SelectedEntries.</summary>
     [Fact]
@@ -211,7 +203,7 @@ public sealed class ExportViewModelTests
                 await Task.Delay(Timeout.Infinite, token);
             });
         ExportViewModel vm = s.Build();
-        vm.SelectedDrive = DriveA;
+        vm.SelectedDrive = driveA;
 
         Task exportTask = vm.StartExportCommand.ExecuteAsync(null);
         await exportStarted.Task;
@@ -221,8 +213,6 @@ public sealed class ExportViewModelTests
         vm.CancelExportCommand.Execute(null);
         await exportTask;
     }
-
-    // ── StartExportCommand validation ───────────────────────────────────────
 
     /// <summary>StartExportCommand with no drive selected sets a status message and does not call the export service.</summary>
     [Fact]
@@ -243,7 +233,7 @@ public sealed class ExportViewModelTests
     {
         Setup s = new();
         ExportViewModel vm = s.Build();
-        vm.SelectedDrive = DriveA;
+        vm.SelectedDrive = driveA;
         vm.FileName = "   ";
 
         await vm.StartExportCommand.ExecuteAsync(null);
@@ -258,7 +248,7 @@ public sealed class ExportViewModelTests
     {
         Setup s = new();
         ExportViewModel vm = s.Build();
-        vm.SelectedDrive = DriveA;
+        vm.SelectedDrive = driveA;
         vm.Scope = ExportScope.Some;
 
         await vm.StartExportCommand.ExecuteAsync(null);
@@ -266,8 +256,6 @@ public sealed class ExportViewModelTests
         Assert.Equal("Select at least one entry to export", vm.StatusMessage);
         s.ExportService.Verify(e => e.Export(It.IsAny<IReadOnlyList<ExportEntryRef>>(), It.IsAny<string>(), It.IsAny<CancellationToken>()), Times.Never);
     }
-
-    // ── StartExportCommand – All scope ──────────────────────────────────────
 
     /// <summary>StartExportCommand with All scope fetches every entry ref and exports to the selected drive.</summary>
     [Fact]
@@ -279,12 +267,12 @@ public sealed class ExportViewModelTests
         s.ExportService.Setup(e => e.Export(It.IsAny<IReadOnlyList<ExportEntryRef>>(), It.IsAny<string>(), It.IsAny<CancellationToken>()))
             .Returns(Task.CompletedTask);
         ExportViewModel vm = s.Build();
-        vm.SelectedDrive = DriveA;
+        vm.SelectedDrive = driveA;
         vm.FileName = "backup";
 
         await vm.StartExportCommand.ExecuteAsync(null);
 
-        s.ExportService.Verify(e => e.Export(allRefs, Path.Combine(DriveA.RootPath, "backup" + IExportService.PackageExtension), It.IsAny<CancellationToken>()), Times.Once);
+        s.ExportService.Verify(e => e.Export(allRefs, Path.Combine(driveA.RootPath, "backup" + IExportService.PackageExtension), It.IsAny<CancellationToken>()), Times.Once);
         Assert.False(vm.IsExporting);
         Assert.Contains("Exported", vm.StatusMessage);
     }
@@ -297,7 +285,7 @@ public sealed class ExportViewModelTests
         s.ExportService.Setup(e => e.Export(It.IsAny<IReadOnlyList<ExportEntryRef>>(), It.IsAny<string>(), It.IsAny<CancellationToken>()))
             .Returns(Task.CompletedTask);
         ExportViewModel vm = s.Build();
-        vm.SelectedDrive = DriveA;
+        vm.SelectedDrive = driveA;
         vm.Scope = ExportScope.Some;
         vm.AddEntry(MakeEntry("E1"));
         vm.AddEntry(MakeEntry("E2", EntryType.Draft));
@@ -320,18 +308,16 @@ public sealed class ExportViewModelTests
         s.ExportService.Setup(e => e.Export(It.IsAny<IReadOnlyList<ExportEntryRef>>(), It.IsAny<string>(), It.IsAny<CancellationToken>()))
             .Returns(Task.CompletedTask);
         ExportViewModel vm = s.Build();
-        vm.SelectedDrive = DriveA;
+        vm.SelectedDrive = driveA;
         vm.FileName = "a/b";
 
         await vm.StartExportCommand.ExecuteAsync(null);
 
         s.ExportService.Verify(e => e.Export(
             It.IsAny<IReadOnlyList<ExportEntryRef>>(),
-            Path.Combine(DriveA.RootPath, "a_b" + IExportService.PackageExtension),
+            Path.Combine(driveA.RootPath, "a_b" + IExportService.PackageExtension),
             It.IsAny<CancellationToken>()), Times.Once);
     }
-
-    // ── Failure / cancellation ───────────────────────────────────────────────
 
     /// <summary>A cancelled export sets an appropriate status message, leaves IsExporting false, and preserves the collected entries.</summary>
     [Fact]
@@ -341,7 +327,7 @@ public sealed class ExportViewModelTests
         s.ExportService.Setup(e => e.Export(It.IsAny<IReadOnlyList<ExportEntryRef>>(), It.IsAny<string>(), It.IsAny<CancellationToken>()))
             .ThrowsAsync(new OperationCanceledException());
         ExportViewModel vm = s.Build();
-        vm.SelectedDrive = DriveA;
+        vm.SelectedDrive = driveA;
         vm.Scope = ExportScope.Some;
         vm.AddEntry(MakeEntry("E1"));
 
@@ -361,15 +347,13 @@ public sealed class ExportViewModelTests
         s.ExportService.Setup(e => e.Export(It.IsAny<IReadOnlyList<ExportEntryRef>>(), It.IsAny<string>(), It.IsAny<CancellationToken>()))
             .ThrowsAsync(new IOException("disk full"));
         ExportViewModel vm = s.Build();
-        vm.SelectedDrive = DriveA;
+        vm.SelectedDrive = driveA;
 
         await vm.StartExportCommand.ExecuteAsync(null);
 
         Assert.Equal("Export failed: disk full", vm.StatusMessage);
         Assert.False(vm.IsExporting);
     }
-
-    // ── CancelExportCommand ──────────────────────────────────────────────────
 
     /// <summary>CancelExportCommand cannot execute while no export is running.</summary>
     [Fact]
@@ -397,7 +381,7 @@ public sealed class ExportViewModelTests
                 return Task.Delay(Timeout.Infinite, token);
             });
         ExportViewModel vm = s.Build();
-        vm.SelectedDrive = DriveA;
+        vm.SelectedDrive = driveA;
 
         Task exportTask = vm.StartExportCommand.ExecuteAsync(null);
         await exportStarted.Task;

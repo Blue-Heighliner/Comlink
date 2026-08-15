@@ -3,7 +3,6 @@ namespace BlueHeighliner.Comlink.Tests.Core;
 /// <summary>Unit tests for <see cref="EngineConfig"/> methods.</summary>
 public sealed class EngineConfigTests
 {
-    // ── Defaults ──────────────────────────────────────────────────────────────
 
     /// <summary>Default config has HeadlessMode = false.</summary>
     [Fact]
@@ -21,8 +20,6 @@ public sealed class EngineConfigTests
         Assert.Empty(config.Users);
         Assert.Empty(config.UserGroups);
     }
-
-    // ── GetUserEndpoints ──────────────────────────────────────────────────────
 
     /// <summary>Empty Users produces an empty endpoint map.</summary>
     [Fact]
@@ -71,8 +68,6 @@ public sealed class EngineConfigTests
         Assert.True(endpoints.ContainsKey("ALPHA"));
         Assert.True(endpoints.ContainsKey("alpha"));
     }
-
-    // ── Load ──────────────────────────────────────────────────────────────────
 
     /// <summary>Load with no --config argument returns a default config.</summary>
     [Fact]

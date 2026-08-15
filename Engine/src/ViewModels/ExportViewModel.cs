@@ -35,8 +35,6 @@ public interface IExportViewModel
     string? StatusMessage { get; }
     /// <summary>Re-scans for available external drives, preserving <see cref="SelectedDrive"/> if it is still present.</summary>
     IRelayCommand RefreshDrivesCommand { get; }
-    /// <summary>Adds an entry to <see cref="SelectedEntries"/> if not already present.</summary>
-    void AddEntry(EntryItemViewModel entry);
     /// <summary>Removes an entry from <see cref="SelectedEntries"/>.</summary>
     IRelayCommand<EntryItemViewModel> RemoveEntryCommand { get; }
     /// <summary>Clears every entry from <see cref="SelectedEntries"/>.</summary>
@@ -45,33 +43,55 @@ public interface IExportViewModel
     IAsyncRelayCommand StartExportCommand { get; }
     /// <summary>Cancels an export in progress.</summary>
     IRelayCommand CancelExportCommand { get; }
+
+    /// <summary>Adds an entry to <see cref="SelectedEntries"/> if not already present.</summary>
+    void AddEntry(EntryItemViewModel entry);
 }
 
 /// <inheritdoc cref="IExportViewModel" />
 public sealed partial class ExportViewModel : ObservableObject, IExportViewModel
 {
-    private readonly IExternalDriveProvider _driveProvider;
-    private readonly IExportService _exportService;
-    private CancellationTokenSource? _cancellation;
+    private static string SanitizeFileName(string name)
+    {
+        string trimmed = name.Trim();
+        foreach (char c in Path.GetInvalidFileNameChars())
+        {
+            trimmed = trimmed.Replace(c, '_');
+        }
+        return trimmed;
+    }
 
-    [ObservableProperty] private IReadOnlyList<ExternalDriveInfo> _availableDrives = [];
-    [ObservableProperty] private ExternalDriveInfo? _selectedDrive;
-    [ObservableProperty] private string _fileName = "export";
+    /// <summary>Initializes a new <see cref="ExportViewModel"/> with the drive provider and export service.</summary>
+    /// <param name="driveProvider">Enumerates available external drives.</param>
+    /// <param name="exportService">Builds the full entry list and writes the zip archive.</param>
+    public ExportViewModel(IExternalDriveProvider driveProvider, IExportService exportService)
+    {
+        this.driveProvider = driveProvider;
+        this.exportService = exportService;
+    }
+
+    private readonly IExternalDriveProvider driveProvider;
+    private readonly IExportService exportService;
+    private CancellationTokenSource? cancellation;
+
+    [ObservableProperty] private IReadOnlyList<ExternalDriveInfo> availableDrives = [];
+    [ObservableProperty] private ExternalDriveInfo? selectedDrive;
+    [ObservableProperty] private string fileName = "export";
 
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(IsCollectingEntries))]
     [NotifyPropertyChangedFor(nameof(IsAllScope))]
     [NotifyPropertyChangedFor(nameof(IsSomeScope))]
-    private ExportScope _scope = ExportScope.All;
+    private ExportScope scope = ExportScope.All;
 
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(IsCollectingEntries))]
     [NotifyCanExecuteChangedFor(nameof(StartExportCommand))]
     [NotifyCanExecuteChangedFor(nameof(CancelExportCommand))]
     [NotifyCanExecuteChangedFor(nameof(ClearEntriesCommand))]
-    private bool _isExporting;
+    private bool isExporting;
 
-    [ObservableProperty] private string? _statusMessage;
+    [ObservableProperty] private string? statusMessage;
 
     /// <inheritdoc />
     public ObservableCollection<EntryItemViewModel> SelectedEntries { get; } = [];
@@ -93,22 +113,15 @@ public sealed partial class ExportViewModel : ObservableObject, IExportViewModel
     /// <inheritdoc />
     public bool IsCollectingEntries => Scope == ExportScope.Some && !IsExporting;
 
-    /// <summary>Initializes a new <see cref="ExportViewModel"/> with the drive provider and export service.</summary>
-    /// <param name="driveProvider">Enumerates available external drives.</param>
-    /// <param name="exportService">Builds the full entry list and writes the zip archive.</param>
-    public ExportViewModel(IExternalDriveProvider driveProvider, IExportService exportService)
-    {
-        _driveProvider = driveProvider;
-        _exportService = exportService;
-    }
-
     [RelayCommand]
     private void RefreshDrives()
     {
-        IReadOnlyList<ExternalDriveInfo> drives = _driveProvider.GetDrives();
+        IReadOnlyList<ExternalDriveInfo> drives = driveProvider.GetDrives();
         AvailableDrives = drives;
         if (SelectedDrive is not null && !drives.Any(d => d.RootPath == SelectedDrive.RootPath))
+        {
             SelectedDrive = null;
+        }
     }
 
     /// <inheritdoc />
@@ -117,7 +130,9 @@ public sealed partial class ExportViewModel : ObservableObject, IExportViewModel
         bool alreadyAdded = SelectedEntries.Any(e =>
             e.Id == entry.Id && e.EntryType == entry.EntryType && e.IsOutboundMessage == entry.IsOutboundMessage);
         if (!alreadyAdded)
+        {
             SelectedEntries.Add(entry);
+        }
     }
 
     [RelayCommand]
@@ -138,18 +153,18 @@ public sealed partial class ExportViewModel : ObservableObject, IExportViewModel
 
         string zipPath = Path.Combine(drive.RootPath, SanitizeFileName(FileName) + IExportService.PackageExtension);
 
-        _cancellation = new CancellationTokenSource();
+        cancellation = new CancellationTokenSource();
         IsExporting = true;
         StatusMessage = null;
         try
         {
             IReadOnlyList<ExportEntryRef> refs = Scope == ExportScope.All
-                ? await _exportService.GetAllEntryRefs()
+                ? await exportService.GetAllEntryRefs()
                 : SelectedEntries
                     .Select(e => new ExportEntryRef { Id = e.Id, EntryType = e.EntryType, IsOutboundMessage = e.IsOutboundMessage })
                     .ToList();
 
-            await _exportService.Export(refs, zipPath, _cancellation.Token);
+            await exportService.Export(refs, zipPath, cancellation.Token);
 
             StatusMessage = $"Exported {refs.Count} {(refs.Count == 1 ? "entry" : "entries")} to {drive.DisplayName}";
             SelectedEntries.Clear();
@@ -165,23 +180,15 @@ public sealed partial class ExportViewModel : ObservableObject, IExportViewModel
         finally
         {
             IsExporting = false;
-            _cancellation?.Dispose();
-            _cancellation = null;
+            cancellation?.Dispose();
+            cancellation = null;
         }
     }
 
     private bool CanStartExport() => !IsExporting;
 
     [RelayCommand(CanExecute = nameof(CanCancelExport))]
-    private void CancelExport() => _cancellation?.Cancel();
+    private void CancelExport() => cancellation?.Cancel();
 
     private bool CanCancelExport() => IsExporting;
-
-    private static string SanitizeFileName(string name)
-    {
-        string trimmed = name.Trim();
-        foreach (char c in Path.GetInvalidFileNameChars())
-            trimmed = trimmed.Replace(c, '_');
-        return trimmed;
-    }
 }

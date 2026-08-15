@@ -24,16 +24,17 @@ public interface IActivityLogRepository
 /// <summary>Provides data-access operations for <see cref="ActivityLogEntity"/> documents.</summary>
 public sealed class ActivityLogRepository : IActivityLogRepository
 {
-    private readonly ILiteDbContext _ctx;
-    private readonly SemaphoreSlim _appendLock = new(1, 1);
     private const int PageSize = 50;
 
     /// <summary>Initializes a new <see cref="ActivityLogRepository"/> backed by the given database context.</summary>
-    public ActivityLogRepository(ILiteDbContext ctx) => _ctx = ctx;
+    public ActivityLogRepository(ILiteDbContext ctx) => this.ctx = ctx;
+
+    private readonly ILiteDbContext ctx;
+    private readonly SemaphoreSlim appendLock = new(1, 1);
 
     /// <inheritdoc />
-    public Task<List<ActivityLogEntity>> GetPage(int page) =>
-        Task.Run(() => _ctx.ActivityLogs
+    public Task<List<ActivityLogEntity>> GetPage(int page)
+        => Task.Run(() => ctx.ActivityLogs
             .Query()
             .OrderByDescending(a => a.Date)
             .Skip((page - 1) * PageSize)
@@ -41,56 +42,56 @@ public sealed class ActivityLogRepository : IActivityLogRepository
             .ToList());
 
     /// <inheritdoc />
-    public Task<int> Count() =>
-        Task.Run(() => _ctx.ActivityLogs.Count());
+    public Task<int> Count()
+        => Task.Run(() => ctx.ActivityLogs.Count());
 
     /// <inheritdoc />
-    public Task<List<ActivityLogEntity>> GetAll() =>
-        Task.Run(() => _ctx.ActivityLogs.FindAll().ToList());
+    public Task<List<ActivityLogEntity>> GetAll()
+        => Task.Run(() => ctx.ActivityLogs.FindAll().ToList());
 
     /// <inheritdoc />
-    public Task<ActivityLogEntity?> GetForToday() =>
-        Task.Run<ActivityLogEntity?>(() =>
+    public Task<ActivityLogEntity?> GetForToday()
+        => Task.Run<ActivityLogEntity?>(() =>
         {
             DateTime today = DateTime.UtcNow.Date;
-            return _ctx.ActivityLogs.FindOne(a => a.Date == today);
+            return ctx.ActivityLogs.FindOne(a => a.Date == today);
         });
 
     /// <inheritdoc />
-    public Task<ActivityLogEntity?> Get(ObjectId id) =>
-        Task.Run<ActivityLogEntity?>(() => _ctx.ActivityLogs.FindById(id));
+    public Task<ActivityLogEntity?> Get(ObjectId id)
+        => Task.Run<ActivityLogEntity?>(() => ctx.ActivityLogs.FindById(id));
 
     /// <inheritdoc />
-    public Task<ActivityLogEntity> Insert(ActivityLogEntity entity) =>
-        Task.Run(() => { _ctx.ActivityLogs.Insert(entity); return entity; });
+    public Task<ActivityLogEntity> Insert(ActivityLogEntity entity)
+        => Task.Run(() => { ctx.ActivityLogs.Insert(entity); return entity; });
 
     /// <inheritdoc />
-    public Task Update(ActivityLogEntity entity) =>
-        Task.Run(() => _ctx.ActivityLogs.Update(entity));
+    public Task Update(ActivityLogEntity entity)
+        => Task.Run(() => ctx.ActivityLogs.Update(entity));
 
     /// <inheritdoc />
     public async Task AppendEvent(string eventText)
     {
-        await _appendLock.WaitAsync();
+        await appendLock.WaitAsync();
         try
         {
             DateTime today = DateTime.UtcNow.Date;
             ActivityLogEntry entry = new() { At = DateTime.UtcNow, Message = eventText };
-            ActivityLogEntity? log = _ctx.ActivityLogs.FindOne(a => a.Date == today);
+            ActivityLogEntity? log = ctx.ActivityLogs.FindOne(a => a.Date == today);
             if (log is null)
             {
                 log = new ActivityLogEntity { Date = today, EventEntries = [entry] };
-                _ctx.ActivityLogs.Insert(log);
+                ctx.ActivityLogs.Insert(log);
             }
             else
             {
                 log.EventEntries.Add(entry);
-                _ctx.ActivityLogs.Update(log);
+                ctx.ActivityLogs.Update(log);
             }
         }
         finally
         {
-            _appendLock.Release();
+            appendLock.Release();
         }
     }
 }

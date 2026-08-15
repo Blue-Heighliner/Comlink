@@ -3,64 +3,61 @@ namespace BlueHeighliner.Comlink.Tests.Services;
 /// <summary>Integration tests for <see cref="ExportService"/> using a real LiteDB database and real zip files on disk.</summary>
 public sealed class ExportServiceTests : IDisposable
 {
-    private static readonly IMessageFormat MessageFormat = new TestMessageFormat();
-
-    private readonly string _appName = Guid.NewGuid().ToString();
-    private readonly string _exportDir = Path.Combine(Path.GetTempPath(), $"comlink-export-tests-{Guid.NewGuid():N}");
-    private readonly LiteDbContext _ctx;
-    private readonly MessageRepository _messages;
-    private readonly DraftRepository _drafts;
-    private readonly NoteRepository _notes;
-    private readonly ActivityLogRepository _activityLogs;
-    private readonly ExportService _service;
-
     /// <summary>Initializes a fresh isolated LiteDB context and temp export directory for each test.</summary>
     public ExportServiceTests()
     {
-        _ctx = new LiteDbContext(new TestAppDataPathProvider(_appName));
-        _ctx.Initialize();
-        _messages = new MessageRepository(_ctx);
-        _drafts = new DraftRepository(_ctx);
-        _notes = new NoteRepository(_ctx);
-        _activityLogs = new ActivityLogRepository(_ctx);
-        _service = new ExportService(_messages, _drafts, _notes, _activityLogs, MessageFormat);
-        Directory.CreateDirectory(_exportDir);
+        ctx = new LiteDbContext(new TestAppDataPathProvider(appName));
+        ctx.Initialize();
+        messages = new MessageRepository(ctx);
+        drafts = new DraftRepository(ctx);
+        notes = new NoteRepository(ctx);
+        activityLogs = new ActivityLogRepository(ctx);
+        service = new ExportService(messages, drafts, notes, activityLogs, messageFormat);
+        Directory.CreateDirectory(exportDir);
     }
+
+    private readonly IEngineController messageFormat = new TestEngineController();
+    private readonly string appName = Guid.NewGuid().ToString();
+    private readonly string exportDir = Path.Combine(Path.GetTempPath(), $"comlink-export-tests-{Guid.NewGuid():N}");
+    private readonly LiteDbContext ctx;
+    private readonly MessageRepository messages;
+    private readonly DraftRepository drafts;
+    private readonly NoteRepository notes;
+    private readonly ActivityLogRepository activityLogs;
+    private readonly ExportService service;
 
     /// <inheritdoc />
     public void Dispose()
     {
-        _ctx.Dispose();
-        string dbDir = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), _appName);
-        if (Directory.Exists(dbDir)) Directory.Delete(dbDir, recursive: true);
-        if (Directory.Exists(_exportDir)) Directory.Delete(_exportDir, recursive: true);
+        ctx.Dispose();
+        string dbDir = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), appName);
+        if (Directory.Exists(dbDir)) { Directory.Delete(dbDir, recursive: true); }
+        if (Directory.Exists(exportDir)) { Directory.Delete(exportDir, recursive: true); }
     }
 
-    private string ZipPath() => Path.Combine(_exportDir, "export" + IExportService.PackageExtension);
+    private string ZipPath() => Path.Combine(exportDir, "export" + IExportService.PackageExtension);
 
     private async Task<MessageEntity> InsertMessage(string messageId, string subject, bool isOutbound, int priority = 0)
     {
-        object message = MessageFormat.CreateMessage();
-        MessageFormat.SetMessageId(message, messageId);
-        MessageFormat.SetSubject(message, subject);
-        MessageFormat.SetPriority(message, priority);
+        object message = messageFormat.CreateMessage();
+        messageFormat.SetMessageId(message, messageId);
+        messageFormat.SetSubject(message, subject);
+        messageFormat.SetPriority(message, priority);
         MessageEntity entity = new() { MessageId = messageId, Message = message, FolderId = "root-inbox", IsOutbound = isOutbound };
-        await _messages.Insert(entity);
+        await messages.Insert(entity);
         return entity;
     }
-
-    // ── GetAllEntryRefs ──────────────────────────────────────────────────────
 
     /// <summary>GetAllEntryRefs returns one reference per message, draft, note, and activity log document.</summary>
     [Fact]
     public async Task GetAllEntryRefs_ReturnsRefForEveryEntryType()
     {
         MessageEntity message = await InsertMessage("M1", "Hello", isOutbound: false);
-        DraftEntity draft = await _drafts.Insert(new DraftEntity { Subject = "D", FolderId = "root-drafts" });
-        NoteEntity note = await _notes.Insert(new NoteEntity { Body = "N", FolderId = "root-notes" });
-        ActivityLogEntity log = await _activityLogs.Insert(new ActivityLogEntity { Date = DateTime.UtcNow.Date });
+        DraftEntity draft = await drafts.Insert(new DraftEntity { Subject = "D", FolderId = "root-drafts" });
+        NoteEntity note = await notes.Insert(new NoteEntity { Body = "N", FolderId = "root-notes" });
+        ActivityLogEntity log = await activityLogs.Insert(new ActivityLogEntity { Date = DateTime.UtcNow.Date });
 
-        IReadOnlyList<ExportEntryRef> refs = await _service.GetAllEntryRefs();
+        IReadOnlyList<ExportEntryRef> refs = await service.GetAllEntryRefs();
 
         Assert.Equal(4, refs.Count);
         Assert.Contains(refs, r => r.Id == message.MessageId && r.EntryType == EntryType.Message && !r.IsOutboundMessage);
@@ -76,21 +73,19 @@ public sealed class ExportServiceTests : IDisposable
         await InsertMessage("M1", "In", isOutbound: false);
         await InsertMessage("M1", "Out", isOutbound: true);
 
-        IReadOnlyList<ExportEntryRef> refs = await _service.GetAllEntryRefs();
+        IReadOnlyList<ExportEntryRef> refs = await service.GetAllEntryRefs();
 
         Assert.Equal(2, refs.Count);
         Assert.Contains(refs, r => r.Id == "M1" && !r.IsOutboundMessage);
         Assert.Contains(refs, r => r.Id == "M1" && r.IsOutboundMessage);
     }
 
-    // ── Export ───────────────────────────────────────────────────────────────
-
     /// <summary>Export writes one JSON file per entry into the zip, with content matching the source entity.</summary>
     [Fact]
     public async Task Export_WritesOneJsonFilePerEntry()
     {
         await InsertMessage("M1", "Hello World", isOutbound: false, priority: 3);
-        DraftEntity draft = await _drafts.Insert(new DraftEntity { Subject = "Draft Subject", FolderId = "root-drafts", Priority = 2 });
+        DraftEntity draft = await drafts.Insert(new DraftEntity { Subject = "Draft Subject", FolderId = "root-drafts", Priority = 2 });
         string zipPath = ZipPath();
 
         List<ExportEntryRef> refs =
@@ -99,7 +94,7 @@ public sealed class ExportServiceTests : IDisposable
             new ExportEntryRef { Id = draft.Id.ToString(), EntryType = EntryType.Draft }
         ];
 
-        await _service.Export(refs, zipPath);
+        await service.Export(refs, zipPath);
 
         Assert.True(File.Exists(zipPath));
         using ZipArchive archive = ZipFile.OpenRead(zipPath);
@@ -129,7 +124,7 @@ public sealed class ExportServiceTests : IDisposable
         string zipPath = ZipPath();
         List<ExportEntryRef> refs = [new ExportEntryRef { Id = "does-not-exist", EntryType = EntryType.Message, IsOutboundMessage = false }];
 
-        await _service.Export(refs, zipPath);
+        await service.Export(refs, zipPath);
 
         using ZipArchive archive = ZipFile.OpenRead(zipPath);
         Assert.Empty(archive.Entries);
@@ -141,7 +136,7 @@ public sealed class ExportServiceTests : IDisposable
     {
         string zipPath = ZipPath();
 
-        await _service.Export([], zipPath);
+        await service.Export([], zipPath);
 
         Assert.True(File.Exists(zipPath));
         using ZipArchive archive = ZipFile.OpenRead(zipPath);
@@ -159,7 +154,7 @@ public sealed class ExportServiceTests : IDisposable
         using CancellationTokenSource cts = new();
         cts.Cancel();
 
-        await Assert.ThrowsAsync<OperationCanceledException>(() => _service.Export(refs, zipPath, cts.Token));
+        await Assert.ThrowsAsync<OperationCanceledException>(() => service.Export(refs, zipPath, cts.Token));
 
         Assert.False(File.Exists(zipPath));
     }

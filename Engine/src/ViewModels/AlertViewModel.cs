@@ -2,7 +2,7 @@ namespace BlueHeighliner.Comlink.Engine.ViewModels;
 
 /// <summary>
 /// ViewModel interface tracking pending (unread) alert messages and driving the title bar's alarm box
-/// and sound. See <see cref="Control.IMessageFormat.GetIsAlert"/> and <c>Docs/ViewModels.md</c>.
+/// and sound. See <see cref="Control.IEngineController.GetIsAlert"/> and <c>Docs/ViewModels.md</c>.
 /// </summary>
 public interface IAlertViewModel
 {
@@ -25,58 +25,56 @@ public interface IAlertViewModel
 /// </summary>
 public sealed partial class AlertViewModel : ObservableObject, IAlertViewModel
 {
-    private readonly IEntryService _entryService;
-    private readonly IServiceConnection _connection;
-    private readonly IMessageFormat _messageFormat;
-    private readonly IAlertSettings _alertSettings;
-    private readonly IAlertSoundPlayer _soundPlayer;
-    private readonly List<string> _pending = [];
-    private Timer? _soundTimer;
-
-    [ObservableProperty]
-    [NotifyPropertyChangedFor(nameof(IsAlerting))]
-    [NotifyCanExecuteChangedFor(nameof(ConfirmLatestCommand))]
-    private int _pendingCount;
-
-    /// <inheritdoc />
-    public bool IsAlerting => PendingCount > 0;
-    /// <inheritdoc />
-    public string AlertText => _alertSettings.AlertText;
-    /// <inheritdoc />
-    public bool QuickConfirmationEnabled => _alertSettings.QuickConfirmationEnabled;
-
     /// <summary>Initializes a new <see cref="AlertViewModel"/> and subscribes to entry read/insert events.</summary>
     /// <param name="entryService">Entry service raising the insert/read events that drive the pending list.</param>
     /// <param name="connection">Service connection used to mark an alert read via quick confirmation.</param>
-    /// <param name="messageFormat">Maps logical fields onto a message entity's stored message.</param>
-    /// <param name="alertSettings">Provides alert box text, alarm sound duration, and quick-confirmation setting.</param>
+    /// <param name="engineController">Maps logical fields onto a message entity's stored message; provides alert box text, alarm sound duration, and quick-confirmation setting.</param>
     /// <param name="soundPlayer">Plays and stops the alarm sound.</param>
     public AlertViewModel(
         IEntryService entryService,
         IServiceConnection connection,
-        IMessageFormat messageFormat,
-        IAlertSettings alertSettings,
+        IEngineController engineController,
         IAlertSoundPlayer soundPlayer)
     {
-        _entryService = entryService;
-        _connection = connection;
-        _messageFormat = messageFormat;
-        _alertSettings = alertSettings;
-        _soundPlayer = soundPlayer;
+        this.entryService = entryService;
+        this.connection = connection;
+        this.engineController = engineController;
+        this.soundPlayer = soundPlayer;
 
         entryService.MessageInserted += OnMessageInserted;
         entryService.MessageRead += OnMessageRead;
     }
 
+    private readonly IEntryService entryService;
+    private readonly IServiceConnection connection;
+    private readonly IEngineController engineController;
+    private readonly IAlertSoundPlayer soundPlayer;
+    private readonly List<string> pending = [];
+    private Timer? soundTimer;
+
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(IsAlerting))]
+    [NotifyCanExecuteChangedFor(nameof(ConfirmLatestCommand))]
+    private int pendingCount;
+
+    /// <inheritdoc />
+    public bool IsAlerting => PendingCount > 0;
+    /// <inheritdoc />
+    public string AlertText => engineController.AlertLabel;
+    /// <inheritdoc />
+    public bool QuickConfirmationEnabled => engineController.QuickConfirmationEnabled;
+
     private Task OnMessageInserted(MessageEntity entity)
     {
-        if (!_messageFormat.GetIsAlert(entity.Message))
+        if (!engineController.GetIsAlert(entity.Message))
+        {
             return Task.CompletedTask;
+        }
 
-        lock (_pending) _pending.Add(entity.MessageId);
-        PendingCount = _pending.Count;
+        lock (pending) pending.Add(entity.MessageId);
+        PendingCount = pending.Count;
 
-        _soundPlayer.Play();
+        soundPlayer.Play();
         ResetSoundTimer();
         return Task.CompletedTask;
     }
@@ -84,26 +82,30 @@ public sealed partial class AlertViewModel : ObservableObject, IAlertViewModel
     private Task OnMessageRead(MessageEntity entity)
     {
         bool removed;
-        lock (_pending) removed = _pending.Remove(entity.MessageId);
-        if (!removed) return Task.CompletedTask;
+        lock (pending) removed = pending.Remove(entity.MessageId);
+        if (!removed) { return Task.CompletedTask; }
 
-        PendingCount = _pending.Count;
+        PendingCount = pending.Count;
         if (PendingCount == 0)
         {
-            _soundTimer?.Dispose();
-            _soundTimer = null;
-            _soundPlayer.Stop();
+            soundTimer?.Dispose();
+            soundTimer = null;
+            soundPlayer.Stop();
         }
         return Task.CompletedTask;
     }
 
     private void ResetSoundTimer()
     {
-        TimeSpan duration = _alertSettings.AlarmSoundDuration;
-        if (_soundTimer is null)
-            _soundTimer = new Timer(_ => _soundPlayer.Stop(), null, duration, Timeout.InfiniteTimeSpan);
+        TimeSpan duration = engineController.AlarmSoundDuration;
+        if (soundTimer is null)
+        {
+            soundTimer = new Timer(_ => soundPlayer.Stop(), null, duration, Timeout.InfiniteTimeSpan);
+        }
         else
-            _soundTimer.Change(duration, Timeout.InfiniteTimeSpan);
+        {
+            soundTimer.Change(duration, Timeout.InfiniteTimeSpan);
+        }
     }
 
     /// <summary>Confirms (marks read) the most recently received pending alert, if any and if enabled.</summary>
@@ -111,9 +113,9 @@ public sealed partial class AlertViewModel : ObservableObject, IAlertViewModel
     private async Task ConfirmLatest()
     {
         string? latest;
-        lock (_pending) latest = _pending.Count > 0 ? _pending[^1] : null;
-        if (latest is null) return;
-        await _connection.MarkMessageRead(latest);
+        lock (pending) latest = pending.Count > 0 ? pending[^1] : null;
+        if (latest is null) { return; }
+        await connection.MarkMessageRead(latest);
     }
 
     private bool CanConfirmLatest() => IsAlerting && QuickConfirmationEnabled;

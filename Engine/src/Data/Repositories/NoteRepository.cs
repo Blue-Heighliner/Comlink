@@ -22,17 +22,18 @@ public interface INoteRepository
 /// <summary>Provides data-access operations for <see cref="NoteEntity"/> documents.</summary>
 public sealed class NoteRepository : INoteRepository
 {
-    private readonly ILiteDbContext _ctx;
     private const int PageSize = 50;
 
     /// <summary>Initializes a new <see cref="NoteRepository"/> backed by the given database context.</summary>
-    public NoteRepository(ILiteDbContext ctx) => _ctx = ctx;
+    public NoteRepository(ILiteDbContext ctx) => this.ctx = ctx;
+
+    private readonly ILiteDbContext ctx;
 
     /// <inheritdoc />
-    public Task<List<NoteEntity>> GetPage(string folderId, int page, bool alphabetical) =>
-        Task.Run(() =>
+    public Task<List<NoteEntity>> GetPage(string folderId, int page, bool alphabetical)
+        => Task.Run(() =>
         {
-            ILiteQueryable<NoteEntity> query = _ctx.Notes.Query().Where(n => n.FolderId == folderId);
+            ILiteQueryable<NoteEntity> query = ctx.Notes.Query().Where(n => n.FolderId == folderId);
             return (alphabetical
                 ? query.OrderBy(n => n.Body)
                 : query.OrderByDescending(n => n.ModifiedAt))
@@ -42,26 +43,26 @@ public sealed class NoteRepository : INoteRepository
         });
 
     /// <inheritdoc />
-    public Task<int> Count(string folderId) =>
-        Task.Run(() => _ctx.Notes.Count(n => n.FolderId == folderId));
+    public Task<int> Count(string folderId)
+        => Task.Run(() => ctx.Notes.Count(n => n.FolderId == folderId));
 
     /// <inheritdoc />
-    public Task<List<NoteEntity>> GetAll() =>
-        Task.Run(() => _ctx.Notes.FindAll().ToList());
+    public Task<List<NoteEntity>> GetAll()
+        => Task.Run(() => ctx.Notes.FindAll().ToList());
 
     /// <inheritdoc />
-    public Task<NoteEntity?> Get(ObjectId id) =>
-        Task.Run<NoteEntity?>(() => _ctx.Notes.FindById(id));
+    public Task<NoteEntity?> Get(ObjectId id)
+        => Task.Run<NoteEntity?>(() => ctx.Notes.FindById(id));
 
     /// <inheritdoc />
-    public Task<NoteEntity> Insert(NoteEntity entity) =>
-        Task.Run(() => { _ctx.Notes.Insert(entity); return entity; });
+    public Task<NoteEntity> Insert(NoteEntity entity)
+        => Task.Run(() => { ctx.Notes.Insert(entity); return entity; });
 
     /// <inheritdoc />
-    public Task Update(NoteEntity entity) =>
-        Task.Run(() => _ctx.Notes.Update(entity));
+    public Task Update(NoteEntity entity)
+        => Task.Run(() => ctx.Notes.Update(entity));
 
     /// <inheritdoc />
-    public Task Delete(ObjectId id) =>
-        Task.Run(() => _ctx.Notes.Delete(id));
+    public Task Delete(ObjectId id)
+        => Task.Run(() => ctx.Notes.Delete(id));
 }

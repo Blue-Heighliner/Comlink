@@ -4,7 +4,7 @@ The data layer is active in `Client` mode only. It uses LiteDB (a single-file em
 
 ## Database File
 
-A single file `Data.db` in `IAppSettings.AppDataPath`. The file is created on first `LiteDbContext.Initialize()` call.
+A single file `Data.db` in `IEngineController.AppDataPath`. The file is created on first `LiteDbContext.Initialize()` call.
 
 ## LiteDbContext
 
@@ -73,8 +73,8 @@ Stored in both Inbox (received) and Outbox (sent).
 | Field | Type | Notes |
 |-------|------|-------|
 | `Id` | `ObjectId` | LiteDB auto-ID (the actual primary key) |
-| `MessageId` | `string` | Denormalized from `Message` (via `IMessageFormat.GetMessageId`) so LiteDB can query/index on it directly. **Not unique** — see below |
-| `Message` | `object` | The message content — subject, body, sender, addresses, sent time — as an instance of `IMessageFormat.MessageType`. This is the canonical representation; LiteDB serializes it using its own runtime type (via its built-in `object`-property polymorphism, storing a `_type` discriminator) and reconstructs the same concrete type on load. Read its logical fields through the registered `IMessageFormat` — see `Docs/Peer.md` and `Docs/Control.md`. |
+| `MessageId` | `string` | Denormalized from `Message` (via `IEngineController.GetMessageId`) so LiteDB can query/index on it directly. **Not unique** — see below |
+| `Message` | `object` | The message content — subject, body, sender, addresses, sent time — as an instance of `IEngineController.MessageType`. This is the canonical representation; LiteDB serializes it using its own runtime type (via its built-in `object`-property polymorphism, storing a `_type` discriminator) and reconstructs the same concrete type on load. Read its logical fields through the registered `IEngineController` — see `Docs/Peer.md` and `Docs/Control.md`. |
 | `DeliveryStatuses` | `List<DeliveryStatus>` | Per-user delivery state (Outbox messages) |
 | `ReadStatus` | `DestinationStatus?` | Inbox-only: `Received` when stored, `Read` once the user opens it (see `Docs/Peer.md#read-confirmation`). Always `null` on Outbox records — per-destination read state lives in `DeliveryStatuses` instead |
 | `ReceivedAt` | `DateTime` | UTC timestamp; denormalized from `Message`'s sent time so LiteDB can sort/index on it directly |
@@ -94,8 +94,8 @@ Stored in both Inbox (received) and Outbox (sent).
 | `Addresses` | `List<AddressData>` | |
 | `IsSent` | `bool` | `true` after successful send |
 | `IsAlert` | `bool` | Whether this draft will be sent as an alert; see `Docs/Peer.md#alert-messages` |
-| `Priority` | `int` | Priority number this draft should be sent at; see `Docs/Control.md#imessagepriorityprovider` |
-| `Tag` | `string` | Short user-inputted tag identifying the type of this message; see `Docs/Control.md#imessagetagconfiguration` |
+| `Priority` | `int` | Priority number this draft should be sent at; see `Docs/Control.md#message-composition` |
+| `Tag` | `string` | Short user-inputted tag identifying the type of this message; see `Docs/Control.md#message-composition` |
 | `SentAt` | `DateTime?` | UTC send time |
 | `ModifiedAt` | `DateTime` | UTC last edit time |
 | `FolderId` | `string` | |

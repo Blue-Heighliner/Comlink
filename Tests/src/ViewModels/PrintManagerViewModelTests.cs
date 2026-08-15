@@ -3,46 +3,41 @@ namespace BlueHeighliner.Comlink.Tests.ViewModels;
 /// <summary>Unit tests for <see cref="PrintManagerViewModel"/>.</summary>
 public sealed class PrintManagerViewModelTests
 {
-    private static readonly IMessageFormat Format = new TestMessageFormat();
-    private static readonly ILoggerFactory NoLogger = LoggerFactory.Create(_ => { });
-
-    private sealed class FakeLinePrinter : ILinePrinter
-    {
-        public List<(string Printer, string Line)> PrintedLines { get; } = [];
-        public List<string> PageFeeds { get; } = [];
-        public Func<string, string, Task>? OnPrintLine { get; set; }
-
-        public async Task PrintLine(string printerName, string line, CancellationToken cancellation = default)
-        {
-            PrintedLines.Add((printerName, line));
-            if (OnPrintLine is not null) await OnPrintLine(printerName, line);
-        }
-
-        public Task PageFeed(string printerName, CancellationToken cancellation = default)
-        {
-            PageFeeds.Add(printerName);
-            return Task.CompletedTask;
-        }
-    }
+    private static readonly IEngineController format = new TestEngineController();
+    private static readonly ILoggerFactory noLogger = LoggerFactory.Create(_ => { });
 
     private sealed class Setup
     {
+        public Setup()
+        {
+            PrintDriver.Setup(p => p.GetAvailablePrinters()).Returns(["PRINTER-A", "PRINTER-B"]);
+            PrintDriver.Setup(p => p.GetDefaultPrinter()).Returns("PRINTER-A");
+            EngineController.Setup(p => p.PrintReceivedDefaultEnabled).Returns(false);
+            EngineController.Setup(r => r.GetPrintCount(It.IsAny<TestMessage>())).Returns(1);
+            PrintDriver.Setup(p => p.PrintLine(It.IsAny<string>(), It.IsAny<string>(), It.IsAny<CancellationToken>()))
+                .Returns<string, string, CancellationToken>(async (printer, line, _) =>
+                {
+                    PrintedLines.Add((printer, line));
+                    if (OnPrintLine is not null) { await OnPrintLine(printer, line); }
+                });
+            PrintDriver.Setup(p => p.PageFeed(It.IsAny<string>(), It.IsAny<CancellationToken>()))
+                .Returns<string, CancellationToken>((printer, _) =>
+                {
+                    PageFeeds.Add(printer);
+                    return Task.CompletedTask;
+                });
+        }
+
         public Mock<IEntryService> EntryService { get; } = new();
         public Mock<IMessageRepository> Messages { get; } = new();
         public Mock<IDraftRepository> Drafts { get; } = new();
         public Mock<INoteRepository> Notes { get; } = new();
         public Mock<IActivityLogRepository> ActivityLogs { get; } = new();
-        public Mock<IPrinterProvider> PrinterProvider { get; } = new();
-        public FakeLinePrinter LinePrinter { get; } = new();
-        public Mock<IPrintPolicy> PrintPolicy { get; } = new();
-
-        public Setup()
-        {
-            PrinterProvider.Setup(p => p.GetAvailablePrinters()).Returns(["PRINTER-A", "PRINTER-B"]);
-            PrinterProvider.Setup(p => p.GetDefaultPrinter()).Returns("PRINTER-A");
-            PrintPolicy.Setup(p => p.PrintReceivedDefaultEnabled).Returns(false);
-            PrintPolicy.Setup(r => r.GetPrintCount(It.IsAny<object>())).Returns(1);
-        }
+        public Mock<TestEngineController> EngineController { get; } = new() { CallBase = true };
+        public Mock<IPrintDriver> PrintDriver { get; } = new();
+        public List<(string Printer, string Line)> PrintedLines { get; } = [];
+        public List<string> PageFeeds { get; } = [];
+        public Func<string, string, Task>? OnPrintLine { get; set; }
 
         public PrintManagerViewModel Build() => new(
             EntryService.Object,
@@ -50,29 +45,25 @@ public sealed class PrintManagerViewModelTests
             Drafts.Object,
             Notes.Object,
             ActivityLogs.Object,
-            Format,
-            PrinterProvider.Object,
-            LinePrinter,
-            PrintPolicy.Object,
-            NoLogger);
+            EngineController.Object,
+            PrintDriver.Object,
+            noLogger);
     }
 
     private static MessageEntity MakeMessage(string messageId, string subject, string body, int priority)
     {
-        object message = Format.CreateMessage();
-        Format.SetMessageId(message, messageId);
-        Format.SetSubject(message, subject);
-        Format.SetBody(message, body);
-        Format.SetPriority(message, priority);
+        object message = format.CreateMessage();
+        format.SetMessageId(message, messageId);
+        format.SetSubject(message, subject);
+        format.SetBody(message, body);
+        format.SetPriority(message, priority);
         return new MessageEntity { MessageId = messageId, Message = message };
     }
 
-    private static EntryItemViewModel MakeEntryItem(string id, string title, EntryType entryType = EntryType.Note) =>
-        new(id, title, entryType, DateTime.UtcNow);
+    private static EntryItemViewModel MakeEntryItem(string id, string title, EntryType entryType = EntryType.Note)
+        => new(id, title, entryType, DateTime.UtcNow);
 
-    // ── Construction ──────────────────────────────────────────────────────────
-
-    /// <summary>SelectedPrinter initializes from IPrinterProvider.GetDefaultPrinter().</summary>
+    /// <summary>SelectedPrinter initializes from IPrintDriver.GetDefaultPrinter().</summary>
     [Fact]
     public void Ctor_SelectedPrinterFromDefaultProvider()
     {
@@ -80,7 +71,7 @@ public sealed class PrintManagerViewModelTests
         Assert.Equal("PRINTER-A", vm.SelectedPrinter);
     }
 
-    /// <summary>AvailablePrinters is populated from IPrinterProvider.GetAvailablePrinters().</summary>
+    /// <summary>AvailablePrinters is populated from IPrintDriver.GetAvailablePrinters().</summary>
     [Fact]
     public void Ctor_AvailablePrintersFromProvider()
     {
@@ -88,14 +79,14 @@ public sealed class PrintManagerViewModelTests
         Assert.Equal(["PRINTER-A", "PRINTER-B"], vm.AvailablePrinters);
     }
 
-    /// <summary>PrintReceivedEnabled initializes from IPrintPolicy.PrintReceivedDefaultEnabled.</summary>
+    /// <summary>PrintReceivedEnabled initializes from IEngineController.PrintReceivedDefaultEnabled.</summary>
     [Theory]
     [InlineData(false)]
     [InlineData(true)]
     public void Ctor_PrintReceivedEnabledFromDefaultProvider(bool enabled)
     {
         Setup s = new();
-        s.PrintPolicy.Setup(p => p.PrintReceivedDefaultEnabled).Returns(enabled);
+        s.EngineController.Setup(p => p.PrintReceivedDefaultEnabled).Returns(enabled);
 
         PrintManagerViewModel vm = s.Build();
 
@@ -110,14 +101,12 @@ public sealed class PrintManagerViewModelTests
         Assert.Empty(vm.Queue);
     }
 
-    // ── EnqueueManual ─────────────────────────────────────────────────────────
-
     /// <summary>EnqueueManual adds a manual entry to the queue.</summary>
     [Fact]
     public void EnqueueManual_AddsToQueue()
     {
         Setup s = new();
-        s.PrinterProvider.Setup(p => p.GetDefaultPrinter()).Returns((string?)null);
+        s.PrintDriver.Setup(p => p.GetDefaultPrinter()).Returns((string?)null);
         PrintManagerViewModel vm = s.Build();
 
         vm.EnqueueManual(MakeEntryItem("N1", "My Note"));
@@ -133,8 +122,8 @@ public sealed class PrintManagerViewModelTests
     public void Queue_ManualEntry_SortsAheadOfHigherPriorityReceivedEntry()
     {
         Setup s = new();
-        s.PrinterProvider.Setup(p => p.GetDefaultPrinter()).Returns((string?)null);
-        s.PrintPolicy.Setup(p => p.PrintReceivedDefaultEnabled).Returns(true);
+        s.PrintDriver.Setup(p => p.GetDefaultPrinter()).Returns((string?)null);
+        s.EngineController.Setup(p => p.PrintReceivedDefaultEnabled).Returns(true);
         PrintManagerViewModel vm = s.Build();
 
         s.EntryService.Raise(e => e.MessageInserted += null, MakeMessage("MSG1", "High priority", "body", 99));
@@ -145,14 +134,12 @@ public sealed class PrintManagerViewModelTests
         Assert.Equal("N1", vm.Queue[0].EntryId);
     }
 
-    // ── Automatic print-received ─────────────────────────────────────────────
-
     /// <summary>MessageInserted does not enqueue anything while PrintReceivedEnabled is false (the default).</summary>
     [Fact]
     public void MessageInserted_PrintReceivedDisabled_DoesNotEnqueue()
     {
         Setup s = new();
-        s.PrinterProvider.Setup(p => p.GetDefaultPrinter()).Returns((string?)null);
+        s.PrintDriver.Setup(p => p.GetDefaultPrinter()).Returns((string?)null);
         PrintManagerViewModel vm = s.Build();
 
         s.EntryService.Raise(e => e.MessageInserted += null, MakeMessage("MSG1", "Subject", "body", 0));
@@ -165,8 +152,8 @@ public sealed class PrintManagerViewModelTests
     public void MessageInserted_PrintReceivedEnabled_EnqueuesGetPrintCountCopies()
     {
         Setup s = new();
-        s.PrinterProvider.Setup(p => p.GetDefaultPrinter()).Returns((string?)null);
-        s.PrintPolicy.Setup(r => r.GetPrintCount(It.IsAny<object>())).Returns(3);
+        s.PrintDriver.Setup(p => p.GetDefaultPrinter()).Returns((string?)null);
+        s.EngineController.Setup(r => r.GetPrintCount(It.IsAny<TestMessage>())).Returns(3);
         PrintManagerViewModel vm = s.Build();
         vm.PrintReceivedEnabled = true;
 
@@ -182,8 +169,8 @@ public sealed class PrintManagerViewModelTests
     public void MessageInserted_PrintCountZero_EnqueuesNothing()
     {
         Setup s = new();
-        s.PrinterProvider.Setup(p => p.GetDefaultPrinter()).Returns((string?)null);
-        s.PrintPolicy.Setup(r => r.GetPrintCount(It.IsAny<object>())).Returns(0);
+        s.PrintDriver.Setup(p => p.GetDefaultPrinter()).Returns((string?)null);
+        s.EngineController.Setup(r => r.GetPrintCount(It.IsAny<TestMessage>())).Returns(0);
         PrintManagerViewModel vm = s.Build();
         vm.PrintReceivedEnabled = true;
 
@@ -197,8 +184,8 @@ public sealed class PrintManagerViewModelTests
     public void Queue_ReceivedEntries_SortByDescendingPriority()
     {
         Setup s = new();
-        s.PrinterProvider.Setup(p => p.GetDefaultPrinter()).Returns((string?)null);
-        s.PrintPolicy.Setup(p => p.PrintReceivedDefaultEnabled).Returns(true);
+        s.PrintDriver.Setup(p => p.GetDefaultPrinter()).Returns((string?)null);
+        s.EngineController.Setup(p => p.PrintReceivedDefaultEnabled).Returns(true);
         PrintManagerViewModel vm = s.Build();
 
         s.EntryService.Raise(e => e.MessageInserted += null, MakeMessage("LOW", "Low", "body", 1));
@@ -212,8 +199,8 @@ public sealed class PrintManagerViewModelTests
     public void Queue_EqualPriorityReceivedEntries_PreserveFifoOrder()
     {
         Setup s = new();
-        s.PrinterProvider.Setup(p => p.GetDefaultPrinter()).Returns((string?)null);
-        s.PrintPolicy.Setup(p => p.PrintReceivedDefaultEnabled).Returns(true);
+        s.PrintDriver.Setup(p => p.GetDefaultPrinter()).Returns((string?)null);
+        s.EngineController.Setup(p => p.PrintReceivedDefaultEnabled).Returns(true);
         PrintManagerViewModel vm = s.Build();
 
         s.EntryService.Raise(e => e.MessageInserted += null, MakeMessage("FIRST", "First", "body", 5));
@@ -222,14 +209,12 @@ public sealed class PrintManagerViewModelTests
         Assert.Equal(["FIRST", "SECOND"], vm.Queue.Select(e => e.EntryId).ToList());
     }
 
-    // ── Remove / Purge ────────────────────────────────────────────────────────
-
     /// <summary>RemoveCommand removes only the targeted entry.</summary>
     [Fact]
     public void RemoveCommand_RemovesOnlyTargetedEntry()
     {
         Setup s = new();
-        s.PrinterProvider.Setup(p => p.GetDefaultPrinter()).Returns((string?)null);
+        s.PrintDriver.Setup(p => p.GetDefaultPrinter()).Returns((string?)null);
         PrintManagerViewModel vm = s.Build();
         vm.EnqueueManual(MakeEntryItem("N1", "First"));
         vm.EnqueueManual(MakeEntryItem("N2", "Second"));
@@ -246,7 +231,7 @@ public sealed class PrintManagerViewModelTests
     public void PurgeCommand_ClearsQueue()
     {
         Setup s = new();
-        s.PrinterProvider.Setup(p => p.GetDefaultPrinter()).Returns((string?)null);
+        s.PrintDriver.Setup(p => p.GetDefaultPrinter()).Returns((string?)null);
         PrintManagerViewModel vm = s.Build();
         vm.EnqueueManual(MakeEntryItem("N1", "First"));
         vm.EnqueueManual(MakeEntryItem("N2", "Second"));
@@ -255,8 +240,6 @@ public sealed class PrintManagerViewModelTests
 
         Assert.Empty(vm.Queue);
     }
-
-    // ── Line-by-line printing ─────────────────────────────────────────────────
 
     /// <summary>A manual note prints each body line individually, then feeds the page, then leaves the queue.</summary>
     [Fact]
@@ -269,23 +252,25 @@ public sealed class PrintManagerViewModelTests
 
         TaskCompletionSource done = new();
         int expectedLines = 3;
-        s.LinePrinter.OnPrintLine = (_, _) =>
+        s.OnPrintLine = (_, _) =>
         {
-            if (s.LinePrinter.PrintedLines.Count == expectedLines) done.TrySetResult();
+            if (s.PrintedLines.Count == expectedLines) { done.TrySetResult(); }
             return Task.CompletedTask;
         };
 
         vm.EnqueueManual(new EntryItemViewModel(noteId.ToString(), "My Note", EntryType.Note, DateTime.UtcNow));
         await Task.WhenAny(done.Task, Task.Delay(2000));
 
-        Assert.Equal(["Line1", "Line2", "Line3"], s.LinePrinter.PrintedLines.Select(l => l.Line).ToList());
-        Assert.All(s.LinePrinter.PrintedLines, l => Assert.Equal("PRINTER-A", l.Printer));
+        Assert.Equal(["Line1", "Line2", "Line3"], s.PrintedLines.Select(l => l.Line).ToList());
+        Assert.All(s.PrintedLines, l => Assert.Equal("PRINTER-A", l.Printer));
 
         // Allow the loop to finish the page feed and removal after the last line.
         for (int i = 0; i < 50 && vm.Queue.Count > 0; i++)
+        {
             await Task.Delay(20);
+        }
 
-        Assert.Single(s.LinePrinter.PageFeeds);
+        Assert.Single(s.PageFeeds);
         Assert.Empty(vm.Queue);
     }
 
@@ -297,7 +282,7 @@ public sealed class PrintManagerViewModelTests
     public async Task PrintLoop_HigherPriorityReceivedJob_InterruptsAndRestartsLowerPriorityJob()
     {
         Setup s = new();
-        s.PrintPolicy.Setup(p => p.PrintReceivedDefaultEnabled).Returns(true);
+        s.EngineController.Setup(p => p.PrintReceivedDefaultEnabled).Returns(true);
         s.Messages.Setup(m => m.Get("LOW", false))
             .ReturnsAsync(MakeMessage("LOW", "Low", "L1\nL2", 1));
         s.Messages.Setup(m => m.Get("HIGH", false))
@@ -307,7 +292,7 @@ public sealed class PrintManagerViewModelTests
         TaskCompletionSource interruptTriggered = new();
         TaskCompletionSource allDone = new();
         bool interruptQueued = false;
-        s.LinePrinter.OnPrintLine = (printer, line) =>
+        s.OnPrintLine = (printer, line) =>
         {
             // Interrupt exactly once, right after the low-priority job's first line ("Low") prints.
             if (!interruptQueued && line == "Low")
@@ -316,8 +301,10 @@ public sealed class PrintManagerViewModelTests
                 s.EntryService.Raise(e => e.MessageInserted += null, MakeMessage("HIGH", "High", "H1", 9));
                 interruptTriggered.TrySetResult();
             }
-            if (line == "Low" && s.LinePrinter.PrintedLines.Count(l => l.Line == "Low") == 2)
+            if (line == "Low" && s.PrintedLines.Count(l => l.Line == "Low") == 2)
+            {
                 allDone.TrySetResult();
+            }
             return Task.CompletedTask;
         };
 
@@ -326,18 +313,20 @@ public sealed class PrintManagerViewModelTests
 
         await Task.WhenAny(allDone.Task, Task.Delay(2000));
         for (int i = 0; i < 100 && vm.Queue.Count > 0; i++)
+        {
             await Task.Delay(20);
+        }
 
         // LOW's first attempt is interrupted after its title line; HIGH then prints fully; LOW then restarts
         // from its title line and prints to completion.
-        List<string> lines = s.LinePrinter.PrintedLines.Select(l => l.Line).ToList();
+        List<string> lines = s.PrintedLines.Select(l => l.Line).ToList();
         int highIndex = lines.IndexOf("High");
         Assert.True(highIndex > 0, "HIGH should have printed after being interrupted-in");
         Assert.Equal(["Low", "High", string.Empty, "H1"], lines.Take(4).ToList());
         Assert.Equal(["Low", "", "L1", "L2"], lines.Skip(4).ToList());
 
         // Page feed once for the interruption, once after HIGH, once after LOW's completed restart.
-        Assert.Equal(3, s.LinePrinter.PageFeeds.Count);
+        Assert.Equal(3, s.PageFeeds.Count);
         Assert.Empty(vm.Queue);
     }
 
@@ -351,7 +340,7 @@ public sealed class PrintManagerViewModelTests
         PrintManagerViewModel vm = s.Build();
 
         TaskCompletionSource purged = new();
-        s.LinePrinter.OnPrintLine = (_, line) =>
+        s.OnPrintLine = (_, line) =>
         {
             if (line == "Line1")
             {
@@ -365,8 +354,8 @@ public sealed class PrintManagerViewModelTests
         await Task.WhenAny(purged.Task, Task.Delay(2000));
         await Task.Delay(100);
 
-        Assert.Single(s.LinePrinter.PrintedLines);
-        Assert.Single(s.LinePrinter.PageFeeds);
+        Assert.Single(s.PrintedLines);
+        Assert.Single(s.PageFeeds);
         Assert.Empty(vm.Queue);
     }
 }

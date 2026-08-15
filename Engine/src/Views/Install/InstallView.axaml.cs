@@ -4,6 +4,14 @@ namespace BlueHeighliner.Comlink.Engine.Views.Install;
 [ExcludeFromCodeCoverage]
 public partial class InstallView : UserControl
 {
+    private static void OnUserCodeTextInput(object? sender, TextInputEventArgs e)
+    {
+        if (e.Text is not null)
+        {
+            e.Text = e.Text.ToUpperInvariant();
+        }
+    }
+
     /// <summary>Initializes the control, loads the AXAML layout, and registers the user code text input handler.</summary>
     public InstallView()
     {
@@ -12,11 +20,5 @@ public partial class InstallView : UserControl
             InputElement.TextInputEvent,
             OnUserCodeTextInput,
             RoutingStrategies.Tunnel);
-    }
-
-    private static void OnUserCodeTextInput(object? sender, TextInputEventArgs e)
-    {
-        if (e.Text is not null)
-            e.Text = e.Text.ToUpperInvariant();
     }
 }

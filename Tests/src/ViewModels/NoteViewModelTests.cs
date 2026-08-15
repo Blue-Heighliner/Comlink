@@ -11,8 +11,6 @@ public sealed class NoteViewModelTests
         ModifiedAt = DateTime.UtcNow
     };
 
-    // ── Construction ──────────────────────────────────────────────────────────
-
     /// <summary>Id and Body are populated from the entity on construction.</summary>
     [Fact]
     public void Ctor_PopulatesIdAndBody()
@@ -27,8 +25,6 @@ public sealed class NoteViewModelTests
         Assert.False(vm.IsSaving);
         Assert.Null(vm.StatusMessage);
     }
-
-    // ── Save ──────────────────────────────────────────────────────────────────
 
     /// <summary>SaveCommand persists the current body via the entry service.</summary>
     [Fact]

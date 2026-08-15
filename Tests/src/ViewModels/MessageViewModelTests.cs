@@ -3,7 +3,7 @@ namespace BlueHeighliner.Comlink.Tests.ViewModels;
 /// <summary>Unit tests for <see cref="MessageViewModel"/>.</summary>
 public sealed class MessageViewModelTests
 {
-    private static readonly IMessageFormat Format = new TestMessageFormat();
+    private static readonly IEngineController format = new TestEngineController();
 
     private static MessageEntity MakeEntity(
         string? messageId = null,
@@ -14,12 +14,12 @@ public sealed class MessageViewModelTests
         DeliveryStatus[]? deliveryStatuses = null)
     {
         string id = messageId ?? Guid.NewGuid().ToString("N").ToUpperInvariant();
-        object message = Format.CreateMessage();
-        Format.SetMessageId(message, id);
-        Format.SetSubject(message, subject);
-        Format.SetBody(message, body);
-        Format.SetFromUser(message, fromUser);
-        Format.SetAddresses(message, [.. (addresses ?? [new AddressData { UserName = "DEST", Type = "To" }])
+        object message = format.CreateMessage();
+        format.SetMessageId(message, id);
+        format.SetSubject(message, subject);
+        format.SetBody(message, body);
+        format.SetFromUser(message, fromUser);
+        format.SetAddresses(message, [.. (addresses ?? [new AddressData { UserName = "DEST", Type = "To" }])
             .Select(a => new MessageAddress { UserName = a.UserName, Type = a.Type.ParseAddressType() })]);
         return new MessageEntity
         {
@@ -29,8 +29,6 @@ public sealed class MessageViewModelTests
             DeliveryStatuses = [.. (deliveryStatuses ?? [])]
         };
     }
-
-    // ── Construction ──────────────────────────────────────────────────────────
 
     /// <summary>ViewModel exposes all message fields from the entity.</summary>
     [Fact]
@@ -47,7 +45,7 @@ public sealed class MessageViewModelTests
                 new AddressData { UserName = "GAMMA", Type = "Cc" }
             ]);
 
-        MessageViewModel vm = new(entity, Format);
+        MessageViewModel vm = new(entity, format);
 
         Assert.Equal("ABC123", vm.MessageId);
         Assert.Equal("Hello", vm.Subject);
@@ -62,7 +60,7 @@ public sealed class MessageViewModelTests
     [Fact]
     public void Ctor_NoDeliveryStatuses_HasDeliveryStatusesIsFalse()
     {
-        MessageViewModel vm = new(MakeEntity(), Format);
+        MessageViewModel vm = new(MakeEntity(), format);
 
         Assert.False(vm.HasDeliveryStatuses);
         Assert.Empty(vm.DeliveryStatuses);
@@ -78,7 +76,7 @@ public sealed class MessageViewModelTests
             Status = DestinationStatus.Sending,
             AddressedVia = []
         };
-        MessageViewModel vm = new(MakeEntity(deliveryStatuses: [status]), Format);
+        MessageViewModel vm = new(MakeEntity(deliveryStatuses: [status]), format);
 
         Assert.True(vm.HasDeliveryStatuses);
         Assert.Single(vm.DeliveryStatuses);
@@ -86,14 +84,12 @@ public sealed class MessageViewModelTests
         Assert.Equal(DestinationStatus.Sending, vm.DeliveryStatuses[0].Status);
     }
 
-    // ── UpdateDeliveryStatus ──────────────────────────────────────────────────
-
     /// <summary>UpdateDeliveryStatus updates the matching row's status.</summary>
     [Fact]
     public void UpdateDeliveryStatus_UpdatesMatchingRow()
     {
         DeliveryStatus status = new() { UserName = "DEST", Status = DestinationStatus.Sending, AddressedVia = [] };
-        MessageViewModel vm = new(MakeEntity(deliveryStatuses: [status]), Format);
+        MessageViewModel vm = new(MakeEntity(deliveryStatuses: [status]), format);
 
         vm.UpdateDeliveryStatus("DEST", DestinationStatus.Confirmed);
 
@@ -109,7 +105,7 @@ public sealed class MessageViewModelTests
             new() { UserName = "A", Status = DestinationStatus.Sending, AddressedVia = [] },
             new() { UserName = "B", Status = DestinationStatus.Confirmed, AddressedVia = [] }
         ];
-        MessageViewModel vm = new(MakeEntity(deliveryStatuses: statuses), Format);
+        MessageViewModel vm = new(MakeEntity(deliveryStatuses: statuses), format);
 
         vm.UpdateDeliveryStatus("A", DestinationStatus.Confirmed);
 
@@ -125,20 +121,18 @@ public sealed class MessageViewModelTests
             new() { UserName = "A", Status = DestinationStatus.Confirmed, AddressedVia = [] },
             new() { UserName = "B", Status = DestinationStatus.Sending, AddressedVia = [] }
         ];
-        MessageViewModel vm = new(MakeEntity(deliveryStatuses: statuses), Format);
+        MessageViewModel vm = new(MakeEntity(deliveryStatuses: statuses), format);
 
         vm.UpdateDeliveryStatus("B", DestinationStatus.Failed);
 
         Assert.Equal(DestinationStatus.Failed, vm.OverallStatus);
     }
 
-    // ── ToggleDelivery ────────────────────────────────────────────────────────
-
     /// <summary>ToggleDelivery flips IsDeliveryExpanded and changes the indicator glyph.</summary>
     [Fact]
     public void ToggleDelivery_FlipsExpandedAndUpdatesIndicator()
     {
-        MessageViewModel vm = new(MakeEntity(), Format);
+        MessageViewModel vm = new(MakeEntity(), format);
         Assert.False(vm.IsDeliveryExpanded);
         Assert.Equal("▼", vm.DeliveryExpandIndicator);
 
@@ -148,14 +142,12 @@ public sealed class MessageViewModelTests
         Assert.Equal("▲", vm.DeliveryExpandIndicator);
     }
 
-    // ── OverallStatusText ─────────────────────────────────────────────────────
-
     /// <summary>OverallStatusText returns the uppercase status name.</summary>
     [Fact]
     public void OverallStatusText_ReturnsUppercaseStatusName()
     {
         DeliveryStatus[] statuses = [new() { UserName = "DEST", Status = DestinationStatus.Confirmed, AddressedVia = [] }];
-        MessageViewModel vm = new(MakeEntity(deliveryStatuses: statuses), Format);
+        MessageViewModel vm = new(MakeEntity(deliveryStatuses: statuses), format);
 
         Assert.Equal("CONFIRMED", vm.OverallStatusText);
     }
@@ -164,7 +156,7 @@ public sealed class MessageViewModelTests
     [Fact]
     public void OverallStatusText_Null_ReturnsEmptyString()
     {
-        MessageViewModel vm = new(MakeEntity(), Format);
+        MessageViewModel vm = new(MakeEntity(), format);
 
         Assert.Equal(string.Empty, vm.OverallStatusText);
     }
@@ -178,7 +170,7 @@ public sealed class MessageViewModelTests
             new() { UserName = "A", Status = DestinationStatus.Read, AddressedVia = [] },
             new() { UserName = "B", Status = DestinationStatus.Confirmed, AddressedVia = [] }
         ];
-        MessageViewModel vm = new(MakeEntity(deliveryStatuses: statuses), Format);
+        MessageViewModel vm = new(MakeEntity(deliveryStatuses: statuses), format);
 
         vm.UpdateDeliveryStatus("B", DestinationStatus.Read);
 
@@ -194,14 +186,12 @@ public sealed class MessageViewModelTests
             new() { UserName = "A", Status = DestinationStatus.Sending, AddressedVia = [] },
             new() { UserName = "B", Status = DestinationStatus.Confirmed, AddressedVia = [] }
         ];
-        MessageViewModel vm = new(MakeEntity(deliveryStatuses: statuses), Format);
+        MessageViewModel vm = new(MakeEntity(deliveryStatuses: statuses), format);
 
         vm.UpdateDeliveryStatus("A", DestinationStatus.Read);
 
         Assert.Equal(DestinationStatus.Confirmed, vm.OverallStatus);
     }
-
-    // ── ReadStatus / IsAlert ──────────────────────────────────────────────────
 
     /// <summary>ReadStatus and ReadStatusText reflect the entity's own Inbox read status.</summary>
     [Fact]
@@ -210,7 +200,7 @@ public sealed class MessageViewModelTests
         MessageEntity entity = MakeEntity();
         entity.ReadStatus = DestinationStatus.Received;
 
-        MessageViewModel vm = new(entity, Format);
+        MessageViewModel vm = new(entity, format);
 
         Assert.Equal(DestinationStatus.Received, vm.ReadStatus);
         Assert.Equal("RECEIVED", vm.ReadStatusText);
@@ -220,7 +210,7 @@ public sealed class MessageViewModelTests
     [Fact]
     public void ReadStatusText_Null_ReturnsEmptyString()
     {
-        MessageViewModel vm = new(MakeEntity(), Format);
+        MessageViewModel vm = new(MakeEntity(), format);
 
         Assert.Null(vm.ReadStatus);
         Assert.Equal(string.Empty, vm.ReadStatusText);
@@ -230,7 +220,7 @@ public sealed class MessageViewModelTests
     [Fact]
     public void ReadStatus_SetDirectly_UpdatesReadStatusText()
     {
-        MessageViewModel vm = new(MakeEntity(), Format);
+        MessageViewModel vm = new(MakeEntity(), format);
 
         vm.ReadStatus = DestinationStatus.Read;
 
@@ -242,9 +232,9 @@ public sealed class MessageViewModelTests
     public void Ctor_AlertMessage_IsAlertIsTrue()
     {
         MessageEntity entity = MakeEntity();
-        Format.SetIsAlert(entity.Message, true);
+        format.SetIsAlert(entity.Message, true);
 
-        MessageViewModel vm = new(entity, Format);
+        MessageViewModel vm = new(entity, format);
 
         Assert.True(vm.IsAlert);
     }

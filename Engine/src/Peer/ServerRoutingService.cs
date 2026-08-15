@@ -13,22 +13,48 @@ namespace BlueHeighliner.Comlink.Engine.Peer;
 /// </summary>
 internal sealed class ServerRoutingService : IPeerService, IAsyncDisposable
 {
-    private static readonly TimeSpan DefaultRetryInterval = TimeSpan.FromSeconds(5);
+    private static readonly TimeSpan defaultRetryInterval = TimeSpan.FromSeconds(5);
 
-    private readonly IOftHoster _hoster;
-    private readonly IOftConnector _connector;
-    private readonly INetworkTopology _networkTopology;
-    private readonly ICurrentUserProvider _currentUserProvider;
-    private readonly IOftCertificateProvider _certProvider;
-    private readonly IMessageFormat _messageFormat;
-    private readonly ILogger _logger;
-    private readonly TimeSpan _retryInterval;
+    /// <summary>Initializes a new <see cref="ServerRoutingService"/>.</summary>
+    public ServerRoutingService(
+        IOftHoster hoster,
+        IOftConnector connector,
+        IEngineController engineController,
+        ICurrentUserProvider currentUserProvider,
+        ILoggerFactory loggerFactory)
+        : this(hoster, connector, engineController, currentUserProvider, loggerFactory, defaultRetryInterval)
+    {
+    }
 
-    private readonly ConcurrentDictionary<string, IOftConnection> _childConnections = new(StringComparer.OrdinalIgnoreCase);
-    private readonly ConcurrentDictionary<string, IOftConnection> _serverConnections = new(StringComparer.OrdinalIgnoreCase);
-    private readonly ConcurrentDictionary<string, Task<bool>> _inFlightSends = new();
-    private IReadOnlyDictionary<string, ServerUserConfig> _userMap = new Dictionary<string, ServerUserConfig>();
-    private IOftListener? _listener;
+    /// <summary>Initializes a new <see cref="ServerRoutingService"/> with a custom retry interval; intended for unit testing.</summary>
+    internal ServerRoutingService(
+        IOftHoster hoster,
+        IOftConnector connector,
+        IEngineController engineController,
+        ICurrentUserProvider currentUserProvider,
+        ILoggerFactory loggerFactory,
+        TimeSpan retryInterval)
+    {
+        this.hoster = hoster;
+        this.connector = connector;
+        this.engineController = engineController;
+        this.currentUserProvider = currentUserProvider;
+        logger = loggerFactory.CreateLogger("ACTIVITY");
+        this.retryInterval = retryInterval;
+    }
+
+    private readonly IOftHoster hoster;
+    private readonly IOftConnector connector;
+    private readonly IEngineController engineController;
+    private readonly ICurrentUserProvider currentUserProvider;
+    private readonly ILogger logger;
+    private readonly TimeSpan retryInterval;
+
+    private readonly ConcurrentDictionary<string, IOftConnection> childConnections = new(StringComparer.OrdinalIgnoreCase);
+    private readonly ConcurrentDictionary<string, IOftConnection> serverConnections = new(StringComparer.OrdinalIgnoreCase);
+    private readonly ConcurrentDictionary<string, Task<bool>> inFlightSends = new();
+    private IReadOnlyDictionary<string, ServerUserConfig> userMap = new Dictionary<string, ServerUserConfig>();
+    private IOftListener? listener;
 
     /// <inheritdoc />
     public event Func<object, Task>? MessageDelivered;
@@ -41,57 +67,23 @@ internal sealed class ServerRoutingService : IPeerService, IAsyncDisposable
     public event Func<string, string, OftDeliveryStatus, Task>? DeliveryStatusChanged;
 #pragma warning restore CS0067
 
-    /// <summary>Initializes a new <see cref="ServerRoutingService"/>.</summary>
-    public ServerRoutingService(
-        IOftHoster hoster,
-        IOftConnector connector,
-        INetworkTopology networkTopology,
-        ICurrentUserProvider currentUserProvider,
-        IOftCertificateProvider certProvider,
-        IMessageFormat messageFormat,
-        ILoggerFactory loggerFactory)
-        : this(hoster, connector, networkTopology, currentUserProvider, certProvider, messageFormat, loggerFactory, DefaultRetryInterval)
-    {
-    }
-
-    /// <summary>Initializes a new <see cref="ServerRoutingService"/> with a custom retry interval; intended for unit testing.</summary>
-    internal ServerRoutingService(
-        IOftHoster hoster,
-        IOftConnector connector,
-        INetworkTopology networkTopology,
-        ICurrentUserProvider currentUserProvider,
-        IOftCertificateProvider certProvider,
-        IMessageFormat messageFormat,
-        ILoggerFactory loggerFactory,
-        TimeSpan retryInterval)
-    {
-        _hoster = hoster;
-        _connector = connector;
-        _networkTopology = networkTopology;
-        _currentUserProvider = currentUserProvider;
-        _certProvider = certProvider;
-        _messageFormat = messageFormat;
-        _logger = loggerFactory.CreateLogger("ACTIVITY");
-        _retryInterval = retryInterval;
-    }
-
     /// <inheritdoc />
     public async Task Start(CancellationToken cancellation)
     {
-        _userMap = await _networkTopology.GetServerUsers(cancellation);
-        string myName = _currentUserProvider.UserName ?? string.Empty;
-        if (!_userMap.TryGetValue(myName, out ServerUserConfig? myConfig))
+        userMap = engineController.Servers;
+        string myName = currentUserProvider.UserName ?? string.Empty;
+        if (!userMap.TryGetValue(myName, out ServerUserConfig? myConfig))
         {
-            _logger.LogError("Server user {UserName} not found in the configured server user map; routing cannot start", myName);
+            logger.LogError("Server user {UserName} not found in the configured server user map; routing cannot start", myName);
             return;
         }
 
-        _listener = await _hoster.Host(new IPEndPoint(IPAddress.Any, myConfig.Endpoint.Port), _certProvider.GetPeerOptions(), cancellation);
-        _listener.ConnectedHandler = OnConnected;
+        listener = await hoster.Host(new IPEndPoint(IPAddress.Any, myConfig.Endpoint.Port), engineController.ConnectionOptions, cancellation);
+        listener.ConnectedHandler = OnConnected;
 
-        foreach ((string serverName, ServerUserConfig serverConfig) in _userMap)
+        foreach ((string serverName, ServerUserConfig serverConfig) in userMap)
         {
-            if (string.Equals(serverName, myName, StringComparison.OrdinalIgnoreCase)) continue;
+            if (string.Equals(serverName, myName, StringComparison.OrdinalIgnoreCase)) { continue; }
             _ = MaintainServerConnection(serverName, serverConfig.Endpoint, cancellation);
         }
 
@@ -106,12 +98,12 @@ internal sealed class ServerRoutingService : IPeerService, IAsyncDisposable
             IOftConnection? connection = null;
             try
             {
-                connection = await _connector.Connect(endpoint.IpAddress, endpoint.Port, _certProvider.GetPeerOptions(), cancellation);
-                _serverConnections[serverName] = connection;
+                connection = await connector.Connect(endpoint.IpAddress, endpoint.Port, engineController.ConnectionOptions, cancellation);
+                serverConnections[serverName] = connection;
                 TaskCompletionSource disconnected = new(TaskCreationOptions.RunContinuationsAsynchronously);
                 connection.ReceivedHandler = data => OnReceivedFromServer(serverName, data);
                 connection.DisconnectedHandler = _ => disconnected.TrySetResult();
-                _logger.LogInformation("Connected to server {ServerName}", serverName);
+                logger.LogInformation("Connected to server {ServerName}", serverName);
                 await disconnected.Task.WaitAsync(cancellation);
             }
             catch (OperationCanceledException)
@@ -120,15 +112,15 @@ internal sealed class ServerRoutingService : IPeerService, IAsyncDisposable
             }
             catch (Exception ex)
             {
-                _logger.LogWarning("Connection to server {ServerName} failed: {Message}", serverName, ex.Message);
+                logger.LogWarning("Connection to server {ServerName} failed: {Message}", serverName, ex.Message);
             }
             finally
             {
-                _serverConnections.TryRemove(serverName, out _);
-                if (connection is not null) await connection.DisposeAsync();
+                serverConnections.TryRemove(serverName, out _);
+                if (connection is not null) { await connection.DisposeAsync(); }
             }
 
-            try { await Task.Delay(_retryInterval, cancellation); }
+            try { await Task.Delay(retryInterval, cancellation); }
             catch (OperationCanceledException) { return; }
         }
     }
@@ -136,29 +128,29 @@ internal sealed class ServerRoutingService : IPeerService, IAsyncDisposable
     private void OnConnected(IOftConnection connection)
     {
         string remoteName = connection.Identity.Info;
-        string myName = _currentUserProvider.UserName ?? string.Empty;
+        string myName = currentUserProvider.UserName ?? string.Empty;
 
-        bool isChild = _userMap.TryGetValue(myName, out ServerUserConfig? myConfig)
+        bool isChild = userMap.TryGetValue(myName, out ServerUserConfig? myConfig)
             && myConfig.ChildClients.Contains(remoteName, StringComparer.OrdinalIgnoreCase);
-        bool isServer = !isChild && _userMap.ContainsKey(remoteName) && !string.Equals(remoteName, myName, StringComparison.OrdinalIgnoreCase);
+        bool isServer = !isChild && userMap.ContainsKey(remoteName) && !string.Equals(remoteName, myName, StringComparison.OrdinalIgnoreCase);
 
         if (isChild)
         {
-            _childConnections[remoteName] = connection;
+            childConnections[remoteName] = connection;
             connection.ReceivedHandler = data => OnReceivedFromChild(remoteName, data);
-            connection.DisconnectedHandler = ex => _childConnections.TryRemove(remoteName, out _);
-            _logger.LogInformation("Child client {ClientName} connected", remoteName);
+            connection.DisconnectedHandler = ex => childConnections.TryRemove(remoteName, out _);
+            logger.LogInformation("Child client {ClientName} connected", remoteName);
         }
         else if (isServer)
         {
             // Received-only: this server's own outbound leg (MaintainServerConnection) owns sending to,
             // and retrying the connection with, serverName — this inbound leg just supplies its traffic.
             connection.ReceivedHandler = data => OnReceivedFromServer(remoteName, data);
-            _logger.LogInformation("Server {ServerName} connected inbound", remoteName);
+            logger.LogInformation("Server {ServerName} connected inbound", remoteName);
         }
         else
         {
-            _logger.LogWarning("Rejected connection from unrecognized identity {Identity}", remoteName);
+            logger.LogWarning("Rejected connection from unrecognized identity {Identity}", remoteName);
             _ = connection.DisposeAsync();
         }
     }
@@ -180,53 +172,61 @@ internal sealed class ServerRoutingService : IPeerService, IAsyncDisposable
     private async Task HandleFromChild(string childName, ReadOnlyMemory<byte> data)
     {
         object? message = TryDeserialize(data);
-        if (message is null) return;
+        if (message is null) { return; }
 
         HashSet<string> addressedUsers = GetAddressedUsers(message);
-        int priority = _messageFormat.GetPriority(message);
-        string myName = _currentUserProvider.UserName ?? string.Empty;
+        int priority = engineController.GetPriority(message);
+        string myName = currentUserProvider.UserName ?? string.Empty;
 
         foreach (string addressedUser in addressedUsers)
         {
-            if (_childConnections.TryGetValue(addressedUser, out IOftConnection? childConn))
+            if (childConnections.TryGetValue(addressedUser, out IOftConnection? childConn))
+            {
                 await TrySend(childConn, data, priority);
+            }
         }
 
         HashSet<string> targetServers = new(StringComparer.OrdinalIgnoreCase);
-        foreach ((string serverName, ServerUserConfig config) in _userMap)
+        foreach ((string serverName, ServerUserConfig config) in userMap)
         {
-            if (string.Equals(serverName, myName, StringComparison.OrdinalIgnoreCase)) continue;
+            if (string.Equals(serverName, myName, StringComparison.OrdinalIgnoreCase)) { continue; }
             if (config.ChildClients.Any(child => addressedUsers.Contains(child)))
+            {
                 targetServers.Add(serverName);
+            }
         }
         foreach (string serverName in targetServers)
         {
-            if (_serverConnections.TryGetValue(serverName, out IOftConnection? serverConn))
+            if (serverConnections.TryGetValue(serverName, out IOftConnection? serverConn))
+            {
                 await TrySend(serverConn, data, priority);
+            }
         }
     }
 
     private async Task HandleFromServer(string serverName, ReadOnlyMemory<byte> data)
     {
         object? message = TryDeserialize(data);
-        if (message is null) return;
+        if (message is null) { return; }
 
         HashSet<string> addressedUsers = GetAddressedUsers(message);
-        int priority = _messageFormat.GetPriority(message);
+        int priority = engineController.GetPriority(message);
 
         foreach (string addressedUser in addressedUsers)
         {
-            if (_childConnections.TryGetValue(addressedUser, out IOftConnection? childConn))
+            if (childConnections.TryGetValue(addressedUser, out IOftConnection? childConn))
+            {
                 await TrySend(childConn, data, priority);
+            }
         }
     }
 
-    private HashSet<string> GetAddressedUsers(object message) =>
-        new(_messageFormat.GetAddresses(message).Select(a => a.UserName), StringComparer.OrdinalIgnoreCase);
+    private HashSet<string> GetAddressedUsers(object message)
+        => new(engineController.GetAddresses(message).Select(a => a.UserName), StringComparer.OrdinalIgnoreCase);
 
     private object? TryDeserialize(ReadOnlyMemory<byte> data)
     {
-        try { return PeerSerializer.Deserialize(_messageFormat.MessageType, data); }
+        try { return PeerSerializer.Deserialize(engineController.MessageType, data); }
         catch { return null; }
     }
 
@@ -239,8 +239,8 @@ internal sealed class ServerRoutingService : IPeerService, IAsyncDisposable
     /// <inheritdoc />
     public Task<bool> Send(string userName, object message, CancellationToken cancellation = default)
     {
-        string messageId = _messageFormat.GetMessageId(message);
-        return _inFlightSends.GetOrAdd(messageId, _ => SendOnceAndCleanup(messageId, message, cancellation));
+        string messageId = engineController.GetMessageId(message);
+        return inFlightSends.GetOrAdd(messageId, _ => SendOnceAndCleanup(messageId, message, cancellation));
     }
 
     private async Task<bool> SendOnceAndCleanup(string messageId, object message, CancellationToken cancellation)
@@ -248,30 +248,36 @@ internal sealed class ServerRoutingService : IPeerService, IAsyncDisposable
         try
         {
             using OwnedBuffer buf = PeerSerializer.Serialize(message);
-            await HandleFromChild(_currentUserProvider.UserName ?? string.Empty, buf.Memory);
+            await HandleFromChild(currentUserProvider.UserName ?? string.Empty, buf.Memory);
             return true;
         }
         finally
         {
-            _inFlightSends.TryRemove(messageId, out _);
+            inFlightSends.TryRemove(messageId, out _);
         }
     }
 
     /// <inheritdoc />
     public async Task DeliverLocal(object payload)
     {
-        _logger.LogInformation("{MessageId} delivered locally from {FromUser}", _messageFormat.GetMessageId(payload), _messageFormat.GetFromUser(payload));
+        logger.LogInformation("{MessageId} delivered locally from {FromUser}", engineController.GetMessageId(payload), engineController.GetFromUser(payload));
         if (MessageDelivered is not null)
+        {
             await MessageDelivered(payload);
+        }
     }
 
     /// <inheritdoc />
     public async ValueTask DisposeAsync()
     {
-        _listener?.Dispose();
-        foreach (IOftConnection connection in _childConnections.Values)
+        listener?.Dispose();
+        foreach (IOftConnection connection in childConnections.Values)
+        {
             await connection.DisposeAsync();
-        foreach (IOftConnection connection in _serverConnections.Values)
+        }
+        foreach (IOftConnection connection in serverConnections.Values)
+        {
             await connection.DisposeAsync();
+        }
     }
 }

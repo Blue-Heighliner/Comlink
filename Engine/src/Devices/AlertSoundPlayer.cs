@@ -1,12 +1,13 @@
-namespace BlueHeighliner.Comlink.Engine.Audio;
+namespace BlueHeighliner.Comlink.Engine.Devices;
 
 /// <summary>
 /// Plays and stops the alarm sound while one or more alerts are pending (see <see cref="ViewModels.IAlertViewModel"/>).
-/// This is real OS-level audio playback, not configuration — see <see cref="IAlertSettings"/> for the
+/// This is real OS-level audio playback, not configuration — see <see cref="IEngineController"/> for the
 /// configurable alarm text/duration. Not a control interface: the engine always provides real behavior for
-/// this, the same way it always provides real behavior for <see cref="IPrinterProvider"/>. Public only
-/// because it is a constructor dependency of the public <see cref="ViewModels.AlertViewModel"/> — not
-/// meant to be overridden by a host the way control interfaces are.
+/// this directly, the same way it always provides real behavior for printer discovery/driving
+/// (see <see cref="IPrintDriver"/>) rather than leaving either to a host. Public only because it
+/// is a constructor dependency of the public <see cref="ViewModels.AlertViewModel"/> — not meant to be
+/// overridden by a host the way control interfaces are.
 /// </summary>
 public interface IAlertSoundPlayer
 {
@@ -33,31 +34,31 @@ internal sealed class AlertSoundPlayer : IAlertSoundPlayer
     private const double BeepSeconds = 0.15;
     private const double SilenceSeconds = 0.85;
 
-    private readonly object _lock = new();
-    private CancellationTokenSource? _cts;
+    private readonly object lockObject = new();
+    private CancellationTokenSource? cts;
 
     /// <inheritdoc />
     public void Play()
     {
-        lock (_lock)
+        lock (lockObject)
         {
-            if (_cts is not null) return;
-            CancellationTokenSource cts = new();
-            _cts = cts;
-            if (OperatingSystem.IsWindows()) PlayWindows(cts.Token);
-            else if (OperatingSystem.IsLinux()) _ = Task.Run(() => PlayLoopLinux(cts.Token));
+            if (cts is not null) { return; }
+            CancellationTokenSource newCts = new();
+            cts = newCts;
+            if (OperatingSystem.IsWindows()) { PlayWindows(newCts.Token); }
+            else if (OperatingSystem.IsLinux()) { _ = Task.Run(() => PlayLoopLinux(newCts.Token)); }
         }
     }
 
     /// <inheritdoc />
     public void Stop()
     {
-        lock (_lock)
+        lock (lockObject)
         {
-            _cts?.Cancel();
-            _cts?.Dispose();
-            _cts = null;
-            if (OperatingSystem.IsWindows()) StopWindows();
+            cts?.Cancel();
+            cts?.Dispose();
+            cts = null;
+            if (OperatingSystem.IsWindows()) { StopWindows(); }
         }
     }
 
@@ -75,8 +76,6 @@ internal sealed class AlertSoundPlayer : IAlertSoundPlayer
 
         return frame;
     }
-
-    // ── Linux (PulseAudio) ───────────────────────────────────────────────────
 
     private static async Task PlayLoopLinux(CancellationToken cancellation)
     {
@@ -114,8 +113,6 @@ internal sealed class AlertSoundPlayer : IAlertSoundPlayer
             }
         }
     }
-
-    // ── Windows (winmm) ──────────────────────────────────────────────────────
 
     private static void PlayWindows(CancellationToken cancellation)
     {

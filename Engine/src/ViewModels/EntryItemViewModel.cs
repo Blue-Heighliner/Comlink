@@ -3,12 +3,38 @@ namespace BlueHeighliner.Comlink.Engine.ViewModels;
 /// <summary>ViewModel representing a single row in the entry list panel.</summary>
 public sealed partial class EntryItemViewModel : ObservableObject
 {
-    [ObservableProperty] private bool _isSelected;
+    /// <summary>Initializes a new entry item row with the given identity and display properties.</summary>
+    /// <param name="id">Unique identifier for this entry.</param>
+    /// <param name="title">Primary display title.</param>
+    /// <param name="entryType">Type of this entry.</param>
+    /// <param name="sortDate">Date used for chronological ordering.</param>
+    /// <param name="secondaryText">Optional secondary line of text shown below the title.</param>
+    /// <param name="priorityText">Optional priority label shown below <paramref name="secondaryText"/>.</param>
+    /// <param name="tagText">Optional tag label shown next to <paramref name="priorityText"/>.</param>
+    /// <param name="timeText">Optional formatted timestamp string.</param>
+    /// <param name="fixedStatusText">Optional static status string that takes precedence when no overall status is set.</param>
+    /// <param name="isOutboundMessage">For Message entries, whether this row represents the Outbox (sent) record rather than the Inbox (received) record.</param>
+    public EntryItemViewModel(string id, string title, EntryType entryType, DateTime sortDate,
+        string? secondaryText = null, string? priorityText = null, string? tagText = null, string? timeText = null, string? fixedStatusText = null, bool isOutboundMessage = false)
+    {
+        Id = id;
+        Title = title;
+        EntryType = entryType;
+        SortDate = sortDate;
+        SecondaryText = secondaryText;
+        PriorityText = priorityText;
+        TagText = tagText;
+        TimeText = timeText;
+        FixedStatusText = fixedStatusText;
+        IsOutboundMessage = isOutboundMessage;
+    }
+
+    [ObservableProperty] private bool isSelected;
 
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(StatusText))]
     [NotifyPropertyChangedFor(nameof(StatusColorHex))]
-    private DestinationStatus? _overallStatus;
+    private DestinationStatus? overallStatus;
 
     /// <summary>Gets the unique identifier for this entry (message ID or LiteDB object-id string).</summary>
     public string Id { get; }
@@ -16,9 +42,9 @@ public sealed partial class EntryItemViewModel : ObservableObject
     public string Title { get; }
     /// <summary>Gets an optional secondary line of text shown below the title.</summary>
     public string? SecondaryText { get; }
-    /// <summary>Gets an optional priority label shown below <see cref="SecondaryText"/>; see <see cref="Control.IMessageComposition"/>.</summary>
+    /// <summary>Gets an optional priority label shown below <see cref="SecondaryText"/>; see <see cref="Control.IEngineController"/>.</summary>
     public string? PriorityText { get; }
-    /// <summary>Gets an optional tag label shown next to <see cref="PriorityText"/>; see <see cref="Control.IMessageComposition"/>.</summary>
+    /// <summary>Gets an optional tag label shown next to <see cref="PriorityText"/>; see <see cref="Control.IEngineController"/>.</summary>
     public string? TagText { get; }
     /// <summary>Gets an optional formatted timestamp string for display.</summary>
     public string? TimeText { get; }
@@ -46,30 +72,4 @@ public sealed partial class EntryItemViewModel : ObservableObject
         DestinationStatus.Confirmed or DestinationStatus.Read or DestinationStatus.Received => "#98C379",
         _ => "#858585"
     };
-
-    /// <summary>Initializes a new entry item row with the given identity and display properties.</summary>
-    /// <param name="id">Unique identifier for this entry.</param>
-    /// <param name="title">Primary display title.</param>
-    /// <param name="entryType">Type of this entry.</param>
-    /// <param name="sortDate">Date used for chronological ordering.</param>
-    /// <param name="secondaryText">Optional secondary line of text shown below the title.</param>
-    /// <param name="priorityText">Optional priority label shown below <paramref name="secondaryText"/>.</param>
-    /// <param name="tagText">Optional tag label shown next to <paramref name="priorityText"/>.</param>
-    /// <param name="timeText">Optional formatted timestamp string.</param>
-    /// <param name="fixedStatusText">Optional static status string that takes precedence when no overall status is set.</param>
-    /// <param name="isOutboundMessage">For Message entries, whether this row represents the Outbox (sent) record rather than the Inbox (received) record.</param>
-    public EntryItemViewModel(string id, string title, EntryType entryType, DateTime sortDate,
-        string? secondaryText = null, string? priorityText = null, string? tagText = null, string? timeText = null, string? fixedStatusText = null, bool isOutboundMessage = false)
-    {
-        Id = id;
-        Title = title;
-        EntryType = entryType;
-        SortDate = sortDate;
-        SecondaryText = secondaryText;
-        PriorityText = priorityText;
-        TagText = tagText;
-        TimeText = timeText;
-        FixedStatusText = fixedStatusText;
-        IsOutboundMessage = isOutboundMessage;
-    }
 }

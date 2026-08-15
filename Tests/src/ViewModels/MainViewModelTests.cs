@@ -3,7 +3,7 @@ namespace BlueHeighliner.Comlink.Tests.ViewModels;
 /// <summary>Unit tests for <see cref="MainViewModel"/>.</summary>
 public sealed class MainViewModelTests
 {
-    private static readonly ILoggerFactory NoLogger = LoggerFactory.Create(_ => { });
+    private static readonly ILoggerFactory noLogger = LoggerFactory.Create(_ => { });
 
     private static UserInfo MakeUserInfo(string name = "ALPHA") => new()
     {
@@ -28,23 +28,20 @@ public sealed class MainViewModelTests
         public Mock<IImportViewModel> Import { get; } = new();
         public Mock<IPrintManagerViewModel> PrintManager { get; } = new();
         public Mock<ICurrentUserProvider> UserProvider { get; } = new();
-        public Mock<IAppSettings> AppSettings { get; } = new();
+        public Mock<TestEngineController> EngineController { get; } = new() { CallBase = true };
         public Mock<IBodyDocumentFactory> BodyDocumentFactory { get; } = new();
-        public Mock<IAlertSettings> AlertSettings { get; } = new();
-        public Mock<IMessageComposition> MessageComposition { get; } = new();
-        public IMessageFormat MessageFormat { get; } = new TestMessageFormat();
 
         public MainViewModel BuildVm()
         {
-            AppSettings.Setup(a => a.AppName).Returns("TestApp");
+            EngineController.Setup(a => a.AppName).Returns("TestApp");
             FolderBar.Setup(f => f.RootFolders).Returns([]);
             BodyDocumentFactory.Setup(f => f.Create()).Returns(new StringBodyDocument());
-            MessageComposition.Setup(p => p.GetPriorities()).Returns([new MessagePriorityOption { Name = "Normal", Value = 0 }]);
-            AlertSettings.Setup(a => a.AlertText).Returns("ALERT");
-            AlertSettings.Setup(a => a.ComposeAlertsEnabled).Returns(true);
-            MessageComposition.Setup(t => t.TagsEnabled).Returns(true);
-            MessageComposition.Setup(t => t.TagLabel).Returns("Tag");
-            MessageComposition.Setup(p => p.GetBlockedCombinations()).Returns([]);
+            EngineController.Setup(p => p.Priorities).Returns([new MessagePriorityOption { Name = "Normal", Value = 0 }]);
+            EngineController.Setup(a => a.AlertLabel).Returns("ALERT");
+            EngineController.Setup(a => a.ComposeAlertsEnabled).Returns(true);
+            EngineController.Setup(t => t.TagsEnabled).Returns(true);
+            EngineController.Setup(t => t.TagLabel).Returns("Tag");
+            EngineController.Setup(p => p.BlockedCombinations).Returns([]);
 
             return new MainViewModel(
                 Connection.Object,
@@ -59,16 +56,11 @@ public sealed class MainViewModelTests
                 Import.Object,
                 PrintManager.Object,
                 UserProvider.Object,
-                AppSettings.Object,
-                NoLogger,
-                BodyDocumentFactory.Object,
-                AlertSettings.Object,
-                MessageComposition.Object,
-                MessageFormat);
+                EngineController.Object,
+                noLogger,
+                BodyDocumentFactory.Object);
         }
     }
-
-    // ── Sub-VM properties ─────────────────────────────────────────────────────
 
     /// <summary>FolderBar, EntryBar, ContentArea, InstallView, and Alert expose the injected interfaces.</summary>
     [Fact]
@@ -86,20 +78,16 @@ public sealed class MainViewModelTests
         Assert.Same(s.Import.Object, vm.Import);
     }
 
-    // ── KioskMode ─────────────────────────────────────────────────────────────
-
-    /// <summary>IsKioskMode reflects the value from IAppSettings at construction time.</summary>
+    /// <summary>IsKioskMode reflects the value from IEngineController at construction time.</summary>
     [Fact]
     public void IsKioskMode_ReflectsProvider()
     {
         Setup s = new();
-        s.AppSettings.Setup(a => a.IsKioskMode).Returns(true);
+        s.EngineController.Setup(a => a.IsKioskMode).Returns(true);
         MainViewModel vm = s.BuildVm();
 
         Assert.True(vm.IsKioskMode);
     }
-
-    // ── Initialize – user installed ───────────────────────────────────────────
 
     /// <summary>Initialize connects, initializes the DB, applies user info, and loads the folder tree when a user is installed.</summary>
     [Fact]
@@ -121,8 +109,6 @@ public sealed class MainViewModelTests
         Assert.False(vm.IsInstallScreenVisible);
     }
 
-    // ── Initialize – not installed ────────────────────────────────────────────
-
     /// <summary>Initialize shows the install screen when no user is installed and does not load the folder bar.</summary>
     [Fact]
     public async Task Initialize_NoUser_ShowsInstallScreen()
@@ -139,8 +125,6 @@ public sealed class MainViewModelTests
         s.Db.Verify(d => d.Initialize(), Times.Never);
     }
 
-    // ── Initialize – connection error ─────────────────────────────────────────
-
     /// <summary>Initialize does not propagate exceptions from the connection.</summary>
     [Fact]
     public async Task Initialize_ConnectionThrows_DoesNotPropagate()
@@ -153,8 +137,6 @@ public sealed class MainViewModelTests
 
         Assert.Null(ex);
     }
-
-    // ── FolderSelected event wiring ───────────────────────────────────────────
 
     /// <summary>When FolderSelected fires, ShowHome and LoadFolder are called on the content area and entry bar.</summary>
     [Fact]
@@ -211,8 +193,6 @@ public sealed class MainViewModelTests
         s.ContentArea.Verify(c => c.ShowHome(), Times.Once);
     }
 
-    // ── EntryMoved event wiring ───────────────────────────────────────────────
-
     /// <summary>When EntryMoved fires, the entry bar is refreshed.</summary>
     [Fact]
     public void EntryMoved_RefreshesEntryBar()
@@ -225,8 +205,6 @@ public sealed class MainViewModelTests
 
         s.EntryBar.Verify(e => e.Refresh(), Times.Once);
     }
-
-    // ── EntriesSelected event wiring ─────────────────────────────────────────────
 
     /// <summary>When the export view is not active, selecting a single entry shows it in the content area as usual.</summary>
     [Fact]
@@ -323,8 +301,6 @@ public sealed class MainViewModelTests
         s.Export.Verify(e => e.AddEntry(It.IsAny<EntryItemViewModel>()), Times.Never);
     }
 
-    // ── ShowExportCommand ───────────────────────────────────────────────────────
-
     /// <summary>ShowExportCommand refreshes the drive list and displays the export ViewModel in the content area.</summary>
     [Fact]
     public void ShowExportCommand_RefreshesDrivesAndShowsExportView()
@@ -352,8 +328,6 @@ public sealed class MainViewModelTests
         s.FolderBar.Verify(f => f.DeselectFolder(), Times.Once);
         s.EntryBar.Verify(e => e.DeselectEntry(), Times.Once);
     }
-
-    // ── ShowImportCommand ───────────────────────────────────────────────────────
 
     /// <summary>ShowImportCommand refreshes the drive list and displays the import ViewModel in the content area.</summary>
     [Fact]
@@ -383,8 +357,6 @@ public sealed class MainViewModelTests
         s.EntryBar.Verify(e => e.DeselectEntry(), Times.Once);
     }
 
-    // ── ShowPrintManagerCommand ────────────────────────────────────────────────
-
     /// <summary>ShowPrintManagerCommand displays the print manager ViewModel in the content area.</summary>
     [Fact]
     public void ShowPrintManagerCommand_ShowsPrintManagerView()
@@ -410,8 +382,6 @@ public sealed class MainViewModelTests
         s.EntryBar.Verify(e => e.DeselectEntry(), Times.Once);
     }
 
-    // ── PrintEntryCommand ─────────────────────────────────────────────────────
-
     /// <summary>PrintEntryCommand adds the given entry to the print manager's queue as a manual print.</summary>
     [Fact]
     public void PrintEntryCommand_EnqueuesEntryAsManual()
@@ -424,8 +394,6 @@ public sealed class MainViewModelTests
 
         s.PrintManager.Verify(p => p.EnqueueManual(entry), Times.Once);
     }
-
-    // ── ShowHomeCommand ───────────────────────────────────────────────────────
 
     /// <summary>ShowHomeCommand restores the content area to its default (home) state.</summary>
     [Fact]

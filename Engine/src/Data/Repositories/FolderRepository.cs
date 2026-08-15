@@ -20,39 +20,6 @@ public interface IFolderRepository
 /// <summary>Provides data-access operations for <see cref="FolderEntity"/> documents.</summary>
 public sealed class FolderRepository : IFolderRepository
 {
-    private readonly ILiteDbContext _ctx;
-
-    /// <summary>Initializes a new <see cref="FolderRepository"/> backed by the given database context.</summary>
-    public FolderRepository(ILiteDbContext ctx) => _ctx = ctx;
-
-    /// <inheritdoc />
-    public Task<List<FolderEntity>> GetAll() =>
-        Task.Run(() => _ctx.Folders.FindAll().ToList());
-
-    /// <inheritdoc />
-    public Task<FolderEntity?> Get(string id) =>
-        Task.Run<FolderEntity?>(() => _ctx.Folders.FindById(id));
-
-    /// <inheritdoc />
-    public Task<string> GetRootId(FolderType type) =>
-        Task.FromResult($"root-{type.ToString().ToLower()}");
-
-    /// <inheritdoc />
-    public Task<FolderEntity> Insert(FolderEntity entity) =>
-        Task.Run(() => { _ctx.Folders.Insert(entity); return entity; });
-
-    /// <inheritdoc />
-    public Task<bool> Delete(string id) =>
-        Task.Run(() => _ctx.Folders.Delete(id));
-
-    /// <inheritdoc />
-    public Task<List<Folder>> GetTree() =>
-        Task.Run(() =>
-        {
-            List<FolderEntity> all = _ctx.Folders.FindAll().ToList();
-            return BuildTree(all, null);
-        });
-
     private static List<Folder> BuildTree(List<FolderEntity> all, string? parentId)
     {
         return all
@@ -67,4 +34,37 @@ public sealed class FolderRepository : IFolderRepository
             })
             .ToList();
     }
+
+    /// <summary>Initializes a new <see cref="FolderRepository"/> backed by the given database context.</summary>
+    public FolderRepository(ILiteDbContext ctx) => this.ctx = ctx;
+
+    private readonly ILiteDbContext ctx;
+
+    /// <inheritdoc />
+    public Task<List<FolderEntity>> GetAll()
+        => Task.Run(() => ctx.Folders.FindAll().ToList());
+
+    /// <inheritdoc />
+    public Task<FolderEntity?> Get(string id)
+        => Task.Run<FolderEntity?>(() => ctx.Folders.FindById(id));
+
+    /// <inheritdoc />
+    public Task<string> GetRootId(FolderType type)
+        => Task.FromResult($"root-{type.ToString().ToLower()}");
+
+    /// <inheritdoc />
+    public Task<FolderEntity> Insert(FolderEntity entity)
+        => Task.Run(() => { ctx.Folders.Insert(entity); return entity; });
+
+    /// <inheritdoc />
+    public Task<bool> Delete(string id)
+        => Task.Run(() => ctx.Folders.Delete(id));
+
+    /// <inheritdoc />
+    public Task<List<Folder>> GetTree()
+        => Task.Run(() =>
+        {
+            List<FolderEntity> all = ctx.Folders.FindAll().ToList();
+            return BuildTree(all, null);
+        });
 }

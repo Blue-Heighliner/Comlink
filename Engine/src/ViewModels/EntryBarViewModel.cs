@@ -3,6 +3,9 @@ namespace BlueHeighliner.Comlink.Engine.ViewModels;
 /// <summary>ViewModel interface for the entry list panel.</summary>
 public interface IEntryBarViewModel
 {
+    /// <summary>Raised when the user's selection in the list changes, carrying every entry newly added to the selection (one for a plain click, several for a shift-range or accumulated ctrl-click selection).</summary>
+    event Action<IReadOnlyList<EntryItemViewModel>>? EntriesSelected;
+
     /// <summary>Gets or sets the currently selected entry.</summary>
     EntryItemViewModel? SelectedEntry { get; set; }
     /// <summary>Gets the current page of entry items displayed in the list.</summary>
@@ -19,8 +22,7 @@ public interface IEntryBarViewModel
     bool CanGoPrev { get; set; }
     /// <summary>Gets or sets a value indicating whether the sort toggle control is visible.</summary>
     bool ShowSortToggle { get; set; }
-    /// <summary>Raised when the user's selection in the list changes, carrying every entry newly added to the selection (one for a plain click, several for a shift-range or accumulated ctrl-click selection).</summary>
-    event Action<IReadOnlyList<EntryItemViewModel>>? EntriesSelected;
+
     /// <summary>Loads the first page of entries for the given folder and resets pagination.</summary>
     Task LoadFolder(FolderItemViewModel folder);
     /// <summary>Reloads the current page of entries for the active folder.</summary>
@@ -48,51 +50,49 @@ public interface IEntryBarViewModel
 /// <summary>ViewModel for the entry list panel, providing paginated browsing and selection of entries within a folder.</summary>
 public sealed partial class EntryBarViewModel : ObservableObject, IEntryBarViewModel
 {
-    private readonly IEntryService _entryService;
-    private readonly IMessageFormat _messageFormat;
-    private readonly IMessageComposition _messageComposition;
     private const int PageSize = 50;
 
-    [ObservableProperty] private EntryItemViewModel? _selectedEntry;
-    [ObservableProperty] private int _currentPage = 1;
-    [ObservableProperty] private int _totalPages = 1;
-    [ObservableProperty] private bool _isAlphabeticalSort;
-    [ObservableProperty] private bool _canGoNext;
-    [ObservableProperty] private bool _canGoPrev;
-    [ObservableProperty] private bool _showSortToggle;
+    /// <summary>Initializes a new <see cref="EntryBarViewModel"/> with the required entry service.</summary>
+    /// <param name="entryService">Entry service for data loading and delete operations.</param>
+    /// <param name="engineController">Maps logical fields onto a message entity's stored message; provides the available message priority levels, used to label each Inbox/Outbox entry's priority, and whether each entry's tag is shown.</param>
+    public EntryBarViewModel(IEntryService entryService, IEngineController engineController)
+    {
+        this.entryService = entryService;
+        this.engineController = engineController;
+    }
 
-    private FolderItemViewModel? _currentFolder;
-    private string? _pendingSelectId;
+    private readonly IEntryService entryService;
+    private readonly IEngineController engineController;
+
+    [ObservableProperty] private EntryItemViewModel? selectedEntry;
+    [ObservableProperty] private int currentPage = 1;
+    [ObservableProperty] private int totalPages = 1;
+    [ObservableProperty] private bool isAlphabeticalSort;
+    [ObservableProperty] private bool canGoNext;
+    [ObservableProperty] private bool canGoPrev;
+    [ObservableProperty] private bool showSortToggle;
+
+    private FolderItemViewModel? currentFolder;
+    private string? pendingSelectId;
 
     /// <summary>Gets the current page of entry items displayed in the list.</summary>
     public ObservableCollection<EntryItemViewModel> Entries { get; } = [];
     /// <inheritdoc />
     public event Action<IReadOnlyList<EntryItemViewModel>>? EntriesSelected;
 
-    /// <summary>Initializes a new <see cref="EntryBarViewModel"/> with the required entry service.</summary>
-    /// <param name="entryService">Entry service for data loading and delete operations.</param>
-    /// <param name="messageFormat">Maps logical fields onto a message entity's stored message.</param>
-    /// <param name="messageComposition">Provides the available message priority levels, used to label each Inbox/Outbox entry's priority, and whether each entry's tag is shown.</param>
-    public EntryBarViewModel(IEntryService entryService, IMessageFormat messageFormat, IMessageComposition messageComposition)
-    {
-        _entryService = entryService;
-        _messageFormat = messageFormat;
-        _messageComposition = messageComposition;
-    }
-
-    private string GetPriorityLabel(object message) => _messageComposition.GetPriorities().GetLabel(_messageFormat.GetPriority(message));
+    private string GetPriorityLabel(object message) => engineController.Priorities.GetLabel(engineController.GetPriority(message));
 
     private string? GetTagLabel(object message)
     {
-        if (!_messageComposition.TagsEnabled) return null;
-        string tag = _messageFormat.GetTag(message);
+        if (!engineController.TagsEnabled) { return null; }
+        string tag = engineController.GetTag(message);
         return string.IsNullOrEmpty(tag) ? null : tag;
     }
 
     /// <summary>Loads the first page of entries for the given folder and resets pagination.</summary>
     public async Task LoadFolder(FolderItemViewModel folder)
     {
-        _currentFolder = folder;
+        currentFolder = folder;
         CurrentPage = 1;
         ShowSortToggle = folder.RootType is FolderType.Drafts or FolderType.Notes;
         DeselectEntry();
@@ -103,7 +103,9 @@ public sealed partial class EntryBarViewModel : ObservableObject, IEntryBarViewM
     public void DeselectEntry()
     {
         foreach (EntryItemViewModel entry in Entries.Where(e => e.IsSelected).ToList())
+        {
             entry.IsSelected = false;
+        }
         SelectedEntry = null;
     }
 
@@ -138,19 +140,19 @@ public sealed partial class EntryBarViewModel : ObservableObject, IEntryBarViewM
     /// <summary>Reloads the current page of entries from the service for the active folder.</summary>
     public async Task Refresh()
     {
-        if (_currentFolder is null) return;
+        if (currentFolder is null) { return; }
 
         Entries.Clear();
 
-        switch (_currentFolder.RootType)
+        switch (currentFolder.RootType)
         {
             case FolderType.Inbox:
-                (List<MessageEntity> inboxMsgs, int inboxTotal) = await _entryService.GetMessages(_currentFolder.Id, CurrentPage);
+                (List<MessageEntity> inboxMsgs, int inboxTotal) = await entryService.GetMessages(currentFolder.Id, CurrentPage);
                 foreach (MessageEntity m in inboxMsgs)
                 {
                     string timeText = m.ReceivedAt.ToString("dd-MMM-yyyy HH:mm").ToUpperInvariant();
-                    EntryItemViewModel item = new(m.MessageId, _messageFormat.GetFromUser(m.Message), EntryType.Message, m.ReceivedAt,
-                        secondaryText: _messageFormat.GetSubject(m.Message), priorityText: GetPriorityLabel(m.Message), tagText: GetTagLabel(m.Message), timeText: timeText);
+                    EntryItemViewModel item = new(m.MessageId, engineController.GetFromUser(m.Message), EntryType.Message, m.ReceivedAt,
+                        secondaryText: engineController.GetSubject(m.Message), priorityText: GetPriorityLabel(m.Message), tagText: GetTagLabel(m.Message), timeText: timeText);
                     item.OverallStatus = m.ReadStatus;
                     Entries.Add(item);
                 }
@@ -158,13 +160,13 @@ public sealed partial class EntryBarViewModel : ObservableObject, IEntryBarViewM
                 break;
 
             case FolderType.Outbox:
-                (List<MessageEntity> outboxMsgs, int outboxTotal) = await _entryService.GetMessages(_currentFolder.Id, CurrentPage);
+                (List<MessageEntity> outboxMsgs, int outboxTotal) = await entryService.GetMessages(currentFolder.Id, CurrentPage);
                 foreach (MessageEntity m in outboxMsgs)
                 {
-                    string destinations = string.Join(", ", _messageFormat.GetAddresses(m.Message).Select(a => a.UserName).Distinct());
+                    string destinations = string.Join(", ", engineController.GetAddresses(m.Message).Select(a => a.UserName).Distinct());
                     string timeText = m.ReceivedAt.ToString("dd-MMM-yyyy HH:mm").ToUpperInvariant();
                     EntryItemViewModel item = new(m.MessageId, destinations, EntryType.Message, m.ReceivedAt,
-                        secondaryText: _messageFormat.GetSubject(m.Message), priorityText: GetPriorityLabel(m.Message), tagText: GetTagLabel(m.Message), timeText: timeText, isOutboundMessage: true);
+                        secondaryText: engineController.GetSubject(m.Message), priorityText: GetPriorityLabel(m.Message), tagText: GetTagLabel(m.Message), timeText: timeText, isOutboundMessage: true);
                     item.OverallStatus = m.OverallStatus;
                     Entries.Add(item);
                 }
@@ -172,7 +174,7 @@ public sealed partial class EntryBarViewModel : ObservableObject, IEntryBarViewM
                 break;
 
             case FolderType.Drafts:
-                (List<DraftEntity> drafts, int draftTotal) = await _entryService.GetDrafts(_currentFolder.Id, CurrentPage, IsAlphabeticalSort);
+                (List<DraftEntity> drafts, int draftTotal) = await entryService.GetDrafts(currentFolder.Id, CurrentPage, IsAlphabeticalSort);
                 foreach (DraftEntity d in drafts)
                 {
                     string subject = string.IsNullOrEmpty(d.Subject) ? "(No subject)" : d.Subject;
@@ -183,7 +185,7 @@ public sealed partial class EntryBarViewModel : ObservableObject, IEntryBarViewM
                 break;
 
             case FolderType.Notes:
-                (List<NoteEntity> notes, int noteTotal) = await _entryService.GetNotes(_currentFolder.Id, CurrentPage, IsAlphabeticalSort);
+                (List<NoteEntity> notes, int noteTotal) = await entryService.GetNotes(currentFolder.Id, CurrentPage, IsAlphabeticalSort);
                 foreach (NoteEntity n in notes)
                 {
                     string? title = (n.Body ?? string.Empty).Split('\n').FirstOrDefault()?.Trim();
@@ -196,9 +198,11 @@ public sealed partial class EntryBarViewModel : ObservableObject, IEntryBarViewM
                 break;
 
             case FolderType.Activity:
-                (List<ActivityLogEntity> logs, int logTotal) = await _entryService.GetActivityLogs(CurrentPage);
+                (List<ActivityLogEntity> logs, int logTotal) = await entryService.GetActivityLogs(CurrentPage);
                 foreach (ActivityLogEntity l in logs)
+                {
                     Entries.Add(new EntryItemViewModel(l.Id.ToString(), l.Date.ToString("dd-MMM-yyyy").ToUpperInvariant(), EntryType.Activity, l.Date));
+                }
                 UpdatePagination(logTotal);
                 break;
         }
@@ -211,17 +215,19 @@ public sealed partial class EntryBarViewModel : ObservableObject, IEntryBarViewM
     {
         EntryItemViewModel? entry = Entries.FirstOrDefault(e => e.Id == messageId && e.EntryType == EntryType.Message);
         if (entry is not null)
+        {
             entry.OverallStatus = overallStatus;
+        }
         return Task.CompletedTask;
     }
 
     private void ApplyPendingSelect()
     {
-        if (_pendingSelectId is null) return;
-        string id = _pendingSelectId;
-        _pendingSelectId = null;
+        if (pendingSelectId is null) { return; }
+        string id = pendingSelectId;
+        pendingSelectId = null;
         EntryItemViewModel? match = Entries.FirstOrDefault(e => e.Id == id);
-        if (match is not null) SelectEntry(match);
+        if (match is not null) { SelectEntry(match); }
     }
 
     private void UpdatePagination(int total)
@@ -234,16 +240,18 @@ public sealed partial class EntryBarViewModel : ObservableObject, IEntryBarViewM
     /// <summary>Inserts an entry at the top of the current page when the active folder and page match, then refreshes pagination counts.</summary>
     public async Task PrependEntry(EntryItemViewModel entry)
     {
-        if (_currentFolder is null || _currentFolder.RootType != FolderType.Inbox &&
-            _currentFolder.RootType != FolderType.Outbox &&
-            _currentFolder.RootType != FolderType.Drafts &&
-            _currentFolder.RootType != FolderType.Notes) return;
+        if (currentFolder is null || currentFolder.RootType != FolderType.Inbox &&
+            currentFolder.RootType != FolderType.Outbox &&
+            currentFolder.RootType != FolderType.Drafts &&
+            currentFolder.RootType != FolderType.Notes) return;
 
         if (CurrentPage == 1)
         {
             Entries.Insert(0, entry);
             if (Entries.Count > PageSize)
+            {
                 Entries.RemoveAt(PageSize);
+            }
         }
 
         await RefreshPaginationCounts();
@@ -251,13 +259,13 @@ public sealed partial class EntryBarViewModel : ObservableObject, IEntryBarViewM
 
     private async Task RefreshPaginationCounts()
     {
-        if (_currentFolder is null) return;
-        int total = _currentFolder.RootType switch
+        if (currentFolder is null) { return; }
+        int total = currentFolder.RootType switch
         {
-            FolderType.Inbox or FolderType.Outbox => (await _entryService.GetMessages(_currentFolder.Id, 1)).Total,
-            FolderType.Drafts => (await _entryService.GetDrafts(_currentFolder.Id, 1, IsAlphabeticalSort)).Total,
-            FolderType.Notes => (await _entryService.GetNotes(_currentFolder.Id, 1, IsAlphabeticalSort)).Total,
-            FolderType.Activity => (await _entryService.GetActivityLogs(1)).Total,
+            FolderType.Inbox or FolderType.Outbox => (await entryService.GetMessages(currentFolder.Id, 1)).Total,
+            FolderType.Drafts => (await entryService.GetDrafts(currentFolder.Id, 1, IsAlphabeticalSort)).Total,
+            FolderType.Notes => (await entryService.GetNotes(currentFolder.Id, 1, IsAlphabeticalSort)).Total,
+            FolderType.Activity => (await entryService.GetActivityLogs(1)).Total,
             _ => 0
         };
         UpdatePagination(total);
@@ -266,20 +274,22 @@ public sealed partial class EntryBarViewModel : ObservableObject, IEntryBarViewM
     /// <summary>Deletes the given entry from the data store and removes it from the current list.</summary>
     public async Task DeleteEntry(EntryItemViewModel entry)
     {
-        await _entryService.DeleteEntry(entry.Id, entry.EntryType, entry.IsOutboundMessage);
+        await entryService.DeleteEntry(entry.Id, entry.EntryType, entry.IsOutboundMessage);
         Entries.Remove(entry);
     }
 
     /// <summary>Queues an entry ID to be auto-selected after the next refresh.</summary>
-    public void SetPendingSelectId(string id) => _pendingSelectId = id;
+    public void SetPendingSelectId(string id) => pendingSelectId = id;
 
     /// <inheritdoc />
     public void SelectEntry(EntryItemViewModel entry)
     {
-        if (SelectedEntry == entry && Entries.Count(e => e.IsSelected) == 1) return;
+        if (SelectedEntry == entry && Entries.Count(e => e.IsSelected) == 1) { return; }
 
         foreach (EntryItemViewModel other in Entries.Where(e => e.IsSelected && e != entry).ToList())
+        {
             other.IsSelected = false;
+        }
         SelectedEntry = entry;
         entry.IsSelected = true;
         EntriesSelected?.Invoke([entry]);
@@ -294,11 +304,17 @@ public sealed partial class EntryBarViewModel : ObservableObject, IEntryBarViewM
         // SelectedItem setter collapses a multi-selection down to a single item — writing it here
         // would immediately undo a ctrl/shift selection the user just made.
         foreach (EntryItemViewModel entry in removed)
+        {
             entry.IsSelected = false;
+        }
         foreach (EntryItemViewModel entry in added)
+        {
             entry.IsSelected = true;
+        }
 
         if (added.Count > 0)
+        {
             EntriesSelected?.Invoke(added);
+        }
     }
 }

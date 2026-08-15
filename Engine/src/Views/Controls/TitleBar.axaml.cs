@@ -56,6 +56,12 @@ public partial class TitleBar : UserControl
     public static readonly StyledProperty<ICommand?> AlertCommandProperty =
         AvaloniaProperty.Register<TitleBar, ICommand?>(nameof(AlertCommand));
 
+    /// <summary>Initializes the control and loads the AXAML layout.</summary>
+    public TitleBar()
+    {
+        InitializeComponent();
+    }
+
     /// <summary>Gets or sets the user name displayed in the title bar.</summary>
     public string UserName
     {
@@ -147,64 +153,64 @@ public partial class TitleBar : UserControl
         set => SetValue(AlertCommandProperty, value);
     }
 
-    /// <summary>Initializes the control and loads the AXAML layout.</summary>
-    public TitleBar()
-    {
-        InitializeComponent();
-    }
-
     /// <inheritdoc />
     protected override void OnPropertyChanged(AvaloniaPropertyChangedEventArgs change)
     {
         base.OnPropertyChanged(change);
         if (change.Property == UserNameProperty || change.Property == AppVersionProperty)
+        {
             UpdateUserInfo();
+        }
         if (change.Property == IsInstallScreenVisibleProperty)
         {
             var panel = this.FindControl<StackPanel>("ActionButtonsPanel");
-            if (panel is not null) panel.IsVisible = !IsInstallScreenVisible;
+            if (panel is not null) { panel.IsVisible = !IsInstallScreenVisible; }
         }
         if (change.Property == IsKioskModeProperty)
+        {
             ApplyKioskMode();
+        }
         if (change.Property == IsAlertingProperty)
         {
             Border? box = this.FindControl<Border>("AlertBox");
-            if (box is not null) box.IsVisible = IsAlerting;
+            if (box is not null) { box.IsVisible = IsAlerting; }
         }
         if (change.Property == AlertTextProperty)
         {
             TextBlock? tb = this.FindControl<TextBlock>("AlertBoxText");
-            if (tb is not null) tb.Text = AlertText;
+            if (tb is not null) { tb.Text = AlertText; }
         }
     }
 
     private void UpdateUserInfo()
     {
         var tb = this.FindControl<TextBlock>("UserInfoText");
-        if (tb is null) return;
+        if (tb is null) { return; }
         tb.Text = string.IsNullOrEmpty(AppVersion) ? UserName : $"{UserName} v{AppVersion}";
     }
 
-    private void OnDraftClick(object? sender, Avalonia.Interactivity.RoutedEventArgs e) =>
-        CreateDraftCommand?.Execute(null);
+    private void OnDraftClick(object? sender, Avalonia.Interactivity.RoutedEventArgs e)
+        => CreateDraftCommand?.Execute(null);
 
-    private void OnNoteClick(object? sender, Avalonia.Interactivity.RoutedEventArgs e) =>
-        CreateNoteCommand?.Execute(null);
+    private void OnNoteClick(object? sender, Avalonia.Interactivity.RoutedEventArgs e)
+        => CreateNoteCommand?.Execute(null);
 
-    private void OnExportClick(object? sender, Avalonia.Interactivity.RoutedEventArgs e) =>
-        ShowExportCommand?.Execute(null);
+    private void OnExportClick(object? sender, Avalonia.Interactivity.RoutedEventArgs e)
+        => ShowExportCommand?.Execute(null);
 
-    private void OnImportClick(object? sender, Avalonia.Interactivity.RoutedEventArgs e) =>
-        ShowImportCommand?.Execute(null);
+    private void OnImportClick(object? sender, Avalonia.Interactivity.RoutedEventArgs e)
+        => ShowImportCommand?.Execute(null);
 
-    private void OnPrintManagerClick(object? sender, Avalonia.Interactivity.RoutedEventArgs e) =>
-        ShowPrintManagerCommand?.Execute(null);
+    private void OnPrintManagerClick(object? sender, Avalonia.Interactivity.RoutedEventArgs e)
+        => ShowPrintManagerCommand?.Execute(null);
 
     private void OnAlertBoxPressed(object? sender, PointerPressedEventArgs e)
     {
-        if (!QuickConfirmationEnabled) return;
+        if (!QuickConfirmationEnabled) { return; }
         if (AlertCommand?.CanExecute(null) == true)
+        {
             AlertCommand.Execute(null);
+        }
     }
 
     private void ApplyKioskMode()
@@ -212,31 +218,35 @@ public partial class TitleBar : UserControl
         var minimize = this.FindControl<Button>("MinimizeButton");
         var maximize = this.FindControl<Button>("MaximizeButton");
         var close = this.FindControl<Button>("CloseButton");
-        if (minimize is not null) minimize.IsVisible = !IsKioskMode;
-        if (maximize is not null) maximize.IsVisible = !IsKioskMode;
-        if (close is not null) close.Content = IsKioskMode ? "↺" : "✕";
+        if (minimize is not null) { minimize.IsVisible = !IsKioskMode; }
+        if (maximize is not null) { maximize.IsVisible = !IsKioskMode; }
+        if (close is not null) { close.Content = IsKioskMode ? "↺" : "✕"; }
     }
 
     private void OnDragAreaPressed(object? sender, PointerPressedEventArgs e)
     {
-        if (!ReferenceEquals(e.Source, sender)) return;
+        if (!ReferenceEquals(e.Source, sender)) { return; }
         if (VisualRoot is Window window && e.GetCurrentPoint(window).Properties.IsLeftButtonPressed)
+        {
             window.BeginMoveDrag(e);
+        }
     }
 
     private void OnMinimize(object? sender, Avalonia.Interactivity.RoutedEventArgs e)
     {
-        if (VisualRoot is Window w) w.WindowState = WindowState.Minimized;
+        if (VisualRoot is Window w) { w.WindowState = WindowState.Minimized; }
     }
 
     private void OnMaximize(object? sender, Avalonia.Interactivity.RoutedEventArgs e)
     {
         if (VisualRoot is Window w)
+        {
             w.WindowState = w.WindowState == WindowState.Maximized ? WindowState.Normal : WindowState.Maximized;
+        }
     }
 
     private void OnClose(object? sender, Avalonia.Interactivity.RoutedEventArgs e)
     {
-        if (VisualRoot is Window w) w.Close();
+        if (VisualRoot is Window w) { w.Close(); }
     }
 }

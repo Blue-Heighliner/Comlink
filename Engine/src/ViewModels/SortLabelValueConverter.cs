@@ -8,10 +8,10 @@ internal sealed class SortLabelValueConverter : IValueConverter
     public static readonly SortLabelValueConverter Instance = new();
 
     /// <inheritdoc />
-    public object Convert(object? value, Type targetType, object? parameter, CultureInfo culture) =>
-        value is true ? "Sort: A-Z" : "Sort: Recent";
+    public object Convert(object? value, Type targetType, object? parameter, CultureInfo culture)
+        => value is true ? "Sort: A-Z" : "Sort: Recent";
 
     /// <inheritdoc />
-    public object ConvertBack(object? value, Type targetType, object? parameter, CultureInfo culture) =>
-        throw new NotSupportedException();
+    public object ConvertBack(object? value, Type targetType, object? parameter, CultureInfo culture)
+        => throw new NotSupportedException();
 }

@@ -11,8 +11,6 @@ public sealed class ActivityLogViewModelTests
             EventEntries = structured ?? []
         };
 
-    // ── Date formatting ───────────────────────────────────────────────────────
-
     /// <summary>Date is formatted as uppercase DD-MMM-YYYY.</summary>
     [Fact]
     public void Date_IsFormattedCorrectly()
@@ -23,8 +21,6 @@ public sealed class ActivityLogViewModelTests
 
         Assert.Equal("04-JUL-2025", vm.Date);
     }
-
-    // ── Event ordering ────────────────────────────────────────────────────────
 
     /// <summary>Events are ordered newest-first when all are structured entries.</summary>
     [Fact]
@@ -67,8 +63,6 @@ public sealed class ActivityLogViewModelTests
         Assert.Equal("Structured", vm.Events[0].Message);
         Assert.Equal("Legacy message", vm.Events[1].Message);
     }
-
-    // ── TimeText ──────────────────────────────────────────────────────────────
 
     /// <summary>TimeText on an event row is formatted as uppercase DD-MMM-YYYY HH:mm.</summary>
     [Fact]

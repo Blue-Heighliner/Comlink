@@ -3,32 +3,48 @@ namespace BlueHeighliner.Comlink.Tests.Data;
 /// <summary>Integration tests for all repository classes using a real LiteDB database.</summary>
 public sealed class RepositoryTests : IDisposable
 {
-    private readonly string _appName = Guid.NewGuid().ToString();
-    private readonly LiteDbContext _ctx;
+    private static MessageEntity MakeMessage(string messageId, string folderId, bool isOutbound)
+    {
+        object message = messageFormat.CreateMessage();
+        messageFormat.SetMessageId(message, messageId);
+        return new MessageEntity { MessageId = messageId, Message = message, FolderId = folderId, IsOutbound = isOutbound };
+    }
+
+    private static DraftEntity MakeDraft(string folderId, string subject = "Sub", bool sent = false, DateTime? modifiedAt = null)
+        => new() { FolderId = folderId, Subject = subject, IsSent = sent, ModifiedAt = modifiedAt ?? DateTime.UtcNow };
+
+    private static FolderEntity MakeFolder(string id, FolderType type, string? parentId = null)
+        => new() { Id = id, Name = type.ToString(), RootType = type, ParentId = parentId };
+
+    private static NoteEntity MakeNote(string folderId, string body = "Note", DateTime? modifiedAt = null)
+        => new() { FolderId = folderId, Body = body, ModifiedAt = modifiedAt ?? DateTime.UtcNow };
+
+    private static readonly IEngineController messageFormat = new TestEngineController();
 
     /// <summary>Initializes a fresh isolated LiteDB context for each test.</summary>
     public RepositoryTests()
     {
-        _ctx = new LiteDbContext(new TestAppDataPathProvider(_appName));
-        _ctx.Initialize();
+        ctx = new LiteDbContext(new TestAppDataPathProvider(appName));
+        ctx.Initialize();
     }
+
+    private readonly string appName = Guid.NewGuid().ToString();
+    private readonly LiteDbContext ctx;
 
     /// <inheritdoc />
     public void Dispose()
     {
-        _ctx.Dispose();
+        ctx.Dispose();
         string dir = Path.Combine(
-            Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), _appName);
-        if (Directory.Exists(dir)) Directory.Delete(dir, recursive: true);
+            Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), appName);
+        if (Directory.Exists(dir)) { Directory.Delete(dir, recursive: true); }
     }
-
-    // ── ActivityLogRepository ─────────────────────────────────────────────────
 
     /// <summary>AppendEvent creates a new entity for today when none exists.</summary>
     [Fact]
     public async Task ActivityLog_AppendEvent_CreatesEntityForToday()
     {
-        ActivityLogRepository repo = new(_ctx);
+        ActivityLogRepository repo = new(ctx);
         await repo.AppendEvent("first event");
 
         ActivityLogEntity? today = await repo.GetForToday();
@@ -41,7 +57,7 @@ public sealed class RepositoryTests : IDisposable
     [Fact]
     public async Task ActivityLog_AppendEvent_AccumulatesOnSameDay()
     {
-        ActivityLogRepository repo = new(_ctx);
+        ActivityLogRepository repo = new(ctx);
         await repo.AppendEvent("A");
         await repo.AppendEvent("B");
 
@@ -53,7 +69,7 @@ public sealed class RepositoryTests : IDisposable
     [Fact]
     public async Task ActivityLog_Insert_ThenGetById_ReturnsEntity()
     {
-        ActivityLogRepository repo = new(_ctx);
+        ActivityLogRepository repo = new(ctx);
         ActivityLogEntity entity = new() { Date = DateTime.UtcNow.Date, EventEntries = [] };
         await repo.Insert(entity);
 
@@ -66,7 +82,7 @@ public sealed class RepositoryTests : IDisposable
     [Fact]
     public async Task ActivityLog_Update_PersistsChanges()
     {
-        ActivityLogRepository repo = new(_ctx);
+        ActivityLogRepository repo = new(ctx);
         ActivityLogEntity entity = new() { Date = DateTime.UtcNow.Date, EventEntries = [] };
         await repo.Insert(entity);
         entity.EventEntries.Add(new ActivityLogEntry { At = DateTime.UtcNow, Message = "updated" });
@@ -81,7 +97,7 @@ public sealed class RepositoryTests : IDisposable
     [Fact]
     public async Task ActivityLog_GetPage_ReturnsInDescendingDateOrder()
     {
-        ActivityLogRepository repo = new(_ctx);
+        ActivityLogRepository repo = new(ctx);
         ActivityLogEntity older = new() { Date = DateTime.UtcNow.Date.AddDays(-1), EventEntries = [] };
         ActivityLogEntity newer = new() { Date = DateTime.UtcNow.Date, EventEntries = [] };
         await repo.Insert(older);
@@ -97,7 +113,7 @@ public sealed class RepositoryTests : IDisposable
     [Fact]
     public async Task ActivityLog_Count_ReturnsCorrectTotal()
     {
-        ActivityLogRepository repo = new(_ctx);
+        ActivityLogRepository repo = new(ctx);
         await repo.Insert(new ActivityLogEntity { Date = DateTime.UtcNow.Date, EventEntries = [] });
         await repo.Insert(new ActivityLogEntity { Date = DateTime.UtcNow.Date.AddDays(-1), EventEntries = [] });
 
@@ -105,16 +121,11 @@ public sealed class RepositoryTests : IDisposable
         Assert.Equal(2, count);
     }
 
-    // ── DraftRepository ───────────────────────────────────────────────────────
-
-    private static DraftEntity MakeDraft(string folderId, string subject = "Sub", bool sent = false, DateTime? modifiedAt = null) =>
-        new() { FolderId = folderId, Subject = subject, IsSent = sent, ModifiedAt = modifiedAt ?? DateTime.UtcNow };
-
     /// <summary>Insert then Get by id returns the draft.</summary>
     [Fact]
     public async Task Draft_Insert_ThenGet_ReturnsDraft()
     {
-        DraftRepository repo = new(_ctx);
+        DraftRepository repo = new(ctx);
         DraftEntity draft = MakeDraft("root-drafts");
         await repo.Insert(draft);
 
@@ -127,7 +138,7 @@ public sealed class RepositoryTests : IDisposable
     [Fact]
     public async Task Draft_GetPage_Alphabetical_ReturnsInSubjectOrder()
     {
-        DraftRepository repo = new(_ctx);
+        DraftRepository repo = new(ctx);
         await repo.Insert(MakeDraft("root-drafts", "Zebra"));
         await repo.Insert(MakeDraft("root-drafts", "Alpha"));
         await repo.Insert(MakeDraft("root-drafts", "Mango"));
@@ -141,7 +152,7 @@ public sealed class RepositoryTests : IDisposable
     [Fact]
     public async Task Draft_GetPage_Chronological_ReturnsNewestFirst()
     {
-        DraftRepository repo = new(_ctx);
+        DraftRepository repo = new(ctx);
         DateTime now = DateTime.UtcNow;
         await repo.Insert(MakeDraft("root-drafts", "Old", modifiedAt: now.AddHours(-2)));
         await repo.Insert(MakeDraft("root-drafts", "New", modifiedAt: now));
@@ -156,7 +167,7 @@ public sealed class RepositoryTests : IDisposable
     [Fact]
     public async Task Draft_GetPage_ExcludesSentDrafts()
     {
-        DraftRepository repo = new(_ctx);
+        DraftRepository repo = new(ctx);
         await repo.Insert(MakeDraft("root-drafts", "Unsent"));
         await repo.Insert(MakeDraft("root-drafts", "Sent", sent: true));
 
@@ -170,7 +181,7 @@ public sealed class RepositoryTests : IDisposable
     [Fact]
     public async Task Draft_Count_ReturnsUnsentCount()
     {
-        DraftRepository repo = new(_ctx);
+        DraftRepository repo = new(ctx);
         await repo.Insert(MakeDraft("root-drafts", "A"));
         await repo.Insert(MakeDraft("root-drafts", "B"));
         await repo.Insert(MakeDraft("root-drafts", "C", sent: true));
@@ -183,7 +194,7 @@ public sealed class RepositoryTests : IDisposable
     [Fact]
     public async Task Draft_Update_PersistsSubjectChange()
     {
-        DraftRepository repo = new(_ctx);
+        DraftRepository repo = new(ctx);
         DraftEntity draft = MakeDraft("root-drafts", "Original");
         await repo.Insert(draft);
         draft.Subject = "Updated";
@@ -197,7 +208,7 @@ public sealed class RepositoryTests : IDisposable
     [Fact]
     public async Task Draft_Delete_RemovesDraft()
     {
-        DraftRepository repo = new(_ctx);
+        DraftRepository repo = new(ctx);
         DraftEntity draft = MakeDraft("root-drafts");
         await repo.Insert(draft);
         await repo.Delete(draft.Id);
@@ -205,11 +216,6 @@ public sealed class RepositoryTests : IDisposable
         DraftEntity? found = await repo.Get(draft.Id);
         Assert.Null(found);
     }
-
-    // ── FolderRepository ──────────────────────────────────────────────────────
-
-    private static FolderEntity MakeFolder(string id, FolderType type, string? parentId = null) =>
-        new() { Id = id, Name = type.ToString(), RootType = type, ParentId = parentId };
 
     /// <summary>GetRootId returns "root-{type}".</summary>
     [Theory]
@@ -220,7 +226,7 @@ public sealed class RepositoryTests : IDisposable
     [InlineData(FolderType.Activity, "root-activity")]
     public async Task Folder_GetRootId_ReturnsExpectedId(FolderType type, string expected)
     {
-        FolderRepository repo = new(_ctx);
+        FolderRepository repo = new(ctx);
         string id = await repo.GetRootId(type);
         Assert.Equal(expected, id);
     }
@@ -229,7 +235,7 @@ public sealed class RepositoryTests : IDisposable
     [Fact]
     public async Task Folder_Insert_ThenGetAll_ContainsInserted()
     {
-        FolderRepository repo = new(_ctx);
+        FolderRepository repo = new(ctx);
         FolderEntity f = MakeFolder("inbox-root", FolderType.Inbox);
         await repo.Insert(f);
 
@@ -241,7 +247,7 @@ public sealed class RepositoryTests : IDisposable
     [Fact]
     public async Task Folder_Get_ById_ReturnsFolder()
     {
-        FolderRepository repo = new(_ctx);
+        FolderRepository repo = new(ctx);
         FolderEntity f = MakeFolder("notes-root", FolderType.Notes);
         await repo.Insert(f);
 
@@ -254,7 +260,7 @@ public sealed class RepositoryTests : IDisposable
     [Fact]
     public async Task Folder_Delete_RemovesFolder()
     {
-        FolderRepository repo = new(_ctx);
+        FolderRepository repo = new(ctx);
         FolderEntity f = MakeFolder("del-folder", FolderType.Drafts);
         await repo.Insert(f);
 
@@ -267,7 +273,7 @@ public sealed class RepositoryTests : IDisposable
     [Fact]
     public async Task Folder_GetTree_BuildsHierarchy()
     {
-        FolderRepository repo = new(_ctx);
+        FolderRepository repo = new(ctx);
         FolderEntity root = MakeFolder("root", FolderType.Inbox);
         FolderEntity child = MakeFolder("child", FolderType.Inbox, "root");
         await repo.Insert(root);
@@ -281,16 +287,11 @@ public sealed class RepositoryTests : IDisposable
         Assert.Equal("child", rootFolder.Children[0].Id);
     }
 
-    // ── NoteRepository ────────────────────────────────────────────────────────
-
-    private static NoteEntity MakeNote(string folderId, string body = "Note", DateTime? modifiedAt = null) =>
-        new() { FolderId = folderId, Body = body, ModifiedAt = modifiedAt ?? DateTime.UtcNow };
-
     /// <summary>Insert then Get returns the note.</summary>
     [Fact]
     public async Task Note_Insert_ThenGet_ReturnsNote()
     {
-        NoteRepository repo = new(_ctx);
+        NoteRepository repo = new(ctx);
         NoteEntity note = MakeNote("root-notes");
         await repo.Insert(note);
 
@@ -303,7 +304,7 @@ public sealed class RepositoryTests : IDisposable
     [Fact]
     public async Task Note_GetPage_Alphabetical_SortsByBody()
     {
-        NoteRepository repo = new(_ctx);
+        NoteRepository repo = new(ctx);
         await repo.Insert(MakeNote("root-notes", "Zebra"));
         await repo.Insert(MakeNote("root-notes", "Apple"));
 
@@ -317,7 +318,7 @@ public sealed class RepositoryTests : IDisposable
     [Fact]
     public async Task Note_GetPage_Chronological_SortsByModifiedAtDescending()
     {
-        NoteRepository repo = new(_ctx);
+        NoteRepository repo = new(ctx);
         DateTime now = DateTime.UtcNow;
         await repo.Insert(MakeNote("root-notes", "Old", modifiedAt: now.AddHours(-1)));
         await repo.Insert(MakeNote("root-notes", "New", modifiedAt: now));
@@ -331,7 +332,7 @@ public sealed class RepositoryTests : IDisposable
     [Fact]
     public async Task Note_Count_ReturnsCorrectCount()
     {
-        NoteRepository repo = new(_ctx);
+        NoteRepository repo = new(ctx);
         await repo.Insert(MakeNote("root-notes"));
         await repo.Insert(MakeNote("root-notes"));
         await repo.Insert(MakeNote("other-folder"));
@@ -344,7 +345,7 @@ public sealed class RepositoryTests : IDisposable
     [Fact]
     public async Task Note_Update_PersistsChanges()
     {
-        NoteRepository repo = new(_ctx);
+        NoteRepository repo = new(ctx);
         NoteEntity note = MakeNote("root-notes", "Original");
         await repo.Insert(note);
         note.Body = "Updated";
@@ -358,7 +359,7 @@ public sealed class RepositoryTests : IDisposable
     [Fact]
     public async Task Note_Delete_RemovesNote()
     {
-        NoteRepository repo = new(_ctx);
+        NoteRepository repo = new(ctx);
         NoteEntity note = MakeNote("root-notes");
         await repo.Insert(note);
         await repo.Delete(note.Id);
@@ -366,22 +367,11 @@ public sealed class RepositoryTests : IDisposable
         Assert.Null(await repo.Get(note.Id));
     }
 
-    // ── GetAll (export support) ───────────────────────────────────────────────
-
-    private static readonly IMessageFormat MessageFormat = new TestMessageFormat();
-
-    private static MessageEntity MakeMessage(string messageId, string folderId, bool isOutbound)
-    {
-        object message = MessageFormat.CreateMessage();
-        MessageFormat.SetMessageId(message, messageId);
-        return new MessageEntity { MessageId = messageId, Message = message, FolderId = folderId, IsOutbound = isOutbound };
-    }
-
     /// <summary>MessageRepository.GetAll returns messages from every folder, both Inbox and Outbox.</summary>
     [Fact]
     public async Task Message_GetAll_ReturnsAllFoldersAndDirections()
     {
-        MessageRepository repo = new(_ctx);
+        MessageRepository repo = new(ctx);
         await repo.Insert(MakeMessage("M1", "root-inbox", isOutbound: false));
         await repo.Insert(MakeMessage("M2", "root-outbox", isOutbound: true));
         await repo.Insert(MakeMessage("M3", "custom-folder", isOutbound: false));
@@ -398,7 +388,7 @@ public sealed class RepositoryTests : IDisposable
     [Fact]
     public async Task Draft_GetAll_ReturnsSentAndUnsentAcrossFolders()
     {
-        DraftRepository repo = new(_ctx);
+        DraftRepository repo = new(ctx);
         await repo.Insert(MakeDraft("root-drafts", "Unsent"));
         await repo.Insert(MakeDraft("root-drafts", "Sent", sent: true));
         await repo.Insert(MakeDraft("custom-folder", "Other"));
@@ -412,7 +402,7 @@ public sealed class RepositoryTests : IDisposable
     [Fact]
     public async Task Note_GetAll_ReturnsAllFolders()
     {
-        NoteRepository repo = new(_ctx);
+        NoteRepository repo = new(ctx);
         await repo.Insert(MakeNote("root-notes"));
         await repo.Insert(MakeNote("custom-folder"));
 
@@ -425,7 +415,7 @@ public sealed class RepositoryTests : IDisposable
     [Fact]
     public async Task ActivityLog_GetAll_ReturnsAllDocuments()
     {
-        ActivityLogRepository repo = new(_ctx);
+        ActivityLogRepository repo = new(ctx);
         await repo.Insert(new ActivityLogEntity { Date = DateTime.UtcNow.Date, EventEntries = [] });
         await repo.Insert(new ActivityLogEntity { Date = DateTime.UtcNow.Date.AddDays(-1), EventEntries = [] });
 

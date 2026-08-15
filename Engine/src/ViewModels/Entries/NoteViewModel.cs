@@ -18,25 +18,25 @@ public interface INoteViewModel
 /// <summary>ViewModel for editing and saving a plain-text note entry.</summary>
 public sealed partial class NoteViewModel : ObservableObject, INoteViewModel
 {
-    private readonly IEntryService _entryService;
-    private NoteEntity _entity;
-
-    [ObservableProperty] private string _body;
-    [ObservableProperty] private bool _isSaving;
-    [ObservableProperty] private string? _statusMessage;
-
-    /// <summary>Gets the LiteDB object-id string for this note.</summary>
-    public string Id => _entity.Id.ToString();
-
     /// <summary>Initializes a new <see cref="NoteViewModel"/> for the given note entity.</summary>
     /// <param name="entity">The note entity to display and edit.</param>
     /// <param name="entryService">Entry service for saving changes.</param>
     public NoteViewModel(NoteEntity entity, IEntryService entryService)
     {
-        _entity = entity;
-        _entryService = entryService;
-        _body = entity.Body;
+        this.entity = entity;
+        this.entryService = entryService;
+        body = entity.Body;
     }
+
+    private readonly IEntryService entryService;
+    private NoteEntity entity;
+
+    [ObservableProperty] private string body;
+    [ObservableProperty] private bool isSaving;
+    [ObservableProperty] private string? statusMessage;
+
+    /// <summary>Gets the LiteDB object-id string for this note.</summary>
+    public string Id => entity.Id.ToString();
 
     [RelayCommand]
     private async Task Save()
@@ -44,8 +44,8 @@ public sealed partial class NoteViewModel : ObservableObject, INoteViewModel
         IsSaving = true;
         try
         {
-            _entity.Body = Body;
-            await _entryService.SaveNote(_entity);
+            entity.Body = Body;
+            await entryService.SaveNote(entity);
             StatusMessage = "Saved";
         }
         finally

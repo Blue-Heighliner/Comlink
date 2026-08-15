@@ -12,6 +12,13 @@ public partial class EnvironmentBanner : UserControl
     public static readonly StyledProperty<string> BannerColorProperty =
         AvaloniaProperty.Register<EnvironmentBanner, string>(nameof(BannerColor), "#1565C0");
 
+    /// <summary>Initializes the control, loads the AXAML layout, and applies the initial banner color.</summary>
+    public EnvironmentBanner()
+    {
+        InitializeComponent();
+        ApplyColor();
+    }
+
     /// <summary>Gets or sets the banner title text.</summary>
     public string Title
     {
@@ -26,13 +33,6 @@ public partial class EnvironmentBanner : UserControl
         set => SetValue(BannerColorProperty, value);
     }
 
-    /// <summary>Initializes the control, loads the AXAML layout, and applies the initial banner color.</summary>
-    public EnvironmentBanner()
-    {
-        InitializeComponent();
-        ApplyColor();
-    }
-
     /// <inheritdoc />
     protected override void OnPropertyChanged(AvaloniaPropertyChangedEventArgs change)
     {
@@ -41,23 +41,29 @@ public partial class EnvironmentBanner : UserControl
         if (change.Property == TitleProperty)
         {
             TextBlock? text = this.FindControl<TextBlock>("TitleText");
-            if (text is not null) text.Text = Title.ToUpperInvariant();
+            if (text is not null) { text.Text = Title.ToUpperInvariant(); }
         }
 
         if (change.Property == BannerColorProperty)
+        {
             ApplyColor();
+        }
     }
 
     private void ApplyColor()
     {
         Border? border = this.FindControl<Border>("BannerBorder");
         if (border is not null && Color.TryParse(BannerColor, out Color color))
+        {
             border.Background = new SolidColorBrush(color);
+        }
     }
 
     private void OnBannerPressed(object? sender, PointerPressedEventArgs e)
     {
         if (VisualRoot is Window window && e.GetCurrentPoint(window).Properties.IsLeftButtonPressed)
+        {
             window.BeginMoveDrag(e);
+        }
     }
 }

@@ -1,27 +1,28 @@
-namespace BlueHeighliner.Comlink.Engine.Control;
+namespace BlueHeighliner.Comlink.Engine.Devices;
 
-/// <summary>Enumerates the printers available on this computer for the print manager to target.</summary>
-public interface IPrinterProvider
+/// <summary>
+/// Discovers printers and drives raw line printing via the operating system's own printing facilities —
+/// Windows Print Spooler (WinSpool) on Windows, CUPS (<c>lp</c>/<c>lpstat</c>) on Linux. This is real
+/// OS-level behavior, not configuration or rules, so it does not live on <see cref="Control.IEngineController"/>
+/// and is not registered/overridable the way control interfaces are — Engine always provides real behavior
+/// for it directly, the same way it always provides real behavior for alarm sound playback (see
+/// <see cref="IAlertSoundPlayer"/>). Printer discovery is best-effort (see <see cref="GetAvailablePrinters"/>);
+/// line printing submits each line as its own raw print job and polls the OS's own job status until it
+/// reports the job finished printing before returning, so the print queue's "wait for confirmation"
+/// semantics reflect genuine OS-reported completion rather than just "the app handed the bytes off."
+/// </summary>
+public interface IPrintDriver
 {
     /// <summary>Returns the names of every printer currently available on this computer.</summary>
     IReadOnlyList<string> GetAvailablePrinters();
     /// <summary>Returns the name of this computer's default printer, or <see langword="null"/> if none is configured.</summary>
     string? GetDefaultPrinter();
-}
-
-/// <summary>
-/// Drives a named line printer: prints one line at a time, waiting for confirmation that the line has
-/// finished printing before the print queue advances to the next line, and issues a page feed between jobs.
-/// See <see cref="ViewModels.IPrintManagerViewModel"/> for the queue that drives this interface.
-/// </summary>
-public interface ILinePrinter
-{
     /// <summary>
     /// Prints a single line to the named printer. The returned task completes once the printer confirms the
     /// line has finished printing — the print queue will not print the next line (or check for a
     /// higher-priority job that should interrupt this one) until this task completes.
     /// </summary>
-    /// <param name="printerName">Name of the target printer, as returned by <see cref="IPrinterProvider"/>.</param>
+    /// <param name="printerName">Name of the target printer, as returned by <see cref="GetAvailablePrinters"/>.</param>
     /// <param name="line">The line of text to print.</param>
     /// <param name="cancellation">Cancellation token.</param>
     Task PrintLine(string printerName, string line, CancellationToken cancellation = default);
@@ -29,63 +30,69 @@ public interface ILinePrinter
     /// Issues a page feed on the named printer. Called after the last line of an entry is printed, and also
     /// when a print job is interrupted partway through by a higher-priority job.
     /// </summary>
-    /// <param name="printerName">Name of the target printer, as returned by <see cref="IPrinterProvider"/>.</param>
+    /// <param name="printerName">Name of the target printer, as returned by <see cref="GetAvailablePrinters"/>.</param>
     /// <param name="cancellation">Cancellation token.</param>
     Task PageFeed(string printerName, CancellationToken cancellation = default);
 }
 
 /// <summary>
-/// Default <see cref="IPrinterProvider"/>/<see cref="ILinePrinter"/> querying and driving the operating
-/// system's own printing facilities — Windows Print Spooler (WinSpool) on Windows, CUPS (<c>lp</c>/<c>lpstat</c>)
-/// on Linux. Printer discovery is best-effort (see <see cref="GetAvailablePrinters"/>); line printing submits
-/// each line as its own raw print job and polls the OS's own job status until it reports the job finished
-/// printing before returning, so the print queue's "wait for confirmation" semantics reflect genuine
-/// OS-reported completion rather than just "the app handed the bytes off." Members are <see langword="virtual"/>
-/// so a host can inherit and override — see <c>Docs/Control.md</c>.
+/// Discovers printers and drives raw line printing via the operating system's own printing facilities:
+/// Windows Print Spooler (WinSpool) on Windows, CUPS (<c>lp</c>/<c>lpstat</c>) on Linux. Not unit tested
+/// directly — inherently environment- and OS-dependent, so a unit test could only meaningfully assert
+/// against whatever printers happen to be installed (and reachable) on the machine running the test; see
+/// <c>Docs/Control.md</c>.
 /// </summary>
 [ExcludeFromCodeCoverage]
-public partial class DefaultPrinterProvider : IPrinterProvider, ILinePrinter
+internal sealed class PrintDriver : IPrintDriver
 {
-    private static readonly TimeSpan PollInterval = TimeSpan.FromMilliseconds(150);
-    private static readonly TimeSpan MaxWait = TimeSpan.FromSeconds(30);
-
     /// <inheritdoc />
-    public virtual IReadOnlyList<string> GetAvailablePrinters()
+    public IReadOnlyList<string> GetAvailablePrinters() => PrintOperations.GetAvailablePrinters();
+    /// <inheritdoc />
+    public string? GetDefaultPrinter() => PrintOperations.GetDefaultPrinter();
+    /// <inheritdoc />
+    public Task PrintLine(string printerName, string line, CancellationToken cancellation = default)
+        => PrintOperations.PrintRaw(printerName, line + "\r\n", cancellation);
+    /// <inheritdoc />
+    public Task PageFeed(string printerName, CancellationToken cancellation = default)
+        => PrintOperations.PrintRaw(printerName, "\f", cancellation);
+}
+
+/// <summary>
+/// OS-branched printer discovery/driving logic backing <see cref="PrintDriver"/>. Not unit tested directly —
+/// inherently environment- and OS-dependent, so a unit test could only meaningfully assert against whatever
+/// printers happen to be installed (and reachable) on the machine running the test; see <c>Docs/Control.md</c>.
+/// </summary>
+[ExcludeFromCodeCoverage]
+file static class PrintOperations
+{
+    private static readonly TimeSpan pollInterval = TimeSpan.FromMilliseconds(150);
+    private static readonly TimeSpan maxWait = TimeSpan.FromSeconds(30);
+
+    public static IReadOnlyList<string> GetAvailablePrinters()
     {
-        if (OperatingSystem.IsWindows()) return GetWindowsPrinters();
-        if (OperatingSystem.IsLinux()) return GetLinuxPrinters();
+        if (OperatingSystem.IsWindows()) { return GetWindowsPrinters(); }
+        if (OperatingSystem.IsLinux()) { return GetLinuxPrinters(); }
         return [];
     }
 
-    /// <inheritdoc />
-    public virtual string? GetDefaultPrinter()
+    public static string? GetDefaultPrinter()
     {
-        if (OperatingSystem.IsWindows()) return GetWindowsDefaultPrinter();
-        if (OperatingSystem.IsLinux()) return GetLinuxDefaultPrinter();
+        if (OperatingSystem.IsWindows()) { return GetWindowsDefaultPrinter(); }
+        if (OperatingSystem.IsLinux()) { return GetLinuxDefaultPrinter(); }
         return null;
     }
 
-    /// <inheritdoc />
-    public virtual Task PrintLine(string printerName, string line, CancellationToken cancellation = default) =>
-        PrintRaw(printerName, line + "\r\n", cancellation);
-
-    /// <inheritdoc />
-    public virtual Task PageFeed(string printerName, CancellationToken cancellation = default) =>
-        PrintRaw(printerName, "\f", cancellation);
-
-    private static Task PrintRaw(string printerName, string content, CancellationToken cancellation)
+    public static Task PrintRaw(string printerName, string content, CancellationToken cancellation)
     {
-        if (OperatingSystem.IsWindows()) return PrintRawWindows(printerName, content, cancellation);
-        if (OperatingSystem.IsLinux()) return PrintRawLinux(printerName, content, cancellation);
+        if (OperatingSystem.IsWindows()) { return PrintRawWindows(printerName, content, cancellation); }
+        if (OperatingSystem.IsLinux()) { return PrintRawLinux(printerName, content, cancellation); }
         return Task.CompletedTask;
     }
-
-    // ── Windows (WinSpool) ───────────────────────────────────────────────────
 
     private static IReadOnlyList<string> GetWindowsPrinters()
     {
         string? output = RunPowerShell("Get-CimInstance -ClassName Win32_Printer | Select-Object -ExpandProperty Name");
-        if (output is null) return [];
+        if (output is null) { return []; }
         return output.Split('\n', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries).ToList();
     }
 
@@ -93,7 +100,7 @@ public partial class DefaultPrinterProvider : IPrinterProvider, ILinePrinter
     {
         string? output = RunPowerShell(
             "Get-CimInstance -ClassName Win32_Printer | Where-Object { $_.Default } | Select-Object -First 1 -ExpandProperty Name");
-        if (output is null) return null;
+        if (output is null) { return null; }
         string name = output.Trim();
         return string.IsNullOrEmpty(name) ? null : name;
     }
@@ -139,7 +146,9 @@ public partial class DefaultPrinterProvider : IPrinterProvider, ILinePrinter
             // MSDN documents phPrinter as "undefined" (not necessarily zero) when OpenPrinter fails, so
             // cleanup must be gated on that return value rather than on the handle being non-zero.
             if (!OpenPrinter(printerName, out nint printerHandle, 0))
+            {
                 return;
+            }
 
             try
             {
@@ -150,12 +159,12 @@ public partial class DefaultPrinterProvider : IPrinterProvider, ILinePrinter
                     pDataType = "RAW"
                 };
                 int jobId = StartDocPrinter(printerHandle, 1, ref docInfo);
-                if (jobId == 0) return;
+                if (jobId == 0) { return; }
 
                 bool wroteSuccessfully;
                 try
                 {
-                    if (!StartPagePrinter(printerHandle)) return;
+                    if (!StartPagePrinter(printerHandle)) { return; }
                     try
                     {
                         byte[] bytes = Encoding.UTF8.GetBytes(content);
@@ -174,7 +183,7 @@ public partial class DefaultPrinterProvider : IPrinterProvider, ILinePrinter
                     EndDocPrinter(printerHandle);
                 }
 
-                if (!wroteSuccessfully) return;
+                if (!wroteSuccessfully) { return; }
 
                 await WaitForWindowsJobCompletion(printerHandle, jobId, cancellation);
             }
@@ -195,12 +204,12 @@ public partial class DefaultPrinterProvider : IPrinterProvider, ILinePrinter
     {
         const uint TerminalStatus = JOB_STATUS_PRINTED | JOB_STATUS_DELETED | JOB_STATUS_ERROR | JOB_STATUS_COMPLETE;
         Stopwatch elapsed = Stopwatch.StartNew();
-        while (elapsed.Elapsed < MaxWait)
+        while (elapsed.Elapsed < maxWait)
         {
             cancellation.ThrowIfCancellationRequested();
 
             GetJob(printerHandle, jobId, 1, 0, 0, out int needed);
-            if (needed <= 0) return;
+            if (needed <= 0) { return; }
 
             nint buffer = Marshal.AllocHGlobal(needed);
             try
@@ -208,7 +217,7 @@ public partial class DefaultPrinterProvider : IPrinterProvider, ILinePrinter
                 if (GetJob(printerHandle, jobId, 1, buffer, needed, out _))
                 {
                     JOB_INFO_1 info = Marshal.PtrToStructure<JOB_INFO_1>(buffer);
-                    if ((info.Status & TerminalStatus) != 0) return;
+                    if ((info.Status & TerminalStatus) != 0) { return; }
                 }
                 else
                 {
@@ -220,7 +229,7 @@ public partial class DefaultPrinterProvider : IPrinterProvider, ILinePrinter
                 Marshal.FreeHGlobal(buffer);
             }
 
-            await Task.Delay(PollInterval, cancellation);
+            await Task.Delay(pollInterval, cancellation);
         }
     }
 
@@ -285,19 +294,17 @@ public partial class DefaultPrinterProvider : IPrinterProvider, ILinePrinter
     [DllImport("winspool.drv", EntryPoint = "GetJobW", SetLastError = true, CharSet = CharSet.Unicode)]
     private static extern bool GetJob(nint hPrinter, int jobId, int level, nint pJob, int cbBuf, out int pcbNeeded);
 
-    // ── Linux (CUPS) ──────────────────────────────────────────────────────────
-
     private static IReadOnlyList<string> GetLinuxPrinters()
     {
         string? output = RunCommand("lpstat", "-p");
-        if (output is null) return [];
+        if (output is null) { return []; }
 
         List<string> printers = [];
         foreach (string line in output.Split('\n'))
         {
-            if (!line.StartsWith("printer ", StringComparison.Ordinal)) continue;
+            if (!line.StartsWith("printer ", StringComparison.Ordinal)) { continue; }
             string[] parts = line.Split(' ', StringSplitOptions.RemoveEmptyEntries);
-            if (parts.Length >= 2) printers.Add(parts[1]);
+            if (parts.Length >= 2) { printers.Add(parts[1]); }
         }
         return printers;
     }
@@ -305,11 +312,11 @@ public partial class DefaultPrinterProvider : IPrinterProvider, ILinePrinter
     private static string? GetLinuxDefaultPrinter()
     {
         string? output = RunCommand("lpstat", "-d");
-        if (output is null) return null;
+        if (output is null) { return null; }
 
         const string marker = "system default destination:";
         int index = output.IndexOf(marker, StringComparison.OrdinalIgnoreCase);
-        if (index < 0) return null;
+        if (index < 0) { return null; }
 
         string name = output[(index + marker.Length)..].Trim();
         return string.IsNullOrEmpty(name) ? null : name;
@@ -320,10 +327,10 @@ public partial class DefaultPrinterProvider : IPrinterProvider, ILinePrinter
         try
         {
             string? jobId = await SubmitLinuxJob(printerName, content, cancellation);
-            if (jobId is null) return;
+            if (jobId is null) { return; }
 
             Stopwatch elapsed = Stopwatch.StartNew();
-            while (elapsed.Elapsed < MaxWait)
+            while (elapsed.Elapsed < maxWait)
             {
                 cancellation.ThrowIfCancellationRequested();
 
@@ -334,9 +341,9 @@ public partial class DefaultPrinterProvider : IPrinterProvider, ILinePrinter
                 string? pending = RunCommand("lpstat", "-W", "not-completed", "-o", printerName);
                 bool stillPending = pending is not null &&
                     pending.Split('\n').Any(line => line.Split(' ', StringSplitOptions.RemoveEmptyEntries) is [var firstToken, ..] && firstToken == jobId);
-                if (!stillPending) return;
+                if (!stillPending) { return; }
 
-                await Task.Delay(PollInterval, cancellation);
+                await Task.Delay(pollInterval, cancellation);
             }
         }
         catch (Exception ex) when (ex is not OperationCanceledException)
@@ -381,7 +388,7 @@ public partial class DefaultPrinterProvider : IPrinterProvider, ILinePrinter
         // Output format: "request id is PRINTER-123 (1 file(s))"
         const string marker = "request id is ";
         int index = output.IndexOf(marker, StringComparison.OrdinalIgnoreCase);
-        if (index < 0) return null;
+        if (index < 0) { return null; }
         string rest = output[(index + marker.Length)..].TrimStart();
         int spaceIndex = rest.IndexOf(' ');
         return spaceIndex < 0 ? rest.Trim() : rest[..spaceIndex];
@@ -403,7 +410,9 @@ public partial class DefaultPrinterProvider : IPrinterProvider, ILinePrinter
                 }
             };
             foreach (string argument in arguments)
+            {
                 process.StartInfo.ArgumentList.Add(argument);
+            }
             process.Start();
             // Drain (rather than inherit) stderr too, so a tool's own diagnostic chatter — e.g. lpstat's
             // "No destinations added." when no printer is configured — never leaks to the app's console;

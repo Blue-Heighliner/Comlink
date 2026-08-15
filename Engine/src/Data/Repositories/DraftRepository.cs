@@ -22,17 +22,18 @@ public interface IDraftRepository
 /// <summary>Provides data-access operations for <see cref="DraftEntity"/> documents.</summary>
 public sealed class DraftRepository : IDraftRepository
 {
-    private readonly ILiteDbContext _ctx;
     private const int PageSize = 50;
 
     /// <summary>Initializes a new <see cref="DraftRepository"/> backed by the given database context.</summary>
-    public DraftRepository(ILiteDbContext ctx) => _ctx = ctx;
+    public DraftRepository(ILiteDbContext ctx) => this.ctx = ctx;
+
+    private readonly ILiteDbContext ctx;
 
     /// <inheritdoc />
-    public Task<List<DraftEntity>> GetPage(string folderId, int page, bool alphabetical) =>
-        Task.Run(() =>
+    public Task<List<DraftEntity>> GetPage(string folderId, int page, bool alphabetical)
+        => Task.Run(() =>
         {
-            ILiteQueryable<DraftEntity> query = _ctx.Drafts.Query().Where(d => d.FolderId == folderId && !d.IsSent);
+            ILiteQueryable<DraftEntity> query = ctx.Drafts.Query().Where(d => d.FolderId == folderId && !d.IsSent);
             return (alphabetical
                 ? query.OrderBy(d => d.Subject)
                 : query.OrderByDescending(d => d.ModifiedAt))
@@ -42,26 +43,26 @@ public sealed class DraftRepository : IDraftRepository
         });
 
     /// <inheritdoc />
-    public Task<int> Count(string folderId) =>
-        Task.Run(() => _ctx.Drafts.Count(d => d.FolderId == folderId && !d.IsSent));
+    public Task<int> Count(string folderId)
+        => Task.Run(() => ctx.Drafts.Count(d => d.FolderId == folderId && !d.IsSent));
 
     /// <inheritdoc />
-    public Task<List<DraftEntity>> GetAll() =>
-        Task.Run(() => _ctx.Drafts.FindAll().ToList());
+    public Task<List<DraftEntity>> GetAll()
+        => Task.Run(() => ctx.Drafts.FindAll().ToList());
 
     /// <inheritdoc />
-    public Task<DraftEntity?> Get(ObjectId id) =>
-        Task.Run<DraftEntity?>(() => _ctx.Drafts.FindById(id));
+    public Task<DraftEntity?> Get(ObjectId id)
+        => Task.Run<DraftEntity?>(() => ctx.Drafts.FindById(id));
 
     /// <inheritdoc />
-    public Task<DraftEntity> Insert(DraftEntity entity) =>
-        Task.Run(() => { _ctx.Drafts.Insert(entity); return entity; });
+    public Task<DraftEntity> Insert(DraftEntity entity)
+        => Task.Run(() => { ctx.Drafts.Insert(entity); return entity; });
 
     /// <inheritdoc />
-    public Task Update(DraftEntity entity) =>
-        Task.Run(() => _ctx.Drafts.Update(entity));
+    public Task Update(DraftEntity entity)
+        => Task.Run(() => ctx.Drafts.Update(entity));
 
     /// <inheritdoc />
-    public Task Delete(ObjectId id) =>
-        Task.Run(() => _ctx.Drafts.Delete(id));
+    public Task Delete(ObjectId id)
+        => Task.Run(() => ctx.Drafts.Delete(id));
 }

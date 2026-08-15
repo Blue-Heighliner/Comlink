@@ -26,15 +26,16 @@ public interface IMessageRepository
 /// <summary>Provides data-access operations for <see cref="MessageEntity"/> documents.</summary>
 public sealed class MessageRepository : IMessageRepository
 {
-    private readonly ILiteDbContext _ctx;
     private const int PageSize = 50;
 
     /// <summary>Initializes a new <see cref="MessageRepository"/> backed by the given database context.</summary>
-    public MessageRepository(ILiteDbContext ctx) => _ctx = ctx;
+    public MessageRepository(ILiteDbContext ctx) => this.ctx = ctx;
+
+    private readonly ILiteDbContext ctx;
 
     /// <inheritdoc />
-    public Task<List<MessageEntity>> GetPage(string folderId, int page) =>
-        Task.Run(() => _ctx.Messages
+    public Task<List<MessageEntity>> GetPage(string folderId, int page)
+        => Task.Run(() => ctx.Messages
             .Query()
             .Where(m => m.FolderId == folderId)
             .OrderByDescending(m => m.ReceivedAt)
@@ -43,26 +44,26 @@ public sealed class MessageRepository : IMessageRepository
             .ToList());
 
     /// <inheritdoc />
-    public Task<int> Count(string folderId) =>
-        Task.Run(() => _ctx.Messages.Count(m => m.FolderId == folderId));
+    public Task<int> Count(string folderId)
+        => Task.Run(() => ctx.Messages.Count(m => m.FolderId == folderId));
 
     /// <inheritdoc />
-    public Task<List<MessageEntity>> GetAll() =>
-        Task.Run(() => _ctx.Messages.FindAll().ToList());
+    public Task<List<MessageEntity>> GetAll()
+        => Task.Run(() => ctx.Messages.FindAll().ToList());
 
     /// <inheritdoc />
-    public Task<MessageEntity?> Get(string messageId, bool outbound) =>
-        Task.Run<MessageEntity?>(() => _ctx.Messages.FindOne(m => m.MessageId == messageId && m.IsOutbound == outbound));
+    public Task<MessageEntity?> Get(string messageId, bool outbound)
+        => Task.Run<MessageEntity?>(() => ctx.Messages.FindOne(m => m.MessageId == messageId && m.IsOutbound == outbound));
 
     /// <inheritdoc />
-    public Task Insert(MessageEntity entity) =>
-        Task.Run(() => _ctx.Messages.Insert(entity));
+    public Task Insert(MessageEntity entity)
+        => Task.Run(() => ctx.Messages.Insert(entity));
 
     /// <inheritdoc />
-    public Task Update(MessageEntity entity) =>
-        Task.Run(() => _ctx.Messages.Update(entity));
+    public Task Update(MessageEntity entity)
+        => Task.Run(() => ctx.Messages.Update(entity));
 
     /// <inheritdoc />
-    public Task Delete(string messageId, bool outbound) =>
-        Task.Run(() => _ctx.Messages.DeleteMany(m => m.MessageId == messageId && m.IsOutbound == outbound));
+    public Task Delete(string messageId, bool outbound)
+        => Task.Run(() => ctx.Messages.DeleteMany(m => m.MessageId == messageId && m.IsOutbound == outbound));
 }

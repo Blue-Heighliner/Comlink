@@ -15,11 +15,11 @@ public sealed class MessageReceivedEvent
     public List<AddressRequest> Addresses { get; set; } = [];
     /// <summary>UTC timestamp when the message was originally sent.</summary>
     public DateTime SentAt { get; set; }
-    /// <summary>Whether this message is an alert; see <see cref="Control.IMessageFormat.GetIsAlert"/>.</summary>
+    /// <summary>Whether this message is an alert; see <see cref="Control.IEngineController.GetIsAlert"/>.</summary>
     public bool IsAlert { get; set; }
-    /// <summary>Priority number of this message; see <see cref="Control.IMessageFormat.GetPriority"/>.</summary>
+    /// <summary>Priority number of this message; see <see cref="Control.IEngineController.GetPriority"/>.</summary>
     public int Priority { get; set; }
-    /// <summary>Tag identifying the type of this message; see <see cref="Control.IMessageFormat.GetTag"/>.</summary>
+    /// <summary>Tag identifying the type of this message; see <see cref="Control.IEngineController.GetTag"/>.</summary>
     public string Tag { get; set; } = string.Empty;
 }
 
@@ -79,11 +79,11 @@ public sealed class SendMessagePayload
     public string Body { get; set; } = string.Empty;
     /// <summary>List of recipient addresses for this message.</summary>
     public List<AddressPayload> Addresses { get; set; } = [];
-    /// <summary>Whether this message is an alert; see <see cref="Control.IMessageFormat.GetIsAlert"/>.</summary>
+    /// <summary>Whether this message is an alert; see <see cref="Control.IEngineController.GetIsAlert"/>.</summary>
     public bool IsAlert { get; set; }
-    /// <summary>Priority number of this message; see <see cref="Control.IMessageFormat.GetPriority"/>.</summary>
+    /// <summary>Priority number of this message; see <see cref="Control.IEngineController.GetPriority"/>.</summary>
     public int Priority { get; set; }
-    /// <summary>Tag identifying the type of this message; see <see cref="Control.IMessageFormat.GetTag"/>.</summary>
+    /// <summary>Tag identifying the type of this message; see <see cref="Control.IEngineController.GetTag"/>.</summary>
     public string Tag { get; set; } = string.Empty;
 }
 

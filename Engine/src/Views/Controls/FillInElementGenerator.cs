@@ -11,20 +11,20 @@ public sealed class FillInElementGenerator : VisualLineElementGenerator
     /// <summary>The total length of a fill-in marker (sentinel character plus ID).</summary>
     public const int MarkerLength = IdLength + 1;
 
-    private readonly IReadOnlyDictionary<string, IFillInViewModel> _fillIns;
-
     /// <summary>Initializes the generator with the fill-in ViewModel map for the active draft.</summary>
     public FillInElementGenerator(IReadOnlyDictionary<string, IFillInViewModel> fillIns)
     {
         _fillIns = fillIns;
     }
 
+    private readonly IReadOnlyDictionary<string, IFillInViewModel> _fillIns;
+
     /// <inheritdoc />
     public override int GetFirstInterestedOffset(int startOffset)
     {
         DocumentLine line = CurrentContext.VisualLine.FirstDocumentLine;
         int lineEnd = line.Offset + line.Length;
-        if (startOffset >= lineEnd) return -1;
+        if (startOffset >= lineEnd) { return -1; }
 
         string text = CurrentContext.Document.GetText(startOffset, lineEnd - startOffset);
         int idx = text.IndexOf(Sentinel);
@@ -35,11 +35,11 @@ public sealed class FillInElementGenerator : VisualLineElementGenerator
     public override VisualLineElement? ConstructElement(int offset)
     {
         TextDocument doc = CurrentContext.Document;
-        if (doc.GetCharAt(offset) != Sentinel) return null;
-        if (offset + MarkerLength > doc.TextLength) return null;
+        if (doc.GetCharAt(offset) != Sentinel) { return null; }
+        if (offset + MarkerLength > doc.TextLength) { return null; }
 
         string id = doc.GetText(offset + 1, IdLength);
-        if (!_fillIns.TryGetValue(id, out IFillInViewModel? fillIn)) return null;
+        if (!_fillIns.TryGetValue(id, out IFillInViewModel? fillIn)) { return null; }
 
         FillInInlineControl ctrl = new()
         {

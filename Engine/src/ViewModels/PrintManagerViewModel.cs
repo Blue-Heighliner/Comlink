@@ -20,7 +20,7 @@ public sealed record PrintQueueEntry
     public required bool IsManual { get; init; }
     /// <summary>
     /// For automatically-queued received messages, the message's priority value (see
-    /// <see cref="Control.IMessageComposition"/>) — higher prints first among other automatically-queued
+    /// <see cref="Control.IEngineController"/>) — higher prints first among other automatically-queued
     /// entries. Unused (and irrelevant to ordering) for manual entries.
     /// </summary>
     public required int Priority { get; init; }
@@ -42,10 +42,10 @@ public interface IPrintManagerViewModel
     ObservableCollection<PrintQueueEntry> Queue { get; }
     /// <summary>
     /// Gets or sets whether every received message is automatically added to the print queue (the number of
-    /// copies decided by <see cref="Control.IPrintPolicy"/>). Off by default; see <see cref="Control.IPrintPolicy"/>.
+    /// copies decided by <see cref="Control.IEngineController"/>). Off by default; see <see cref="Control.IEngineController"/>.
     /// </summary>
     bool PrintReceivedEnabled { get; set; }
-    /// <summary>Gets the printers available on this computer; see <see cref="Control.IPrinterProvider"/>.</summary>
+    /// <summary>Gets the printers available on this computer; see <see cref="Control.IEngineController"/>.</summary>
     IReadOnlyList<string> AvailablePrinters { get; }
     /// <summary>Gets or sets the printer the queue prints to. Initializes to this computer's default printer.</summary>
     string? SelectedPrinter { get; set; }
@@ -60,36 +60,14 @@ public interface IPrintManagerViewModel
 /// <inheritdoc cref="IPrintManagerViewModel" />
 public sealed partial class PrintManagerViewModel : ObservableObject, IPrintManagerViewModel
 {
-    // Next-to-print first: manual entries before any automatic one, then by descending message priority,
-    // then oldest-queued first among ties.
-    private static readonly Comparison<PrintQueueEntry> Order = (a, b) =>
+    private static List<string> SplitLines(string? text)
+        => [.. (text ?? string.Empty).Replace("\r\n", "\n").Split('\n')];
+
+    private static ObjectId? TryParseObjectId(string id)
     {
-        int manual = b.IsManual.CompareTo(a.IsManual);
-        if (manual != 0) return manual;
-        int priority = b.Priority.CompareTo(a.Priority);
-        if (priority != 0) return priority;
-        return a.QueuedAt.CompareTo(b.QueuedAt);
-    };
-
-    private readonly IMessageRepository _messages;
-    private readonly IDraftRepository _drafts;
-    private readonly INoteRepository _notes;
-    private readonly IActivityLogRepository _activityLogs;
-    private readonly IMessageFormat _messageFormat;
-    private readonly ILinePrinter _linePrinter;
-    private readonly IPrintPolicy _printPolicy;
-    private readonly ILogger _activityLogger;
-    private readonly List<PrintQueueEntry> _queue = [];
-    private readonly Lock _gate = new();
-    private bool _isProcessing;
-
-    [ObservableProperty] private bool _printReceivedEnabled;
-    [ObservableProperty] private string? _selectedPrinter;
-
-    /// <inheritdoc />
-    public ObservableCollection<PrintQueueEntry> Queue { get; } = [];
-    /// <inheritdoc />
-    public IReadOnlyList<string> AvailablePrinters { get; }
+        try { return new ObjectId(id); }
+        catch { return null; }
+    }
 
     /// <summary>Initializes a new <see cref="PrintManagerViewModel"/> and subscribes to inbound message events.</summary>
     /// <param name="entryService">Entry service raising <see cref="IEntryService.MessageInserted"/> for received messages.</param>
@@ -97,10 +75,8 @@ public sealed partial class PrintManagerViewModel : ObservableObject, IPrintMana
     /// <param name="drafts">Repository for loading draft content when it reaches the front of the queue.</param>
     /// <param name="notes">Repository for loading note content when it reaches the front of the queue.</param>
     /// <param name="activityLogs">Repository for loading activity log content when it reaches the front of the queue.</param>
-    /// <param name="messageFormat">Maps logical fields onto a message entity's stored message.</param>
-    /// <param name="printerProvider">Enumerates available printers and this computer's default.</param>
-    /// <param name="linePrinter">Drives the selected printer line by line.</param>
-    /// <param name="printPolicy">Provides the starting state of <see cref="PrintReceivedEnabled"/> and how many copies of each received message to auto-queue.</param>
+    /// <param name="engineController">Maps logical fields onto a message entity's stored message, and provides the starting state of <see cref="PrintReceivedEnabled"/> and how many copies of each received message to auto-queue.</param>
+    /// <param name="printDriver">Enumerates available printers and this computer's default, and drives the selected printer line by line.</param>
     /// <param name="loggerFactory">Factory for creating named loggers.</param>
     public PrintManagerViewModel(
         IEntryService entryService,
@@ -108,37 +84,64 @@ public sealed partial class PrintManagerViewModel : ObservableObject, IPrintMana
         IDraftRepository drafts,
         INoteRepository notes,
         IActivityLogRepository activityLogs,
-        IMessageFormat messageFormat,
-        IPrinterProvider printerProvider,
-        ILinePrinter linePrinter,
-        IPrintPolicy printPolicy,
+        IEngineController engineController,
+        IPrintDriver printDriver,
         ILoggerFactory loggerFactory)
     {
-        _messages = messages;
-        _drafts = drafts;
-        _notes = notes;
-        _activityLogs = activityLogs;
-        _messageFormat = messageFormat;
-        _linePrinter = linePrinter;
-        _printPolicy = printPolicy;
-        _activityLogger = loggerFactory.CreateLogger("ACTIVITY");
+        this.messages = messages;
+        this.drafts = drafts;
+        this.notes = notes;
+        this.activityLogs = activityLogs;
+        this.engineController = engineController;
+        this.printDriver = printDriver;
+        activityLogger = loggerFactory.CreateLogger("ACTIVITY");
 
-        _printReceivedEnabled = printPolicy.PrintReceivedDefaultEnabled;
-        AvailablePrinters = printerProvider.GetAvailablePrinters();
-        _selectedPrinter = printerProvider.GetDefaultPrinter();
+        printReceivedEnabled = engineController.PrintReceivedDefaultEnabled;
+        AvailablePrinters = printDriver.GetAvailablePrinters();
+        selectedPrinter = printDriver.GetDefaultPrinter();
 
         entryService.MessageInserted += OnMessageInserted;
     }
 
+    private readonly IMessageRepository messages;
+    private readonly IDraftRepository drafts;
+    private readonly INoteRepository notes;
+    private readonly IActivityLogRepository activityLogs;
+    private readonly IEngineController engineController;
+    private readonly IPrintDriver printDriver;
+    private readonly ILogger activityLogger;
+    private readonly List<PrintQueueEntry> queue = [];
+    private readonly Lock gate = new();
+    private bool isProcessing;
+
+    // Next-to-print first: manual entries before any automatic one, then by descending message priority,
+    // then oldest-queued first among ties.
+    private readonly Comparison<PrintQueueEntry> order = (a, b) =>
+    {
+        int manual = b.IsManual.CompareTo(a.IsManual);
+        if (manual != 0) { return manual; }
+        int priority = b.Priority.CompareTo(a.Priority);
+        if (priority != 0) { return priority; }
+        return a.QueuedAt.CompareTo(b.QueuedAt);
+    };
+
+    [ObservableProperty] private bool printReceivedEnabled;
+    [ObservableProperty] private string? selectedPrinter;
+
+    /// <inheritdoc />
+    public ObservableCollection<PrintQueueEntry> Queue { get; } = [];
+    /// <inheritdoc />
+    public IReadOnlyList<string> AvailablePrinters { get; }
+
     private Task OnMessageInserted(MessageEntity entity)
     {
-        if (!PrintReceivedEnabled) return Task.CompletedTask;
+        if (!PrintReceivedEnabled) { return Task.CompletedTask; }
 
-        int count = _printPolicy.GetPrintCount(entity.Message);
-        if (count <= 0) return Task.CompletedTask;
+        int count = engineController.GetPrintCount(entity.Message);
+        if (count <= 0) { return Task.CompletedTask; }
 
-        int priority = _messageFormat.GetPriority(entity.Message);
-        string title = _messageFormat.GetSubject(entity.Message);
+        int priority = engineController.GetPriority(entity.Message);
+        string title = engineController.GetSubject(entity.Message);
         for (int i = 0; i < count; i++)
         {
             Enqueue(new PrintQueueEntry
@@ -171,10 +174,10 @@ public sealed partial class PrintManagerViewModel : ObservableObject, IPrintMana
 
     private void Enqueue(PrintQueueEntry job)
     {
-        lock (_gate)
+        lock (gate)
         {
-            _queue.Add(job);
-            _queue.Sort(Order);
+            queue.Add(job);
+            queue.Sort(order);
         }
         RefreshQueueDisplay();
         TryStartProcessing();
@@ -183,14 +186,14 @@ public sealed partial class PrintManagerViewModel : ObservableObject, IPrintMana
     [RelayCommand]
     private void Remove(PrintQueueEntry entry)
     {
-        lock (_gate) _queue.RemoveAll(j => j.Id == entry.Id);
+        lock (gate) queue.RemoveAll(j => j.Id == entry.Id);
         RefreshQueueDisplay();
     }
 
     [RelayCommand]
     private void Purge()
     {
-        lock (_gate) _queue.Clear();
+        lock (gate) queue.Clear();
         RefreshQueueDisplay();
     }
 
@@ -199,23 +202,25 @@ public sealed partial class PrintManagerViewModel : ObservableObject, IPrintMana
     private void RefreshQueueDisplay()
     {
         List<PrintQueueEntry> snapshot;
-        lock (_gate) snapshot = [.. _queue];
+        lock (gate) snapshot = [.. queue];
         Queue.Clear();
         foreach (PrintQueueEntry entry in snapshot)
+        {
             Queue.Add(entry);
+        }
     }
 
     private void TryStartProcessing()
     {
-        lock (_gate)
+        lock (gate)
         {
-            if (_isProcessing || SelectedPrinter is null || _queue.Count == 0) return;
-            _isProcessing = true;
+            if (isProcessing || SelectedPrinter is null || queue.Count == 0) { return; }
+            isProcessing = true;
         }
         _ = RunPrintLoop();
     }
 
-    private PrintQueueEntry? PeekTopLocked() => _queue.Count > 0 ? _queue[0] : null;
+    private PrintQueueEntry? PeekTopLocked() => queue.Count > 0 ? queue[0] : null;
 
     private async Task RunPrintLoop()
     {
@@ -223,12 +228,12 @@ public sealed partial class PrintManagerViewModel : ObservableObject, IPrintMana
         {
             string? printer = SelectedPrinter;
             PrintQueueEntry? job;
-            lock (_gate)
+            lock (gate)
             {
                 job = printer is null ? null : PeekTopLocked();
                 if (job is null)
                 {
-                    _isProcessing = false;
+                    isProcessing = false;
                     return;
                 }
             }
@@ -240,8 +245,8 @@ public sealed partial class PrintManagerViewModel : ObservableObject, IPrintMana
             }
             catch (Exception ex)
             {
-                _activityLogger.LogError(ex, "Failed to load print content for {EntryId}", job.EntryId);
-                lock (_gate) _queue.RemoveAll(j => j.Id == job.Id);
+                activityLogger.LogError(ex, "Failed to load print content for {EntryId}", job.EntryId);
+                lock (gate) queue.RemoveAll(j => j.Id == job.Id);
                 RefreshQueueDisplay();
                 continue;
             }
@@ -249,19 +254,19 @@ public sealed partial class PrintManagerViewModel : ObservableObject, IPrintMana
             bool interrupted = false;
             foreach (string line in lines)
             {
-                await _linePrinter.PrintLine(printer!, line);
-                lock (_gate)
+                await printDriver.PrintLine(printer!, line);
+                lock (gate)
                 {
                     PrintQueueEntry? top = PeekTopLocked();
                     interrupted = top is null || top.Id != job.Id;
                 }
-                if (interrupted) break;
+                if (interrupted) { break; }
             }
-            await _linePrinter.PageFeed(printer!);
+            await printDriver.PageFeed(printer!);
 
             if (!interrupted)
             {
-                lock (_gate) _queue.RemoveAll(j => j.Id == job.Id);
+                lock (gate) queue.RemoveAll(j => j.Id == job.Id);
                 RefreshQueueDisplay();
             }
         }
@@ -273,17 +278,17 @@ public sealed partial class PrintManagerViewModel : ObservableObject, IPrintMana
         {
             case EntryType.Message:
             {
-                MessageEntity? entity = await _messages.Get(job.EntryId, job.IsOutboundMessage);
-                if (entity is null) return [];
-                List<string> lines = [_messageFormat.GetSubject(entity.Message), string.Empty];
-                lines.AddRange(SplitLines(_messageFormat.GetBody(entity.Message)));
+                MessageEntity? entity = await messages.Get(job.EntryId, job.IsOutboundMessage);
+                if (entity is null) { return []; }
+                List<string> lines = [engineController.GetSubject(entity.Message), string.Empty];
+                lines.AddRange(SplitLines(engineController.GetBody(entity.Message)));
                 return lines;
             }
             case EntryType.Draft:
             {
                 ObjectId? id = TryParseObjectId(job.EntryId);
-                DraftEntity? entity = id is null ? null : await _drafts.Get(id);
-                if (entity is null) return [];
+                DraftEntity? entity = id is null ? null : await drafts.Get(id);
+                if (entity is null) { return []; }
                 List<string> lines = [entity.Subject, string.Empty];
                 lines.AddRange(SplitLines(entity.Body));
                 return lines;
@@ -291,26 +296,17 @@ public sealed partial class PrintManagerViewModel : ObservableObject, IPrintMana
             case EntryType.Note:
             {
                 ObjectId? id = TryParseObjectId(job.EntryId);
-                NoteEntity? entity = id is null ? null : await _notes.Get(id);
+                NoteEntity? entity = id is null ? null : await notes.Get(id);
                 return entity is null ? [] : SplitLines(entity.Body);
             }
             case EntryType.Activity:
             {
                 ObjectId? id = TryParseObjectId(job.EntryId);
-                ActivityLogEntity? entity = id is null ? null : await _activityLogs.Get(id);
+                ActivityLogEntity? entity = id is null ? null : await activityLogs.Get(id);
                 return entity is null ? [] : entity.EventEntries.Select(e => $"{e.At:HH:mm} {e.Message}").ToList();
             }
             default:
                 return [];
         }
-    }
-
-    private static List<string> SplitLines(string? text) =>
-        [.. (text ?? string.Empty).Replace("\r\n", "\n").Split('\n')];
-
-    private static ObjectId? TryParseObjectId(string id)
-    {
-        try { return new ObjectId(id); }
-        catch { return null; }
     }
 }

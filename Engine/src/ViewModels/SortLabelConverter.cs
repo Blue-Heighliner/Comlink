@@ -12,11 +12,11 @@ public sealed class SortLabelConverter
     /// <param name="parameter">Ignored.</param>
     /// <param name="culture">Ignored.</param>
     /// <returns>The display label for the current sort mode.</returns>
-    public object Convert(object? value, Type targetType, object? parameter, CultureInfo culture) =>
-        value is true ? "Sort: A-Z" : "Sort: Recent";
+    public object Convert(object? value, Type targetType, object? parameter, CultureInfo culture)
+        => value is true ? "Sort: A-Z" : "Sort: Recent";
 
     /// <summary>Not supported.</summary>
     /// <exception cref="NotSupportedException">Always thrown.</exception>
-    public object ConvertBack(object? value, Type targetType, object? parameter, CultureInfo culture) =>
-        throw new NotSupportedException();
+    public object ConvertBack(object? value, Type targetType, object? parameter, CultureInfo culture)
+        => throw new NotSupportedException();
 }

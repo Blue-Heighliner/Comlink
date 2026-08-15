@@ -3,11 +3,10 @@ namespace BlueHeighliner.Comlink.Tests.Peer;
 /// <summary>Unit tests for <see cref="ServerRoutingService"/> child/server connection classification and message routing.</summary>
 public sealed class ServerRoutingServiceTests
 {
-    private static readonly ILoggerFactory NoLogger = LoggerFactory.Create(_ => { });
-    private static readonly IMessageFormat Format = new TestMessageFormat();
+    private static readonly ILoggerFactory noLogger = LoggerFactory.Create(_ => { });
 
-    private static readonly UserEndpoint ServerAEndpoint = new() { IpAddress = "10.0.0.1", Port = 9001 };
-    private static readonly UserEndpoint ServerBEndpoint = new() { IpAddress = "10.0.0.2", Port = 9002 };
+    private static readonly UserEndpoint serverAEndpoint = new() { IpAddress = "10.0.0.1", Port = 9001 };
+    private static readonly UserEndpoint serverBEndpoint = new() { IpAddress = "10.0.0.2", Port = 9002 };
 
     private static Mock<IOftConnection> BuildConnection(string info)
     {
@@ -32,18 +31,16 @@ public sealed class ServerRoutingServiceTests
     {
         Dictionary<string, ServerUserConfig> userMap = new(StringComparer.OrdinalIgnoreCase)
         {
-            ["ServerA"] = new ServerUserConfig { Endpoint = ServerAEndpoint, ChildClients = ["ClientA1", "ClientA2"] },
-            ["ServerB"] = new ServerUserConfig { Endpoint = ServerBEndpoint, ChildClients = ["ClientB1", "ClientB2"] }
+            ["ServerA"] = new ServerUserConfig { Endpoint = serverAEndpoint, ChildClients = ["ClientA1", "ClientA2"] },
+            ["ServerB"] = new ServerUserConfig { Endpoint = serverBEndpoint, ChildClients = ["ClientB1", "ClientB2"] }
         };
 
-        Mock<INetworkTopology> userMapProvider = new();
-        userMapProvider.Setup(p => p.GetServerUsers(It.IsAny<CancellationToken>())).ReturnsAsync(userMap);
+        Mock<TestEngineController> engineController = new() { CallBase = true };
+        engineController.Setup(p => p.Servers).Returns(userMap);
+        engineController.Setup(p => p.ConnectionOptions).Returns(new OftPeerOptions { Info = "ServerA" });
 
         Mock<ICurrentUserProvider> currentUser = new();
         currentUser.SetupGet(p => p.UserName).Returns("ServerA");
-
-        Mock<IOftCertificateProvider> certProvider = new();
-        certProvider.Setup(p => p.GetPeerOptions()).Returns(new OftPeerOptions { Info = "ServerA" });
 
         Mock<IOftListener> listener = new();
         listener.SetupProperty(l => l.ConnectedHandler);
@@ -53,10 +50,10 @@ public sealed class ServerRoutingServiceTests
             .ReturnsAsync(listener.Object);
 
         Mock<IOftConnector> connector = new();
-        connector.Setup(c => c.Connect(ServerBEndpoint.IpAddress, ServerBEndpoint.Port, It.IsAny<OftConnectionOptions?>(), It.IsAny<CancellationToken>()))
+        connector.Setup(c => c.Connect(serverBEndpoint.IpAddress, serverBEndpoint.Port, It.IsAny<OftConnectionOptions?>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync(serverBOutboundConnection.Object);
 
-        ServerRoutingService service = new(hoster.Object, connector.Object, userMapProvider.Object, currentUser.Object, certProvider.Object, Format, NoLogger, TimeSpan.FromMilliseconds(20));
+        ServerRoutingService service = new(hoster.Object, connector.Object, engineController.Object, currentUser.Object, noLogger, TimeSpan.FromMilliseconds(20));
 
         CancellationTokenSource cts = new();
         Task startTask = service.Start(cts.Token);
@@ -83,7 +80,7 @@ public sealed class ServerRoutingServiceTests
         DateTime deadline = DateTime.UtcNow + timeout;
         while (!condition())
         {
-            if (DateTime.UtcNow > deadline) throw new TimeoutException("Condition was not met in time.");
+            if (DateTime.UtcNow > deadline) { throw new TimeoutException("Condition was not met in time."); }
             await Task.Delay(10);
         }
     }
@@ -194,7 +191,7 @@ public sealed class ServerRoutingServiceTests
         serverB.Object.DisconnectedHandler!(null);
 
         await WaitUntil(() => fx.Connector.Invocations.Count >= 2, TimeSpan.FromSeconds(2));
-        fx.Connector.Verify(c => c.Connect(ServerBEndpoint.IpAddress, ServerBEndpoint.Port, It.IsAny<OftConnectionOptions?>(), It.IsAny<CancellationToken>()), Times.AtLeast(2));
+        fx.Connector.Verify(c => c.Connect(serverBEndpoint.IpAddress, serverBEndpoint.Port, It.IsAny<OftConnectionOptions?>(), It.IsAny<CancellationToken>()), Times.AtLeast(2));
 
         fx.Cts.Cancel();
         await fx.StartTask;

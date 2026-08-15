@@ -3,7 +3,6 @@ namespace BlueHeighliner.Comlink.Tests.ViewModels;
 /// <summary>Unit tests for <see cref="FillInViewModel"/>.</summary>
 public sealed class FillInViewModelTests
 {
-    // ── Construction ──────────────────────────────────────────────────────────
 
     /// <summary>Default constructor produces a non-empty ID and no options.</summary>
     [Fact]
@@ -39,8 +38,6 @@ public sealed class FillInViewModelTests
         Assert.Equal("______", vm.DisplayText);
     }
 
-    // ── AddOption ─────────────────────────────────────────────────────────────
-
     /// <summary>AddOption appends a trimmed option and resets NewOption.</summary>
     [Fact]
     public void AddOption_AppendsTrimmedOptionAndClearsInput()
@@ -66,8 +63,6 @@ public sealed class FillInViewModelTests
 
         Assert.Empty(vm.Options);
     }
-
-    // ── SelectOption ──────────────────────────────────────────────────────────
 
     /// <summary>SelectOption marks the matching option as selected.</summary>
     [Fact]
@@ -103,8 +98,6 @@ public sealed class FillInViewModelTests
         Assert.Null(vm.SelectedOption);
     }
 
-    // ── RemoveOption ──────────────────────────────────────────────────────────
-
     /// <summary>RemoveOption removes the matching option from the list.</summary>
     [Fact]
     public void RemoveOption_RemovesMatchingOption()
@@ -116,8 +109,6 @@ public sealed class FillInViewModelTests
         Assert.Single(vm.Options);
         Assert.Equal("Beta", vm.Options[0].Value);
     }
-
-    // ── MoveOptionUp / Down ───────────────────────────────────────────────────
 
     /// <summary>MoveOptionUp moves the item one position earlier.</summary>
     [Fact]
@@ -164,8 +155,6 @@ public sealed class FillInViewModelTests
 
         Assert.Equal("Beta", vm.Options[1].Value);
     }
-
-    // ── TogglePopup ───────────────────────────────────────────────────────────
 
     /// <summary>TogglePopup flips IsPopupOpen from false to true.</summary>
     [Fact]

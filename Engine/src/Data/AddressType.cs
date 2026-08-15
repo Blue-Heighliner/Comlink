@@ -13,6 +13,6 @@ public enum AddressType
 public static class AddressTypeExtensions
 {
     /// <summary>Parses a role string (e.g. <c>"To"</c>, <c>"Cc"</c>) into an <see cref="AddressType"/>, defaulting to <see cref="AddressType.To"/> for an unrecognized value.</summary>
-    public static AddressType ParseAddressType(this string type) =>
-        Enum.TryParse(type, ignoreCase: true, out AddressType parsed) ? parsed : AddressType.To;
+    public static AddressType ParseAddressType(this string type)
+        => Enum.TryParse(type, ignoreCase: true, out AddressType parsed) ? parsed : AddressType.To;
 }

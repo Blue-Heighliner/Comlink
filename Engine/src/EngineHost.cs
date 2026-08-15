@@ -4,48 +4,48 @@ namespace BlueHeighliner.Comlink.Engine;
 [ExcludeFromCodeCoverage]
 internal sealed class EngineHost : IHostedService
 {
-    private readonly IUserService _userService;
-    private readonly IPeerService _peerService;
-    private readonly IInterfaceService _interfaceService;
-    private readonly ILogger _logger;
-    private readonly string _displayName;
-    private CancellationTokenSource? _cts;
-
     /// <summary>Initializes a new <see cref="EngineHost"/> with required engine services.</summary>
     public EngineHost(
         IUserService userService,
         IPeerService peerService,
         IInterfaceService interfaceService,
-        IAppSettings appSettings,
+        IEngineController engineController,
         EngineMode mode,
         ILoggerFactory loggerFactory)
     {
-        _userService = userService;
-        _peerService = peerService;
-        _interfaceService = interfaceService;
-        _logger = loggerFactory.CreateLogger("APP");
-        _displayName = mode == EngineMode.Headless ? $"{appSettings.AppName} (Headless)" : appSettings.AppName;
+        this.userService = userService;
+        this.peerService = peerService;
+        this.interfaceService = interfaceService;
+        logger = loggerFactory.CreateLogger("APP");
+        displayName = mode == EngineMode.Headless ? $"{engineController.AppName} (Headless)" : engineController.AppName;
     }
+
+    private readonly IUserService userService;
+    private readonly IPeerService peerService;
+    private readonly IInterfaceService interfaceService;
+    private readonly ILogger logger;
+    private readonly string displayName;
+    private CancellationTokenSource? cts;
 
     /// <inheritdoc />
     public async Task StartAsync(CancellationToken cancellationToken)
     {
-        _logger.LogInformation("{AppName} starting...", _displayName);
-        await _userService.Load(cancellationToken);
+        logger.LogInformation("{AppName} starting...", displayName);
+        await userService.Load(cancellationToken);
 
-        _cts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
-        CancellationToken cancellation = _cts.Token;
+        cts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+        CancellationToken cancellation = cts.Token;
 
-        _ = Task.Run(() => _peerService.Start(cancellation), cancellation);
-        _ = Task.Run(() => _interfaceService.Start(cancellation), cancellation);
+        _ = Task.Run(() => peerService.Start(cancellation), cancellation);
+        _ = Task.Run(() => interfaceService.Start(cancellation), cancellation);
 
-        _logger.LogInformation("{AppName} started", _displayName);
+        logger.LogInformation("{AppName} started", displayName);
     }
 
     /// <inheritdoc />
     public Task StopAsync(CancellationToken cancellationToken)
     {
-        _cts?.Cancel();
+        cts?.Cancel();
         return Task.CompletedTask;
     }
 }

@@ -13,8 +13,6 @@ public sealed class EntryItemViewModelTests
         return vm;
     }
 
-    // ── StatusText ────────────────────────────────────────────────────────────
-
     /// <summary>StatusText reflects OverallStatus when set.</summary>
     [Theory]
     [InlineData(DestinationStatus.Confirmed, "CONFIRMED")]
@@ -49,8 +47,6 @@ public sealed class EntryItemViewModelTests
         EntryItemViewModel vm = Make(fixedStatus: "RECEIVED", overallStatus: DestinationStatus.Confirmed);
         Assert.Equal("CONFIRMED", vm.StatusText);
     }
-
-    // ── Constructor properties ────────────────────────────────────────────────
 
     /// <summary>Constructor assigns all properties correctly.</summary>
     [Fact]

@@ -22,8 +22,6 @@ public sealed class FolderBarViewModelTests
         return (new FolderBarViewModel(foldersMock.Object, serviceMock.Object), foldersMock, serviceMock);
     }
 
-    // ── Load ──────────────────────────────────────────────────────────────────
-
     /// <summary>Load populates RootFolders in the canonical Inbox/Outbox/Drafts/Notes/Activity order.</summary>
     [Fact]
     public async Task Load_PopulatesRootFoldersInOrder()
@@ -92,8 +90,6 @@ public sealed class FolderBarViewModelTests
         Assert.Equal("child1", vm.RootFolders[0].Children[0].Id);
     }
 
-    // ── SelectFolder ──────────────────────────────────────────────────────────
-
     /// <summary>SelectFolder fires FolderSelected event and updates SelectedFolder.</summary>
     [Fact]
     public async Task SelectFolder_FiresEventAndUpdatesSelection()
@@ -123,8 +119,6 @@ public sealed class FolderBarViewModelTests
 
         Assert.False(first.IsSelected);
     }
-
-    // ── DeselectFolder ────────────────────────────────────────────────────────
 
     /// <summary>DeselectFolder clears SelectedFolder and unmarks the folder's IsSelected flag.</summary>
     [Fact]
@@ -168,8 +162,6 @@ public sealed class FolderBarViewModelTests
         Assert.Null(vm.SelectedFolder);
     }
 
-    // ── SelectFolderByType ────────────────────────────────────────────────────
-
     /// <summary>SelectFolderByType selects the matching root folder.</summary>
     [Fact]
     public async Task SelectFolderByType_SelectsMatchingFolder()
@@ -182,8 +174,6 @@ public sealed class FolderBarViewModelTests
 
         Assert.Equal(FolderType.Drafts, vm.SelectedFolder?.RootType);
     }
-
-    // ── MoveEntry ─────────────────────────────────────────────────────────────
 
     /// <summary>MoveEntry calls entryService.MoveEntry for a compatible type combination.</summary>
     [Fact]
@@ -233,8 +223,6 @@ public sealed class FolderBarViewModelTests
         svc.Verify(s => s.MoveEntry(It.IsAny<string>(), It.IsAny<EntryType>(), It.IsAny<string>()), Times.Never);
     }
 
-    // ── IsCompatibleMove ──────────────────────────────────────────────────────
-
     /// <summary>Messages may only be moved into Inbox or Outbox.</summary>
     [Theory]
     [InlineData(FolderType.Inbox,    true)]
@@ -263,8 +251,6 @@ public sealed class FolderBarViewModelTests
         Assert.True(FolderBarViewModel.IsCompatibleMove(EntryType.Note, FolderType.Notes));
         Assert.False(FolderBarViewModel.IsCompatibleMove(EntryType.Note, FolderType.Inbox));
     }
-
-    // ── CollapseAll ───────────────────────────────────────────────────────────
 
     /// <summary>CollapseAll sets IsExpanded = false on all folders in the tree.</summary>
     [Fact]

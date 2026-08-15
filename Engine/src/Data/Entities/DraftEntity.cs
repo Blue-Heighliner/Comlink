@@ -19,11 +19,11 @@ public sealed class DraftEntity
     public DateTime ModifiedAt { get; set; } = DateTime.UtcNow;
     /// <summary>Indicates whether this draft has been sent.</summary>
     public bool IsSent { get; set; }
-    /// <summary>Whether this draft should be sent as an alert; see <see cref="IMessageFormat.GetIsAlert"/>.</summary>
+    /// <summary>Whether this draft should be sent as an alert; see <see cref="IEngineController.GetIsAlert"/>.</summary>
     public bool IsAlert { get; set; }
-    /// <summary>Priority number this draft should be sent at; see <see cref="IMessageFormat.GetPriority"/>.</summary>
+    /// <summary>Priority number this draft should be sent at; see <see cref="IEngineController.GetPriority"/>.</summary>
     public int Priority { get; set; }
-    /// <summary>Tag identifying the type of this draft; see <see cref="IMessageFormat.GetTag"/>.</summary>
+    /// <summary>Tag identifying the type of this draft; see <see cref="IEngineController.GetTag"/>.</summary>
     public string Tag { get; set; } = string.Empty;
     /// <summary>UTC timestamp when the draft was sent, or <c>null</c> if not yet sent.</summary>
     public DateTime? SentAt { get; set; }

@@ -36,13 +36,13 @@ Manages user installation and persists user identity to `State.json`.
 **Key responsibilities**:
 - Load existing user state on startup (`Load`)
 - Install a new user by resolving a code (`Install`)
-- Apply a debug override (`IUserIdentity.DebugUserName`) that bypasses `State.json`
+- Apply a debug override (`IEngineController.DebugUserName`) that bypasses `State.json`
 
 **State file**: `{AppDataPath}/State.json` — contains `UserName`, `UserCode`, `EnvironmentTitle`, `EnvironmentColor`. `IsInstalled` is a computed property: `true` when `UserName` is non-null.
 
 **Thread safety**: `Install` uses a `SemaphoreSlim(1,1)` to prevent concurrent installs.
 
-**Debug override**: If `IUserIdentity.DebugUserName` is non-null, `Load` skips the state file entirely and uses it (uppercased) with a synthetic `EnvironmentTitle = "DEBUG"` and color `#FF6200`. Useful for development without a real user code.
+**Debug override**: If `IEngineController.DebugUserName` is non-null, `Load` skips the state file entirely and uses it (uppercased) with a synthetic `EnvironmentTitle = "DEBUG"` and color `#FF6200`. Useful for development without a real user code.
 
 ```csharp
 // Consumers call:
@@ -59,7 +59,7 @@ UserInfo? installed = await service.Install("SN01", cancellation);
 Routes outbound messages to peer nodes and surfaces their delivery status. OFT-level delivery status comes entirely from OFT's own delivery status stream (see [Peer.md](Peer.md#delivery-status)); the one application-level status above that — `Read` — comes from the user-read confirmation message flow (see [Peer.md](Peer.md#read-confirmation)).
 
 **Key responsibilities**:
-- Build the outbound message via `IMessageFormat` (`CreateMessage()` then the `Set*` logical-field setters, including `SetIsAlert`, `SetPriority`, `SetTag`) so it can be sent as whatever concrete type the host has configured (see [Control.md](Control.md#imessageformat))
+- Build the outbound message via `IEngineController` (`CreateMessage()` then the `Set*` logical-field setters, including `SetIsAlert`, `SetPriority`, `SetTag`) so it can be sent as whatever concrete type the host has configured (see [Control.md](Control.md#message-format))
 - For each recipient in `SendMessagePayload.Addresses`, deliver via `IPeerService.Send`
 - Subscribe to `IPeerService.DeliveryStatusChanged` and map each `OftDeliveryStatus` to a `DestinationStatus`, re-raising its own `DeliveryStatusChanged`
 - Subscribe to `IPeerService.ConfirmationReceived` and re-raise it as `DeliveryStatusChanged(messageId, confirmingUser, DestinationStatus.Read)` — reusing the same event as OFT-driven status changes
@@ -90,7 +90,7 @@ CRUD for messages, drafts, notes, and activity log reads. Runs in `Client` mode 
 - `NoteInserted` — after `CreateNote`
 - `NoteUpdated` — after `SaveNote`
 
-Both `StoreIncomingMessage` and `StoreSentMessage` take the message's logical fields (subject, body, addresses, etc.) as plain parameters, plus an `isAlert` flag, and build `MessageEntity.Message` from them via `IMessageFormat` (`CreateMessage()` + `Set*`) before saving — callers never construct the stored message type directly. `MessageEntity.MessageId` is denormalized from the same value passed to `IMessageFormat.SetMessageId` so it stays queryable/indexable (see [Data.md](Data.md#messageentity)).
+Both `StoreIncomingMessage` and `StoreSentMessage` take the message's logical fields (subject, body, addresses, etc.) as plain parameters, plus an `isAlert` flag, and build `MessageEntity.Message` from them via `IEngineController` (`CreateMessage()` + `Set*`) before saving — callers never construct the stored message type directly. `MessageEntity.MessageId` is denormalized from the same value passed to `IEngineController.SetMessageId` so it stays queryable/indexable (see [Data.md](Data.md#messageentity)).
 
 **Key methods**:
 
@@ -122,7 +122,7 @@ Implements `IServiceConnection`, registered in both `Client` and `Headless` mode
 - Translates `PeerService.MessageDelivered` → fires `IServiceConnection.MessageReceived`. It does not persist the message itself — in Client mode, `MainViewModel`'s handler for that event calls `EntryService.StoreIncomingMessage`
 - On `MessageRoutingService.DeliveryStatusChanged`, updates the Outbox record via `EntryService.UpdateDeliveryStatus`, then fires `IServiceConnection.DeliveryStatusChanged` with the resulting `OverallStatus`
 - `MarkMessageRead(messageId)`: calls `EntryService.MarkMessageRead`, fires `IServiceConnection.DeliveryStatusChanged` locally (empty `UserName`, status `Read`) so Client-mode UI reflects the read state immediately, then sends a user-read confirmation message to the original sender via `IPeerService.Send` directly — or, for a self-addressed message, calls `EntryService.UpdateDeliveryStatus` directly with no network round-trip. See [Peer.md](Peer.md#read-confirmation)
-- Implements install, user info query, and user names query by delegating to `UserService` / `IUserDirectory`
+- Implements install, user info query, and user names query by delegating to `UserService` / `IEngineController`
 
 ---
 
@@ -138,10 +138,10 @@ Builds the entry-reference list for a full export and writes selected entries to
 
 **Key responsibilities**:
 - `GetAllEntryRefs()` — returns an `ExportEntryRef` (`Id`, `EntryType`, `IsOutboundMessage`) for every message (both Inbox and Outbox, across every folder), draft, note, and activity log document in the database, via each repository's `GetAll()`
-- `Export(entries, zipPath, cancellation)` — for each reference, loads the full entity from the appropriate repository, maps it to a clean JSON DTO (`MessageExportData`/`DraftExportData`/`NoteExportData`/`ActivityLogExportData` in `ExportModels.cs`) via `IMessageFormat` for messages, and writes it as `{index}_{EntryType}_{id}.json` inside a new `ZipArchive` at `zipPath`. A reference whose entity has since been deleted is silently skipped.
+- `Export(entries, zipPath, cancellation)` — for each reference, loads the full entity from the appropriate repository, maps it to a clean JSON DTO (`MessageExportData`/`DraftExportData`/`NoteExportData`/`ActivityLogExportData` in `ExportModels.cs`) via `IEngineController` for messages, and writes it as `{index}_{EntryType}_{id}.json` inside a new `ZipArchive` at `zipPath`. A reference whose entity has since been deleted is silently skipped.
 - On cancellation (or any other failure) mid-write, the partially written zip file at `zipPath` is deleted before the exception propagates — the `try`/`catch` wraps the entire archive-writing block, so this holds regardless of how many entries had already been written.
 
-Message content is read through `IMessageFormat`, matching every other message read path in Engine — `ExportService` has no knowledge of the host's concrete message type.
+Message content is read through `IEngineController`, matching every other message read path in Engine — `ExportService` has no knowledge of the host's concrete message type.
 
 `IExportService.PackageExtension` (a `const` interface member, `".export.zip"`) is the file extension every export package is written with, distinguishing it from an ordinary zip file so `ImportService.GetPackages` can find it on a drive. `ExportViewModel` appends this to the user-entered file name.
 

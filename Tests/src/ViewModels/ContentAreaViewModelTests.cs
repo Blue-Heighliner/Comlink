@@ -27,26 +27,19 @@ public sealed class ContentAreaViewModelTests
 
         public async Task RaiseDeliveryStatusChanged(DeliveryStatusChangedEvent evt)
         {
-            if (DeliveryStatusChanged is not null) await DeliveryStatusChanged(evt);
+            if (DeliveryStatusChanged is not null) { await DeliveryStatusChanged(evt); }
         }
     }
 
-    private static readonly IMessageFormat Format = new TestMessageFormat();
-
-    private static IMessageComposition MakeMessageComposition()
+    private static IEngineController MakeEngineController(string homeText = "HOME")
     {
-        Mock<IMessageComposition> mock = new();
-        mock.Setup(p => p.GetPriorities()).Returns([new MessagePriorityOption { Name = "Normal", Value = 0 }]);
+        Mock<TestEngineController> mock = new() { CallBase = true };
+        mock.Setup(h => h.HomeText).Returns(homeText);
+        mock.Setup(p => p.Priorities).Returns([new MessagePriorityOption { Name = "Normal", Value = 0 }]);
         mock.Setup(t => t.TagsEnabled).Returns(true);
         mock.Setup(t => t.TagLabel).Returns("Tag");
-        mock.Setup(p => p.GetBlockedCombinations()).Returns([]);
-        return mock.Object;
-    }
-
-    private static IAlertSettings MakeAlertSettings()
-    {
-        Mock<IAlertSettings> mock = new();
-        mock.Setup(a => a.AlertText).Returns("ALERT");
+        mock.Setup(p => p.BlockedCombinations).Returns([]);
+        mock.Setup(a => a.AlertLabel).Returns("ALERT");
         mock.Setup(a => a.ComposeAlertsEnabled).Returns(true);
         return mock.Object;
     }
@@ -54,29 +47,23 @@ public sealed class ContentAreaViewModelTests
     private static ContentAreaViewModel Build(out FakeServiceConnection connection, string homeText = "HOME")
     {
         connection = new FakeServiceConnection();
-        Mock<IAppSettings> appSettings = new();
-        appSettings.Setup(h => h.GetHomeText()).Returns(homeText);
         Mock<IEntryService> entry = new();
         Mock<IMessageRepository> messages = new();
         Mock<IDraftRepository> drafts = new();
         Mock<INoteRepository> notes = new();
         Mock<IActivityLogRepository> activityLogs = new();
         ILoggerFactory loggerFactory = LoggerFactory.Create(_ => { });
-        return new ContentAreaViewModel(appSettings.Object, entry.Object, connection, messages.Object,
-            drafts.Object, notes.Object, activityLogs.Object, Format, MakeAlertSettings(), MakeMessageComposition(), loggerFactory);
+        return new ContentAreaViewModel(MakeEngineController(homeText), entry.Object, connection, messages.Object,
+            drafts.Object, notes.Object, activityLogs.Object, loggerFactory);
     }
 
-    // ── HomeText ──────────────────────────────────────────────────────────────
-
-    /// <summary>HomeText is set from IAppSettings on construction.</summary>
+    /// <summary>HomeText is set from IEngineController on construction.</summary>
     [Fact]
     public void HomeText_SetFromProvider()
     {
         ContentAreaViewModel vm = Build(out _, "WELCOME");
         Assert.Equal("WELCOME", vm.HomeText);
     }
-
-    // ── ShowHome ──────────────────────────────────────────────────────────────
 
     /// <summary>ShowHome sets ActiveContent to null and IsHomeVisible to true.</summary>
     [Fact]
@@ -90,8 +77,6 @@ public sealed class ContentAreaViewModelTests
         Assert.Null(vm.ActiveContent);
         Assert.True(vm.IsHomeVisible);
     }
-
-    // ── ShowEntry(object) ─────────────────────────────────────────────────────
 
     /// <summary>ShowEntry(object) sets ActiveContent and clears IsHomeVisible.</summary>
     [Fact]
@@ -115,13 +100,10 @@ public sealed class ContentAreaViewModelTests
         Assert.Null(vm.ActiveContent);
     }
 
-    // ── ShowEntry(EntryItemViewModel) ────────────────────────────────────────
-
     /// <summary>Opening an Outbox message entry looks up the outbound-scoped record, disambiguating from any same-MessageId Inbox record.</summary>
     [Fact]
     public async Task ShowEntry_OutboundMessage_LooksUpOutboundRecord()
     {
-        Mock<IAppSettings> home = new();
         Mock<IEntryService> entry = new();
         Mock<IMessageRepository> messages = new();
         Mock<IDraftRepository> drafts = new();
@@ -130,8 +112,8 @@ public sealed class ContentAreaViewModelTests
         ILoggerFactory loggerFactory = LoggerFactory.Create(_ => { });
         MessageEntity outboundEntity = new() { MessageId = "MSG1", Message = new TestMessage(), IsOutbound = true };
         messages.Setup(m => m.Get("MSG1", true)).ReturnsAsync(outboundEntity);
-        ContentAreaViewModel vm = new(home.Object, entry.Object, new FakeServiceConnection(), messages.Object,
-            drafts.Object, notes.Object, activityLogs.Object, Format, MakeAlertSettings(), MakeMessageComposition(), loggerFactory);
+        ContentAreaViewModel vm = new(MakeEngineController(), entry.Object, new FakeServiceConnection(), messages.Object,
+            drafts.Object, notes.Object, activityLogs.Object, loggerFactory);
         EntryItemViewModel item = new("MSG1", "Title", EntryType.Message, DateTime.UtcNow, isOutboundMessage: true);
 
         await vm.ShowEntry(item);
@@ -144,7 +126,6 @@ public sealed class ContentAreaViewModelTests
     [Fact]
     public async Task ShowEntry_InboundMessage_LooksUpInboundRecord()
     {
-        Mock<IAppSettings> home = new();
         Mock<IEntryService> entry = new();
         Mock<IMessageRepository> messages = new();
         Mock<IDraftRepository> drafts = new();
@@ -153,8 +134,8 @@ public sealed class ContentAreaViewModelTests
         ILoggerFactory loggerFactory = LoggerFactory.Create(_ => { });
         MessageEntity inboundEntity = new() { MessageId = "MSG1", Message = new TestMessage(), IsOutbound = false };
         messages.Setup(m => m.Get("MSG1", false)).ReturnsAsync(inboundEntity);
-        ContentAreaViewModel vm = new(home.Object, entry.Object, new FakeServiceConnection(), messages.Object,
-            drafts.Object, notes.Object, activityLogs.Object, Format, MakeAlertSettings(), MakeMessageComposition(), loggerFactory);
+        ContentAreaViewModel vm = new(MakeEngineController(), entry.Object, new FakeServiceConnection(), messages.Object,
+            drafts.Object, notes.Object, activityLogs.Object, loggerFactory);
         EntryItemViewModel item = new("MSG1", "Title", EntryType.Message, DateTime.UtcNow);
 
         await vm.ShowEntry(item);
@@ -167,7 +148,6 @@ public sealed class ContentAreaViewModelTests
     [Fact]
     public async Task ShowEntry_UnreadInboundMessage_MarksRead()
     {
-        Mock<IAppSettings> home = new();
         Mock<IEntryService> entry = new();
         Mock<IMessageRepository> messages = new();
         Mock<IDraftRepository> drafts = new();
@@ -177,8 +157,8 @@ public sealed class ContentAreaViewModelTests
         MessageEntity inboundEntity = new() { MessageId = "MSG1", Message = new TestMessage(), IsOutbound = false, ReadStatus = DestinationStatus.Received };
         messages.Setup(m => m.Get("MSG1", false)).ReturnsAsync(inboundEntity);
         FakeServiceConnection connection = new();
-        ContentAreaViewModel vm = new(home.Object, entry.Object, connection, messages.Object,
-            drafts.Object, notes.Object, activityLogs.Object, Format, MakeAlertSettings(), MakeMessageComposition(), loggerFactory);
+        ContentAreaViewModel vm = new(MakeEngineController(), entry.Object, connection, messages.Object,
+            drafts.Object, notes.Object, activityLogs.Object, loggerFactory);
         EntryItemViewModel item = new("MSG1", "Title", EntryType.Message, DateTime.UtcNow);
 
         await vm.ShowEntry(item);
@@ -192,7 +172,6 @@ public sealed class ContentAreaViewModelTests
     [Fact]
     public async Task ShowEntry_AlreadyReadInboundMessage_DoesNotMarkReadAgain()
     {
-        Mock<IAppSettings> home = new();
         Mock<IEntryService> entry = new();
         Mock<IMessageRepository> messages = new();
         Mock<IDraftRepository> drafts = new();
@@ -202,8 +181,8 @@ public sealed class ContentAreaViewModelTests
         MessageEntity inboundEntity = new() { MessageId = "MSG1", Message = new TestMessage(), IsOutbound = false, ReadStatus = DestinationStatus.Read };
         messages.Setup(m => m.Get("MSG1", false)).ReturnsAsync(inboundEntity);
         FakeServiceConnection connection = new();
-        ContentAreaViewModel vm = new(home.Object, entry.Object, connection, messages.Object,
-            drafts.Object, notes.Object, activityLogs.Object, Format, MakeAlertSettings(), MakeMessageComposition(), loggerFactory);
+        ContentAreaViewModel vm = new(MakeEngineController(), entry.Object, connection, messages.Object,
+            drafts.Object, notes.Object, activityLogs.Object, loggerFactory);
         EntryItemViewModel item = new("MSG1", "Title", EntryType.Message, DateTime.UtcNow);
 
         await vm.ShowEntry(item);
@@ -215,7 +194,6 @@ public sealed class ContentAreaViewModelTests
     [Fact]
     public async Task ShowEntry_OutboundMessage_DoesNotCallMarkMessageRead()
     {
-        Mock<IAppSettings> home = new();
         Mock<IEntryService> entry = new();
         Mock<IMessageRepository> messages = new();
         Mock<IDraftRepository> drafts = new();
@@ -225,16 +203,14 @@ public sealed class ContentAreaViewModelTests
         MessageEntity outboundEntity = new() { MessageId = "MSG1", Message = new TestMessage(), IsOutbound = true };
         messages.Setup(m => m.Get("MSG1", true)).ReturnsAsync(outboundEntity);
         FakeServiceConnection connection = new();
-        ContentAreaViewModel vm = new(home.Object, entry.Object, connection, messages.Object,
-            drafts.Object, notes.Object, activityLogs.Object, Format, MakeAlertSettings(), MakeMessageComposition(), loggerFactory);
+        ContentAreaViewModel vm = new(MakeEngineController(), entry.Object, connection, messages.Object,
+            drafts.Object, notes.Object, activityLogs.Object, loggerFactory);
         EntryItemViewModel item = new("MSG1", "Title", EntryType.Message, DateTime.UtcNow, isOutboundMessage: true);
 
         await vm.ShowEntry(item);
 
         Assert.Empty(connection.MarkMessageReadCalls);
     }
-
-    // ── DeliveryStatusChanged ─────────────────────────────────────────────────
 
     /// <summary>DeliveryStatusChanged event calls UpdateDeliveryStatus when active content matches the message ID.</summary>
     [Fact]

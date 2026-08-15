@@ -16,16 +16,16 @@ public interface IBodyDocument
 /// <summary>Simple string-backed implementation of <see cref="IBodyDocument"/> for non-Avalonia contexts such as unit tests.</summary>
 public sealed class StringBodyDocument : IBodyDocument
 {
-    private string _text = string.Empty;
+    private string text = string.Empty;
 
     /// <inheritdoc />
-    public string Text { get => _text; set => _text = value; }
+    public string Text { get => text; set => text = value; }
 
     /// <inheritdoc />
-    public int TextLength => _text.Length;
+    public int TextLength => text.Length;
 
     /// <inheritdoc />
-    public void Insert(int offset, string text) => _text = _text.Insert(offset, text);
+    public void Insert(int offset, string text) => text = text.Insert(offset, text);
 }
 
 /// <summary>Factory that creates <see cref="IBodyDocument"/> instances for use by draft ViewModels.</summary>
