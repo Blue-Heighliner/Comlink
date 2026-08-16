@@ -6,7 +6,7 @@
 
   <Grid ColumnDefinitions="Auto,*,Auto,Auto,Auto">
 
-    <!-- Left: Action buttons -->
+    <!-- Left: Action buttons — never shown in Server mode, which has no drafts/notes/export/import/print UI -->
     <StackPanel x:Name="ActionButtonsPanel"
                 Grid.Column="0"
                 Orientation="Horizontal"
@@ -37,6 +37,26 @@
               Content="PRINTS"
               Foreground="#CCCCCC"
               Click="OnPrintManagerClick" />
+    </StackPanel>
+
+    <!-- Left: Server mode's view-switching buttons — only shown in Server mode, in the same position the
+         normal action buttons occupy in Peer/Client mode -->
+    <StackPanel x:Name="ServerViewButtonsPanel"
+                Grid.Column="0"
+                Orientation="Horizontal"
+                VerticalAlignment="Center"
+                Margin="4,0"
+                IsVisible="False">
+      <Button x:Name="ConnectionsButton"
+              Classes="titlebar-action"
+              Content="CONNECTIONS"
+              Foreground="#CCCCCC"
+              Click="OnShowConnectionsClick" />
+      <Button x:Name="ActivityButton"
+              Classes="titlebar-action"
+              Content="ACTIVITY"
+              Foreground="#CCCCCC"
+              Click="OnShowActivityClick" />
     </StackPanel>
 
     <!-- Center: Drag area (transparent, fills space) -->

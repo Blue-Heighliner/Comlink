@@ -426,4 +426,66 @@ public sealed class MainViewModelTests
         s.FolderBar.Verify(f => f.DeselectFolder(), Times.Never);
         s.EntryBar.Verify(e => e.DeselectEntry(), Times.Never);
     }
+
+    /// <summary>In Server mode, the connections table is shown by default, and the activity view is not.</summary>
+    [Fact]
+    public void ServerMode_Initially_ShowsConnectionsTableNotActivityView()
+    {
+        Setup s = new();
+        s.EngineController.Setup(e => e.Role).Returns(NodeRole.Server);
+        MainViewModel vm = s.BuildVm();
+
+        Assert.True(vm.ShowConnectionsTable);
+        Assert.False(vm.ShowServerActivityView);
+    }
+
+    /// <summary>ShowActivityCommand switches to the activity view and selects the Activity folder when it is not already selected.</summary>
+    [Fact]
+    public async Task ShowActivityCommand_ActivityFolderNotSelected_SwitchesViewAndSelectsFolder()
+    {
+        Setup s = new();
+        s.EngineController.Setup(e => e.Role).Returns(NodeRole.Server);
+        s.FolderBar.Setup(f => f.SelectedFolder).Returns((FolderItemViewModel?)null);
+        MainViewModel vm = s.BuildVm();
+
+        await vm.ShowActivityCommand.ExecuteAsync(null);
+
+        Assert.True(vm.ShowServerActivityView);
+        Assert.False(vm.ShowConnectionsTable);
+        s.FolderBar.Verify(f => f.SelectFolderByType(FolderType.Activity), Times.Once);
+        s.EntryBar.Verify(e => e.Refresh(), Times.Never);
+    }
+
+    /// <summary>ShowActivityCommand refreshes the entry bar instead of re-selecting when the Activity folder is already selected.</summary>
+    [Fact]
+    public async Task ShowActivityCommand_ActivityFolderAlreadySelected_RefreshesInsteadOfReselecting()
+    {
+        Setup s = new();
+        s.EngineController.Setup(e => e.Role).Returns(NodeRole.Server);
+        FolderItemViewModel activityFolder = new("f1", "Activity", FolderType.Activity, null);
+        s.FolderBar.Setup(f => f.SelectedFolder).Returns(activityFolder);
+        s.EntryBar.Setup(e => e.Refresh()).Returns(Task.CompletedTask);
+        MainViewModel vm = s.BuildVm();
+
+        await vm.ShowActivityCommand.ExecuteAsync(null);
+
+        s.EntryBar.Verify(e => e.Refresh(), Times.Once);
+        s.FolderBar.Verify(f => f.SelectFolderByType(It.IsAny<FolderType>()), Times.Never);
+    }
+
+    /// <summary>ShowConnectionsCommand switches back to the connections table view.</summary>
+    [Fact]
+    public async Task ShowConnectionsCommand_SwitchesBackToConnectionsTable()
+    {
+        Setup s = new();
+        s.EngineController.Setup(e => e.Role).Returns(NodeRole.Server);
+        s.FolderBar.Setup(f => f.SelectedFolder).Returns((FolderItemViewModel?)null);
+        MainViewModel vm = s.BuildVm();
+        await vm.ShowActivityCommand.ExecuteAsync(null);
+
+        vm.ShowConnectionsCommand.Execute(null);
+
+        Assert.True(vm.ShowConnectionsTable);
+        Assert.False(vm.ShowServerActivityView);
+    }
 }

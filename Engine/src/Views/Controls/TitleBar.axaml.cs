@@ -1,6 +1,11 @@
 namespace BlueHeighliner.Comlink.Engine.Views.Controls;
 
-/// <summary>User control for the application title bar, providing window controls, user info, and action buttons.</summary>
+/// <summary>
+/// User control for the application title bar, providing window controls, user info, and action buttons —
+/// the normal drafts/notes/export/import/print actions in Peer/Client mode (<see cref="IsServerMode"/> is
+/// <see langword="false"/>), or the CONNECTIONS/ACTIVITY view-switching buttons in Server mode
+/// (<see cref="IsServerMode"/> is <see langword="true"/>).
+/// </summary>
 [ExcludeFromCodeCoverage]
 public partial class TitleBar : UserControl
 {
@@ -35,6 +40,18 @@ public partial class TitleBar : UserControl
     /// <summary>Identifies the <see cref="IsInstallScreenVisible"/> styled property.</summary>
     public static readonly StyledProperty<bool> IsInstallScreenVisibleProperty =
         AvaloniaProperty.Register<TitleBar, bool>(nameof(IsInstallScreenVisible));
+
+    /// <summary>Identifies the <see cref="IsServerMode"/> styled property.</summary>
+    public static readonly StyledProperty<bool> IsServerModeProperty =
+        AvaloniaProperty.Register<TitleBar, bool>(nameof(IsServerMode));
+
+    /// <summary>Identifies the <see cref="ShowConnectionsCommand"/> styled property.</summary>
+    public static readonly StyledProperty<ICommand?> ShowConnectionsCommandProperty =
+        AvaloniaProperty.Register<TitleBar, ICommand?>(nameof(ShowConnectionsCommand));
+
+    /// <summary>Identifies the <see cref="ShowActivityCommand"/> styled property.</summary>
+    public static readonly StyledProperty<ICommand?> ShowActivityCommandProperty =
+        AvaloniaProperty.Register<TitleBar, ICommand?>(nameof(ShowActivityCommand));
 
     /// <summary>Identifies the <see cref="IsKioskMode"/> styled property.</summary>
     public static readonly StyledProperty<bool> IsKioskModeProperty =
@@ -118,6 +135,30 @@ public partial class TitleBar : UserControl
         set => SetValue(IsInstallScreenVisibleProperty, value);
     }
 
+    /// <summary>
+    /// Gets or sets a value indicating whether this instance is running as a <see cref="NodeRole.Server"/>,
+    /// which hides the left-side action buttons and shows the CONNECTIONS/ACTIVITY view-switching buttons instead.
+    /// </summary>
+    public bool IsServerMode
+    {
+        get => GetValue(IsServerModeProperty);
+        set => SetValue(IsServerModeProperty, value);
+    }
+
+    /// <summary>Gets or sets the command invoked when the user clicks the CONNECTIONS button (<see cref="IsServerMode"/> only).</summary>
+    public ICommand? ShowConnectionsCommand
+    {
+        get => GetValue(ShowConnectionsCommandProperty);
+        set => SetValue(ShowConnectionsCommandProperty, value);
+    }
+
+    /// <summary>Gets or sets the command invoked when the user clicks the ACTIVITY button (<see cref="IsServerMode"/> only).</summary>
+    public ICommand? ShowActivityCommand
+    {
+        get => GetValue(ShowActivityCommandProperty);
+        set => SetValue(ShowActivityCommandProperty, value);
+    }
+
     /// <summary>Gets or sets a value indicating whether kiosk mode is active, which hides minimize and maximize controls.</summary>
     public bool IsKioskMode
     {
@@ -161,10 +202,9 @@ public partial class TitleBar : UserControl
         {
             UpdateUserInfo();
         }
-        if (change.Property == IsInstallScreenVisibleProperty)
+        if (change.Property == IsInstallScreenVisibleProperty || change.Property == IsServerModeProperty)
         {
-            var panel = this.FindControl<StackPanel>("ActionButtonsPanel");
-            if (panel is not null) { panel.IsVisible = !IsInstallScreenVisible; }
+            UpdateActionButtonsVisibility();
         }
         if (change.Property == IsKioskModeProperty)
         {
@@ -180,6 +220,14 @@ public partial class TitleBar : UserControl
             TextBlock? tb = this.FindControl<TextBlock>("AlertBoxText");
             if (tb is not null) { tb.Text = AlertText; }
         }
+    }
+
+    private void UpdateActionButtonsVisibility()
+    {
+        var actionButtons = this.FindControl<StackPanel>("ActionButtonsPanel");
+        if (actionButtons is not null) { actionButtons.IsVisible = !IsServerMode && !IsInstallScreenVisible; }
+        var serverViewButtons = this.FindControl<StackPanel>("ServerViewButtonsPanel");
+        if (serverViewButtons is not null) { serverViewButtons.IsVisible = IsServerMode && !IsInstallScreenVisible; }
     }
 
     private void UpdateUserInfo()
@@ -203,6 +251,12 @@ public partial class TitleBar : UserControl
 
     private void OnPrintManagerClick(object? sender, Avalonia.Interactivity.RoutedEventArgs e)
         => ShowPrintManagerCommand?.Execute(null);
+
+    private void OnShowConnectionsClick(object? sender, Avalonia.Interactivity.RoutedEventArgs e)
+        => ShowConnectionsCommand?.Execute(null);
+
+    private void OnShowActivityClick(object? sender, Avalonia.Interactivity.RoutedEventArgs e)
+        => ShowActivityCommand?.Execute(null);
 
     private void OnAlertBoxPressed(object? sender, PointerPressedEventArgs e)
     {

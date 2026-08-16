@@ -20,9 +20,9 @@
                                 BannerColor="{Binding EnvironmentColor}"
                                 IsVisible="{Binding EnvironmentTitle, Converter={x:Static StringConverters.IsNotNullOrEmpty}}" />
 
-    <!-- Custom Title Bar (row 1) - hidden in Server mode, which has no drafts/notes/export/import/print UI -->
+    <!-- Custom Title Bar (row 1) - always shown; Server mode swaps the left-side drafts/notes/export/
+         import/print action buttons for the right-side CONNECTIONS/ACTIVITY view switcher (see IsServerMode) -->
     <controls:TitleBar Grid.Row="1"
-                       IsVisible="{Binding !IsServerMode}"
                        UserName="{Binding UserName}"
                        AppVersion="{Binding AppVersion}"
                        CreateDraftCommand="{Binding CreateDraftCommand}"
@@ -31,6 +31,9 @@
                        ShowImportCommand="{Binding ShowImportCommand}"
                        ShowPrintManagerCommand="{Binding ShowPrintManagerCommand}"
                        IsInstallScreenVisible="{Binding IsInstallScreenVisible}"
+                       IsServerMode="{Binding IsServerMode}"
+                       ShowConnectionsCommand="{Binding ShowConnectionsCommand}"
+                       ShowActivityCommand="{Binding ShowActivityCommand}"
                        IsKioskMode="{Binding IsKioskMode}"
                        IsAlerting="{Binding Alert.IsAlerting}"
                        AlertText="{Binding Alert.AlertText}"
@@ -81,16 +84,9 @@
         <!-- Server connections: other servers in the cluster this instance dials out to. -->
         <DockPanel IsVisible="{Binding ConnectionStatus.HasServerRows}">
           <TextBlock DockPanel.Dock="Top"
-                     Text="SERVER CONNECTIONS"
+                     Text="SERVERS"
                      FontSize="11" FontWeight="SemiBold" Foreground="#858585" LetterSpacing="1"
                      Margin="0,0,0,12" />
-
-          <Grid DockPanel.Dock="Top" ColumnDefinitions="*,80,180,180" Margin="12,0,12,4">
-            <TextBlock Grid.Column="0" Text="USER" FontSize="11" FontWeight="SemiBold" Foreground="#858585" LetterSpacing="1" />
-            <TextBlock Grid.Column="1" Text="STATUS" FontSize="11" FontWeight="SemiBold" Foreground="#858585" LetterSpacing="1" />
-            <TextBlock Grid.Column="2" Text="LAST CONNECTED" FontSize="11" FontWeight="SemiBold" Foreground="#858585" LetterSpacing="1" />
-            <TextBlock Grid.Column="3" Text="LAST DISCONNECTED" FontSize="11" FontWeight="SemiBold" Foreground="#858585" LetterSpacing="1" />
-          </Grid>
 
           <ItemsControl ItemsSource="{Binding ConnectionStatus.ServerRows}">
             <ItemsControl.ItemTemplate>
@@ -104,16 +100,9 @@
         <!-- Client connections: this server's own configured child clients. -->
         <DockPanel IsVisible="{Binding ConnectionStatus.HasClientRows}">
           <TextBlock DockPanel.Dock="Top"
-                     Text="CLIENT CONNECTIONS"
+                     Text="CLIENTS"
                      FontSize="11" FontWeight="SemiBold" Foreground="#858585" LetterSpacing="1"
                      Margin="0,0,0,12" />
-
-          <Grid DockPanel.Dock="Top" ColumnDefinitions="*,80,180,180" Margin="12,0,12,4">
-            <TextBlock Grid.Column="0" Text="USER" FontSize="11" FontWeight="SemiBold" Foreground="#858585" LetterSpacing="1" />
-            <TextBlock Grid.Column="1" Text="STATUS" FontSize="11" FontWeight="SemiBold" Foreground="#858585" LetterSpacing="1" />
-            <TextBlock Grid.Column="2" Text="LAST CONNECTED" FontSize="11" FontWeight="SemiBold" Foreground="#858585" LetterSpacing="1" />
-            <TextBlock Grid.Column="3" Text="LAST DISCONNECTED" FontSize="11" FontWeight="SemiBold" Foreground="#858585" LetterSpacing="1" />
-          </Grid>
 
           <ItemsControl ItemsSource="{Binding ConnectionStatus.ClientRows}">
             <ItemsControl.ItemTemplate>
@@ -124,6 +113,24 @@
           </ItemsControl>
         </DockPanel>
       </StackPanel>
+
+      <!-- Server mode: activity log view, switched to via the title bar's ACTIVITY button — the same
+           EntryBar/ContentArea pairing peer/client mode shows for the Activity folder, without a folder
+           bar (a routing-only server has no other folders worth navigating to). -->
+      <Grid IsVisible="{Binding ShowServerActivityView}"
+            ColumnDefinitions="300,4,*">
+
+        <controls:EntryBar Grid.Column="0"
+                           DataContext="{Binding EntryBar}" />
+
+        <GridSplitter Grid.Column="1"
+                      ResizeDirection="Columns"
+                      Background="#3E3E42"
+                      MinWidth="2" />
+
+        <controls:ContentArea Grid.Column="2"
+                              DataContext="{Binding ContentArea}" />
+      </Grid>
     </Panel>
 
     <!-- Client mode: a single row tracking the connection to the configured server, pinned to the bottom

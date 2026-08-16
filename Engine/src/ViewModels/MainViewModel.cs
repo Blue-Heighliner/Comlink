@@ -18,7 +18,9 @@ public interface IMainViewModel
     /// <summary>
     /// Gets a value indicating whether this instance is running as a <see cref="NodeRole.Server"/> — a
     /// routing-only node with no inbox/outbox/notes/drafts UI of its own. When <see langword="true"/>, the
-    /// main window shows only <see cref="ConnectionStatus"/>'s connections table.
+    /// main window shows either <see cref="ConnectionStatus"/>'s connections table (see
+    /// <see cref="ShowConnectionsTable"/>) or the activity log view (see <see cref="ShowServerActivityView"/>),
+    /// toggled via the title bar's CONNECTIONS/ACTIVITY buttons.
     /// </summary>
     bool IsServerMode { get; }
     /// <summary>
@@ -31,8 +33,19 @@ public interface IMainViewModel
     IConnectionStatusViewModel ConnectionStatus { get; }
     /// <summary>Gets a value indicating whether the normal 3-panel folder/entry/content layout should be shown — never in <see cref="IsServerMode"/>, and never while the install screen is visible.</summary>
     bool ShowMainLayout { get; }
-    /// <summary>Gets a value indicating whether the <see cref="IsServerMode"/> connections table should be shown in place of the normal 3-panel layout.</summary>
+    /// <summary>
+    /// Gets a value indicating whether the <see cref="IsServerMode"/> connections table should be shown —
+    /// the view the title bar's CONNECTIONS button switches to, and the one shown by default. Mutually
+    /// exclusive with <see cref="ShowServerActivityView"/>; never shown while the install screen is visible.
+    /// </summary>
     bool ShowConnectionsTable { get; }
+    /// <summary>
+    /// Gets a value indicating whether the <see cref="IsServerMode"/> activity log view — the same
+    /// <see cref="EntryBar"/>/<see cref="ContentArea"/> pairing peer/client mode shows for the Activity
+    /// folder, without a folder bar — should be shown in place of <see cref="ShowConnectionsTable"/>. The
+    /// view the title bar's ACTIVITY button switches to; never shown while the install screen is visible.
+    /// </summary>
+    bool ShowServerActivityView { get; }
     /// <summary>Gets the folder bar ViewModel.</summary>
     IFolderBarViewModel FolderBar { get; }
     /// <summary>Gets the entry bar ViewModel.</summary>
@@ -61,6 +74,10 @@ public interface IMainViewModel
     IRelayCommand ShowPrintManagerCommand { get; }
     /// <summary>Restores the content area to its default (home) state, without disturbing any other ViewModel's state.</summary>
     IRelayCommand ShowHomeCommand { get; }
+    /// <summary>Switches <see cref="IsServerMode"/>'s view to the connections table.</summary>
+    IRelayCommand ShowConnectionsCommand { get; }
+    /// <summary>Switches <see cref="IsServerMode"/>'s view to the activity log, selecting (or refreshing) the Activity folder.</summary>
+    IAsyncRelayCommand ShowActivityCommand { get; }
     /// <summary>Adds the given entry to the print queue as a manual print.</summary>
     IRelayCommand<EntryItemViewModel> PrintEntryCommand { get; }
     /// <summary>Connects to the service, loads user info, and initializes either the main UI or the install screen.</summary>
@@ -159,7 +176,12 @@ public sealed partial class MainViewModel : ObservableObject, IMainViewModel
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(ShowMainLayout))]
     [NotifyPropertyChangedFor(nameof(ShowConnectionsTable))]
+    [NotifyPropertyChangedFor(nameof(ShowServerActivityView))]
     private bool isInstallScreenVisible;
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(ShowConnectionsTable))]
+    [NotifyPropertyChangedFor(nameof(ShowServerActivityView))]
+    private bool isServerActivityViewActive;
     [ObservableProperty] private bool isKioskMode;
     [ObservableProperty] private string userName = string.Empty;
     [ObservableProperty] private string environmentTitle = string.Empty;
@@ -175,7 +197,9 @@ public sealed partial class MainViewModel : ObservableObject, IMainViewModel
     /// <inheritdoc />
     public bool ShowMainLayout => !IsServerMode && !IsInstallScreenVisible;
     /// <inheritdoc />
-    public bool ShowConnectionsTable => IsServerMode && !IsInstallScreenVisible;
+    public bool ShowConnectionsTable => IsServerMode && !IsInstallScreenVisible && !IsServerActivityViewActive;
+    /// <inheritdoc />
+    public bool ShowServerActivityView => IsServerMode && !IsInstallScreenVisible && IsServerActivityViewActive;
     /// <inheritdoc />
     public IFolderBarViewModel FolderBar => folderBar;
     /// <inheritdoc />
@@ -401,6 +425,23 @@ public sealed partial class MainViewModel : ObservableObject, IMainViewModel
 
     [RelayCommand]
     private void ShowHome() => contentArea.ShowHome();
+
+    [RelayCommand]
+    private void ShowConnections() => IsServerActivityViewActive = false;
+
+    [RelayCommand]
+    private async Task ShowActivity()
+    {
+        IsServerActivityViewActive = true;
+        if (folderBar.SelectedFolder?.RootType == FolderType.Activity)
+        {
+            await entryBar.Refresh();
+        }
+        else
+        {
+            folderBar.SelectFolderByType(FolderType.Activity);
+        }
+    }
 
     private void DeselectFolderAndEntry()
     {
