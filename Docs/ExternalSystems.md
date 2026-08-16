@@ -3,8 +3,9 @@
 An **external system** is a conduit between this instance and one system outside Comlink — a socket, a
 message queue, an HTTP long-poll, or any other integration point a host wants to bridge into the
 messaging flow. Unlike a peer or an [interface connection](Interface.md), an external system is not
-another Comlink instance and does not speak OFT; it is entirely defined by the host's own
-`ExternalSystemBase<TMessage>` subclass.
+another Comlink instance and does not speak OFT; it is entirely defined by the host's own `IExternalSystem`
+implementation, typically (though not necessarily) a subclass of the optional convenience base class
+`ExternalSystemBase<TMessage>`.
 
 ## Interfaces
 
@@ -27,7 +28,9 @@ public abstract class ExternalSystemBase<TMessage> : IExternalSystem where TMess
     protected virtual Task<bool> PollIsConnected(CancellationToken cancellation);
     protected abstract Task Disconnect();
     protected abstract Task<bool> Send(TMessage message);
+    protected virtual bool FilterSent(TMessage message);
     protected Task Receive(TMessage message);
+    protected virtual bool FilterReceived(TMessage message);
     protected void ReportDisconnected();
 }
 ```
@@ -35,15 +38,17 @@ public abstract class ExternalSystemBase<TMessage> : IExternalSystem where TMess
 `IExternalSystem` is deliberately not generic over the message type — it is declared `object`-typed on
 `Send`/`MessageReceived` so `ExternalSystemsService` (below) can hold and drive every configured external
 system uniformly, the same reasoning as `IEngineController`'s message-format members (see
-[Control.md](Control.md#message-format)). A host never implements `IExternalSystem` directly; it always
-subclasses `ExternalSystemBase<TMessage>`, which implements `IExternalSystem` on your behalf and exposes
-only type-safe `TMessage`-typed members — `protected abstract` methods for the real connection behavior
-(plus one `protected virtual` method, `PollIsConnected` — see [Lifecycle](#lifecycle) below), and
-`protected Task Receive(TMessage message)` to report an inbound message. `TMessage` should match the
-host's own `IEngineController.MessageType`.
+[Control.md](Control.md#message-format)). `IEngineController.ExternalSystems`/`ExternalServer` (see
+[Control.md](Control.md#external-systems)) are typed as plain `IExternalSystem`/`IExternalSystem?` too, so
+a host is free to implement `IExternalSystem` directly if it wants full control. In practice, a host
+instead subclasses the optional convenience base class `ExternalSystemBase<TMessage>`, which implements
+`IExternalSystem` on your behalf and exposes only type-safe `TMessage`-typed members — `protected abstract`
+methods for the real connection behavior (plus one `protected virtual` method, `PollIsConnected` — see
+[Lifecycle](#lifecycle) below), and `protected Task Receive(TMessage message)` to report an inbound
+message. `TMessage` should match the host's own `IEngineController.MessageType`.
 
 `ExternalSystemBase<TMessage>`'s constructor deliberately does not take an `ILoggerFactory` — each
-external system is constructed directly by `IEngineController.GetExternalSystems()`, not resolved through
+external system is constructed directly by `IEngineController.ExternalSystems`, not resolved through
 DI, and that member lives on the same type backing `IEngineController` itself; taking `ILoggerFactory`
 there would create a circular dependency through the logging providers (e.g. `DailyFileLoggerProvider`)
 that themselves depend on `IEngineController` for their log file location. Instead, `AttachLogger` is
@@ -75,24 +80,34 @@ cycle reacts right away rather than waiting up to the poll interval. `ReportDisc
 currently connected.
 
 `Send(object message)` returns `false` immediately without calling the abstract `Send(TMessage message)`
-while not connected; while connected, it casts to `TMessage` and calls it, catching and logging any
-exception as a failed send (returning `false`) rather than propagating it.
+while not connected; while connected, it casts to `TMessage`, calls `FilterSent` (see below), and — if that
+returns `true` — calls `Send(TMessage message)`, catching and logging any exception (from either) as a
+failed send (returning `false`) rather than propagating it.
 
 `Receive(TMessage message)` is called by the implementor (e.g. from its own background read loop,
-socket callback, or poll) whenever the external system delivers a new message. It only enqueues the
-message onto an internal, per-instance channel and returns — it does not wait for the message to actually
-reach `MessageReceived`, so it is safe to call concurrently, or without awaiting a previous call first, if
-the implementor's own connection can genuinely deliver messages that way (e.g. parallel socket reads). A
-single internal loop, running for the lifetime of `Start`, drains that channel and delivers each message to
-`MessageReceived` one at a time, in enqueue order — so `ExternalSystemsService` (and any other subscriber)
-never sees two deliveries overlap, and messages are always processed in the order they were enqueued,
-regardless of how many `Receive` calls were in flight at once. A message enqueued before `Start` has
-been called, or after it has returned, is logged and dropped, since there is no delivery loop running to
-receive it.
+socket callback, or poll) whenever the external system delivers a new message. It first calls
+`FilterReceived` (see below); if that returns `false`, the message is silently dropped. Otherwise it
+enqueues the message onto an internal, per-instance channel and returns — it does not wait for the message
+to actually reach `MessageReceived`, so it is safe to call concurrently, or without awaiting a previous call
+first, if the implementor's own connection can genuinely deliver messages that way (e.g. parallel socket
+reads). A single internal loop, running for the lifetime of `Start`, drains that channel and delivers each
+message to `MessageReceived` one at a time, in enqueue order — so `ExternalSystemsService` (and any other
+subscriber) never sees two deliveries overlap, and messages are always processed in the order they were
+enqueued, regardless of how many `Receive` calls were in flight at once. A message enqueued before `Start`
+has been called, or after it has returned, is logged and dropped, since there is no delivery loop running
+to receive it.
 
-## `GetExternalSystems` and `ExternalSystemsService`
+`FilterSent(TMessage message)` and `FilterReceived(TMessage message)` are both `protected virtual` and
+synchronous — intended for simple, cheap filtering only (e.g. by tag, priority, or sender), not I/O —
+defaulting to always returning `true` (allow everything). `FilterSent` runs inside `Send(object message)`,
+before the abstract `Send(TMessage message)`; a filtered send is treated exactly like a failed one
+(`Send(object message)` returns `false`). `FilterReceived` runs inside `Receive(TMessage message)`, before
+the message is enqueued; a filtered receive is silently dropped, exactly as if `Receive` had never been
+called for it.
 
-`IEngineController.GetExternalSystems()` (see [Control.md](Control.md#external-systems)) returns the list
+## `ExternalSystems` and `ExternalSystemsService`
+
+`IEngineController.ExternalSystems` (see [Control.md](Control.md#external-systems)) returns the list
 of external systems this instance communicates with, resolved once at startup. `ExternalSystemsService`
 (`Engine/src/ExternalSystems/ExternalSystemsService.cs`, an internal hosted-service-style component started
 by `EngineHost` alongside the peer and interface listeners) reads this list once and then:
@@ -113,8 +128,34 @@ field would race under concurrent delivery from multiple external systems at onc
 receives from a peer (not an external system) has no such source, so it is relayed to every configured
 external system.
 
-If `GetExternalSystems()` returns an empty list (the Engine default), `ExternalSystemsService.Start`
+If `ExternalSystems` returns an empty list (the Engine default), `ExternalSystemsService.Start`
 returns immediately without subscribing to anything.
+
+## `ExternalServer`
+
+`IEngineController.ExternalServer` (see [Control.md](Control.md#external-systems)) designates one entry of
+`ExternalSystems` — or `null`, the default — as the exclusive upstream hub for every message this instance
+would otherwise send out. When it is set, `ExternalSystemsService` changes the relay step above:
+
+- A message **not** received from `ExternalServer` (composed locally by the user and sent to a remote
+  peer, received from a genuine peer connection, or received from any other configured external system) is
+  sent exclusively to `ExternalServer`, bypassing every other external system entirely.
+- A message received **from** `ExternalServer` is relayed to every other external system exactly as it
+  would be without one configured (the normal "except the source" behavior above).
+
+Outbound peer sends are covered too: `MessageRoutingService.Route` — the entry point for a message the
+local user composes and sends — checks `ExternalServer` before dialing each remote recipient individually
+over the peer network. If set, the message is sent to `ExternalServer` **once**, regardless of how many
+remote recipients it is addressed to (since the external server, not this instance, is now responsible for
+delivering it onward), and every one of those recipients' `UserDeliveryResult.Success` reflects that single
+send's outcome. A self-addressed portion of a send is unaffected — it still delivers locally via
+`IPeerService.DeliverLocal`, exactly as it would with no `ExternalServer` configured, since it never leaves
+the instance in the first place.
+
+`ExternalServer` must be one of the same instances also returned by `ExternalSystems`, not a separate
+instance managed on the side — `ExternalSystemsService` still runs its connect/poll/receive lifecycle
+(`Start`, `AttachLogger`, `MessageReceived`) exactly like any other configured external system; the
+property only designates *which* one, if any, is treated as the exclusive hub for outbound traffic.
 
 ## Sample
 
@@ -123,7 +164,7 @@ network integration — that "connects" after a short delay, stays connected ind
 synthesizes an inbound demo message, so the receive path (mirroring to every other external system, and
 normal processing as a received message) is visible without needing an actual external system to connect
 to. It never loses its simulated connection, so it leaves `PollIsConnected` at its default rather than
-overriding it. `SampleEngineController.GetExternalSystems()` returns a single instance of it. A real host
+overriding it. `SampleEngineController.ExternalSystems` returns a single instance of it. A real host
 implementation replaces `TryConnect`, `Disconnect`, and `Send` with genuine connection logic for its own
 external system, and either overrides `PollIsConnected` or calls `ReportDisconnected` (or both), depending
 on how its own external system reports connection loss.

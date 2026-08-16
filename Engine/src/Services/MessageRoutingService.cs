@@ -134,13 +134,15 @@ internal sealed class MessageRoutingService : IMessageRoutingService
         string? selfUser = targetUsers.FirstOrDefault(user => string.Equals(user, fromUser, StringComparison.OrdinalIgnoreCase));
         List<string> remoteUsers = selfUser is null ? targetUsers : targetUsers.Where(user => !string.Equals(user, fromUser, StringComparison.OrdinalIgnoreCase)).ToList();
 
-        UserDeliveryResult[] remoteResults = await Task.WhenAll(remoteUsers.Select(async user =>
-        {
-            bool sent = await peerService.Send(user, message, cancellation);
-            IReadOnlyList<string> via = userAddressedVia.TryGetValue(user, out List<string>? v) ? v.AsReadOnly() : Array.Empty<string>();
-            logger.LogInformation(sent ? "{MessageId} delivered to {User}" : "{MessageId} failed to {User}", messageId, user);
-            return new UserDeliveryResult { UserName = user, Success = sent, AddressedVia = [.. via] };
-        }));
+        UserDeliveryResult[] remoteResults = engineController.ExternalServer is { } externalServer
+            ? await RouteToExternalServer(externalServer, messageId, message, remoteUsers, userAddressedVia)
+            : await Task.WhenAll(remoteUsers.Select(async user =>
+            {
+                bool sent = await peerService.Send(user, message, cancellation);
+                IReadOnlyList<string> via = userAddressedVia.TryGetValue(user, out List<string>? v) ? v.AsReadOnly() : Array.Empty<string>();
+                logger.LogInformation(sent ? "{MessageId} delivered to {User}" : "{MessageId} failed to {User}", messageId, user);
+                return new UserDeliveryResult { UserName = user, Success = sent, AddressedVia = [.. via] };
+            }));
 
         List<UserDeliveryResult> allResults = [.. remoteResults];
 
@@ -157,5 +159,27 @@ internal sealed class MessageRoutingService : IMessageRoutingService
         }
 
         return (messageId, allResults);
+    }
+
+    /// <summary>
+    /// Sends <paramref name="message"/> once to <paramref name="externalServer"/> — regardless of how many
+    /// remote users it is addressed to — instead of dialing each one individually over the peer network,
+    /// since <see cref="Control.IEngineController.ExternalServer"/> designates it as the exclusive upstream
+    /// hub for every message this instance sends. Every remote recipient shares that single send's outcome.
+    /// </summary>
+    private async Task<UserDeliveryResult[]> RouteToExternalServer(IExternalSystem externalServer, string messageId, object message, List<string> remoteUsers, Dictionary<string, List<string>> userAddressedVia)
+    {
+        if (remoteUsers.Count == 0) { return []; }
+
+        bool sent = await externalServer.Send(message);
+        logger.LogInformation(
+            sent ? "{MessageId} delivered to external server for {Count} recipient(s)" : "{MessageId} failed to reach external server for {Count} recipient(s)",
+            messageId, remoteUsers.Count);
+
+        return [.. remoteUsers.Select(user =>
+        {
+            IReadOnlyList<string> via = userAddressedVia.TryGetValue(user, out List<string>? v) ? v.AsReadOnly() : Array.Empty<string>();
+            return new UserDeliveryResult { UserName = user, Success = sent, AddressedVia = [.. via] };
+        })];
     }
 }

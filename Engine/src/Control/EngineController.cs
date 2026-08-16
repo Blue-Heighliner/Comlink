@@ -107,6 +107,32 @@ public interface IEngineController
     /// <summary>When <see langword="true"/>, a <c>--config</c> argument is read; when <see langword="false"/> (the default), it is ignored and <see cref="EngineConfig"/> always uses its defaults.</summary>
     bool ConfigFileEnabled { get; }
 
+    /// <summary>
+    /// The external systems this instance communicates with — each a conduit relaying messages to and
+    /// from a system outside Comlink (a socket, a message queue, an HTTP long-poll, etc.). Resolved once
+    /// at startup by <c>ExternalSystemsService</c>: every message this instance receives (from a peer, or
+    /// from any other external system) is sent through every other external system in this list, and
+    /// every message received from one is processed exactly like an ordinary received message. See
+    /// <c>Docs/ExternalSystems.md</c>.
+    /// </summary>
+    IReadOnlyList<IExternalSystem> ExternalSystems { get; }
+
+    /// <summary>
+    /// The single external system, from <see cref="ExternalSystems"/>, that should exclusively receive
+    /// every message this instance would otherwise send out — whether composed locally by the user or
+    /// received from a peer connection — instead of that message going to the normal peer network and
+    /// every other configured external system. A message received <em>from</em> this external system is,
+    /// in turn, relayed to every other external system exactly as it would be without an
+    /// <see cref="ExternalServer"/> configured — only <see cref="ExternalServer"/> itself is treated as
+    /// the exclusive upstream hub, everything else still fans out normally. <see langword="null"/> (the
+    /// default) disables this gateway behavior entirely, so every configured external system and the
+    /// normal peer network behave exactly as they would with no <see cref="ExternalServer"/> at all. Must
+    /// be one of the same instances also returned by <see cref="ExternalSystems"/>, so its own
+    /// connect/poll/receive lifecycle still runs — this property only designates which one, if any, acts
+    /// as the exclusive upstream hub. See <c>Docs/ExternalSystems.md</c>.
+    /// </summary>
+    IExternalSystem? ExternalServer { get; }
+
     /// <summary>Creates a new, empty instance of <see cref="MessageType"/>.</summary>
     object CreateMessage();
     /// <summary>Gets the application-level message identifier from <paramref name="message"/>.</summary>
@@ -190,12 +216,6 @@ public interface IEngineController
     /// </summary>
     /// <param name="userName">The local user name for which to resolve a certificate name.</param>
     string? GetCertificateName(string userName);
-
-    /// <summary>
-    /// Returns the external systems this instance communicates with — see
-    /// <see cref="DefaultEngineController{TMessage}.GetExternalSystems"/>.
-    /// </summary>
-    IReadOnlyList<IExternalSystem> GetExternalSystems();
 }
 
 /// <summary>
@@ -365,20 +385,28 @@ public abstract class DefaultEngineController<TMessage> : IEngineController wher
     /// <inheritdoc />
     public virtual bool ConfigFileEnabled => false;
 
-    /// <inheritdoc />
-    public virtual string? GetCertificateName(string userName) => $"USER-{userName}";
+    /// <summary>
+    /// The external systems this instance communicates with — each a conduit relaying messages to and from
+    /// another system outside Comlink. <see cref="ExternalSystemBase{TMessage}"/> is available as an
+    /// optional convenience base class for implementing one (see <c>Docs/ExternalSystems.md</c>), but is
+    /// not required — any <see cref="IExternalSystem"/> implementation works here. Read once at startup by
+    /// <see cref="ExternalSystemsService"/>: every message this instance receives (from a peer, or from any
+    /// other external system) is sent through every other external system in the returned list, and every
+    /// message received from one is processed exactly like an ordinary received message. The default is an
+    /// empty list — override to provide one or more.
+    /// </summary>
+    public virtual IReadOnlyList<IExternalSystem> ExternalSystems { get; } = [];
 
     /// <summary>
-    /// Returns the external systems this instance communicates with — each a conduit relaying messages to
-    /// and from another system outside Comlink (see <see cref="ExternalSystems.ExternalSystemBase{TMessage}"/>).
-    /// Called once at startup by <see cref="ExternalSystems.ExternalSystemsService"/>: every message this
-    /// instance receives (from a peer, or from any other external system) is sent through every other
-    /// external system in the returned list, and every message received from one is processed exactly like
-    /// an ordinary received message. The default returns an empty list — override to provide one or more.
+    /// The single external system, from <see cref="ExternalSystems"/>, that should exclusively receive
+    /// every message this instance would otherwise send out. The default is <see langword="null"/>,
+    /// disabling this gateway behavior — override to designate one of <see cref="ExternalSystems"/>'s own
+    /// entries as the exclusive upstream hub.
     /// </summary>
-    public virtual IReadOnlyList<ExternalSystemBase<TMessage>> GetExternalSystems() => [];
+    public virtual IExternalSystem? ExternalServer { get; } = null;
 
-    IReadOnlyList<IExternalSystem> IEngineController.GetExternalSystems() => GetExternalSystems();
+    /// <inheritdoc />
+    public virtual string? GetCertificateName(string userName) => $"USER-{userName}";
 }
 
 /// <summary>
@@ -622,6 +650,12 @@ internal sealed class ConfiguredEngineController : IEngineController
     public bool ConfigFileEnabled => fallback.ConfigFileEnabled;
 
     /// <inheritdoc />
+    public IReadOnlyList<IExternalSystem> ExternalSystems => fallback.ExternalSystems;
+
+    /// <inheritdoc />
+    public IExternalSystem? ExternalServer => fallback.ExternalServer;
+
+    /// <inheritdoc />
     public UserInfo? ResolveCode(string userCode) => fallback.ResolveCode(userCode);
     /// <inheritdoc />
     public UserEndpoint? GetEndpoint(string userName)
@@ -634,7 +668,4 @@ internal sealed class ConfiguredEngineController : IEngineController
             "disable" => null,
             string name => name
         };
-
-    /// <inheritdoc />
-    public IReadOnlyList<IExternalSystem> GetExternalSystems() => fallback.GetExternalSystems();
 }

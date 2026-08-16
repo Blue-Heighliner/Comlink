@@ -41,6 +41,37 @@ public sealed class MessageRoutingServiceTests
         }
     }
 
+    private sealed class FakeExternalSystem() : ExternalSystemBase<TestMessage>("Fake", TimeSpan.FromMilliseconds(20), TimeSpan.FromSeconds(30))
+    {
+        public List<TestMessage> SentMessages { get; } = [];
+        public bool ReturnSuccess { get; set; } = true;
+
+        protected override Task<bool> TryConnect(CancellationToken cancellation) => Task.FromResult(true);
+        protected override Task Disconnect() => Task.CompletedTask;
+
+        protected override Task<bool> Send(TestMessage message)
+        {
+            SentMessages.Add(message);
+            return Task.FromResult(ReturnSuccess);
+        }
+    }
+
+    private static async Task<(FakeExternalSystem System, CancellationTokenSource Cts, Task StartTask)> StartConnectedExternalServer()
+    {
+        FakeExternalSystem system = new();
+        CancellationTokenSource cts = new();
+        Task startTask = system.Start(cts.Token);
+
+        DateTime deadline = DateTime.UtcNow + TimeSpan.FromSeconds(2);
+        while (!system.IsConnected)
+        {
+            if (DateTime.UtcNow > deadline) { throw new TimeoutException("External server did not connect in time."); }
+            await Task.Delay(10);
+        }
+
+        return (system, cts, startTask);
+    }
+
     /// <summary>Verifies that Route returns a non-empty uppercase hex GUID as the message ID.</summary>
     [Fact]
     public async Task RouteAsync_ReturnsNonEmptyMessageId()
@@ -353,5 +384,90 @@ public sealed class MessageRoutingServiceTests
         Assert.Equal("MSG1", messageId);
         Assert.Equal("ALPHA", user);
         Assert.Equal(DestinationStatus.Read, status);
+    }
+
+    /// <summary>With ExternalServer configured, remote sends go to it exactly once, regardless of recipient count, instead of dialing each peer individually.</summary>
+    [Fact]
+    public async Task RouteAsync_ExternalServerConfigured_SendsOnceToExternalServerNotPeer()
+    {
+        (FakeExternalSystem externalServer, CancellationTokenSource cts, Task startTask) = await StartConnectedExternalServer();
+        Mock<TestEngineController> controller = new() { CallBase = true };
+        controller.Setup(c => c.ExternalServer).Returns(externalServer);
+        FakePeerService fake = new();
+        MessageRoutingService service = new(fake, controller.Object, loggerFactory);
+
+        SendMessagePayload payload = new()
+        {
+            Subject = "ViaExternalServer",
+            Body = "Body",
+            Addresses =
+            [
+                new AddressPayload { UserName = "Alpha", Type = "To" },
+                new AddressPayload { UserName = "Beta", Type = "To" }
+            ]
+        };
+
+        (string _, IReadOnlyList<UserDeliveryResult> results) = await service.Route("Source", payload, default);
+
+        Assert.Empty(fake.Sent);
+        Assert.Single(externalServer.SentMessages);
+        Assert.Equal(2, results.Count);
+        Assert.All(results, r => Assert.True(r.Success));
+
+        cts.Cancel();
+        await startTask;
+    }
+
+    /// <summary>With ExternalServer configured, a failed external-server send is reflected as a failure for every remote recipient.</summary>
+    [Fact]
+    public async Task RouteAsync_ExternalServerSendFails_AllRemoteResultsFail()
+    {
+        (FakeExternalSystem externalServer, CancellationTokenSource cts, Task startTask) = await StartConnectedExternalServer();
+        externalServer.ReturnSuccess = false;
+        Mock<TestEngineController> controller = new() { CallBase = true };
+        controller.Setup(c => c.ExternalServer).Returns(externalServer);
+        FakePeerService fake = new();
+        MessageRoutingService service = new(fake, controller.Object, loggerFactory);
+
+        SendMessagePayload payload = new()
+        {
+            Subject = "Fail",
+            Body = "Body",
+            Addresses = [new AddressPayload { UserName = "Alpha", Type = "To" }]
+        };
+
+        (string _, IReadOnlyList<UserDeliveryResult> results) = await service.Route("Source", payload, default);
+
+        Assert.Single(results);
+        Assert.False(results[0].Success);
+
+        cts.Cancel();
+        await startTask;
+    }
+
+    /// <summary>With ExternalServer configured, sending to the current user still delivers locally instead of going through the external server.</summary>
+    [Fact]
+    public async Task RouteAsync_ExternalServerConfigured_SelfSendStillDeliversLocally()
+    {
+        (FakeExternalSystem externalServer, CancellationTokenSource cts, Task startTask) = await StartConnectedExternalServer();
+        Mock<TestEngineController> controller = new() { CallBase = true };
+        controller.Setup(c => c.ExternalServer).Returns(externalServer);
+        FakePeerService fake = new();
+        MessageRoutingService service = new(fake, controller.Object, loggerFactory);
+
+        SendMessagePayload payload = new()
+        {
+            Subject = "Self",
+            Body = "Body",
+            Addresses = [new AddressPayload { UserName = "SOURCE", Type = "To" }]
+        };
+
+        await service.Route("SOURCE", payload, default);
+
+        Assert.Single(fake.DeliveredLocally);
+        Assert.Empty(externalServer.SentMessages);
+
+        cts.Cancel();
+        await startTask;
     }
 }

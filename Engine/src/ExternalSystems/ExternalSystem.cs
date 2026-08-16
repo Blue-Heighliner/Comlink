@@ -34,7 +34,7 @@ public interface IExternalSystem
     /// <summary>
     /// Assigns the logger this external system uses to report connection lifecycle events. Called once by
     /// <see cref="ExternalSystemsService"/>, using its own <see cref="ILoggerFactory"/>, before <see cref="Start"/>
-    /// — an external system is constructed directly by a host's <see cref="Control.IEngineController.GetExternalSystems"/>
+    /// — an external system is constructed directly by a host's <see cref="Control.IEngineController.ExternalSystems"/>
     /// implementation rather than resolved through DI, so it cannot safely take <see cref="ILoggerFactory"/>
     /// as a constructor dependency itself (doing so on the same type backing <see cref="Control.IEngineController"/>
     /// would create a circular dependency through the logging providers that themselves depend on
@@ -47,7 +47,7 @@ public interface IExternalSystem
 /// <summary>
 /// Base class for an external system integration, generic over the host's concrete message type
 /// <typeparamref name="TMessage"/> — matching <see cref="Control.DefaultEngineController{TMessage}"/>'s own
-/// type parameter, since <see cref="Control.DefaultEngineController{TMessage}.GetExternalSystems"/> returns
+/// type parameter, since <see cref="Control.DefaultEngineController{TMessage}.ExternalSystems"/> returns
 /// a list of these. Handles the connect/poll/disconnect lifecycle so a derived class only needs to supply
 /// the real connection behavior for its specific external system, via three abstract methods —
 /// <see cref="TryConnect"/> (attempt to establish a connection), <see cref="Disconnect"/> (release a
@@ -59,8 +59,10 @@ public interface IExternalSystem
 /// an inbound message — concurrently and without awaiting each call before making the next one, if its own
 /// connection can genuinely deliver messages that way (e.g. parallel socket reads); <see cref="Receive"/>
 /// only enqueues the message; a single internal loop delivers queued messages to <see cref="MessageReceived"/>
-/// one at a time, in enqueue order, for the lifetime of <see cref="Start"/>. See <c>Docs/ExternalSystems.md</c>
-/// and <c>Sample/src/SampleExternalSystem.cs</c> for a worked example.
+/// one at a time, in enqueue order, for the lifetime of <see cref="Start"/>. Two further optional virtual
+/// methods, <see cref="FilterSent"/> and <see cref="FilterReceived"/>, let a derived class drop specific
+/// messages in either direction (e.g. by tag, priority, or sender) without touching the connection lifecycle
+/// itself. See <c>Docs/ExternalSystems.md</c> and <c>Sample/src/SampleExternalSystem.cs</c> for a worked example.
 /// </summary>
 /// <typeparam name="TMessage">The host's concrete message type — the same type argument supplied to <see cref="Control.DefaultEngineController{TMessage}"/>.</typeparam>
 /// <param name="name">A short, human-readable name identifying this external system.</param>
@@ -160,7 +162,12 @@ public abstract class ExternalSystemBase<TMessage>(string name, TimeSpan? connec
     public async Task<bool> Send(object message)
     {
         if (!IsConnected) { return false; }
-        try { return await Send((TMessage)message); }
+        TMessage typed = (TMessage)message;
+        try
+        {
+            if (!FilterSent(typed)) { return false; }
+            return await Send(typed);
+        }
         catch (Exception ex) when (ex is not OperationCanceledException)
         {
             logger.LogWarning(ex, "External system {Name} failed to send a message", Name);
@@ -172,20 +179,29 @@ public abstract class ExternalSystemBase<TMessage>(string name, TimeSpan? connec
     public void AttachLogger(ILogger logger) => this.logger = logger;
 
     /// <summary>
-    /// Called by a derived class whenever its connection delivers an inbound message while connected. Only
-    /// enqueues <paramref name="message"/> for delivery — safe to call concurrently, or without awaiting a
-    /// previous call first, since actual delivery to <see cref="MessageReceived"/> always happens one
-    /// message at a time, in enqueue order, on a single internal loop running for the lifetime of
-    /// <see cref="Start"/>. A message enqueued before <see cref="Start"/> has been called, or after it has
-    /// returned, is silently dropped, since there is no running delivery loop to hand it to.
+    /// Called by a derived class whenever its connection delivers an inbound message while connected. First
+    /// checks <see cref="FilterReceived"/>, silently dropping the message if it returns <see langword="false"/>;
+    /// otherwise only enqueues <paramref name="message"/> for delivery — safe to call concurrently, or
+    /// without awaiting a previous call first, since actual delivery to <see cref="MessageReceived"/> always
+    /// happens one message at a time, in enqueue order, on a single internal loop running for the lifetime
+    /// of <see cref="Start"/>. A message enqueued before <see cref="Start"/> has been called, or after it
+    /// has returned, is silently dropped, since there is no running delivery loop to hand it to.
     /// </summary>
     /// <param name="message">The received message, in this instance's own <typeparamref name="TMessage"/>.</param>
     protected async Task Receive(TMessage message)
     {
-        try { await receivedMessages.Writer.WriteAsync(message); }
+        try
+        {
+            if (!FilterReceived(message)) { return; }
+            await receivedMessages.Writer.WriteAsync(message);
+        }
         catch (ChannelClosedException)
         {
             logger.LogWarning("External system {Name} received a message while not running; dropping it", Name);
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            logger.LogWarning(ex, "External system {Name} failed to filter a received message", Name);
         }
     }
 
@@ -236,4 +252,24 @@ public abstract class ExternalSystemBase<TMessage>(string name, TimeSpan? connec
     /// <param name="message">The message to send, in this instance's own <typeparamref name="TMessage"/>.</param>
     /// <returns><see langword="true"/> if the message was sent successfully.</returns>
     protected abstract Task<bool> Send(TMessage message);
+    /// <summary>
+    /// Determines whether <paramref name="message"/> should actually be sent to the external system.
+    /// Called by <see cref="Send(object)"/> before every send attempt, while connected. Synchronous —
+    /// intended for simple, cheap filtering only (e.g. by tag, priority, or sender), not I/O. The default
+    /// always returns <see langword="true"/>. A filtered message is treated the same as a failed send:
+    /// <see cref="Send(object)"/> returns <see langword="false"/> without calling <see cref="Send(TMessage)"/>.
+    /// </summary>
+    /// <param name="message">The message that would be sent, in this instance's own <typeparamref name="TMessage"/>.</param>
+    /// <returns><see langword="true"/> to allow the send; <see langword="false"/> to filter it out.</returns>
+    protected virtual bool FilterSent(TMessage message) => true;
+    /// <summary>
+    /// Determines whether a message reported via <see cref="Receive"/> should actually be treated as
+    /// received. Called before the message is enqueued for delivery to <see cref="MessageReceived"/>.
+    /// Synchronous — intended for simple, cheap filtering only (e.g. by tag, priority, or sender), not I/O.
+    /// The default always returns <see langword="true"/>. A filtered message is silently dropped, exactly
+    /// as if <see cref="Receive"/> had never been called for it.
+    /// </summary>
+    /// <param name="message">The received message, in this instance's own <typeparamref name="TMessage"/>.</param>
+    /// <returns><see langword="true"/> to accept the message; <see langword="false"/> to filter it out.</returns>
+    protected virtual bool FilterReceived(TMessage message) => true;
 }

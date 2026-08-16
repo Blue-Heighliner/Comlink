@@ -2,7 +2,7 @@ namespace BlueHeighliner.Comlink.Sample;
 
 /// <summary>
 /// Sample <see cref="ExternalSystemBase{TMessage}"/> demonstrating the external-system conduit pattern —
-/// see <see cref="SampleEngineController.GetExternalSystems"/> and <c>Docs/ExternalSystems.md</c>. Not a
+/// see <see cref="SampleEngineController.ExternalSystems"/> and <c>Docs/ExternalSystems.md</c>. Not a
 /// real integration: "connecting" is simulated with a short delay, and once connected it stays connected
 /// and periodically synthesizes an inbound demo message, so the receive path — including mirroring to
 /// every other external system, and normal processing as a received message — is visible without needing

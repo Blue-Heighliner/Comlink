@@ -100,7 +100,7 @@ When the user opens that Inbox message, `ContentAreaViewModel` calls `IServiceCo
 3. Any connected external program receives it directly over its own OFT connection — see [Interface.md](Interface.md). This happens in both Client and Headless mode.
 
 ### Receiving/relaying a message (via an external system)
-1. An external system (`IEngineController.GetExternalSystems()`) reports an inbound message via `Receive`.
+1. An external system (`IEngineController.ExternalSystems`) reports an inbound message via `Receive`.
 2. `ExternalSystemsService` calls `IPeerService.DeliverLocal`, which processes it exactly like an ordinary received message (stored, shown in the UI, mirrored to any connected interface) and raises `MessageDelivered`.
 3. `ExternalSystemsService`'s own `MessageDelivered` subscription relays the message out through every other configured external system, excluding the one it was originally received from. This happens in both Client and Headless mode. See [ExternalSystems.md](ExternalSystems.md).
 

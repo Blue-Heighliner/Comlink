@@ -56,10 +56,11 @@ public sealed class ExternalSystemsServiceTests
 
     private static readonly ILoggerFactory noLogger = LoggerFactory.Create(_ => { });
 
-    private static IEngineController MakeController(IReadOnlyList<IExternalSystem> systems)
+    private static IEngineController MakeController(IReadOnlyList<IExternalSystem> systems, IExternalSystem? externalServer = null)
     {
         Mock<IEngineController> controller = new();
-        controller.Setup(c => c.GetExternalSystems()).Returns(systems);
+        controller.Setup(c => c.ExternalSystems).Returns(systems);
+        controller.Setup(c => c.ExternalServer).Returns(externalServer);
         return controller.Object;
     }
 
@@ -199,6 +200,83 @@ public sealed class ExternalSystemsServiceTests
         Assert.Contains(messageFromA, systemB.SentMessages);
         Assert.DoesNotContain(messageFromB, systemB.SentMessages);
         Assert.Contains(messageFromB, systemA.SentMessages);
+
+        cts.Cancel();
+        await startTask.WaitAsync(TimeSpan.FromSeconds(2));
+    }
+
+    /// <summary>With an ExternalServer configured, a peer-delivered message goes exclusively to it, not to any other external system.</summary>
+    [Fact]
+    public async Task PeerMessageDelivered_ExternalServerConfigured_RoutesExclusivelyToExternalServer()
+    {
+        FakeExternalSystem externalServer = new("Server");
+        FakeExternalSystem other = new("Other");
+        FakePeerService peer = new();
+        ExternalSystemsService service = new(MakeController([externalServer, other], externalServer), peer, noLogger);
+
+        using CancellationTokenSource cts = new();
+        Task startTask = service.Start(cts.Token);
+        await Task.Delay(50);
+
+        TestMessage message = new() { MessageId = "M1" };
+        await peer.FireMessageDelivered(message);
+
+        Assert.Single(externalServer.SentMessages);
+        Assert.Same(message, externalServer.SentMessages[0]);
+        Assert.Empty(other.SentMessages);
+
+        cts.Cancel();
+        await startTask.WaitAsync(TimeSpan.FromSeconds(2));
+    }
+
+    /// <summary>With an ExternalServer configured, a message received from another external system is routed exclusively to the external server, not to any other configured system.</summary>
+    [Fact]
+    public async Task ExternalSystemMessageReceived_FromOtherSystem_ExternalServerConfigured_RoutesExclusivelyToExternalServer()
+    {
+        FakeExternalSystem externalServer = new("Server");
+        FakeExternalSystem other = new("Other");
+        FakeExternalSystem third = new("Third");
+        FakePeerService peer = new();
+        ExternalSystemsService service = new(MakeController([externalServer, other, third], externalServer), peer, noLogger);
+
+        using CancellationTokenSource cts = new();
+        Task startTask = service.Start(cts.Token);
+        await Task.Delay(50);
+
+        TestMessage message = new() { MessageId = "M1" };
+        await other.Deliver(message);
+
+        Assert.Single(externalServer.SentMessages);
+        Assert.Same(message, externalServer.SentMessages[0]);
+        Assert.Empty(third.SentMessages);
+        Assert.Empty(other.SentMessages);
+
+        cts.Cancel();
+        await startTask.WaitAsync(TimeSpan.FromSeconds(2));
+    }
+
+    /// <summary>With an ExternalServer configured, a message received from the external server itself is routed to every other external system, exactly as it would be without one configured.</summary>
+    [Fact]
+    public async Task ExternalSystemMessageReceived_FromExternalServer_RoutesToOtherSystemsNormally()
+    {
+        FakeExternalSystem externalServer = new("Server");
+        FakeExternalSystem other1 = new("Other1");
+        FakeExternalSystem other2 = new("Other2");
+        FakePeerService peer = new();
+        ExternalSystemsService service = new(MakeController([externalServer, other1, other2], externalServer), peer, noLogger);
+
+        using CancellationTokenSource cts = new();
+        Task startTask = service.Start(cts.Token);
+        await Task.Delay(50);
+
+        TestMessage message = new() { MessageId = "M1" };
+        await externalServer.Deliver(message);
+
+        Assert.Single(other1.SentMessages);
+        Assert.Same(message, other1.SentMessages[0]);
+        Assert.Single(other2.SentMessages);
+        Assert.Same(message, other2.SentMessages[0]);
+        Assert.Empty(externalServer.SentMessages);
 
         cts.Cancel();
         await startTask.WaitAsync(TimeSpan.FromSeconds(2));

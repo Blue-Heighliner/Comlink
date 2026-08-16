@@ -1,15 +1,17 @@
 namespace BlueHeighliner.Comlink.Engine.ExternalSystems;
 
 /// <summary>
-/// Coordinates every configured <see cref="IExternalSystem"/> (see <see cref="Control.IEngineController.GetExternalSystems"/>):
-/// runs each one's own connect/poll/disconnect lifecycle, relays every message the app receives (from a
-/// peer, or from any other external system) out to every <em>other</em> external system, and processes
-/// every message received from an external system exactly like an ordinary received message — see
-/// <c>Docs/ExternalSystems.md</c>.
+/// Coordinates every configured <see cref="IExternalSystem"/> (see <see cref="Control.IEngineController.ExternalSystems"/>):
+/// runs each one's own connect/poll/disconnect lifecycle, routes every message the app receives (from a
+/// peer, or from any other external system) out to other external systems, and processes every message
+/// received from an external system exactly like an ordinary received message — see
+/// <c>Docs/ExternalSystems.md</c>. When <see cref="Control.IEngineController.ExternalServer"/> is set, a
+/// message not received from it is instead sent exclusively to it; a message received from it is routed
+/// to every other external system exactly as it would be without one configured.
 /// </summary>
 internal interface IExternalSystemsService
 {
-    /// <summary>Starts every configured external system's connect/poll/disconnect lifecycle and wires up message relaying. Blocks until <paramref name="cancellation"/> is cancelled.</summary>
+    /// <summary>Starts every configured external system's connect/poll/disconnect lifecycle and wires up message routing. Blocks until <paramref name="cancellation"/> is cancelled.</summary>
     Task Start(CancellationToken cancellation);
 }
 
@@ -20,12 +22,14 @@ internal sealed class ExternalSystemsService : IExternalSystemsService
     public ExternalSystemsService(IEngineController engineController, IPeerService peerService, ILoggerFactory loggerFactory)
     {
         this.peerService = peerService;
-        systems = engineController.GetExternalSystems();
+        systems = engineController.ExternalSystems;
+        externalServer = engineController.ExternalServer;
         logger = loggerFactory.CreateLogger("ACTIVITY");
     }
 
     private readonly IPeerService peerService;
     private readonly IReadOnlyList<IExternalSystem> systems;
+    private readonly IExternalSystem? externalServer;
     private readonly ILogger logger;
     private readonly AsyncLocal<IExternalSystem?> receivingFrom = new();
 
@@ -34,7 +38,7 @@ internal sealed class ExternalSystemsService : IExternalSystemsService
     {
         if (systems.Count == 0) { return; }
 
-        peerService.MessageDelivered += RelayToOtherExternalSystems;
+        peerService.MessageDelivered += RouteToExternalSystems;
         foreach (IExternalSystem system in systems)
         {
             system.AttachLogger(logger);
@@ -47,7 +51,7 @@ internal sealed class ExternalSystemsService : IExternalSystemsService
         }
         finally
         {
-            peerService.MessageDelivered -= RelayToOtherExternalSystems;
+            peerService.MessageDelivered -= RouteToExternalSystems;
         }
     }
 
@@ -60,10 +64,10 @@ internal sealed class ExternalSystemsService : IExternalSystemsService
 
     private async Task OnExternalSystemMessageReceived(IExternalSystem source, object message)
     {
-        // Marks this logical call chain as "currently relaying a message received from `source`" so that
-        // RelayToOtherExternalSystems — invoked synchronously underneath DeliverLocal, below — knows to
-        // skip sending the message back to the very system it just arrived from. AsyncLocal (rather than a
-        // plain field) keeps this correct if more than one external system receives a message concurrently.
+        // Marks this logical call chain as "currently routing a message received from `source`" so that
+        // RouteToExternalSystems — invoked synchronously underneath DeliverLocal, below — knows where the
+        // message came from. AsyncLocal (rather than a plain field) keeps this correct if more than one
+        // external system receives a message concurrently.
         receivingFrom.Value = source;
         try
         {
@@ -77,12 +81,22 @@ internal sealed class ExternalSystemsService : IExternalSystemsService
         }
     }
 
-    private async Task RelayToOtherExternalSystems(object message)
+    private async Task RouteToExternalSystems(object message)
     {
-        IExternalSystem? exclude = receivingFrom.Value;
+        IExternalSystem? source = receivingFrom.Value;
+
+        // A message not received from the external server (composed locally by the user, received from a
+        // peer connection, or received from any other external system) goes exclusively to it, bypassing
+        // every other configured external system.
+        if (externalServer is not null && !ReferenceEquals(source, externalServer))
+        {
+            await externalServer.Send(message);
+            return;
+        }
+
         foreach (IExternalSystem system in systems)
         {
-            if (ReferenceEquals(system, exclude)) { continue; }
+            if (ReferenceEquals(system, source)) { continue; }
             await system.Send(message);
         }
     }

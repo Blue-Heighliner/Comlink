@@ -347,20 +347,21 @@ Determines whether the `--config` command-line argument is honored at all. Resol
 ### External Systems
 
 ```csharp
-IReadOnlyList<IExternalSystem> GetExternalSystems();
+IReadOnlyList<IExternalSystem> ExternalSystems { get; }
+IExternalSystem? ExternalServer { get; }
 ```
 
-The list of external systems (conduits to systems outside Comlink — a socket, a message queue, an HTTP long-poll, etc.) this instance communicates with, resolved once at startup by `ExternalSystemsService`. See `Docs/ExternalSystems.md` for the full contract and behavior; the shape here is deliberately terse since that doc covers it in depth.
+`ExternalSystems` is the list of external systems (conduits to systems outside Comlink — a socket, a message queue, an HTTP long-poll, etc.) this instance communicates with, resolved once at startup by `ExternalSystemsService`. `ExternalServer` designates one entry of `ExternalSystems` (or `null`, the default) as the exclusive upstream hub every outbound message is routed through instead of the normal peer network and every other external system. See `Docs/ExternalSystems.md` for the full contract and behavior; the shape here is deliberately terse since that doc covers it in depth.
 
-Like [Message Format](#message-format) and `GetPrintCount`, this member is declared on `IEngineController` as `IReadOnlyList<IExternalSystem>` (a non-generic interface, so `ExternalSystemsService` can hold and drive every configured external system uniformly, regardless of the host's message type) but implemented on `DefaultEngineController<TMessage>` via `public virtual IReadOnlyList<ExternalSystemBase<TMessage>> GetExternalSystems() => [];` plus an explicit interface implementation bridging the two — `IReadOnlyList<T>`'s covariance means no manual mapping is needed, since `ExternalSystemBase<TMessage> : IExternalSystem`.
+Unlike [Message Format](#message-format) and `GetPrintCount`, these members are not generic-bridged — `IExternalSystem` is already non-generic (see `Docs/ExternalSystems.md`), so `DefaultEngineController<TMessage>` declares `public virtual IReadOnlyList<IExternalSystem> ExternalSystems { get; } = [];` and `public virtual IExternalSystem? ExternalServer { get; } = null;` directly, satisfying `IEngineController`'s members with no cast or explicit interface implementation needed. `ExternalSystemBase<TMessage>` (see `Docs/ExternalSystems.md`) is available as an optional convenience base class for implementing `IExternalSystem` with less boilerplate — the connect/poll/disconnect lifecycle, filtering, etc. — but is never required or referenced by `IEngineController`/`DefaultEngineController<TMessage>` themselves; any `IExternalSystem` implementation, base class or not, works here.
 
-Each returned `ExternalSystemBase<TMessage>` is constructed directly by this member, not resolved through DI — so it must never take `ILoggerFactory` as a constructor dependency itself (that would create a circular dependency: resolving `IEngineController` would require `ILoggerFactory`, whose logging providers, e.g. `DailyFileLoggerProvider`, themselves require `IEngineController` for their log file location). `ExternalSystemsService` instead calls `IExternalSystem.AttachLogger` on each configured system, using its own safely-resolved `ILoggerFactory`, before starting it — see `Docs/ExternalSystems.md`.
+Each returned `IExternalSystem` is constructed directly by this member, not resolved through DI — so it must never take `ILoggerFactory` as a constructor dependency itself (that would create a circular dependency: resolving `IEngineController` would require `ILoggerFactory`, whose logging providers, e.g. `DailyFileLoggerProvider`, themselves require `IEngineController` for their log file location). `ExternalSystemsService` instead calls `IExternalSystem.AttachLogger` on each configured system, using its own safely-resolved `ILoggerFactory`, before starting it — see `Docs/ExternalSystems.md`.
 
-**Engine default:** an empty list — no external systems.
+**Engine default:** an empty list for `ExternalSystems` — no external systems; `null` for `ExternalServer` — no gateway behavior.
 
-**Config override:** none — there is no `config.json` field for external systems (a system-specific connection endpoint, credential, etc. belongs to each `ExternalSystemBase<TMessage>` subclass's own constructor, not a generic config schema). Always delegates straight to the wrapped provider.
+**Config override:** none — there is no `config.json` field for either member (a system-specific connection endpoint, credential, etc. belongs to each `IExternalSystem` implementation's own constructor, not a generic config schema; which one is the exclusive upstream hub is likewise a host-code decision, not something a deployment config toggles). Both always delegate straight to the wrapped provider.
 
-**Sample override:** `SampleEngineController` overrides `GetExternalSystems` to return a single `SampleExternalSystem`, demonstrating the conduit pattern with a self-contained simulated connection (see `Docs/ExternalSystems.md`).
+**Sample override:** `SampleEngineController` overrides `ExternalSystems` to return a single `SampleExternalSystem`, demonstrating the conduit pattern with a self-contained simulated connection (see `Docs/ExternalSystems.md`); it does not override `ExternalServer`, since a single-external-system setup has nothing else to designate it as exclusive relative to.
 
 ---
 
