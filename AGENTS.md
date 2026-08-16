@@ -27,6 +27,7 @@ The `Docs/` folder contains component documentation. **Review and update relevan
 | `Docs/Logging.md` | Logging providers and format |
 | `Docs/Control.md` | DI control interfaces — concept, required vs optional, each interface explained |
 | `Docs/Configuration.md` | All DI configuration interfaces |
+| `Docs/ExternalSystems.md` | External system conduit contract, lifecycle, relay/mirror behavior, Sample demo |
 
 When making changes that affect the interface wire format, peer protocol, data schema, or any configuration interface, update the corresponding doc file in the same commit.
 

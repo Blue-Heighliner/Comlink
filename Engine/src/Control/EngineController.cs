@@ -5,10 +5,10 @@ namespace BlueHeighliner.Comlink.Engine.Control;
 /// customises Engine behaviour without modifying Engine code: the concrete message type and its logical
 /// field mapping, app identity/presentation, local user identity, the user/group directory, listener
 /// ports, alert settings, message composition, the automatic print policy, OFT peer certificate naming
-/// and peer options, network topology, and whether <c>config.json</c> is read at all. External drive
-/// discovery and printer discovery/driving are real OS-level behavior, not configuration or rules, so
-/// they live on <see cref="Devices.IExternalDriveProvider"/> and <see cref="Devices.IPrintDriver"/>
-/// instead. See <c>Docs/Control.md</c>.
+/// and peer options, network topology, the external systems this instance communicates with, and whether
+/// <c>config.json</c> is read at all. External drive discovery and printer discovery/driving are real
+/// OS-level behavior, not configuration or rules, so they live on <see cref="Devices.IExternalDriveProvider"/>
+/// and <see cref="Devices.IPrintDriver"/> instead. See <c>Docs/Control.md</c>.
 /// </summary>
 public interface IEngineController
 {
@@ -190,6 +190,12 @@ public interface IEngineController
     /// </summary>
     /// <param name="userName">The local user name for which to resolve a certificate name.</param>
     string? GetCertificateName(string userName);
+
+    /// <summary>
+    /// Returns the external systems this instance communicates with — see
+    /// <see cref="DefaultEngineController{TMessage}.GetExternalSystems"/>.
+    /// </summary>
+    IReadOnlyList<IExternalSystem> GetExternalSystems();
 }
 
 /// <summary>
@@ -361,6 +367,18 @@ public abstract class DefaultEngineController<TMessage> : IEngineController wher
 
     /// <inheritdoc />
     public virtual string? GetCertificateName(string userName) => $"USER-{userName}";
+
+    /// <summary>
+    /// Returns the external systems this instance communicates with — each a conduit relaying messages to
+    /// and from another system outside Comlink (see <see cref="ExternalSystems.ExternalSystemBase{TMessage}"/>).
+    /// Called once at startup by <see cref="ExternalSystems.ExternalSystemsService"/>: every message this
+    /// instance receives (from a peer, or from any other external system) is sent through every other
+    /// external system in the returned list, and every message received from one is processed exactly like
+    /// an ordinary received message. The default returns an empty list — override to provide one or more.
+    /// </summary>
+    public virtual IReadOnlyList<ExternalSystemBase<TMessage>> GetExternalSystems() => [];
+
+    IReadOnlyList<IExternalSystem> IEngineController.GetExternalSystems() => GetExternalSystems();
 }
 
 /// <summary>
@@ -616,4 +634,7 @@ internal sealed class ConfiguredEngineController : IEngineController
             "disable" => null,
             string name => name
         };
+
+    /// <inheritdoc />
+    public IReadOnlyList<IExternalSystem> GetExternalSystems() => fallback.GetExternalSystems();
 }

@@ -1,9 +1,11 @@
 global using Microsoft.Extensions.DependencyInjection;
+global using Microsoft.Extensions.Logging;
 global using ProtoBuf;
 global using System.Diagnostics;
 global using System.Reflection;
 global using BlueHeighliner.Comlink.Engine;
 global using BlueHeighliner.Comlink.Engine.Control;
 global using BlueHeighliner.Comlink.Engine.Data;
+global using BlueHeighliner.Comlink.Engine.ExternalSystems;
 global using BlueHeighliner.Comlink.Engine.Models;
 global using BlueHeighliner.Comlink.Engine.Services;

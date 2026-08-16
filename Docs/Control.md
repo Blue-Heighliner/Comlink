@@ -344,6 +344,26 @@ Determines whether the `--config` command-line argument is honored at all. Resol
 
 ---
 
+### External Systems
+
+```csharp
+IReadOnlyList<IExternalSystem> GetExternalSystems();
+```
+
+The list of external systems (conduits to systems outside Comlink — a socket, a message queue, an HTTP long-poll, etc.) this instance communicates with, resolved once at startup by `ExternalSystemsService`. See `Docs/ExternalSystems.md` for the full contract and behavior; the shape here is deliberately terse since that doc covers it in depth.
+
+Like [Message Format](#message-format) and `GetPrintCount`, this member is declared on `IEngineController` as `IReadOnlyList<IExternalSystem>` (a non-generic interface, so `ExternalSystemsService` can hold and drive every configured external system uniformly, regardless of the host's message type) but implemented on `DefaultEngineController<TMessage>` via `public virtual IReadOnlyList<ExternalSystemBase<TMessage>> GetExternalSystems() => [];` plus an explicit interface implementation bridging the two — `IReadOnlyList<T>`'s covariance means no manual mapping is needed, since `ExternalSystemBase<TMessage> : IExternalSystem`.
+
+Each returned `ExternalSystemBase<TMessage>` is constructed directly by this member, not resolved through DI — so it must never take `ILoggerFactory` as a constructor dependency itself (that would create a circular dependency: resolving `IEngineController` would require `ILoggerFactory`, whose logging providers, e.g. `DailyFileLoggerProvider`, themselves require `IEngineController` for their log file location). `ExternalSystemsService` instead calls `IExternalSystem.AttachLogger` on each configured system, using its own safely-resolved `ILoggerFactory`, before starting it — see `Docs/ExternalSystems.md`.
+
+**Engine default:** an empty list — no external systems.
+
+**Config override:** none — there is no `config.json` field for external systems (a system-specific connection endpoint, credential, etc. belongs to each `ExternalSystemBase<TMessage>` subclass's own constructor, not a generic config schema). Always delegates straight to the wrapped provider.
+
+**Sample override:** `SampleEngineController` overrides `GetExternalSystems` to return a single `SampleExternalSystem`, demonstrating the conduit pattern with a self-contained simulated connection (see `Docs/ExternalSystems.md`).
+
+---
+
 ## Client API
 
 ---

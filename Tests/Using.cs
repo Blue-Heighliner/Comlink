@@ -8,6 +8,7 @@ global using BlueHeighliner.Comlink.Engine.Data;
 global using BlueHeighliner.Comlink.Engine.Data.Entities;
 global using BlueHeighliner.Comlink.Engine.Data.Repositories;
 global using BlueHeighliner.Comlink.Engine.Devices;
+global using BlueHeighliner.Comlink.Engine.ExternalSystems;
 global using BlueHeighliner.Comlink.Engine.Models;
 global using BlueHeighliner.Comlink.Engine.Peer;
 global using BlueHeighliner.Comlink.Engine.Services;

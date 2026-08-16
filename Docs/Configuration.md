@@ -17,6 +17,7 @@ All external configuration and rule-based behavior — including the concrete me
 | OFT Certificate | `GetCertificateName(userName)`, `ConnectionOptions` |
 | Network Topology | `Role`, `ServerEndpoint`, `Servers` |
 | Config File | `ConfigFileEnabled` |
+| External Systems | `GetExternalSystems()` |
 
 Members with a corresponding `config.json` field are listed in [Config.md](Config.md) and overridden field-by-field by `ConfiguredEngineController`; every other member always delegates straight to whichever `IEngineController` implementation is registered (the host's `DefaultEngineController<TMessage>` subclass). See [Control.md](Control.md) for the full description, Engine default, config override, and Sample override of each app area.
 

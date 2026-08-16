@@ -9,6 +9,7 @@ internal sealed class EngineHost : IHostedService
         IUserService userService,
         IPeerService peerService,
         IInterfaceService interfaceService,
+        IExternalSystemsService externalSystemsService,
         IEngineController engineController,
         EngineMode mode,
         ILoggerFactory loggerFactory)
@@ -16,6 +17,7 @@ internal sealed class EngineHost : IHostedService
         this.userService = userService;
         this.peerService = peerService;
         this.interfaceService = interfaceService;
+        this.externalSystemsService = externalSystemsService;
         logger = loggerFactory.CreateLogger("APP");
         displayName = mode == EngineMode.Headless ? $"{engineController.AppName} (Headless)" : engineController.AppName;
     }
@@ -23,6 +25,7 @@ internal sealed class EngineHost : IHostedService
     private readonly IUserService userService;
     private readonly IPeerService peerService;
     private readonly IInterfaceService interfaceService;
+    private readonly IExternalSystemsService externalSystemsService;
     private readonly ILogger logger;
     private readonly string displayName;
     private CancellationTokenSource? cts;
@@ -38,6 +41,7 @@ internal sealed class EngineHost : IHostedService
 
         _ = Task.Run(() => peerService.Start(cancellation), cancellation);
         _ = Task.Run(() => interfaceService.Start(cancellation), cancellation);
+        _ = Task.Run(() => externalSystemsService.Start(cancellation), cancellation);
 
         logger.LogInformation("{AppName} started", displayName);
     }

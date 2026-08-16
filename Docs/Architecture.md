@@ -40,6 +40,8 @@ Engine/src/
 │   └── Repositories/
 ├── Devices/       Real OS-level device integrations, not control interfaces — alarm sound
 │                  playback, printer discovery/driving, external drive discovery
+├── ExternalSystems/ Conduits to systems outside Comlink — connect/poll/send/receive lifecycle
+│                  and the relay/mirror coordinator — see ExternalSystems.md
 ├── Logging/        Daily file logger + activity log writer
 ├── Models/         Shared DTOs (UserInfo, UserEndpoint, UserState, Folder, etc.)
 ├── Peer/           P2P networking over OFT — send/receive messages between nodes, and the
@@ -96,6 +98,11 @@ When the user opens that Inbox message, `ContentAreaViewModel` calls `IServiceCo
 1. Remote node sends to this user's `PeerService` over OFT.
 2. `InterfaceService` (subscribed to `PeerService.MessageDelivered`) mirrors the message, unmodified, to every currently connected interface connection.
 3. Any connected external program receives it directly over its own OFT connection — see [Interface.md](Interface.md). This happens in both Client and Headless mode.
+
+### Receiving/relaying a message (via an external system)
+1. An external system (`IEngineController.GetExternalSystems()`) reports an inbound message via `Receive`.
+2. `ExternalSystemsService` calls `IPeerService.DeliverLocal`, which processes it exactly like an ordinary received message (stored, shown in the UI, mirrored to any connected interface) and raises `MessageDelivered`.
+3. `ExternalSystemsService`'s own `MessageDelivered` subscription relays the message out through every other configured external system, excluding the one it was originally received from. This happens in both Client and Headless mode. See [ExternalSystems.md](ExternalSystems.md).
 
 ### Sending a message from an interface
 1. An external program sends an instance of `IEngineController.MessageType` on its interface connection.

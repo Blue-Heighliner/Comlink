@@ -13,6 +13,7 @@ namespace BlueHeighliner.Comlink.Sample;
 /// <item><description><see cref="Priorities"/>/<see cref="BlockedCombinations"/> — three priority levels and both blocked-combination kinds.</description></item>
 /// <item><description><see cref="GetPrintCount"/> — prints an alert message twice and every other received message once.</description></item>
 /// <item><description><see cref="ConfigFileEnabled"/> — <see langword="true"/>, so Sample honors a <c>--config</c> argument, unlike the Engine default.</description></item>
+/// <item><description><see cref="GetExternalSystems"/> — a single demo <see cref="SampleExternalSystem"/>, showing the external-system conduit pattern.</description></item>
 /// </list>
 /// Actual alarm sound playback and printer discovery/driving are real platform behavior always provided by
 /// the engine itself, not something Sample overrides here.
@@ -104,4 +105,8 @@ public sealed class SampleEngineController(ICurrentUserProvider currentUserProvi
 
     /// <inheritdoc />
     public override int GetPrintCount(SampleMessage message) => GetIsAlert(message) ? 2 : 1;
+
+    /// <inheritdoc />
+    public override IReadOnlyList<ExternalSystemBase<SampleMessage>> GetExternalSystems()
+        => [new SampleExternalSystem()];
 }
