@@ -521,6 +521,25 @@ public sealed class EntryBarViewModelTests
         svc.Verify(s => s.DeleteEntry("M1", EntryType.Message), Times.Once);
     }
 
+    /// <summary>DeleteEntry raises EntryDeleted with the deleted entry after removing it.</summary>
+    [Fact]
+    public async Task DeleteEntry_RaisesEntryDeleted()
+    {
+        Mock<IEntryService> svc = new();
+        svc.Setup(s => s.GetMessages(It.IsAny<string>(), It.IsAny<int>()))
+           .ReturnsAsync((Items: new List<MessageEntity> { MakeMessage("M1") }, Total: 1));
+        svc.Setup(s => s.DeleteEntry(It.IsAny<string>(), It.IsAny<EntryType>())).Returns(Task.CompletedTask);
+        EntryBarViewModel vm = new(svc.Object, format);
+        await vm.LoadFolder(MakeFolder("root-inbox", FolderType.Inbox));
+        EntryItemViewModel entry = vm.Entries[0];
+        List<EntryItemViewModel> raised = [];
+        vm.EntryDeleted += raised.Add;
+
+        await vm.DeleteEntry(entry);
+
+        Assert.Equal([entry], raised);
+    }
+
     /// <summary>DeleteEntry is a silent no-op when IEngineController.CanDelete forbids deletion for the active folder's root type.</summary>
     [Fact]
     public async Task DeleteEntry_ForbiddenByController_DoesNotCallServiceOrRemoveFromList()
@@ -534,11 +553,50 @@ public sealed class EntryBarViewModelTests
         EntryBarViewModel vm = new(svc.Object, controller.Object);
         await vm.LoadFolder(MakeFolder("root-inbox", FolderType.Inbox));
         EntryItemViewModel entry = vm.Entries[0];
+        bool raised = false;
+        vm.EntryDeleted += _ => raised = true;
 
         await vm.DeleteEntry(entry);
 
         Assert.Single(vm.Entries);
         svc.Verify(s => s.DeleteEntry(It.IsAny<string>(), It.IsAny<EntryType>(), It.IsAny<bool>()), Times.Never);
+        Assert.False(raised);
+    }
+
+    /// <summary>LoadFolder sets CanDeleteEntries from IEngineController.CanDelete for the folder's root type.</summary>
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public async Task LoadFolder_SetsCanDeleteEntriesFromController(bool canDelete)
+    {
+        Mock<TestEngineController> controller = new() { CallBase = true };
+        controller.Setup(c => c.CanDelete(FolderType.Inbox)).Returns(canDelete);
+        Mock<IEntryService> svc = new();
+        svc.Setup(s => s.GetMessages(It.IsAny<string>(), It.IsAny<int>()))
+           .ReturnsAsync((Items: new List<MessageEntity>(), Total: 0));
+        EntryBarViewModel vm = new(svc.Object, controller.Object);
+
+        await vm.LoadFolder(MakeFolder("root-inbox", FolderType.Inbox));
+
+        Assert.Equal(canDelete, vm.CanDeleteEntries);
+    }
+
+    /// <summary>The generated DeleteCommand, bound to the entry list's right-click "Delete" menu item, delegates to DeleteEntry.</summary>
+    [Fact]
+    public async Task DeleteCommand_CallsServiceAndRemovesFromList()
+    {
+        Mock<IEntryService> svc = new();
+        svc.Setup(s => s.GetMessages(It.IsAny<string>(), It.IsAny<int>()))
+           .ReturnsAsync((Items: new List<MessageEntity> { MakeMessage("M1") }, Total: 1));
+        svc.Setup(s => s.DeleteEntry(It.IsAny<string>(), It.IsAny<EntryType>())).Returns(Task.CompletedTask);
+        EntryBarViewModel vm = new(svc.Object, format);
+        await vm.LoadFolder(MakeFolder("root-inbox", FolderType.Inbox));
+        EntryItemViewModel entry = vm.Entries[0];
+
+        await vm.DeleteCommand.ExecuteAsync(entry);
+
+        Assert.Empty(vm.Entries);
+        svc.Verify(s => s.DeleteEntry("M1", EntryType.Message), Times.Once);
     }
 
     /// <summary>SetPendingSelectId causes the matching entry to be auto-selected after the next refresh.</summary>

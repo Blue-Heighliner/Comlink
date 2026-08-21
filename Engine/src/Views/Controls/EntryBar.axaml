@@ -74,6 +74,10 @@
                 <MenuItem Header="Print"
                           Command="{Binding $parent[Window].DataContext.PrintEntryCommand}"
                           CommandParameter="{Binding}" />
+                <MenuItem Header="Delete"
+                          Command="{Binding $parent[UserControl].DataContext.DeleteCommand}"
+                          CommandParameter="{Binding}"
+                          IsVisible="{Binding $parent[UserControl].DataContext.CanDeleteEntries}" />
               </ContextMenu>
             </Grid.ContextMenu>
             <StackPanel Grid.Column="0" Margin="0,0,8,0">

@@ -303,6 +303,84 @@ public sealed class MainViewModelTests
         s.Export.Verify(e => e.AddEntry(It.IsAny<EntryItemViewModel>()), Times.Never);
     }
 
+    /// <summary>Deleting the entry currently shown in the content area (matched by MessageId) resets it to the home screen.</summary>
+    [Fact]
+    public void EntryDeleted_MatchesActiveMessage_ShowsHome()
+    {
+        Setup s = new();
+        Mock<IMessageViewModel> messageVm = new();
+        messageVm.Setup(m => m.MessageId).Returns("E1");
+        s.ContentArea.Setup(c => c.ActiveContent).Returns(messageVm.Object);
+        MainViewModel vm = s.BuildVm();
+        EntryItemViewModel entry = new("E1", "Title", EntryType.Message, DateTime.UtcNow);
+
+        s.EntryBar.Raise(e => e.EntryDeleted += null!, entry);
+
+        s.ContentArea.Verify(c => c.ShowHome(), Times.Once);
+    }
+
+    /// <summary>Deleting an entry that is not the one currently shown in the content area leaves it untouched.</summary>
+    [Fact]
+    public void EntryDeleted_DoesNotMatchActiveMessage_DoesNotShowHome()
+    {
+        Setup s = new();
+        Mock<IMessageViewModel> messageVm = new();
+        messageVm.Setup(m => m.MessageId).Returns("OTHER");
+        s.ContentArea.Setup(c => c.ActiveContent).Returns(messageVm.Object);
+        MainViewModel vm = s.BuildVm();
+        EntryItemViewModel entry = new("E1", "Title", EntryType.Message, DateTime.UtcNow);
+
+        s.EntryBar.Raise(e => e.EntryDeleted += null!, entry);
+
+        s.ContentArea.Verify(c => c.ShowHome(), Times.Never);
+    }
+
+    /// <summary>Deleting the draft currently shown in the content area (matched by Id) resets it to the home screen.</summary>
+    [Fact]
+    public void EntryDeleted_MatchesActiveDraft_ShowsHome()
+    {
+        Setup s = new();
+        Mock<IDraftViewModel> draftVm = new();
+        draftVm.Setup(d => d.Id).Returns("D1");
+        s.ContentArea.Setup(c => c.ActiveContent).Returns(draftVm.Object);
+        MainViewModel vm = s.BuildVm();
+        EntryItemViewModel entry = new("D1", "Title", EntryType.Draft, DateTime.UtcNow);
+
+        s.EntryBar.Raise(e => e.EntryDeleted += null!, entry);
+
+        s.ContentArea.Verify(c => c.ShowHome(), Times.Once);
+    }
+
+    /// <summary>Deleting the note currently shown in the content area (matched by Id) resets it to the home screen.</summary>
+    [Fact]
+    public void EntryDeleted_MatchesActiveNote_ShowsHome()
+    {
+        Setup s = new();
+        Mock<INoteViewModel> noteVm = new();
+        noteVm.Setup(n => n.Id).Returns("N1");
+        s.ContentArea.Setup(c => c.ActiveContent).Returns(noteVm.Object);
+        MainViewModel vm = s.BuildVm();
+        EntryItemViewModel entry = new("N1", "Title", EntryType.Note, DateTime.UtcNow);
+
+        s.EntryBar.Raise(e => e.EntryDeleted += null!, entry);
+
+        s.ContentArea.Verify(c => c.ShowHome(), Times.Once);
+    }
+
+    /// <summary>When the content area is showing something unrelated (e.g. the home screen or export view), deleting an entry does not touch it.</summary>
+    [Fact]
+    public void EntryDeleted_ActiveContentIsUnrelated_DoesNotShowHome()
+    {
+        Setup s = new();
+        s.ContentArea.Setup(c => c.ActiveContent).Returns((object?)null);
+        MainViewModel vm = s.BuildVm();
+        EntryItemViewModel entry = new("E1", "Title", EntryType.Message, DateTime.UtcNow);
+
+        s.EntryBar.Raise(e => e.EntryDeleted += null!, entry);
+
+        s.ContentArea.Verify(c => c.ShowHome(), Times.Never);
+    }
+
     /// <summary>ShowExportCommand refreshes the drive list and displays the export ViewModel in the content area.</summary>
     [Fact]
     public void ShowExportCommand_RefreshesDrivesAndShowsExportView()

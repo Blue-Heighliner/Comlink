@@ -248,6 +248,21 @@ public sealed partial class MainViewModel : ObservableObject, IMainViewModel
             }
         };
 
+        entryBar.EntryDeleted += entry =>
+        {
+            bool isActiveContent = contentArea.ActiveContent switch
+            {
+                IMessageViewModel msg => msg.MessageId == entry.Id,
+                IDraftViewModel draft => draft.Id == entry.Id,
+                INoteViewModel note => note.Id == entry.Id,
+                _ => false
+            };
+            if (isActiveContent)
+            {
+                contentArea.ShowHome();
+            }
+        };
+
         installViewModel.InstallSucceeded += async info =>
         {
             db.Initialize();

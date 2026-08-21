@@ -5,6 +5,8 @@ public interface IEntryBarViewModel
 {
     /// <summary>Raised when the user's selection in the list changes, carrying every entry newly added to the selection (one for a plain click, several for a shift-range or accumulated ctrl-click selection).</summary>
     event Action<IReadOnlyList<EntryItemViewModel>>? EntriesSelected;
+    /// <summary>Raised after an entry is successfully deleted via <see cref="DeleteEntry"/> (not raised on the silent no-op path).</summary>
+    event Action<EntryItemViewModel>? EntryDeleted;
 
     /// <summary>Gets or sets the currently selected entry.</summary>
     EntryItemViewModel? SelectedEntry { get; set; }
@@ -22,6 +24,8 @@ public interface IEntryBarViewModel
     bool CanGoPrev { get; set; }
     /// <summary>Gets or sets a value indicating whether the sort toggle control is visible.</summary>
     bool ShowSortToggle { get; set; }
+    /// <summary>Gets or sets a value indicating whether entries in the current folder can be deleted, per <see cref="IEngineController.CanDelete"/>.</summary>
+    bool CanDeleteEntries { get; set; }
 
     /// <summary>Loads the first page of entries for the given folder and resets pagination.</summary>
     Task LoadFolder(FolderItemViewModel folder);
@@ -75,6 +79,7 @@ public sealed partial class EntryBarViewModel : ObservableObject, IEntryBarViewM
     [ObservableProperty] private bool canGoNext;
     [ObservableProperty] private bool canGoPrev;
     [ObservableProperty] private bool showSortToggle;
+    [ObservableProperty] private bool canDeleteEntries;
 
     private FolderItemViewModel? currentFolder;
     private string? pendingSelectId;
@@ -83,6 +88,8 @@ public sealed partial class EntryBarViewModel : ObservableObject, IEntryBarViewM
     public ObservableCollection<EntryItemViewModel> Entries { get; } = [];
     /// <inheritdoc />
     public event Action<IReadOnlyList<EntryItemViewModel>>? EntriesSelected;
+    /// <inheritdoc />
+    public event Action<EntryItemViewModel>? EntryDeleted;
 
     private string GetPriorityLabel(object message) => engineController.Priorities.GetLabel(engineController.GetPriority(message));
 
@@ -99,6 +106,7 @@ public sealed partial class EntryBarViewModel : ObservableObject, IEntryBarViewM
         currentFolder = folder;
         CurrentPage = 1;
         ShowSortToggle = folder.RootType is FolderType.Drafts or FolderType.Notes;
+        CanDeleteEntries = engineController.CanDelete(folder.RootType);
         DeselectEntry();
         await Refresh();
     }
@@ -282,7 +290,12 @@ public sealed partial class EntryBarViewModel : ObservableObject, IEntryBarViewM
 
         await entryService.DeleteEntry(entry.Id, entry.EntryType, entry.IsOutboundMessage);
         Entries.Remove(entry);
+        EntryDeleted?.Invoke(entry);
     }
+
+    /// <summary>Bound to the entry list's right-click "Delete" context menu item (<see cref="CanDeleteEntries"/> controls its visibility).</summary>
+    [RelayCommand]
+    private Task Delete(EntryItemViewModel entry) => DeleteEntry(entry);
 
     /// <summary>Queues an entry ID to be auto-selected after the next refresh.</summary>
     public void SetPendingSelectId(string id) => pendingSelectId = id;
