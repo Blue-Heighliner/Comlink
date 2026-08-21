@@ -338,6 +338,28 @@ public sealed class ControlProviderTests
         Assert.Equal(5, controller.GetPrintCount(new object()));
     }
 
+    /// <summary>The default implementation allows deletion in every root folder type.</summary>
+    [Fact]
+    public void DefaultEngineController_CanDelete_DefaultsToTrueForEveryFolderType()
+    {
+        TestEngineController controller = new();
+        foreach (FolderType folderType in Enum.GetValues<FolderType>())
+        {
+            Assert.True(controller.CanDelete(folderType));
+        }
+    }
+
+    /// <summary>CanDelete always delegates to the wrapped provider, since there is no corresponding config.json field.</summary>
+    [Fact]
+    public void ConfiguredEngineController_CanDelete_AlwaysDelegatesToFallback()
+    {
+        Mock<IEngineController> fallback = new();
+        fallback.Setup(f => f.CanDelete(FolderType.Drafts)).Returns(false);
+        ConfiguredEngineController controller = new(fallback.Object, new EngineConfig(), NoCurrentUser);
+
+        Assert.False(controller.CanDelete(FolderType.Drafts));
+    }
+
     /// <summary>The default implementation always returns the auto-detected name.</summary>
     [Fact]
     public void DefaultEngineController_GetCertificateName_AlwaysReturnsAutoName()

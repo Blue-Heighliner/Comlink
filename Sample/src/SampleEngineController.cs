@@ -12,6 +12,7 @@ namespace BlueHeighliner.Comlink.Sample;
 /// <item><description><see cref="Users"/> — three hard-coded built-in user names matching those codes.</description></item>
 /// <item><description><see cref="Priorities"/>/<see cref="BlockedCombinations"/> — three priority levels and both blocked-combination kinds.</description></item>
 /// <item><description><see cref="GetPrintCount"/> — prints an alert message twice and every other received message once.</description></item>
+/// <item><description><see cref="CanDelete"/> — only <see cref="FolderType.Drafts"/> and <see cref="FolderType.Notes"/> entries can be deleted; Inbox, Outbox, and Activity are protected.</description></item>
 /// <item><description><see cref="ConfigFileEnabled"/> — <see langword="true"/>, so Sample honors a <c>--config</c> argument, unlike the Engine default.</description></item>
 /// <item><description><see cref="ExternalSystems"/> — a single demo <see cref="SampleExternalSystem"/>, showing the external-system conduit pattern.</description></item>
 /// </list>
@@ -107,4 +108,7 @@ public sealed class SampleEngineController(ICurrentUserProvider currentUserProvi
 
     /// <inheritdoc />
     public override int GetPrintCount(SampleMessage message) => GetIsAlert(message) ? 2 : 1;
+
+    /// <inheritdoc />
+    public override bool CanDelete(FolderType folderType) => folderType is FolderType.Drafts or FolderType.Notes;
 }

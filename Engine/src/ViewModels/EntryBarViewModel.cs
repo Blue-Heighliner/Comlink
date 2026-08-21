@@ -31,7 +31,11 @@ public interface IEntryBarViewModel
     Task UpdateEntryStatus(string messageId, DestinationStatus? overallStatus);
     /// <summary>Inserts an entry at the top of the current page when the active folder and page match.</summary>
     Task PrependEntry(EntryItemViewModel entry);
-    /// <summary>Deletes the given entry from the data store and removes it from the current list.</summary>
+    /// <summary>
+    /// Deletes the given entry from the data store and removes it from the current list, unless
+    /// <see cref="IEngineController.CanDelete"/> forbids deletion for the active folder's root type, in
+    /// which case this is a silent no-op.
+    /// </summary>
     Task DeleteEntry(EntryItemViewModel entry);
     /// <summary>Queues an entry ID to be auto-selected after the next refresh.</summary>
     void SetPendingSelectId(string id);
@@ -271,9 +275,11 @@ public sealed partial class EntryBarViewModel : ObservableObject, IEntryBarViewM
         UpdatePagination(total);
     }
 
-    /// <summary>Deletes the given entry from the data store and removes it from the current list.</summary>
+    /// <inheritdoc />
     public async Task DeleteEntry(EntryItemViewModel entry)
     {
+        if (currentFolder is null || !engineController.CanDelete(currentFolder.RootType)) { return; }
+
         await entryService.DeleteEntry(entry.Id, entry.EntryType, entry.IsOutboundMessage);
         Entries.Remove(entry);
     }

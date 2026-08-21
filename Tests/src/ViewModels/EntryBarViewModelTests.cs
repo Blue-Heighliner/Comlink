@@ -521,6 +521,26 @@ public sealed class EntryBarViewModelTests
         svc.Verify(s => s.DeleteEntry("M1", EntryType.Message), Times.Once);
     }
 
+    /// <summary>DeleteEntry is a silent no-op when IEngineController.CanDelete forbids deletion for the active folder's root type.</summary>
+    [Fact]
+    public async Task DeleteEntry_ForbiddenByController_DoesNotCallServiceOrRemoveFromList()
+    {
+        Mock<TestEngineController> controller = new() { CallBase = true };
+        controller.Setup(c => c.CanDelete(FolderType.Inbox)).Returns(false);
+
+        Mock<IEntryService> svc = new();
+        svc.Setup(s => s.GetMessages(It.IsAny<string>(), It.IsAny<int>()))
+           .ReturnsAsync((Items: new List<MessageEntity> { MakeMessage("M1") }, Total: 1));
+        EntryBarViewModel vm = new(svc.Object, controller.Object);
+        await vm.LoadFolder(MakeFolder("root-inbox", FolderType.Inbox));
+        EntryItemViewModel entry = vm.Entries[0];
+
+        await vm.DeleteEntry(entry);
+
+        Assert.Single(vm.Entries);
+        svc.Verify(s => s.DeleteEntry(It.IsAny<string>(), It.IsAny<EntryType>(), It.IsAny<bool>()), Times.Never);
+    }
+
     /// <summary>SetPendingSelectId causes the matching entry to be auto-selected after the next refresh.</summary>
     [Fact]
     public async Task SetPendingSelectId_AutoSelectsAfterRefresh()

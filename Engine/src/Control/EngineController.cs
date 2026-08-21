@@ -210,6 +210,14 @@ public interface IEngineController
     int GetPrintCount(object message);
 
     /// <summary>
+    /// Returns whether the user can delete entries in the given root folder type. Consulted by
+    /// <see cref="ViewModels.IEntryBarViewModel.DeleteEntry"/> before deleting; when <see langword="false"/>,
+    /// the delete is silently skipped.
+    /// </summary>
+    /// <param name="folderType">The root folder type the entry being deleted belongs to.</param>
+    bool CanDelete(FolderType folderType);
+
+    /// <summary>
     /// Returns the certificate subject name to search for in the system store for the given user.
     /// Returns <see langword="null"/> to disable peer authentication (unauthenticated mode).
     /// When a non-null name is returned and no matching certificate exists, startup throws.
@@ -366,6 +374,9 @@ public abstract class DefaultEngineController<TMessage> : IEngineController wher
     public virtual int GetPrintCount(TMessage message) => 1;
 
     int IEngineController.GetPrintCount(object message) => GetPrintCount((TMessage)message);
+
+    /// <inheritdoc />
+    public virtual bool CanDelete(FolderType folderType) => true;
 
     /// <summary>
     /// Builds peer options by looking up the certificate returned by <see cref="GetCertificateName"/> (through
@@ -616,6 +627,9 @@ internal sealed class ConfiguredEngineController : IEngineController
     public bool PrintReceivedDefaultEnabled => config.PrintReceivedEnabled ?? fallback.PrintReceivedDefaultEnabled;
     /// <inheritdoc />
     public int GetPrintCount(object message) => fallback.GetPrintCount(message);
+
+    /// <inheritdoc />
+    public bool CanDelete(FolderType folderType) => fallback.CanDelete(folderType);
 
     /// <inheritdoc />
     public OftPeerOptions ConnectionOptions => OftCertificateLookup.BuildPeerOptions(currentUserProvider.UserName, GetCertificateName);

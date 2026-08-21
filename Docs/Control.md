@@ -282,6 +282,22 @@ Like the [Message Format](#message-format) members, `GetPrintCount` is declared 
 
 ---
 
+### Deletion Policy
+
+```csharp
+bool CanDelete(FolderType folderType);
+```
+
+Whether the user can delete entries in a given root folder type (`FolderType.Inbox`/`Outbox`/`Drafts`/`Notes`/`Activity`, `Engine/src/Data/FolderType.cs`). Consulted by `EntryBarViewModel.DeleteEntry` before deleting the selected entry — the active folder's `RootType` is passed straight through; when `CanDelete` returns `false`, `DeleteEntry` is a silent no-op (the entry stays in the data store and in the list) rather than throwing. See `Docs/ViewModels.md`.
+
+**Engine default:** `true` for every `FolderType` — deletion is unrestricted unless a host opts to lock down specific folders.
+
+**Config override:** none — there is no `config.json` field for deletion policy (a fixed, code-level rule, not a per-deployment setting). Always delegates straight to the wrapped provider.
+
+**Sample override:** `SampleEngineController` overrides `CanDelete` to allow deletion only in `FolderType.Drafts` and `FolderType.Notes`, protecting Inbox, Outbox, and Activity entries from deletion.
+
+---
+
 ### OFT Certificate
 
 ```csharp

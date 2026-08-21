@@ -91,7 +91,7 @@ Middle-column paginated entry list. Registered as `IEntryBarViewModel → EntryB
 
 **Methods**:
 - `LoadFolder(FolderItemViewModel)` — also deselects the current entry via `DeselectEntry()`
-- `Refresh()`, `UpdateEntryStatus(string messageId, DestinationStatus?)`, `PrependEntry(EntryItemViewModel)`, `DeleteEntry(EntryItemViewModel)`, `SetPendingSelectId(string)`
+- `Refresh()`, `UpdateEntryStatus(string messageId, DestinationStatus?)`, `PrependEntry(EntryItemViewModel)`, `DeleteEntry(EntryItemViewModel)` — a silent no-op if `IEngineController.CanDelete(currentFolder.RootType)` returns `false` (see `Docs/Control.md`) — `SetPendingSelectId(string)`
 - `SelectEntry(EntryItemViewModel)` — programmatic single-entry selection (used by the pending-select-after-refresh flow); deselects every other entry, including any multi-selection, and raises `EntriesSelected` with a single-item list
 - `SelectEntries(IReadOnlyList<EntryItemViewModel> added, IReadOnlyList<EntryItemViewModel> removed)` — applies a selection-list delta from the View's `SelectionChanged`: marks `added` selected and `removed` deselected, then raises `EntriesSelected` with `added` if non-empty. Deliberately does **not** assign `SelectedEntry` — see below.
 - `DeselectEntry()` — clears every selected entry's `IsSelected` flag (not just `SelectedEntry`, so a multi-selection is fully cleared) without raising `EntriesSelected` (used by `LoadFolder` and by `MainViewModel.ShowExportCommand`/`ShowImportCommand`)
