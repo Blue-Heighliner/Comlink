@@ -1,0 +1,13 @@
+# Manual test scenario: default Peer-to-peer role (no NodeRole set). Launches two peer users, each with
+# the other's endpoint pre-configured in "Users", so they can address each other directly.
+
+script Build
+	run dotnet build Sample
+
+script Peer1
+	after Build
+	run dotnet run --no-build --project Sample -- --config Scenarios/Peer/Peer1.json
+
+script Peer2
+	after Build
+	run dotnet run --no-build --project Sample -- --config Scenarios/Peer/Peer2.json

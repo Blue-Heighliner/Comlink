@@ -1,0 +1,12 @@
+var TestResultsFolder = TestResults
+
+script Test
+	trace off
+	run dotnet tool restore
+	delete {TestResultsFolder}
+	trace on
+	run dotnet test Tests/Tests.csproj --settings Tests/coverage.runsettings "--collect:XPlat Code Coverage" --results-directory {TestResultsFolder}
+	trace off
+	run dotnet reportgenerator "-reports:{TestResultsFolder}/**/coverage.cobertura.xml" "-targetdir:{TestResultsFolder}" -reporttypes:TextSummary
+	read {TestResultsFolder}/Summary.txt
+	delete {TestResultsFolder}

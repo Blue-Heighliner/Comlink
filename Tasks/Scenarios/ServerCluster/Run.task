@@ -1,0 +1,22 @@
+# Manual test scenario: a two-server cluster (Server1, Server2), each with one Client child (Client1
+# under Server1, Client2 under Server2). Both servers form a long-term connection to each other in
+# addition to hosting their own child, so each server's connections table shows one row for the other server.
+
+script Build
+	run dotnet build Sample
+
+script Server1
+	after Build
+	run dotnet run --no-build --project Sample -- --config Scenarios/ServerCluster/Server1.json
+
+script Server2
+	after Build
+	run dotnet run --no-build --project Sample -- --config Scenarios/ServerCluster/Server2.json
+
+script Client1
+	after Build
+	run dotnet run --no-build --project Sample -- --config Scenarios/ServerCluster/Client1.json
+
+script Client2
+	after Build
+	run dotnet run --no-build --project Sample -- --config Scenarios/ServerCluster/Client2.json

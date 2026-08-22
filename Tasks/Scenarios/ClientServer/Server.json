@@ -1,0 +1,11 @@
+{
+  "UserName": "Server",
+  "PeerPort": 50121,
+  "InterfacePort": 50120,
+  "DataFolder": "@Server",
+  "PeerCertificateName": "disable",
+  "NodeRole": "Server",
+  "ServerUsers": {
+    "Server": { "IpAddress": "127.0.0.1", "Port": 50121, "ChildClients": [ "Client1", "Client2" ] }
+  }
+}

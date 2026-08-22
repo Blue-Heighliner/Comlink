@@ -1,0 +1,18 @@
+# Manual test scenario: one server with two client children (Client1, Client2). Both clients
+# form a single long-term connection to the server; the server routes messages between them and does not
+# expose an inbox/outbox/notes/drafts UI of its own.
+
+script Build
+	run dotnet build Sample
+
+script Server
+	after Build
+	run dotnet run --no-build --project Sample -- --config Scenarios/ClientServer/Server.json
+
+script Client1
+	after Build
+	run dotnet run --no-build --project Sample -- --config Scenarios/ClientServer/Client1.json
+
+script Client2
+	after Build
+	run dotnet run --no-build --project Sample -- --config Scenarios/ClientServer/Client2.json

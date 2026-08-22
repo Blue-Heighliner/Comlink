@@ -107,7 +107,7 @@ public sealed class SampleEngineController(ICurrentUserProvider currentUserProvi
     public override UserInfo? ResolveCode(string userCode) => userCodes.GetValueOrDefault(userCode.ToUpperInvariant());
 
     /// <inheritdoc />
-    public override int GetPrintCount(SampleMessage message) => GetIsAlert(message) ? 2 : 1;
+    public override int GetPrintCount(SampleMessage message) => 1;
 
     /// <inheritdoc />
     public override bool CanDelete(FolderType folderType) => folderType is FolderType.Drafts or FolderType.Notes;

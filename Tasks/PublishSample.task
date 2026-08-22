@@ -1,0 +1,6 @@
+script
+	run dotnet publish Sample -r linux-x64
+	run dotnet publish Sample -r win-x64
+	delete Build
+	move Sample/bin/Release/net10.0/linux-x64/publish/BlueHeighliner.Comlink.Sample Build/Linux/Sample
+	move Sample/bin/Release/net10.0/win-x64/publish/BlueHeighliner.Comlink.Sample.exe Build/Windows/Sample.exe

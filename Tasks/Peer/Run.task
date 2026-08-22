@@ -1,9 +1,0 @@
-# Manual test scenario: default Peer-to-peer role (no NodeRole set). Launches two peer users, each with
-# the other's endpoint pre-configured in "Users", so they can address each other directly.
-
-script TESTPEER1
-	run dotnet run --project Sample -- --config Tasks/Peer/TESTPEER1.json
-
-script TESTPEER2
-	wait 2
-	run dotnet run --project Sample -- --config Tasks/Peer/TESTPEER2.json
