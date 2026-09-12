@@ -38,10 +38,11 @@ public sealed class UserDeliveryResult
     /// <summary>Name of the destination user.</summary>
     public string UserName { get; set; } = string.Empty;
     /// <summary>
-    /// Whether the message was successfully delivered to this user. For a remote user this reflects OFT's own
-    /// delivery status — the underlying send only completes once OFT has fully acknowledged the message — so
-    /// a successful send here means the message is already fully delivered, not merely queued. For the sending
-    /// user addressing itself, delivery happens in-process with no network round-trip and is always successful.
+    /// Whether the message was successfully delivered to this user. For a remote user this reflects the peer
+    /// transport's own delivery status — the underlying send only completes once it has fully acknowledged the
+    /// message — so a successful send here means the message is already fully delivered, not merely queued.
+    /// For the sending user addressing itself, delivery happens in-process with no network round-trip and is
+    /// always successful.
     /// </summary>
     public bool Success { get; set; }
     /// <summary>Names of the groups in the address list that contained this user.</summary>

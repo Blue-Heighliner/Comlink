@@ -45,9 +45,9 @@ internal sealed partial class ConnectionStatusViewModel : ObservableObject, ICon
 
     private void Refresh()
     {
-        // StatusesChanged can fire from a background connection thread (e.g. a Server's per-remote-server
-        // retry loop, or its inbound child-connect handler) — ServerRows/ClientRows are bound to live
-        // Avalonia ItemsControls, so they must only ever be mutated on the UI thread.
+        // StatusesChanged can fire from a background connection thread (e.g. a Server's inbound
+        // child-connect handler, or its MsmtConnectionMonitor heartbeat loop) — ServerRows/ClientRows are
+        // bound to live Avalonia ItemsControls, so they must only ever be mutated on the UI thread.
         // Dispatcher.UIThread.CheckAccess() is also true with no Avalonia dispatcher loop running at all
         // (e.g. in a unit test), so this still refreshes synchronously there instead of posting to a queue
         // nothing will ever pump.

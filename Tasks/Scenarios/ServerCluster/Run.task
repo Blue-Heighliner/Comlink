@@ -7,16 +7,16 @@ script Build
 
 script Server1
 	after Build
-	run dotnet run --no-build --project Sample -- --config Scenarios/ServerCluster/Server1.json
+	run dotnet run --no-build --project Sample -- --config Tasks/Scenarios/ServerCluster/Server1.json
 
 script Server2
 	after Build
-	run dotnet run --no-build --project Sample -- --config Scenarios/ServerCluster/Server2.json
+	run dotnet run --no-build --project Sample -- --config Tasks/Scenarios/ServerCluster/Server2.json
 
 script Client1
 	after Build
-	run dotnet run --no-build --project Sample -- --config Scenarios/ServerCluster/Client1.json
+	run dotnet run --no-build --project Sample -- --config Tasks/Scenarios/ServerCluster/Client1.json
 
 script Client2
 	after Build
-	run dotnet run --no-build --project Sample -- --config Scenarios/ServerCluster/Client2.json
+	run dotnet run --no-build --project Sample -- --config Tasks/Scenarios/ServerCluster/Client2.json

@@ -6,7 +6,15 @@ public sealed class PeerServiceTests
     private static readonly ILoggerFactory noLogger = LoggerFactory.Create(_ => { });
     private static readonly UserEndpoint fakeUserEndpoint = new() { IpAddress = "127.0.0.1", Port = 12345 };
 
-    private static PeerService BuildService(Mock<IOftPeer> peerMock, Mock<TestEngineController> engineControllerMock)
+    private static Mock<IMsmtPeer> BuildPeerMock()
+    {
+        Mock<IMsmtPeer> peer = new();
+        peer.SetupGet(p => p.Received).Returns(new TestObservable<MsmtReceivedEventArgs>());
+        peer.SetupGet(p => p.PackageChanged).Returns(new TestObservable<MsmtPackageChangedEventArgs>());
+        return peer;
+    }
+
+    private static PeerService BuildService(Mock<IMsmtPeer> peerMock, Mock<TestEngineController> engineControllerMock)
         => new(peerMock.Object, engineControllerMock.Object, noLogger);
 
     private static Mock<TestEngineController> BuildUserDirectory()
@@ -15,6 +23,11 @@ public sealed class PeerServiceTests
         locator.Setup(l => l.GetEndpoint(It.IsAny<string>())).Returns(fakeUserEndpoint);
         return locator;
     }
+
+    /// <summary>Configures <paramref name="peer"/> so every <see cref="IMsmtPeer.Request"/> call immediately returns a successful acknowledgement.</summary>
+    private static void AutoAcknowledge(Mock<IMsmtPeer> peer, bool success = true)
+        => peer.Setup(p => p.Request(It.IsAny<MsmtNameTarget>(), It.IsAny<IMemoryOwner<byte>>(), It.IsAny<MsmtSendOptions>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new MsmtResponse { Success = success, Payload = new UnownedMemory(ReadOnlyMemory<byte>.Empty) });
 
     private static ReadOnlyMemory<byte> Encode(TestMessage message)
     {
@@ -26,7 +39,7 @@ public sealed class PeerServiceTests
     [Fact]
     public async Task HandleMessage_ValidMessage_RaisesMessageDeliveredEvent()
     {
-        Mock<IOftPeer> peer = new();
+        Mock<IMsmtPeer> peer = BuildPeerMock();
         Mock<TestEngineController> userDirectory = BuildUserDirectory();
 
         PeerService svc = BuildService(peer, userDirectory);
@@ -53,7 +66,7 @@ public sealed class PeerServiceTests
     [Fact]
     public async Task HandleMessage_CorruptData_ReturnsFalse()
     {
-        Mock<IOftPeer> peer = new();
+        Mock<IMsmtPeer> peer = BuildPeerMock();
         Mock<TestEngineController> userDirectory = BuildUserDirectory();
 
         PeerService svc = BuildService(peer, userDirectory);
@@ -66,7 +79,7 @@ public sealed class PeerServiceTests
     [Fact]
     public async Task HandleMessage_ConfirmationMessage_RaisesConfirmationReceivedNotMessageDelivered()
     {
-        Mock<IOftPeer> peer = new();
+        Mock<IMsmtPeer> peer = BuildPeerMock();
         Mock<TestEngineController> userDirectory = BuildUserDirectory();
 
         PeerService svc = BuildService(peer, userDirectory);
@@ -89,7 +102,7 @@ public sealed class PeerServiceTests
     [Fact]
     public async Task HandleMessage_OrdinaryMessage_RaisesMessageDeliveredNotConfirmationReceived()
     {
-        Mock<IOftPeer> peer = new();
+        Mock<IMsmtPeer> peer = BuildPeerMock();
         Mock<TestEngineController> userDirectory = BuildUserDirectory();
 
         PeerService svc = BuildService(peer, userDirectory);
@@ -103,13 +116,12 @@ public sealed class PeerServiceTests
         Assert.False(confirmationFired);
     }
 
-    /// <summary>Send resolves the user's endpoint, serializes the message, and forwards it to the peer.</summary>
+    /// <summary>Send resolves the user's endpoint, serializes the message, forwards it to the peer, and returns once it is acknowledged.</summary>
     [Fact]
     public async Task Send_ForwardsSerializedMessageToPeer()
     {
-        Mock<IOftPeer> peer = new();
-        peer.Setup(p => p.Send("127.0.0.1", 12345, It.IsAny<ReadOnlyMemory<byte>>(), 0, It.IsAny<object?>(), default))
-            .Returns(Task.CompletedTask);
+        Mock<IMsmtPeer> peer = BuildPeerMock();
+        AutoAcknowledge(peer);
         Mock<TestEngineController> userDirectory = new() { CallBase = true };
         userDirectory.Setup(l => l.GetEndpoint("DEST")).Returns(fakeUserEndpoint);
 
@@ -119,16 +131,19 @@ public sealed class PeerServiceTests
         bool ok = await svc.Send("DEST", msg);
 
         Assert.True(ok);
-        peer.Verify(p => p.Send("127.0.0.1", 12345, It.IsAny<ReadOnlyMemory<byte>>(), 0, It.IsAny<object?>(), default), Times.Once);
+        peer.Verify(p => p.Request(
+            It.Is<MsmtNameTarget>(t => t.Host == "127.0.0.1" && t.Port == 12345),
+            It.IsAny<IMemoryOwner<byte>>(),
+            It.Is<MsmtSendOptions>(o => o.Priority == 0),
+            It.IsAny<CancellationToken>()), Times.Once);
     }
 
-    /// <summary>Send passes the message's IEngineController.GetPriority value through as the OFT send priority.</summary>
+    /// <summary>Send passes the message's IEngineController.GetPriority value through as the MSMT send priority.</summary>
     [Fact]
-    public async Task Send_UsesMessagePriorityAsOftPriority()
+    public async Task Send_UsesMessagePriorityAsSendPriority()
     {
-        Mock<IOftPeer> peer = new();
-        peer.Setup(p => p.Send("127.0.0.1", 12345, It.IsAny<ReadOnlyMemory<byte>>(), 3, It.IsAny<object?>(), default))
-            .Returns(Task.CompletedTask);
+        Mock<IMsmtPeer> peer = BuildPeerMock();
+        AutoAcknowledge(peer);
         Mock<TestEngineController> userDirectory = new() { CallBase = true };
         userDirectory.Setup(l => l.GetEndpoint("DEST")).Returns(fakeUserEndpoint);
 
@@ -138,14 +153,18 @@ public sealed class PeerServiceTests
         bool ok = await svc.Send("DEST", msg);
 
         Assert.True(ok);
-        peer.Verify(p => p.Send("127.0.0.1", 12345, It.IsAny<ReadOnlyMemory<byte>>(), 3, It.IsAny<object?>(), default), Times.Once);
+        peer.Verify(p => p.Request(
+            It.IsAny<MsmtNameTarget>(),
+            It.IsAny<IMemoryOwner<byte>>(),
+            It.Is<MsmtSendOptions>(o => o.Priority == 3),
+            It.IsAny<CancellationToken>()), Times.Once);
     }
 
     /// <summary>Send returns false without contacting the peer when the user cannot be resolved.</summary>
     [Fact]
     public async Task Send_UnknownUser_ReturnsFalse()
     {
-        Mock<IOftPeer> peer = new();
+        Mock<IMsmtPeer> peer = BuildPeerMock();
         Mock<TestEngineController> userDirectory = new() { CallBase = true };
         userDirectory.Setup(l => l.GetEndpoint("UNKNOWN")).Returns((UserEndpoint?)null);
 
@@ -155,16 +174,16 @@ public sealed class PeerServiceTests
         bool ok = await svc.Send("UNKNOWN", msg);
 
         Assert.False(ok);
-        peer.Verify(p => p.Send(It.IsAny<string>(), It.IsAny<int>(), It.IsAny<ReadOnlyMemory<byte>>(), It.IsAny<int>(), It.IsAny<object?>(), It.IsAny<CancellationToken>()), Times.Never);
+        peer.Verify(p => p.Request(It.IsAny<MsmtNameTarget>(), It.IsAny<IMemoryOwner<byte>>(), It.IsAny<MsmtSendOptions>(), It.IsAny<CancellationToken>()), Times.Never);
     }
 
-    /// <summary>Send returns false when the underlying OFT send throws (e.g. the peer is unreachable).</summary>
+    /// <summary>Send returns false when the underlying peer request throws (e.g. the peer is unreachable).</summary>
     [Fact]
-    public async Task Send_PeerSendThrows_ReturnsFalse()
+    public async Task Send_PeerRequestThrows_ReturnsFalse()
     {
-        Mock<IOftPeer> peer = new();
-        peer.Setup(p => p.Send(It.IsAny<string>(), It.IsAny<int>(), It.IsAny<ReadOnlyMemory<byte>>(), It.IsAny<int>(), It.IsAny<object?>(), It.IsAny<CancellationToken>()))
-            .ThrowsAsync(new OftDisconnectedException());
+        Mock<IMsmtPeer> peer = BuildPeerMock();
+        peer.Setup(p => p.Request(It.IsAny<MsmtNameTarget>(), It.IsAny<IMemoryOwner<byte>>(), It.IsAny<MsmtSendOptions>(), It.IsAny<CancellationToken>()))
+            .ThrowsAsync(new InvalidOperationException());
         Mock<TestEngineController> userDirectory = BuildUserDirectory();
 
         PeerService svc = BuildService(peer, userDirectory);
@@ -175,39 +194,173 @@ public sealed class PeerServiceTests
         Assert.False(ok);
     }
 
-    /// <summary>Raising the peer's DeliveryStatusHandler for a tag from a Send call re-raises DeliveryStatusChanged with the matching message and user.</summary>
+    /// <summary>Send returns false when the remote peer negatively acknowledges the message.</summary>
     [Fact]
-    public async Task DeliveryStatusHandler_ForKnownTag_RaisesDeliveryStatusChanged()
+    public async Task Send_NegativelyAcknowledged_ReturnsFalse()
     {
-        Mock<IOftPeer> peer = new();
-        Action<object, OftDeliveryStatus>? handler = null;
-        peer.SetupSet(p => p.DeliveryStatusHandler = It.IsAny<Action<object, OftDeliveryStatus>>())
-            .Callback<Action<object, OftDeliveryStatus>>(h => handler = h);
-        object? capturedTag = null;
-        peer.Setup(p => p.Send(It.IsAny<string>(), It.IsAny<int>(), It.IsAny<ReadOnlyMemory<byte>>(), It.IsAny<int>(), It.IsAny<object?>(), It.IsAny<CancellationToken>()))
-            .Callback<string, int, ReadOnlyMemory<byte>, int, object?, CancellationToken>((_, _, _, _, tag, _) => capturedTag = tag)
-            .Returns(Task.CompletedTask);
+        Mock<IMsmtPeer> peer = BuildPeerMock();
+        AutoAcknowledge(peer, success: false);
         Mock<TestEngineController> userDirectory = BuildUserDirectory();
 
-        // The DeliveryStatusHandler setter runs during construction, so Setup above must be in place first.
+        PeerService svc = BuildService(peer, userDirectory);
+        TestMessage msg = new() { MessageId = "M1", FromUser = "SOURCE" };
+
+        bool ok = await svc.Send("DEST", msg);
+
+        Assert.False(ok);
+    }
+
+    /// <summary>
+    /// A connection attempt that fails outright (e.g. the target refused the connection) causes the
+    /// underlying Request to throw, which Send treats as a failed delivery rather than propagating.
+    /// </summary>
+    [Fact]
+    public async Task Send_ConnectionRefused_ReturnsFalsePromptly()
+    {
+        Mock<IMsmtPeer> peer = BuildPeerMock();
+        peer.Setup(p => p.Request(It.IsAny<MsmtNameTarget>(), It.IsAny<IMemoryOwner<byte>>(), It.IsAny<MsmtSendOptions>(), It.IsAny<CancellationToken>()))
+            .ThrowsAsync(new SocketException((int)SocketError.ConnectionRefused));
+        Mock<TestEngineController> userDirectory = BuildUserDirectory();
+
+        PeerService svc = BuildService(peer, userDirectory);
+        TestMessage msg = new() { MessageId = "M1", FromUser = "SOURCE" };
+
+        Task<bool> sendTask = svc.Send("DEST", msg);
+        bool ok = await sendTask.WaitAsync(TimeSpan.FromSeconds(2));
+
+        Assert.False(ok);
+    }
+
+    /// <summary>A successful Request's outcome re-raises DeliveryStatusChanged with the matching message and user.</summary>
+    [Fact]
+    public async Task Send_Acknowledged_RaisesDeliveryStatusChanged()
+    {
+        Mock<IMsmtPeer> peer = BuildPeerMock();
+        AutoAcknowledge(peer);
+        Mock<TestEngineController> userDirectory = BuildUserDirectory();
+
         PeerService svc = BuildService(peer, userDirectory);
 
-        TaskCompletionSource<(string MessageId, string UserName, OftDeliveryStatus Status)> tcs = new();
+        List<(string MessageId, string UserName, DestinationStatus Status)> events = [];
+        TaskCompletionSource tcs = new();
         svc.DeliveryStatusChanged += (messageId, userName, status) =>
         {
-            tcs.TrySetResult((messageId, userName, status));
+            events.Add((messageId, userName, status));
+            if (status == DestinationStatus.Confirmed) { tcs.TrySetResult(); }
             return Task.CompletedTask;
         };
 
         await svc.Send("DEST", new TestMessage { MessageId = "M1", FromUser = "SOURCE" });
+        await tcs.Task.WaitAsync(TimeSpan.FromSeconds(2));
 
-        Assert.NotNull(handler);
-        Assert.NotNull(capturedTag);
-        handler(capturedTag, OftDeliveryStatus.Acknowledged);
+        Assert.Contains(events, e => e.MessageId == "M1" && e.UserName == "DEST" && e.Status == DestinationStatus.Confirmed);
+    }
 
-        (string MessageId, string UserName, OftDeliveryStatus Status) result = await tcs.Task.WaitAsync(TimeSpan.FromSeconds(2));
-        Assert.Equal("M1", result.MessageId);
-        Assert.Equal("DEST", result.UserName);
-        Assert.Equal(OftDeliveryStatus.Acknowledged, result.Status);
+    /// <summary>Start, using the production DI constructor, creates a peer via IMsmtPeerFactory and starts its listener on PeerPort.</summary>
+    [Fact]
+    public async Task Start_UsesFactoryToCreatePeerAndStartsListener()
+    {
+        Mock<IMsmtPeer> peer = BuildPeerMock();
+        Mock<IMsmtPeerFactory> peerFactory = new();
+        peerFactory.Setup(f => f.Create(It.IsAny<MsmtOptions>())).Returns(peer.Object);
+
+        Mock<TestEngineController> engineController = BuildUserDirectory();
+        engineController.Setup(e => e.PeerPort).Returns(50021);
+        (X509Certificate2 identity, _, X509Certificate2Collection trustedAuthorities) = TestMsmtCertificates.Create();
+        engineController.Setup(e => e.ConnectionOptions).Returns(new MsmtOptions
+        {
+            Credentials = new MsmtCredentials { Identity = identity, TrustedAuthorities = trustedAuthorities }
+        });
+
+        PeerService svc = new(peerFactory.Object, engineController.Object, noLogger);
+        using CancellationTokenSource cts = new();
+        Task startTask = svc.Start(cts.Token);
+        await Task.Delay(20);
+
+        peerFactory.Verify(f => f.Create(It.IsAny<MsmtOptions>()), Times.Once);
+        peer.Verify(p => p.StartListener(50021, "0.0.0.0"), Times.Once);
+
+        cts.Cancel();
+        await startTask;
+    }
+
+    /// <summary>Start logs and returns without creating a peer when no current user is registered to resolve an identity certificate for.</summary>
+    [Fact]
+    public async Task Start_NoCurrentUser_DoesNotCreatePeer()
+    {
+        Mock<IMsmtPeerFactory> peerFactory = new();
+        Mock<TestEngineController> engineController = BuildUserDirectory();
+        engineController.Setup(e => e.ConnectionOptions).Throws(new InvalidOperationException("no current user"));
+
+        PeerService svc = new(peerFactory.Object, engineController.Object, noLogger);
+        using CancellationTokenSource cts = new();
+        cts.Cancel();
+        await svc.Start(cts.Token);
+
+        peerFactory.Verify(f => f.Create(It.IsAny<MsmtOptions>()), Times.Never);
+    }
+
+    /// <summary>A PackageChanged event reporting PendingAcknowledgement raises DeliveryStatusChanged as Sent.</summary>
+    [Fact]
+    public async Task Send_PendingAcknowledgementPackageStatus_RaisesSentDeliveryStatus()
+    {
+        Mock<IMsmtPeer> peer = BuildPeerMock();
+        TestObservable<MsmtPackageChangedEventArgs> packageChanged = new();
+        peer.SetupGet(p => p.PackageChanged).Returns(packageChanged);
+        TaskCompletionSource requestStarted = new();
+        TaskCompletionSource<MsmtResponse> requestCompletion = new();
+        peer.Setup(p => p.Request(It.IsAny<MsmtNameTarget>(), It.IsAny<IMemoryOwner<byte>>(), It.IsAny<MsmtSendOptions>(), It.IsAny<CancellationToken>()))
+            .Callback<MsmtNameTarget, IMemoryOwner<byte>, MsmtSendOptions?, CancellationToken>((_, _, options, _) =>
+            {
+                requestStarted.TrySetResult();
+                packageChanged.Publish(new MsmtPackageChangedEventArgs
+                {
+                    Link = Mock.Of<IMsmtLink>(),
+                    Package = Mock.Of<IMsmtPackage>(pk => pk.Tag == options!.Tag),
+                    Status = MsmtSendStatus.PendingAcknowledgement
+                });
+            })
+            .Returns(requestCompletion.Task);
+        Mock<TestEngineController> userDirectory = BuildUserDirectory();
+
+        PeerService svc = BuildService(peer, userDirectory);
+        List<DestinationStatus> statuses = [];
+        svc.DeliveryStatusChanged += (_, _, status) => { statuses.Add(status); return Task.CompletedTask; };
+
+        Task<bool> sendTask = svc.Send("DEST", new TestMessage { MessageId = "M1", FromUser = "SOURCE" });
+        await requestStarted.Task.WaitAsync(TimeSpan.FromSeconds(2));
+        await WaitUntil(() => statuses.Contains(DestinationStatus.Sent), TimeSpan.FromSeconds(2));
+
+        requestCompletion.TrySetResult(new MsmtResponse { Success = true, Payload = new UnownedMemory(ReadOnlyMemory<byte>.Empty) });
+        await sendTask;
+    }
+
+    /// <summary>DisposeAsync disposes the underlying peer once Start has created one.</summary>
+    [Fact]
+    public async Task DisposeAsync_DisposesUnderlyingPeer()
+    {
+        Mock<IMsmtPeer> peer = BuildPeerMock();
+        Mock<TestEngineController> userDirectory = BuildUserDirectory();
+        PeerService svc = BuildService(peer, userDirectory);
+
+        await svc.DisposeAsync();
+
+        peer.Verify(p => p.DisposeAsync(), Times.Once);
+    }
+
+    private static async Task WaitUntil(Func<bool> condition, TimeSpan timeout)
+    {
+        DateTime deadline = DateTime.UtcNow + timeout;
+        while (!condition())
+        {
+            if (DateTime.UtcNow > deadline) { throw new TimeoutException("Condition was not met in time."); }
+            await Task.Delay(10);
+        }
+    }
+
+    private sealed class UnownedMemory(ReadOnlyMemory<byte> data) : IMemoryOwner<byte>
+    {
+        public Memory<byte> Memory { get; } = data.ToArray();
+        public void Dispose() { }
     }
 }

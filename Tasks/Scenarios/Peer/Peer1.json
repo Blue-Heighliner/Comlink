@@ -3,7 +3,8 @@
   "PeerPort": 50021,
   "InterfacePort": 50020,
   "DataFolder": "@Peer1",
-  "PeerCertificateName": "disable",
+  "PeerCertificateFile": "Peer1.pfx",
+  "TrustedAuthorityCertificateFile": "../Root.cer",
   "Users": {
     "Peer2": { "IpAddress": "127.0.0.1", "Port": 50023 }
   },

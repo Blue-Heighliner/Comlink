@@ -4,7 +4,7 @@ namespace BlueHeighliner.Comlink.Engine.Control;
 /// Single control interface consolidating every extension point through which a host application
 /// customises Engine behaviour without modifying Engine code: the concrete message type and its logical
 /// field mapping, app identity/presentation, local user identity, the user/group directory, listener
-/// ports, alert settings, message composition, the automatic print policy, OFT peer certificate naming
+/// ports, alert settings, message composition, the automatic print policy, MSMT peer certificate naming
 /// and peer options, network topology, the external systems this instance communicates with, and whether
 /// <c>config.json</c> is read at all. External drive discovery and printer discovery/driving are real
 /// OS-level behavior, not configuration or rules, so they live on <see cref="Devices.IExternalDriveProvider"/>
@@ -87,8 +87,8 @@ public interface IEngineController
     /// </summary>
     bool PrintReceivedDefaultEnabled { get; }
 
-    /// <summary>The peer options — including TLS certificate, validation, and security mode — used for both inbound and outbound OFT peer connections.</summary>
-    OftPeerOptions ConnectionOptions { get; }
+    /// <summary>The peer options — including TLS identity certificate and trusted certificate authorities — used for both inbound and outbound MSMT peer connections.</summary>
+    MsmtOptions ConnectionOptions { get; }
 
     /// <summary>The configured role for this instance.</summary>
     NodeRole Role { get; }
@@ -180,8 +180,8 @@ public interface IEngineController
     void SetIsAlert(object message, bool value);
     /// <summary>
     /// Gets the priority number of <paramref name="message"/>. One of the values returned by
-    /// <see cref="Priorities"/>; used verbatim as the OFT send priority (larger values are sent first —
-    /// see <c>Docs/Peer.md</c>) whenever this message is sent over an OFT connection.
+    /// <see cref="Priorities"/>; used verbatim as the MSMT send priority (larger values are sent first —
+    /// see <c>Docs/Peer.md</c>) whenever this message is sent over an MSMT connection.
     /// </summary>
     int GetPriority(object message);
     /// <summary>Sets the priority number on <paramref name="message"/>.</summary>
@@ -218,12 +218,20 @@ public interface IEngineController
     bool CanDelete(FolderType folderType);
 
     /// <summary>
-    /// Returns the certificate subject name to search for in the system store for the given user.
-    /// Returns <see langword="null"/> to disable peer authentication (unauthenticated mode).
-    /// When a non-null name is returned and no matching certificate exists, startup throws.
+    /// Returns the identity certificate's subject name to search for in the system store for the given
+    /// user. MSMT peer authentication is mandatory - there is no unauthenticated mode - so when no
+    /// matching certificate exists, startup throws.
     /// </summary>
     /// <param name="userName">The local user name for which to resolve a certificate name.</param>
-    string? GetCertificateName(string userName);
+    string GetCertificateName(string userName);
+
+    /// <summary>
+    /// The certificate subject name, searched for in the system store the same way as <see
+    /// cref="GetCertificateName"/>, of the certificate authority trusted to sign every peer's identity
+    /// certificate (see <see cref="GetCertificateName"/>). When no matching certificate exists, startup
+    /// throws.
+    /// </summary>
+    string TrustedAuthorityCertificateName { get; }
 }
 
 /// <summary>
@@ -379,12 +387,14 @@ public abstract class DefaultEngineController<TMessage> : IEngineController wher
     public virtual bool CanDelete(FolderType folderType) => true;
 
     /// <summary>
-    /// Builds peer options by looking up the certificate returned by <see cref="GetCertificateName"/> (through
-    /// virtual dispatch, so overriding just that member is enough for most customization needs) in the system
-    /// certificate store. <see langword="virtual"/> so a host can override the whole policy directly when that
-    /// is not sufficient — see <c>Docs/Control.md</c>.
+    /// Builds peer options by looking up the certificates returned by <see cref="GetCertificateName"/> and
+    /// <see cref="TrustedAuthorityCertificateName"/> (through virtual dispatch, so overriding just those
+    /// members is enough for most customization needs) in the system certificate store. <see
+    /// langword="virtual"/> so a host can override the whole policy directly when that is not sufficient —
+    /// see <c>Docs/Control.md</c>.
     /// </summary>
-    public virtual OftPeerOptions ConnectionOptions => OftCertificateLookup.BuildPeerOptions(currentUserProvider.UserName, GetCertificateName);
+    /// <exception cref="InvalidOperationException">No current user is registered yet, so no identity certificate can be resolved.</exception>
+    public virtual MsmtOptions ConnectionOptions => MsmtCertificateLookup.BuildPeerOptions(currentUserProvider.UserName, GetCertificateName, TrustedAuthorityCertificateName);
 
     /// <inheritdoc />
     public virtual NodeRole Role => NodeRole.Peer;
@@ -417,7 +427,10 @@ public abstract class DefaultEngineController<TMessage> : IEngineController wher
     public virtual IExternalSystem? ExternalServer { get; } = null;
 
     /// <inheritdoc />
-    public virtual string? GetCertificateName(string userName) => $"USER-{userName}";
+    public virtual string GetCertificateName(string userName) => userName;
+
+    /// <inheritdoc />
+    public virtual string TrustedAuthorityCertificateName => "COMLINK-ROOT";
 }
 
 /// <summary>
@@ -425,33 +438,64 @@ public abstract class DefaultEngineController<TMessage> : IEngineController wher
 /// <see cref="ConfiguredEngineController.ConnectionOptions"/> — not itself generic over the message type, since
 /// certificate lookup has nothing to do with it.
 /// </summary>
-internal static class OftCertificateLookup
+internal static class MsmtCertificateLookup
 {
     /// <summary>
-    /// Looks up <paramref name="currentUserName"/>'s certificate via <paramref name="getCertificateName"/>
-    /// (each caller passes its own, potentially config-overridden, method) in the system certificate store.
+    /// Looks up <paramref name="currentUserName"/>'s identity certificate via <paramref
+    /// name="getCertificateName"/> and <paramref name="trustedAuthorityCertificateName"/>'s certificate
+    /// authority (each caller passes its own, potentially config-overridden, values) in the system
+    /// certificate store.
     /// </summary>
-    public static OftPeerOptions BuildPeerOptions(string? currentUserName, Func<string, string?> getCertificateName)
+    /// <exception cref="InvalidOperationException"><paramref name="currentUserName"/> is <see langword="null"/>, so no identity certificate can be resolved.</exception>
+    public static MsmtOptions BuildPeerOptions(string? currentUserName, Func<string, string> getCertificateName, string trustedAuthorityCertificateName)
     {
-        X509Certificate2? cert = GetOwnCertificate(currentUserName, getCertificateName);
-        return new OftPeerOptions
+        if (currentUserName is null)
         {
-            Info = currentUserName ?? string.Empty,
-            Certificate = cert,
-            CertificateValidation = cert is not null ? ValidateChain : null,
-            SecurityMode = cert is not null ? OftSecurityMode.DualAuthentication : OftSecurityMode.Secure
+            throw new InvalidOperationException("Peer connection options require a registered current user to resolve an identity certificate for.");
+        }
+
+        string certName = getCertificateName(currentUserName);
+        X509Certificate2 identity = FindCertificate(certName)
+            ?? throw new InvalidOperationException($"Peer authentication requires a certificate named '{certName}', but none was found in the system store. Install the certificate to continue.");
+        X509Certificate2 authority = FindCertificate(trustedAuthorityCertificateName)
+            ?? throw new InvalidOperationException($"Peer authentication requires a trusted authority certificate named '{trustedAuthorityCertificateName}', but none was found in the system store. Install the certificate to continue.");
+
+        return new MsmtOptions
+        {
+            Credentials = new MsmtCredentials { Identity = identity, TrustedAuthorities = [authority] },
+            RequireFullyQualifiedHostname = false,
+            Mode = MsmtOperationMode.Session
         };
     }
 
-    private static X509Certificate2? GetOwnCertificate(string? userName, Func<string, string?> getCertificateName)
+    /// <summary>
+    /// Builds peer options directly from certificate files on disk instead of a system store lookup - used
+    /// when <c>config.json</c>'s <c>PeerCertificateFile</c>/<c>TrustedAuthorityCertificateFile</c> fields
+    /// are set. <paramref name="peerCertificateFile"/> must be a PKCS#12 file carrying the identity
+    /// certificate's private key; <paramref name="trustedAuthorityCertificateFile"/> a public certificate
+    /// file for the trusted authority.
+    /// </summary>
+    /// <exception cref="InvalidOperationException">Either file does not exist.</exception>
+    public static MsmtOptions BuildPeerOptionsFromFiles(string peerCertificateFile, string trustedAuthorityCertificateFile)
     {
-        if (userName is null) { return null; }
-        string? certName = getCertificateName(userName);
-        if (certName is null) { return null; }
-        return FindCertificate(certName)
-            ?? throw new InvalidOperationException(
-                $"Peer authentication is required but no certificate named '{certName}' was found in the system store. " +
-                "Install the certificate or set PeerCertificateName to \"disable\" to run without authentication.");
+        if (!File.Exists(peerCertificateFile))
+        {
+            throw new InvalidOperationException($"Peer authentication requires an identity certificate file at '{peerCertificateFile}', but it was not found.");
+        }
+        if (!File.Exists(trustedAuthorityCertificateFile))
+        {
+            throw new InvalidOperationException($"Peer authentication requires a trusted authority certificate file at '{trustedAuthorityCertificateFile}', but it was not found.");
+        }
+
+        X509Certificate2 identity = X509CertificateLoader.LoadPkcs12FromFile(peerCertificateFile, password: null);
+        X509Certificate2 authority = X509CertificateLoader.LoadCertificateFromFile(trustedAuthorityCertificateFile);
+
+        return new MsmtOptions
+        {
+            Credentials = new MsmtCredentials { Identity = identity, TrustedAuthorities = [authority] },
+            RequireFullyQualifiedHostname = false,
+            Mode = MsmtOperationMode.Session
+        };
     }
 
     private static X509Certificate2? FindCertificate(string name)
@@ -474,9 +518,6 @@ internal static class OftCertificateLookup
         }
         return null;
     }
-
-    private static bool ValidateChain(object _, X509Certificate? cert, X509Chain? chain, SslPolicyErrors errors)
-        => errors == SslPolicyErrors.None;
 }
 
 /// <summary>
@@ -487,7 +528,7 @@ internal static class OftCertificateLookup
 /// <see cref="EngineExtensions.UseEngineConfigOverrides"/>, not by control-interface convention scanning.
 /// <see cref="ConnectionOptions"/> has no <c>config.json</c> field of its own but is reimplemented (rather than
 /// delegated) so it consumes this decorator's own, potentially config-overridden, <see cref="GetCertificateName"/>
-/// instead of the wrapped provider's raw one.
+/// and <see cref="TrustedAuthorityCertificateName"/> instead of the wrapped provider's raw ones.
 /// </summary>
 internal sealed class ConfiguredEngineController : IEngineController
 {
@@ -632,7 +673,24 @@ internal sealed class ConfiguredEngineController : IEngineController
     public bool CanDelete(FolderType folderType) => fallback.CanDelete(folderType);
 
     /// <inheritdoc />
-    public OftPeerOptions ConnectionOptions => OftCertificateLookup.BuildPeerOptions(currentUserProvider.UserName, GetCertificateName);
+    /// <exception cref="InvalidOperationException">Only one of <c>PeerCertificateFile</c>/<c>TrustedAuthorityCertificateFile</c> is set - they must be set together.</exception>
+    public MsmtOptions ConnectionOptions
+    {
+        get
+        {
+            string? peerFile = config.GetPeerCertificateFilePath();
+            string? authorityFile = config.GetTrustedAuthorityCertificateFilePath();
+            if (peerFile is null && authorityFile is null)
+            {
+                return MsmtCertificateLookup.BuildPeerOptions(currentUserProvider.UserName, GetCertificateName, TrustedAuthorityCertificateName);
+            }
+            if (peerFile is null || authorityFile is null)
+            {
+                throw new InvalidOperationException("PeerCertificateFile and TrustedAuthorityCertificateFile must both be set together.");
+            }
+            return MsmtCertificateLookup.BuildPeerOptionsFromFiles(peerFile, authorityFile);
+        }
+    }
 
     /// <inheritdoc />
     public NodeRole Role =>
@@ -675,11 +733,10 @@ internal sealed class ConfiguredEngineController : IEngineController
     public UserEndpoint? GetEndpoint(string userName)
         => _endpoints.TryGetValue(userName, out UserEndpoint? endpoint) ? endpoint : fallback.GetEndpoint(userName);
     /// <inheritdoc />
-    public string? GetCertificateName(string userName)
-        => config.PeerCertificateName switch
-        {
-            null => fallback.GetCertificateName(userName),
-            "disable" => null,
-            string name => name
-        };
+    public string GetCertificateName(string userName)
+        => config.PeerCertificateName ?? fallback.GetCertificateName(userName);
+
+    /// <inheritdoc />
+    public string TrustedAuthorityCertificateName
+        => config.TrustedAuthorityCertificateName ?? fallback.TrustedAuthorityCertificateName;
 }

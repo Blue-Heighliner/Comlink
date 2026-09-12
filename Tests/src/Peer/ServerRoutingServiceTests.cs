@@ -7,59 +7,100 @@ public sealed class ServerRoutingServiceTests
 
     private static readonly UserEndpoint serverAEndpoint = new() { IpAddress = "10.0.0.1", Port = 9001 };
     private static readonly UserEndpoint serverBEndpoint = new() { IpAddress = "10.0.0.2", Port = 9002 };
+    private static readonly UserEndpoint clientA1Endpoint = new() { IpAddress = "10.0.1.1", Port = 9101 };
+    private static readonly UserEndpoint clientA2Endpoint = new() { IpAddress = "10.0.1.2", Port = 9102 };
 
-    private static Mock<IOftConnection> BuildConnection(string info)
+    /// <summary>Distinguishes a real routed message from a background <see cref="MsmtConnectionMonitor"/> heartbeat (an empty payload), which every started fixture also sends to each of its hierarchical targets.</summary>
+    private static bool IsRealPayload(IMemoryOwner<byte> payload) => payload.Memory.Length > 0;
+
+    /// <summary>Builds an inbound (accepted) connection mock identified by <paramref name="userName"/>'s certificate subject.</summary>
+    private static Mock<IMsmtConnection> BuildInboundConnection(string userName, MsmtTarget? target = null)
     {
-        Mock<IOftConnection> connection = new();
-        connection.SetupProperty(c => c.ReceivedHandler);
-        connection.SetupProperty(c => c.DisconnectedHandler);
-        connection.SetupGet(c => c.IsConnected).Returns(true);
-        connection.SetupGet(c => c.Identity).Returns(new OftIdentity { EndPoint = new IPEndPoint(IPAddress.Loopback, 0), Certificate = null, Info = info });
-        connection.Setup(c => c.DisposeAsync()).Returns(ValueTask.CompletedTask);
-        connection.Setup(c => c.Send(It.IsAny<ReadOnlyMemory<byte>>(), It.IsAny<int>(), It.IsAny<object?>(), It.IsAny<CancellationToken>()))
-            .Returns(Task.CompletedTask);
+        Mock<IMsmtConnection> connection = new();
+        connection.SetupGet(c => c.Identity).Returns(new MsmtIdentity { Subject = $"CN=USER-{userName}", Issuer = string.Empty, SerialNumber = string.Empty, Thumbprint = string.Empty });
+        connection.SetupGet(c => c.Target).Returns(target ?? new MsmtTarget { Host = "0.0.0.0", Port = 0 });
+        connection.SetupGet(c => c.Sender).Returns((IMsmtLink?)null);
+        connection.SetupGet(c => c.Receiver).Returns(Mock.Of<IMsmtLink>());
         return connection;
     }
 
-    private sealed record Fixture(ServerRoutingService Service, Mock<IOftListener> Listener, Mock<IOftConnector> Connector, Task StartTask, CancellationTokenSource Cts);
+    private static MsmtReceivedEventArgs ReceivedFrom(IMsmtConnection connection, IMemoryOwner<byte> payload)
+        => new() { Link = Mock.Of<IMsmtLink>(l => l.Connection == connection), Payload = payload, Responder = Mock.Of<IMsmtResponder>(), IsResponseRequested = false };
+
+    /// <summary>Configures <paramref name="peer"/> so every Request publishes Connected (matching the sent-to target) via <paramref name="connectedObservable"/> and resolves successfully, simulating an on-demand outbound MSMT connection.</summary>
+    private static void AutoConnectAndAcknowledge(Mock<IMsmtPeer> peer, TestObservable<MsmtConnectedEventArgs> connectedObservable, bool success = true)
+        => peer.Setup(p => p.Request(It.IsAny<MsmtNameTarget>(), It.IsAny<IMemoryOwner<byte>>(), It.IsAny<MsmtSendOptions>(), It.IsAny<CancellationToken>()))
+            .Returns<MsmtNameTarget, IMemoryOwner<byte>, MsmtSendOptions?, CancellationToken>((target, _, _, _) =>
+            {
+                Mock<IMsmtConnection> connection = new();
+                connection.SetupGet(c => c.Target).Returns(new MsmtTarget { Host = target.Host, Port = target.Port });
+                connection.SetupGet(c => c.Sender).Returns(Mock.Of<IMsmtLink>());
+                connectedObservable.Publish(new MsmtConnectedEventArgs { Connection = connection.Object });
+                return Task.FromResult(new MsmtResponse { Success = success, Payload = new UnownedMemory(ReadOnlyMemory<byte>.Empty) });
+            });
+
+    private sealed record Fixture(
+        ServerRoutingService Service,
+        Mock<IMsmtPeer> Peer,
+        TestObservable<MsmtConnectedEventArgs> Connected,
+        TestObservable<MsmtDisconnectedEventArgs> Disconnected,
+        TestObservable<MsmtReceivedEventArgs> Received,
+        Task StartTask,
+        CancellationTokenSource Cts);
 
     /// <summary>
     /// Builds a service for "ServerA" (this instance) with children ClientA1/ClientA2, alongside "ServerB"
-    /// with children ClientB1/ClientB2, and starts it so its listener and outbound server connection are live.
+    /// with children ClientB1/ClientB2, and starts it so its receiver is live. <paramref name="configurePeer"/>,
+    /// if given, runs against the mocked peer before <c>Start</c> is called, so it can also observe the
+    /// background connection monitor's own immediate heartbeat sends.
     /// </summary>
-    private static async Task<Fixture> BuildStarted(Mock<IOftConnection> serverBOutboundConnection)
+    private static async Task<Fixture> BuildStarted(Action<Mock<IMsmtPeer>, TestObservable<MsmtConnectedEventArgs>>? configurePeer = null)
     {
         Dictionary<string, ServerUserConfig> userMap = new(StringComparer.OrdinalIgnoreCase)
         {
             ["ServerA"] = new ServerUserConfig { Endpoint = serverAEndpoint, ChildClients = ["ClientA1", "ClientA2"] },
             ["ServerB"] = new ServerUserConfig { Endpoint = serverBEndpoint, ChildClients = ["ClientB1", "ClientB2"] }
         };
+        Dictionary<string, UserEndpoint> childEndpoints = new(StringComparer.OrdinalIgnoreCase)
+        {
+            ["ClientA1"] = clientA1Endpoint,
+            ["ClientA2"] = clientA2Endpoint
+        };
+
+        Mock<IMsmtPeer> peer = new();
+        TestObservable<MsmtConnectedEventArgs> connected = new();
+        TestObservable<MsmtDisconnectedEventArgs> disconnected = new();
+        TestObservable<MsmtReceivedEventArgs> received = new();
+        peer.SetupGet(p => p.Connected).Returns(connected);
+        peer.SetupGet(p => p.Disconnected).Returns(disconnected);
+        peer.SetupGet(p => p.Received).Returns(received);
+
+        Mock<IMsmtPeerFactory> peerFactory = new();
+        peerFactory.Setup(f => f.Create(It.IsAny<MsmtOptions>())).Returns(peer.Object);
+
+        (X509Certificate2 identity, _, X509Certificate2Collection trustedAuthorities) = TestMsmtCertificates.Create();
 
         Mock<TestEngineController> engineController = new() { CallBase = true };
         engineController.Setup(p => p.Servers).Returns(userMap);
-        engineController.Setup(p => p.ConnectionOptions).Returns(new OftPeerOptions { Info = "ServerA" });
+        engineController.Setup(p => p.ConnectionOptions).Returns(new MsmtOptions
+        {
+            Credentials = new MsmtCredentials { Identity = identity, TrustedAuthorities = trustedAuthorities }
+        });
+        engineController.Setup(p => p.GetCertificateName(It.IsAny<string>())).Returns((string name) => $"USER-{name}");
+        engineController.Setup(p => p.GetEndpoint(It.IsAny<string>())).Returns((string name) => childEndpoints.GetValueOrDefault(name));
 
         Mock<ICurrentUserProvider> currentUser = new();
         currentUser.SetupGet(p => p.UserName).Returns("ServerA");
 
-        Mock<IOftListener> listener = new();
-        listener.SetupProperty(l => l.ConnectedHandler);
+        ServerRoutingService service = new(peerFactory.Object, engineController.Object, currentUser.Object, noLogger);
 
-        Mock<IOftHoster> hoster = new();
-        hoster.Setup(h => h.Host(It.IsAny<IPEndPoint>(), It.IsAny<OftConnectionOptions?>(), It.IsAny<CancellationToken>()))
-            .ReturnsAsync(listener.Object);
-
-        Mock<IOftConnector> connector = new();
-        connector.Setup(c => c.Connect(serverBEndpoint.IpAddress, serverBEndpoint.Port, It.IsAny<OftConnectionOptions?>(), It.IsAny<CancellationToken>()))
-            .ReturnsAsync(serverBOutboundConnection.Object);
-
-        ServerRoutingService service = new(hoster.Object, connector.Object, engineController.Object, currentUser.Object, noLogger, TimeSpan.FromMilliseconds(20));
+        configurePeer?.Invoke(peer, connected);
 
         CancellationTokenSource cts = new();
         Task startTask = service.Start(cts.Token);
-        await WaitUntil(() => listener.Object.ConnectedHandler is not null && connector.Invocations.Count >= 1, TimeSpan.FromSeconds(2));
+        await Task.Delay(20);
 
-        return new Fixture(service, listener, connector, startTask, cts);
+        return new Fixture(service, peer, connected, disconnected, received, startTask, cts);
     }
 
     private static ReadOnlyMemory<byte> Encode(TestMessage message)
@@ -85,34 +126,33 @@ public sealed class ServerRoutingServiceTests
         }
     }
 
-    /// <summary>An inbound connection whose hail identifies a known child of this server is tracked as a child connection.</summary>
+    /// <summary>An inbound connection whose certificate identifies a known child of this server is tracked as a child connection.</summary>
     [Fact]
     public async Task OnConnected_KnownChild_TrackedAsChild()
     {
-        Mock<IOftConnection> serverB = BuildConnection("ServerB");
-        Fixture fx = await BuildStarted(serverB);
-        Mock<IOftConnection> clientA1 = BuildConnection("ClientA1");
+        Fixture fx = await BuildStarted();
+        Mock<IMsmtConnection> clientA1 = BuildInboundConnection("ClientA1");
 
-        fx.Listener.Object.ConnectedHandler!(clientA1.Object);
+        fx.Connected.Publish(new MsmtConnectedEventArgs { Connection = clientA1.Object });
 
-        Assert.NotNull(clientA1.Object.ReceivedHandler);
-        clientA1.Verify(c => c.DisposeAsync(), Times.Never);
+        Assert.Contains(fx.Service.GetStatuses(), s => s.UserName == "ClientA1" && s.IsConnected);
+        clientA1.Verify(c => c.Drop(), Times.Never);
 
         fx.Cts.Cancel();
         await fx.StartTask;
     }
 
-    /// <summary>An inbound connection whose hail identifies an unrecognized identity is disposed and ignored.</summary>
+    /// <summary>An inbound connection whose certificate identifies an unrecognized identity is dropped and ignored.</summary>
     [Fact]
-    public async Task OnConnected_UnrecognizedIdentity_Disposed()
+    public async Task OnConnected_UnrecognizedIdentity_Dropped()
     {
-        Mock<IOftConnection> serverB = BuildConnection("ServerB");
-        Fixture fx = await BuildStarted(serverB);
-        Mock<IOftConnection> stranger = BuildConnection("UNKNOWN-USER");
+        Fixture fx = await BuildStarted();
+        MsmtTarget strangerTarget = new() { Host = "10.0.9.9", Port = 12345 };
+        Mock<IMsmtConnection> stranger = BuildInboundConnection("UNKNOWN-USER", strangerTarget);
 
-        fx.Listener.Object.ConnectedHandler!(stranger.Object);
+        fx.Connected.Publish(new MsmtConnectedEventArgs { Connection = stranger.Object });
 
-        await WaitUntil(() => stranger.Invocations.Any(i => i.Method.Name == nameof(IAsyncDisposable.DisposeAsync)), TimeSpan.FromSeconds(2));
+        stranger.Verify(c => c.Drop(), Times.Once);
 
         fx.Cts.Cancel();
         await fx.StartTask;
@@ -122,19 +162,17 @@ public sealed class ServerRoutingServiceTests
     [Fact]
     public async Task FromChild_AddressedToSiblingChild_RoutesToSibling()
     {
-        Mock<IOftConnection> serverB = BuildConnection("ServerB");
-        Fixture fx = await BuildStarted(serverB);
+        Fixture fx = await BuildStarted();
+        AutoConnectAndAcknowledge(fx.Peer, fx.Connected);
 
-        Mock<IOftConnection> clientA1 = BuildConnection("ClientA1");
-        Mock<IOftConnection> clientA2 = BuildConnection("ClientA2");
-        fx.Listener.Object.ConnectedHandler!(clientA1.Object);
-        fx.Listener.Object.ConnectedHandler!(clientA2.Object);
+        Mock<IMsmtConnection> clientA1 = BuildInboundConnection("ClientA1");
+        fx.Connected.Publish(new MsmtConnectedEventArgs { Connection = clientA1.Object });
 
-        clientA1.Object.ReceivedHandler!(new UnownedMemory(Encode(MessageTo("ClientA2"))));
+        fx.Received.Publish(ReceivedFrom(clientA1.Object, new UnownedMemory(Encode(MessageTo("ClientA2")))));
 
-        await WaitUntil(() => clientA2.Invocations.Any(i => i.Method.Name == nameof(IOftConnection.Send)), TimeSpan.FromSeconds(2));
-        clientA2.Verify(c => c.Send(It.IsAny<ReadOnlyMemory<byte>>(), It.IsAny<int>(), It.IsAny<object?>(), It.IsAny<CancellationToken>()), Times.Once);
-        serverB.Verify(c => c.Send(It.IsAny<ReadOnlyMemory<byte>>(), It.IsAny<int>(), It.IsAny<object?>(), It.IsAny<CancellationToken>()), Times.Never);
+        await WaitUntil(() => fx.Peer.Invocations.Any(i => i.Method.Name == nameof(IMsmtPeer.Request) && ((MsmtNameTarget)i.Arguments[0]).Port == clientA2Endpoint.Port && IsRealPayload((IMemoryOwner<byte>)i.Arguments[1])), TimeSpan.FromSeconds(2));
+        fx.Peer.Verify(p => p.Request(It.Is<MsmtNameTarget>(t => t.Port == clientA2Endpoint.Port), It.Is<IMemoryOwner<byte>>(p => IsRealPayload(p)), It.IsAny<MsmtSendOptions>(), It.IsAny<CancellationToken>()), Times.Once);
+        fx.Peer.Verify(p => p.Request(It.Is<MsmtNameTarget>(t => t.Port == serverBEndpoint.Port), It.Is<IMemoryOwner<byte>>(p => IsRealPayload(p)), It.IsAny<MsmtSendOptions>(), It.IsAny<CancellationToken>()), Times.Never);
 
         fx.Cts.Cancel();
         await fx.StartTask;
@@ -144,94 +182,182 @@ public sealed class ServerRoutingServiceTests
     [Fact]
     public async Task FromChild_AddressedToRemoteServersChild_ForwardsToThatServerOnce()
     {
-        Mock<IOftConnection> serverB = BuildConnection("ServerB");
-        Fixture fx = await BuildStarted(serverB);
+        Fixture fx = await BuildStarted();
+        AutoConnectAndAcknowledge(fx.Peer, fx.Connected);
 
-        Mock<IOftConnection> clientA1 = BuildConnection("ClientA1");
-        fx.Listener.Object.ConnectedHandler!(clientA1.Object);
+        Mock<IMsmtConnection> clientA1 = BuildInboundConnection("ClientA1");
+        fx.Connected.Publish(new MsmtConnectedEventArgs { Connection = clientA1.Object });
 
         // Addressed to both of ServerB's children — should still forward to ServerB exactly once.
-        clientA1.Object.ReceivedHandler!(new UnownedMemory(Encode(MessageTo("ClientB1", "ClientB2"))));
+        fx.Received.Publish(ReceivedFrom(clientA1.Object, new UnownedMemory(Encode(MessageTo("ClientB1", "ClientB2")))));
 
-        await WaitUntil(() => serverB.Invocations.Any(i => i.Method.Name == nameof(IOftConnection.Send)), TimeSpan.FromSeconds(2));
-        serverB.Verify(c => c.Send(It.IsAny<ReadOnlyMemory<byte>>(), It.IsAny<int>(), It.IsAny<object?>(), It.IsAny<CancellationToken>()), Times.Once);
+        await WaitUntil(() => fx.Peer.Invocations.Any(i => i.Method.Name == nameof(IMsmtPeer.Request) && ((MsmtNameTarget)i.Arguments[0]).Port == serverBEndpoint.Port && IsRealPayload((IMemoryOwner<byte>)i.Arguments[1])), TimeSpan.FromSeconds(2));
+        fx.Peer.Verify(p => p.Request(It.Is<MsmtNameTarget>(t => t.Port == serverBEndpoint.Port), It.Is<IMemoryOwner<byte>>(p => IsRealPayload(p)), It.IsAny<MsmtSendOptions>(), It.IsAny<CancellationToken>()), Times.Once);
 
         fx.Cts.Cancel();
         await fx.StartTask;
+    }
+
+    /// <summary>A child with no configured endpoint (missing from the Users map) is silently skipped, not thrown for, when addressed.</summary>
+    [Fact]
+    public async Task FromChild_SiblingHasNoConfiguredEndpoint_DoesNotSendOrThrow()
+    {
+        Dictionary<string, ServerUserConfig> userMap = new(StringComparer.OrdinalIgnoreCase)
+        {
+            ["ServerA"] = new ServerUserConfig { Endpoint = serverAEndpoint, ChildClients = ["ClientA1", "ClientA2"] }
+        };
+
+        Mock<IMsmtPeer> peer = new();
+        TestObservable<MsmtConnectedEventArgs> connected = new();
+        TestObservable<MsmtDisconnectedEventArgs> disconnected = new();
+        TestObservable<MsmtReceivedEventArgs> received = new();
+        peer.SetupGet(p => p.Connected).Returns(connected);
+        peer.SetupGet(p => p.Disconnected).Returns(disconnected);
+        peer.SetupGet(p => p.Received).Returns(received);
+
+        Mock<IMsmtPeerFactory> peerFactory = new();
+        peerFactory.Setup(f => f.Create(It.IsAny<MsmtOptions>())).Returns(peer.Object);
+
+        (X509Certificate2 identity, _, X509Certificate2Collection trustedAuthorities) = TestMsmtCertificates.Create();
+
+        Mock<TestEngineController> engineController = new() { CallBase = true };
+        engineController.Setup(p => p.Servers).Returns(userMap);
+        engineController.Setup(p => p.ConnectionOptions).Returns(new MsmtOptions
+        {
+            Credentials = new MsmtCredentials { Identity = identity, TrustedAuthorities = trustedAuthorities }
+        });
+        engineController.Setup(p => p.GetCertificateName(It.IsAny<string>())).Returns((string name) => $"USER-{name}");
+        engineController.Setup(p => p.GetEndpoint(It.IsAny<string>())).Returns((UserEndpoint?)null);
+
+        Mock<ICurrentUserProvider> currentUser = new();
+        currentUser.SetupGet(p => p.UserName).Returns("ServerA");
+
+        ServerRoutingService service = new(peerFactory.Object, engineController.Object, currentUser.Object, noLogger);
+        CancellationTokenSource cts = new();
+        Task startTask = service.Start(cts.Token);
+        await Task.Delay(20);
+
+        Mock<IMsmtConnection> clientA1 = BuildInboundConnection("ClientA1");
+        connected.Publish(new MsmtConnectedEventArgs { Connection = clientA1.Object });
+
+        received.Publish(ReceivedFrom(clientA1.Object, new UnownedMemory(Encode(MessageTo("ClientA2")))));
+
+        await Task.Delay(50);
+        peer.Verify(p => p.Request(It.IsAny<MsmtNameTarget>(), It.IsAny<IMemoryOwner<byte>>(), It.IsAny<MsmtSendOptions>(), It.IsAny<CancellationToken>()), Times.Never);
+
+        cts.Cancel();
+        await startTask;
     }
 
     /// <summary>A message received from another server is delivered only to local children it addresses, never re-forwarded to other servers.</summary>
     [Fact]
     public async Task FromServer_AddressedToLocalChild_DeliversLocallyOnlyNeverReforwarded()
     {
-        Mock<IOftConnection> serverB = BuildConnection("ServerB");
-        Fixture fx = await BuildStarted(serverB);
+        Fixture fx = await BuildStarted();
+        AutoConnectAndAcknowledge(fx.Peer, fx.Connected);
 
-        Mock<IOftConnection> clientA1 = BuildConnection("ClientA1");
-        fx.Listener.Object.ConnectedHandler!(clientA1.Object);
+        Mock<IMsmtConnection> serverB = BuildInboundConnection("ServerB", new MsmtTarget { Host = serverBEndpoint.IpAddress, Port = serverBEndpoint.Port });
+        fx.Connected.Publish(new MsmtConnectedEventArgs { Connection = serverB.Object });
 
-        serverB.Object.ReceivedHandler!(new UnownedMemory(Encode(MessageTo("ClientA1"))));
+        fx.Received.Publish(ReceivedFrom(serverB.Object, new UnownedMemory(Encode(MessageTo("ClientA1")))));
 
-        await WaitUntil(() => clientA1.Invocations.Any(i => i.Method.Name == nameof(IOftConnection.Send)), TimeSpan.FromSeconds(2));
-        clientA1.Verify(c => c.Send(It.IsAny<ReadOnlyMemory<byte>>(), It.IsAny<int>(), It.IsAny<object?>(), It.IsAny<CancellationToken>()), Times.Once);
-        // Never re-forwarded back out over the same (or any) server connection.
-        serverB.Verify(c => c.Send(It.IsAny<ReadOnlyMemory<byte>>(), It.IsAny<int>(), It.IsAny<object?>(), It.IsAny<CancellationToken>()), Times.Never);
-
-        fx.Cts.Cancel();
-        await fx.StartTask;
-    }
-
-    /// <summary>The server user map keeps retrying an outbound connection to another server after it disconnects.</summary>
-    [Fact]
-    public async Task MaintainServerConnection_Disconnects_Reconnects()
-    {
-        Mock<IOftConnection> serverB = BuildConnection("ServerB");
-        Fixture fx = await BuildStarted(serverB);
-
-        serverB.Object.DisconnectedHandler!(null);
-
-        await WaitUntil(() => fx.Connector.Invocations.Count >= 2, TimeSpan.FromSeconds(2));
-        fx.Connector.Verify(c => c.Connect(serverBEndpoint.IpAddress, serverBEndpoint.Port, It.IsAny<OftConnectionOptions?>(), It.IsAny<CancellationToken>()), Times.AtLeast(2));
+        await WaitUntil(() => fx.Peer.Invocations.Any(i => i.Method.Name == nameof(IMsmtPeer.Request) && ((MsmtNameTarget)i.Arguments[0]).Port == clientA1Endpoint.Port && IsRealPayload((IMemoryOwner<byte>)i.Arguments[1])), TimeSpan.FromSeconds(2));
+        fx.Peer.Verify(p => p.Request(It.Is<MsmtNameTarget>(t => t.Port == clientA1Endpoint.Port), It.Is<IMemoryOwner<byte>>(p => IsRealPayload(p)), It.IsAny<MsmtSendOptions>(), It.IsAny<CancellationToken>()), Times.Once);
+        // Never re-forwarded back out to ServerB.
+        fx.Peer.Verify(p => p.Request(It.Is<MsmtNameTarget>(t => t.Port == serverBEndpoint.Port), It.Is<IMemoryOwner<byte>>(p => IsRealPayload(p)), It.IsAny<MsmtSendOptions>(), It.IsAny<CancellationToken>()), Times.Never);
 
         fx.Cts.Cancel();
         await fx.StartTask;
     }
 
-    /// <summary>GetStatuses returns one row per own child client (ClientA1, ClientA2) plus one connected row for the other server (ServerB), excluding this instance's own name.</summary>
+    /// <summary>GetStatuses returns one row per own child client (ClientA1, ClientA2) plus one row for the other server (ServerB), excluding this instance's own name, all initially disconnected.</summary>
     [Fact]
-    public async Task GetStatuses_Started_ReturnsChildRowsAndConnectedServerRow()
+    public async Task GetStatuses_Started_ReturnsChildAndServerRowsDisconnected()
     {
-        Mock<IOftConnection> serverB = BuildConnection("ServerB");
-        Fixture fx = await BuildStarted(serverB);
+        Fixture fx = await BuildStarted();
 
-        await WaitUntil(() => fx.Service.GetStatuses().Any(s => s.UserName == "ServerB" && s.IsConnected), TimeSpan.FromSeconds(2));
         IReadOnlyList<PeerConnectionStatus> statuses = fx.Service.GetStatuses();
 
         Assert.Equal(3, statuses.Count);
         Assert.Contains(statuses, s => s.UserName == "ClientA1" && !s.IsConnected);
         Assert.Contains(statuses, s => s.UserName == "ClientA2" && !s.IsConnected);
-        PeerConnectionStatus serverStatus = Assert.Single(statuses, s => s.UserName == "ServerB");
-        Assert.True(serverStatus.IsConnected);
-        Assert.NotNull(serverStatus.LastConnectedAt);
-        Assert.Null(serverStatus.LastDisconnectedAt);
+        Assert.Contains(statuses, s => s.UserName == "ServerB" && !s.IsConnected);
 
         fx.Cts.Cancel();
         await fx.StartTask;
     }
 
-    /// <summary>After the outbound server connection disconnects, GetStatuses reports it disconnected with a LastDisconnectedAt timestamp.</summary>
+    /// <summary>
+    /// Even with no real message ever routed, the background connection monitor proactively sends an empty
+    /// heartbeat request to every own child and every sibling server - reusing the same on-demand connection
+    /// a real message would use - and GetStatuses reports them connected once those heartbeats' Connected
+    /// events arrive, so the status table doesn't stay perpetually disconnected while idle.
+    /// </summary>
     [Fact]
-    public async Task GetStatuses_AfterServerDisconnects_ReturnsDisconnectedRowWithLastDisconnectedAt()
+    public async Task GetStatuses_HeartbeatConnectsChildrenAndServersProactively_ReportsConnectedWithoutAnyRealTraffic()
     {
-        Mock<IOftConnection> serverB = BuildConnection("ServerB");
-        Fixture fx = await BuildStarted(serverB);
-        await WaitUntil(() => fx.Service.GetStatuses().Any(s => s.UserName == "ServerB" && s.IsConnected), TimeSpan.FromSeconds(2));
+        Fixture fx = await BuildStarted(configurePeer: (peer, connected) => AutoConnectAndAcknowledge(peer, connected));
 
-        serverB.Object.DisconnectedHandler!(null);
-        await WaitUntil(() => fx.Service.GetStatuses().Any(s => s.UserName == "ServerB" && !s.IsConnected), TimeSpan.FromSeconds(2));
+        await WaitUntil(() => fx.Service.GetStatuses().All(s => s.IsConnected), TimeSpan.FromSeconds(2));
+
+        fx.Peer.Verify(p => p.Request(
+            It.Is<MsmtNameTarget>(t => t.Port == clientA1Endpoint.Port),
+            It.Is<IMemoryOwner<byte>>(payload => payload.Memory.Length == 0),
+            It.IsAny<MsmtSendOptions>(),
+            It.IsAny<CancellationToken>()), Times.AtLeastOnce);
+        fx.Peer.Verify(p => p.Request(
+            It.Is<MsmtNameTarget>(t => t.Port == clientA2Endpoint.Port),
+            It.Is<IMemoryOwner<byte>>(payload => payload.Memory.Length == 0),
+            It.IsAny<MsmtSendOptions>(),
+            It.IsAny<CancellationToken>()), Times.AtLeastOnce);
+        fx.Peer.Verify(p => p.Request(
+            It.Is<MsmtNameTarget>(t => t.Port == serverBEndpoint.Port),
+            It.Is<IMemoryOwner<byte>>(payload => payload.Memory.Length == 0),
+            It.IsAny<MsmtSendOptions>(),
+            It.IsAny<CancellationToken>()), Times.AtLeastOnce);
+
+        IReadOnlyList<PeerConnectionStatus> statuses = fx.Service.GetStatuses();
+        Assert.Equal(3, statuses.Count);
+        Assert.All(statuses, s => Assert.True(s.IsConnected));
+        Assert.All(statuses, s => Assert.NotNull(s.LastConnectedAt));
+
+        fx.Cts.Cancel();
+        await fx.StartTask;
+    }
+
+    /// <summary>Once an outbound connection to another server is established (e.g. via routing a message to it), GetStatuses reports it connected with a LastConnectedAt timestamp.</summary>
+    [Fact]
+    public async Task GetStatuses_ServerConnectedOutbound_ReturnsConnectedRow()
+    {
+        Fixture fx = await BuildStarted();
+
+        Mock<IMsmtConnection> serverB = new();
+        serverB.SetupGet(c => c.Target).Returns(new MsmtTarget { Host = serverBEndpoint.IpAddress, Port = serverBEndpoint.Port });
+        serverB.SetupGet(c => c.Sender).Returns(Mock.Of<IMsmtLink>());
+        fx.Connected.Publish(new MsmtConnectedEventArgs { Connection = serverB.Object });
 
         PeerConnectionStatus status = Assert.Single(fx.Service.GetStatuses(), s => s.UserName == "ServerB");
+        Assert.True(status.IsConnected);
+        Assert.NotNull(status.LastConnectedAt);
+        Assert.Null(status.LastDisconnectedAt);
 
+        fx.Cts.Cancel();
+        await fx.StartTask;
+    }
+
+    /// <summary>After a known child's connection disconnects, GetStatuses reports it disconnected with a LastDisconnectedAt timestamp.</summary>
+    [Fact]
+    public async Task GetStatuses_ChildDisconnects_ReturnsDisconnectedRowWithLastDisconnectedAt()
+    {
+        Fixture fx = await BuildStarted();
+        Mock<IMsmtConnection> clientA1 = BuildInboundConnection("ClientA1");
+
+        fx.Connected.Publish(new MsmtConnectedEventArgs { Connection = clientA1.Object });
+        Assert.Contains(fx.Service.GetStatuses(), s => s.UserName == "ClientA1" && s.IsConnected);
+
+        fx.Disconnected.Publish(new MsmtDisconnectedEventArgs { Connection = clientA1.Object });
+
+        PeerConnectionStatus status = Assert.Single(fx.Service.GetStatuses(), s => s.UserName == "ClientA1");
         Assert.False(status.IsConnected);
         Assert.NotNull(status.LastConnectedAt);
         Assert.NotNull(status.LastDisconnectedAt);
@@ -244,18 +370,75 @@ public sealed class ServerRoutingServiceTests
     [Fact]
     public async Task GetStatuses_ChildConnects_ReturnsConnectedChildRow()
     {
-        Mock<IOftConnection> serverB = BuildConnection("ServerB");
-        Fixture fx = await BuildStarted(serverB);
-        Mock<IOftConnection> clientA1 = BuildConnection("ClientA1");
+        Fixture fx = await BuildStarted();
+        Mock<IMsmtConnection> clientA1 = BuildInboundConnection("ClientA1");
 
-        fx.Listener.Object.ConnectedHandler!(clientA1.Object);
+        fx.Connected.Publish(new MsmtConnectedEventArgs { Connection = clientA1.Object });
 
-        await WaitUntil(() => fx.Service.GetStatuses().Any(s => s.UserName == "ClientA1" && s.IsConnected), TimeSpan.FromSeconds(2));
         PeerConnectionStatus status = Assert.Single(fx.Service.GetStatuses(), s => s.UserName == "ClientA1");
-
         Assert.True(status.IsConnected);
         Assert.NotNull(status.LastConnectedAt);
         Assert.Null(status.LastDisconnectedAt);
+
+        fx.Cts.Cancel();
+        await fx.StartTask;
+    }
+
+    /// <summary>Once a recognized sibling server connects and then disconnects, GetStatuses reports its row as disconnected with a LastDisconnectedAt timestamp.</summary>
+    [Fact]
+    public async Task GetStatuses_ServerDisconnects_ReturnsDisconnectedRowWithLastDisconnectedAt()
+    {
+        Fixture fx = await BuildStarted();
+        Mock<IMsmtConnection> serverB = BuildInboundConnection("ServerB", new MsmtTarget { Host = serverBEndpoint.IpAddress, Port = serverBEndpoint.Port });
+
+        fx.Connected.Publish(new MsmtConnectedEventArgs { Connection = serverB.Object });
+        Assert.Contains(fx.Service.GetStatuses(), s => s.UserName == "ServerB" && s.IsConnected);
+
+        fx.Disconnected.Publish(new MsmtDisconnectedEventArgs { Connection = serverB.Object });
+
+        PeerConnectionStatus status = Assert.Single(fx.Service.GetStatuses(), s => s.UserName == "ServerB");
+        Assert.False(status.IsConnected);
+        Assert.NotNull(status.LastConnectedAt);
+        Assert.NotNull(status.LastDisconnectedAt);
+
+        fx.Cts.Cancel();
+        await fx.StartTask;
+    }
+
+    /// <summary>Malformed (non-empty, non-deserializable) bytes from a recognized child are dropped silently - no relay Request happens and nothing throws.</summary>
+    [Fact]
+    public async Task FromChild_MalformedPayload_IsDroppedWithoutSendOrThrow()
+    {
+        Fixture fx = await BuildStarted();
+        AutoConnectAndAcknowledge(fx.Peer, fx.Connected);
+
+        Mock<IMsmtConnection> clientA1 = BuildInboundConnection("ClientA1");
+        fx.Connected.Publish(new MsmtConnectedEventArgs { Connection = clientA1.Object });
+
+        fx.Received.Publish(ReceivedFrom(clientA1.Object, new UnownedMemory(new byte[] { 0xFF, 0xFE, 0xFD })));
+
+        await Task.Delay(50);
+        fx.Peer.Verify(p => p.Request(It.IsAny<MsmtNameTarget>(), It.Is<IMemoryOwner<byte>>(p => IsRealPayload(p)), It.IsAny<MsmtSendOptions>(), It.IsAny<CancellationToken>()), Times.Never);
+
+        fx.Cts.Cancel();
+        await fx.StartTask;
+    }
+
+    /// <summary>IPeerService.Send (this server instance originating its own message) is routed exactly like a message received from itself as a child.</summary>
+    [Fact]
+    public async Task Send_FromServerItself_RoutesLikeAChildMessage()
+    {
+        Fixture fx = await BuildStarted();
+        AutoConnectAndAcknowledge(fx.Peer, fx.Connected);
+
+        TestMessage message = MessageTo("ClientA2");
+        message.MessageId = "SELF-M1";
+
+        bool ok = await fx.Service.Send("ClientA2", message);
+
+        Assert.True(ok);
+        await WaitUntil(() => fx.Peer.Invocations.Any(i => i.Method.Name == nameof(IMsmtPeer.Request) && ((MsmtNameTarget)i.Arguments[0]).Port == clientA2Endpoint.Port && IsRealPayload((IMemoryOwner<byte>)i.Arguments[1])), TimeSpan.FromSeconds(2));
+        fx.Peer.Verify(p => p.Request(It.Is<MsmtNameTarget>(t => t.Port == clientA2Endpoint.Port), It.Is<IMemoryOwner<byte>>(p => IsRealPayload(p)), It.IsAny<MsmtSendOptions>(), It.IsAny<CancellationToken>()), Times.Once);
 
         fx.Cts.Cancel();
         await fx.StartTask;

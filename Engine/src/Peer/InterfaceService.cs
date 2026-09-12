@@ -1,11 +1,19 @@
 namespace BlueHeighliner.Comlink.Engine.Peer;
 
 /// <summary>
-/// Hosts the local interface listener: an OFT connection that behaves like a peer connection — same
+/// Hosts the local interface listener: an MSMT connection that behaves like a peer connection — same
 /// transport, same message type (<see cref="IEngineController.MessageType"/>) — but represents no user of
-/// its own. Every message this user receives from a peer is mirrored to every connected interface, and
-/// every message an interface sends is routed out to other peers as if this user had originated it itself.
+/// its own. Every message an interface sends is routed out to other peers as if this user had originated
+/// it itself.
 /// </summary>
+/// <remarks>
+/// Mirroring an inbound peer message back out to a connected interface is not currently implemented:
+/// MSMT's client-request/server-response model means a connection an interface client initiated can only
+/// ever be used to acknowledge what that client sends, never to push a new message back down it, so an
+/// interface tool would need to run its own MSMT receiver for this instance to dial back into - a
+/// materially different integration shape than "open a socket and read" that is not yet provided. See
+/// <c>Docs/Interface.md</c>.
+/// </remarks>
 internal interface IInterfaceService : IAsyncDisposable
 {
     /// <summary>Starts the inbound interface listener and blocks until <paramref name="cancellation"/> is cancelled.</summary>
@@ -15,53 +23,55 @@ internal interface IInterfaceService : IAsyncDisposable
 /// <inheritdoc cref="IInterfaceService" />
 internal sealed class InterfaceService : IInterfaceService
 {
-    /// <summary>Initializes a new <see cref="InterfaceService"/> and subscribes to inbound peer deliveries to mirror.</summary>
+    /// <summary>Initializes a new <see cref="InterfaceService"/>.</summary>
     public InterfaceService(
-        IOftHoster hoster,
+        IMsmtPeerFactory peerFactory,
         IEngineController engineController,
         IMessageRoutingService routingService,
         IUserService userService,
-        IPeerService peerService)
+        ILoggerFactory loggerFactory)
     {
-        this.hoster = hoster;
+        this.peerFactory = peerFactory;
         this.engineController = engineController;
         this.routingService = routingService;
         this.userService = userService;
-        peerService.MessageDelivered += OnMessageDelivered;
+        logger = loggerFactory.CreateLogger("ACTIVITY");
     }
 
-    private readonly IOftHoster hoster;
+    private readonly IMsmtPeerFactory peerFactory;
     private readonly IEngineController engineController;
     private readonly IMessageRoutingService routingService;
     private readonly IUserService userService;
+    private readonly ILogger logger;
 
-    private readonly ConcurrentDictionary<Guid, IOftConnection> connections = new();
+    private IMsmtPeer? peer;
 
     /// <inheritdoc />
     public async Task Start(CancellationToken cancellation)
     {
-        IOftListener listener = await hoster.Host(
-            new IPEndPoint(IPAddress.Loopback, engineController.InterfacePort),
-            new OftConnectionOptions { Info = string.Empty, SecurityMode = OftSecurityMode.Trusted },
-            cancellation);
-        listener.ConnectedHandler = OnConnected;
+        MsmtOptions options;
+        try
+        {
+            options = engineController.ConnectionOptions;
+        }
+        catch (InvalidOperationException ex)
+        {
+            logger.LogError("Interface listener cannot start: {Message}", ex.Message);
+            return;
+        }
+
+        peer = peerFactory.Create(options);
+        peer.Received.Subscribe(OnReceived);
+        peer.StartListener(engineController.InterfacePort, "127.0.0.1");
 
         try { await Task.Delay(Timeout.Infinite, cancellation); }
         catch (OperationCanceledException) { }
     }
 
-    private void OnConnected(IOftConnection connection)
-    {
-        Guid id = Guid.NewGuid();
-        connections[id] = connection;
-        connection.DisconnectedHandler = ex => connections.TryRemove(id, out IOftConnection? _);
-        connection.ReceivedHandler = OnReceived;
-    }
-
-    private void OnReceived(IMemoryOwner<byte> data)
+    private void OnReceived(MsmtReceivedEventArgs args)
     {
         byte[] copy;
-        using (data) { copy = data.Memory.ToArray(); }
+        using (args.Payload) { copy = args.Payload.Memory.ToArray(); }
         _ = Task.Run(() => HandleInterfaceMessage(copy));
     }
 
@@ -94,26 +104,9 @@ internal sealed class InterfaceService : IInterfaceService
         await routingService.Route(userInfo.Name, payload, CancellationToken.None);
     }
 
-    private async Task OnMessageDelivered(object message)
-    {
-        if (connections.IsEmpty) { return; }
-
-        int priority = engineController.GetPriority(message);
-        using OwnedBuffer buf = PeerSerializer.Serialize(message);
-        foreach (IOftConnection connection in connections.Values)
-        {
-            try { await connection.Send(buf.Memory, priority); }
-            catch { }
-        }
-    }
-
     /// <inheritdoc />
     public async ValueTask DisposeAsync()
     {
-        foreach (IOftConnection connection in connections.Values)
-        {
-            await connection.DisposeAsync();
-        }
-        connections.Clear();
+        if (peer is not null) { await peer.DisposeAsync(); }
     }
 }

@@ -1,59 +1,25 @@
 namespace BlueHeighliner.Comlink.Tests.Interface;
 
-/// <summary>Unit and real-OFT integration tests for <see cref="InterfaceService"/>.</summary>
+/// <summary>Unit and real-MSMT integration tests for <see cref="InterfaceService"/>.</summary>
 public sealed class InterfaceServiceTests
 {
-    private sealed class FakePeerService : IPeerService
-    {
-        public event Func<object, Task>? MessageDelivered;
-#pragma warning disable CS0067
-        public event Func<string, string, Task>? ConfirmationReceived;
-        public event Func<string, string, OftDeliveryStatus, Task>? DeliveryStatusChanged;
-#pragma warning restore CS0067
-        public Task Start(CancellationToken cancellation) => Task.CompletedTask;
-        public Task<bool> Send(string userName, object message, CancellationToken cancellation = default) => Task.FromResult(true);
-        public Task DeliverLocal(object payload) => Task.CompletedTask;
-
-        public async Task FireMessageDelivered(object payload)
-        {
-            if (MessageDelivered is not null) { await MessageDelivered(payload); }
-        }
-    }
-
+    private static readonly ILoggerFactory noLogger = LoggerFactory.Create(_ => { });
     private readonly IEngineController format = new TestEngineController();
 
     private static UserInfo MakeUserInfo(string name) => new() { Name = name, Code = "C1", EnvironmentTitle = "T", EnvironmentColor = "#000" };
-
-    /// <summary>Retries connecting to the listener while it finishes binding, tolerating scheduling delays under parallel test load.</summary>
-    private static async Task<IOftConnection> ConnectWithRetry(int port)
-    {
-        OftConnectionOptions options = new() { Info = string.Empty, SecurityMode = OftSecurityMode.Trusted };
-        for (int attempt = 0; ; attempt++)
-        {
-            try
-            {
-                return await new OftConnector().Connect("127.0.0.1", port, options);
-            }
-            catch when (attempt < 50)
-            {
-                await Task.Delay(100);
-            }
-        }
-    }
 
     /// <summary>A message received from an interface is routed as if sent by the currently installed user.</summary>
     [Fact]
     public async Task HandleInterfaceMessage_ValidMessage_RoutesAsCurrentUser()
     {
-        Mock<IOftHoster> hoster = new();
+        Mock<IMsmtPeerFactory> peerFactory = new();
         Mock<IMessageRoutingService> routing = new();
         routing.Setup(r => r.Route(It.IsAny<string>(), It.IsAny<SendMessagePayload>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync(("MSGID", (IReadOnlyList<UserDeliveryResult>)[]));
         Mock<IUserService> user = new();
         user.Setup(s => s.GetCurrentUserInfo()).Returns(MakeUserInfo("LOCAL"));
-        FakePeerService peer = new();
 
-        InterfaceService svc = new(hoster.Object, format, routing.Object, user.Object, peer);
+        InterfaceService svc = new(peerFactory.Object, format, routing.Object, user.Object, noLogger);
 
         TestMessage incoming = new()
         {
@@ -76,13 +42,12 @@ public sealed class InterfaceServiceTests
     [Fact]
     public async Task HandleInterfaceMessage_NoUserInstalled_DoesNotRoute()
     {
-        Mock<IOftHoster> hoster = new();
+        Mock<IMsmtPeerFactory> peerFactory = new();
         Mock<IMessageRoutingService> routing = new();
         Mock<IUserService> user = new();
         user.Setup(s => s.GetCurrentUserInfo()).Returns((UserInfo?)null);
-        FakePeerService peer = new();
 
-        InterfaceService svc = new(hoster.Object, format, routing.Object, user.Object, peer);
+        InterfaceService svc = new(peerFactory.Object, format, routing.Object, user.Object, noLogger);
 
         using OwnedBuffer buf = PeerSerializer.Serialize(new TestMessage { Subject = "Hi" });
         await svc.HandleInterfaceMessage(buf.Memory.ToArray());
@@ -94,110 +59,24 @@ public sealed class InterfaceServiceTests
     [Fact]
     public async Task HandleInterfaceMessage_CorruptData_DoesNotThrow()
     {
-        Mock<IOftHoster> hoster = new();
+        Mock<IMsmtPeerFactory> peerFactory = new();
         Mock<IMessageRoutingService> routing = new();
         Mock<IUserService> user = new();
-        FakePeerService peer = new();
 
-        InterfaceService svc = new(hoster.Object, format, routing.Object, user.Object, peer);
+        InterfaceService svc = new(peerFactory.Object, format, routing.Object, user.Object, noLogger);
 
         await svc.HandleInterfaceMessage(new byte[] { 0xFF, 0xFE, 0xFD });
 
         routing.Verify(r => r.Route(It.IsAny<string>(), It.IsAny<SendMessagePayload>(), It.IsAny<CancellationToken>()), Times.Never);
     }
 
-    /// <summary>An inbound peer message mirrored to a connected interface is sent at the message's own OFT priority.</summary>
+    /// <summary>A message an interface sends over a real MSMT connection is routed out to peers as if the app's own installed user had sent it.</summary>
     [Fact]
-    public async Task OnMessageDelivered_MirrorsToConnectedInterface_AtMessagePriority()
-    {
-        Mock<IOftListener> listener = new();
-        listener.SetupProperty(l => l.ConnectedHandler);
-        Mock<IOftHoster> hoster = new();
-        hoster.Setup(h => h.Host(It.IsAny<IPEndPoint>(), It.IsAny<OftConnectionOptions>(), It.IsAny<CancellationToken>()))
-            .ReturnsAsync(listener.Object);
-        Mock<IMessageRoutingService> routing = new();
-        Mock<IUserService> user = new();
-        FakePeerService peer = new();
-
-        InterfaceService svc = new(hoster.Object, format, routing.Object, user.Object, peer);
-
-        using CancellationTokenSource cts = new();
-        _ = svc.Start(cts.Token);
-
-        using CancellationTokenSource timeout = new(TimeSpan.FromSeconds(5));
-        while (listener.Object.ConnectedHandler is null)
-        {
-            timeout.Token.ThrowIfCancellationRequested();
-            await Task.Delay(10);
-        }
-
-        Mock<IOftConnection> connection = new();
-        connection.Setup(c => c.Send(It.IsAny<ReadOnlyMemory<byte>>(), It.IsAny<int>(), It.IsAny<object?>(), It.IsAny<CancellationToken>()))
-            .Returns(Task.CompletedTask);
-        listener.Object.ConnectedHandler!(connection.Object);
-
-        await peer.FireMessageDelivered(new TestMessage { MessageId = "M1", FromUser = "REMOTE", Priority = 3 });
-
-        connection.Verify(c => c.Send(It.IsAny<ReadOnlyMemory<byte>>(), 3, It.IsAny<object?>(), It.IsAny<CancellationToken>()), Times.Once);
-
-        cts.Cancel();
-    }
-
-    /// <summary>A message the user receives from a peer is mirrored, unmodified, to a connected interface.</summary>
-    [Fact]
-    public async Task RealOft_MessageDeliveredFromPeer_IsMirroredToConnectedInterface()
-    {
-        int port = 43000 + Random.Shared.Next(1000);
-        Mock<IMessageRoutingService> routing = new();
-        Mock<IUserService> user = new();
-        FakePeerService peer = new();
-
-        await using InterfaceService svc = new(new OftHoster(), new ConfiguredEngineController(format, new EngineConfig { InterfacePort = port }, new CurrentUserProvider()), routing.Object, user.Object, peer);
-
-        using CancellationTokenSource cts = new();
-        _ = svc.Start(cts.Token);
-
-        await using IOftConnection client = await ConnectWithRetry(port);
-
-        TaskCompletionSource<TestMessage> tcs = new();
-        client.ReceivedHandler = data =>
-        {
-            byte[] copy;
-            using (data) { copy = data.Memory.ToArray(); }
-            TestMessage? message = PeerSerializer.Deserialize(typeof(TestMessage), copy) as TestMessage;
-            if (message is not null) { tcs.TrySetResult(message); }
-        };
-
-        // The client's Connect() completing does not happen-before the server's ConnectedHandler
-        // registering the connection into InterfaceService's own connection set — OnMessageDelivered
-        // is a one-shot fire-and-forget event that silently drops the message if that registration
-        // hasn't finished yet, so a single FireMessageDelivered call can race and be lost. Re-fire
-        // until the client observes it (harmless: TrySetResult only ever accepts the first delivery).
-        _ = Task.Run(async () =>
-        {
-            try
-            {
-                while (!tcs.Task.IsCompleted)
-                {
-                    await peer.FireMessageDelivered(new TestMessage { MessageId = "M1", FromUser = "REMOTE", Subject = "Hello", Body = "World" });
-                    await Task.Delay(100);
-                }
-            }
-            catch { }
-        });
-
-        TestMessage received = await tcs.Task.WaitAsync(TimeSpan.FromSeconds(10));
-        Assert.Equal("M1", received.MessageId);
-        Assert.Equal("REMOTE", received.FromUser);
-
-        cts.Cancel();
-    }
-
-    /// <summary>A message an interface sends is routed out to peers as if the app's own installed user had sent it.</summary>
-    [Fact]
-    public async Task RealOft_MessageFromInterface_IsRoutedAsCurrentUser()
+    public async Task RealMsmt_MessageFromInterface_IsRoutedAsCurrentUser()
     {
         int port = 44000 + Random.Shared.Next(1000);
+        (X509Certificate2 serverCertificate, X509Certificate2 clientCertificate, X509Certificate2Collection trustedAuthorities) = TestMsmtCertificates.Create();
+
         Mock<IMessageRoutingService> routing = new();
         TaskCompletionSource<(string FromUser, SendMessagePayload Payload)> routeCalled = new();
         routing.Setup(r => r.Route(It.IsAny<string>(), It.IsAny<SendMessagePayload>(), It.IsAny<CancellationToken>()))
@@ -205,14 +84,25 @@ public sealed class InterfaceServiceTests
             .ReturnsAsync(("MSGID", (IReadOnlyList<UserDeliveryResult>)[]));
         Mock<IUserService> user = new();
         user.Setup(s => s.GetCurrentUserInfo()).Returns(MakeUserInfo("LOCAL"));
-        FakePeerService peer = new();
 
-        await using InterfaceService svc = new(new OftHoster(), new ConfiguredEngineController(format, new EngineConfig { InterfacePort = port }, new CurrentUserProvider()), routing.Object, user.Object, peer);
+        Mock<TestEngineController> engineController = new() { CallBase = true };
+        engineController.Setup(e => e.InterfacePort).Returns(port);
+        engineController.Setup(e => e.ConnectionOptions).Returns(new MsmtOptions
+        {
+            Credentials = new MsmtCredentials { Identity = serverCertificate, TrustedAuthorities = trustedAuthorities },
+            RequireFullyQualifiedHostname = false
+        });
+
+        await using InterfaceService svc = new(new MsmtPeerFactory(), engineController.Object, routing.Object, user.Object, noLogger);
 
         using CancellationTokenSource cts = new();
         _ = svc.Start(cts.Token);
 
-        await using IOftConnection client = await ConnectWithRetry(port);
+        await using IMsmtPeer client = new MsmtPeerFactory().Create(new MsmtOptions
+        {
+            Credentials = new MsmtCredentials { Identity = clientCertificate, TrustedAuthorities = trustedAuthorities },
+            RequireFullyQualifiedHostname = false
+        });
 
         TestMessage outgoing = new()
         {
@@ -221,10 +111,8 @@ public sealed class InterfaceServiceTests
             Addresses = [new TestAddressEntry { UserName = "DEST", Type = "To" }]
         };
 
-        // Same race as RealOft_MessageDeliveredFromPeer_IsMirroredToConnectedInterface, mirrored on the
-        // send side: the client's Connect() completing does not happen-before the server's ConnectedHandler
-        // setting connection.ReceivedHandler, so a single send can arrive before the server is listening.
-        // Re-send until routing observes it (harmless: Route is a no-op to production state here).
+        // The interface listener may still be finishing binding immediately after Start() returns
+        // control; re-send until routing observes it (harmless: Route is a no-op to production state here).
         _ = Task.Run(async () =>
         {
             try
@@ -232,7 +120,7 @@ public sealed class InterfaceServiceTests
                 while (!routeCalled.Task.IsCompleted)
                 {
                     using OwnedBuffer buf = PeerSerializer.Serialize(outgoing);
-                    await client.Send(buf.Memory);
+                    client.Send(new MsmtTarget { Host = "127.0.0.1", Port = port }, buf.Memory);
                     await Task.Delay(100);
                 }
             }

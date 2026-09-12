@@ -9,7 +9,7 @@ public sealed class DirectServiceConnectionTests
         public event Func<object, Task>? MessageDelivered;
 #pragma warning disable CS0067
         public event Func<string, string, Task>? ConfirmationReceived;
-        public event Func<string, string, OftDeliveryStatus, Task>? DeliveryStatusChanged;
+        public event Func<string, string, DestinationStatus, Task>? DeliveryStatusChanged;
 #pragma warning restore CS0067
         public List<(string UserName, TestMessage Message)> Sent { get; } = [];
         public bool ReturnSuccess { get; set; } = true;

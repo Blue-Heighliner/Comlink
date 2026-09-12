@@ -5,7 +5,7 @@
       <DataCollector friendlyName="XPlat Code Coverage">
         <Configuration>
           <Format>cobertura</Format>
-          <Include>[BlueHeighliner.Comlink.Engine]*</Include>
+          <Include>[BlueHeighliner.Comlink.Engine]*,[BlueHeighliner.Msmt]*</Include>
           <Exclude>[BlueHeighliner.Comlink.Tests]*</Exclude>
           <ExcludeByAttribute>GeneratedCode,ExcludeFromCodeCoverage,CompilerGenerated</ExcludeByAttribute>
           <IncludeTestAssembly>false</IncludeTestAssembly>

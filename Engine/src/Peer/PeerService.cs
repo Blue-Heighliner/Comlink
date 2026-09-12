@@ -11,8 +11,8 @@ internal interface IPeerService
     /// the message being confirmed and the confirming user's name; not raised via <see cref="MessageDelivered"/>.
     /// </summary>
     event Func<string, string, Task>? ConfirmationReceived;
-    /// <summary>Raised whenever the OFT delivery status of a message sent to a specific user changes.</summary>
-    event Func<string, string, OftDeliveryStatus, Task>? DeliveryStatusChanged;
+    /// <summary>Raised whenever the delivery status of a message sent to a specific user changes.</summary>
+    event Func<string, string, DestinationStatus, Task>? DeliveryStatusChanged;
     /// <summary>Starts the inbound peer listener and blocks until <paramref name="cancellation"/> is cancelled.</summary>
     Task Start(CancellationToken cancellation);
     /// <summary>Sends <paramref name="message"/> (an instance of <see cref="IEngineController.MessageType"/>) to the peer identified by <paramref name="userName"/>.</summary>
@@ -22,51 +22,63 @@ internal interface IPeerService
 }
 
 /// <summary>
-/// Implements <see cref="IPeerService"/> by wrapping an <see cref="IOftPeer"/>. Traffic carries an
+/// Implements <see cref="IPeerService"/> by wrapping an <see cref="IMsmtPeer"/>. Traffic carries an
 /// instance of <see cref="IEngineController.MessageType"/> directly with no envelope; delivery confirmation
-/// is derived entirely from OFT's own <see cref="OftDeliveryStatus"/> stream, not from an
+/// is derived from MSMT's own <see cref="IMsmtPeer.Request"/> outcome for the send's tag, not from an
 /// application-level acknowledgement.
 /// </summary>
 internal sealed class PeerService : IPeerService, IAsyncDisposable
 {
-    /// <summary>Initializes a new <see cref="PeerService"/> and wires up an <see cref="IOftPeer"/> using Engine infrastructure.</summary>
+    /// <summary>Initializes a new <see cref="PeerService"/>, deferring its <see cref="IMsmtPeer"/> to <see cref="Start"/> once a current user is registered.</summary>
     public PeerService(
-        IOftPeerFactory peerFactory,
+        IMsmtPeerFactory peerFactory,
         IEngineController engineController,
         ILoggerFactory loggerFactory)
     {
+        this.peerFactory = peerFactory;
         this.engineController = engineController;
         logger = loggerFactory.CreateLogger("ACTIVITY");
-        peer = peerFactory.Create(engineController.ConnectionOptions);
-        peer.ReceivedHandler = OnReceived;
-        peer.DeliveryStatusHandler = OnDeliveryStatus;
     }
 
     /// <summary>Initializes a <see cref="PeerService"/> with a pre-built peer; intended for unit testing.</summary>
-    internal PeerService(IOftPeer peer, IEngineController engineController, ILoggerFactory loggerFactory)
+    internal PeerService(IMsmtPeer peer, IEngineController engineController, ILoggerFactory loggerFactory)
     {
-        this.peer = peer;
+        peerFactory = null;
         this.engineController = engineController;
         logger = loggerFactory.CreateLogger("ACTIVITY");
-        peer.ReceivedHandler = OnReceived;
-        peer.DeliveryStatusHandler = OnDeliveryStatus;
+        Wire(peer);
     }
 
-    private readonly IOftPeer peer;
+    private readonly IMsmtPeerFactory? peerFactory;
     private readonly IEngineController engineController;
     private readonly ILogger logger;
+
+    private IMsmtPeer? peer;
 
     /// <inheritdoc />
     public event Func<object, Task>? MessageDelivered;
     /// <inheritdoc />
     public event Func<string, string, Task>? ConfirmationReceived;
     /// <inheritdoc />
-    public event Func<string, string, OftDeliveryStatus, Task>? DeliveryStatusChanged;
+    public event Func<string, string, DestinationStatus, Task>? DeliveryStatusChanged;
 
     /// <inheritdoc />
     public async Task Start(CancellationToken cancellation)
     {
-        await peer.Listen(new IPEndPoint(IPAddress.Any, engineController.PeerPort), cancellation);
+        MsmtOptions options;
+        try
+        {
+            options = engineController.ConnectionOptions;
+        }
+        catch (InvalidOperationException ex)
+        {
+            logger.LogError("Peer role cannot start: {Message}", ex.Message);
+            return;
+        }
+
+        Wire(peerFactory!.Create(options));
+        peer!.StartListener(engineController.PeerPort);
+
         try { await Task.Delay(Timeout.Infinite, cancellation); }
         catch (OperationCanceledException) { }
     }
@@ -74,20 +86,28 @@ internal sealed class PeerService : IPeerService, IAsyncDisposable
     /// <inheritdoc />
     public async Task<bool> Send(string userName, object message, CancellationToken cancellation = default)
     {
+        if (peer is null) { return false; }
+
         UserEndpoint? endpoint = engineController.GetEndpoint(userName);
         if (endpoint is null) { return false; }
 
-        using OwnedBuffer buf = PeerSerializer.Serialize(message);
+        DeliveryTag tag = new(engineController.GetMessageId(message), userName);
         try
         {
-            await peer.Send(endpoint.IpAddress, endpoint.Port, buf.Memory,
-                priority: engineController.GetPriority(message),
-                tag: new DeliveryTag(engineController.GetMessageId(message), userName),
-                cancellationToken: cancellation);
-            return true;
+            using OwnedBuffer buf = PeerSerializer.Serialize(message);
+            MsmtResponse response = await peer.Request(
+                new MsmtTarget { Host = endpoint.IpAddress, Port = endpoint.Port },
+                buf.Memory,
+                new MsmtSendOptions { Priority = engineController.GetPriority(message), Tag = tag },
+                cancellation);
+            response.Payload.Dispose();
+
+            RaiseDeliveryStatusChanged(tag, response.Success ? DestinationStatus.Confirmed : DestinationStatus.Failed);
+            return response.Success;
         }
         catch
         {
+            RaiseDeliveryStatusChanged(tag, DestinationStatus.Failed);
             return false;
         }
     }
@@ -102,24 +122,39 @@ internal sealed class PeerService : IPeerService, IAsyncDisposable
         }
     }
 
-    private void OnReceived(OftIdentity identity, IMemoryOwner<byte> data)
+    private void Wire(IMsmtPeer newPeer)
+    {
+        peer = newPeer;
+        newPeer.Received.Subscribe(OnReceived);
+        newPeer.PackageChanged.Subscribe(OnPackageChanged);
+    }
+
+    private void OnReceived(MsmtReceivedEventArgs args)
     {
         byte[] copy;
-        using (data) { copy = data.Memory.ToArray(); }
+        using (args.Payload) { copy = args.Payload.Memory.ToArray(); }
         _ = Task.Run(() => HandleMessage(copy));
     }
 
     internal Task<bool> HandleMessage(ReadOnlyMemory<byte> data)
         => PeerMessageDispatcher.Dispatch(data, engineController, logger, MessageDelivered, ConfirmationReceived);
 
-    private void OnDeliveryStatus(object tag, OftDeliveryStatus status)
+    private void OnPackageChanged(MsmtPackageChangedEventArgs args)
     {
-        if (tag is not DeliveryTag deliveryTag || DeliveryStatusChanged is null) { return; }
-        _ = Task.Run(() => DeliveryStatusChanged(deliveryTag.MessageId, deliveryTag.UserName, status));
+        if (args.Package.Tag is DeliveryTag tag && args.Status == MsmtSendStatus.PendingAcknowledgement)
+        {
+            RaiseDeliveryStatusChanged(tag, DestinationStatus.Sent);
+        }
+    }
+
+    private void RaiseDeliveryStatusChanged(DeliveryTag tag, DestinationStatus status)
+    {
+        if (DeliveryStatusChanged is null) { return; }
+        _ = Task.Run(() => DeliveryStatusChanged(tag.MessageId, tag.UserName, status));
     }
 
     /// <inheritdoc />
-    public ValueTask DisposeAsync() => peer.DisposeAsync();
+    public ValueTask DisposeAsync() => peer?.DisposeAsync() ?? ValueTask.CompletedTask;
 
     private sealed record DeliveryTag(string MessageId, string UserName);
 }

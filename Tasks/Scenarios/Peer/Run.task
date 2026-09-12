@@ -6,8 +6,8 @@ script Build
 
 script Peer1
 	after Build
-	run dotnet run --no-build --project Sample -- --config Scenarios/Peer/Peer1.json
+	run dotnet run --no-build --project Sample -- --config Tasks/Scenarios/Peer/Peer1.json
 
 script Peer2
 	after Build
-	run dotnet run --no-build --project Sample -- --config Scenarios/Peer/Peer2.json
+	run dotnet run --no-build --project Sample -- --config Tasks/Scenarios/Peer/Peer2.json

@@ -14,7 +14,7 @@ All external configuration and rule-based behavior — including the concrete me
 | Alert Settings | `AlertLabel`, `AlarmSoundDuration`, `QuickConfirmationEnabled`, `ComposeAlertsEnabled` |
 | Message Composition | `Priorities`, `TagsEnabled`, `TagLabel`, `BlockedCombinations` |
 | Print Policy | `PrintReceivedDefaultEnabled`, `GetPrintCount(message)` |
-| OFT Certificate | `GetCertificateName(userName)`, `ConnectionOptions` |
+| MSMT Certificates | `GetCertificateName(userName)`, `TrustedAuthorityCertificateName`, `ConnectionOptions` |
 | Network Topology | `Role`, `ServerEndpoint`, `Servers` |
 | Config File | `ConfigFileEnabled` |
 | External Systems | `ExternalSystems`, `ExternalServer` |

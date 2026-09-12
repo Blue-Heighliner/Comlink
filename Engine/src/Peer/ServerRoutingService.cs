@@ -1,65 +1,55 @@
 namespace BlueHeighliner.Comlink.Engine.Peer;
 
 /// <summary>
-/// Implements <see cref="IPeerService"/> for <see cref="NodeRole.Server"/>: listens on this server
-/// user's configured endpoint for connections from its child clients, forms a long-term outbound
-/// connection to every other server in the user map (retrying indefinitely on failure or disconnect),
-/// and relays raw message bytes between them. A message received from a child client is routed to any
-/// other local child it addresses and, once per remote server, forwarded to any other server that owns
-/// an addressed child; a message received from another server is assumed already routed and is only
-/// delivered to local children it addresses, never re-forwarded to other servers. Addressing operates on
-/// the message's raw (unexpanded) address list — group expansion is not performed at the server. Also
-/// implements <see cref="IConnectionStatusService"/>, tracking connect/disconnect status and timestamps
-/// for every own child client and every other server in the cluster. See <c>Docs/Peer.md</c>.
+/// Implements <see cref="IPeerService"/> for <see cref="NodeRole.Server"/>: listens on this server user's
+/// configured endpoint for connections from its child clients and other servers, and relays raw message
+/// bytes between them by dialing out to each recipient's own endpoint - MSMT's client-request/server-
+/// response model means a connection a remote peer initiated can only ever be used to acknowledge what
+/// that peer sends, never to push something new back down it, so delivering to any recipient (a child or
+/// another server) always means this instance acting as an MSMT client and connecting out to that
+/// recipient's own receiver, identified by certificate subject rather than any self-declared name. A
+/// message received from a child client is routed to any other local child it addresses and, once per
+/// remote server, forwarded to any other server that owns an addressed child; a message received from
+/// another server is assumed already routed and is only delivered to local children it addresses, never
+/// re-forwarded to other servers. Addressing operates on the message's raw (unexpanded) address list —
+/// group expansion is not performed at the server. Also implements <see cref="IConnectionStatusService"/>,
+/// tracking connect/disconnect status and timestamps for every own child client and every other server in
+/// the cluster. A background <see cref="MsmtConnectionMonitor"/> per child and per sibling server
+/// proactively opens and maintains that connection with a recurring heartbeat, independent of whether any
+/// real message is actually being routed, so <see cref="GetStatuses"/> reflects each connection's live state
+/// continuously rather than only the moment a message last happened to flow. See <c>Docs/Peer.md</c>.
 /// </summary>
 internal sealed class ServerRoutingService : IPeerService, IConnectionStatusService, IAsyncDisposable
 {
-    private static readonly TimeSpan defaultRetryInterval = TimeSpan.FromSeconds(5);
-
     /// <summary>Initializes a new <see cref="ServerRoutingService"/>.</summary>
     public ServerRoutingService(
-        IOftHoster hoster,
-        IOftConnector connector,
+        IMsmtPeerFactory peerFactory,
         IEngineController engineController,
         ICurrentUserProvider currentUserProvider,
         ILoggerFactory loggerFactory)
-        : this(hoster, connector, engineController, currentUserProvider, loggerFactory, defaultRetryInterval)
     {
-    }
-
-    /// <summary>Initializes a new <see cref="ServerRoutingService"/> with a custom retry interval; intended for unit testing.</summary>
-    internal ServerRoutingService(
-        IOftHoster hoster,
-        IOftConnector connector,
-        IEngineController engineController,
-        ICurrentUserProvider currentUserProvider,
-        ILoggerFactory loggerFactory,
-        TimeSpan retryInterval)
-    {
-        this.hoster = hoster;
-        this.connector = connector;
+        this.peerFactory = peerFactory;
         this.engineController = engineController;
         this.currentUserProvider = currentUserProvider;
         logger = loggerFactory.CreateLogger("ACTIVITY");
-        this.retryInterval = retryInterval;
     }
 
-    private readonly IOftHoster hoster;
-    private readonly IOftConnector connector;
+    private readonly IMsmtPeerFactory peerFactory;
     private readonly IEngineController engineController;
     private readonly ICurrentUserProvider currentUserProvider;
     private readonly ILogger logger;
-    private readonly TimeSpan retryInterval;
+    private readonly MsmtConnectionMonitor connectionMonitor = new();
 
-    private readonly ConcurrentDictionary<string, IOftConnection> childConnections = new(StringComparer.OrdinalIgnoreCase);
-    private readonly ConcurrentDictionary<string, IOftConnection> serverConnections = new(StringComparer.OrdinalIgnoreCase);
+    private readonly ConcurrentDictionary<string, bool> childConnected = new(StringComparer.OrdinalIgnoreCase);
+    private readonly ConcurrentDictionary<string, bool> serverConnected = new(StringComparer.OrdinalIgnoreCase);
     private readonly ConcurrentDictionary<string, Task<bool>> inFlightSends = new();
     private readonly ConcurrentDictionary<string, DateTime> serverLastConnectedAt = new(StringComparer.OrdinalIgnoreCase);
     private readonly ConcurrentDictionary<string, DateTime> serverLastDisconnectedAt = new(StringComparer.OrdinalIgnoreCase);
     private readonly ConcurrentDictionary<string, DateTime> childLastConnectedAt = new(StringComparer.OrdinalIgnoreCase);
     private readonly ConcurrentDictionary<string, DateTime> childLastDisconnectedAt = new(StringComparer.OrdinalIgnoreCase);
+    private readonly ConcurrentDictionary<IMsmtConnection, string> inboundConnectionNames = new();
     private IReadOnlyDictionary<string, ServerUserConfig> userMap = new Dictionary<string, ServerUserConfig>();
-    private IOftListener? listener;
+    private IMsmtPeer? peer;
 
     /// <inheritdoc />
     public event Func<object, Task>? MessageDelivered;
@@ -67,9 +57,9 @@ internal sealed class ServerRoutingService : IPeerService, IConnectionStatusServ
     /// <inheritdoc />
     public event Func<string, string, Task>? ConfirmationReceived;
 #pragma warning restore CS0067
-#pragma warning disable CS0067 // No per-message OFT delivery status is tracked across the client/server hierarchy.
+#pragma warning disable CS0067 // No per-message delivery status is tracked across the client/server hierarchy.
     /// <inheritdoc />
-    public event Func<string, string, OftDeliveryStatus, Task>? DeliveryStatusChanged;
+    public event Func<string, string, DestinationStatus, Task>? DeliveryStatusChanged;
 #pragma warning restore CS0067
     /// <inheritdoc />
     public event Action? StatusesChanged;
@@ -85,109 +75,211 @@ internal sealed class ServerRoutingService : IPeerService, IConnectionStatusServ
             return;
         }
 
-        listener = await hoster.Host(new IPEndPoint(IPAddress.Any, myConfig.Endpoint.Port), engineController.ConnectionOptions, cancellation);
-        listener.ConnectedHandler = OnConnected;
-
-        foreach ((string serverName, ServerUserConfig serverConfig) in userMap)
+        MsmtOptions options;
+        try
         {
-            if (string.Equals(serverName, myName, StringComparison.OrdinalIgnoreCase)) { continue; }
-            _ = MaintainServerConnection(serverName, serverConfig.Endpoint, cancellation);
+            options = engineController.ConnectionOptions;
         }
+        catch (InvalidOperationException ex)
+        {
+            logger.LogError("Server role cannot start: {Message}", ex.Message);
+            return;
+        }
+
+        peer = peerFactory.Create(options);
+        peer.Connected.Subscribe(OnConnected);
+        peer.Disconnected.Subscribe(OnDisconnected);
+        peer.Received.Subscribe(OnReceived);
+        peer.StartListener(myConfig.Endpoint.Port);
+        StartMonitoring(peer, myName, myConfig, cancellation);
 
         try { await Task.Delay(Timeout.Infinite, cancellation); }
         catch (OperationCanceledException) { }
     }
 
-    private async Task MaintainServerConnection(string serverName, UserEndpoint endpoint, CancellationToken cancellation)
+    private void StartMonitoring(IMsmtPeer activePeer, string myName, ServerUserConfig myConfig, CancellationToken cancellation)
     {
-        while (!cancellation.IsCancellationRequested)
+        foreach (string childName in myConfig.ChildClients)
         {
-            IOftConnection? connection = null;
-            try
+            UserEndpoint? endpoint = engineController.GetEndpoint(childName);
+            if (endpoint is null)
             {
-                connection = await connector.Connect(endpoint.IpAddress, endpoint.Port, engineController.ConnectionOptions, cancellation);
-                serverConnections[serverName] = connection;
-                serverLastConnectedAt[serverName] = DateTime.UtcNow;
-                StatusesChanged?.Invoke();
-                TaskCompletionSource disconnected = new(TaskCreationOptions.RunContinuationsAsynchronously);
-                connection.ReceivedHandler = data => OnReceivedFromServer(serverName, data);
-                connection.DisconnectedHandler = _ => disconnected.TrySetResult();
-                logger.LogInformation("Connected to server {ServerName}", serverName);
-                await disconnected.Task.WaitAsync(cancellation);
-            }
-            catch (OperationCanceledException)
-            {
-                return;
-            }
-            catch (Exception ex)
-            {
-                logger.LogWarning("Connection to server {ServerName} failed: {Message}", serverName, ex.Message);
-            }
-            finally
-            {
-                serverConnections.TryRemove(serverName, out _);
-                if (connection is not null)
-                {
-                    serverLastDisconnectedAt[serverName] = DateTime.UtcNow;
-                    StatusesChanged?.Invoke();
-                    await connection.DisposeAsync();
-                }
+                logger.LogWarning("Cannot monitor child {ChildName}: no endpoint configured for it (add it to the Users map)", childName);
+                continue;
             }
 
-            try { await Task.Delay(retryInterval, cancellation); }
-            catch (OperationCanceledException) { return; }
+            MsmtTarget target = new() { Host = endpoint.IpAddress, Port = endpoint.Port };
+            connectionMonitor.Maintain(activePeer, target, cancellation);
+        }
+
+        foreach ((string serverName, ServerUserConfig config) in userMap)
+        {
+            if (string.Equals(serverName, myName, StringComparison.OrdinalIgnoreCase)) { continue; }
+
+            MsmtTarget target = new() { Host = config.Endpoint.IpAddress, Port = config.Endpoint.Port };
+            connectionMonitor.Maintain(activePeer, target, cancellation);
         }
     }
 
-    private void OnConnected(IOftConnection connection)
+    private void UpdateChildStatus(string childName, bool connected)
     {
-        string remoteName = connection.Identity.Info;
-        string myName = currentUserProvider.UserName ?? string.Empty;
+        bool changed = childConnected.GetValueOrDefault(childName) != connected;
+        if (!changed) { return; }
 
-        bool isChild = userMap.TryGetValue(myName, out ServerUserConfig? myConfig)
-            && myConfig.ChildClients.Contains(remoteName, StringComparer.OrdinalIgnoreCase);
-        bool isServer = !isChild && userMap.ContainsKey(remoteName) && !string.Equals(remoteName, myName, StringComparison.OrdinalIgnoreCase);
-
-        if (isChild)
+        if (connected)
         {
-            childConnections[remoteName] = connection;
-            childLastConnectedAt[remoteName] = DateTime.UtcNow;
-            StatusesChanged?.Invoke();
-            connection.ReceivedHandler = data => OnReceivedFromChild(remoteName, data);
-            connection.DisconnectedHandler = ex =>
-            {
-                childConnections.TryRemove(remoteName, out _);
-                childLastDisconnectedAt[remoteName] = DateTime.UtcNow;
-                StatusesChanged?.Invoke();
-            };
-            logger.LogInformation("Child client {ClientName} connected", remoteName);
-        }
-        else if (isServer)
-        {
-            // Received-only: this server's own outbound leg (MaintainServerConnection) owns sending to,
-            // and retrying the connection with, serverName — this inbound leg just supplies its traffic.
-            connection.ReceivedHandler = data => OnReceivedFromServer(remoteName, data);
-            logger.LogInformation("Server {ServerName} connected inbound", remoteName);
+            childConnected[childName] = true;
+            childLastConnectedAt[childName] = DateTime.UtcNow;
+            logger.LogInformation("Connected to child client {ClientName}", childName);
         }
         else
         {
-            logger.LogWarning("Rejected connection from unrecognized identity {Identity}", remoteName);
-            _ = connection.DisposeAsync();
+            childConnected.TryRemove(childName, out _);
+            childLastDisconnectedAt[childName] = DateTime.UtcNow;
+            logger.LogWarning("Child client {ClientName} unreachable", childName);
+        }
+        StatusesChanged?.Invoke();
+    }
+
+    private void UpdateServerStatus(string serverName, bool connected)
+    {
+        bool changed = serverConnected.GetValueOrDefault(serverName) != connected;
+        if (!changed) { return; }
+
+        if (connected)
+        {
+            serverConnected[serverName] = true;
+            serverLastConnectedAt[serverName] = DateTime.UtcNow;
+            logger.LogInformation("Connected to server {ServerName}", serverName);
+        }
+        else
+        {
+            serverConnected.TryRemove(serverName, out _);
+            serverLastDisconnectedAt[serverName] = DateTime.UtcNow;
+            logger.LogWarning("Server {ServerName} unreachable", serverName);
+        }
+        StatusesChanged?.Invoke();
+    }
+
+    private void OnConnected(MsmtConnectedEventArgs args)
+    {
+        if (args.Connection.Sender is not null)
+        {
+            string? serverName = FindNameByTarget(userMap.Keys, args.Connection.Target);
+            if (serverName is not null)
+            {
+                UpdateServerStatus(serverName, true);
+                return;
+            }
+
+            string? childName = FindChildNameByTarget(args.Connection.Target);
+            if (childName is not null)
+            {
+                UpdateChildStatus(childName, true);
+            }
+            return;
+        }
+
+        string myName = currentUserProvider.UserName ?? string.Empty;
+        IReadOnlyList<string> childNames = userMap.TryGetValue(myName, out ServerUserConfig? myConfig) ? myConfig.ChildClients : [];
+
+        string? subject = args.Connection.Identity?.Subject;
+        string? remoteName = subject is null ? null
+            : FindNameByCertificateSubject(childNames, subject)
+                ?? FindNameByCertificateSubject(userMap.Keys.Where(name => !string.Equals(name, myName, StringComparison.OrdinalIgnoreCase)), subject);
+
+        if (remoteName is null)
+        {
+            logger.LogWarning("Rejected connection from unrecognized certificate {Subject}", subject);
+            args.Connection.Drop();
+            return;
+        }
+
+        inboundConnectionNames[args.Connection] = remoteName;
+
+        if (childNames.Contains(remoteName, StringComparer.OrdinalIgnoreCase))
+        {
+            UpdateChildStatus(remoteName, true);
+        }
+        else
+        {
+            UpdateServerStatus(remoteName, true);
         }
     }
 
-    private void OnReceivedFromChild(string childName, IMemoryOwner<byte> data)
+    private void OnDisconnected(MsmtDisconnectedEventArgs args)
     {
-        byte[] copy;
-        using (data) { copy = data.Memory.ToArray(); }
-        _ = Task.Run(() => HandleFromChild(childName, copy));
+        if (!inboundConnectionNames.TryRemove(args.Connection, out string? remoteName)) { return; }
+
+        string myName = currentUserProvider.UserName ?? string.Empty;
+        IReadOnlyList<string> childNames = userMap.TryGetValue(myName, out ServerUserConfig? myConfig) ? myConfig.ChildClients : [];
+
+        if (childNames.Contains(remoteName, StringComparer.OrdinalIgnoreCase))
+        {
+            UpdateChildStatus(remoteName, false);
+        }
+        else
+        {
+            UpdateServerStatus(remoteName, false);
+        }
     }
 
-    private void OnReceivedFromServer(string serverName, IMemoryOwner<byte> data)
+    private string? FindNameByTarget(IEnumerable<string> candidates, MsmtTarget target)
+        => candidates.FirstOrDefault(name =>
+            userMap.TryGetValue(name, out ServerUserConfig? config)
+            && config.Endpoint.IpAddress == target.Host
+            && config.Endpoint.Port == target.Port);
+
+    private string? FindChildNameByTarget(MsmtTarget target)
     {
+        string myName = currentUserProvider.UserName ?? string.Empty;
+        IReadOnlyList<string> childNames = userMap.TryGetValue(myName, out ServerUserConfig? myConfig) ? myConfig.ChildClients : [];
+        return childNames.FirstOrDefault(name =>
+            engineController.GetEndpoint(name) is { } endpoint
+            && endpoint.IpAddress == target.Host
+            && endpoint.Port == target.Port);
+    }
+
+    private string? FindNameByCertificateSubject(IEnumerable<string> candidates, string subject)
+    {
+        string simpleName = ExtractCommonName(subject);
+        return candidates.FirstOrDefault(name => string.Equals(engineController.GetCertificateName(name), simpleName, StringComparison.OrdinalIgnoreCase));
+    }
+
+    private static string ExtractCommonName(string distinguishedName)
+    {
+        foreach (string component in distinguishedName.Split(','))
+        {
+            string trimmed = component.Trim();
+            if (trimmed.StartsWith("CN=", StringComparison.OrdinalIgnoreCase))
+            {
+                return trimmed["CN=".Length..];
+            }
+        }
+        return distinguishedName;
+    }
+
+    private void OnReceived(MsmtReceivedEventArgs args)
+    {
+        if (!inboundConnectionNames.TryGetValue(args.Link.Connection, out string? remoteName)) { return; }
+
         byte[] copy;
-        using (data) { copy = data.Memory.ToArray(); }
-        _ = Task.Run(() => HandleFromServer(serverName, copy));
+        using (args.Payload) { copy = args.Payload.Memory.ToArray(); }
+
+        // An empty payload is a MsmtConnectionMonitor heartbeat, not a real message to relay.
+        if (copy.Length == 0) { return; }
+
+        string myName = currentUserProvider.UserName ?? string.Empty;
+        IReadOnlyList<string> childNames = userMap.TryGetValue(myName, out ServerUserConfig? myConfig) ? myConfig.ChildClients : [];
+
+        if (childNames.Contains(remoteName, StringComparer.OrdinalIgnoreCase))
+        {
+            _ = Task.Run(() => HandleFromChild(remoteName, copy));
+        }
+        else
+        {
+            _ = Task.Run(() => HandleFromServer(remoteName, copy));
+        }
     }
 
     private async Task HandleFromChild(string childName, ReadOnlyMemory<byte> data)
@@ -199,11 +291,13 @@ internal sealed class ServerRoutingService : IPeerService, IConnectionStatusServ
         int priority = engineController.GetPriority(message);
         string myName = currentUserProvider.UserName ?? string.Empty;
 
+        if (!userMap.TryGetValue(myName, out ServerUserConfig? myConfig)) { return; }
+
         foreach (string addressedUser in addressedUsers)
         {
-            if (childConnections.TryGetValue(addressedUser, out IOftConnection? childConn))
+            if (myConfig.ChildClients.Contains(addressedUser, StringComparer.OrdinalIgnoreCase))
             {
-                await TrySend(childConn, data, priority);
+                await TrySendToChild(addressedUser, data);
             }
         }
 
@@ -218,10 +312,7 @@ internal sealed class ServerRoutingService : IPeerService, IConnectionStatusServ
         }
         foreach (string serverName in targetServers)
         {
-            if (serverConnections.TryGetValue(serverName, out IOftConnection? serverConn))
-            {
-                await TrySend(serverConn, data, priority);
-            }
+            await TrySendToServer(serverName, data);
         }
     }
 
@@ -231,13 +322,15 @@ internal sealed class ServerRoutingService : IPeerService, IConnectionStatusServ
         if (message is null) { return; }
 
         HashSet<string> addressedUsers = GetAddressedUsers(message);
-        int priority = engineController.GetPriority(message);
+        string myName = currentUserProvider.UserName ?? string.Empty;
+
+        if (!userMap.TryGetValue(myName, out ServerUserConfig? myConfig)) { return; }
 
         foreach (string addressedUser in addressedUsers)
         {
-            if (childConnections.TryGetValue(addressedUser, out IOftConnection? childConn))
+            if (myConfig.ChildClients.Contains(addressedUser, StringComparer.OrdinalIgnoreCase))
             {
-                await TrySend(childConn, data, priority);
+                await TrySendToChild(addressedUser, data);
             }
         }
     }
@@ -251,9 +344,34 @@ internal sealed class ServerRoutingService : IPeerService, IConnectionStatusServ
         catch { return null; }
     }
 
-    private static async Task TrySend(IOftConnection connection, ReadOnlyMemory<byte> data, int priority)
+    private async Task TrySendToChild(string childName, ReadOnlyMemory<byte> data)
     {
-        try { await connection.Send(data, priority); }
+        if (peer is null) { return; }
+        UserEndpoint? endpoint = engineController.GetEndpoint(childName);
+        if (endpoint is null)
+        {
+            logger.LogWarning("Cannot deliver to child {ChildName}: no endpoint configured for it (add it to the Users map)", childName);
+            return;
+        }
+
+        try
+        {
+            MsmtResponse response = await peer.Request(new MsmtTarget { Host = endpoint.IpAddress, Port = endpoint.Port }, data, cancellation: CancellationToken.None);
+            response.Payload.Dispose();
+        }
+        catch { }
+    }
+
+    private async Task TrySendToServer(string serverName, ReadOnlyMemory<byte> data)
+    {
+        if (peer is null) { return; }
+        if (!userMap.TryGetValue(serverName, out ServerUserConfig? config)) { return; }
+
+        try
+        {
+            MsmtResponse response = await peer.Request(new MsmtTarget { Host = config.Endpoint.IpAddress, Port = config.Endpoint.Port }, data, cancellation: CancellationToken.None);
+            response.Payload.Dispose();
+        }
         catch { }
     }
 
@@ -278,7 +396,7 @@ internal sealed class ServerRoutingService : IPeerService, IConnectionStatusServ
                 {
                     UserName = childName,
                     Kind = PeerConnectionKind.Client,
-                    IsConnected = childConnections.ContainsKey(childName),
+                    IsConnected = childConnected.ContainsKey(childName),
                     LastConnectedAt = childLastConnectedAt.TryGetValue(childName, out DateTime connectedAt) ? connectedAt : null,
                     LastDisconnectedAt = childLastDisconnectedAt.TryGetValue(childName, out DateTime disconnectedAt) ? disconnectedAt : null
                 });
@@ -292,7 +410,7 @@ internal sealed class ServerRoutingService : IPeerService, IConnectionStatusServ
             {
                 UserName = serverName,
                 Kind = PeerConnectionKind.Server,
-                IsConnected = serverConnections.ContainsKey(serverName),
+                IsConnected = serverConnected.ContainsKey(serverName),
                 LastConnectedAt = serverLastConnectedAt.TryGetValue(serverName, out DateTime connectedAt) ? connectedAt : null,
                 LastDisconnectedAt = serverLastDisconnectedAt.TryGetValue(serverName, out DateTime disconnectedAt) ? disconnectedAt : null
             });
@@ -328,14 +446,6 @@ internal sealed class ServerRoutingService : IPeerService, IConnectionStatusServ
     /// <inheritdoc />
     public async ValueTask DisposeAsync()
     {
-        listener?.Dispose();
-        foreach (IOftConnection connection in childConnections.Values)
-        {
-            await connection.DisposeAsync();
-        }
-        foreach (IOftConnection connection in serverConnections.Values)
-        {
-            await connection.DisposeAsync();
-        }
+        if (peer is not null) { await peer.DisposeAsync(); }
     }
 }

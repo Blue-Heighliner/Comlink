@@ -1,6 +1,6 @@
 namespace BlueHeighliner.Comlink.Engine.Services;
 
-/// <summary>Routes outbound messages to peer users and surfaces their OFT delivery status.</summary>
+/// <summary>Routes outbound messages to peer users and surfaces their delivery status.</summary>
 internal interface IMessageRoutingService
 {
     /// <summary>Raised whenever the delivery status for a specific user transitions.</summary>
@@ -8,24 +8,16 @@ internal interface IMessageRoutingService
     /// <summary>
     /// Expands groups in <paramref name="payload"/> addresses, sends to all resolved users, and returns per-user delivery results.
     /// Each result includes the top-level addressed group names through which the user was reached. A remote user's
-    /// <see cref="UserDeliveryResult.Success"/> already reflects full OFT delivery — the underlying send only completes
-    /// once OFT has fully acknowledged the message — and the sending user addressing itself is always delivered
-    /// in-process, so this method never returns before every recipient's outcome, remote or local, is final.
+    /// <see cref="UserDeliveryResult.Success"/> already reflects full delivery — the underlying send only completes
+    /// once the peer transport has fully acknowledged the message — and the sending user addressing itself is always
+    /// delivered in-process, so this method never returns before every recipient's outcome, remote or local, is final.
     /// </summary>
     Task<(string MessageId, IReadOnlyList<UserDeliveryResult> UserResults)> Route(string fromUser, SendMessagePayload payload, CancellationToken cancellation);
 }
 
-/// <summary>Routes outbound messages to peer users and surfaces their OFT delivery status.</summary>
+/// <summary>Routes outbound messages to peer users and surfaces their delivery status.</summary>
 internal sealed class MessageRoutingService : IMessageRoutingService
 {
-    private static DestinationStatus MapStatus(OftDeliveryStatus status) => status switch
-    {
-        OftDeliveryStatus.Sent => DestinationStatus.Sent,
-        OftDeliveryStatus.Acknowledged => DestinationStatus.Confirmed,
-        OftDeliveryStatus.Cancelled => DestinationStatus.Failed,
-        _ => DestinationStatus.Sending
-    };
-
     private static void ExpandGroup(string groupName, IReadOnlyDictionary<string, IReadOnlyList<string>> groupMap, HashSet<string> users, HashSet<string> visited)
     {
         if (!visited.Add(groupName)) { return; }
@@ -64,13 +56,12 @@ internal sealed class MessageRoutingService : IMessageRoutingService
     /// <inheritdoc />
     public event Func<string, string, DestinationStatus, Task>? DeliveryStatusChanged;
 
-    private async Task OnPeerDeliveryStatusChanged(string messageId, string user, OftDeliveryStatus status)
+    private async Task OnPeerDeliveryStatusChanged(string messageId, string user, DestinationStatus status)
     {
-        DestinationStatus mapped = MapStatus(status);
-        logger.LogInformation("{MessageId} status for {User}: {Status}", messageId, user, mapped);
+        logger.LogInformation("{MessageId} status for {User}: {Status}", messageId, user, status);
         if (DeliveryStatusChanged is not null)
         {
-            await DeliveryStatusChanged(messageId, user, mapped);
+            await DeliveryStatusChanged(messageId, user, status);
         }
     }
 

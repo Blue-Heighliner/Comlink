@@ -7,7 +7,7 @@ public sealed record MessagePriorityOption
     public required string Name { get; init; }
     /// <summary>
     /// Gets the priority number stored via <see cref="IEngineController.SetPriority"/> and used verbatim as
-    /// the OFT send priority (larger values are sent first — see <c>Docs/Peer.md</c>).
+    /// the MSMT send priority (larger values are sent first — see <c>Docs/Peer.md</c>).
     /// </summary>
     public required int Value { get; init; }
 }

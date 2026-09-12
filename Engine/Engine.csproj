@@ -23,8 +23,8 @@
     <PackageId>BlueHeighliner.Comlink</PackageId>
     <Version>0.1.0</Version>
     <Authors>Chris Markwardt</Authors>
-    <Description>A peer-to-peer messaging engine built on the Open Frame Transport (OFT) protocol, with a built-in Avalonia desktop GUI. Avalonia is a required dependency of this package, not optional — it can be run headless (no window shown), but the GUI layer and its dependencies are always present.</Description>
-    <PackageTags>comlink;messaging;peer-to-peer;oft;avalonia</PackageTags>
+    <Description>A peer-to-peer messaging engine built on the Mercury Secure Message Transport (MSMT) protocol, with a built-in Avalonia desktop GUI. Avalonia is a required dependency of this package, not optional — it can be run headless (no window shown), but the GUI layer and its dependencies are always present.</Description>
+    <PackageTags>comlink;messaging;peer-to-peer;msmt;avalonia</PackageTags>
     <PackageLicenseExpression>MIT</PackageLicenseExpression>
     <PackageReadmeFile>README.md</PackageReadmeFile>
     <RepositoryUrl>https://github.com/Blue-Heighliner/Comlink</RepositoryUrl>
@@ -37,6 +37,7 @@
   </ItemGroup>
 
   <ItemGroup>
+    <PackageReference Include="BlueHeighliner.Msmt" Version="0.1.5" />
     <PackageReference Include="protobuf-net" Version="3.2.30" />
     <PackageReference Include="Avalonia" Version="11.3.0" />
     <PackageReference Include="Avalonia.AvaloniaEdit" Version="11.3.0" />
@@ -47,7 +48,6 @@
     <PackageReference Include="LiteDB" Version="5.0.21" />
     <PackageReference Include="Microsoft.Extensions.Hosting" Version="10.0.0" />
     <PackageReference Include="Microsoft.Extensions.Logging.Abstractions" Version="10.0.0" />
-    <PackageReference Include="BlueHeighliner.OpenFrameTransport" Version="0.1.0" />
   </ItemGroup>
 
   <ItemGroup>

@@ -360,12 +360,12 @@ public sealed class ControlProviderTests
         Assert.False(controller.CanDelete(FolderType.Drafts));
     }
 
-    /// <summary>The default implementation always returns the auto-detected name.</summary>
+    /// <summary>The default implementation returns the user name unchanged, with no prefix.</summary>
     [Fact]
     public void DefaultEngineController_GetCertificateName_AlwaysReturnsAutoName()
     {
         TestEngineController controller = new();
-        Assert.Equal("USER-ALPHA", controller.GetCertificateName("ALPHA"));
+        Assert.Equal("ALPHA", controller.GetCertificateName("ALPHA"));
     }
 
     /// <summary>Null config falls back to the wrapped provider.</summary>
@@ -379,14 +379,6 @@ public sealed class ControlProviderTests
         Assert.Equal("FALLBACK-NAME", controller.GetCertificateName("ALPHA"));
     }
 
-    /// <summary>"disable" config → null (no authentication), regardless of the wrapped provider.</summary>
-    [Fact]
-    public void ConfiguredEngineController_DisablePeerCertificateNameConfig_ReturnsNull()
-    {
-        ConfiguredEngineController controller = new(new TestEngineController(), new EngineConfig { PeerCertificateName = "disable" }, NoCurrentUser);
-        Assert.Null(controller.GetCertificateName("ALPHA"));
-    }
-
     /// <summary>Explicit name → that name regardless of user.</summary>
     [Fact]
     public void ConfiguredEngineController_ExplicitPeerCertificateNameConfig_ReturnsExactName()
@@ -396,15 +388,100 @@ public sealed class ControlProviderTests
         Assert.Equal("MY-CERT", controller.GetCertificateName("BETA"));
     }
 
-    /// <summary>ConnectionOptions returns an unauthenticated (Secure) policy when no current user is installed.</summary>
+    /// <summary>ConnectionOptions throws when no current user is installed, since MSMT peer authentication is mandatory and there is no user to resolve an identity certificate for.</summary>
     [Fact]
-    public void DefaultEngineController_ConnectionOptions_NoCurrentUser_ReturnsUnauthenticated()
+    public void DefaultEngineController_ConnectionOptions_NoCurrentUser_Throws()
     {
         TestEngineController controller = new();
-        OftPeerOptions options = controller.ConnectionOptions;
 
-        Assert.Null(options.Certificate);
-        Assert.Equal(OftSecurityMode.Secure, options.SecurityMode);
+        Assert.Throws<InvalidOperationException>(() => controller.ConnectionOptions);
+    }
+
+    /// <summary>The default implementation always returns the well-known trusted authority name.</summary>
+    [Fact]
+    public void DefaultEngineController_TrustedAuthorityCertificateName_ReturnsDefaultName()
+    {
+        TestEngineController controller = new();
+        Assert.Equal("COMLINK-ROOT", controller.TrustedAuthorityCertificateName);
+    }
+
+    /// <summary>Null config falls back to the wrapped provider.</summary>
+    [Fact]
+    public void ConfiguredEngineController_NullTrustedAuthorityCertificateNameConfig_FallsBack()
+    {
+        Mock<IEngineController> fallback = new();
+        fallback.Setup(f => f.TrustedAuthorityCertificateName).Returns("FALLBACK-ROOT");
+        ConfiguredEngineController controller = new(fallback.Object, new EngineConfig(), NoCurrentUser);
+
+        Assert.Equal("FALLBACK-ROOT", controller.TrustedAuthorityCertificateName);
+    }
+
+    /// <summary>Explicit name → that name, regardless of the wrapped provider.</summary>
+    [Fact]
+    public void ConfiguredEngineController_ExplicitTrustedAuthorityCertificateNameConfig_ReturnsExactName()
+    {
+        ConfiguredEngineController controller = new(new TestEngineController(), new EngineConfig { TrustedAuthorityCertificateName = "MY-ROOT" }, NoCurrentUser);
+        Assert.Equal("MY-ROOT", controller.TrustedAuthorityCertificateName);
+    }
+
+    /// <summary>When both certificate file fields are set, ConnectionOptions loads the identity and trusted authority directly from disk instead of the system store.</summary>
+    [Fact]
+    public void ConfiguredEngineController_BothCertificateFilesSet_LoadsFromFiles()
+    {
+        string tempDir = Path.Combine(Path.GetTempPath(), $"comlink-cert-file-tests-{Guid.NewGuid():N}");
+        Directory.CreateDirectory(tempDir);
+        try
+        {
+            (X509Certificate2 server, X509Certificate2 client, X509Certificate2Collection trustedAuthorities) = TestMsmtCertificates.Create();
+            string peerFile = Path.Combine(tempDir, "identity.pfx");
+            string authorityFile = Path.Combine(tempDir, "authority.cer");
+            File.WriteAllBytes(peerFile, client.Export(X509ContentType.Pfx));
+            File.WriteAllBytes(authorityFile, trustedAuthorities[0].Export(X509ContentType.Cert));
+
+            ConfiguredEngineController controller = new(
+                new TestEngineController(),
+                new EngineConfig { PeerCertificateFile = peerFile, TrustedAuthorityCertificateFile = authorityFile },
+                NoCurrentUser);
+
+            MsmtOptions options = controller.ConnectionOptions;
+
+            Assert.Equal(client.Thumbprint, options.Credentials.Identity.Thumbprint);
+            Assert.Single(options.Credentials.TrustedAuthorities);
+            Assert.Equal(trustedAuthorities[0].Thumbprint, options.Credentials.TrustedAuthorities[0].Thumbprint);
+            Assert.Equal(MsmtOperationMode.Session, options.Mode);
+        }
+        finally
+        {
+            Directory.Delete(tempDir, recursive: true);
+        }
+    }
+
+    /// <summary>Setting only PeerCertificateFile without TrustedAuthorityCertificateFile throws, since the two must be set together.</summary>
+    [Fact]
+    public void ConfiguredEngineController_OnlyPeerCertificateFileSet_Throws()
+    {
+        ConfiguredEngineController controller = new(new TestEngineController(), new EngineConfig { PeerCertificateFile = "/tmp/identity.pfx" }, NoCurrentUser);
+        Assert.Throws<InvalidOperationException>(() => controller.ConnectionOptions);
+    }
+
+    /// <summary>Setting only TrustedAuthorityCertificateFile without PeerCertificateFile throws, since the two must be set together.</summary>
+    [Fact]
+    public void ConfiguredEngineController_OnlyTrustedAuthorityCertificateFileSet_Throws()
+    {
+        ConfiguredEngineController controller = new(new TestEngineController(), new EngineConfig { TrustedAuthorityCertificateFile = "/tmp/authority.cer" }, NoCurrentUser);
+        Assert.Throws<InvalidOperationException>(() => controller.ConnectionOptions);
+    }
+
+    /// <summary>A configured identity certificate file that does not exist on disk throws.</summary>
+    [Fact]
+    public void ConfiguredEngineController_PeerCertificateFileMissing_Throws()
+    {
+        ConfiguredEngineController controller = new(
+            new TestEngineController(),
+            new EngineConfig { PeerCertificateFile = "/nonexistent/identity.pfx", TrustedAuthorityCertificateFile = "/nonexistent/authority.cer" },
+            NoCurrentUser);
+
+        Assert.Throws<InvalidOperationException>(() => controller.ConnectionOptions);
     }
 
     /// <summary>The default implementation always returns the well-known default ports.</summary>
@@ -645,5 +722,142 @@ public sealed class ControlProviderTests
         ConfiguredEngineController controller = new(fallback.Object, new EngineConfig(), NoCurrentUser);
 
         Assert.False(controller.ConfigFileEnabled);
+    }
+
+    /// <summary>Every message-field member has no config.json field and always delegates straight to the wrapped provider, working through the real TestMessage mapping.</summary>
+    [Fact]
+    public void ConfiguredEngineController_MessageFieldMembers_AlwaysDelegateToFallback()
+    {
+        TestEngineController fallback = new();
+        ConfiguredEngineController controller = new(fallback, new EngineConfig(), NoCurrentUser);
+
+        Assert.Equal(fallback.MessageType, controller.MessageType);
+
+        object message = controller.CreateMessage();
+        Assert.IsType<TestMessage>(message);
+
+        controller.SetMessageId(message, "M1");
+        Assert.Equal("M1", controller.GetMessageId(message));
+        controller.SetFromUser(message, "ALICE");
+        Assert.Equal("ALICE", controller.GetFromUser(message));
+        controller.SetSubject(message, "Hi");
+        Assert.Equal("Hi", controller.GetSubject(message));
+        controller.SetBody(message, "Body text");
+        Assert.Equal("Body text", controller.GetBody(message));
+        List<MessageAddress> addresses = [new MessageAddress { UserName = "BOB", Type = AddressType.To }];
+        controller.SetAddresses(message, addresses);
+        MessageAddress roundTripped = Assert.Single(controller.GetAddresses(message));
+        Assert.Equal("BOB", roundTripped.UserName);
+        Assert.Equal(AddressType.To, roundTripped.Type);
+        DateTime sentAt = new(2026, 1, 1, 0, 0, 0, DateTimeKind.Utc);
+        controller.SetSentAt(message, sentAt);
+        Assert.Equal(sentAt, controller.GetSentAt(message));
+        controller.SetConfirmationMessageId(message, "M0");
+        Assert.Equal("M0", controller.GetConfirmationMessageId(message));
+        controller.SetIsAlert(message, true);
+        Assert.True(controller.GetIsAlert(message));
+        controller.SetPriority(message, 2);
+        Assert.Equal(2, controller.GetPriority(message));
+        controller.SetTag(message, "URGENT");
+        Assert.Equal("URGENT", controller.GetTag(message));
+    }
+
+    /// <summary>ExternalSystems has no config.json field and always delegates to the wrapped provider.</summary>
+    [Fact]
+    public void ConfiguredEngineController_ExternalSystems_AlwaysDelegatesToFallback()
+    {
+        Mock<IExternalSystem> externalSystem = new();
+        Mock<IEngineController> fallback = new();
+        fallback.Setup(f => f.ExternalSystems).Returns([externalSystem.Object]);
+        ConfiguredEngineController controller = new(fallback.Object, new EngineConfig(), NoCurrentUser);
+
+        Assert.Same(externalSystem.Object, Assert.Single(controller.ExternalSystems));
+    }
+
+    /// <summary>With neither certificate file field configured, ConnectionOptions falls back to the system store lookup - and throws the same way DefaultEngineController does when no current user is registered.</summary>
+    [Fact]
+    public void ConfiguredEngineController_NoCertificateFilesConfigured_FallsBackToStoreLookup()
+    {
+        ConfiguredEngineController controller = new(new TestEngineController(), new EngineConfig(), NoCurrentUser);
+
+        Assert.Throws<InvalidOperationException>(() => controller.ConnectionOptions);
+    }
+
+    /// <summary>The store-based lookup resolves a real identity certificate and trusted authority installed under their expected subject names in the current user's certificate store.</summary>
+    [Fact]
+    public void MsmtCertificateLookup_BuildPeerOptions_ResolvesFromSystemStore()
+    {
+        string identityName = $"comlink-test-identity-{Guid.NewGuid():N}";
+        string authorityName = $"comlink-test-authority-{Guid.NewGuid():N}";
+        using X509Certificate2 identityCert = SelfSignedCertificateNamed(identityName);
+        using X509Certificate2 authorityCert = SelfSignedCertificateNamed(authorityName);
+
+        using X509Store store = new(StoreName.My, StoreLocation.CurrentUser);
+        store.Open(OpenFlags.ReadWrite);
+        store.Add(identityCert);
+        store.Add(authorityCert);
+        try
+        {
+            MsmtOptions options = MsmtCertificateLookup.BuildPeerOptions("ALPHA", _ => identityName, authorityName);
+
+            Assert.Equal(identityCert.Thumbprint, options.Credentials.Identity.Thumbprint);
+            Assert.Single(options.Credentials.TrustedAuthorities);
+            Assert.Equal(authorityCert.Thumbprint, options.Credentials.TrustedAuthorities[0].Thumbprint);
+            Assert.Equal(MsmtOperationMode.Session, options.Mode);
+        }
+        finally
+        {
+            store.Remove(identityCert);
+            store.Remove(authorityCert);
+        }
+    }
+
+    /// <summary>The store-based lookup throws when the trusted authority certificate cannot be found, even though the identity certificate was.</summary>
+    [Fact]
+    public void MsmtCertificateLookup_BuildPeerOptions_AuthorityNotFound_Throws()
+    {
+        string identityName = $"comlink-test-identity-{Guid.NewGuid():N}";
+        using X509Certificate2 identityCert = SelfSignedCertificateNamed(identityName);
+
+        using X509Store store = new(StoreName.My, StoreLocation.CurrentUser);
+        store.Open(OpenFlags.ReadWrite);
+        store.Add(identityCert);
+        try
+        {
+            Assert.Throws<InvalidOperationException>(
+                () => MsmtCertificateLookup.BuildPeerOptions("ALPHA", _ => identityName, "comlink-test-missing-authority"));
+        }
+        finally
+        {
+            store.Remove(identityCert);
+        }
+    }
+
+    /// <summary>The file-based lookup throws when the authority file does not exist, even though the identity file does.</summary>
+    [Fact]
+    public void MsmtCertificateLookup_BuildPeerOptionsFromFiles_AuthorityFileMissing_Throws()
+    {
+        string tempDir = Path.Combine(Path.GetTempPath(), $"comlink-cert-file-tests-{Guid.NewGuid():N}");
+        Directory.CreateDirectory(tempDir);
+        try
+        {
+            (_, X509Certificate2 client, _) = TestMsmtCertificates.Create();
+            string peerFile = Path.Combine(tempDir, "identity.pfx");
+            File.WriteAllBytes(peerFile, client.Export(X509ContentType.Pfx));
+
+            Assert.Throws<InvalidOperationException>(
+                () => MsmtCertificateLookup.BuildPeerOptionsFromFiles(peerFile, Path.Combine(tempDir, "missing-authority.cer")));
+        }
+        finally
+        {
+            Directory.Delete(tempDir, recursive: true);
+        }
+    }
+
+    private static X509Certificate2 SelfSignedCertificateNamed(string simpleName)
+    {
+        using RSA key = RSA.Create(2048);
+        CertificateRequest request = new($"CN={simpleName}", key, HashAlgorithmName.SHA256, RSASignaturePadding.Pkcs1);
+        return request.CreateSelfSigned(DateTimeOffset.UtcNow.AddMinutes(-5), DateTimeOffset.UtcNow.AddDays(1));
     }
 }

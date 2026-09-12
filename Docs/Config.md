@@ -6,7 +6,7 @@ Engine supports an optional `--config <path>` argument pointing to a JSON config
 Sample.exe --config path/to/config.json
 ```
 
-If `--config` is omitted all fields take their defaults. If `--config` points to a non-existent or unreadable file the process throws at startup.
+If `--config` is omitted all fields take their defaults. If `--config` points to a non-existent or unreadable file the process throws at startup. Whether `--config` is honored at all is itself gated by `IEngineController.ConfigFileEnabled` — see [Control.md](Control.md#config-file).
 
 All property names are PascalCase; deserialization is case-insensitive. Unrecognised fields are silently ignored. Missing fields use their defaults. An empty config file (`{}`) behaves identically to omitting `--config`.
 
@@ -20,6 +20,9 @@ All property names are PascalCase; deserialization is case-insensitive. Unrecogn
   "InterfacePort":       50020,
   "DataFolder":          null,
   "PeerCertificateName": null,
+  "TrustedAuthorityCertificateName": null,
+  "PeerCertificateFile": null,
+  "TrustedAuthorityCertificateFile": null,
   "AlertText":           null,
   "AlarmSoundSeconds":   null,
   "QuickConfirmationEnabled": null,
@@ -93,15 +96,36 @@ The `@` prefix is useful for running multiple instances in isolated sub-director
 
 **Type:** `string | null` | **Default:** `null` (auto-detect)
 
-Controls which certificate is used for mutual TLS authentication on peer connections. The certificate is looked up by subject name (CN) in the system certificate store (`My` / Personal), checking CurrentUser then LocalMachine.
+Controls which identity certificate is used for MSMT mutual TLS authentication on peer connections. MSMT peer authentication is mandatory — there is no way to disable it. The certificate is looked up by subject name (CN) in the system certificate store (`My` / Personal), checking CurrentUser then LocalMachine. Ignored when `PeerCertificateFile` is set.
 
 | Value | Behaviour |
 |-------|-----------|
-| `null` or absent | Auto-detect: look for a certificate named `USER-{userName}`. Throws at startup if not found. |
-| `"disable"` | Disable peer authentication. Connections use an ephemeral self-signed certificate; no client certificate is required or validated. |
+| `null` or absent | Auto-detect: look for a certificate named after the user name itself, unprefixed. Throws at startup if not found. |
 | Any other string | Look for a certificate with that exact subject name. Throws at startup if not found. |
 
-When authentication is enabled both sides must present a certificate signed by a common root CA. The certificate is validated via chain trust (`SslPolicyErrors.None`). Client certificates are required.
+---
+
+### `TrustedAuthorityCertificateName`
+
+**Type:** `string | null` | **Default:** `null` (uses Engine default of `"COMLINK-ROOT"`)
+
+The certificate authority every peer's identity certificate (see `PeerCertificateName`) must chain to, looked up by subject name the same way. Both sides of a connection must present a certificate signed by this same authority, checked directly against it (not the OS's own trust store). Throws at startup if not found. Ignored when `TrustedAuthorityCertificateFile` is set.
+
+---
+
+### `PeerCertificateFile`
+
+**Type:** `string | null` | **Default:** `null` (use `PeerCertificateName` against the system store)
+
+Path to a PKCS#12 (`.pfx`) file containing the identity certificate and its private key, used instead of a system certificate store lookup. A relative path is resolved against the directory containing the config file itself, not the process's working directory — so a certificate file can sit right next to its config and be referenced by a bare filename regardless of where the process is launched from. Must be set together with `TrustedAuthorityCertificateFile`; setting only one of the two throws at startup. See `Tasks/Scenarios/` for a working example: each scenario's config points at a `.pfx` file in the same directory, all signed by the shared `Tasks/Scenarios/Root.cer` authority.
+
+---
+
+### `TrustedAuthorityCertificateFile`
+
+**Type:** `string | null` | **Default:** `null` (use `TrustedAuthorityCertificateName` against the system store)
+
+Path to a public certificate file (e.g. `.cer`) for the certificate authority trusted to sign every peer's identity certificate, used instead of a system certificate store lookup. Resolved the same way as `PeerCertificateFile`. Must be set together with `PeerCertificateFile`.
 
 ---
 
@@ -255,9 +279,9 @@ Sending to `ALL` delivers to `USER-A`, `USER-B`, and `NEW-USER`. Cycles are igno
 }
 ```
 
-`PeerCertificateName` is absent so authentication uses `USER-{userName}` auto-detection.
+`PeerCertificateName` is absent so authentication uses the user name itself, unprefixed, for auto-detection.
 
-### Development (unauthenticated, Headless mode)
+### Development (Headless mode, certificate files)
 
 ```json
 {
@@ -266,12 +290,15 @@ Sending to `ALL` delivers to `USER-A`, `USER-B`, and `NEW-USER`. Cycles are igno
   "PeerPort": 50020,
   "InterfacePort": 50021,
   "DataFolder": "@TEST1",
-  "PeerCertificateName": "disable",
+  "PeerCertificateFile": "TEST1.pfx",
+  "TrustedAuthorityCertificateFile": "../Root.cer",
   "Users": {
     "TEST2": { "IpAddress": "127.0.0.1", "Port": 50030 }
   }
 }
 ```
+
+`PeerCertificateFile`/`TrustedAuthorityCertificateFile` are resolved relative to this config file's own directory, so `TEST1.pfx` and `Root.cer` are expected to sit alongside it (and one directory up, respectively) rather than in the system certificate store — see `Tasks/Scenarios/` for a full working example of this layout across three multi-node scenarios, all signed by one shared `Tasks/Scenarios/Root.cer` authority.
 
 ### Groups with nested membership
 
@@ -298,6 +325,20 @@ Sending to `ALL` delivers to `USER-A`, `USER-B`, and `NEW-USER`. Cycles are igno
   }
 }
 ```
+
+### Certificate file override
+
+```json
+{
+  "PeerCertificateFile": "identity.pfx",
+  "TrustedAuthorityCertificateFile": "authority.cer",
+  "Users": {
+    "USER-B": { "IpAddress": "192.168.1.11", "Port": 50021 }
+  }
+}
+```
+
+`PeerCertificateName`/`TrustedAuthorityCertificateName` are ignored once their file-based counterparts are set.
 
 ### Client/Server hierarchy
 

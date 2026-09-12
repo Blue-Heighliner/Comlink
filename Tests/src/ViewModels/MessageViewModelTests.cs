@@ -238,4 +238,17 @@ public sealed class MessageViewModelTests
 
         Assert.True(vm.IsAlert);
     }
+
+    /// <summary>DeliveryStatusRow.StatusText is the uppercase status name, and DisplayName includes addressed group context when present.</summary>
+    [Fact]
+    public void DeliveryStatusRow_StatusTextAndDisplayName_ReflectStatusAndGroups()
+    {
+        DeliveryStatusRow withoutGroups = new("USER1", DestinationStatus.Sent, []);
+        Assert.Equal("SENT", withoutGroups.StatusText);
+        Assert.Equal("USER1", withoutGroups.DisplayName);
+
+        DeliveryStatusRow withGroups = new("USER1", DestinationStatus.Confirmed, ["OPS", "ALL"]);
+        Assert.Equal("CONFIRMED", withGroups.StatusText);
+        Assert.Equal("USER1 (OPS, ALL)", withGroups.DisplayName);
+    }
 }

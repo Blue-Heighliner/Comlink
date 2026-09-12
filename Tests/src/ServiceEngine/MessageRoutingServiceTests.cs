@@ -10,7 +10,7 @@ public sealed class MessageRoutingServiceTests
     {
         public event Func<object, Task>? MessageDelivered;
         public event Func<string, string, Task>? ConfirmationReceived;
-        public event Func<string, string, OftDeliveryStatus, Task>? DeliveryStatusChanged;
+        public event Func<string, string, DestinationStatus, Task>? DeliveryStatusChanged;
 
         public List<(string User, TestMessage Message)> Sent { get; } = [];
         public List<TestMessage> DeliveredLocally { get; } = [];
@@ -30,7 +30,7 @@ public sealed class MessageRoutingServiceTests
             if (MessageDelivered is not null) { await MessageDelivered(payload); }
         }
 
-        public async Task FireDeliveryStatusChanged(string messageId, string user, OftDeliveryStatus status)
+        public async Task FireDeliveryStatusChanged(string messageId, string user, DestinationStatus status)
         {
             if (DeliveryStatusChanged is not null) { await DeliveryStatusChanged(messageId, user, status); }
         }
@@ -280,88 +280,28 @@ public sealed class MessageRoutingServiceTests
         Assert.Contains(results, r => r.UserName.Equals("REMOTE", StringComparison.OrdinalIgnoreCase) && r.Success);
     }
 
-    /// <summary>An Acknowledged OFT status from the peer service is mapped to Confirmed.</summary>
-    [Fact]
-    public async Task PeerDeliveryStatusChanged_Acknowledged_MapsToConfirmed()
-    {
-        FakePeerService fake = new();
-        MessageRoutingService service = new(fake, format, loggerFactory);
-
-        List<DestinationStatus> statuses = [];
-        service.DeliveryStatusChanged += (_, _, status) =>
-        {
-            statuses.Add(status);
-            return Task.CompletedTask;
-        };
-
-        await fake.FireDeliveryStatusChanged("MSG1", "ALPHA", OftDeliveryStatus.Acknowledged);
-
-        Assert.Single(statuses);
-        Assert.Equal(DestinationStatus.Confirmed, statuses[0]);
-    }
-
-    /// <summary>A Cancelled OFT status from the peer service is mapped to Failed.</summary>
-    [Fact]
-    public async Task PeerDeliveryStatusChanged_Cancelled_MapsToFailed()
-    {
-        FakePeerService fake = new();
-        MessageRoutingService service = new(fake, format, loggerFactory);
-
-        List<DestinationStatus> statuses = [];
-        service.DeliveryStatusChanged += (_, _, status) =>
-        {
-            statuses.Add(status);
-            return Task.CompletedTask;
-        };
-
-        await fake.FireDeliveryStatusChanged("MSG1", "ALPHA", OftDeliveryStatus.Cancelled);
-
-        Assert.Single(statuses);
-        Assert.Equal(DestinationStatus.Failed, statuses[0]);
-    }
-
-    /// <summary>A Sent OFT status from the peer service is mapped to Sent.</summary>
-    [Fact]
-    public async Task PeerDeliveryStatusChanged_Sent_MapsToSent()
-    {
-        FakePeerService fake = new();
-        MessageRoutingService service = new(fake, format, loggerFactory);
-
-        List<DestinationStatus> statuses = [];
-        service.DeliveryStatusChanged += (_, _, status) =>
-        {
-            statuses.Add(status);
-            return Task.CompletedTask;
-        };
-
-        await fake.FireDeliveryStatusChanged("MSG1", "ALPHA", OftDeliveryStatus.Sent);
-
-        Assert.Single(statuses);
-        Assert.Equal(DestinationStatus.Sent, statuses[0]);
-    }
-
-    /// <summary>Queued/Sending/Interrupted/Resumed OFT statuses are all mapped to Sending.</summary>
+    /// <summary>A delivery status from the peer service is forwarded to DeliveryStatusChanged unchanged, for every status value.</summary>
     [Theory]
-    [InlineData(OftDeliveryStatus.Queued)]
-    [InlineData(OftDeliveryStatus.Sending)]
-    [InlineData(OftDeliveryStatus.Interrupted)]
-    [InlineData(OftDeliveryStatus.Resumed)]
-    public async Task PeerDeliveryStatusChanged_InFlightStatuses_MapToSending(OftDeliveryStatus oftStatus)
+    [InlineData(DestinationStatus.Sending)]
+    [InlineData(DestinationStatus.Sent)]
+    [InlineData(DestinationStatus.Failed)]
+    [InlineData(DestinationStatus.Confirmed)]
+    public async Task PeerDeliveryStatusChanged_ForwardsStatusUnchanged(DestinationStatus status)
     {
         FakePeerService fake = new();
         MessageRoutingService service = new(fake, format, loggerFactory);
 
         List<DestinationStatus> statuses = [];
-        service.DeliveryStatusChanged += (_, _, status) =>
+        service.DeliveryStatusChanged += (_, _, s) =>
         {
-            statuses.Add(status);
+            statuses.Add(s);
             return Task.CompletedTask;
         };
 
-        await fake.FireDeliveryStatusChanged("MSG1", "ALPHA", oftStatus);
+        await fake.FireDeliveryStatusChanged("MSG1", "ALPHA", status);
 
         Assert.Single(statuses);
-        Assert.Equal(DestinationStatus.Sending, statuses[0]);
+        Assert.Equal(status, statuses[0]);
     }
 
     /// <summary>A confirmation received from the peer service is re-raised as a Read status change for the confirming user.</summary>

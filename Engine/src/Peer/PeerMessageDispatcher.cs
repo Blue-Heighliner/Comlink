@@ -10,13 +10,15 @@ internal static class PeerMessageDispatcher
     /// <summary>
     /// Deserializes <paramref name="data"/> as an instance of <see cref="IEngineController.MessageType"/> and
     /// raises <paramref name="confirmationReceived"/> or <paramref name="messageDelivered"/> as appropriate.
+    /// An empty <paramref name="data"/> is a <see cref="MsmtConnectionMonitor"/> heartbeat, not a real
+    /// message, and is silently ignored.
     /// </summary>
     /// <param name="data">The raw, already-received message payload.</param>
     /// <param name="engineController">Maps logical fields onto the engine's message type.</param>
     /// <param name="logger">Logger for activity messages.</param>
     /// <param name="messageDelivered">Raised with the deserialized message when it is not a confirmation.</param>
     /// <param name="confirmationReceived">Raised with the confirmed message ID and confirming user when it is a confirmation.</param>
-    /// <returns><see langword="true"/> if <paramref name="data"/> deserialized successfully; otherwise <see langword="false"/>.</returns>
+    /// <returns><see langword="true"/> if <paramref name="data"/> deserialized successfully or was an ignored heartbeat; otherwise <see langword="false"/>.</returns>
     public static async Task<bool> Dispatch(
         ReadOnlyMemory<byte> data,
         IEngineController engineController,
@@ -24,6 +26,8 @@ internal static class PeerMessageDispatcher
         Func<object, Task>? messageDelivered,
         Func<string, string, Task>? confirmationReceived)
     {
+        if (data.IsEmpty) { return true; }
+
         try
         {
             object? message = PeerSerializer.Deserialize(engineController.MessageType, data);

@@ -26,7 +26,7 @@ The engine runs in one of two modes selected at startup via `EngineMode`:
 | `Client` | Desktop UI via Engine's Avalonia layer. Includes LiteDB persistence, all ViewModels, and a peer listener for receiving messages. |
 | `Headless` | Runs as a normal peer client — same LiteDB persistence, same `IServiceConnection` — but with no UI. |
 
-Both modes run `PeerService` to accept and send peer-to-peer messages over [OFT](Oft.md), and both always run `InterfaceService`, hosting the local interface listener for external programs — see [Interface.md](Interface.md). The interface listener is not tied to Headless mode; it is active regardless of which mode the engine runs in.
+Both modes run `PeerService` to accept and send peer-to-peer messages over [MSMT](MsmtIntegration.md), and both always run `InterfaceService`, hosting the local interface listener for external programs — see [Interface.md](Interface.md). The interface listener is not tied to Headless mode; it is active regardless of which mode the engine runs in.
 
 Headless mode does not remove the Avalonia dependency — Engine is a single assembly, so Avalonia and its packages are always loaded regardless of mode. `HeadlessMode` only controls whether `EngineApplication` shows a window (`AppBuilder...StartWithClassicDesktopLifetime`) or runs the `IHost` directly with no UI; it is not a build-time or package-level option.
 
@@ -44,7 +44,7 @@ Engine/src/
 │                  and the relay/mirror coordinator — see ExternalSystems.md
 ├── Logging/        Daily file logger + activity log writer
 ├── Models/         Shared DTOs (UserInfo, UserEndpoint, UserState, Folder, etc.)
-├── Peer/           P2P networking over OFT — send/receive messages between nodes, and the
+├── Peer/           P2P networking over MSMT — send/receive messages between nodes, and the
 │                   local interface listener (always active) — see Interface.md
 ├── Services/       Business logic
 ├── ViewModels/     MVVM layer — mostly Avalonia-agnostic (primitive types, custom interfaces),
@@ -64,13 +64,13 @@ sequenceDiagram
     participant MRS as MessageRoutingService
     participant SL as IEngineController
     participant PS as PeerService
-    participant RP as Remote IOftPeer
+    participant RP as Remote IMsmtPeer
     DVM->>SC: SendMessage
     SC->>MRS: Route
     MRS->>SL: GetEndpoint (per recipient)
     MRS->>PS: Send (IEngineController.MessageType instance, tagged for delivery status)
-    PS->>RP: OFT send
-    RP-->>PS: OFT Acknowledged
+    PS->>RP: MSMT send
+    RP-->>PS: MSMT Acknowledged
     PS-->>MRS: DeliveryStatusChanged (Confirmed)
     MRS-->>SC: DeliveryStatusChanged event
     SC-->>DVM: DeliveryStatusChanged event
@@ -85,7 +85,7 @@ sequenceDiagram
     participant DSC as DirectServiceConnection
     participant MVM as MainViewModel
     participant ES as EntryService
-    RN->>PS: OFT send (IEngineController.MessageType instance)
+    RN->>PS: MSMT send (IEngineController.MessageType instance)
     PS-->>DSC: MessageDelivered event
     DSC-->>MVM: MessageReceived event
     MVM->>ES: StoreIncomingMessage (ReadStatus=Received)
@@ -94,14 +94,9 @@ sequenceDiagram
 
 When the user opens that Inbox message, `ContentAreaViewModel` calls `IServiceConnection.MarkMessageRead`, which transitions `ReadStatus` to `Read` and sends a user-read confirmation back to the sender — see [Peer.md](Peer.md#read-confirmation). If the message is an alert (`IEngineController.GetIsAlert`), `AlertViewModel` also alarms (title bar box + sound) until it — and every other pending alert — is read; see `Docs/ViewModels.md`.
 
-### Receiving a message (via an interface connection)
-1. Remote node sends to this user's `PeerService` over OFT.
-2. `InterfaceService` (subscribed to `PeerService.MessageDelivered`) mirrors the message, unmodified, to every currently connected interface connection.
-3. Any connected external program receives it directly over its own OFT connection — see [Interface.md](Interface.md). This happens in both Client and Headless mode.
-
 ### Receiving/relaying a message (via an external system)
 1. An external system (`IEngineController.ExternalSystems`) reports an inbound message via `Receive`.
-2. `ExternalSystemsService` calls `IPeerService.DeliverLocal`, which processes it exactly like an ordinary received message (stored, shown in the UI, mirrored to any connected interface) and raises `MessageDelivered`.
+2. `ExternalSystemsService` calls `IPeerService.DeliverLocal`, which processes it exactly like an ordinary received message (stored, shown in the UI) and raises `MessageDelivered`.
 3. `ExternalSystemsService`'s own `MessageDelivered` subscription relays the message out through every other configured external system, excluding the one it was originally received from. This happens in both Client and Headless mode. See [ExternalSystems.md](ExternalSystems.md).
 
 ### Sending a message from an interface

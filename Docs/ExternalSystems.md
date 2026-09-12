@@ -3,7 +3,7 @@
 An **external system** is a conduit between this instance and one system outside Comlink — a socket, a
 message queue, an HTTP long-poll, or any other integration point a host wants to bridge into the
 messaging flow. Unlike a peer or an [interface connection](Interface.md), an external system is not
-another Comlink instance and does not speak OFT; it is entirely defined by the host's own `IExternalSystem`
+another Comlink instance and does not speak MSMT; it is entirely defined by the host's own `IExternalSystem`
 implementation, typically (though not necessarily) a subclass of the optional convenience base class
 `ExternalSystemBase<TMessage>`.
 

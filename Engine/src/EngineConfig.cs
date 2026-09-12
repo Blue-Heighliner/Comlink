@@ -24,10 +24,35 @@ public sealed class EngineConfig
     public string? DataFolder { get; init; }
 
     /// <summary>
-    /// TLS certificate subject name for peer auth.
-    /// <see langword="null"/> = auto (<c>USER-{userName}</c>); <c>"disable"</c> = no auth; explicit name = use that cert.
+    /// TLS identity certificate subject name for peer authentication, mandatory for every MSMT connection.
+    /// <see langword="null"/> uses the Engine default (the user name itself, unprefixed); an explicit name
+    /// uses that certificate instead. Ignored when <see cref="PeerCertificateFile"/> is set.
     /// </summary>
     public string? PeerCertificateName { get; init; }
+
+    /// <summary>
+    /// TLS certificate authority subject name trusted to sign every peer's identity certificate.
+    /// <see langword="null"/> uses the Engine default (<c>COMLINK-ROOT</c>); an explicit name uses that
+    /// certificate instead. Ignored when <see cref="TrustedAuthorityCertificateFile"/> is set.
+    /// </summary>
+    public string? TrustedAuthorityCertificateName { get; init; }
+
+    /// <summary>
+    /// Path to a PKCS#12 (<c>.pfx</c>) file containing the identity certificate and its private key, used
+    /// instead of a system certificate store lookup. A relative path is resolved against the directory
+    /// containing the config file itself. Must be set together with <see cref="TrustedAuthorityCertificateFile"/>.
+    /// <see langword="null"/> (the default) uses <see cref="PeerCertificateName"/> against the system store instead.
+    /// </summary>
+    public string? PeerCertificateFile { get; init; }
+
+    /// <summary>
+    /// Path to a public certificate file (e.g. <c>.cer</c>) for the certificate authority trusted to sign
+    /// every peer's identity certificate, used instead of a system certificate store lookup. A relative
+    /// path is resolved against the directory containing the config file itself. Must be set together with
+    /// <see cref="PeerCertificateFile"/>. <see langword="null"/> (the default) uses
+    /// <see cref="TrustedAuthorityCertificateName"/> against the system store instead.
+    /// </summary>
+    public string? TrustedAuthorityCertificateFile { get; init; }
 
     /// <summary>Text shown in the title bar's alert box while alarming. <see langword="null"/> uses the Engine default (<c>"ALERT"</c>).</summary>
     public string? AlertText { get; init; }
@@ -88,7 +113,7 @@ public sealed class EngineConfig
     public string? NodeRole { get; init; }
 
     /// <summary>
-    /// The server endpoint a <see cref="Control.NodeRole.Client"/> instance forms its long-term OFT
+    /// The server endpoint a <see cref="Control.NodeRole.Client"/> instance forms its long-term MSMT
     /// connection to. Required when <see cref="NodeRole"/> is <c>"Client"</c>; unused otherwise.
     /// </summary>
     public UserEndpointConfig? ServerEndpoint { get; init; }
@@ -100,6 +125,9 @@ public sealed class EngineConfig
     /// </summary>
     public Dictionary<string, ServerUserConfigEntry> ServerUsers { get; init; } = [];
 
+    /// <summary>Absolute directory containing the loaded config file, used to resolve relative certificate file paths. <see langword="null"/> when no config file was loaded.</summary>
+    private string? ConfigDirectory { get; set; }
+
     /// <summary>
     /// Loads configuration from a file specified by the <c>--config</c> argument.
     /// Returns a default <see cref="EngineConfig"/> if the argument is absent or config loading is not enabled for this build.
@@ -110,12 +138,24 @@ public sealed class EngineConfig
         int idx = Array.IndexOf(args, "--config");
         if (idx >= 0 && idx + 1 < args.Length)
         {
-            string json = File.ReadAllText(args[idx + 1]);
-            return JsonSerializer.Deserialize<EngineConfig>(json, jsonOptions) ?? new EngineConfig();
+            string configPath = args[idx + 1];
+            string json = File.ReadAllText(configPath);
+            EngineConfig config = JsonSerializer.Deserialize<EngineConfig>(json, jsonOptions) ?? new EngineConfig();
+            config.ConfigDirectory = Path.GetDirectoryName(Path.GetFullPath(configPath));
+            return config;
         }
 #endif
         return new EngineConfig();
     }
+
+    /// <summary>Resolves <see cref="PeerCertificateFile"/> against <see cref="ConfigDirectory"/> when it is a relative path.</summary>
+    public string? GetPeerCertificateFilePath() => ResolveConfigRelativePath(PeerCertificateFile);
+
+    /// <summary>Resolves <see cref="TrustedAuthorityCertificateFile"/> against <see cref="ConfigDirectory"/> when it is a relative path.</summary>
+    public string? GetTrustedAuthorityCertificateFilePath() => ResolveConfigRelativePath(TrustedAuthorityCertificateFile);
+
+    private string? ResolveConfigRelativePath(string? path)
+        => path is null || ConfigDirectory is null || Path.IsPathRooted(path) ? path : Path.GetFullPath(Path.Combine(ConfigDirectory, path));
 
     /// <summary>Returns the configured user entries as Engine model types, with case-insensitive key lookup.</summary>
     public IReadOnlyDictionary<string, UserEndpoint> GetUserEndpoints()

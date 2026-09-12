@@ -210,7 +210,7 @@ public sealed class EntryServiceTests : IDisposable
         Assert.Empty(inboxCopy.DeliveryStatuses);
     }
 
-    /// <summary>A successful user result seeds the Outbox record with Confirmed status immediately — a successful send already implies full OFT delivery.</summary>
+    /// <summary>A successful user result seeds the Outbox record with Confirmed status immediately — a successful send already implies full MSMT delivery.</summary>
     [Fact]
     public async Task StoreSentMessage_SuccessfulUserResult_SeedsConfirmedStatusImmediately()
     {

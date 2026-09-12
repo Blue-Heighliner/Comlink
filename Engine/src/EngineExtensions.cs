@@ -42,7 +42,7 @@ public static class EngineExtensions
 
             services.TryAddSingleton(new EngineConfig());
             services.AddConventionSingletons();
-            services.AddOpenFrameTransport();
+            services.AddMsmt();
 
             services.AddSingleton<IServiceConnection, DirectServiceConnection>();
             if (mode == EngineMode.Client)

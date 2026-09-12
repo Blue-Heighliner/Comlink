@@ -1,47 +1,40 @@
 namespace BlueHeighliner.Comlink.Engine.Peer;
 
 /// <summary>
-/// Implements <see cref="IPeerService"/> for <see cref="NodeRole.Client"/>: maintains a single
-/// long-term outbound OFT connection to the configured server (<see cref="IEngineController"/>),
-/// retrying indefinitely whenever the connection cannot be formed or drops. All outbound messages are
-/// sent through this one connection regardless of addressee — the server performs the actual
-/// user-to-connection routing. See <c>Docs/Peer.md</c>.
+/// Implements <see cref="IPeerService"/> for <see cref="NodeRole.Client"/>: sends every outbound message
+/// to the configured server (<see cref="IEngineController"/>), regardless of addressee — the server
+/// performs the actual user-to-connection routing. Also runs its own MSMT receiver on <see
+/// cref="IEngineController.PeerPort"/> so the server can deliver messages back to this client - MSMT's
+/// client-request/server-response model means the server can never push over a connection this client
+/// initiated, so a genuinely separate connection, dialed by the server back to this client, carries that
+/// direction instead. A background <see cref="MsmtConnectionMonitor"/> proactively opens and maintains a
+/// connection to the server with a recurring heartbeat, independent of whether any real message is being
+/// sent, so <see cref="GetStatuses"/> reflects the connection's live state continuously rather than only the
+/// moment a message last happened to flow. See <c>Docs/Peer.md</c>.
 /// </summary>
 internal sealed class ClientPeerService : IPeerService, IConnectionStatusService, IAsyncDisposable
 {
-    private static readonly TimeSpan defaultRetryInterval = TimeSpan.FromSeconds(5);
-
     /// <summary>Initializes a new <see cref="ClientPeerService"/>.</summary>
     public ClientPeerService(
-        IOftConnector connector,
+        IMsmtPeerFactory peerFactory,
         IEngineController engineController,
         ILoggerFactory loggerFactory)
-        : this(connector, engineController, loggerFactory, defaultRetryInterval)
     {
-    }
-
-    /// <summary>Initializes a new <see cref="ClientPeerService"/> with a custom retry interval; intended for unit testing.</summary>
-    internal ClientPeerService(
-        IOftConnector connector,
-        IEngineController engineController,
-        ILoggerFactory loggerFactory,
-        TimeSpan retryInterval)
-    {
-        this.connector = connector;
+        this.peerFactory = peerFactory;
         this.engineController = engineController;
         logger = loggerFactory.CreateLogger("ACTIVITY");
-        this.retryInterval = retryInterval;
     }
 
-    private readonly IOftConnector connector;
+    private readonly IMsmtPeerFactory peerFactory;
     private readonly IEngineController engineController;
     private readonly ILogger logger;
-    private readonly TimeSpan retryInterval;
+    private readonly MsmtConnectionMonitor connectionMonitor = new();
 
     private readonly ConcurrentDictionary<string, Task<bool>> inFlightSends = new();
 
-    private volatile IOftConnection? activeConnection;
-    private volatile string? remoteUserName;
+    private IMsmtPeer? peer;
+    private MsmtTarget? serverTarget;
+    private volatile bool isConnected;
     private DateTime? lastConnectedAt;
     private DateTime? lastDisconnectedAt;
 
@@ -51,9 +44,9 @@ internal sealed class ClientPeerService : IPeerService, IConnectionStatusService
     /// <inheritdoc />
     public event Func<string, string, Task>? ConfirmationReceived;
 
-#pragma warning disable CS0067 // No per-message OFT delivery status is tracked across the client/server hierarchy.
+#pragma warning disable CS0067 // No per-message delivery status is tracked across the client/server hierarchy.
     /// <inheritdoc />
-    public event Func<string, string, OftDeliveryStatus, Task>? DeliveryStatusChanged;
+    public event Func<string, string, DestinationStatus, Task>? DeliveryStatusChanged;
 
 #pragma warning restore CS0067
     /// <inheritdoc />
@@ -69,60 +62,44 @@ internal sealed class ClientPeerService : IPeerService, IConnectionStatusService
             return;
         }
 
-        while (!cancellation.IsCancellationRequested)
+        MsmtOptions options;
+        try
         {
-            IOftConnection? connection = null;
-            try
-            {
-                connection = await connector.Connect(endpoint.IpAddress, endpoint.Port, engineController.ConnectionOptions, cancellation);
-                activeConnection = connection;
-                remoteUserName = connection.Identity.Info;
-                lastConnectedAt = DateTime.UtcNow;
-                StatusesChanged?.Invoke();
-                TaskCompletionSource disconnected = new(TaskCreationOptions.RunContinuationsAsynchronously);
-                connection.ReceivedHandler = OnReceived;
-                connection.DisconnectedHandler = _ => disconnected.TrySetResult();
-                logger.LogInformation("Connected to server");
-                await disconnected.Task.WaitAsync(cancellation);
-            }
-            catch (OperationCanceledException)
-            {
-                break;
-            }
-            catch (Exception ex)
-            {
-                logger.LogWarning("Connection to server failed: {Message}", ex.Message);
-            }
-            finally
-            {
-                activeConnection = null;
-                if (connection is not null)
-                {
-                    lastDisconnectedAt = DateTime.UtcNow;
-                    StatusesChanged?.Invoke();
-                    await connection.DisposeAsync();
-                }
-            }
-
-            try { await Task.Delay(retryInterval, cancellation); }
-            catch (OperationCanceledException) { break; }
+            options = engineController.ConnectionOptions;
         }
+        catch (InvalidOperationException ex)
+        {
+            logger.LogError("Client role cannot start: {Message}", ex.Message);
+            return;
+        }
+
+        serverTarget = new MsmtTarget { Host = endpoint.IpAddress, Port = endpoint.Port };
+        peer = peerFactory.Create(options);
+        peer.Connected.Subscribe(OnConnected);
+        peer.Disconnected.Subscribe(OnDisconnected);
+        peer.Received.Subscribe(OnReceived);
+        peer.StartListener(engineController.PeerPort);
+        logger.LogInformation("Client peer listening for server-originated deliveries");
+        connectionMonitor.Maintain(peer, serverTarget, cancellation);
+
+        try { await Task.Delay(Timeout.Infinite, cancellation); }
+        catch (OperationCanceledException) { }
     }
 
     /// <inheritdoc />
     public Task<bool> Send(string userName, object message, CancellationToken cancellation = default)
     {
         // Route()/MessageRoutingService calls Send once per resolved recipient, even for a single group
-        // address expanding to several users; since every send here goes through the one shared server
-        // connection regardless of userName, in-flight sends are coalesced by message ID to avoid
-        // transmitting the same message multiple times.
+        // address expanding to several users; since every send here goes to the one shared server
+        // regardless of userName, in-flight sends are coalesced by message ID to avoid transmitting the
+        // same message multiple times.
         string messageId = engineController.GetMessageId(message);
         return inFlightSends.GetOrAdd(messageId, _ => SendOnceAndCleanup(messageId, message, cancellation));
     }
 
     private async Task<bool> SendOnceAndCleanup(string messageId, object message, CancellationToken cancellation)
     {
-        try { return await SendOnce(message, cancellation); }
+        try { return await SendOnce(messageId, message, cancellation); }
         finally { inFlightSends.TryRemove(messageId, out _); }
     }
 
@@ -130,23 +107,23 @@ internal sealed class ClientPeerService : IPeerService, IConnectionStatusService
     public IReadOnlyList<PeerConnectionStatus> GetStatuses()
         => [new PeerConnectionStatus
         {
-            UserName = remoteUserName ?? string.Empty,
+            UserName = string.Empty,
             Kind = PeerConnectionKind.Server,
-            IsConnected = activeConnection is not null,
+            IsConnected = isConnected,
             LastConnectedAt = lastConnectedAt,
             LastDisconnectedAt = lastDisconnectedAt
         }];
 
-    private async Task<bool> SendOnce(object message, CancellationToken cancellation)
+    private async Task<bool> SendOnce(string messageId, object message, CancellationToken cancellation)
     {
-        IOftConnection? connection = activeConnection;
-        if (connection is null || !connection.IsConnected) { return false; }
+        if (peer is null || serverTarget is null) { return false; }
 
-        using OwnedBuffer buf = PeerSerializer.Serialize(message);
         try
         {
-            await connection.Send(buf.Memory, priority: engineController.GetPriority(message), cancellationToken: cancellation);
-            return true;
+            using OwnedBuffer buf = PeerSerializer.Serialize(message);
+            MsmtResponse response = await peer.Request(serverTarget, buf.Memory, new MsmtSendOptions { Priority = engineController.GetPriority(message), Tag = messageId }, cancellation);
+            response.Payload.Dispose();
+            return response.Success;
         }
         catch
         {
@@ -164,10 +141,41 @@ internal sealed class ClientPeerService : IPeerService, IConnectionStatusService
         }
     }
 
-    private void OnReceived(IMemoryOwner<byte> data)
+    private void OnConnected(MsmtConnectedEventArgs args)
+    {
+        if (IsServerTarget(args.Connection.Target)) { UpdateConnectionStatus(true); }
+    }
+
+    private void OnDisconnected(MsmtDisconnectedEventArgs args)
+    {
+        if (IsServerTarget(args.Connection.Target)) { UpdateConnectionStatus(false); }
+    }
+
+    private void UpdateConnectionStatus(bool connected)
+    {
+        if (isConnected == connected) { return; }
+
+        isConnected = connected;
+        if (connected)
+        {
+            lastConnectedAt = DateTime.UtcNow;
+            logger.LogInformation("Connected to server");
+        }
+        else
+        {
+            lastDisconnectedAt = DateTime.UtcNow;
+            logger.LogWarning("Server unreachable");
+        }
+        StatusesChanged?.Invoke();
+    }
+
+    private bool IsServerTarget(MsmtTarget target)
+        => serverTarget is { } expected && target.Host == expected.Host && target.Port == expected.Port;
+
+    private void OnReceived(MsmtReceivedEventArgs args)
     {
         byte[] copy;
-        using (data) { copy = data.Memory.ToArray(); }
+        using (args.Payload) { copy = args.Payload.Memory.ToArray(); }
         _ = Task.Run(() => HandleMessage(copy));
     }
 
@@ -177,7 +185,6 @@ internal sealed class ClientPeerService : IPeerService, IConnectionStatusService
     /// <inheritdoc />
     public async ValueTask DisposeAsync()
     {
-        IOftConnection? connection = activeConnection;
-        if (connection is not null) { await connection.DisposeAsync(); }
+        if (peer is not null) { await peer.DisposeAsync(); }
     }
 }

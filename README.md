@@ -4,7 +4,7 @@
 [![License: MIT](https://img.shields.io/github/license/Blue-Heighliner/Comlink.svg)](LICENSE)
 [![C#](https://github.com/Blue-Heighliner/Comlink/actions/workflows/csharp.yml/badge.svg)](https://github.com/Blue-Heighliner/Comlink/actions/workflows/csharp.yml)
 
-A peer-to-peer messaging system built on .NET 10 and the [Open Frame Transport (OFT)](Docs/Oft.md) protocol.
+A peer-to-peer messaging system built on .NET 10 and the [Mercury Secure Message Transport (MSMT)](Docs/Msmt.md) protocol.
 
 ## Projects
 
@@ -50,13 +50,15 @@ See [Docs/Config.md](Docs/Config.md) for the full configuration reference.
 | [Docs/Config.md](Docs/Config.md) | All `config.json` fields and examples |
 | [Docs/Interface.md](Docs/Interface.md) | Local interface listener contract (Headless mode) |
 | [Docs/Peer.md](Docs/Peer.md) | Peer-to-peer networking protocol |
-| [Docs/Oft.md](Docs/Oft.md) | Open Frame Transport (OFT) protocol reference |
+| [Docs/Msmt.md](Docs/Msmt.md) | Mercury Secure Message Transport (MSMT) protocol standard reference |
+| [Docs/MsmtIntegration.md](Docs/MsmtIntegration.md) | How Comlink integrates with MSMT |
 | [Docs/Data.md](Docs/Data.md) | LiteDB entities and database layout |
 | [Docs/Services.md](Docs/Services.md) | Business logic services |
 | [Docs/ViewModels.md](Docs/ViewModels.md) | MVVM layer |
 | [Docs/Logging.md](Docs/Logging.md) | Logging providers and format |
 | [Docs/Control.md](Docs/Control.md) | DI control interfaces — required vs optional, each interface explained |
 | [Docs/Configuration.md](Docs/Configuration.md) | DI configuration interfaces |
+| [Docs/ExternalSystems.md](Docs/ExternalSystems.md) | External system conduit contract, lifecycle, relay/mirror behavior, Sample demo |
 
 ## License
 
