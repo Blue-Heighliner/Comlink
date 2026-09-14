@@ -2,7 +2,7 @@ namespace BlueHeighliner.Comlink.Sample;
 
 /// <summary>
 /// Sample <see cref="ExternalSystemBase{TMessage}"/> demonstrating the external-system conduit pattern —
-/// see <see cref="SampleEngineController.ExternalSystems"/> and <c>Docs/ExternalSystems.md</c>. Not a
+/// see <see cref="SampleEngineController.ExternalSystems"/> and <c>Docs/Components/ExternalSystems.md</c>. Not a
 /// real integration: "connecting" is simulated with a short delay, and once connected it stays connected
 /// and periodically synthesizes an inbound demo message, so the receive path — including mirroring to
 /// every other external system, and normal processing as a received message — is visible without needing
@@ -18,8 +18,8 @@ namespace BlueHeighliner.Comlink.Sample;
 /// <param name="name">A short, human-readable name identifying this external system.</param>
 public sealed class SampleExternalSystem() : ExternalSystemBase<SampleMessage>("EXTERNAL")
 {
-    private static readonly TimeSpan ConnectDelay = TimeSpan.FromSeconds(3);
-    private static readonly TimeSpan DemoMessageInterval = TimeSpan.FromSeconds(30);
+    private static readonly TimeSpan connectDelay = TimeSpan.FromSeconds(3);
+    private static readonly TimeSpan demoMessageInterval = TimeSpan.FromSeconds(30);
 
     private CancellationTokenSource? demoMessageLoopCts;
 
@@ -28,7 +28,7 @@ public sealed class SampleExternalSystem() : ExternalSystemBase<SampleMessage>("
     {
         // Simulates the latency a real connection attempt (a socket handshake, an auth exchange, ...)
         // would have.
-        await Task.Delay(ConnectDelay, cancellation);
+        await Task.Delay(connectDelay, cancellation);
 
         demoMessageLoopCts = CancellationTokenSource.CreateLinkedTokenSource(cancellation);
         _ = Task.Run(() => RunDemoMessageLoop(demoMessageLoopCts.Token), CancellationToken.None);
@@ -52,7 +52,7 @@ public sealed class SampleExternalSystem() : ExternalSystemBase<SampleMessage>("
         {
             while (!cancellation.IsCancellationRequested)
             {
-                await Task.Delay(DemoMessageInterval, cancellation);
+                await Task.Delay(demoMessageInterval, cancellation);
                 await Receive(new SampleMessage
                 {
                     Id = Guid.NewGuid().ToString("N"),

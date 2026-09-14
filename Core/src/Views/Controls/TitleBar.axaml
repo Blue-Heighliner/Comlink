@@ -1,0 +1,114 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             x:Class="BlueHeighliner.Comlink.Views.Controls.TitleBar"
+             Background="#2D2D30"
+             Height="32">
+
+  <Grid ColumnDefinitions="Auto,*,Auto,Auto,Auto">
+
+    <!-- Left: Action buttons — never shown in Server mode, which has no drafts/notes/export/import/print UI -->
+    <StackPanel x:Name="ActionButtonsPanel"
+                Grid.Column="0"
+                Orientation="Horizontal"
+                VerticalAlignment="Center"
+                Margin="4,0">
+      <Button x:Name="DraftButton"
+              Classes="titlebar-action"
+              Content="NEW DRAFT"
+              Foreground="#CCCCCC"
+              Click="OnDraftClick" />
+      <Button x:Name="NoteButton"
+              Classes="titlebar-action"
+              Content="NEW NOTE"
+              Foreground="#CCCCCC"
+              Click="OnNoteClick" />
+      <Button x:Name="ExportButton"
+              Classes="titlebar-action"
+              Content="EXPORT"
+              Foreground="#CCCCCC"
+              Click="OnExportClick" />
+      <Button x:Name="ImportButton"
+              Classes="titlebar-action"
+              Content="IMPORT"
+              Foreground="#CCCCCC"
+              Click="OnImportClick" />
+      <Button x:Name="PrintManagerButton"
+              Classes="titlebar-action"
+              Content="PRINTS"
+              Foreground="#CCCCCC"
+              Click="OnPrintManagerClick" />
+    </StackPanel>
+
+    <!-- Left: Server mode's view-switching buttons — only shown in Server mode, in the same position the
+         normal action buttons occupy in Peer/Client mode -->
+    <StackPanel x:Name="ServerViewButtonsPanel"
+                Grid.Column="0"
+                Orientation="Horizontal"
+                VerticalAlignment="Center"
+                Margin="4,0"
+                IsVisible="False">
+      <Button x:Name="ConnectionsButton"
+              Classes="titlebar-action"
+              Content="CONNECTIONS"
+              Foreground="#CCCCCC"
+              Click="OnShowConnectionsClick" />
+      <Button x:Name="ActivityButton"
+              Classes="titlebar-action"
+              Content="ACTIVITY"
+              Foreground="#CCCCCC"
+              Click="OnShowActivityClick" />
+    </StackPanel>
+
+    <!-- Center: Drag area (transparent, fills space) -->
+    <Border Grid.Column="1"
+            Background="Transparent"
+            PointerPressed="OnDragAreaPressed" />
+
+    <!-- Alert box: shown while one or more alert messages are pending (unread) -->
+    <Border x:Name="AlertBox"
+            Grid.Column="2"
+            Background="#C0392B"
+            CornerRadius="3"
+            Padding="10,4"
+            Margin="0,0,8,0"
+            VerticalAlignment="Center"
+            IsVisible="False"
+            Cursor="Hand"
+            PointerPressed="OnAlertBoxPressed">
+      <TextBlock x:Name="AlertBoxText"
+                 FontWeight="Bold"
+                 FontSize="12"
+                 Foreground="White" />
+    </Border>
+
+    <!-- Right side: user name + version -->
+    <TextBlock x:Name="UserInfoText"
+               Grid.Column="3"
+               FontSize="12"
+               Foreground="#AAAAAA"
+               VerticalAlignment="Center"
+               Margin="0,0,8,0" />
+
+    <!-- Window controls -->
+    <StackPanel Grid.Column="4"
+                Orientation="Horizontal"
+                Spacing="0">
+      <Button x:Name="MinimizeButton"
+              Classes="winctrl"
+              Content="&#x2212;"
+              ToolTip.Tip="Minimize"
+              Click="OnMinimize" />
+      <Button x:Name="MaximizeButton"
+              Classes="winctrl"
+              Content="&#x25A1;"
+              ToolTip.Tip="Maximize"
+              Click="OnMaximize" />
+      <Button x:Name="CloseButton"
+              Classes="winctrl close"
+              Content="&#x2715;"
+              ToolTip.Tip="Close"
+              Click="OnClose" />
+    </StackPanel>
+
+  </Grid>
+</UserControl>

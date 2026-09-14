@@ -5,9 +5,10 @@ namespace BlueHeighliner.Comlink.Sample;
 /// <see cref="SampleMessage"/> (with no casting required — see <see cref="DefaultEngineController{TMessage}"/>),
 /// and demonstrating every other control override Sample has distinct, non-config-file behavior worth
 /// showing — every other member uses the Engine default, with <c>config.json</c> applied on top
-/// automatically (see <c>Docs/Control.md</c>):
+/// automatically (see <c>Docs/Components/Control.md</c>):
 /// <list type="bullet">
 /// <item><description><see cref="HomeText"/> — a product-appropriate home screen welcome text.</description></item>
+/// <item><description><see cref="WindowIconUri"/> — Sample's own envelope icon instead of the Engine default's OS icon.</description></item>
 /// <item><description><see cref="ResolveCode"/> — three hard-coded test codes instead of the Engine default's single one.</description></item>
 /// <item><description><see cref="Users"/> — three hard-coded built-in user names matching those codes.</description></item>
 /// <item><description><see cref="Priorities"/>/<see cref="BlockedCombinations"/> — three priority levels and both blocked-combination kinds.</description></item>
@@ -31,6 +32,8 @@ public sealed class SampleEngineController(ICurrentUserProvider currentUserProvi
 
     /// <inheritdoc />
     public override string HomeText => "Select a folder and entry to get started, or create a new draft or note.";
+    /// <inheritdoc />
+    public override Uri? WindowIconUri => new Uri("avares://BlueHeighliner.Comlink.Sample/Assets/envelope.png");
     /// <inheritdoc />
     public override IReadOnlyList<string> Users { get; } = ["TEST1", "TEST2", "TEST3"];
     /// <inheritdoc />

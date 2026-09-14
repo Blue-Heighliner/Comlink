@@ -2,63 +2,43 @@
 
 [![NuGet](https://img.shields.io/nuget/v/BlueHeighliner.Comlink.svg?label=NuGet)](https://www.nuget.org/packages/BlueHeighliner.Comlink)
 [![License: MIT](https://img.shields.io/github/license/Blue-Heighliner/Comlink.svg)](LICENSE)
-[![C#](https://github.com/Blue-Heighliner/Comlink/actions/workflows/csharp.yml/badge.svg)](https://github.com/Blue-Heighliner/Comlink/actions/workflows/csharp.yml)
+[![Build](https://github.com/Blue-Heighliner/Comlink/actions/workflows/build.yml/badge.svg)](https://github.com/Blue-Heighliner/Comlink/actions/workflows/build.yml)
+[![Coverage](.github/badges/badge_linecoverage.svg)](https://github.com/Blue-Heighliner/Comlink/actions/workflows/build.yml)
 
-A peer-to-peer messaging system built on .NET 10 and the [Mercury Secure Message Transport (MSMT)](Docs/Msmt.md) protocol.
-
-## Projects
-
-| Project | Description |
-|---------|-------------|
-| **Engine** | The whole engine — networking, data, services, ViewModels, and the Avalonia UI layer (Views, Themes, converters) — in one library. |
-| **Sample** | Host application using Engine in GUI mode or headless mode. |
-| **Tests** | xUnit tests for Engine services and ViewModels. |
-
-## Prerequisites
-
-- [.NET 10 SDK](https://dotnet.microsoft.com/download)
+A peer-to-peer messaging engine built on .NET 10 and the Mercury Secure Message Transport (MSMT) protocol, with a built-in Avalonia desktop GUI. The GUI is a required dependency, not optional — it can run headless (no window shown), but Avalonia and its dependencies are always loaded.
 
 ## Installing
-
-Engine is published as a single NuGet package covering both the core library and the Avalonia UI layer. The Avalonia GUI is a required dependency of this package, not optional — a host can run Engine headless (no window shown, see [Docs/Architecture.md](Docs/Architecture.md#modes)), but Avalonia and its dependencies are always pulled in:
 
 ```sh
 dotnet add package BlueHeighliner.Comlink
 ```
 
-## Building
+## Getting started
 
-```sh
-dotnet build
+A host implements `IEngineController` (via `DefaultEngineController<TMessage>`, generic over its own message DTO) and starts the engine with `Engine.Start`:
+
+```csharp
+public sealed class MyEngineController(ICurrentUserProvider currentUserProvider)
+    : DefaultEngineController<MyMessage>(currentUserProvider)
+{
+    protected override string GetMessageId(MyMessage message) => message.Id;
+    // ...every other required message-field member...
+}
+
+await Engine.Start(args, services => services.AddSingleton<IEngineController, MyEngineController>());
 ```
 
-## Running
-
-```sh
-dotnet run --project Sample -- --config Configs/TEST1.json
-```
-
-Omit `--config` to use all defaults (GUI mode, default ports, system app data folder).
-
-See [Docs/Config.md](Docs/Config.md) for the full configuration reference.
+See `Sample/` for a complete, runnable host, and `Docs/Usage.md` for further examples.
 
 ## Documentation
 
 | File | Covers |
 |------|--------|
-| [Docs/Architecture.md](Docs/Architecture.md) | System overview, modes, startup sequence, data layout |
-| [Docs/Config.md](Docs/Config.md) | All `config.json` fields and examples |
-| [Docs/Interface.md](Docs/Interface.md) | Local interface listener contract (Headless mode) |
-| [Docs/Peer.md](Docs/Peer.md) | Peer-to-peer networking protocol |
-| [Docs/Msmt.md](Docs/Msmt.md) | Mercury Secure Message Transport (MSMT) protocol standard reference |
-| [Docs/MsmtIntegration.md](Docs/MsmtIntegration.md) | How Comlink integrates with MSMT |
-| [Docs/Data.md](Docs/Data.md) | LiteDB entities and database layout |
-| [Docs/Services.md](Docs/Services.md) | Business logic services |
-| [Docs/ViewModels.md](Docs/ViewModels.md) | MVVM layer |
-| [Docs/Logging.md](Docs/Logging.md) | Logging providers and format |
-| [Docs/Control.md](Docs/Control.md) | DI control interfaces — required vs optional, each interface explained |
-| [Docs/Configuration.md](Docs/Configuration.md) | DI configuration interfaces |
-| [Docs/ExternalSystems.md](Docs/ExternalSystems.md) | External system conduit contract, lifecycle, relay/mirror behavior, Sample demo |
+| [Docs/Api.md](Docs/Api.md) | Public API design and flow — `IEngineController`, `Engine.Start` |
+| [Docs/Architecture.md](Docs/Architecture.md) | High-level design decisions |
+| [Docs/Project.md](Docs/Project.md) | This repo's own tooling: `Scripts/`, publishing, CI |
+| [Docs/Usage.md](Docs/Usage.md) | Runnable usage examples |
+| [Docs/Components/](Docs/Components/) | One file per complex internal component/subsystem |
 
 ## License
 

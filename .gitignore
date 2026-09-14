@@ -1,11 +1,15 @@
 .claude/
-.autodev/local/
+.autodev/
 
 bin/
 obj/
 Logs/
-Build/
 TestResults/
+
+# Coverage badge: ReportGenerator writes every color/metric variant here, but only the one
+# badge referenced from README.md is meant to be committed.
+.github/badges/*
+!.github/badges/badge_linecoverage.svg
 
 *.db
 *.db-shm

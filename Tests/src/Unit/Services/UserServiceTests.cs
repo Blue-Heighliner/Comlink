@@ -1,0 +1,111 @@
+namespace BlueHeighliner.Comlink.Tests.Unit.Services;
+
+/// <summary>Integration tests for <see cref="UserService"/> covering install, load, and state queries.</summary>
+public sealed class UserServiceTests : IDisposable
+{
+    public UserServiceTests()
+    {
+        string path = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), appName);
+        engineControllerMock.Setup(e => e.AppDataPath).Returns(path);
+    }
+
+    private readonly string appName = Guid.NewGuid().ToString();
+    private readonly Mock<IEngineController> engineControllerMock = new();
+
+    private UserService CreateService()
+        => new(engineControllerMock.Object, new BlueHeighliner.Comlink.Control.CurrentUserProvider(), LoggerFactory.Create(_ => { }));
+
+    /// <summary>Verifies that GetCurrentUserInfo returns null when the user has not been installed.</summary>
+    [Fact]
+    public void GetCurrentUserInfo_WhenNotInstalled_ReturnsNull()
+    {
+        UserService service = CreateService();
+        Assert.Null(service.GetCurrentUserInfo());
+    }
+
+    /// <summary>Verifies that Install returns the resolved user info for a valid user code.</summary>
+    [Fact]
+    public async Task InstallAsync_WithValidCode_ReturnsUserInfo()
+    {
+        UserInfo expected = new()
+        {
+            Name = "TestUser",
+            Code = "TS01",
+            EnvironmentTitle = "Test",
+            EnvironmentColor = "#FF0000"
+        };
+        engineControllerMock.Setup(r => r.ResolveCode("TS01")).Returns(expected);
+
+        UserService service = CreateService();
+        UserInfo? result = await service.Install("TS01");
+
+        Assert.NotNull(result);
+        Assert.Equal("TestUser", result.Name);
+        Assert.Equal("TS01", result.Code);
+    }
+
+    /// <summary>Verifies that Install returns null when the user code is unrecognized.</summary>
+    [Fact]
+    public async Task InstallAsync_WithInvalidCode_ReturnsNull()
+    {
+        engineControllerMock.Setup(r => r.ResolveCode("INVALID")).Returns((UserInfo?)null);
+
+        UserService service = CreateService();
+        UserInfo? result = await service.Install("INVALID");
+
+        Assert.Null(result);
+    }
+
+    /// <summary>Verifies that the service reports as installed after a successful Install call.</summary>
+    [Fact]
+    public async Task InstallAsync_WithValidCode_MakesServiceInstalled()
+    {
+        UserInfo userInfo = new()
+        {
+            Name = "MyNode",
+            Code = "MN01",
+            EnvironmentTitle = "Prod",
+            EnvironmentColor = "#00FF00"
+        };
+        engineControllerMock.Setup(r => r.ResolveCode("MN01")).Returns(userInfo);
+
+        UserService service = CreateService();
+        await service.Install("MN01");
+
+        UserInfo? result = service.GetCurrentUserInfo();
+        Assert.NotNull(result);
+        Assert.Equal("MyNode", result.Name);
+    }
+
+    /// <summary>Verifies that Load restores previously persisted user state from disk.</summary>
+    [Fact]
+    public async Task LoadAsync_WithExistingStateFile_RestoresState()
+    {
+        UserInfo userInfo = new()
+        {
+            Name = "Restored",
+            Code = "RS01",
+            EnvironmentTitle = "QA",
+            EnvironmentColor = "#0000FF"
+        };
+        engineControllerMock.Setup(r => r.ResolveCode("RS01")).Returns(userInfo);
+
+        UserService service = CreateService();
+        await service.Install("RS01");
+
+        UserService service2 = CreateService();
+        await service2.Load();
+
+        UserInfo? result = service2.GetCurrentUserInfo();
+        Assert.NotNull(result);
+        Assert.Equal("Restored", result.Name);
+    }
+
+    /// <inheritdoc />
+    public void Dispose()
+    {
+        string appData = Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData);
+        string dir = Path.Combine(appData, appName);
+        if (Directory.Exists(dir)) { Directory.Delete(dir, recursive: true); }
+    }
+}
