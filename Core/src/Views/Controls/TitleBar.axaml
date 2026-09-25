@@ -4,7 +4,7 @@
              Background="#2D2D30"
              Height="32">
 
-  <Grid ColumnDefinitions="Auto,*,Auto,Auto,Auto">
+  <Grid ColumnDefinitions="Auto,*,Auto,Auto,Auto,Auto">
 
     <!-- Left: Action buttons — never shown in Server mode, which has no drafts/notes/export/import/print UI -->
     <StackPanel x:Name="ActionButtonsPanel"
@@ -89,8 +89,46 @@
                VerticalAlignment="Center"
                Margin="0,0,8,0" />
 
-    <!-- Window controls -->
+    <!-- Info and help: always available, immediately left of the window controls -->
     <StackPanel Grid.Column="4"
+                Orientation="Horizontal"
+                Spacing="0">
+      <Button x:Name="InfoButton"
+              Classes="winctrl"
+              ToolTip.Tip="About"
+              Click="OnInfoClick">
+        <Border Width="18"
+                Height="18"
+                CornerRadius="9"
+                BorderThickness="1.5"
+                BorderBrush="{Binding $parent[Button].Foreground}">
+          <TextBlock Text="i"
+                     FontSize="12"
+                     FontWeight="Bold"
+                     HorizontalAlignment="Center"
+                     VerticalAlignment="Center" />
+        </Border>
+      </Button>
+      <Button x:Name="HelpButton"
+              Classes="winctrl"
+              ToolTip.Tip="Help"
+              Click="OnHelpClick">
+        <Border Width="18"
+                Height="18"
+                CornerRadius="9"
+                BorderThickness="1.5"
+                BorderBrush="{Binding $parent[Button].Foreground}">
+          <TextBlock Text="?"
+                     FontSize="12"
+                     FontWeight="Bold"
+                     HorizontalAlignment="Center"
+                     VerticalAlignment="Center" />
+        </Border>
+      </Button>
+    </StackPanel>
+
+    <!-- Window controls -->
+    <StackPanel Grid.Column="5"
                 Orientation="Horizontal"
                 Spacing="0">
       <Button x:Name="MinimizeButton"

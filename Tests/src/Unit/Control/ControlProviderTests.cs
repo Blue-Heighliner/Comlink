@@ -19,6 +19,19 @@ public sealed class ControlProviderTests
         Assert.Equal("HOME", controller.HomeText);
     }
 
+    /// <summary>The default AppVersion is the entry assembly's major.minor.build version, and a host can override it.</summary>
+    [Fact]
+    public void DefaultEngineController_AppVersion_IsThreePartVersionAndOverridable()
+    {
+        Assert.Matches(@"^\d+\.\d+\.\d+$", new TestEngineController().AppVersion);
+        Assert.Equal("4.5.6", new TestAppVersionOverride().AppVersion);
+    }
+
+    private sealed class TestAppVersionOverride : TestEngineController
+    {
+        public override string AppVersion => "4.5.6";
+    }
+
     /// <summary>A subclass overriding only AppName automatically gets a matching AppDataPath, since the base computes it via virtual dispatch.</summary>
     [Fact]
     public void DefaultEngineController_OverridingAppNameOnly_AppDataPathFollows()
@@ -71,11 +84,13 @@ public sealed class ControlProviderTests
     {
         Mock<IEngineController> fallback = new();
         fallback.Setup(f => f.AppName).Returns("FallbackApp");
+        fallback.Setup(f => f.AppVersion).Returns("9.8.7");
         fallback.Setup(f => f.IsKioskMode).Returns(true);
         fallback.Setup(f => f.HomeText).Returns("FALLBACK-HOME");
         ConfiguredEngineController controller = new(fallback.Object, new EngineConfig(), NoCurrentUser);
 
         Assert.Equal("FallbackApp", controller.AppName);
+        Assert.Equal("9.8.7", controller.AppVersion);
         Assert.True(controller.IsKioskMode);
         Assert.Equal("FALLBACK-HOME", controller.HomeText);
     }

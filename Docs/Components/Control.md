@@ -105,14 +105,15 @@ These members are declared on `IEngineController` as `object`-typed, since that'
 
 ```csharp
 string AppName { get; }
+string AppVersion { get; }
 string AppDataPath { get; }
 bool IsKioskMode { get; }
 string HomeText { get; }
 ```
 
-This app's own identity and top-level presentation: the display/data-folder name, the root directory persistent state (LiteDB, user state, logs) is written under, whether the main window runs in kiosk mode (hides window chrome and restricts navigation), and the placeholder text shown in the content area when no entry is selected.
+This app's own identity and top-level presentation: the display/data-folder name, the version shown in the title bar and the info popup, the root directory persistent state (LiteDB, user state, logs) is written under, whether the main window runs in kiosk mode (hides window chrome and restricts navigation), and the placeholder text shown in the content area when no entry is selected.
 
-**Engine default:** `AppName` derives from the entry assembly name; `AppDataPath` is `%APPDATA%\{AppName}` (computed from `AppName` via virtual dispatch — see [Concept](#concept)); `IsKioskMode` is `false`; `HomeText` returns `"HOME"`.
+**Engine default:** `AppName` derives from the entry assembly name; `AppVersion` is the entry assembly's `major.minor.build` version (`1.0.0` if it has none), so a host sets it by overriding the property or by versioning its assembly; `AppDataPath` is `%APPDATA%\{AppName}` (computed from `AppName` via virtual dispatch - see [Concept](#concept)); `IsKioskMode` is `false`; `HomeText` returns `"HOME"`.
 
 **Config override:** `config.json`'s `DataFolder` overrides `AppDataPath` when set: `null` uses it unchanged; an absolute path is used verbatim; an `@`-prefixed path is relative to it (see [Config.md](Config.md)) — supporting the `@`-prefix shorthand this way, rather than reading `AppName` again itself, is what lets a host override *both* `AppName` and `DataFolder` at once and have them compose correctly. `AppName`, `IsKioskMode`, and `HomeText` have no corresponding `config.json` field and always delegate to the wrapped provider.
 

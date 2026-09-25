@@ -17,6 +17,14 @@ public partial class TitleBar : UserControl
     public static readonly StyledProperty<string> AppVersionProperty =
         AvaloniaProperty.Register<TitleBar, string>(nameof(AppVersion), string.Empty);
 
+    /// <summary>Identifies the <see cref="AppName"/> styled property.</summary>
+    public static readonly StyledProperty<string> AppNameProperty =
+        AvaloniaProperty.Register<TitleBar, string>(nameof(AppName), string.Empty);
+
+    /// <summary>Identifies the <see cref="Help"/> styled property.</summary>
+    public static readonly StyledProperty<IHelpViewModel?> HelpProperty =
+        AvaloniaProperty.Register<TitleBar, IHelpViewModel?>(nameof(Help));
+
     /// <summary>Identifies the <see cref="CreateDraftCommand"/> styled property.</summary>
     public static readonly StyledProperty<ICommand?> CreateDraftCommandProperty =
         AvaloniaProperty.Register<TitleBar, ICommand?>(nameof(CreateDraftCommand));
@@ -73,6 +81,8 @@ public partial class TitleBar : UserControl
     public static readonly StyledProperty<ICommand?> AlertCommandProperty =
         AvaloniaProperty.Register<TitleBar, ICommand?>(nameof(AlertCommand));
 
+    private HelpWindow? helpWindow;
+
     /// <summary>Initializes the control and loads the AXAML layout.</summary>
     public TitleBar()
     {
@@ -91,6 +101,20 @@ public partial class TitleBar : UserControl
     {
         get => GetValue(AppVersionProperty);
         set => SetValue(AppVersionProperty, value);
+    }
+
+    /// <summary>Gets or sets the application name shown in the info popup.</summary>
+    public string AppName
+    {
+        get => GetValue(AppNameProperty);
+        set => SetValue(AppNameProperty, value);
+    }
+
+    /// <summary>Gets or sets the help ViewModel the help button opens a <see cref="HelpWindow"/> for.</summary>
+    public IHelpViewModel? Help
+    {
+        get => GetValue(HelpProperty);
+        set => SetValue(HelpProperty, value);
     }
 
     /// <summary>Gets or sets the command invoked when the user clicks the New Draft button.</summary>
@@ -235,6 +259,35 @@ public partial class TitleBar : UserControl
         TextBlock? tb = this.FindControl<TextBlock>("UserInfoText");
         if (tb is null) { return; }
         tb.Text = string.IsNullOrEmpty(AppVersion) ? UserName : $"{UserName} v{AppVersion}";
+    }
+
+    private void OnInfoClick(object? sender, Avalonia.Interactivity.RoutedEventArgs e)
+    {
+        if (sender is not Avalonia.Controls.Control anchor) { return; }
+
+        StackPanel content = new() { Spacing = 2, Margin = new Thickness(6), MinWidth = 160 };
+        content.Children.Add(new TextBlock { Text = AppName, FontSize = 14, FontWeight = FontWeight.SemiBold });
+        if (!string.IsNullOrEmpty(AppVersion))
+        {
+            content.Children.Add(new TextBlock { Text = $"Version {AppVersion}", FontSize = 12, Foreground = new SolidColorBrush(Color.Parse("#AAAAAA")) });
+        }
+
+        new Flyout { Content = content, Placement = PlacementMode.BottomEdgeAlignedRight }.ShowAt(anchor);
+    }
+
+    private void OnHelpClick(object? sender, Avalonia.Interactivity.RoutedEventArgs e)
+    {
+        if (helpWindow is not null)
+        {
+            helpWindow.Activate();
+            return;
+        }
+
+        if (Help is null || VisualRoot is not Window owner) { return; }
+
+        helpWindow = new HelpWindow { DataContext = Help };
+        helpWindow.Closed += (_, _) => helpWindow = null;
+        helpWindow.Show(owner);
     }
 
     private void OnDraftClick(object? sender, Avalonia.Interactivity.RoutedEventArgs e)

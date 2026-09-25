@@ -24,7 +24,9 @@
          import/print action buttons for the right-side CONNECTIONS/ACTIVITY view switcher (see IsServerMode) -->
     <controls:TitleBar Grid.Row="1"
                        UserName="{Binding UserName}"
+                       AppName="{Binding AppName}"
                        AppVersion="{Binding AppVersion}"
+                       Help="{Binding Help}"
                        CreateDraftCommand="{Binding CreateDraftCommand}"
                        CreateNoteCommand="{Binding CreateNoteCommand}"
                        ShowExportCommand="{Binding ShowExportCommand}"

@@ -7,7 +7,7 @@ All external configuration and rule-based behavior — including the concrete me
 | App area | Members |
 |---|---|
 | Message Format | `MessageType`, `CreateMessage()`, and a `Get`/`Set` pair for each logical field (message id, sender, subject, body, addresses, sent time, confirmation id, alert flag, priority, tag) |
-| App Settings | `AppName`, `AppDataPath`, `IsKioskMode`, `HomeText` |
+| App Settings | `AppName`, `AppVersion`, `AppDataPath`, `IsKioskMode`, `HomeText` |
 | User Identity | `DebugUserName`, `ResolveCode(userCode)` |
 | User Directory | `GetEndpoint(userName)`, `UserGroups`, `Users` |
 | Ports | `PeerPort` (default `50021`), `InterfacePort` (default `50020`) |

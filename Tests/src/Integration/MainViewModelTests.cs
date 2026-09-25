@@ -27,6 +27,7 @@ public sealed class MainViewModelTests
         public Mock<IExportViewModel> Export { get; } = new();
         public Mock<IImportViewModel> Import { get; } = new();
         public Mock<IPrintManagerViewModel> PrintManager { get; } = new();
+        public Mock<IHelpViewModel> Help { get; } = new();
         public Mock<IConnectionStatusViewModel> ConnectionStatus { get; } = new();
         public Mock<ICurrentUserProvider> UserProvider { get; } = new();
         public Mock<TestEngineController> EngineController { get; } = new() { CallBase = true };
@@ -56,6 +57,7 @@ public sealed class MainViewModelTests
                 Export.Object,
                 Import.Object,
                 PrintManager.Object,
+                Help.Object,
                 ConnectionStatus.Object,
                 UserProvider.Object,
                 EngineController.Object,
@@ -78,6 +80,19 @@ public sealed class MainViewModelTests
         Assert.Same(s.Alert.Object, vm.Alert);
         Assert.Same(s.Export.Object, vm.Export);
         Assert.Same(s.Import.Object, vm.Import);
+        Assert.Same(s.Help.Object, vm.Help);
+    }
+
+    /// <summary>AppName and AppVersion come from IEngineController, for the title bar's info popup.</summary>
+    [Fact]
+    public void AppNameAndVersion_ComeFromEngineController()
+    {
+        Setup s = new();
+        s.EngineController.Setup(a => a.AppVersion).Returns("2.3.4");
+        MainViewModel vm = s.BuildVm();
+
+        Assert.Equal("TestApp", vm.AppName);
+        Assert.Equal("2.3.4", vm.AppVersion);
     }
 
     /// <summary>IsKioskMode reflects the value from IEngineController at construction time.</summary>

@@ -21,6 +21,8 @@ public interface IEngineController
 
     /// <summary>The application name, used as the default data folder name and in log headers.</summary>
     string AppName { get; }
+    /// <summary>The application version, shown in the title bar and the info popup.</summary>
+    string AppVersion { get; }
     /// <summary>Absolute path to the application data directory.</summary>
     string AppDataPath { get; }
     /// <summary><see langword="true"/> to enable kiosk mode, which hides window chrome and restricts navigation.</summary>
@@ -335,6 +337,8 @@ public abstract class DefaultEngineController<TMessage> : IEngineController wher
     /// <summary>The default <see cref="AppDataPath"/> reads <see cref="AppName"/> through virtual dispatch, so a host overriding only <see cref="AppName"/> automatically gets a matching default data folder.</summary>
     public virtual string AppName => Assembly.GetEntryAssembly()?.GetName().Name ?? "App";
     /// <inheritdoc />
+    public virtual string AppVersion => Assembly.GetEntryAssembly()?.GetName().Version is { } version ? $"{version.Major}.{version.Minor}.{version.Build}" : "1.0.0";
+    /// <inheritdoc />
     public virtual string AppDataPath => Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), AppName);
     /// <inheritdoc />
     public virtual bool IsKioskMode => false;
@@ -600,6 +604,8 @@ internal sealed class ConfiguredEngineController : IEngineController
 
     /// <inheritdoc />
     public string AppName => fallback.AppName;
+    /// <inheritdoc />
+    public string AppVersion => fallback.AppVersion;
     /// <inheritdoc />
     public string AppDataPath => config.DataFolder switch
     {

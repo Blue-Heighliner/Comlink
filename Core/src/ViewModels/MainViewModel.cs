@@ -15,6 +15,10 @@ public interface IMainViewModel
     string EnvironmentColor { get; set; }
     /// <summary>Gets or sets the application version string.</summary>
     string AppVersion { get; set; }
+    /// <summary>Gets the application name, shown in the title bar's info popup.</summary>
+    string AppName { get; }
+    /// <summary>Gets the help ViewModel driving the help window opened from the title bar.</summary>
+    IHelpViewModel Help { get; }
     /// <summary>
     /// Gets a value indicating whether this instance is running as a <see cref="NodeRole.Server"/> — a
     /// routing-only node with no inbox/outbox/notes/drafts UI of its own. When <see langword="true"/>, the
@@ -87,12 +91,6 @@ public interface IMainViewModel
 /// <summary>Root ViewModel for the main application window, coordinating folder, entry, and content area ViewModels.</summary>
 public sealed partial class MainViewModel : ObservableObject, IMainViewModel
 {
-    private static string GetAppVersion()
-    {
-        Version? version = System.Reflection.Assembly.GetEntryAssembly()?.GetName().Version;
-        return version is null ? "1.0.0" : $"{version.Major}.{version.Minor}.{version.Build}";
-    }
-
     /// <summary>Initializes a new <see cref="MainViewModel"/> with all required engine and UI dependencies.</summary>
     /// <param name="connection">Service connection used for user and messaging operations.</param>
     /// <param name="db">LiteDB context for lazy initialization after install.</param>
@@ -105,6 +103,7 @@ public sealed partial class MainViewModel : ObservableObject, IMainViewModel
     /// <param name="export">Export ViewModel driving the export screen.</param>
     /// <param name="import">Import ViewModel driving the import screen.</param>
     /// <param name="printManager">Print manager ViewModel driving the print queue screen.</param>
+    /// <param name="help">Help ViewModel driving the help window opened from the title bar.</param>
     /// <param name="connectionStatus">Connection status ViewModel driving <see cref="IsServerMode"/>'s connections table and <see cref="IsClientMode"/>'s connection row.</param>
     /// <param name="currentUserProvider">Provides and accepts the current user name.</param>
     /// <param name="engineController">Provides the application display name, whether the UI should run in kiosk mode, alert settings, message composition settings, and the configured node role.</param>
@@ -122,6 +121,7 @@ public sealed partial class MainViewModel : ObservableObject, IMainViewModel
         IExportViewModel export,
         IImportViewModel import,
         IPrintManagerViewModel printManager,
+        IHelpViewModel help,
         IConnectionStatusViewModel connectionStatus,
         ICurrentUserProvider currentUserProvider,
         IEngineController engineController,
@@ -139,6 +139,7 @@ public sealed partial class MainViewModel : ObservableObject, IMainViewModel
         this.export = export;
         this.import = import;
         this.printManager = printManager;
+        Help = help;
         this.connectionStatus = connectionStatus;
         this.currentUserProvider = currentUserProvider;
         this.engineController = engineController;
@@ -148,7 +149,7 @@ public sealed partial class MainViewModel : ObservableObject, IMainViewModel
         activityLogger = loggerFactory.CreateLogger("ACTIVITY");
 
         isKioskMode = engineController.IsKioskMode;
-        appVersion = GetAppVersion();
+        appVersion = engineController.AppVersion;
         IsServerMode = engineController.Role == NodeRole.Server;
         IsClientMode = engineController.Role == NodeRole.Client;
         WireEvents();
@@ -216,6 +217,10 @@ public sealed partial class MainViewModel : ObservableObject, IMainViewModel
     public IImportViewModel Import => import;
     /// <inheritdoc />
     public IPrintManagerViewModel PrintManager => printManager;
+    /// <inheritdoc />
+    public IHelpViewModel Help { get; }
+    /// <inheritdoc />
+    public string AppName => engineController.AppName;
 
     private void WireEvents()
     {
