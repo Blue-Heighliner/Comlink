@@ -1,6 +1,6 @@
 # Config File Reference
 
-Engine supports an optional `--config <path>` argument pointing to a JSON configuration file. The `--config` argument is available in Debug builds and in Release builds that define the `ALLOW_CONFIG` compile-time constant.
+Engine supports an optional `--config <path>` argument pointing to a JSON configuration file. It works identically in every build configuration; whether it is honored at all is decided solely by `IEngineController.ConfigFileEnabled`, which defaults to `false`.
 
 ```sh
 Sample.exe --config path/to/config.json

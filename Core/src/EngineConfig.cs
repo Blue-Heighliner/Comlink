@@ -130,11 +130,11 @@ public sealed class EngineConfig
 
     /// <summary>
     /// Loads configuration from a file specified by the <c>--config</c> argument.
-    /// Returns a default <see cref="EngineConfig"/> if the argument is absent or config loading is not enabled for this build.
+    /// Returns a default <see cref="EngineConfig"/> if the argument is absent. Whether this is called at all is decided by
+    /// <see cref="IEngineController.ConfigFileEnabled"/>.
     /// </summary>
     public static EngineConfig Load(string[] args)
     {
-#if DEBUG || ALLOW_CONFIG
         int idx = Array.IndexOf(args, "--config");
         if (idx >= 0 && idx + 1 < args.Length)
         {
@@ -144,7 +144,7 @@ public sealed class EngineConfig
             config.ConfigDirectory = Path.GetDirectoryName(Path.GetFullPath(configPath));
             return config;
         }
-#endif
+
         return new EngineConfig();
     }
 

@@ -30,7 +30,7 @@ await Engine.Start(args, services => services.AddSingleton<IEngineController, My
 
 1. `Engine.Start` builds a minimal, throwaway service provider from `configureServices` alone and
    resolves `IEngineController` from it, to read `ConfigFileEnabled` before anything else exists.
-2. If `ConfigFileEnabled` is true (the default), `EngineConfig.Load(args)` reads `--config`;
+2. If `ConfigFileEnabled` is true (it defaults to false), `EngineConfig.Load(args)` reads `--config`;
    otherwise every setting uses its default and `--config` is ignored.
 3. If `EngineConfig.HeadlessMode` is set, `Engine` builds and runs an `IHost` with no UI. Otherwise
    it builds and shows the Avalonia desktop application.

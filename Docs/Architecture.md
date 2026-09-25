@@ -126,7 +126,7 @@ sequenceDiagram
 
 ## Startup Sequence
 
-Before any host container exists, `Engine.Start(args, configureServices)` resolves `IEngineController` from a minimal, throwaway service provider built from `configureServices` alone (this interface must never depend on `EngineConfig` — see [Control.md](Components/Control.md#config-file) — since that's exactly what it decides whether to load). If enabled (the default), `EngineConfig.Load(args)` reads `--config`; otherwise `--config` is ignored and every setting uses its default.
+Before any host container exists, `Engine.Start(args, configureServices)` resolves `IEngineController` from a minimal, throwaway service provider built from `configureServices` alone (this interface must never depend on `EngineConfig` — see [Control.md](Components/Control.md#config-file) — since that's exactly what it decides whether to load). If `ConfigFileEnabled` is true (it defaults to false), `EngineConfig.Load(args)` reads `--config`; otherwise `--config` is ignored and every setting uses its default.
 
 `EngineExtensions.UseEngine()` registers the core services. For Client mode, `EngineUiExtensions.UseEngineUi()` additionally registers `MainWindow` and overrides `IBodyDocumentFactory`. After the host's `configureServices` callback registers `IEngineController` and any further control-interface overrides, `EngineExtensions.UseEngineConfigOverrides()` layers `EngineConfig` on top of every control interface that has a corresponding `config.json` field — see [Control.md](Components/Control.md#config-overrides). `EngineHost` (an `IHostedService`) runs at startup:
 
