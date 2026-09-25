@@ -199,7 +199,7 @@ public interface IEngineController
     /// <summary>Resolves <paramref name="userCode"/> to its <see cref="UserInfo"/>, or <see langword="null"/> if the code is unrecognized.</summary>
     /// <param name="userCode">The user installation code to resolve.</param>
     UserInfo? ResolveCode(string userCode);
-    /// <summary>Returns the TCP endpoint for <paramref name="userName"/>, or <see langword="null"/> if the user is unknown.</summary>
+    /// <summary>Returns the endpoint for <paramref name="userName"/>, an IP host and port or a MicroGate serial port, or <see langword="null"/> if the user is unknown.</summary>
     /// <param name="userName">The user name to resolve.</param>
     UserEndpoint? GetEndpoint(string userName);
 
@@ -707,7 +707,7 @@ internal sealed class ConfiguredEngineController : IEngineController
     /// <inheritdoc />
     public UserEndpoint? ServerEndpoint =>
         config.ServerEndpoint is { } endpoint
-            ? new UserEndpoint { IpAddress = endpoint.IpAddress, Port = endpoint.Port }
+            ? endpoint.ToEndpoint()
             : fallback.ServerEndpoint;
 
     /// <inheritdoc />

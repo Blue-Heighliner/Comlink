@@ -145,7 +145,7 @@ IReadOnlyDictionary<string, IReadOnlyList<string>> UserGroups { get; }
 IReadOnlyList<string> Users { get; }
 ```
 
-Everything the engine knows about addressable users and groups: resolving a user name to its TCP peer endpoint for outbound P2P delivery (`GetEndpoint` returns `null` when the user is unknown), group membership for address expansion (members may be user names or other group names, enabling nested hierarchies), and the full list of known user and group names for the destination auto-complete in the draft editor.
+Everything the engine knows about addressable users and groups: resolving a user name to its peer endpoint for outbound P2P delivery, either an IP host and port or a MicroGate serial port (`GetEndpoint` returns `null` when the user is unknown), group membership for address expansion (members may be user names or other group names, enabling nested hierarchies), and the full list of known user and group names for the destination auto-complete in the draft editor.
 
 When a message is sent to a group, the Engine records which addressed groups each user was reached through. The sent message view shows this context — e.g. `USER-A (OPS)` — so the operator can see which group membership drove delivery.
 

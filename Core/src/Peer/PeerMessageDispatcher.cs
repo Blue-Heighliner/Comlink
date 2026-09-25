@@ -10,7 +10,7 @@ internal static class PeerMessageDispatcher
     /// <summary>
     /// Deserializes <paramref name="data"/> as an instance of <see cref="IEngineController.MessageType"/> and
     /// raises <paramref name="confirmationReceived"/> or <paramref name="messageDelivered"/> as appropriate.
-    /// An empty <paramref name="data"/> is a <see cref="MsmtConnectionMonitor"/> heartbeat, not a real
+    /// An empty <paramref name="data"/> is a <see cref="PeerConnectionMonitor"/> heartbeat, not a real
     /// message, and is silently ignored.
     /// </summary>
     /// <param name="data">The raw, already-received message payload.</param>

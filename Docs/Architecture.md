@@ -44,8 +44,11 @@ Core/src/
 │                  and the relay/mirror coordinator — see Components/ExternalSystems.md
 ├── Logging/        Daily file logger + activity log writer
 ├── Models/         Shared DTOs (UserInfo, UserEndpoint, UserState, Folder, etc.)
-├── Peer/           P2P networking over MSMT — send/receive messages between nodes, and the
-│                   local interface listener (always active) — see Components/Interface.md
+├── Peer/           P2P networking - send/receive messages between nodes over MSMT (IP) or a
+│   │               MicroGate serial cable, and the local interface listener (always active) -
+│   │               see Components/Interface.md
+│   └── Transport/  The IP/serial transport abstraction the peer services send through -
+│                   see Components/Transport.md
 ├── Services/       Business logic
 ├── ViewModels/     MVVM layer — mostly Avalonia-agnostic (primitive types, custom interfaces),
 │                   except the Avalonia-specific converters and TextDocumentBodyDocument(Factory)

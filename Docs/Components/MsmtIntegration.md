@@ -46,7 +46,7 @@ Comlink connection (peer, client/server hierarchy, and interface) negotiates a s
 opening a fresh TLS connection per message or rekeying periodically. A session connection persists across
 multiple sends and is kept alive automatically by MSMT's own idle keep-alive, instead of tearing down after
 every message. `ClientPeerService` and `ServerRoutingService` additionally run a background
-`MsmtConnectionMonitor` per hierarchical target (a client's server; a server's own children and sibling
+`PeerConnectionMonitor` per hierarchical target (a client's server; a server's own children and sibling
 servers), sending an empty heartbeat payload on an interval so each of those connections is proactively
 opened and kept alive even when no real message is being sent — see
 [Peer.md](Peer.md#connection-status-client-and-server) for the full mechanism and why `IMsmtPeer.Test` is
@@ -87,10 +87,11 @@ integration shape than "open a socket and read" that is not yet provided. See [P
 
 | Component | Role |
 |-----------|------|
-| `PeerService` (`Core/src/Peer/PeerService.cs`) | Wraps a single `IMsmtPeer` for `NodeRole.Peer`; resolves user names to endpoints via `IEngineController.GetEndpoint`, serializes/deserializes instances of `IEngineController.MessageType` (see [Control.md](Control.md#message-format)), and dispatches `MessageDelivered`/`DeliveryStatusChanged` events derived directly from `IMsmtPeer.Request`'s outcome and its `PackageChanged` progress stream. |
-| `ClientPeerService` (`Core/src/Peer/ClientPeerService.cs`) | Implements `NodeRole.Client`: sends every outbound message to the configured server, and also runs its own listener so the server can dial back in to deliver messages to it. Proactively maintains its connection to the server via `MsmtConnectionMonitor`. |
-| `ServerRoutingService` (`Core/src/Peer/ServerRoutingService.cs`) | Implements `NodeRole.Server`: accepts connections from child clients and other servers, and delivers to any recipient (a child or another server) by dialing out to that recipient's own endpoint. Proactively maintains a connection to each own child and each sibling server via `MsmtConnectionMonitor`. |
-| `MsmtConnectionMonitor` (`Core/src/Peer/MsmtConnectionMonitor.cs`) | Sends a periodic empty heartbeat `Request` to a hierarchical target so its connection opens and stays open without needing a real message. See [Session Mode](#session-mode). |
+| `PeerService` (`Core/src/Peer/PeerService.cs`) | Wraps a single `IPeerTransport` (IP through `MsmtPeerTransport`, which wraps the `IMsmtPeer`, and serial through `SerialPeerTransport`) for `NodeRole.Peer`; resolves user names to endpoints via `IEngineController.GetEndpoint`, serializes/deserializes instances of `IEngineController.MessageType` (see [Control.md](Control.md#message-format)), and dispatches `MessageDelivered`/`DeliveryStatusChanged` events derived directly from the transport's `Request` outcome and its `Transmitted` progress callback. |
+| `ClientPeerService` (`Core/src/Peer/ClientPeerService.cs`) | Implements `NodeRole.Client`: sends every outbound message to the configured server, and also runs its own listener so the server can dial back in to deliver messages to it. Proactively maintains its connection to the server via `PeerConnectionMonitor`. |
+| `ServerRoutingService` (`Core/src/Peer/ServerRoutingService.cs`) | Implements `NodeRole.Server`: accepts connections from child clients and other servers, and delivers to any recipient (a child or another server) by dialing out to that recipient's own endpoint. Proactively maintains a connection to each own child and each sibling server via `PeerConnectionMonitor`. |
+| `PeerConnectionMonitor` (`Core/src/Peer/PeerConnectionMonitor.cs`) | Sends a periodic empty heartbeat `Request` to a hierarchical target so its connection opens and stays open without needing a real message. See [Session Mode](#session-mode). |
+| `MsmtPeerTransport` (`Core/src/Peer/Transport/MsmtPeerTransport.cs`) | Adapts an `IMsmtPeer` to the peer transport used by `PeerService`, `ClientPeerService`, and `ServerRoutingService`, so they can also reach users over serial. MSMT itself remains IP only. |
 | `InterfaceService` (`Core/src/Peer/InterfaceService.cs`, always active) | Uses its own `IMsmtPeer` to host the local interface listener described in [Interface.md](Interface.md). |
 | `IEngineController.ConnectionOptions` | Builds the `MsmtOptions` (identity certificate, trusted authority) used for both inbound and outbound MSMT peer connections. See [Control.md](Control.md#msmt-certificates). |
 | `IEngineController.GetCertificateName(userName)`/`TrustedAuthorityCertificateName` | Map the local user name, and the trusted certificate authority, to certificate subject names to look up in the system store. See [Control.md](Control.md#msmt-certificates). |

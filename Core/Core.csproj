@@ -26,8 +26,8 @@
   <PropertyGroup>
     <PackageId>BlueHeighliner.Comlink</PackageId>
     <Authors>Chris Markwardt</Authors>
-    <Description>A peer-to-peer messaging engine built on the Mercury Secure Message Transport (MSMT) protocol, with a built-in Avalonia desktop GUI. Avalonia is a required dependency of this package, not optional — it can be run headless (no window shown), but the GUI layer and its dependencies are always present.</Description>
-    <PackageTags>comlink;messaging;peer-to-peer;msmt;avalonia</PackageTags>
+    <Description>A peer-to-peer messaging engine that connects nodes over IP with the Mercury Secure Message Transport (MSMT) protocol or point-to-point over MicroGate serial cables, with a built-in Avalonia desktop GUI. Avalonia is a required dependency of this package, not optional - it can be run headless (no window shown), but the GUI layer and its dependencies are always present.</Description>
+    <PackageTags>comlink;messaging;peer-to-peer;msmt;microgate;serial;avalonia</PackageTags>
     <PackageLicenseExpression>MIT</PackageLicenseExpression>
     <PackageReadmeFile>README.md</PackageReadmeFile>
     <RepositoryUrl>https://github.com/Blue-Heighliner/Comlink</RepositoryUrl>
@@ -40,6 +40,7 @@
   </ItemGroup>
 
   <ItemGroup>
+    <PackageReference Include="BlueHeighliner.MicroGate" Version="0.1.0" />
     <PackageReference Include="BlueHeighliner.Msmt" Version="0.1.5" />
     <PackageReference Include="protobuf-net" Version="3.2.30" />
     <PackageReference Include="Avalonia" Version="11.3.0" />

@@ -61,7 +61,7 @@ internal sealed class InterfaceService : IInterfaceService
         }
 
         peer = peerFactory.Create(options);
-        peer.Received.Subscribe(OnReceived);
+        peer.Received.Listen(OnReceived);
         peer.StartListener(engineController.InterfacePort, "127.0.0.1");
 
         try { await Task.Delay(Timeout.Infinite, cancellation); }

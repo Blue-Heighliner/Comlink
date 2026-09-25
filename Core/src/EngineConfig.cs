@@ -161,7 +161,7 @@ public sealed class EngineConfig
     public IReadOnlyDictionary<string, UserEndpoint> GetUserEndpoints()
         => Users.ToDictionary(
             kvp => kvp.Key,
-            kvp => new UserEndpoint { IpAddress = kvp.Value.IpAddress, Port = kvp.Value.Port },
+            kvp => kvp.Value.ToEndpoint(),
             StringComparer.OrdinalIgnoreCase);
 
     /// <summary>Parses <see cref="NodeRole"/>, defaulting to <see cref="Control.NodeRole.Peer"/> when unset or unrecognized.</summary>
@@ -174,7 +174,7 @@ public sealed class EngineConfig
             kvp => kvp.Key,
             kvp => new ServerUserConfig
             {
-                Endpoint = new UserEndpoint { IpAddress = kvp.Value.IpAddress, Port = kvp.Value.Port },
+                Endpoint = new UserEndpoint { IpAddress = kvp.Value.IpAddress, Port = kvp.Value.Port, SerialPort = kvp.Value.SerialPort, SerialAddress = kvp.Value.SerialAddress },
                 ChildClients = kvp.Value.ChildClients
             },
             StringComparer.OrdinalIgnoreCase);
@@ -183,10 +183,17 @@ public sealed class EngineConfig
 /// <summary>JSON deserialization shape for a user endpoint entry in the config file.</summary>
 public sealed class UserEndpointConfig
 {
-    /// <summary>IPv4 or IPv6 address of the remote peer node.</summary>
+    /// <summary>IPv4 or IPv6 address of the remote peer node. Ignored when <see cref="SerialPort"/> is set.</summary>
     public string IpAddress { get; init; } = string.Empty;
-    /// <summary>TCP port of the remote peer node's peer server.</summary>
+    /// <summary>TCP port of the remote peer node's peer server. Ignored when <see cref="SerialPort"/> is set.</summary>
     public int Port { get; init; }
+    /// <summary>Name of the local MicroGate serial port cabled to the remote peer node; when set, this endpoint is reached over serial instead of IP.</summary>
+    public string? SerialPort { get; init; }
+    /// <summary>HDLC station address for the serial link. Defaults to 255 (0xFF). Both ends of the cable must use the same value.</summary>
+    public byte SerialAddress { get; init; } = 0xFF;
+
+    /// <summary>Converts this entry to the engine's endpoint model.</summary>
+    public UserEndpoint ToEndpoint() => new() { IpAddress = IpAddress, Port = Port, SerialPort = SerialPort, SerialAddress = SerialAddress };
 }
 
 /// <summary>JSON deserialization shape for a server user map entry in the config file.</summary>
@@ -196,6 +203,10 @@ public sealed class ServerUserConfigEntry
     public string IpAddress { get; init; } = string.Empty;
     /// <summary>TCP port this server user listens on and other servers dial to reach it.</summary>
     public int Port { get; init; }
+    /// <summary>Name of the local MicroGate serial port through which this server user is reached; when set, IP address and port are ignored.</summary>
+    public string? SerialPort { get; init; }
+    /// <summary>HDLC station address for the serial link. Defaults to 255 (0xFF).</summary>
+    public byte SerialAddress { get; init; } = 0xFF;
     /// <summary>Names of the client users that belong to this server.</summary>
     public List<string> ChildClients { get; init; } = [];
 }

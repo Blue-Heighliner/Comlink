@@ -207,6 +207,8 @@ The server endpoint a `"Client"`-role instance forms its long-term connection th
 |-------|------|-------------|
 | `IpAddress` | `string` | IPv4 or IPv6 address of the server |
 | `Port` | `int` | TCP port the server listens on |
+| `SerialPort` | `string` | Name of the local MicroGate serial port cabled to the server. When set, `IpAddress` and `Port` are ignored and the server is reached over serial |
+| `SerialAddress` | `int` | HDLC station address for the serial link (0-255, default 255). Must match on both ends of the cable |
 
 ---
 
@@ -227,6 +229,8 @@ The full server-user-map topology for a `"Server"`-role instance: a map of serve
 |-------|------|-------------|
 | `IpAddress` | `string` | IPv4 or IPv6 address this server user listens on and other servers dial to reach it |
 | `Port` | `int` | TCP port this server user listens on and other servers dial to reach it |
+| `SerialPort` | `string` | Name of the local MicroGate serial port through which this server user is reached. When set, `IpAddress` and `Port` are ignored. On the local server's own entry a serial endpoint means no TCP listener is started |
+| `SerialAddress` | `int` | HDLC station address for the serial link (0-255, default 255) |
 | `ChildClients` | `string[]` | Names of the client users that belong to this server |
 
 ---
@@ -248,6 +252,10 @@ A map of user name → endpoint used by the `IEngineController.GetEndpoint` impl
 |-------|------|-------------|
 | `IpAddress` | `string` | IPv4 or IPv6 address of the remote node |
 | `Port` | `int` | TCP port of the remote node's peer server |
+| `SerialPort` | `string` | Name of the local MicroGate serial port cabled to the remote node. When set, `IpAddress` and `Port` are ignored and the user is reached over serial |
+| `SerialAddress` | `int` | HDLC station address for the serial link (0-255, default 255). Must match on both ends of the cable |
+
+A user reached over serial needs no certificate: the cable itself is the identity. For example, `"USER-C": { "SerialPort": "SL0" }` reaches `USER-C` over the first MicroGate port. Serial links are opened at startup for every configured user that uses one.
 
 ---
 

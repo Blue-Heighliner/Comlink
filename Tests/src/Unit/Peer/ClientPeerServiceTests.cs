@@ -6,36 +6,32 @@ public sealed class ClientPeerServiceTests
     private static readonly ILoggerFactory noLogger = LoggerFactory.Create(_ => { });
     private static readonly UserEndpoint serverEndpoint = new() { IpAddress = "10.0.0.1", Port = 9000 };
 
-    private static (ClientPeerService Service, Mock<IMsmtPeer> Peer, TestObservable<MsmtConnectedEventArgs> Connected, TestObservable<MsmtDisconnectedEventArgs> Disconnected, TestObservable<MsmtReceivedEventArgs> Received) Build(bool endpointConfigured = true)
+    private static (ClientPeerService Service, Mock<IPeerTransport> Transport, TestObservable<PeerConnectionEventArgs> Connected, TestObservable<PeerConnectionEventArgs> Disconnected, TestObservable<PeerReceivedEventArgs> Received) Build(bool endpointConfigured = true, UserEndpoint? endpoint = null)
     {
-        Mock<IMsmtPeer> peer = new();
-        TestObservable<MsmtConnectedEventArgs> connected = new();
-        TestObservable<MsmtDisconnectedEventArgs> disconnected = new();
-        TestObservable<MsmtReceivedEventArgs> received = new();
-        peer.SetupGet(p => p.Connected).Returns(connected);
-        peer.SetupGet(p => p.Disconnected).Returns(disconnected);
-        peer.SetupGet(p => p.Received).Returns(received);
+        Mock<IPeerTransport> transport = new();
+        TestObservable<PeerConnectionEventArgs> connected = new();
+        TestObservable<PeerConnectionEventArgs> disconnected = new();
+        TestObservable<PeerReceivedEventArgs> received = new();
+        transport.SetupGet(p => p.Connected).Returns(connected);
+        transport.SetupGet(p => p.Disconnected).Returns(disconnected);
+        transport.SetupGet(p => p.Received).Returns(received);
 
-        Mock<IMsmtPeerFactory> peerFactory = new();
-        peerFactory.Setup(f => f.Create(It.IsAny<MsmtOptions>())).Returns(peer.Object);
-
-        (X509Certificate2 identity, _, X509Certificate2Collection trustedAuthorities) = TestMsmtCertificates.Create();
+        Mock<IPeerTransportFactory> transportFactory = new();
+        transportFactory.Setup(f => f.Create()).Returns(transport.Object);
 
         Mock<TestEngineController> engineController = new() { CallBase = true };
-        engineController.Setup(p => p.ServerEndpoint).Returns(endpointConfigured ? serverEndpoint : null);
-        engineController.Setup(p => p.ConnectionOptions).Returns(new MsmtOptions
-        {
-            Credentials = new MsmtCredentials { Identity = identity, TrustedAuthorities = trustedAuthorities }
-        });
+        engineController.Setup(p => p.ServerEndpoint).Returns(endpointConfigured ? endpoint ?? serverEndpoint : null);
 
-        ClientPeerService service = new(peerFactory.Object, engineController.Object, noLogger);
-        return (service, peer, connected, disconnected, received);
+        ClientPeerService service = new(transportFactory.Object, engineController.Object, noLogger);
+        return (service, transport, connected, disconnected, received);
     }
 
-    /// <summary>Configures <paramref name="peer"/> so every <see cref="IMsmtPeer.Request"/> call immediately returns a successful acknowledgement.</summary>
-    private static void AutoAcknowledge(Mock<IMsmtPeer> peer, bool success = true)
-        => peer.Setup(p => p.Request(It.IsAny<MsmtNameTarget>(), It.IsAny<IMemoryOwner<byte>>(), It.IsAny<MsmtSendOptions>(), It.IsAny<CancellationToken>()))
-            .ReturnsAsync(new MsmtResponse { Success = success, Payload = new UnownedMemory(ReadOnlyMemory<byte>.Empty) });
+    /// <summary>Configures <paramref name="transport"/> so every <see cref="IPeerTransport.Request"/> call immediately returns a successful acknowledgement.</summary>
+    private static void AutoAcknowledge(Mock<IPeerTransport> transport, bool success = true)
+        => transport.Setup(p => p.Request(It.IsAny<UserEndpoint>(), It.IsAny<ReadOnlyMemory<byte>>(), It.IsAny<PeerSendOptions>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(success);
+
+    private static PeerConnection ConnectionTo(UserEndpoint endpoint) => new(endpoint, false, null, () => { });
 
     private static ReadOnlyMemory<byte> Encode(TestMessage message)
     {
@@ -43,34 +39,53 @@ public sealed class ClientPeerServiceTests
         return buf.Memory.ToArray();
     }
 
-    /// <summary>Start with no server endpoint configured logs an error and never creates a peer.</summary>
+    /// <summary>Start with no server endpoint configured logs an error and never creates a transport.</summary>
     [Fact]
-    public async Task Start_NoEndpointConfigured_DoesNotCreatePeer()
+    public async Task Start_NoEndpointConfigured_DoesNotStartListener()
     {
-        (ClientPeerService service, Mock<IMsmtPeer> peer, _, _, _) = Build(endpointConfigured: false);
+        (ClientPeerService service, Mock<IPeerTransport> transport, _, _, _) = Build(endpointConfigured: false);
 
         await service.Start(CancellationToken.None);
 
-        peer.Verify(p => p.StartListener(It.IsAny<int>(), It.IsAny<string>()), Times.Never);
+        transport.Verify(p => p.StartListener(It.IsAny<int>()), Times.Never);
     }
 
-    /// <summary>Start creates a peer for the configured server and starts its listener so the server can deliver messages back.</summary>
+    /// <summary>Start creates a transport for the configured IP server and starts its listener so the server can deliver messages back.</summary>
     [Fact]
-    public async Task Start_ConfiguredServer_StartsListener()
+    public async Task Start_ConfiguredIpServer_StartsListener()
     {
-        (ClientPeerService service, Mock<IMsmtPeer> peer, _, _, _) = Build();
+        (ClientPeerService service, Mock<IPeerTransport> transport, _, _, _) = Build();
         using CancellationTokenSource cts = new();
 
         Task startTask = service.Start(cts.Token);
         await Task.Delay(20);
 
-        peer.Verify(p => p.StartListener(It.IsAny<int>(), It.IsAny<string>()), Times.Once);
+        transport.Verify(p => p.StartListener(It.IsAny<int>()), Times.Once);
 
         cts.Cancel();
         await startTask;
     }
 
-    /// <summary>Send fails immediately before Start has ever run, since no peer has been created yet.</summary>
+    /// <summary>A serial link is one bidirectional cable, so a client whose server is reached over serial starts no IP listener.</summary>
+    [Fact]
+    public async Task Start_ConfiguredSerialServer_DoesNotStartListener()
+    {
+        UserEndpoint serial = new() { SerialPort = "SL0" };
+        (ClientPeerService service, Mock<IPeerTransport> transport, _, _, _) = Build(endpoint: serial);
+        AutoAcknowledge(transport);
+        using CancellationTokenSource cts = new();
+
+        Task startTask = service.Start(cts.Token);
+        await Task.Delay(20);
+
+        transport.Verify(p => p.StartListener(It.IsAny<int>()), Times.Never);
+        transport.Verify(p => p.Request(serial, It.IsAny<ReadOnlyMemory<byte>>(), It.IsAny<PeerSendOptions>(), It.IsAny<CancellationToken>()), Times.AtLeastOnce);
+
+        cts.Cancel();
+        await startTask;
+    }
+
+    /// <summary>Send fails immediately before Start has ever run, since no transport has been created yet.</summary>
     [Fact]
     public async Task Send_BeforeStart_ReturnsFalse()
     {
@@ -81,12 +96,12 @@ public sealed class ClientPeerServiceTests
         Assert.False(ok);
     }
 
-    /// <summary>Send transmits to the configured server target and returns true once acknowledged.</summary>
+    /// <summary>Send transmits to the configured server endpoint and returns true once acknowledged.</summary>
     [Fact]
     public async Task Send_AfterStart_TransmitsToServerAndReturnsTrue()
     {
-        (ClientPeerService service, Mock<IMsmtPeer> peer, _, _, _) = Build();
-        AutoAcknowledge(peer);
+        (ClientPeerService service, Mock<IPeerTransport> transport, _, _, _) = Build();
+        AutoAcknowledge(transport);
         using CancellationTokenSource cts = new();
         Task startTask = service.Start(cts.Token);
         await Task.Delay(20);
@@ -94,10 +109,10 @@ public sealed class ClientPeerServiceTests
         bool ok = await service.Send("DEST", new TestMessage { MessageId = "M1", FromUser = "SOURCE" });
 
         Assert.True(ok);
-        peer.Verify(p => p.Request(
-            It.Is<MsmtNameTarget>(t => t.Host == serverEndpoint.IpAddress && t.Port == serverEndpoint.Port),
-            It.Is<IMemoryOwner<byte>>(payload => payload.Memory.Length > 0),
-            It.IsAny<MsmtSendOptions>(),
+        transport.Verify(p => p.Request(
+            It.Is<UserEndpoint>(t => t.IpAddress == serverEndpoint.IpAddress && t.Port == serverEndpoint.Port),
+            It.Is<ReadOnlyMemory<byte>>(payload => payload.Length > 0),
+            It.IsAny<PeerSendOptions>(),
             It.IsAny<CancellationToken>()), Times.Once);
 
         cts.Cancel();
@@ -111,8 +126,8 @@ public sealed class ClientPeerServiceTests
     [Fact]
     public async Task Send_SameMessageIdCalledConcurrently_TransmitsOnlyOnce()
     {
-        (ClientPeerService service, Mock<IMsmtPeer> peer, _, _, _) = Build();
-        AutoAcknowledge(peer);
+        (ClientPeerService service, Mock<IPeerTransport> transport, _, _, _) = Build();
+        AutoAcknowledge(transport);
         using CancellationTokenSource cts = new();
         Task startTask = service.Start(cts.Token);
         await Task.Delay(20);
@@ -124,17 +139,17 @@ public sealed class ClientPeerServiceTests
             service.Send("USER-C", message));
 
         Assert.All(results, Assert.True);
-        peer.Verify(p => p.Request(It.IsAny<MsmtNameTarget>(), It.Is<IMemoryOwner<byte>>(payload => payload.Memory.Length > 0), It.IsAny<MsmtSendOptions>(), It.IsAny<CancellationToken>()), Times.Once);
+        transport.Verify(p => p.Request(It.IsAny<UserEndpoint>(), It.Is<ReadOnlyMemory<byte>>(payload => payload.Length > 0), It.IsAny<PeerSendOptions>(), It.IsAny<CancellationToken>()), Times.Once);
 
         cts.Cancel();
         await startTask;
     }
 
-    /// <summary>A valid message received over the peer fires MessageDelivered.</summary>
+    /// <summary>A valid message received over the transport fires MessageDelivered.</summary>
     [Fact]
     public async Task Received_ValidMessage_RaisesMessageDelivered()
     {
-        (ClientPeerService service, _, _, _, TestObservable<MsmtReceivedEventArgs> received) = Build();
+        (ClientPeerService service, _, _, _, TestObservable<PeerReceivedEventArgs> received) = Build();
         using CancellationTokenSource cts = new();
         Task startTask = service.Start(cts.Token);
         await Task.Delay(20);
@@ -142,14 +157,11 @@ public sealed class ClientPeerServiceTests
         TaskCompletionSource<object> tcs = new();
         service.MessageDelivered += message => { tcs.TrySetResult(message); return Task.CompletedTask; };
 
-        MsmtReceivedEventArgs args = new()
+        received.Publish(new PeerReceivedEventArgs
         {
-            Link = Mock.Of<IMsmtLink>(),
-            Payload = new UnownedMemory(Encode(new TestMessage { MessageId = "MSG1", FromUser = "REMOTE" })),
-            Responder = Mock.Of<IMsmtResponder>(),
-            IsResponseRequested = false
-        };
-        received.Publish(args);
+            Connection = new PeerConnection(null, true, null, () => { }),
+            Payload = Encode(new TestMessage { MessageId = "MSG1", FromUser = "REMOTE" })
+        });
 
         object receivedMessage = await tcs.Task.WaitAsync(TimeSpan.FromSeconds(2));
         TestMessage message = Assert.IsType<TestMessage>(receivedMessage);
@@ -172,19 +184,16 @@ public sealed class ClientPeerServiceTests
         Assert.Null(status.LastDisconnectedAt);
     }
 
-    /// <summary>Once the peer reports a Connected event for the configured server target, GetStatuses reports the connected row with a LastConnectedAt timestamp.</summary>
+    /// <summary>Once the transport reports a Connected event for the configured server endpoint, GetStatuses reports the connected row with a LastConnectedAt timestamp.</summary>
     [Fact]
     public async Task GetStatuses_ServerConnected_ReturnsConnectedRow()
     {
-        (ClientPeerService service, _, TestObservable<MsmtConnectedEventArgs> connected, _, _) = Build();
+        (ClientPeerService service, _, TestObservable<PeerConnectionEventArgs> connected, _, _) = Build();
         using CancellationTokenSource cts = new();
         Task startTask = service.Start(cts.Token);
         await Task.Delay(20);
 
-        connected.Publish(new MsmtConnectedEventArgs
-        {
-            Connection = Mock.Of<IMsmtConnection>(c => c.Target == new MsmtTarget { Host = serverEndpoint.IpAddress, Port = serverEndpoint.Port } && c.Sender == Mock.Of<IMsmtLink>())
-        });
+        connected.Publish(new PeerConnectionEventArgs { Connection = ConnectionTo(serverEndpoint) });
 
         PeerConnectionStatus status = Assert.Single(service.GetStatuses());
         Assert.True(status.IsConnected);
@@ -195,21 +204,60 @@ public sealed class ClientPeerServiceTests
         await startTask;
     }
 
-    /// <summary>After a Disconnected event for the server target, GetStatuses reports the row as disconnected with a LastDisconnectedAt timestamp.</summary>
+    /// <summary>A serial server link coming up and going down is tracked exactly like an IP one.</summary>
     [Fact]
-    public async Task GetStatuses_ServerDisconnected_ReturnsDisconnectedRowWithLastDisconnectedAt()
+    public async Task GetStatuses_SerialServerConnectedThenDisconnected_TracksBoth()
     {
-        (ClientPeerService service, _, TestObservable<MsmtConnectedEventArgs> connected, TestObservable<MsmtDisconnectedEventArgs> disconnected, _) = Build();
+        UserEndpoint serial = new() { SerialPort = "SL0" };
+        (ClientPeerService service, Mock<IPeerTransport> transport, TestObservable<PeerConnectionEventArgs> connected, TestObservable<PeerConnectionEventArgs> disconnected, _) = Build(endpoint: serial);
+        AutoAcknowledge(transport);
         using CancellationTokenSource cts = new();
         Task startTask = service.Start(cts.Token);
         await Task.Delay(20);
 
-        Mock<IMsmtConnection> connection = new();
-        connection.SetupGet(c => c.Target).Returns(new MsmtTarget { Host = serverEndpoint.IpAddress, Port = serverEndpoint.Port });
-        connection.SetupGet(c => c.Sender).Returns(Mock.Of<IMsmtLink>());
+        PeerConnection connection = ConnectionTo(new UserEndpoint { SerialPort = "sl0" });
+        connected.Publish(new PeerConnectionEventArgs { Connection = connection });
+        Assert.True(Assert.Single(service.GetStatuses()).IsConnected);
 
-        connected.Publish(new MsmtConnectedEventArgs { Connection = connection.Object });
-        disconnected.Publish(new MsmtDisconnectedEventArgs { Connection = connection.Object });
+        disconnected.Publish(new PeerConnectionEventArgs { Connection = connection });
+        PeerConnectionStatus status = Assert.Single(service.GetStatuses());
+        Assert.False(status.IsConnected);
+        Assert.NotNull(status.LastDisconnectedAt);
+
+        cts.Cancel();
+        await startTask;
+    }
+
+    /// <summary>A connection to some other endpoint does not affect the server row.</summary>
+    [Fact]
+    public async Task GetStatuses_OtherEndpointConnected_ServerRowUnchanged()
+    {
+        (ClientPeerService service, _, TestObservable<PeerConnectionEventArgs> connected, _, _) = Build();
+        using CancellationTokenSource cts = new();
+        Task startTask = service.Start(cts.Token);
+        await Task.Delay(20);
+
+        connected.Publish(new PeerConnectionEventArgs { Connection = ConnectionTo(new UserEndpoint { IpAddress = "10.9.9.9", Port = 1 }) });
+        connected.Publish(new PeerConnectionEventArgs { Connection = new PeerConnection(null, true, null, () => { }) });
+
+        Assert.False(Assert.Single(service.GetStatuses()).IsConnected);
+
+        cts.Cancel();
+        await startTask;
+    }
+
+    /// <summary>After a Disconnected event for the server endpoint, GetStatuses reports the row as disconnected with a LastDisconnectedAt timestamp.</summary>
+    [Fact]
+    public async Task GetStatuses_ServerDisconnected_ReturnsDisconnectedRowWithLastDisconnectedAt()
+    {
+        (ClientPeerService service, _, TestObservable<PeerConnectionEventArgs> connected, TestObservable<PeerConnectionEventArgs> disconnected, _) = Build();
+        using CancellationTokenSource cts = new();
+        Task startTask = service.Start(cts.Token);
+        await Task.Delay(20);
+
+        PeerConnection connection = ConnectionTo(serverEndpoint);
+        connected.Publish(new PeerConnectionEventArgs { Connection = connection });
+        disconnected.Publish(new PeerConnectionEventArgs { Connection = connection });
 
         PeerConnectionStatus status = Assert.Single(service.GetStatuses());
         Assert.False(status.IsConnected);
@@ -222,38 +270,34 @@ public sealed class ClientPeerServiceTests
 
     /// <summary>
     /// Even with no real message ever sent by the caller, the background connection monitor proactively
-    /// sends an empty heartbeat request to the server - reusing the same on-demand connection <see
-    /// cref="IMsmtPeer.Request"/> would create for a real message - and GetStatuses reports it connected once
+    /// sends an empty heartbeat request to the server, and GetStatuses reports it connected once
     /// that heartbeat's Connected event arrives, so the status table doesn't stay perpetually disconnected
     /// while idle.
     /// </summary>
     [Fact]
     public async Task GetStatuses_HeartbeatConnectsProactively_ReportsConnectedWithoutAnyRealSend()
     {
-        (ClientPeerService service, Mock<IMsmtPeer> peer, TestObservable<MsmtConnectedEventArgs> connected, _, _) = Build();
+        (ClientPeerService service, Mock<IPeerTransport> transport, TestObservable<PeerConnectionEventArgs> connected, _, _) = Build();
         bool connectedRaised = false;
-        peer.Setup(p => p.Request(It.IsAny<MsmtNameTarget>(), It.IsAny<IMemoryOwner<byte>>(), It.IsAny<MsmtSendOptions>(), It.IsAny<CancellationToken>()))
-            .Returns<MsmtNameTarget, IMemoryOwner<byte>, MsmtSendOptions?, CancellationToken>((target, _, _, _) =>
+        transport.Setup(p => p.Request(It.IsAny<UserEndpoint>(), It.IsAny<ReadOnlyMemory<byte>>(), It.IsAny<PeerSendOptions>(), It.IsAny<CancellationToken>()))
+            .Returns<UserEndpoint, ReadOnlyMemory<byte>, PeerSendOptions?, CancellationToken>((target, _, _, _) =>
             {
                 if (!connectedRaised)
                 {
                     connectedRaised = true;
-                    connected.Publish(new MsmtConnectedEventArgs
-                    {
-                        Connection = Mock.Of<IMsmtConnection>(c => c.Target == new MsmtTarget { Host = target.Host, Port = target.Port } && c.Sender == Mock.Of<IMsmtLink>())
-                    });
+                    connected.Publish(new PeerConnectionEventArgs { Connection = ConnectionTo(target) });
                 }
-                return Task.FromResult(new MsmtResponse { Success = true, Payload = new UnownedMemory(ReadOnlyMemory<byte>.Empty) });
+                return Task.FromResult(true);
             });
 
         using CancellationTokenSource cts = new();
         Task startTask = service.Start(cts.Token);
         await WaitUntil(() => service.GetStatuses().Single().IsConnected, TimeSpan.FromSeconds(2));
 
-        peer.Verify(p => p.Request(
-            It.Is<MsmtNameTarget>(t => t.Host == serverEndpoint.IpAddress && t.Port == serverEndpoint.Port),
-            It.Is<IMemoryOwner<byte>>(payload => payload.Memory.Length == 0),
-            It.IsAny<MsmtSendOptions>(),
+        transport.Verify(p => p.Request(
+            It.Is<UserEndpoint>(t => t.IpAddress == serverEndpoint.IpAddress && t.Port == serverEndpoint.Port),
+            It.Is<ReadOnlyMemory<byte>>(payload => payload.Length == 0),
+            It.IsAny<PeerSendOptions>(),
             It.IsAny<CancellationToken>()), Times.AtLeastOnce);
         PeerConnectionStatus status = Assert.Single(service.GetStatuses());
         Assert.True(status.IsConnected);
@@ -273,11 +317,11 @@ public sealed class ClientPeerServiceTests
         }
     }
 
-    /// <summary>StatusesChanged fires when the server target connects.</summary>
+    /// <summary>StatusesChanged fires when the server endpoint connects.</summary>
     [Fact]
     public async Task StatusesChanged_OnServerConnect_Fires()
     {
-        (ClientPeerService service, _, TestObservable<MsmtConnectedEventArgs> connected, _, _) = Build();
+        (ClientPeerService service, _, TestObservable<PeerConnectionEventArgs> connected, _, _) = Build();
         using CancellationTokenSource cts = new();
 
         TaskCompletionSource raised = new();
@@ -286,20 +330,11 @@ public sealed class ClientPeerServiceTests
         Task startTask = service.Start(cts.Token);
         await Task.Delay(20);
 
-        connected.Publish(new MsmtConnectedEventArgs
-        {
-            Connection = Mock.Of<IMsmtConnection>(c => c.Target == new MsmtTarget { Host = serverEndpoint.IpAddress, Port = serverEndpoint.Port } && c.Sender == Mock.Of<IMsmtLink>())
-        });
+        connected.Publish(new PeerConnectionEventArgs { Connection = ConnectionTo(serverEndpoint) });
 
         await raised.Task.WaitAsync(TimeSpan.FromSeconds(2));
 
         cts.Cancel();
         await startTask;
-    }
-
-    private sealed class UnownedMemory(ReadOnlyMemory<byte> data) : IMemoryOwner<byte>
-    {
-        public Memory<byte> Memory { get; } = data.ToArray();
-        public void Dispose() { }
     }
 }

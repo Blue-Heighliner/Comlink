@@ -44,6 +44,15 @@
           "Avalonia": "11.3.0"
         }
       },
+      "BlueHeighliner.MicroGate": {
+        "type": "Direct",
+        "requested": "[0.1.0, )",
+        "resolved": "0.1.0",
+        "contentHash": "u36JOgbrLt0OGOj/TIf241okpjp0FwOo38MKxTEadeaOqfRk2BJGRpPHMGi0I40Bcp1QtrMuFCzm85PTFD00eg==",
+        "dependencies": {
+          "System.Reactive": "7.0.0"
+        }
+      },
       "BlueHeighliner.Msmt": {
         "type": "Direct",
         "requested": "[0.1.5, )",
@@ -510,6 +519,11 @@
         "type": "Transitive",
         "resolved": "10.0.0",
         "contentHash": "uaFRda9NjtbJRkdx311eXlAA3n2em7223c1A8d1VWyl+4FL9vkG7y2lpPfBU9HYdj/9KgdRNdn1vFK8ZYCYT/A=="
+      },
+      "System.Reactive": {
+        "type": "Transitive",
+        "resolved": "7.0.0",
+        "contentHash": "VYaSP2Kt+45GFnr3q7c/b4awT48VvueOJV4jPjdUXi5MxC9mSUy+HkJYtm8rGZ6fC3tNHG9gBu/YwNAR/FYqhg=="
       }
     }
   }

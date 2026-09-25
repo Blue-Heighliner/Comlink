@@ -3,11 +3,12 @@ namespace BlueHeighliner.Comlink.Peer;
 /// <summary>
 /// Implements <see cref="IPeerService"/> for <see cref="NodeRole.Client"/>: sends every outbound message
 /// to the configured server (<see cref="IEngineController"/>), regardless of addressee — the server
-/// performs the actual user-to-connection routing. Also runs its own MSMT receiver on <see
+/// performs the actual user-to-connection routing. Over IP it also runs its own listener on <see
 /// cref="IEngineController.PeerPort"/> so the server can deliver messages back to this client - MSMT's
 /// client-request/server-response model means the server can never push over a connection this client
 /// initiated, so a genuinely separate connection, dialed by the server back to this client, carries that
-/// direction instead. A background <see cref="MsmtConnectionMonitor"/> proactively opens and maintains a
+/// direction instead; a serial link is a single bidirectional cable and needs no such second connection.
+/// A background <see cref="PeerConnectionMonitor"/> proactively opens and maintains a
 /// connection to the server with a recurring heartbeat, independent of whether any real message is being
 /// sent, so <see cref="GetStatuses"/> reflects the connection's live state continuously rather than only the
 /// moment a message last happened to flow. See <c>Docs/Components/Peer.md</c>.
@@ -16,24 +17,24 @@ internal sealed class ClientPeerService : IPeerService, IConnectionStatusService
 {
     /// <summary>Initializes a new <see cref="ClientPeerService"/>.</summary>
     public ClientPeerService(
-        IMsmtPeerFactory peerFactory,
+        IPeerTransportFactory transportFactory,
         IEngineController engineController,
         ILoggerFactory loggerFactory)
     {
-        this.peerFactory = peerFactory;
+        this.transportFactory = transportFactory;
         this.engineController = engineController;
         logger = loggerFactory.CreateLogger("ACTIVITY");
     }
 
-    private readonly IMsmtPeerFactory peerFactory;
+    private readonly IPeerTransportFactory transportFactory;
     private readonly IEngineController engineController;
     private readonly ILogger logger;
-    private readonly MsmtConnectionMonitor connectionMonitor = new();
+    private readonly PeerConnectionMonitor connectionMonitor = new();
 
     private readonly ConcurrentDictionary<string, Task<bool>> inFlightSends = new();
 
-    private IMsmtPeer? peer;
-    private MsmtTarget? serverTarget;
+    private IPeerTransport? transport;
+    private UserEndpoint? serverEndpoint;
     private volatile bool isConnected;
     private DateTime? lastConnectedAt;
     private DateTime? lastDisconnectedAt;
@@ -62,25 +63,17 @@ internal sealed class ClientPeerService : IPeerService, IConnectionStatusService
             return;
         }
 
-        MsmtOptions options;
-        try
+        serverEndpoint = endpoint;
+        transport = transportFactory.Create();
+        transport.Connected.Listen(OnConnected);
+        transport.Disconnected.Listen(OnDisconnected);
+        transport.Received.Listen(OnReceived);
+        if (!endpoint.IsSerial)
         {
-            options = engineController.ConnectionOptions;
+            transport.StartListener(engineController.PeerPort);
+            logger.LogInformation("Client peer listening for server-originated deliveries");
         }
-        catch (InvalidOperationException ex)
-        {
-            logger.LogError("Client role cannot start: {Message}", ex.Message);
-            return;
-        }
-
-        serverTarget = new MsmtTarget { Host = endpoint.IpAddress, Port = endpoint.Port };
-        peer = peerFactory.Create(options);
-        peer.Connected.Subscribe(OnConnected);
-        peer.Disconnected.Subscribe(OnDisconnected);
-        peer.Received.Subscribe(OnReceived);
-        peer.StartListener(engineController.PeerPort);
-        logger.LogInformation("Client peer listening for server-originated deliveries");
-        connectionMonitor.Maintain(peer, serverTarget, cancellation);
+        connectionMonitor.Maintain(transport, endpoint, cancellation);
 
         try { await Task.Delay(Timeout.Infinite, cancellation); }
         catch (OperationCanceledException) { }
@@ -116,14 +109,12 @@ internal sealed class ClientPeerService : IPeerService, IConnectionStatusService
 
     private async Task<bool> SendOnce(string messageId, object message, CancellationToken cancellation)
     {
-        if (peer is null || serverTarget is null) { return false; }
+        if (transport is null || serverEndpoint is null) { return false; }
 
         try
         {
             using OwnedBuffer buf = PeerSerializer.Serialize(message);
-            MsmtResponse response = await peer.Request(serverTarget, buf.Memory, new MsmtSendOptions { Priority = engineController.GetPriority(message), Tag = messageId }, cancellation);
-            response.Payload.Dispose();
-            return response.Success;
+            return await transport.Request(serverEndpoint, buf.Memory, new PeerSendOptions { Priority = engineController.GetPriority(message) }, cancellation);
         }
         catch
         {
@@ -141,14 +132,14 @@ internal sealed class ClientPeerService : IPeerService, IConnectionStatusService
         }
     }
 
-    private void OnConnected(MsmtConnectedEventArgs args)
+    private void OnConnected(PeerConnectionEventArgs args)
     {
-        if (IsServerTarget(args.Connection.Target)) { UpdateConnectionStatus(true); }
+        if (IsServerConnection(args.Connection)) { UpdateConnectionStatus(true); }
     }
 
-    private void OnDisconnected(MsmtDisconnectedEventArgs args)
+    private void OnDisconnected(PeerConnectionEventArgs args)
     {
-        if (IsServerTarget(args.Connection.Target)) { UpdateConnectionStatus(false); }
+        if (IsServerConnection(args.Connection)) { UpdateConnectionStatus(false); }
     }
 
     private void UpdateConnectionStatus(bool connected)
@@ -169,15 +160,11 @@ internal sealed class ClientPeerService : IPeerService, IConnectionStatusService
         StatusesChanged?.Invoke();
     }
 
-    private bool IsServerTarget(MsmtTarget target)
-        => serverTarget is { } expected && target.Host == expected.Host && target.Port == expected.Port;
+    private bool IsServerConnection(PeerConnection connection)
+        => serverEndpoint is { } expected && expected.Equals(connection.Endpoint);
 
-    private void OnReceived(MsmtReceivedEventArgs args)
-    {
-        byte[] copy;
-        using (args.Payload) { copy = args.Payload.Memory.ToArray(); }
-        _ = Task.Run(() => HandleMessage(copy));
-    }
+    private void OnReceived(PeerReceivedEventArgs args)
+        => _ = Task.Run(() => HandleMessage(args.Payload));
 
     internal Task<bool> HandleMessage(ReadOnlyMemory<byte> data)
         => PeerMessageDispatcher.Dispatch(data, engineController, logger, MessageDelivered, ConfirmationReceived);
@@ -185,6 +172,6 @@ internal sealed class ClientPeerService : IPeerService, IConnectionStatusService
     /// <inheritdoc />
     public async ValueTask DisposeAsync()
     {
-        if (peer is not null) { await peer.DisposeAsync(); }
+        if (transport is not null) { await transport.DisposeAsync(); }
     }
 }

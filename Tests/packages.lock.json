@@ -153,6 +153,14 @@
           "Avalonia.Skia": "11.3.0"
         }
       },
+      "BlueHeighliner.MicroGate": {
+        "type": "Transitive",
+        "resolved": "0.1.0",
+        "contentHash": "u36JOgbrLt0OGOj/TIf241okpjp0FwOo38MKxTEadeaOqfRk2BJGRpPHMGi0I40Bcp1QtrMuFCzm85PTFD00eg==",
+        "dependencies": {
+          "System.Reactive": "7.0.0"
+        }
+      },
       "BlueHeighliner.Msmt": {
         "type": "Transitive",
         "resolved": "0.1.5",
@@ -575,6 +583,11 @@
         "resolved": "10.0.0",
         "contentHash": "uaFRda9NjtbJRkdx311eXlAA3n2em7223c1A8d1VWyl+4FL9vkG7y2lpPfBU9HYdj/9KgdRNdn1vFK8ZYCYT/A=="
       },
+      "System.Reactive": {
+        "type": "Transitive",
+        "resolved": "7.0.0",
+        "contentHash": "VYaSP2Kt+45GFnr3q7c/b4awT48VvueOJV4jPjdUXi5MxC9mSUy+HkJYtm8rGZ6fC3tNHG9gBu/YwNAR/FYqhg=="
+      },
       "xunit.abstractions": {
         "type": "Transitive",
         "resolved": "2.0.3",
@@ -622,6 +635,7 @@
           "Avalonia.AvaloniaEdit": "[11.3.0, )",
           "Avalonia.Desktop": "[11.3.0, )",
           "Avalonia.Themes.Fluent": "[11.3.0, )",
+          "BlueHeighliner.MicroGate": "[0.1.0, )",
           "BlueHeighliner.Msmt": "[0.1.5, )",
           "CommunityToolkit.Mvvm": "[8.4.0, )",
           "LiteDB": "[5.0.21, )",

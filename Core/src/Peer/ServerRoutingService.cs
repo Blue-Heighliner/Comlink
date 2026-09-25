@@ -6,15 +6,17 @@ namespace BlueHeighliner.Comlink.Peer;
 /// bytes between them by dialing out to each recipient's own endpoint - MSMT's client-request/server-
 /// response model means a connection a remote peer initiated can only ever be used to acknowledge what
 /// that peer sends, never to push something new back down it, so delivering to any recipient (a child or
-/// another server) always means this instance acting as an MSMT client and connecting out to that
+/// another server) over IP always means this instance acting as an MSMT client and connecting out to that
 /// recipient's own receiver, identified by certificate subject rather than any self-declared name. A
+/// recipient reached over a serial cable is instead identified by the port it is configured on, and is sent to
+/// over that same cable. A
 /// message received from a child client is routed to any other local child it addresses and, once per
 /// remote server, forwarded to any other server that owns an addressed child; a message received from
 /// another server is assumed already routed and is only delivered to local children it addresses, never
 /// re-forwarded to other servers. Addressing operates on the message's raw (unexpanded) address list —
 /// group expansion is not performed at the server. Also implements <see cref="IConnectionStatusService"/>,
 /// tracking connect/disconnect status and timestamps for every own child client and every other server in
-/// the cluster. A background <see cref="MsmtConnectionMonitor"/> per child and per sibling server
+/// the cluster. A background <see cref="PeerConnectionMonitor"/> per child and per sibling server
 /// proactively opens and maintains that connection with a recurring heartbeat, independent of whether any
 /// real message is actually being routed, so <see cref="GetStatuses"/> reflects each connection's live state
 /// continuously rather than only the moment a message last happened to flow. See <c>Docs/Components/Peer.md</c>.
@@ -23,22 +25,22 @@ internal sealed class ServerRoutingService : IPeerService, IConnectionStatusServ
 {
     /// <summary>Initializes a new <see cref="ServerRoutingService"/>.</summary>
     public ServerRoutingService(
-        IMsmtPeerFactory peerFactory,
+        IPeerTransportFactory transportFactory,
         IEngineController engineController,
         ICurrentUserProvider currentUserProvider,
         ILoggerFactory loggerFactory)
     {
-        this.peerFactory = peerFactory;
+        this.transportFactory = transportFactory;
         this.engineController = engineController;
         this.currentUserProvider = currentUserProvider;
         logger = loggerFactory.CreateLogger("ACTIVITY");
     }
 
-    private readonly IMsmtPeerFactory peerFactory;
+    private readonly IPeerTransportFactory transportFactory;
     private readonly IEngineController engineController;
     private readonly ICurrentUserProvider currentUserProvider;
     private readonly ILogger logger;
-    private readonly MsmtConnectionMonitor connectionMonitor = new();
+    private readonly PeerConnectionMonitor connectionMonitor = new();
 
     private readonly ConcurrentDictionary<string, bool> childConnected = new(StringComparer.OrdinalIgnoreCase);
     private readonly ConcurrentDictionary<string, bool> serverConnected = new(StringComparer.OrdinalIgnoreCase);
@@ -47,9 +49,9 @@ internal sealed class ServerRoutingService : IPeerService, IConnectionStatusServ
     private readonly ConcurrentDictionary<string, DateTime> serverLastDisconnectedAt = new(StringComparer.OrdinalIgnoreCase);
     private readonly ConcurrentDictionary<string, DateTime> childLastConnectedAt = new(StringComparer.OrdinalIgnoreCase);
     private readonly ConcurrentDictionary<string, DateTime> childLastDisconnectedAt = new(StringComparer.OrdinalIgnoreCase);
-    private readonly ConcurrentDictionary<IMsmtConnection, string> inboundConnectionNames = new();
+    private readonly ConcurrentDictionary<PeerConnection, string> inboundConnectionNames = new();
     private IReadOnlyDictionary<string, ServerUserConfig> userMap = new Dictionary<string, ServerUserConfig>();
-    private IMsmtPeer? peer;
+    private IPeerTransport? transport;
 
     /// <inheritdoc />
     public event Func<object, Task>? MessageDelivered;
@@ -75,29 +77,21 @@ internal sealed class ServerRoutingService : IPeerService, IConnectionStatusServ
             return;
         }
 
-        MsmtOptions options;
-        try
+        transport = transportFactory.Create();
+        transport.Connected.Listen(OnConnected);
+        transport.Disconnected.Listen(OnDisconnected);
+        transport.Received.Listen(OnReceived);
+        if (!myConfig.Endpoint.IsSerial)
         {
-            options = engineController.ConnectionOptions;
+            transport.StartListener(myConfig.Endpoint.Port);
         }
-        catch (InvalidOperationException ex)
-        {
-            logger.LogError("Server role cannot start: {Message}", ex.Message);
-            return;
-        }
-
-        peer = peerFactory.Create(options);
-        peer.Connected.Subscribe(OnConnected);
-        peer.Disconnected.Subscribe(OnDisconnected);
-        peer.Received.Subscribe(OnReceived);
-        peer.StartListener(myConfig.Endpoint.Port);
-        StartMonitoring(peer, myName, myConfig, cancellation);
+        StartMonitoring(transport, myName, myConfig, cancellation);
 
         try { await Task.Delay(Timeout.Infinite, cancellation); }
         catch (OperationCanceledException) { }
     }
 
-    private void StartMonitoring(IMsmtPeer activePeer, string myName, ServerUserConfig myConfig, CancellationToken cancellation)
+    private void StartMonitoring(IPeerTransport activeTransport, string myName, ServerUserConfig myConfig, CancellationToken cancellation)
     {
         foreach (string childName in myConfig.ChildClients)
         {
@@ -108,16 +102,14 @@ internal sealed class ServerRoutingService : IPeerService, IConnectionStatusServ
                 continue;
             }
 
-            MsmtTarget target = new() { Host = endpoint.IpAddress, Port = endpoint.Port };
-            connectionMonitor.Maintain(activePeer, target, cancellation);
+            connectionMonitor.Maintain(activeTransport, endpoint, cancellation);
         }
 
         foreach ((string serverName, ServerUserConfig config) in userMap)
         {
             if (string.Equals(serverName, myName, StringComparison.OrdinalIgnoreCase)) { continue; }
 
-            MsmtTarget target = new() { Host = config.Endpoint.IpAddress, Port = config.Endpoint.Port };
-            connectionMonitor.Maintain(activePeer, target, cancellation);
+            connectionMonitor.Maintain(activeTransport, config.Endpoint, cancellation);
         }
     }
 
@@ -161,18 +153,19 @@ internal sealed class ServerRoutingService : IPeerService, IConnectionStatusServ
         StatusesChanged?.Invoke();
     }
 
-    private void OnConnected(MsmtConnectedEventArgs args)
+    private void OnConnected(PeerConnectionEventArgs args)
     {
-        if (args.Connection.Sender is not null)
+        PeerConnection connection = args.Connection;
+        if (!connection.IsInbound)
         {
-            string? serverName = FindNameByTarget(userMap.Keys, args.Connection.Target);
+            string? serverName = FindNameByEndpoint(userMap.Keys, connection.Endpoint);
             if (serverName is not null)
             {
                 UpdateServerStatus(serverName, true);
                 return;
             }
 
-            string? childName = FindChildNameByTarget(args.Connection.Target);
+            string? childName = FindChildNameByEndpoint(connection.Endpoint);
             if (childName is not null)
             {
                 UpdateChildStatus(childName, true);
@@ -183,7 +176,7 @@ internal sealed class ServerRoutingService : IPeerService, IConnectionStatusServ
         string myName = currentUserProvider.UserName ?? string.Empty;
         IReadOnlyList<string> childNames = userMap.TryGetValue(myName, out ServerUserConfig? myConfig) ? myConfig.ChildClients : [];
 
-        string? subject = args.Connection.Identity?.Subject;
+        string? subject = connection.IdentitySubject;
         string? remoteName = subject is null ? null
             : FindNameByCertificateSubject(childNames, subject)
                 ?? FindNameByCertificateSubject(userMap.Keys.Where(name => !string.Equals(name, myName, StringComparison.OrdinalIgnoreCase)), subject);
@@ -191,53 +184,59 @@ internal sealed class ServerRoutingService : IPeerService, IConnectionStatusServ
         if (remoteName is null)
         {
             logger.LogWarning("Rejected connection from unrecognized certificate {Subject}", subject);
-            args.Connection.Drop();
+            connection.Drop();
             return;
         }
 
-        inboundConnectionNames[args.Connection] = remoteName;
+        inboundConnectionNames[connection] = remoteName;
+        UpdateStatusForName(remoteName, true);
+    }
 
-        if (childNames.Contains(remoteName, StringComparer.OrdinalIgnoreCase))
+    private void OnDisconnected(PeerConnectionEventArgs args)
+    {
+        PeerConnection connection = args.Connection;
+        if (inboundConnectionNames.TryRemove(connection, out string? remoteName))
         {
-            UpdateChildStatus(remoteName, true);
+            UpdateStatusForName(remoteName, false);
+            return;
         }
-        else
+
+        if (connection.Endpoint is { IsSerial: true } && ResolveSerialName(connection) is { } serialName)
         {
-            UpdateServerStatus(remoteName, true);
+            UpdateStatusForName(serialName, false);
         }
     }
 
-    private void OnDisconnected(MsmtDisconnectedEventArgs args)
+    private void UpdateStatusForName(string remoteName, bool isConnected)
     {
-        if (!inboundConnectionNames.TryRemove(args.Connection, out string? remoteName)) { return; }
-
         string myName = currentUserProvider.UserName ?? string.Empty;
         IReadOnlyList<string> childNames = userMap.TryGetValue(myName, out ServerUserConfig? myConfig) ? myConfig.ChildClients : [];
 
         if (childNames.Contains(remoteName, StringComparer.OrdinalIgnoreCase))
         {
-            UpdateChildStatus(remoteName, false);
+            UpdateChildStatus(remoteName, isConnected);
         }
         else
         {
-            UpdateServerStatus(remoteName, false);
+            UpdateServerStatus(remoteName, isConnected);
         }
     }
 
-    private string? FindNameByTarget(IEnumerable<string> candidates, MsmtTarget target)
-        => candidates.FirstOrDefault(name =>
+    private string? ResolveSerialName(PeerConnection connection)
+        => FindNameByEndpoint(userMap.Keys, connection.Endpoint) ?? FindChildNameByEndpoint(connection.Endpoint);
+
+    private string? FindNameByEndpoint(IEnumerable<string> candidates, UserEndpoint? endpoint)
+        => endpoint is null ? null : candidates.FirstOrDefault(name =>
             userMap.TryGetValue(name, out ServerUserConfig? config)
-            && config.Endpoint.IpAddress == target.Host
-            && config.Endpoint.Port == target.Port);
+            && config.Endpoint.Equals(endpoint));
 
-    private string? FindChildNameByTarget(MsmtTarget target)
+    private string? FindChildNameByEndpoint(UserEndpoint? endpoint)
     {
+        if (endpoint is null) { return null; }
+
         string myName = currentUserProvider.UserName ?? string.Empty;
         IReadOnlyList<string> childNames = userMap.TryGetValue(myName, out ServerUserConfig? myConfig) ? myConfig.ChildClients : [];
-        return childNames.FirstOrDefault(name =>
-            engineController.GetEndpoint(name) is { } endpoint
-            && endpoint.IpAddress == target.Host
-            && endpoint.Port == target.Port);
+        return childNames.FirstOrDefault(name => endpoint.Equals(engineController.GetEndpoint(name)));
     }
 
     private string? FindNameByCertificateSubject(IEnumerable<string> candidates, string subject)
@@ -259,18 +258,19 @@ internal sealed class ServerRoutingService : IPeerService, IConnectionStatusServ
         return distinguishedName;
     }
 
-    private void OnReceived(MsmtReceivedEventArgs args)
+    private void OnReceived(PeerReceivedEventArgs args)
     {
-        if (!inboundConnectionNames.TryGetValue(args.Link.Connection, out string? remoteName)) { return; }
+        string? remoteName = inboundConnectionNames.TryGetValue(args.Connection, out string? inboundName)
+            ? inboundName
+            : args.Connection.Endpoint is { IsSerial: true } ? ResolveSerialName(args.Connection) : null;
+        if (remoteName is null) { return; }
 
-        byte[] copy;
-        using (args.Payload) { copy = args.Payload.Memory.ToArray(); }
-
-        // An empty payload is a MsmtConnectionMonitor heartbeat, not a real message to relay.
-        if (copy.Length == 0) { return; }
+        // An empty payload is a PeerConnectionMonitor heartbeat, not a real message to relay.
+        if (args.Payload.IsEmpty) { return; }
 
         string myName = currentUserProvider.UserName ?? string.Empty;
         IReadOnlyList<string> childNames = userMap.TryGetValue(myName, out ServerUserConfig? myConfig) ? myConfig.ChildClients : [];
+        ReadOnlyMemory<byte> copy = args.Payload;
 
         if (childNames.Contains(remoteName, StringComparer.OrdinalIgnoreCase))
         {
@@ -346,7 +346,7 @@ internal sealed class ServerRoutingService : IPeerService, IConnectionStatusServ
 
     private async Task TrySendToChild(string childName, ReadOnlyMemory<byte> data)
     {
-        if (peer is null) { return; }
+        if (transport is null) { return; }
         UserEndpoint? endpoint = engineController.GetEndpoint(childName);
         if (endpoint is null)
         {
@@ -354,24 +354,16 @@ internal sealed class ServerRoutingService : IPeerService, IConnectionStatusServ
             return;
         }
 
-        try
-        {
-            MsmtResponse response = await peer.Request(new MsmtTarget { Host = endpoint.IpAddress, Port = endpoint.Port }, data, cancellation: CancellationToken.None);
-            response.Payload.Dispose();
-        }
+        try { await transport.Request(endpoint, data, cancellation: CancellationToken.None); }
         catch { }
     }
 
     private async Task TrySendToServer(string serverName, ReadOnlyMemory<byte> data)
     {
-        if (peer is null) { return; }
+        if (transport is null) { return; }
         if (!userMap.TryGetValue(serverName, out ServerUserConfig? config)) { return; }
 
-        try
-        {
-            MsmtResponse response = await peer.Request(new MsmtTarget { Host = config.Endpoint.IpAddress, Port = config.Endpoint.Port }, data, cancellation: CancellationToken.None);
-            response.Payload.Dispose();
-        }
+        try { await transport.Request(config.Endpoint, data, cancellation: CancellationToken.None); }
         catch { }
     }
 
@@ -446,6 +438,6 @@ internal sealed class ServerRoutingService : IPeerService, IConnectionStatusServ
     /// <inheritdoc />
     public async ValueTask DisposeAsync()
     {
-        if (peer is not null) { await peer.DisposeAsync(); }
+        if (transport is not null) { await transport.DisposeAsync(); }
     }
 }

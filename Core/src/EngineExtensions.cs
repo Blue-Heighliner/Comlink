@@ -43,6 +43,7 @@ public static class EngineExtensions
             services.TryAddSingleton(new EngineConfig());
             services.AddConventionSingletons();
             services.AddMsmt();
+            services.TryAddSingleton<IMicroGatePeerFactory, MicroGatePeerFactory>();
 
             services.AddSingleton<IServiceConnection, DirectServiceConnection>();
             if (mode == EngineMode.Client)
