@@ -285,6 +285,8 @@ public sealed class DirectServiceConnectionTests
         Assert.Equal("MSG1", confirmation.ConfirmationMessageId);
         Assert.Equal("LOCAL", confirmation.FromUser);
         Assert.NotEqual("MSG1", confirmation.MessageId);
+        TestAddressEntry address = Assert.Single(confirmation.Addresses);
+        Assert.Equal("REMOTE", address.UserName);
     }
 
     /// <summary>MarkMessageRead for a self-addressed message updates the Outbox status directly instead of sending over the wire.</summary>

@@ -136,6 +136,7 @@ internal sealed class DirectServiceConnection : IServiceConnection
         engineController.SetMessageId(confirmation, Guid.NewGuid().ToString("N").ToUpperInvariant());
         engineController.SetFromUser(confirmation, userInfo.Name);
         engineController.SetConfirmationMessageId(confirmation, messageId);
+        engineController.SetAddresses(confirmation, [new MessageAddress { UserName = fromUser, Type = AddressType.To }]);
         engineController.SetSentAt(confirmation, DateTime.UtcNow);
         await peerService.Send(fromUser, confirmation, cancellation);
         return true;
