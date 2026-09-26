@@ -279,6 +279,7 @@ public sealed partial class MainViewModel : ObservableObject, IMainViewModel
         };
 
         contentArea.DraftSent += HandleDraftSent;
+        contentArea.EntryDeleted += HandleEntryDeleted;
 
         connection.DeliveryStatusChanged += async evt =>
         {
@@ -379,6 +380,12 @@ public sealed partial class MainViewModel : ObservableObject, IMainViewModel
         return Task.CompletedTask;
     }
 
+    private async Task HandleEntryDeleted()
+    {
+        contentArea.ShowHome();
+        await entryBar.Refresh();
+    }
+
     private async Task HandleDraftSent(MessageEntity msg)
     {
         FolderItemViewModel? outboxFolder = folderBar.RootFolders.FirstOrDefault(f => f.RootType == FolderType.Outbox);
@@ -406,6 +413,7 @@ public sealed partial class MainViewModel : ObservableObject, IMainViewModel
             contentArea.ShowEntry(new Entries.MessageViewModel(msg, engineController));
             await HandleDraftSent(msg);
         };
+        vm.Deleted += HandleEntryDeleted;
         contentArea.ShowEntry(vm);
     }
 
@@ -413,7 +421,8 @@ public sealed partial class MainViewModel : ObservableObject, IMainViewModel
     private async Task CreateNote()
     {
         NoteEntity entity = await entryService.CreateNote();
-        Entries.NoteViewModel vm = new(entity, entryService);
+        Entries.NoteViewModel vm = new(entity, entryService, engineController.CanDelete(FolderType.Notes));
+        vm.Deleted += HandleEntryDeleted;
         contentArea.ShowEntry(vm);
     }
 

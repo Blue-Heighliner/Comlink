@@ -107,7 +107,7 @@ Right-side content pane. Registered as `IContentAreaViewModel → ContentAreaVie
 
 **Properties**: `ActiveContent (object?)`, `IsHomeVisible (bool)`, `HomeText (string)`.
 
-**Events**: `DraftSent (Func<MessageEntity, Task>)`.
+**Events**: `DraftSent (Func<MessageEntity, Task>)`; `EntryDeleted (Func<Task>)` - raised, after the content area has already returned to the home screen, when the draft or note it is showing is deleted from its own editor. `MainViewModel` reloads the entry list on it.
 
 **Methods**: `ShowHome()`, `ShowEntry(EntryItemViewModel)`, `ShowEntry(object)`.
 
@@ -151,7 +151,9 @@ Editable draft with fill-in support. Constructed with `new DraftViewModel(entity
 
 **IBodyDocument** — framework-agnostic body document abstraction in `Engine.ViewModels.Entries`. `BodyDocumentFactory` provides the default `StringBodyDocument` (plain string, used in tests and Headless mode). `TextDocumentBodyDocumentFactory` provides `TextDocumentBodyDocument` (wraps AvaloniaEdit's `TextDocument`) for Client mode. `DraftEditor.axaml.cs` casts to `TextDocumentBodyDocument` to bind the editor. `IBodyDocumentFactory` controls which implementation is created; `UseEngineUi()` overrides the default with `TextDocumentBodyDocumentFactory`.
 
-**Events**: `DraftSent (Func<IDraftViewModel, MessageEntity, Task>)`.
+**Events**: `DraftSent (Func<IDraftViewModel, MessageEntity, Task>)`; `Deleted (Func<Task>)`.
+
+**Deleting**: `CanDelete` (from `IEngineController.CanDelete(FolderType.Drafts)`, fixed at construction) controls whether `DraftEditor.axaml` shows its DELETE button. `DeleteCommand` is a two-press confirmation (`DeleteConfirmation`): the first press arms it and `DeleteButtonText` reads `"CONFIRM DELETE"`; a second press within four seconds calls `IEntryService.DeleteEntry` and raises `Deleted`, and if no second press comes the button disarms itself. A draft that has already been sent can still be deleted; the sent message is a separate record and is unaffected.
 
 **Commands**: `SaveCommand`, `SendCommand` (`IAsyncRelayCommand`); `AddAddressCommand` (`IRelayCommand`); `RemoveAddressCommand` (`IRelayCommand<AddressData>`).
 
@@ -167,9 +169,11 @@ Editable draft with fill-in support. Constructed with `new DraftViewModel(entity
 
 Editable note. Constructed with `new NoteViewModel(entity, entryService)` — not DI-registered.
 
-**Properties**: `Id`, `Body`, `IsSaving`, `StatusMessage`.
+**Properties**: `Id`, `Body`, `IsSaving`, `StatusMessage`, `CanDelete` (from `IEngineController.CanDelete(FolderType.Notes)`, passed to the constructor), `IsConfirmingDelete`, `DeleteButtonText`.
 
-**Commands**: `SaveCommand (IAsyncRelayCommand)`.
+**Commands**: `SaveCommand (IAsyncRelayCommand)`; `DeleteCommand (IAsyncRelayCommand)` - the same two-press confirmation as a draft's (first press arms and the button reads `"CONFIRM DELETE"`, a second within four seconds deletes via `IEntryService.DeleteEntry`, and it disarms itself otherwise), shown by `NoteEditor.axaml` only when `CanDelete`.
+
+**Events**: `Deleted (Func<Task>)`.
 
 ---
 

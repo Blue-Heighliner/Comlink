@@ -57,6 +57,78 @@ public sealed class ContentAreaViewModelTests
             drafts.Object, notes.Object, activityLogs.Object, loggerFactory);
     }
 
+    private static ContentAreaViewModel BuildWithEditors(out Mock<INoteRepository> notes, out Mock<IDraftRepository> drafts, out Mock<IEntryService> entry)
+    {
+        entry = new Mock<IEntryService>();
+        notes = new Mock<INoteRepository>();
+        drafts = new Mock<IDraftRepository>();
+        return new ContentAreaViewModel(MakeEngineController(), entry.Object, new FakeServiceConnection(), new Mock<IMessageRepository>().Object,
+            drafts.Object, notes.Object, new Mock<IActivityLogRepository>().Object, LoggerFactory.Create(_ => { }));
+    }
+
+    /// <summary>Deleting the open note from its editor deletes it, returns to the home screen, and tells listeners so they can refresh the list.</summary>
+    [Fact]
+    public async Task OpenNote_DeletedFromEditor_ShowsHomeAndRaisesEntryDeleted()
+    {
+        ContentAreaViewModel vm = BuildWithEditors(out Mock<INoteRepository> notes, out _, out Mock<IEntryService> entry);
+        NoteEntity note = new() { Id = new ObjectId(), Body = "B", FolderId = "root-notes", ModifiedAt = DateTime.UtcNow };
+        notes.Setup(n => n.Get(note.Id)).ReturnsAsync(note);
+        int raised = 0;
+        vm.EntryDeleted += () => { raised++; return Task.CompletedTask; };
+        await vm.ShowEntry(new EntryItemViewModel(note.Id.ToString(), "N", EntryType.Note, DateTime.UtcNow));
+        NoteViewModel editor = Assert.IsType<NoteViewModel>(vm.ActiveContent);
+        Assert.True(editor.CanDelete);
+
+        await editor.DeleteCommand.ExecuteAsync(null);
+        Assert.NotNull(vm.ActiveContent);
+        await editor.DeleteCommand.ExecuteAsync(null);
+
+        entry.Verify(e => e.DeleteEntry(note.Id.ToString(), EntryType.Note, false), Times.Once);
+        Assert.Null(vm.ActiveContent);
+        Assert.True(vm.IsHomeVisible);
+        Assert.Equal(1, raised);
+    }
+
+    /// <summary>Deleting the open draft from its editor behaves the same way.</summary>
+    [Fact]
+    public async Task OpenDraft_DeletedFromEditor_ShowsHomeAndRaisesEntryDeleted()
+    {
+        ContentAreaViewModel vm = BuildWithEditors(out _, out Mock<IDraftRepository> drafts, out Mock<IEntryService> entry);
+        DraftEntity draft = new() { Id = new ObjectId(), Subject = "S", Body = "B", Addresses = [], FolderId = "root-drafts" };
+        drafts.Setup(d => d.Get(draft.Id)).ReturnsAsync(draft);
+        int raised = 0;
+        vm.EntryDeleted += () => { raised++; return Task.CompletedTask; };
+        await vm.ShowEntry(new EntryItemViewModel(draft.Id.ToString(), "D", EntryType.Draft, DateTime.UtcNow));
+        DraftViewModel editor = Assert.IsType<DraftViewModel>(vm.ActiveContent);
+
+        await editor.DeleteCommand.ExecuteAsync(null);
+        await editor.DeleteCommand.ExecuteAsync(null);
+
+        entry.Verify(e => e.DeleteEntry(draft.Id.ToString(), EntryType.Draft, false), Times.Once);
+        Assert.Null(vm.ActiveContent);
+        Assert.Equal(1, raised);
+    }
+
+    /// <summary>A draft opened from the list gets its body document from the same factory as a new draft, so the editor can bind it; a plain string document there crashed the Client UI.</summary>
+    [Fact]
+    public async Task OpenDraft_UsesBodyDocumentFromFactory()
+    {
+        Mock<IEntryService> entry = new();
+        Mock<IDraftRepository> drafts = new();
+        StringBodyDocument document = new();
+        Mock<IBodyDocumentFactory> factory = new();
+        factory.Setup(f => f.Create()).Returns(document);
+        ContentAreaViewModel vm = new(MakeEngineController(), entry.Object, new FakeServiceConnection(), new Mock<IMessageRepository>().Object,
+            drafts.Object, new Mock<INoteRepository>().Object, new Mock<IActivityLogRepository>().Object, LoggerFactory.Create(_ => { }), factory.Object);
+        DraftEntity draft = new() { Id = new ObjectId(), Subject = "S", Body = "B", Addresses = [], FolderId = "root-drafts" };
+        drafts.Setup(d => d.Get(draft.Id)).ReturnsAsync(draft);
+
+        await vm.ShowEntry(new EntryItemViewModel(draft.Id.ToString(), "D", EntryType.Draft, DateTime.UtcNow));
+
+        Assert.Same(document, Assert.IsType<DraftViewModel>(vm.ActiveContent).BodyDocument);
+        factory.Verify(f => f.Create(), Times.Once);
+    }
+
     /// <summary>HomeText is set from IEngineController on construction.</summary>
     [Fact]
     public void HomeText_SetFromProvider()

@@ -5,6 +5,8 @@ public interface IContentAreaViewModel
 {
     /// <summary>Raised when a draft is successfully sent and produces a message entity.</summary>
     event Func<MessageEntity, Task>? DraftSent;
+    /// <summary>Raised after the draft or note shown in the content area is deleted from its editor, once the content area has returned to the home screen.</summary>
+    event Func<Task>? EntryDeleted;
 
     /// <summary>Gets or sets the currently displayed entry ViewModel, or <see langword="null"/> when showing the home screen.</summary>
     object? ActiveContent { get; set; }
@@ -39,6 +41,7 @@ public sealed partial class ContentAreaViewModel : ObservableObject, IContentAre
     /// <param name="notes">Repository for loading note entries.</param>
     /// <param name="activityLogs">Repository for loading activity log entries.</param>
     /// <param name="loggerFactory">Factory for creating named loggers.</param>
+    /// <param name="bodyDocumentFactory">Factory for the body document of a draft opened from the list; must match the one used for new drafts, or the draft editor cannot bind it. Defaults to plain string documents when <see langword="null"/>.</param>
     public ContentAreaViewModel(
         IEngineController engineController,
         IEntryService entryService,
@@ -47,8 +50,10 @@ public sealed partial class ContentAreaViewModel : ObservableObject, IContentAre
         IDraftRepository drafts,
         INoteRepository notes,
         IActivityLogRepository activityLogs,
-        ILoggerFactory loggerFactory)
+        ILoggerFactory loggerFactory,
+        IBodyDocumentFactory? bodyDocumentFactory = null)
     {
+        this.bodyDocumentFactory = bodyDocumentFactory;
         this.entryService = entryService;
         this.connection = connection;
         this.messages = messages;
@@ -69,12 +74,15 @@ public sealed partial class ContentAreaViewModel : ObservableObject, IContentAre
     private readonly IActivityLogRepository activityLogs;
     private readonly IEngineController engineController;
     private readonly ILoggerFactory loggerFactory;
+    private readonly IBodyDocumentFactory? bodyDocumentFactory;
 
     [ObservableProperty] private object? activeContent;
     [ObservableProperty] private bool isHomeVisible = true;
 
     /// <summary>Raised when a draft is successfully sent and produces a message entity.</summary>
     public event Func<MessageEntity, Task>? DraftSent;
+    /// <inheritdoc />
+    public event Func<Task>? EntryDeleted;
     /// <summary>Gets the welcome text supplied by the host's home content provider.</summary>
     public string HomeText { get; }
 
@@ -158,12 +166,13 @@ public sealed partial class ContentAreaViewModel : ObservableObject, IContentAre
         DraftEntity? entity = await drafts.Get(oid);
         if (entity is null) { return null; }
         List<string> userNames = await connection.GetUserNames();
-        DraftViewModel vm = new(entity, entryService, connection, userNames, loggerFactory, engineController);
+        DraftViewModel vm = new(entity, entryService, connection, userNames, loggerFactory, engineController, bodyDocumentFactory?.Create());
         vm.DraftSent += async (IDraftViewModel _, MessageEntity msg) =>
         {
             ShowEntry(new MessageViewModel(msg, engineController));
             if (DraftSent is not null) { await DraftSent(msg); }
         };
+        vm.Deleted += HandleEditorDeleted;
         return vm;
     }
 
@@ -172,7 +181,17 @@ public sealed partial class ContentAreaViewModel : ObservableObject, IContentAre
         ObjectId? oid = TryParseObjectId(id);
         if (oid is null) { return null; }
         NoteEntity? entity = await notes.Get(oid);
-        return entity is null ? null : new NoteViewModel(entity, entryService);
+        if (entity is null) { return null; }
+
+        NoteViewModel vm = new(entity, entryService, engineController.CanDelete(FolderType.Notes));
+        vm.Deleted += HandleEditorDeleted;
+        return vm;
+    }
+
+    private async Task HandleEditorDeleted()
+    {
+        ShowHome();
+        if (EntryDeleted is not null) { await EntryDeleted(); }
     }
 
     private async Task<ActivityLogViewModel?> BuildActivityLogViewModel(string id)

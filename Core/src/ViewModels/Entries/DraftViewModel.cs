@@ -73,6 +73,16 @@ public interface IDraftViewModel
     IAsyncRelayCommand SaveCommand { get; }
     /// <summary>Sends the draft as a message.</summary>
     IAsyncRelayCommand SendCommand { get; }
+    /// <summary>Gets a value indicating whether the draft can be deleted, per <see cref="IEngineController.CanDelete"/> for drafts.</summary>
+    bool CanDelete { get; }
+    /// <summary>Gets a value indicating whether a delete is armed and the next <see cref="DeleteCommand"/> press will carry it out.</summary>
+    bool IsConfirmingDelete { get; }
+    /// <summary>Gets the text for the delete button: <c>"DELETE"</c>, or <c>"CONFIRM DELETE"</c> once armed.</summary>
+    string DeleteButtonText { get; }
+    /// <summary>Deletes the draft. The first press arms a confirmation and a second one within a few seconds deletes it.</summary>
+    IAsyncRelayCommand DeleteCommand { get; }
+    /// <summary>Raised after the draft has been deleted.</summary>
+    event Func<Task>? Deleted;
     /// <summary>Adds the current <see cref="NewAddressUser"/> and <see cref="NewAddressType"/> as a recipient.</summary>
     IRelayCommand AddAddressCommand { get; }
     /// <summary>Removes the specified address from the recipient list.</summary>
@@ -112,6 +122,7 @@ public sealed partial class DraftViewModel : ObservableObject, IDraftViewModel
     /// <param name="loggerFactory">Factory for creating named loggers.</param>
     /// <param name="engineController">Provides the shared alert label text, whether the alert checkbox is shown, the available message priority levels, tag input visibility/label, and blocked tag/priority combinations enforced on send.</param>
     /// <param name="bodyDocument">Optional body document implementation; defaults to <see cref="StringBodyDocument"/> when <see langword="null"/>.</param>
+    /// <param name="confirmationWindow">How long an armed delete waits for its confirming press; defaults to a few seconds.</param>
     public DraftViewModel(
         DraftEntity entity,
         IEntryService entryService,
@@ -119,9 +130,12 @@ public sealed partial class DraftViewModel : ObservableObject, IDraftViewModel
         IReadOnlyList<string> userNames,
         ILoggerFactory loggerFactory,
         IEngineController engineController,
-        IBodyDocument? bodyDocument = null)
+        IBodyDocument? bodyDocument = null,
+        TimeSpan? confirmationWindow = null)
     {
         this.entity = entity;
+        CanDelete = engineController.CanDelete(FolderType.Drafts);
+        deleteConfirmation = new DeleteConfirmation(pending => IsConfirmingDelete = pending, confirmationWindow);
         this.entryService = entryService;
         this.connection = connection;
         this.engineController = engineController;
@@ -153,6 +167,7 @@ public sealed partial class DraftViewModel : ObservableObject, IDraftViewModel
     }
 
     private readonly IEntryService entryService;
+    private readonly DeleteConfirmation deleteConfirmation;
     private readonly IServiceConnection connection;
     private readonly IEngineController engineController;
     private readonly IReadOnlyList<MessagePriorityOption> allPriorities;
@@ -171,6 +186,18 @@ public sealed partial class DraftViewModel : ObservableObject, IDraftViewModel
     [ObservableProperty] private PlsoMode plsoMode;
     [ObservableProperty] private bool isSaving;
     [ObservableProperty] private string? statusMessage;
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(DeleteButtonText))]
+    private bool isConfirmingDelete;
+
+    /// <inheritdoc />
+    public event Func<Task>? Deleted;
+
+    /// <inheritdoc />
+    public bool CanDelete { get; }
+
+    /// <inheritdoc />
+    public string DeleteButtonText => IsConfirmingDelete ? "CONFIRM DELETE" : "DELETE";
 
     private readonly Dictionary<string, IFillInViewModel> fillIns = [];
 
@@ -332,6 +359,15 @@ public sealed partial class DraftViewModel : ObservableObject, IDraftViewModel
             dataList.Add(new DraftBodySegmentData { Kind = "text", Text = sb.ToString() });
         }
         return JsonSerializer.Serialize(dataList);
+    }
+
+    [RelayCommand]
+    private async Task Delete()
+    {
+        if (!CanDelete || !deleteConfirmation.Confirm()) { return; }
+
+        await entryService.DeleteEntry(Id, EntryType.Draft);
+        if (Deleted is not null) { await Deleted(); }
     }
 
     [RelayCommand]

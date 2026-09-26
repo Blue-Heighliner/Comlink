@@ -65,6 +65,12 @@
               </MultiBinding>
             </CheckBox.IsVisible>
           </CheckBox>
+          <Button Content="{Binding DeleteButtonText}"
+                  Command="{Binding DeleteCommand}"
+                  IsVisible="{Binding CanDelete}"
+                  Foreground="#E06C75"
+                  FontWeight="SemiBold"
+                  FontSize="12" />
           <Button Classes="accent"
                   Content="SAVE"
                   Command="{Binding SaveCommand}"

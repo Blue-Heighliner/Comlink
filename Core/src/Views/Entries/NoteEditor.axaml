@@ -22,6 +22,12 @@
                      FontSize="12"
                      Foreground="#858585"
                      VerticalAlignment="Center" />
+          <Button Content="{Binding DeleteButtonText}"
+                  Command="{Binding DeleteCommand}"
+                  IsVisible="{Binding CanDelete}"
+                  Foreground="#E06C75"
+                  FontWeight="SemiBold"
+                  FontSize="12" />
           <Button Classes="accent"
                   Content="SAVE"
                   Command="{Binding SaveCommand}"

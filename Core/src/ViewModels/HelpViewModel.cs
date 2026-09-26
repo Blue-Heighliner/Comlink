@@ -64,6 +64,7 @@ public sealed class HelpViewModel : IHelpViewModel
             [
                 new HelpSection("Notes", "NEW NOTE opens a blank note. Write in it and press SAVE. Notes are private to you and are never sent anywhere."),
                 new HelpSection("Drafts", "A draft is a message you are still working on. Press SAVE to keep it in Drafts and come back to it later, and open it from the Drafts folder to carry on. Sending a draft moves it to Outbox."),
+                new HelpSection("Deleting", "Press DELETE at the top of a note or draft, then press CONFIRM DELETE within a few seconds to remove it for good. You can also right-click it in the list and choose Delete. Not every installation allows deleting, in which case neither is offered."),
                 new HelpSection("Finding them again", "Select the Notes or Drafts folder and pick the entry from the middle column. Notes and drafts are listed most recent first, and the sort button at the top of the list switches between Sort: Recent and Sort: A-Z.")
             ]),
             new HelpTab("Folders and entries",

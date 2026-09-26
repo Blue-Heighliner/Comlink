@@ -48,6 +48,49 @@ public sealed class DraftViewModelTests
             MakeEngineController(alertText, composeAlertsEnabled, tagsEnabled, tagLabel, blockedCombinations));
     }
 
+    private static DraftViewModel BuildDeletable(out Mock<IEntryService> entryMock, bool canDelete)
+    {
+        Mock<IEngineController> controller = Mock.Get(MakeEngineController());
+        controller.Setup(c => c.CanDelete(FolderType.Drafts)).Returns(canDelete);
+        entryMock = new Mock<IEntryService>();
+        Mock<IServiceConnection> conn = new();
+        DraftEntity entity = new() { Subject = "S", Body = "B", Addresses = [], FolderId = "root-drafts" };
+        return new DraftViewModel(entity, entryMock.Object, conn.Object, [], noLogger, controller.Object, confirmationWindow: TimeSpan.FromMinutes(1));
+    }
+
+    /// <summary>DeleteCommand arms on the first press and deletes the draft on the second, then raises Deleted.</summary>
+    [Fact]
+    public async Task Delete_TwoPresses_ArmsThenDeletesDraft()
+    {
+        DraftViewModel vm = BuildDeletable(out Mock<IEntryService> entryMock, canDelete: true);
+        bool deleted = false;
+        vm.Deleted += () => { deleted = true; return Task.CompletedTask; };
+
+        await vm.DeleteCommand.ExecuteAsync(null);
+        Assert.True(vm.IsConfirmingDelete);
+        Assert.Equal("CONFIRM DELETE", vm.DeleteButtonText);
+        Assert.False(deleted);
+        entryMock.Verify(s => s.DeleteEntry(It.IsAny<string>(), It.IsAny<EntryType>(), It.IsAny<bool>()), Times.Never);
+
+        await vm.DeleteCommand.ExecuteAsync(null);
+        entryMock.Verify(s => s.DeleteEntry(vm.Id, EntryType.Draft, false), Times.Once);
+        Assert.True(deleted);
+        Assert.False(vm.IsConfirmingDelete);
+    }
+
+    /// <summary>CanDelete follows the host's rule for drafts, and a draft that cannot be deleted never is.</summary>
+    [Fact]
+    public async Task Delete_WhenHostForbidsDraftDeletion_NeverDeletes()
+    {
+        DraftViewModel vm = BuildDeletable(out Mock<IEntryService> entryMock, canDelete: false);
+
+        await vm.DeleteCommand.ExecuteAsync(null);
+        await vm.DeleteCommand.ExecuteAsync(null);
+
+        Assert.False(vm.CanDelete);
+        entryMock.Verify(s => s.DeleteEntry(It.IsAny<string>(), It.IsAny<EntryType>(), It.IsAny<bool>()), Times.Never);
+    }
+
     /// <summary>Constructor sets Subject from entity.</summary>
     [Fact]
     public void Constructor_SetsSubjectFromEntity()

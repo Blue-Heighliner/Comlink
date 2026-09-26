@@ -95,6 +95,40 @@ public sealed class MainViewModelTests
         Assert.Equal("2.3.4", vm.AppVersion);
     }
 
+    /// <summary>The content area reporting an editor-side delete returns to the home screen and reloads the entry list.</summary>
+    [Fact]
+    public void ContentAreaEntryDeleted_ShowsHomeAndRefreshesEntries()
+    {
+        Setup s = new();
+        _ = s.BuildVm();
+
+        s.ContentArea.Raise(c => c.EntryDeleted += null!);
+
+        s.ContentArea.Verify(c => c.ShowHome(), Times.Once);
+        s.EntryBar.Verify(e => e.Refresh(), Times.Once);
+    }
+
+    /// <summary>A note created with NEW NOTE can be deleted from its editor, which closes it and reloads the list.</summary>
+    [Fact]
+    public async Task CreatedNote_DeletedFromEditor_ShowsHomeAndRefreshesEntries()
+    {
+        Setup s = new();
+        NoteEntity note = new() { Id = new ObjectId(), Body = string.Empty, FolderId = "root-notes", ModifiedAt = DateTime.UtcNow };
+        s.EntryService.Setup(e => e.CreateNote()).ReturnsAsync(note);
+        object? shown = null;
+        s.ContentArea.Setup(c => c.ShowEntry(It.IsAny<object>())).Callback<object>(o => shown = o);
+        MainViewModel vm = s.BuildVm();
+
+        await vm.CreateNoteCommand.ExecuteAsync(null);
+        NoteViewModel editor = Assert.IsType<NoteViewModel>(shown);
+        await editor.DeleteCommand.ExecuteAsync(null);
+        await editor.DeleteCommand.ExecuteAsync(null);
+
+        s.EntryService.Verify(e => e.DeleteEntry(note.Id.ToString(), EntryType.Note, false), Times.Once);
+        s.ContentArea.Verify(c => c.ShowHome(), Times.Once);
+        s.EntryBar.Verify(e => e.Refresh(), Times.Once);
+    }
+
     /// <summary>IsKioskMode reflects the value from IEngineController at construction time.</summary>
     [Fact]
     public void IsKioskMode_ReflectsProvider()
