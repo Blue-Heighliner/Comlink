@@ -12,6 +12,18 @@ public sealed class ConnectionStatusServiceTests
         Assert.Empty(service.GetStatuses());
     }
 
+    /// <summary>Closing and refreshing are no-ops, since a peer has no configured connections to act on.</summary>
+    [Fact]
+    public void SetClosedAndRefresh_DoNothing()
+    {
+        NullConnectionStatusService service = new();
+
+        service.SetClosed(PeerConnectionKind.Server, "X", true);
+        service.Refresh(PeerConnectionKind.Server, "X");
+
+        Assert.Empty(service.GetStatuses());
+    }
+
     /// <summary>Subscribing to StatusesChanged is a no-op that never fires.</summary>
     [Fact]
     public void StatusesChanged_Subscribed_NeverFires()

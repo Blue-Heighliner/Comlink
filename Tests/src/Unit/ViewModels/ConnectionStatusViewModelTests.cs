@@ -9,7 +9,15 @@ public sealed class ConnectionStatusViewModelTests
 
         public List<PeerConnectionStatus> Statuses { get; set; } = [];
 
+        public List<(PeerConnectionKind Kind, string UserName, bool Closed)> ClosedCalls { get; } = [];
+
+        public List<(PeerConnectionKind Kind, string UserName)> RefreshCalls { get; } = [];
+
         public IReadOnlyList<PeerConnectionStatus> GetStatuses() => Statuses;
+
+        public void SetClosed(PeerConnectionKind kind, string userName, bool closed) => ClosedCalls.Add((kind, userName, closed));
+
+        public void Refresh(PeerConnectionKind kind, string userName) => RefreshCalls.Add((kind, userName));
 
         public void Raise() => StatusesChanged?.Invoke();
     }
@@ -38,6 +46,40 @@ public sealed class ConnectionStatusViewModelTests
         Assert.Equal("TEST1", clientRow.UserName);
         Assert.False(clientRow.IsConnected);
         Assert.True(vm.HasClientRows);
+    }
+
+    /// <summary>A status the user has closed produces a closed row.</summary>
+    [Fact]
+    public void Constructor_ClosedStatus_ProducesClosedRow()
+    {
+        FakeStatusService service = new() { Statuses = [new PeerConnectionStatus { UserName = "TEST1", Kind = PeerConnectionKind.Client, IsConnected = false, IsClosed = true }] };
+
+        ConnectionStatusViewModel vm = new(service);
+
+        Assert.True(Assert.Single(vm.ClientRows).IsClosed);
+    }
+
+    /// <summary>Each row's commands act on the connection that row was built for, with its own kind and user name.</summary>
+    [Fact]
+    public void RowCommands_TargetTheirOwnConnection()
+    {
+        FakeStatusService service = new()
+        {
+            Statuses =
+            [
+                new PeerConnectionStatus { UserName = "SERVER-B", Kind = PeerConnectionKind.Server, IsConnected = true },
+                new PeerConnectionStatus { UserName = "TEST1", Kind = PeerConnectionKind.Client, IsConnected = true, IsClosed = true }
+            ]
+        };
+        ConnectionStatusViewModel vm = new(service);
+
+        vm.ServerRows[0].ToggleClosedCommand.Execute(null);
+        vm.ServerRows[0].RefreshCommand.Execute(null);
+        vm.ClientRows[0].ToggleClosedCommand.Execute(null);
+        vm.ClientRows[0].RefreshCommand.Execute(null);
+
+        Assert.Equal([(PeerConnectionKind.Server, "SERVER-B", true), (PeerConnectionKind.Client, "TEST1", false)], service.ClosedCalls);
+        Assert.Equal([(PeerConnectionKind.Server, "SERVER-B")], service.RefreshCalls);
     }
 
     /// <summary>ServerRows/ClientRows refresh from the latest GetStatuses snapshot whenever StatusesChanged fires.</summary>

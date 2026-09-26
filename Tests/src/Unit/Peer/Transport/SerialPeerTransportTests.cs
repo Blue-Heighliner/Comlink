@@ -246,6 +246,94 @@ public sealed class SerialPeerTransportTests
         Assert.True(await pair.A.Request(endpoint, new byte[] { 5 }).WaitAsync(timeout));
     }
 
+    /// <summary>Closing a link disconnects it and stops it reconnecting, and requests to it fail immediately as closed.</summary>
+    [Fact]
+    public async Task SetClosed_DisconnectsAndStaysDown()
+    {
+        await using Pair pair = await ConnectedPair();
+
+        pair.A.SetClosed(endpoint, true);
+
+        await WaitUntil(() => pair.AConnections.Events.SequenceEqual(["connected", "disconnected"]));
+        await Task.Delay(150);
+        Assert.Equal(["connected", "disconnected"], pair.AConnections.Events);
+        IOException error = await Assert.ThrowsAsync<IOException>(() => pair.A.Request(endpoint, new byte[] { 1 }));
+        Assert.Contains("closed", error.Message);
+    }
+
+    /// <summary>Reopening a closed link brings it back up.</summary>
+    [Fact]
+    public async Task SetClosed_ThenReopened_Reconnects()
+    {
+        await using Pair pair = await ConnectedPair();
+        pair.A.SetClosed(endpoint, true);
+        await WaitUntil(() => pair.AConnections.Events.Contains("disconnected"));
+
+        pair.A.SetClosed(endpoint, false);
+
+        await WaitUntil(() => pair.AConnections.Events.Count(e => e == "connected") == 2);
+        Assert.True(await pair.A.Request(endpoint, new byte[] { 3 }).WaitAsync(timeout));
+    }
+
+    /// <summary>A link closed before it was ever opened never touches the device until it is reopened.</summary>
+    [Fact]
+    public async Task SetClosed_BeforeAnythingOpened_CreatesNoPeerUntilReopened()
+    {
+        FakeMicroGateCable cable = new();
+        await using SerialPeerTransport transport = new(cable.EndA, logger, TimeSpan.FromMilliseconds(20));
+
+        transport.SetClosed(endpoint, true);
+        await Task.Delay(100);
+        Assert.Equal(0, cable.PeersCreated);
+
+        transport.SetClosed(endpoint, false);
+        await WaitUntil(() => cable.PeersCreated >= 1);
+    }
+
+    /// <summary>Closing a link that is still waiting for the other end abandons the attempt instead of hanging on to the device.</summary>
+    [Fact]
+    public async Task SetClosed_WhileConnecting_AbandonsAttempt()
+    {
+        FakeMicroGateCable cable = new();
+        await using SerialPeerTransport transport = new(cable.EndA, logger, TimeSpan.FromMilliseconds(20));
+        transport.Open(endpoint);
+        await WaitUntil(() => cable.PeersCreated == 1);
+
+        transport.SetClosed(endpoint, true);
+        await Task.Delay(150);
+
+        Assert.Equal(1, cable.PeersCreated);
+    }
+
+    /// <summary>Reset drops the link and it comes back up on its own; on a closed link it does nothing.</summary>
+    [Fact]
+    public async Task Reset_ReconnectsOpenLink_IgnoredWhenClosed()
+    {
+        await using Pair pair = await ConnectedPair();
+
+        pair.A.Reset(endpoint);
+        await WaitUntil(() => pair.AConnections.Events.SequenceEqual(["connected", "disconnected", "connected"]));
+
+        pair.A.SetClosed(endpoint, true);
+        await WaitUntil(() => pair.AConnections.Events.Count(e => e == "disconnected") == 2);
+        pair.A.Reset(endpoint);
+        await Task.Delay(100);
+        Assert.Equal(4, pair.AConnections.Events.Count);
+    }
+
+    /// <summary>Reset on an endpoint that was never opened does not open it.</summary>
+    [Fact]
+    public async Task Reset_UnopenedEndpoint_DoesNotOpenIt()
+    {
+        FakeMicroGateCable cable = new();
+        await using SerialPeerTransport transport = new(cable.EndA, logger, TimeSpan.FromMilliseconds(20));
+
+        transport.Reset(endpoint);
+        await Task.Delay(50);
+
+        Assert.Equal(0, cable.PeersCreated);
+    }
+
     /// <summary>Two endpoints naming the same port and address share one link; a different address is a separate link.</summary>
     [Fact]
     public async Task Open_SameEndpointTwice_SharesOneLink()

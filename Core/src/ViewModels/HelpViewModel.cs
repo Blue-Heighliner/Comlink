@@ -37,7 +37,9 @@ public sealed class HelpViewModel : IHelpViewModel
         [
             new HelpSection("Servers and clients", "The SERVERS table lists the other servers in the cluster and the CLIENTS table lists the client users that belong to this server. A table is hidden while it has no rows."),
             new HelpSection("Reading a row", "A row shows the user it is for, whether the connection is up right now, when it last connected and when it last disconnected. Hover a time to see it in full."),
-            new HelpSection("When a row stays disconnected", "The server keeps trying to reach every listed user, so a row that stays disconnected means that user is not running, cannot be reached at its configured address or port, or presented a certificate this server does not recognize.")
+            new HelpSection("When a row stays disconnected", "The server keeps trying to reach every listed user, so a row that stays disconnected means that user is not running, cannot be reached at its configured address or port, or presented a certificate this server does not recognize."),
+            new HelpSection("Closing a connection", "Right-click a row and choose Close to drop that connection and stop it coming back: the server no longer tries to reach that user and turns away any connection the user makes to it. The row turns grey and reads CLOSED. Choose Open on the same row to let it connect again. A closed connection is forgotten when the application restarts."),
+            new HelpSection("Refreshing a connection", "Right-click a row and choose Refresh to drop the connection and form a new one straight away, which is useful when a row looks stuck. Refresh is not available on a closed connection.")
         ]),
         new HelpTab("Activity",
         [
@@ -91,7 +93,8 @@ public sealed class HelpViewModel : IHelpViewModel
             tabs.Add(new HelpTab("Connection",
             [
                 new HelpSection("The status row", "This instance sends and receives through a server. The row at the bottom of the window shows whether that connection is up, when it last connected and when it last dropped."),
-                new HelpSection("When it is down", "Messages you send while the connection is down fail rather than waiting. The application keeps trying to reconnect, and the row turns to connected as soon as it succeeds. Send again after that.")
+                new HelpSection("When it is down", "Messages you send while the connection is down fail rather than waiting. The application keeps trying to reconnect, and the row turns to connected as soon as it succeeds. Send again after that."),
+                new HelpSection("Closing and refreshing", "Right-click the row to choose Close, which drops the connection and stops the application reconnecting, or Refresh, which drops it and forms a new one straight away. While it is closed the row is grey and reads CLOSED, sending fails, and connections from the server are turned away; choose Open on the row to go back to normal. A closed connection is forgotten when the application restarts.")
             ]));
         }
 

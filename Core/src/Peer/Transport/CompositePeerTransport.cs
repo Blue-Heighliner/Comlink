@@ -42,6 +42,12 @@ internal sealed class CompositePeerTransport : IPeerTransport
     public void Open(UserEndpoint endpoint) => Select(endpoint)?.Open(endpoint);
 
     /// <inheritdoc />
+    public void SetClosed(UserEndpoint endpoint, bool closed) => Select(endpoint)?.SetClosed(endpoint, closed);
+
+    /// <inheritdoc />
+    public void Reset(UserEndpoint endpoint) => Select(endpoint)?.Reset(endpoint);
+
+    /// <inheritdoc />
     public Task<bool> Request(UserEndpoint target, ReadOnlyMemory<byte> data, PeerSendOptions? options = null, CancellationToken cancellation = default)
         => (Select(target) ?? throw new IOException($"IP connections are unavailable, cannot reach {target}")).Request(target, data, options, cancellation);
 

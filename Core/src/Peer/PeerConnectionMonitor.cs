@@ -33,24 +33,45 @@ internal sealed class PeerConnectionMonitor(TimeSpan? steadyInterval = null, Tim
     /// <param name="transport">The transport to send heartbeats through.</param>
     /// <param name="target">The hierarchical peer to maintain a connection to.</param>
     /// <param name="cancellation">Stops sending heartbeats.</param>
-    public void Maintain(IPeerTransport transport, UserEndpoint target, CancellationToken cancellation)
-        => _ = Task.Run(() => Loop(transport, target, cancellation), cancellation);
+    /// <param name="acknowledged">
+    /// Invoked each time the remote node acknowledges a heartbeat. A connection only counts as up once a heartbeat has
+    /// been acknowledged: a remote node that has closed the connection accepts it and drops it again without ever
+    /// answering, and treating the bare connection as up would flash it green every time.
+    /// </param>
+    /// <returns>A handle that can pause, resume, or immediately trigger the heartbeat loop.</returns>
+    public PeerLinkControl Maintain(IPeerTransport transport, UserEndpoint target, CancellationToken cancellation, Action? acknowledged = null)
+    {
+        PeerLinkControl control = new();
+        _ = Task.Run(() => Loop(transport, target, control, acknowledged, cancellation), cancellation);
+        return control;
+    }
 
-    private async Task Loop(IPeerTransport transport, UserEndpoint target, CancellationToken cancellation)
+    private async Task Loop(IPeerTransport transport, UserEndpoint target, PeerLinkControl control, Action? acknowledged, CancellationToken cancellation)
     {
         while (!cancellation.IsCancellationRequested)
         {
-            bool connected;
-            try
+            TimeSpan delay = Timeout.InfiniteTimeSpan;
+            if (!control.IsClosed)
             {
-                connected = await transport.Request(target, ReadOnlyMemory<byte>.Empty, new PeerSendOptions { Priority = int.MinValue }, cancellation);
-            }
-            catch
-            {
-                connected = false;
+                bool connected;
+                try
+                {
+                    connected = await transport.Request(target, ReadOnlyMemory<byte>.Empty, new PeerSendOptions { Priority = int.MinValue }, cancellation);
+                }
+                catch
+                {
+                    connected = false;
+                }
+
+                delay = connected ? steadyInterval : fastRetryInterval;
+                if (connected)
+                {
+                    try { acknowledged?.Invoke(); }
+                    catch { }
+                }
             }
 
-            try { await Task.Delay(connected ? steadyInterval : fastRetryInterval, cancellation); }
+            try { await control.Wait(delay, cancellation); }
             catch (OperationCanceledException) { return; }
         }
     }

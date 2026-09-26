@@ -5,6 +5,14 @@
              x:DataType="vm:ConnectionRowViewModel">
 
   <Border Background="{Binding StatusColorHex}" Padding="12,8">
+    <Border.ContextMenu>
+      <ContextMenu>
+        <MenuItem Header="{Binding ToggleClosedText}"
+                  Command="{Binding ToggleClosedCommand}" />
+        <MenuItem Header="Refresh"
+                  Command="{Binding RefreshCommand}" />
+      </ContextMenu>
+    </Border.ContextMenu>
     <Grid ColumnDefinitions="*,80,180,180">
       <TextBlock Grid.Column="0"
                  Text="{Binding UserName}"

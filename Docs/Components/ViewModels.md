@@ -353,10 +353,13 @@ For `EntryType.Message` rows, `IsOutboundMessage` records whether the row is the
 Display row for per-user delivery tracking: `UserName`, `DisplayName` (with group context), `Status (DestinationStatus)`, `StatusText`.
 
 ### `ConnectionRowViewModel`
+Each row also carries the row's right-click menu commands: `ToggleClosedCommand` (closes an open connection or reopens a closed one, with `ToggleClosedText` reading `"Close"`/`"Open"`) and `RefreshCommand` (drops and re-forms the connection; disabled while closed). Both call back into `IConnectionStatusService.SetClosed`/`Refresh` for that row's own kind and user name, supplied by `ConnectionStatusViewModel` when it rebuilds the rows. The menu itself is the `ContextMenu` on `ConnectionRow.axaml`'s root `Border`, so it works on every place the row is shown. See the Peer component doc for what closing and refreshing do.
+
 One row of `IConnectionStatusViewModel.ServerRows`/`ClientRows` (Server mode's connections tables) or the
 single row pinned to the bottom of the window (Client mode): `UserName` (set once, at construction), `IsConnected`,
-`LastConnectedAt`/`LastDisconnectedAt` (`DateTime?`), plus computed `StatusText` (`"UP"`/`"DN"`),
-`StatusColorHex` (`#98C379` green while connected, `#E06C75` red otherwise — the same row is rendered by
+`LastConnectedAt`/`LastDisconnectedAt` (`DateTime?`), `IsClosed`, plus computed `StatusText` (`"CLOSED"` while
+closed, otherwise `"UP"`/`"DN"`), `StatusColorHex` (`#ABB2BF` grey while closed, otherwise `#98C379` green while
+connected and `#E06C75` red - the same row is rendered by
 `Views/Controls/ConnectionRow.axaml` in both places, with its `Border.Background` bound directly to this),
 and `LastConnectedText`/`LastDisconnectedText` (formatted `dd-MMM-yyyy HH:mm`, uppercased; an em dash when
 `null`). Treated as a lightweight display-model DTO — constructed freely by `ConnectionStatusViewModel`, no DI.

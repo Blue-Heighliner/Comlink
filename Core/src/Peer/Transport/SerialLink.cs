@@ -19,7 +19,8 @@ internal sealed class SerialLink : IAsyncDisposable
         PeerEvent<PeerConnectionEventArgs> connected,
         PeerEvent<PeerConnectionEventArgs> disconnected,
         TimeSpan? reconnectDelay = null,
-        TimeSpan? requestTimeout = null)
+        TimeSpan? requestTimeout = null,
+        bool startClosed = false)
     {
         this.endpoint = endpoint;
         this.peerFactory = peerFactory;
@@ -30,6 +31,8 @@ internal sealed class SerialLink : IAsyncDisposable
         this.reconnectDelay = reconnectDelay ?? TimeSpan.FromSeconds(2);
         this.requestTimeout = requestTimeout ?? TimeSpan.FromSeconds(60);
         connection = new PeerConnection(endpoint, false, null, Drop);
+        isClosed = startClosed;
+        if (!startClosed) { openGate.TrySetResult(); }
         loop = Task.Run(Run);
     }
 
@@ -48,19 +51,52 @@ internal sealed class SerialLink : IAsyncDisposable
     private readonly ConcurrentDictionary<uint, TaskCompletionSource<bool>> pending = new();
     private readonly Dictionary<uint, Reassembly> reassemblies = [];
     private readonly Lock reassemblyLock = new();
+    private readonly Lock closeLock = new();
+    private TaskCompletionSource openGate = new(TaskCreationOptions.RunContinuationsAsynchronously);
 
     private volatile IMicroGatePeer? current;
+    private volatile bool isClosed;
+    private CancellationTokenSource? attempt;
     private uint nextId;
     private bool failureLogged;
 
     /// <summary>Whether the link is currently up.</summary>
     public bool IsConnected => current is not null;
 
+    /// <summary>
+    /// Closes or reopens the link. While closed the device is released, no reconnection is attempted, and requests
+    /// fail immediately; reopening starts connecting again.
+    /// </summary>
+    public void SetClosed(bool closed)
+    {
+        lock (closeLock)
+        {
+            isClosed = closed;
+            if (closed)
+            {
+                if (openGate.Task.IsCompleted) { openGate = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously); }
+                attempt?.Cancel();
+            }
+            else
+            {
+                openGate.TrySetResult();
+            }
+        }
+
+        if (closed) { Drop(); }
+    }
+
+    /// <summary>Drops the current link, if there is one; the connect loop then brings up a new one.</summary>
+    public void Reset()
+    {
+        if (!isClosed) { Drop(); }
+    }
+
     /// <summary>Sends <paramref name="data"/> and waits for the remote node's accept or reject.</summary>
     /// <exception cref="IOException">The link is down, dropped while waiting, or the remote node did not answer in time.</exception>
     public async Task<bool> Request(ReadOnlyMemory<byte> data, PeerSendOptions? options, CancellationToken cancellation)
     {
-        IMicroGatePeer peer = current ?? throw new IOException($"Serial link to {endpoint} is not connected");
+        IMicroGatePeer peer = current ?? throw new IOException(isClosed ? $"Serial link to {endpoint} is closed" : $"Serial link to {endpoint} is not connected");
         uint id = Interlocked.Increment(ref nextId);
         TaskCompletionSource<bool> reply = new(TaskCreationOptions.RunContinuationsAsynchronously);
         pending[id] = reply;
@@ -119,6 +155,18 @@ internal sealed class SerialLink : IAsyncDisposable
     {
         while (!lifetime.IsCancellationRequested)
         {
+            TaskCompletionSource gate;
+            lock (closeLock) { gate = openGate; }
+            try { await gate.Task.WaitAsync(lifetime.Token); }
+            catch (OperationCanceledException) { return; }
+
+            using CancellationTokenSource attemptSource = CancellationTokenSource.CreateLinkedTokenSource(lifetime.Token);
+            lock (closeLock)
+            {
+                attempt = attemptSource;
+                if (isClosed) { attemptSource.Cancel(); }
+            }
+
             IMicroGatePeer peer = peerFactory.Create();
             TaskCompletionSource ended = new(TaskCreationOptions.RunContinuationsAsynchronously);
             peer.Received.Listen(OnFrame);
@@ -126,12 +174,13 @@ internal sealed class SerialLink : IAsyncDisposable
 
             try
             {
-                await peer.Start(endpoint.SerialPort!, new MicroGatePeerOptions { Address = endpoint.SerialAddress }, lifetime.Token);
+                await peer.Start(endpoint.SerialPort!, new MicroGatePeerOptions { Address = endpoint.SerialAddress }, attemptSource.Token);
             }
             catch (OperationCanceledException)
             {
                 await DisposeQuietly(peer);
-                return;
+                if (lifetime.IsCancellationRequested) { return; }
+                continue;
             }
             catch (Exception ex)
             {
@@ -147,6 +196,12 @@ internal sealed class SerialLink : IAsyncDisposable
             }
 
             failureLogged = false;
+            if (isClosed)
+            {
+                await DisposeQuietly(peer);
+                continue;
+            }
+
             current = peer;
             logger.LogInformation("Serial link to {Endpoint} connected", endpoint);
             connected.Publish(new PeerConnectionEventArgs { Connection = connection });
@@ -158,9 +213,10 @@ internal sealed class SerialLink : IAsyncDisposable
             FailPending();
             lock (reassemblyLock) { reassemblies.Clear(); }
             disconnected.Publish(new PeerConnectionEventArgs { Connection = connection });
-            if (!lifetime.IsCancellationRequested) { logger.LogWarning("Serial link to {Endpoint} lost", endpoint); }
+            if (!lifetime.IsCancellationRequested && !isClosed) { logger.LogWarning("Serial link to {Endpoint} lost", endpoint); }
 
             await DisposeQuietly(peer);
+            if (isClosed) { continue; }
             if (!await Delay()) { return; }
         }
     }

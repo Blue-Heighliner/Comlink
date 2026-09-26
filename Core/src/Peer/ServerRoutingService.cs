@@ -50,6 +50,8 @@ internal sealed class ServerRoutingService : IPeerService, IConnectionStatusServ
     private readonly ConcurrentDictionary<string, DateTime> childLastConnectedAt = new(StringComparer.OrdinalIgnoreCase);
     private readonly ConcurrentDictionary<string, DateTime> childLastDisconnectedAt = new(StringComparer.OrdinalIgnoreCase);
     private readonly ConcurrentDictionary<PeerConnection, string> inboundConnectionNames = new();
+    private readonly ConcurrentDictionary<string, bool> closedNames = new(StringComparer.OrdinalIgnoreCase);
+    private readonly ConcurrentDictionary<string, PeerLinkControl> monitors = new(StringComparer.OrdinalIgnoreCase);
     private IReadOnlyDictionary<string, ServerUserConfig> userMap = new Dictionary<string, ServerUserConfig>();
     private IPeerTransport? transport;
 
@@ -102,14 +104,14 @@ internal sealed class ServerRoutingService : IPeerService, IConnectionStatusServ
                 continue;
             }
 
-            connectionMonitor.Maintain(activeTransport, endpoint, cancellation);
+            monitors[childName] = connectionMonitor.Maintain(activeTransport, endpoint, cancellation, () => OnHeartbeatAcknowledged(childName));
         }
 
         foreach ((string serverName, ServerUserConfig config) in userMap)
         {
             if (string.Equals(serverName, myName, StringComparison.OrdinalIgnoreCase)) { continue; }
 
-            connectionMonitor.Maintain(activeTransport, config.Endpoint, cancellation);
+            monitors[serverName] = connectionMonitor.Maintain(activeTransport, config.Endpoint, cancellation, () => OnHeartbeatAcknowledged(serverName));
         }
     }
 
@@ -158,17 +160,13 @@ internal sealed class ServerRoutingService : IPeerService, IConnectionStatusServ
         PeerConnection connection = args.Connection;
         if (!connection.IsInbound)
         {
-            string? serverName = FindNameByEndpoint(userMap.Keys, connection.Endpoint);
-            if (serverName is not null)
+            // An IP connection this node dialed only counts as up once a heartbeat is acknowledged (see
+            // OnHeartbeatAcknowledged): a node that has closed the connection accepts it and drops it again without
+            // answering, so counting the bare connection would flash the row green every time. A serial link only
+            // comes up when the far end answers, so it is up straight away.
+            if (connection.Endpoint is { IsSerial: true } && ResolveSerialName(connection) is { } serialName)
             {
-                UpdateServerStatus(serverName, true);
-                return;
-            }
-
-            string? childName = FindChildNameByEndpoint(connection.Endpoint);
-            if (childName is not null)
-            {
-                UpdateChildStatus(childName, true);
+                UpdateStatusForName(serialName, true);
             }
             return;
         }
@@ -188,6 +186,12 @@ internal sealed class ServerRoutingService : IPeerService, IConnectionStatusServ
             return;
         }
 
+        if (closedNames.ContainsKey(remoteName))
+        {
+            connection.Drop();
+            return;
+        }
+
         inboundConnectionNames[connection] = remoteName;
         UpdateStatusForName(remoteName, true);
     }
@@ -201,10 +205,15 @@ internal sealed class ServerRoutingService : IPeerService, IConnectionStatusServ
             return;
         }
 
-        if (connection.Endpoint is { IsSerial: true } && ResolveSerialName(connection) is { } serialName)
+        if (connection.Endpoint is not null && ResolveSerialName(connection) is { } endpointName)
         {
-            UpdateStatusForName(serialName, false);
+            UpdateStatusForName(endpointName, false);
         }
+    }
+
+    private void OnHeartbeatAcknowledged(string name)
+    {
+        if (!closedNames.ContainsKey(name)) { UpdateStatusForName(name, true); }
     }
 
     private void UpdateStatusForName(string remoteName, bool isConnected)
@@ -241,21 +250,8 @@ internal sealed class ServerRoutingService : IPeerService, IConnectionStatusServ
 
     private string? FindNameByCertificateSubject(IEnumerable<string> candidates, string subject)
     {
-        string simpleName = ExtractCommonName(subject);
+        string simpleName = PeerIdentity.ExtractCommonName(subject);
         return candidates.FirstOrDefault(name => string.Equals(engineController.GetCertificateName(name), simpleName, StringComparison.OrdinalIgnoreCase));
-    }
-
-    private static string ExtractCommonName(string distinguishedName)
-    {
-        foreach (string component in distinguishedName.Split(','))
-        {
-            string trimmed = component.Trim();
-            if (trimmed.StartsWith("CN=", StringComparison.OrdinalIgnoreCase))
-            {
-                return trimmed["CN=".Length..];
-            }
-        }
-        return distinguishedName;
     }
 
     private void OnReceived(PeerReceivedEventArgs args)
@@ -346,7 +342,7 @@ internal sealed class ServerRoutingService : IPeerService, IConnectionStatusServ
 
     private async Task TrySendToChild(string childName, ReadOnlyMemory<byte> data)
     {
-        if (transport is null) { return; }
+        if (transport is null || closedNames.ContainsKey(childName)) { return; }
         UserEndpoint? endpoint = engineController.GetEndpoint(childName);
         if (endpoint is null)
         {
@@ -360,7 +356,7 @@ internal sealed class ServerRoutingService : IPeerService, IConnectionStatusServ
 
     private async Task TrySendToServer(string serverName, ReadOnlyMemory<byte> data)
     {
-        if (transport is null) { return; }
+        if (transport is null || closedNames.ContainsKey(serverName)) { return; }
         if (!userMap.TryGetValue(serverName, out ServerUserConfig? config)) { return; }
 
         try { await transport.Request(config.Endpoint, data, cancellation: CancellationToken.None); }
@@ -390,7 +386,8 @@ internal sealed class ServerRoutingService : IPeerService, IConnectionStatusServ
                     Kind = PeerConnectionKind.Client,
                     IsConnected = childConnected.ContainsKey(childName),
                     LastConnectedAt = childLastConnectedAt.TryGetValue(childName, out DateTime connectedAt) ? connectedAt : null,
-                    LastDisconnectedAt = childLastDisconnectedAt.TryGetValue(childName, out DateTime disconnectedAt) ? disconnectedAt : null
+                    LastDisconnectedAt = childLastDisconnectedAt.TryGetValue(childName, out DateTime disconnectedAt) ? disconnectedAt : null,
+                    IsClosed = closedNames.ContainsKey(childName)
                 });
             }
         }
@@ -404,11 +401,59 @@ internal sealed class ServerRoutingService : IPeerService, IConnectionStatusServ
                 Kind = PeerConnectionKind.Server,
                 IsConnected = serverConnected.ContainsKey(serverName),
                 LastConnectedAt = serverLastConnectedAt.TryGetValue(serverName, out DateTime connectedAt) ? connectedAt : null,
-                LastDisconnectedAt = serverLastDisconnectedAt.TryGetValue(serverName, out DateTime disconnectedAt) ? disconnectedAt : null
+                LastDisconnectedAt = serverLastDisconnectedAt.TryGetValue(serverName, out DateTime disconnectedAt) ? disconnectedAt : null,
+                IsClosed = closedNames.ContainsKey(serverName)
             });
         }
 
         return statuses;
+    }
+
+    /// <inheritdoc />
+    public void SetClosed(PeerConnectionKind kind, string userName, bool closed)
+    {
+        if (transport is null || !monitors.TryGetValue(userName, out PeerLinkControl? monitor) || closedNames.ContainsKey(userName) == closed) { return; }
+
+        UserEndpoint? endpoint = ResolveEndpoint(kind, userName);
+        if (closed)
+        {
+            closedNames[userName] = true;
+            if (endpoint is not null) { transport.SetClosed(endpoint, true); }
+            monitor.Close();
+            DropInbound(userName);
+            UpdateStatusForName(userName, false);
+        }
+        else
+        {
+            closedNames.TryRemove(userName, out _);
+            if (endpoint is not null) { transport.SetClosed(endpoint, false); }
+            monitor.Open();
+        }
+
+        StatusesChanged?.Invoke();
+    }
+
+    /// <inheritdoc />
+    public void Refresh(PeerConnectionKind kind, string userName)
+    {
+        if (transport is null || !monitors.TryGetValue(userName, out PeerLinkControl? monitor) || closedNames.ContainsKey(userName)) { return; }
+
+        if (ResolveEndpoint(kind, userName) is { } endpoint) { transport.Reset(endpoint); }
+        DropInbound(userName);
+        monitor.Refresh();
+    }
+
+    private UserEndpoint? ResolveEndpoint(PeerConnectionKind kind, string userName)
+        => kind == PeerConnectionKind.Server
+            ? userMap.TryGetValue(userName, out ServerUserConfig? config) ? config.Endpoint : null
+            : engineController.GetEndpoint(userName);
+
+    private void DropInbound(string userName)
+    {
+        foreach ((PeerConnection connection, string name) in inboundConnectionNames)
+        {
+            if (string.Equals(name, userName, StringComparison.OrdinalIgnoreCase)) { connection.Drop(); }
+        }
     }
 
     private async Task<bool> SendOnceAndCleanup(string messageId, object message, CancellationToken cancellation)

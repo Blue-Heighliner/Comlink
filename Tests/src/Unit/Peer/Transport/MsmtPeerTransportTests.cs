@@ -227,6 +227,81 @@ public sealed class MsmtPeerTransportTests
         Assert.Equal(target, connection.Endpoint);
     }
 
+    /// <summary>Closing an endpoint drops its live outbound connection and makes requests to it fail without contacting MSMT; other endpoints are unaffected.</summary>
+    [Fact]
+    public async Task SetClosed_DropsConnectionAndBlocksRequests()
+    {
+        Fixture fx = Build();
+        Acknowledge(fx.Peer);
+        Mock<IMsmtConnection> msmt = OutboundConnection(target);
+        fx.Connected.Publish(new MsmtConnectedEventArgs { Connection = msmt.Object });
+
+        fx.Transport.SetClosed(target, true);
+
+        msmt.Verify(c => c.Drop(), Times.Once);
+        await Assert.ThrowsAsync<IOException>(() => fx.Transport.Request(target, new byte[] { 1 }));
+        fx.Peer.Verify(p => p.Request(It.IsAny<MsmtNameTarget>(), It.IsAny<IMemoryOwner<byte>>(), It.IsAny<MsmtSendOptions>(), It.IsAny<CancellationToken>()), Times.Never);
+        Assert.True(await fx.Transport.Request(new UserEndpoint { IpAddress = "10.9.9.9", Port = 1 }, new byte[] { 1 }));
+    }
+
+    /// <summary>Reopening an endpoint lets requests to it through again.</summary>
+    [Fact]
+    public async Task SetClosed_ThenReopened_AllowsRequests()
+    {
+        Fixture fx = Build();
+        Acknowledge(fx.Peer);
+        fx.Transport.SetClosed(target, true);
+
+        fx.Transport.SetClosed(target, false);
+
+        Assert.True(await fx.Transport.Request(target, new byte[] { 1 }));
+    }
+
+    /// <summary>Reset drops the live outbound connection to the endpoint but leaves it open for new requests.</summary>
+    [Fact]
+    public async Task Reset_DropsConnectionButStaysOpen()
+    {
+        Fixture fx = Build();
+        Acknowledge(fx.Peer);
+        Mock<IMsmtConnection> msmt = OutboundConnection(target);
+        fx.Connected.Publish(new MsmtConnectedEventArgs { Connection = msmt.Object });
+
+        fx.Transport.Reset(target);
+
+        msmt.Verify(c => c.Drop(), Times.Once);
+        Assert.True(await fx.Transport.Request(target, new byte[] { 1 }));
+    }
+
+    /// <summary>Reset does nothing to a closed endpoint, and does nothing when there is no connection to drop.</summary>
+    [Fact]
+    public void Reset_WhenClosedOrNotConnected_DoesNothing()
+    {
+        Fixture fx = Build();
+        Mock<IMsmtConnection> msmt = OutboundConnection(target);
+        fx.Transport.Reset(target);
+        fx.Connected.Publish(new MsmtConnectedEventArgs { Connection = msmt.Object });
+        fx.Transport.SetClosed(target, true);
+        msmt.Invocations.Clear();
+
+        fx.Transport.Reset(target);
+
+        msmt.Verify(c => c.Drop(), Times.Never);
+    }
+
+    /// <summary>After a connection is reported disconnected it is no longer dropped by a later close or reset.</summary>
+    [Fact]
+    public void Reset_AfterDisconnect_DoesNotDropStaleConnection()
+    {
+        Fixture fx = Build();
+        Mock<IMsmtConnection> msmt = OutboundConnection(target);
+        fx.Connected.Publish(new MsmtConnectedEventArgs { Connection = msmt.Object });
+        fx.Disconnected.Publish(new MsmtDisconnectedEventArgs { Connection = msmt.Object });
+
+        fx.Transport.Reset(target);
+
+        msmt.Verify(c => c.Drop(), Times.Never);
+    }
+
     /// <summary>StartListener forwards the port, and Open is a no-op since IP connections are dialed on demand.</summary>
     [Fact]
     public void StartListener_ForwardsPort_AndOpenDoesNothing()

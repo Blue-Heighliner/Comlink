@@ -19,6 +19,8 @@ internal sealed class MsmtPeerTransport : IPeerTransport
 
     private readonly IMsmtPeer peer;
     private readonly ConcurrentDictionary<IMsmtConnection, PeerConnection> connections = new();
+    private readonly ConcurrentDictionary<string, PeerConnection> outbound = new();
+    private readonly ConcurrentDictionary<string, bool> closed = new();
     private readonly PeerEvent<PeerReceivedEventArgs> received = new();
     private readonly PeerEvent<PeerConnectionEventArgs> connected = new();
     private readonly PeerEvent<PeerConnectionEventArgs> disconnected = new();
@@ -41,8 +43,30 @@ internal sealed class MsmtPeerTransport : IPeerTransport
     }
 
     /// <inheritdoc />
+    public void SetClosed(UserEndpoint endpoint, bool isClosed)
+    {
+        if (isClosed)
+        {
+            closed[endpoint.Key] = true;
+            DropOutbound(endpoint);
+        }
+        else
+        {
+            closed.TryRemove(endpoint.Key, out _);
+        }
+    }
+
+    /// <inheritdoc />
+    public void Reset(UserEndpoint endpoint)
+    {
+        if (!closed.ContainsKey(endpoint.Key)) { DropOutbound(endpoint); }
+    }
+
+    /// <inheritdoc />
     public async Task<bool> Request(UserEndpoint target, ReadOnlyMemory<byte> data, PeerSendOptions? options = null, CancellationToken cancellation = default)
     {
+        if (closed.ContainsKey(target.Key)) { throw new IOException($"Connection to {target} is closed"); }
+
         MsmtSendOptions sendOptions = new() { Priority = options?.Priority ?? 0, Tag = options?.Transmitted is { } transmitted ? new TransmittedTag(transmitted) : null };
         MsmtResponse response = await peer.Request(new MsmtTarget { Host = target.IpAddress, Port = target.Port }, data, sendOptions, cancellation);
         response.Payload.Dispose();
@@ -57,13 +81,23 @@ internal sealed class MsmtPeerTransport : IPeerTransport
             ? new PeerConnection(new UserEndpoint { IpAddress = c.Target.Host, Port = c.Target.Port }, false, c.Identity?.Subject, c.Drop)
             : new PeerConnection(null, true, c.Identity?.Subject, c.Drop));
 
+    private void DropOutbound(UserEndpoint endpoint)
+    {
+        if (outbound.TryGetValue(endpoint.Key, out PeerConnection? connection)) { connection.Drop(); }
+    }
+
     private void OnConnected(MsmtConnectedEventArgs args)
-        => connected.Publish(new PeerConnectionEventArgs { Connection = Wrap(args.Connection) });
+    {
+        PeerConnection connection = Wrap(args.Connection);
+        if (connection.Endpoint is { } endpoint) { outbound[endpoint.Key] = connection; }
+        connected.Publish(new PeerConnectionEventArgs { Connection = connection });
+    }
 
     private void OnDisconnected(MsmtDisconnectedEventArgs args)
     {
         if (connections.TryRemove(args.Connection, out PeerConnection? connection))
         {
+            if (connection.Endpoint is { } endpoint) { outbound.TryRemove(new KeyValuePair<string, PeerConnection>(endpoint.Key, connection)); }
             disconnected.Publish(new PeerConnectionEventArgs { Connection = connection });
         }
     }

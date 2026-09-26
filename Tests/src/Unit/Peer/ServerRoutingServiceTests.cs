@@ -315,18 +315,20 @@ public sealed class ServerRoutingServiceTests
         await fx.StartTask;
     }
 
-    /// <summary>Once an outbound connection to another server is established (e.g. via routing a message to it), GetStatuses reports it connected with a LastConnectedAt timestamp.</summary>
+    /// <summary>A bare outbound IP connection to another server does not count as up until a heartbeat over it is acknowledged, so a server that closed this one and drops the connection straight away never flashes green.</summary>
     [Fact]
-    public async Task GetStatuses_ServerConnectedOutbound_ReturnsConnectedRow()
+    public async Task GetStatuses_ServerConnectedOutboundWithoutHeartbeatAck_StaysDown()
     {
         Fixture fx = await BuildStarted();
+        int raised = 0;
+        fx.Service.StatusesChanged += () => raised++;
 
         fx.Connected.Publish(new PeerConnectionEventArgs { Connection = new PeerConnection(serverBEndpoint, false, null, () => { }) });
 
         PeerConnectionStatus status = Assert.Single(fx.Service.GetStatuses(), s => s.UserName == "ServerB");
-        Assert.True(status.IsConnected);
-        Assert.NotNull(status.LastConnectedAt);
-        Assert.Null(status.LastDisconnectedAt);
+        Assert.False(status.IsConnected);
+        Assert.Null(status.LastConnectedAt);
+        Assert.Equal(0, raised);
 
         fx.Cts.Cancel();
         await fx.StartTask;
@@ -524,6 +526,230 @@ public sealed class ServerRoutingServiceTests
 
         await Task.Delay(50);
         Assert.False(RequestedRealPayloadTo(fx, clientA2Endpoint.Port));
+
+        fx.Cts.Cancel();
+        await fx.StartTask;
+    }
+
+    private static int RequestsTo(Fixture fx, UserEndpoint endpoint, bool real = false)
+        => fx.Transport.Invocations.Count(i => i.Method.Name == nameof(IPeerTransport.Request)
+            && endpoint.Equals(i.Arguments[0]) && (!real || IsRealPayload((ReadOnlyMemory<byte>)i.Arguments[1])));
+
+    /// <summary>Closing a child closes its endpoint in the transport, marks its row closed and down, and leaves other rows alone.</summary>
+    [Fact]
+    public async Task SetClosed_Child_ClosesEndpointAndMarksRow()
+    {
+        Fixture fx = await BuildStarted();
+        fx.Connected.Publish(new PeerConnectionEventArgs { Connection = BuildInboundConnection("ClientA1") });
+        fx.Connected.Publish(new PeerConnectionEventArgs { Connection = BuildInboundConnection("ClientA2") });
+        int raised = 0;
+        fx.Service.StatusesChanged += () => raised++;
+
+        fx.Service.SetClosed(PeerConnectionKind.Client, "ClientA1", true);
+
+        fx.Transport.Verify(t => t.SetClosed(clientA1Endpoint, true), Times.Once);
+        PeerConnectionStatus closed = Assert.Single(fx.Service.GetStatuses(), s => s.UserName == "ClientA1");
+        Assert.True(closed.IsClosed);
+        Assert.False(closed.IsConnected);
+        Assert.NotNull(closed.LastDisconnectedAt);
+        PeerConnectionStatus other = Assert.Single(fx.Service.GetStatuses(), s => s.UserName == "ClientA2");
+        Assert.False(other.IsClosed);
+        Assert.True(other.IsConnected);
+        Assert.True(raised > 0);
+
+        fx.Cts.Cancel();
+        await fx.StartTask;
+    }
+
+    /// <summary>Closing a sibling server closes that server's endpoint in the transport.</summary>
+    [Fact]
+    public async Task SetClosed_Server_ClosesServerEndpoint()
+    {
+        Fixture fx = await BuildStarted();
+
+        fx.Service.SetClosed(PeerConnectionKind.Server, "ServerB", true);
+
+        fx.Transport.Verify(t => t.SetClosed(serverBEndpoint, true), Times.Once);
+        Assert.True(Assert.Single(fx.Service.GetStatuses(), s => s.UserName == "ServerB").IsClosed);
+
+        fx.Cts.Cancel();
+        await fx.StartTask;
+    }
+
+    /// <summary>A closed child's existing inbound connection is dropped, and new ones from it are rejected until it is reopened.</summary>
+    [Fact]
+    public async Task SetClosed_Child_DropsExistingAndRejectsNewInboundUntilReopened()
+    {
+        Fixture fx = await BuildStarted();
+        int existing = 0;
+        int rejected = 0;
+        int accepted = 0;
+        fx.Connected.Publish(new PeerConnectionEventArgs { Connection = BuildInboundConnection("ClientA1", () => existing++) });
+
+        fx.Service.SetClosed(PeerConnectionKind.Client, "ClientA1", true);
+        fx.Connected.Publish(new PeerConnectionEventArgs { Connection = BuildInboundConnection("ClientA1", () => rejected++) });
+        Assert.False(Assert.Single(fx.Service.GetStatuses(), s => s.UserName == "ClientA1").IsConnected);
+
+        fx.Service.SetClosed(PeerConnectionKind.Client, "ClientA1", false);
+        fx.Connected.Publish(new PeerConnectionEventArgs { Connection = BuildInboundConnection("ClientA1", () => accepted++) });
+
+        Assert.Equal(1, existing);
+        Assert.Equal(1, rejected);
+        Assert.Equal(0, accepted);
+        PeerConnectionStatus status = Assert.Single(fx.Service.GetStatuses(), s => s.UserName == "ClientA1");
+        Assert.False(status.IsClosed);
+        Assert.True(status.IsConnected);
+
+        fx.Cts.Cancel();
+        await fx.StartTask;
+    }
+
+    /// <summary>Nothing is delivered to a closed child, while other children still receive.</summary>
+    [Fact]
+    public async Task SetClosed_Child_MessagesToItAreNotSent()
+    {
+        Fixture fx = await BuildStarted();
+        AutoConnectAndAcknowledge(fx.Transport, fx.Connected);
+        fx.Service.SetClosed(PeerConnectionKind.Client, "ClientA2", true);
+        PeerConnection clientA1 = BuildInboundConnection("ClientA1");
+        fx.Connected.Publish(new PeerConnectionEventArgs { Connection = clientA1 });
+
+        fx.Received.Publish(ReceivedFrom(clientA1, Encode(MessageTo("ClientA2"))));
+        await Task.Delay(100);
+
+        Assert.Equal(0, RequestsTo(fx, clientA2Endpoint, real: true));
+
+        fx.Cts.Cancel();
+        await fx.StartTask;
+    }
+
+    /// <summary>Nothing is forwarded to a closed sibling server.</summary>
+    [Fact]
+    public async Task SetClosed_Server_MessagesToItAreNotForwarded()
+    {
+        Fixture fx = await BuildStarted();
+        AutoConnectAndAcknowledge(fx.Transport, fx.Connected);
+        fx.Service.SetClosed(PeerConnectionKind.Server, "ServerB", true);
+        PeerConnection clientA1 = BuildInboundConnection("ClientA1");
+        fx.Connected.Publish(new PeerConnectionEventArgs { Connection = clientA1 });
+
+        fx.Received.Publish(ReceivedFrom(clientA1, Encode(MessageTo("ClientB1"))));
+        await Task.Delay(100);
+
+        Assert.Equal(0, RequestsTo(fx, serverBEndpoint, real: true));
+
+        fx.Cts.Cancel();
+        await fx.StartTask;
+    }
+
+    /// <summary>A closed child gets no heartbeats, and reopening it resumes them straight away.</summary>
+    [Fact]
+    public async Task SetClosed_Child_StopsHeartbeats_ReopenResumesThem()
+    {
+        Fixture fx = await BuildStarted(configureTransport: (transport, connected) => AutoConnectAndAcknowledge(transport, connected));
+        await WaitUntil(() => RequestsTo(fx, clientA1Endpoint) >= 1, TimeSpan.FromSeconds(2));
+
+        fx.Service.SetClosed(PeerConnectionKind.Client, "ClientA1", true);
+        await Task.Delay(100);
+        int whileClosed = RequestsTo(fx, clientA1Endpoint);
+        await Task.Delay(150);
+        Assert.Equal(whileClosed, RequestsTo(fx, clientA1Endpoint));
+
+        fx.Service.SetClosed(PeerConnectionKind.Client, "ClientA1", false);
+        await WaitUntil(() => RequestsTo(fx, clientA1Endpoint) > whileClosed, TimeSpan.FromSeconds(2));
+        fx.Transport.Verify(t => t.SetClosed(clientA1Endpoint, false), Times.Once);
+
+        fx.Cts.Cancel();
+        await fx.StartTask;
+    }
+
+    /// <summary>Refresh resets the endpoint, drops that user's inbound connections, and heartbeats straight away; it does nothing while closed.</summary>
+    [Fact]
+    public async Task Refresh_ResetsDropsInboundAndHeartbeatsNow_IgnoredWhenClosed()
+    {
+        Fixture fx = await BuildStarted(configureTransport: (transport, connected) => AutoConnectAndAcknowledge(transport, connected));
+        await WaitUntil(() => RequestsTo(fx, clientA1Endpoint) >= 1, TimeSpan.FromSeconds(2));
+        int drops = 0;
+        fx.Connected.Publish(new PeerConnectionEventArgs { Connection = BuildInboundConnection("ClientA1", () => drops++) });
+        int before = RequestsTo(fx, clientA1Endpoint);
+
+        fx.Service.Refresh(PeerConnectionKind.Client, "ClientA1");
+
+        fx.Transport.Verify(t => t.Reset(clientA1Endpoint), Times.Once);
+        Assert.Equal(1, drops);
+        await WaitUntil(() => RequestsTo(fx, clientA1Endpoint) > before, TimeSpan.FromSeconds(2));
+
+        fx.Service.SetClosed(PeerConnectionKind.Client, "ClientA1", true);
+        fx.Service.Refresh(PeerConnectionKind.Client, "ClientA1");
+        fx.Transport.Verify(t => t.Reset(clientA1Endpoint), Times.Once);
+
+        fx.Cts.Cancel();
+        await fx.StartTask;
+    }
+
+    /// <summary>Closing or refreshing a name the server does not track does nothing.</summary>
+    [Fact]
+    public async Task SetClosedAndRefresh_UnknownName_DoNothing()
+    {
+        Fixture fx = await BuildStarted();
+
+        fx.Service.SetClosed(PeerConnectionKind.Client, "Nobody", true);
+        fx.Service.Refresh(PeerConnectionKind.Client, "Nobody");
+
+        fx.Transport.Verify(t => t.SetClosed(It.IsAny<UserEndpoint>(), It.IsAny<bool>()), Times.Never);
+        fx.Transport.Verify(t => t.Reset(It.IsAny<UserEndpoint>()), Times.Never);
+
+        fx.Cts.Cancel();
+        await fx.StartTask;
+    }
+
+    /// <summary>A serial child can be closed too: the transport closes its serial endpoint, which releases the port.</summary>
+    [Fact]
+    public async Task SetClosed_SerialChild_ClosesSerialEndpoint()
+    {
+        Fixture fx = await BuildStarted(userMap: SerialTopology(), childEndpoints: SerialChildren());
+        fx.Connected.Publish(new PeerConnectionEventArgs { Connection = BuildSerialConnection(clientA1SerialEndpoint) });
+
+        fx.Service.SetClosed(PeerConnectionKind.Client, "ClientA1", true);
+
+        fx.Transport.Verify(t => t.SetClosed(clientA1SerialEndpoint, true), Times.Once);
+        Assert.False(Assert.Single(fx.Service.GetStatuses(), s => s.UserName == "ClientA1").IsConnected);
+
+        fx.Cts.Cancel();
+        await fx.StartTask;
+    }
+
+    /// <summary>An outbound connection to a child or server going down is reflected on its row, not only inbound ones.</summary>
+    [Fact]
+    public async Task OutboundConnectionDisconnects_MarksRowDown()
+    {
+        Fixture fx = await BuildStarted(configureTransport: (transport, connected) => AutoConnectAndAcknowledge(transport, connected));
+        await WaitUntil(() => fx.Service.GetStatuses().Single(s => s.UserName == "ServerB").IsConnected, TimeSpan.FromSeconds(2));
+        PeerConnection outbound = new(serverBEndpoint, false, null, () => { });
+
+        fx.Disconnected.Publish(new PeerConnectionEventArgs { Connection = outbound });
+
+        PeerConnectionStatus status = Assert.Single(fx.Service.GetStatuses(), s => s.UserName == "ServerB");
+        Assert.False(status.IsConnected);
+        Assert.NotNull(status.LastDisconnectedAt);
+
+        fx.Cts.Cancel();
+        await fx.StartTask;
+    }
+
+    /// <summary>A heartbeat acknowledged for a user that has since been closed does not bring its row back up.</summary>
+    [Fact]
+    public async Task HeartbeatAcknowledged_ForClosedUser_DoesNotMarkUp()
+    {
+        Fixture fx = await BuildStarted(configureTransport: (transport, connected) => AutoConnectAndAcknowledge(transport, connected));
+        await WaitUntil(() => fx.Service.GetStatuses().Single(s => s.UserName == "ClientA1").IsConnected, TimeSpan.FromSeconds(2));
+
+        fx.Service.SetClosed(PeerConnectionKind.Client, "ClientA1", true);
+        await Task.Delay(100);
+
+        PeerConnectionStatus status = Assert.Single(fx.Service.GetStatuses(), s => s.UserName == "ClientA1");
+        Assert.True(status.IsClosed);
+        Assert.False(status.IsConnected);
 
         fx.Cts.Cancel();
         await fx.StartTask;

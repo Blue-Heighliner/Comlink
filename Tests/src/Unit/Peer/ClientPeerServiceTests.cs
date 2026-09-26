@@ -184,21 +184,84 @@ public sealed class ClientPeerServiceTests
         Assert.Null(status.LastDisconnectedAt);
     }
 
-    /// <summary>Once the transport reports a Connected event for the configured server endpoint, GetStatuses reports the connected row with a LastConnectedAt timestamp.</summary>
+    /// <summary>A bare IP connection to the server does not count as up: a server that has closed this client accepts the connection and drops it again without ever answering, which would otherwise flash the row green.</summary>
     [Fact]
-    public async Task GetStatuses_ServerConnected_ReturnsConnectedRow()
+    public async Task GetStatuses_ConnectionWithoutAcknowledgedHeartbeat_StaysDown()
     {
         (ClientPeerService service, _, TestObservable<PeerConnectionEventArgs> connected, _, _) = Build();
+        int raised = 0;
+        service.StatusesChanged += () => raised++;
         using CancellationTokenSource cts = new();
         Task startTask = service.Start(cts.Token);
-        await Task.Delay(20);
+        await Task.Delay(50);
 
         connected.Publish(new PeerConnectionEventArgs { Connection = ConnectionTo(serverEndpoint) });
 
         PeerConnectionStatus status = Assert.Single(service.GetStatuses());
-        Assert.True(status.IsConnected);
+        Assert.False(status.IsConnected);
+        Assert.Null(status.LastConnectedAt);
+        Assert.Equal(0, raised);
+
+        cts.Cancel();
+        await startTask;
+    }
+
+    /// <summary>Once a heartbeat to the server is acknowledged, GetStatuses reports the connected row with a LastConnectedAt timestamp.</summary>
+    [Fact]
+    public async Task GetStatuses_HeartbeatAcknowledged_ReturnsConnectedRow()
+    {
+        (ClientPeerService service, Mock<IPeerTransport> transport, _, _, _) = Build();
+        AutoAcknowledge(transport);
+        using CancellationTokenSource cts = new();
+        Task startTask = service.Start(cts.Token);
+
+        await WaitUntil(() => service.GetStatuses().Single().IsConnected, TimeSpan.FromSeconds(2));
+
+        PeerConnectionStatus status = Assert.Single(service.GetStatuses());
         Assert.NotNull(status.LastConnectedAt);
         Assert.Null(status.LastDisconnectedAt);
+
+        cts.Cancel();
+        await startTask;
+    }
+
+    /// <summary>The row carries the name from the server's certificate, and keeps it after the connection drops.</summary>
+    [Fact]
+    public async Task GetStatuses_ServerCertificate_NamesTheRow()
+    {
+        (ClientPeerService service, Mock<IPeerTransport> transport, TestObservable<PeerConnectionEventArgs> connected, TestObservable<PeerConnectionEventArgs> disconnected, _) = Build();
+        AutoAcknowledge(transport);
+        using CancellationTokenSource cts = new();
+        Assert.Equal(string.Empty, Assert.Single(service.GetStatuses()).UserName);
+        Task startTask = service.Start(cts.Token);
+        await Task.Delay(20);
+        PeerConnection connection = new(serverEndpoint, false, "CN=Server1, O=Comlink", () => { });
+
+        connected.Publish(new PeerConnectionEventArgs { Connection = connection });
+        await WaitUntil(() => service.GetStatuses().Single().IsConnected, TimeSpan.FromSeconds(2));
+        Assert.Equal("Server1", Assert.Single(service.GetStatuses()).UserName);
+
+        disconnected.Publish(new PeerConnectionEventArgs { Connection = connection });
+        PeerConnectionStatus status = Assert.Single(service.GetStatuses());
+        Assert.False(status.IsConnected);
+        Assert.Equal("Server1", status.UserName);
+
+        cts.Cancel();
+        await startTask;
+    }
+
+    /// <summary>A serial server has no certificate, so its row is named after the port.</summary>
+    [Fact]
+    public async Task GetStatuses_SerialServer_NamedAfterPort()
+    {
+        UserEndpoint serial = new() { SerialPort = "SL0" };
+        (ClientPeerService service, Mock<IPeerTransport> transport, _, _, _) = Build(endpoint: serial);
+        AutoAcknowledge(transport);
+        using CancellationTokenSource cts = new();
+        Task startTask = service.Start(cts.Token);
+        await Task.Delay(20);
+
+        Assert.Equal("SL0", Assert.Single(service.GetStatuses()).UserName);
 
         cts.Cancel();
         await startTask;
@@ -250,10 +313,11 @@ public sealed class ClientPeerServiceTests
     [Fact]
     public async Task GetStatuses_ServerDisconnected_ReturnsDisconnectedRowWithLastDisconnectedAt()
     {
-        (ClientPeerService service, _, TestObservable<PeerConnectionEventArgs> connected, TestObservable<PeerConnectionEventArgs> disconnected, _) = Build();
+        (ClientPeerService service, Mock<IPeerTransport> transport, TestObservable<PeerConnectionEventArgs> connected, TestObservable<PeerConnectionEventArgs> disconnected, _) = Build();
+        AutoAcknowledge(transport);
         using CancellationTokenSource cts = new();
         Task startTask = service.Start(cts.Token);
-        await Task.Delay(20);
+        await WaitUntil(() => service.GetStatuses().Single().IsConnected, TimeSpan.FromSeconds(2));
 
         PeerConnection connection = ConnectionTo(serverEndpoint);
         connected.Publish(new PeerConnectionEventArgs { Connection = connection });
@@ -317,20 +381,138 @@ public sealed class ClientPeerServiceTests
         }
     }
 
-    /// <summary>StatusesChanged fires when the server endpoint connects.</summary>
+    private static (ClientPeerService Service, Mock<IPeerTransport> Transport, TestObservable<PeerConnectionEventArgs> Connected, TestObservable<PeerConnectionEventArgs> Disconnected, CancellationTokenSource Cts, Task StartTask) BuildRunning()
+    {
+        (ClientPeerService service, Mock<IPeerTransport> transport, TestObservable<PeerConnectionEventArgs> connected, TestObservable<PeerConnectionEventArgs> disconnected, _) = Build();
+        AutoAcknowledge(transport);
+        CancellationTokenSource cts = new();
+        Task startTask = service.Start(cts.Token);
+        return (service, transport, connected, disconnected, cts, startTask);
+    }
+
+    private static int Heartbeats(Mock<IPeerTransport> transport) => transport.Invocations.Count(i => i.Method.Name == nameof(IPeerTransport.Request));
+
+    /// <summary>Closing the server connection closes the endpoint in the transport, marks the row closed and down, and stops both heartbeats and sends.</summary>
+    [Fact]
+    public async Task SetClosed_True_ClosesEndpointStopsHeartbeatsAndSends()
+    {
+        (ClientPeerService service, Mock<IPeerTransport> transport, TestObservable<PeerConnectionEventArgs> connected, _, CancellationTokenSource cts, Task startTask) = BuildRunning();
+        await Task.Delay(50);
+        connected.Publish(new PeerConnectionEventArgs { Connection = ConnectionTo(serverEndpoint) });
+        int raised = 0;
+        service.StatusesChanged += () => raised++;
+
+        service.SetClosed(PeerConnectionKind.Server, string.Empty, true);
+
+        transport.Verify(t => t.SetClosed(serverEndpoint, true), Times.Once);
+        PeerConnectionStatus status = Assert.Single(service.GetStatuses());
+        Assert.True(status.IsClosed);
+        Assert.False(status.IsConnected);
+        Assert.True(raised > 0);
+        Assert.False(await service.Send("DEST", new TestMessage { MessageId = "M1", FromUser = "SOURCE" }));
+
+        cts.Cancel();
+        await startTask;
+    }
+
+    /// <summary>A closed client drops the connections the server opened to it and rejects new ones, but accepts them again once reopened.</summary>
+    [Fact]
+    public async Task SetClosed_DropsAndRejectsInboundConnections_UntilReopened()
+    {
+        (ClientPeerService service, _, TestObservable<PeerConnectionEventArgs> connected, _, CancellationTokenSource cts, Task startTask) = BuildRunning();
+        await Task.Delay(50);
+        int existingDrops = 0;
+        int lateDrops = 0;
+        int reopenedDrops = 0;
+        connected.Publish(new PeerConnectionEventArgs { Connection = new PeerConnection(null, true, "CN=Server", () => existingDrops++) });
+
+        service.SetClosed(PeerConnectionKind.Server, string.Empty, true);
+        connected.Publish(new PeerConnectionEventArgs { Connection = new PeerConnection(null, true, "CN=Server", () => lateDrops++) });
+        service.SetClosed(PeerConnectionKind.Server, string.Empty, false);
+        connected.Publish(new PeerConnectionEventArgs { Connection = new PeerConnection(null, true, "CN=Server", () => reopenedDrops++) });
+
+        Assert.Equal(1, existingDrops);
+        Assert.Equal(1, lateDrops);
+        Assert.Equal(0, reopenedDrops);
+
+        cts.Cancel();
+        await startTask;
+    }
+
+    /// <summary>Reopening reopens the endpoint and resumes heartbeats.</summary>
+    [Fact]
+    public async Task SetClosed_False_ReopensAndResumesHeartbeats()
+    {
+        (ClientPeerService service, Mock<IPeerTransport> transport, _, _, CancellationTokenSource cts, Task startTask) = BuildRunning();
+        await Task.Delay(50);
+        service.SetClosed(PeerConnectionKind.Server, string.Empty, true);
+        await Task.Delay(100);
+        int whileClosed = Heartbeats(transport);
+
+        service.SetClosed(PeerConnectionKind.Server, string.Empty, false);
+        await WaitUntil(() => Heartbeats(transport) > whileClosed, TimeSpan.FromSeconds(2));
+
+        transport.Verify(t => t.SetClosed(serverEndpoint, false), Times.Once);
+        Assert.False(Assert.Single(service.GetStatuses()).IsClosed);
+        Assert.True(await service.Send("DEST", new TestMessage { MessageId = "M2", FromUser = "SOURCE" }));
+
+        cts.Cancel();
+        await startTask;
+    }
+
+    /// <summary>Refresh resets the server endpoint, drops the connections the server opened, and heartbeats straight away.</summary>
+    [Fact]
+    public async Task Refresh_ResetsEndpointDropsInboundAndHeartbeatsNow()
+    {
+        (ClientPeerService service, Mock<IPeerTransport> transport, TestObservable<PeerConnectionEventArgs> connected, _, CancellationTokenSource cts, Task startTask) = BuildRunning();
+        await WaitUntil(() => Heartbeats(transport) >= 1, TimeSpan.FromSeconds(2));
+        int drops = 0;
+        connected.Publish(new PeerConnectionEventArgs { Connection = new PeerConnection(null, true, "CN=Server", () => drops++) });
+        int before = Heartbeats(transport);
+
+        service.Refresh(PeerConnectionKind.Server, string.Empty);
+
+        transport.Verify(t => t.Reset(serverEndpoint), Times.Once);
+        Assert.Equal(1, drops);
+        await WaitUntil(() => Heartbeats(transport) > before, TimeSpan.FromSeconds(2));
+
+        cts.Cancel();
+        await startTask;
+    }
+
+    /// <summary>Refresh does nothing while closed, and neither call does anything before the service has started or for a Client-kind row.</summary>
+    [Fact]
+    public async Task RefreshAndSetClosed_IgnoredWhenNotApplicable()
+    {
+        (ClientPeerService notStarted, _, _, _, _) = Build();
+        notStarted.SetClosed(PeerConnectionKind.Server, string.Empty, true);
+        notStarted.Refresh(PeerConnectionKind.Server, string.Empty);
+        Assert.False(Assert.Single(notStarted.GetStatuses()).IsClosed);
+
+        (ClientPeerService service, Mock<IPeerTransport> transport, _, _, CancellationTokenSource cts, Task startTask) = BuildRunning();
+        await Task.Delay(50);
+        service.SetClosed(PeerConnectionKind.Client, "X", true);
+        Assert.False(Assert.Single(service.GetStatuses()).IsClosed);
+        service.SetClosed(PeerConnectionKind.Server, string.Empty, true);
+        service.Refresh(PeerConnectionKind.Server, string.Empty);
+        transport.Verify(t => t.Reset(It.IsAny<UserEndpoint>()), Times.Never);
+
+        cts.Cancel();
+        await startTask;
+    }
+
+    /// <summary>StatusesChanged fires when the server connection comes up, which is when its first heartbeat is acknowledged.</summary>
     [Fact]
     public async Task StatusesChanged_OnServerConnect_Fires()
     {
-        (ClientPeerService service, _, TestObservable<PeerConnectionEventArgs> connected, _, _) = Build();
+        (ClientPeerService service, Mock<IPeerTransport> transport, _, _, _) = Build();
+        AutoAcknowledge(transport);
         using CancellationTokenSource cts = new();
 
         TaskCompletionSource raised = new();
         service.StatusesChanged += () => raised.TrySetResult();
 
         Task startTask = service.Start(cts.Token);
-        await Task.Delay(20);
-
-        connected.Publish(new PeerConnectionEventArgs { Connection = ConnectionTo(serverEndpoint) });
 
         await raised.Task.WaitAsync(TimeSpan.FromSeconds(2));
 

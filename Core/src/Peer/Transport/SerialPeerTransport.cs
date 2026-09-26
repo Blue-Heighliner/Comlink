@@ -43,6 +43,15 @@ internal sealed class SerialPeerTransport : IPeerTransport
     public void Open(UserEndpoint endpoint) => GetLink(endpoint);
 
     /// <inheritdoc />
+    public void SetClosed(UserEndpoint endpoint, bool closed) => GetLink(endpoint, closed).SetClosed(closed);
+
+    /// <inheritdoc />
+    public void Reset(UserEndpoint endpoint)
+    {
+        if (links.TryGetValue(endpoint.Key, out Lazy<SerialLink>? link) && link.IsValueCreated) { link.Value.Reset(); }
+    }
+
+    /// <inheritdoc />
     public Task<bool> Request(UserEndpoint target, ReadOnlyMemory<byte> data, PeerSendOptions? options = null, CancellationToken cancellation = default)
         => GetLink(target).Request(data, options, cancellation);
 
@@ -55,10 +64,10 @@ internal sealed class SerialPeerTransport : IPeerTransport
         }
     }
 
-    private SerialLink GetLink(UserEndpoint endpoint)
+    private SerialLink GetLink(UserEndpoint endpoint, bool startClosed = false)
     {
         if (!endpoint.IsSerial) { throw new ArgumentException("Endpoint is not a serial endpoint", nameof(endpoint)); }
 
-        return links.GetOrAdd(endpoint.Key, _ => new Lazy<SerialLink>(() => new SerialLink(endpoint, peerFactory, logger, received, connected, disconnected, reconnectDelay, requestTimeout))).Value;
+        return links.GetOrAdd(endpoint.Key, _ => new Lazy<SerialLink>(() => new SerialLink(endpoint, peerFactory, logger, received, connected, disconnected, reconnectDelay, requestTimeout, startClosed))).Value;
     }
 }

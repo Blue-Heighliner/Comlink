@@ -67,9 +67,12 @@ internal sealed partial class ConnectionStatusViewModel : ObservableObject, ICon
         ClientRows.Clear();
         foreach (PeerConnectionStatus status in statusService.GetStatuses())
         {
-            ConnectionRowViewModel row = new(status.UserName)
+            PeerConnectionKind kind = status.Kind;
+            string userName = status.UserName;
+            ConnectionRowViewModel row = new(userName, closed => statusService.SetClosed(kind, userName, closed), () => statusService.Refresh(kind, userName))
             {
                 IsConnected = status.IsConnected,
+                IsClosed = status.IsClosed,
                 LastConnectedAt = status.LastConnectedAt,
                 LastDisconnectedAt = status.LastDisconnectedAt
             };

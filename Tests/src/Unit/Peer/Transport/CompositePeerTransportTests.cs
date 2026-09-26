@@ -103,6 +103,29 @@ public sealed class CompositePeerTransportTests
         ipPart.Transport.Verify(t => t.Open(ip), Times.Once);
     }
 
+    /// <summary>SetClosed and Reset reach the transport the endpoint belongs to, and are harmless with no IP transport.</summary>
+    [Fact]
+    public void SetClosedAndReset_RouteByEndpointKind()
+    {
+        Part ipPart = BuildPart();
+        Part serialPart = BuildPart();
+        CompositePeerTransport composite = new(ipPart.Transport.Object, serialPart.Transport.Object);
+
+        composite.SetClosed(ip, true);
+        composite.Reset(ip);
+        composite.SetClosed(serial, false);
+        composite.Reset(serial);
+        new CompositePeerTransport(null, serialPart.Transport.Object).SetClosed(ip, true);
+        new CompositePeerTransport(null, serialPart.Transport.Object).Reset(ip);
+
+        ipPart.Transport.Verify(t => t.SetClosed(ip, true), Times.Once);
+        ipPart.Transport.Verify(t => t.Reset(ip), Times.Once);
+        serialPart.Transport.Verify(t => t.SetClosed(serial, false), Times.Once);
+        serialPart.Transport.Verify(t => t.Reset(serial), Times.Once);
+        serialPart.Transport.Verify(t => t.SetClosed(ip, It.IsAny<bool>()), Times.Never);
+        serialPart.Transport.Verify(t => t.Reset(ip), Times.Never);
+    }
+
     /// <summary>Disposing the composite disposes both transports.</summary>
     [Fact]
     public async Task DisposeAsync_DisposesBoth()

@@ -27,6 +27,64 @@ public sealed class ConnectionRowViewModelTests
         Assert.Equal(expectedColor, vm.StatusColorHex);
     }
 
+    /// <summary>A closed row reads CLOSED in grey whether or not it is still marked connected.</summary>
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public void StatusTextAndColor_WhenClosed_AreClosedAndGrey(bool isConnected)
+    {
+        ConnectionRowViewModel vm = new("SERVER-A") { IsConnected = isConnected, IsClosed = true };
+
+        Assert.Equal("CLOSED", vm.StatusText);
+        Assert.Equal("#ABB2BF", vm.StatusColorHex);
+    }
+
+    /// <summary>The toggle command asks to close an open row and to reopen a closed one, and its menu text says which.</summary>
+    [Fact]
+    public void ToggleClosedCommand_TogglesAndLabelsAccordingly()
+    {
+        List<bool> requests = [];
+        ConnectionRowViewModel vm = new("SERVER-A", requests.Add);
+
+        Assert.Equal("Close", vm.ToggleClosedText);
+        vm.ToggleClosedCommand.Execute(null);
+        vm.IsClosed = true;
+        Assert.Equal("Open", vm.ToggleClosedText);
+        vm.ToggleClosedCommand.Execute(null);
+
+        Assert.Equal([true, false], requests);
+    }
+
+    /// <summary>Refresh runs the supplied action while open, and is disabled while closed.</summary>
+    [Fact]
+    public void RefreshCommand_RunsWhileOpen_DisabledWhileClosed()
+    {
+        int refreshes = 0;
+        ConnectionRowViewModel vm = new("SERVER-A", null, () => refreshes++);
+        bool canExecuteChanged = false;
+        vm.RefreshCommand.CanExecuteChanged += (_, _) => canExecuteChanged = true;
+
+        Assert.True(vm.RefreshCommand.CanExecute(null));
+        vm.RefreshCommand.Execute(null);
+        vm.IsClosed = true;
+
+        Assert.Equal(1, refreshes);
+        Assert.True(canExecuteChanged);
+        Assert.False(vm.RefreshCommand.CanExecute(null));
+    }
+
+    /// <summary>A row built without actions has commands that simply do nothing.</summary>
+    [Fact]
+    public void Commands_WithoutActions_DoNothing()
+    {
+        ConnectionRowViewModel vm = new("SERVER-A");
+
+        vm.ToggleClosedCommand.Execute(null);
+        vm.RefreshCommand.Execute(null);
+
+        Assert.False(vm.IsClosed);
+    }
+
     /// <summary>LastConnectedText/LastDisconnectedText render an em dash when never set.</summary>
     [Fact]
     public void LastTimestampText_Null_RendersEmDash()

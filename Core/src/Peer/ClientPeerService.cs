@@ -33,8 +33,13 @@ internal sealed class ClientPeerService : IPeerService, IConnectionStatusService
 
     private readonly ConcurrentDictionary<string, Task<bool>> inFlightSends = new();
 
+    private readonly ConcurrentDictionary<PeerConnection, byte> inboundConnections = new();
+
     private IPeerTransport? transport;
     private UserEndpoint? serverEndpoint;
+    private PeerLinkControl? serverLink;
+    private volatile bool isClosed;
+    private volatile string serverName = string.Empty;
     private volatile bool isConnected;
     private DateTime? lastConnectedAt;
     private DateTime? lastDisconnectedAt;
@@ -64,6 +69,7 @@ internal sealed class ClientPeerService : IPeerService, IConnectionStatusService
         }
 
         serverEndpoint = endpoint;
+        if (endpoint.IsSerial) { serverName = endpoint.SerialPort!; }
         transport = transportFactory.Create();
         transport.Connected.Listen(OnConnected);
         transport.Disconnected.Listen(OnDisconnected);
@@ -73,7 +79,7 @@ internal sealed class ClientPeerService : IPeerService, IConnectionStatusService
             transport.StartListener(engineController.PeerPort);
             logger.LogInformation("Client peer listening for server-originated deliveries");
         }
-        connectionMonitor.Maintain(transport, endpoint, cancellation);
+        serverLink = connectionMonitor.Maintain(transport, endpoint, cancellation, OnHeartbeatAcknowledged);
 
         try { await Task.Delay(Timeout.Infinite, cancellation); }
         catch (OperationCanceledException) { }
@@ -100,16 +106,53 @@ internal sealed class ClientPeerService : IPeerService, IConnectionStatusService
     public IReadOnlyList<PeerConnectionStatus> GetStatuses()
         => [new PeerConnectionStatus
         {
-            UserName = string.Empty,
+            UserName = serverName,
             Kind = PeerConnectionKind.Server,
             IsConnected = isConnected,
             LastConnectedAt = lastConnectedAt,
-            LastDisconnectedAt = lastDisconnectedAt
+            LastDisconnectedAt = lastDisconnectedAt,
+            IsClosed = isClosed
         }];
+
+    /// <inheritdoc />
+    public void SetClosed(PeerConnectionKind kind, string userName, bool closed)
+    {
+        if (kind != PeerConnectionKind.Server || transport is null || serverEndpoint is null || serverLink is null || isClosed == closed) { return; }
+
+        isClosed = closed;
+        transport.SetClosed(serverEndpoint, closed);
+        if (closed)
+        {
+            serverLink.Close();
+            DropInbound();
+            UpdateConnectionStatus(false);
+        }
+        else
+        {
+            serverLink.Open();
+        }
+
+        StatusesChanged?.Invoke();
+    }
+
+    /// <inheritdoc />
+    public void Refresh(PeerConnectionKind kind, string userName)
+    {
+        if (kind != PeerConnectionKind.Server || transport is null || serverEndpoint is null || serverLink is null || isClosed) { return; }
+
+        transport.Reset(serverEndpoint);
+        DropInbound();
+        serverLink.Refresh();
+    }
+
+    private void DropInbound()
+    {
+        foreach (PeerConnection connection in inboundConnections.Keys) { connection.Drop(); }
+    }
 
     private async Task<bool> SendOnce(string messageId, object message, CancellationToken cancellation)
     {
-        if (transport is null || serverEndpoint is null) { return false; }
+        if (transport is null || serverEndpoint is null || isClosed) { return false; }
 
         try
         {
@@ -134,11 +177,37 @@ internal sealed class ClientPeerService : IPeerService, IConnectionStatusService
 
     private void OnConnected(PeerConnectionEventArgs args)
     {
-        if (IsServerConnection(args.Connection)) { UpdateConnectionStatus(true); }
+        if (args.Connection.IsInbound)
+        {
+            if (isClosed)
+            {
+                args.Connection.Drop();
+                return;
+            }
+
+            inboundConnections[args.Connection] = 0;
+        }
+
+        if (!IsServerConnection(args.Connection)) { return; }
+
+        if (args.Connection.IdentitySubject is { } subject) { serverName = PeerIdentity.ExtractCommonName(subject); }
+
+        // An IP connection only counts as up once a heartbeat is acknowledged (see OnHeartbeatAcknowledged); a serial
+        // link is cabled to exactly one node and only ever comes up when that node answers, so it is up immediately.
+        if (args.Connection.Endpoint is { IsSerial: true })
+        {
+            UpdateConnectionStatus(true);
+        }
+    }
+
+    private void OnHeartbeatAcknowledged()
+    {
+        if (!isClosed) { UpdateConnectionStatus(true); }
     }
 
     private void OnDisconnected(PeerConnectionEventArgs args)
     {
+        inboundConnections.TryRemove(args.Connection, out _);
         if (IsServerConnection(args.Connection)) { UpdateConnectionStatus(false); }
     }
 
