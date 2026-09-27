@@ -28,9 +28,11 @@ public sealed class PeerServiceTests
         => peer.Setup(p => p.Request(It.IsAny<UserEndpoint>(), It.IsAny<ReadOnlyMemory<byte>>(), It.IsAny<PeerSendOptions>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync(success);
 
+    private static readonly INetworkSerializer serializer = new ProtobufNetworkSerializer();
+
     private static ReadOnlyMemory<byte> Encode(TestMessage message)
     {
-        using OwnedBuffer buf = PeerSerializer.Serialize(message);
+        using IMemoryOwner<byte> buf = serializer.Serialize(message);
         return buf.Memory.ToArray();
     }
 
@@ -134,6 +136,30 @@ public sealed class PeerServiceTests
             It.Is<UserEndpoint>(t => t.IpAddress == "127.0.0.1" && t.Port == 12345),
             It.IsAny<ReadOnlyMemory<byte>>(),
             It.Is<PeerSendOptions>(o => o.Priority == 0),
+            It.IsAny<CancellationToken>()), Times.Once);
+    }
+
+    /// <summary>Send serializes the message through IEngineController.NetworkSerializer rather than a hardcoded format, so a host override is honored.</summary>
+    [Fact]
+    public async Task Send_UsesEngineControllersNetworkSerializer()
+    {
+        Mock<IPeerTransport> peer = BuildPeerMock();
+        AutoAcknowledge(peer);
+        Mock<TestEngineController> userDirectory = BuildUserDirectory();
+        Mock<INetworkSerializer> customSerializer = new();
+        customSerializer.Setup(s => s.Serialize(It.IsAny<object>())).Returns(new FixedMemoryOwner([9, 9, 9]));
+        userDirectory.Setup(l => l.NetworkSerializer).Returns(customSerializer.Object);
+        PeerService svc = BuildService(peer, userDirectory);
+        TestMessage msg = new() { MessageId = "M1", FromUser = "SOURCE" };
+
+        bool ok = await svc.Send("DEST", msg);
+
+        Assert.True(ok);
+        customSerializer.Verify(s => s.Serialize(msg), Times.Once);
+        peer.Verify(p => p.Request(
+            It.IsAny<UserEndpoint>(),
+            It.Is<ReadOnlyMemory<byte>>(m => m.ToArray().SequenceEqual(new byte[] { 9, 9, 9 })),
+            It.IsAny<PeerSendOptions>(),
             It.IsAny<CancellationToken>()), Times.Once);
     }
 
@@ -393,5 +419,11 @@ public sealed class PeerServiceTests
             if (DateTime.UtcNow > deadline) { throw new TimeoutException("Condition was not met in time."); }
             await Task.Delay(10);
         }
+    }
+
+    private sealed class FixedMemoryOwner(byte[] data) : IMemoryOwner<byte>
+    {
+        public Memory<byte> Memory { get; } = data;
+        public void Dispose() { }
     }
 }

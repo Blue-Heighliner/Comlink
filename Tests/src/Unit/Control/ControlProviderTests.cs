@@ -32,6 +32,25 @@ public sealed class ControlProviderTests
         public override string AppVersion => "4.5.6";
     }
 
+    /// <summary>The default NetworkSerializer is the protobuf-net implementation, and a host can override it entirely.</summary>
+    [Fact]
+    public void DefaultEngineController_NetworkSerializer_DefaultsToProtobufAndIsOverridable()
+    {
+        Assert.IsType<ProtobufNetworkSerializer>(new TestEngineController().NetworkSerializer);
+        Assert.IsType<TestNetworkSerializer>(new TestNetworkSerializerOverride().NetworkSerializer);
+    }
+
+    private sealed class TestNetworkSerializer : INetworkSerializer
+    {
+        public IMemoryOwner<byte> Serialize(object value) => throw new NotSupportedException();
+        public object? Deserialize(ReadOnlyMemory<byte> data) => throw new NotSupportedException();
+    }
+
+    private sealed class TestNetworkSerializerOverride : TestEngineController
+    {
+        public override INetworkSerializer NetworkSerializer { get; } = new TestNetworkSerializer();
+    }
+
     /// <summary>A subclass overriding only AppName automatically gets a matching AppDataPath, since the base computes it via virtual dispatch.</summary>
     [Fact]
     public void DefaultEngineController_OverridingAppNameOnly_AppDataPathFollows()
@@ -748,6 +767,7 @@ public sealed class ControlProviderTests
         ConfiguredEngineController controller = new(fallback, new EngineConfig(), NoCurrentUser);
 
         Assert.Equal(fallback.MessageType, controller.MessageType);
+        Assert.Same(fallback.NetworkSerializer, controller.NetworkSerializer);
 
         object message = controller.CreateMessage();
         Assert.IsType<TestMessage>(message);

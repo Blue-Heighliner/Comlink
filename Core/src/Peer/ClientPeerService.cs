@@ -163,7 +163,7 @@ internal sealed class ClientPeerService : IPeerService, IConnectionStatusService
 
         try
         {
-            using OwnedBuffer buf = PeerSerializer.Serialize(message);
+            using IMemoryOwner<byte> buf = engineController.NetworkSerializer.Serialize(message);
             return await transport.Request(serverEndpoint, buf.Memory, new PeerSendOptions { Priority = engineController.GetPriority(message) }, cancellation);
         }
         catch

@@ -30,7 +30,7 @@ internal static class PeerMessageDispatcher
 
         try
         {
-            object? message = PeerSerializer.Deserialize(engineController.MessageType, data);
+            object? message = engineController.NetworkSerializer.Deserialize(data);
             if (message is null) { return false; }
 
             string confirmationMessageId = engineController.GetConfirmationMessageId(message);

@@ -3,9 +3,10 @@ namespace BlueHeighliner.Comlink.Control;
 /// <summary>
 /// Single control interface consolidating every extension point through which a host application
 /// customises Engine behaviour without modifying Engine code: the concrete message type and its logical
-/// field mapping, app identity/presentation, local user identity, the user/group directory, listener
-/// ports, alert settings, message composition, the automatic print policy, MSMT peer certificate naming
-/// and peer options, network topology, the external systems this instance communicates with, and whether
+/// field mapping, how that message type is serialized for the network, app identity/presentation, local
+/// user identity, the user/group directory, listener ports, alert settings, message composition, the
+/// automatic print policy, MSMT peer certificate naming and peer options, network topology, the external
+/// systems this instance communicates with, and whether
 /// <c>config.json</c> is read at all. External drive discovery and printer discovery/driving are real
 /// OS-level behavior, not configuration or rules, so they live on <see cref="Devices.IExternalDriveProvider"/>
 /// and <see cref="Devices.IPrintDriver"/> instead. See <c>Docs/Components/Control.md</c>.
@@ -13,11 +14,18 @@ namespace BlueHeighliner.Comlink.Control;
 public interface IEngineController
 {
     /// <summary>
-    /// The concrete message type used throughout the engine. Must be protobuf-net serializable (carry
-    /// <c>[ProtoContract]</c>/<c>[ProtoMember]</c> attributes) for wire transport, and must be a type
-    /// LiteDB can serialize for storage.
+    /// The concrete message type used throughout the engine. Must be a type LiteDB can serialize for
+    /// storage, and must satisfy whatever <see cref="NetworkSerializer"/> requires for wire transport - the
+    /// default <see cref="ProtobufNetworkSerializer"/> requires it to carry <c>[ProtoContract]</c>/<c>[ProtoMember]</c> attributes.
     /// </summary>
     Type MessageType { get; }
+
+    /// <summary>
+    /// Serializes and deserializes instances of <see cref="MessageType"/> to and from the bytes actually
+    /// sent across the network. Defaults to <see cref="ProtobufNetworkSerializer"/>; override to use a
+    /// different wire format, as long as every node this instance talks to is configured the same way.
+    /// </summary>
+    INetworkSerializer NetworkSerializer { get; }
 
     /// <summary>The application name, used as the default data folder name and in log headers.</summary>
     string AppName { get; }
@@ -269,6 +277,9 @@ public abstract class DefaultEngineController<TMessage> : IEngineController wher
 
     /// <inheritdoc cref="IEngineController.MessageType" />
     public Type MessageType => typeof(TMessage);
+
+    /// <inheritdoc cref="IEngineController.NetworkSerializer" />
+    public virtual INetworkSerializer NetworkSerializer { get; } = new ProtobufNetworkSerializer();
 
     /// <summary>Creates a new, empty <typeparamref name="TMessage"/>. The default implementation returns <c>new TMessage()</c>; override for custom construction.</summary>
     protected virtual TMessage CreateMessage() => new();
@@ -558,6 +569,8 @@ internal sealed class ConfiguredEngineController : IEngineController
 
     /// <inheritdoc />
     public Type MessageType => fallback.MessageType;
+    /// <inheritdoc />
+    public INetworkSerializer NetworkSerializer => fallback.NetworkSerializer;
     /// <inheritdoc />
     public object CreateMessage() => fallback.CreateMessage();
     /// <inheritdoc />

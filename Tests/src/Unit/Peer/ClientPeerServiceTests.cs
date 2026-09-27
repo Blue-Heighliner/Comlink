@@ -33,9 +33,11 @@ public sealed class ClientPeerServiceTests
 
     private static PeerConnection ConnectionTo(UserEndpoint endpoint) => new(endpoint, false, null, () => { });
 
+    private static readonly INetworkSerializer serializer = new ProtobufNetworkSerializer();
+
     private static ReadOnlyMemory<byte> Encode(TestMessage message)
     {
-        using OwnedBuffer buf = PeerSerializer.Serialize(message);
+        using IMemoryOwner<byte> buf = serializer.Serialize(message);
         return buf.Memory.ToArray();
     }
 

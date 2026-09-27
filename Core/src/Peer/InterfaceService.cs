@@ -81,13 +81,17 @@ internal sealed class InterfaceService : IInterfaceService
         object? message;
         try
         {
-            message = PeerSerializer.Deserialize(engineController.MessageType, data);
+            message = engineController.NetworkSerializer.Deserialize(data);
         }
         catch
         {
             return;
         }
-        if (message is null) { return; }
+
+        // NetworkSerializer determines the type from the data itself, so bytes from an incompatible sender
+        // could describe a type other than this instance's own MessageType; treat that the same as a
+        // failed deserialize rather than let a mismatched cast below throw.
+        if (message is null || message.GetType() != engineController.MessageType) { return; }
 
         UserInfo? userInfo = userService.GetCurrentUserInfo();
         if (userInfo is null) { return; }

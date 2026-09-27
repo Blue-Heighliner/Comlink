@@ -346,8 +346,18 @@ internal sealed class ServerRoutingService : IPeerService, IConnectionStatusServ
 
     private object? TryDeserialize(ReadOnlyMemory<byte> data)
     {
-        try { return PeerSerializer.Deserialize(engineController.MessageType, data); }
-        catch { return null; }
+        try
+        {
+            // NetworkSerializer determines the type from the data itself, so bytes from an incompatible
+            // sender could describe a type other than this instance's own MessageType; treat that the
+            // same as a failed deserialize rather than let a mismatched cast downstream throw.
+            object? message = engineController.NetworkSerializer.Deserialize(data);
+            return message?.GetType() == engineController.MessageType ? message : null;
+        }
+        catch
+        {
+            return null;
+        }
     }
 
     private async Task TrySendToChild(string childName, ReadOnlyMemory<byte> data, int priority)
@@ -470,7 +480,7 @@ internal sealed class ServerRoutingService : IPeerService, IConnectionStatusServ
     {
         try
         {
-            using OwnedBuffer buf = PeerSerializer.Serialize(message);
+            using IMemoryOwner<byte> buf = engineController.NetworkSerializer.Serialize(message);
             await HandleFromChild(currentUserProvider.UserName ?? string.Empty, buf.Memory);
             return true;
         }

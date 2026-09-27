@@ -96,9 +96,11 @@ public sealed class ServerRoutingServiceTests
         return new Fixture(service, transport, connected, disconnected, received, startTask, cts);
     }
 
+    private static readonly INetworkSerializer serializer = new ProtobufNetworkSerializer();
+
     private static ReadOnlyMemory<byte> Encode(TestMessage message)
     {
-        using OwnedBuffer buf = PeerSerializer.Serialize(message);
+        using IMemoryOwner<byte> buf = serializer.Serialize(message);
         return buf.Memory.ToArray();
     }
 

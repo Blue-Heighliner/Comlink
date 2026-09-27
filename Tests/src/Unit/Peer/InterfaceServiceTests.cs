@@ -5,6 +5,7 @@ public sealed class InterfaceServiceTests
 {
     private static readonly ILoggerFactory noLogger = LoggerFactory.Create(_ => { });
     private readonly IEngineController format = new TestEngineController();
+    private static readonly INetworkSerializer serializer = new ProtobufNetworkSerializer();
 
     private static UserInfo MakeUserInfo(string name) => new() { Name = name, Code = "C1", EnvironmentTitle = "T", EnvironmentColor = "#000" };
 
@@ -29,7 +30,7 @@ public sealed class InterfaceServiceTests
             IsAlert = true,
             Priority = 2
         };
-        using OwnedBuffer buf = PeerSerializer.Serialize(incoming);
+        using IMemoryOwner<byte> buf = serializer.Serialize(incoming);
 
         await svc.HandleInterfaceMessage(buf.Memory.ToArray());
 
@@ -49,10 +50,32 @@ public sealed class InterfaceServiceTests
 
         InterfaceService svc = new(peerFactory.Object, format, routing.Object, user.Object, noLogger);
 
-        using OwnedBuffer buf = PeerSerializer.Serialize(new TestMessage { Subject = "Hi" });
+        using IMemoryOwner<byte> buf = serializer.Serialize(new TestMessage { Subject = "Hi" });
         await svc.HandleInterfaceMessage(buf.Memory.ToArray());
 
         routing.Verify(r => r.Route(It.IsAny<string>(), It.IsAny<SendMessagePayload>(), It.IsAny<CancellationToken>()), Times.Never);
+    }
+
+    /// <summary>A payload that describes a type other than the engine's MessageType is dropped without routing or throwing, since the serializer determines the type from the data itself.</summary>
+    [Fact]
+    public async Task HandleInterfaceMessage_ForeignType_IsDroppedWithoutRouting()
+    {
+        Mock<IMsmtSessionPeer.IFactory> peerFactory = new();
+        Mock<IMessageRoutingService> routing = new();
+        Mock<IUserService> user = new();
+        user.Setup(s => s.GetCurrentUserInfo()).Returns(MakeUserInfo("LOCAL"));
+        InterfaceService svc = new(peerFactory.Object, format, routing.Object, user.Object, noLogger);
+        using IMemoryOwner<byte> buf = serializer.Serialize(new ForeignDto { Name = "not a message" });
+
+        await svc.HandleInterfaceMessage(buf.Memory.ToArray());
+
+        routing.Verify(r => r.Route(It.IsAny<string>(), It.IsAny<SendMessagePayload>(), It.IsAny<CancellationToken>()), Times.Never);
+    }
+
+    [ProtoContract]
+    private sealed class ForeignDto
+    {
+        [ProtoMember(1)] public string Name { get; set; } = string.Empty;
     }
 
     /// <summary>Corrupted (non-protobuf) bytes from an interface are dropped without throwing.</summary>
@@ -122,7 +145,7 @@ public sealed class InterfaceServiceTests
                     IMsmtConnection connection = client.Connect(new MsmtNameTarget { Host = "127.0.0.1", Port = port, ServerName = "127.0.0.1" });
                     if (await connection.Wait())
                     {
-                        using OwnedBuffer buf = PeerSerializer.Serialize(outgoing);
+                        using IMemoryOwner<byte> buf = serializer.Serialize(outgoing);
                         await connection.Request(buf.Memory);
                     }
                     await connection.DisposeAsync();

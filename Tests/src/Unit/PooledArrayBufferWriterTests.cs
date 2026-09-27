@@ -49,6 +49,19 @@ public sealed class PooledArrayBufferWriterTests
         Assert.All(result[2..], b => Assert.Equal(0xBB, b));
     }
 
+    /// <summary>WrittenMutableMemory reflects the same written bytes as WrittenMemory, as a mutable view.</summary>
+    [Fact]
+    public void WrittenMutableMemory_ReflectsWrittenBytes()
+    {
+        using PooledArrayBufferWriter<byte> writer = new(initialCapacity: 4);
+
+        Memory<byte> memory = writer.GetMemory(3);
+        new byte[] { 4, 5, 6 }.CopyTo(memory);
+        writer.Advance(3);
+
+        Assert.Equal(new byte[] { 4, 5, 6 }, writer.WrittenMutableMemory.ToArray());
+    }
+
     /// <summary>Disposing more than once is a safe no-op the second time.</summary>
     [Fact]
     public void Dispose_CalledTwice_DoesNotThrow()

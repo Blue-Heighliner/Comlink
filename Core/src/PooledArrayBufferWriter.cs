@@ -16,6 +16,9 @@ internal sealed class PooledArrayBufferWriter<T> : IBufferWriter<T>, IDisposable
     /// <summary>Returns a <see cref="ReadOnlyMemory{T}"/> view over all bytes written so far.</summary>
     internal ReadOnlyMemory<T> WrittenMemory => buffer.AsMemory(0, written);
 
+    /// <summary>Returns a mutable <see cref="Memory{T}"/> view over all bytes written so far, for wrapping in an <see cref="IMemoryOwner{T}"/>.</summary>
+    internal Memory<T> WrittenMutableMemory => buffer.AsMemory(0, written);
+
     /// <inheritdoc />
     public void Advance(int count) => written += count;
 

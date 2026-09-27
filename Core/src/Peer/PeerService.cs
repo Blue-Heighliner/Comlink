@@ -91,7 +91,7 @@ internal sealed class PeerService : IPeerService, IAsyncDisposable
         DeliveryTag tag = new(engineController.GetMessageId(message), userName);
         try
         {
-            using OwnedBuffer buf = PeerSerializer.Serialize(message);
+            using IMemoryOwner<byte> buf = engineController.NetworkSerializer.Serialize(message);
             bool accepted = await transport.Request(
                 endpoint,
                 buf.Memory,
