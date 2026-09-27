@@ -268,17 +268,28 @@ public sealed partial class PrintManagerViewModel : ObservableObject, IPrintMana
             }
 
             bool interrupted = false;
-            foreach (string line in lines)
+            try
             {
-                await printDriver.PrintLine(printer!, line);
-                lock (gate)
+                foreach (string line in lines)
                 {
-                    PrintQueueEntry? top = PeekTopLocked();
-                    interrupted = top is null || top.Id != job.Id;
+                    await printDriver.PrintLine(printer!, line);
+                    lock (gate)
+                    {
+                        PrintQueueEntry? top = PeekTopLocked();
+                        interrupted = top is null || top.Id != job.Id;
+                    }
+                    if (interrupted) { break; }
                 }
-                if (interrupted) { break; }
+                await printDriver.PageFeed(printer!);
             }
-            await printDriver.PageFeed(printer!);
+            catch (Exception ex)
+            {
+                // Left in the queue for the next attempt, which the next job queued or printer chosen starts; an
+                // exception escaping this fire-and-forget loop would otherwise leave printing stuck until restart.
+                activityLogger.LogError(ex, "Printing {EntryId} on {Printer} failed", job.EntryId, printer);
+                lock (gate) { isProcessing = false; }
+                return;
+            }
 
             if (!interrupted)
             {

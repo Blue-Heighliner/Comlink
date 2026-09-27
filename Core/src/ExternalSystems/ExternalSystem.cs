@@ -162,7 +162,12 @@ public abstract class ExternalSystemBase<TMessage>(string name, TimeSpan? connec
     public async Task<bool> Send(object message)
     {
         if (!IsConnected) { return false; }
-        TMessage typed = (TMessage)message;
+        if (message is not TMessage typed)
+        {
+            logger.LogWarning("External system {Name} cannot send a {Type}; it only handles {Expected}", Name, message.GetType().Name, typeof(TMessage).Name);
+            return false;
+        }
+
         try
         {
             if (!FilterSent(typed)) { return false; }

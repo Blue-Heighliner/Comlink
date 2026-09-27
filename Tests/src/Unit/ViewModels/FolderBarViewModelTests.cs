@@ -14,12 +14,14 @@ public sealed class FolderBarViewModelTests
         };
 
     private static (FolderBarViewModel Vm, Mock<IFolderRepository> FoldersMock, Mock<IEntryService> ServiceMock) Build(
-        List<Folder>? tree = null)
+        List<Folder>? tree = null, bool canDelete = true)
     {
         Mock<IFolderRepository> foldersMock = new();
         Mock<IEntryService> serviceMock = new();
+        Mock<IEngineController> controllerMock = new();
+        controllerMock.Setup(c => c.CanDelete(It.IsAny<FolderType>())).Returns(canDelete);
         foldersMock.Setup(f => f.GetTree()).ReturnsAsync(tree ?? []);
-        return (new FolderBarViewModel(foldersMock.Object, serviceMock.Object), foldersMock, serviceMock);
+        return (new FolderBarViewModel(foldersMock.Object, serviceMock.Object, controllerMock.Object), foldersMock, serviceMock);
     }
 
     /// <summary>Load populates RootFolders in the canonical Inbox/Outbox/Drafts/Notes/Activity order.</summary>
@@ -223,16 +225,18 @@ public sealed class FolderBarViewModelTests
         svc.Verify(s => s.MoveEntry(It.IsAny<string>(), It.IsAny<EntryType>(), It.IsAny<string>()), Times.Never);
     }
 
-    /// <summary>Messages may only be moved into Inbox or Outbox.</summary>
+    /// <summary>A received message may only move within the Inbox tree and a sent one within the Outbox tree, since each tree opens and deletes its entries as its own direction.</summary>
     [Theory]
-    [InlineData(FolderType.Inbox, true)]
-    [InlineData(FolderType.Outbox, true)]
-    [InlineData(FolderType.Drafts, false)]
-    [InlineData(FolderType.Notes, false)]
-    [InlineData(FolderType.Activity, false)]
-    public void IsCompatibleMove_MessageCompatibility(FolderType folderType, bool expected)
+    [InlineData(false, FolderType.Inbox, true)]
+    [InlineData(false, FolderType.Outbox, false)]
+    [InlineData(true, FolderType.Outbox, true)]
+    [InlineData(true, FolderType.Inbox, false)]
+    [InlineData(false, FolderType.Drafts, false)]
+    [InlineData(true, FolderType.Notes, false)]
+    [InlineData(false, FolderType.Activity, false)]
+    public void IsCompatibleMove_MessageCompatibility(bool isOutbound, FolderType folderType, bool expected)
     {
-        Assert.Equal(expected, FolderBarViewModel.IsCompatibleMove(EntryType.Message, folderType));
+        Assert.Equal(expected, FolderBarViewModel.IsCompatibleMove(EntryType.Message, folderType, isOutbound));
     }
 
     /// <summary>Drafts may only be moved into the Drafts folder.</summary>
@@ -267,5 +271,72 @@ public sealed class FolderBarViewModelTests
 
         Assert.False(vm.RootFolders[0].IsExpanded);
         Assert.False(vm.RootFolders[0].Children[0].IsExpanded);
+    }
+
+    private static async Task<(FolderBarViewModel Vm, Mock<IFolderRepository> Folders, Mock<IEntryService> Service, FolderItemViewModel Parent, FolderItemViewModel Child)> BuildWithSubfolder()
+    {
+        (FolderBarViewModel vm, Mock<IFolderRepository> folders, Mock<IEntryService> service) = Build([MakeFolder("notes", FolderType.Notes)]);
+        await vm.Load();
+        FolderItemViewModel parent = vm.RootFolders[0];
+        await vm.AddSubfolder(parent, "Work");
+        return (vm, folders, service, parent, parent.Children[0]);
+    }
+
+    /// <summary>Deleting a subfolder deletes its subfolders and the entries in every one of them, deepest first, and selects its parent when the selection was inside.</summary>
+    [Fact]
+    public async Task DeleteFolder_DeletesNestedSubfoldersAndTheirContents()
+    {
+        (FolderBarViewModel vm, Mock<IFolderRepository> folders, Mock<IEntryService> service, FolderItemViewModel parent, FolderItemViewModel child) = await BuildWithSubfolder();
+        await vm.AddSubfolder(child, "Nested");
+        FolderItemViewModel nested = child.Children[0];
+        List<string> calls = [];
+        service.Setup(s => s.DeleteFolderContents(It.IsAny<string>())).Callback<string>(id => calls.Add("contents:" + id)).Returns(Task.CompletedTask);
+        folders.Setup(f => f.Delete(It.IsAny<string>())).Callback<string>(id => calls.Add("folder:" + id)).ReturnsAsync(true);
+        Assert.Same(nested, vm.SelectedFolder);
+
+        await vm.DeleteFolder(child);
+
+        Assert.Equal([$"contents:{nested.Id}", $"folder:{nested.Id}", $"contents:{child.Id}", $"folder:{child.Id}"], calls);
+        Assert.Empty(parent.Children);
+        Assert.Same(parent, vm.SelectedFolder);
+    }
+
+    /// <summary>Deleting a folder the user is not inside leaves the selection alone.</summary>
+    [Fact]
+    public async Task DeleteFolder_SelectionElsewhere_IsKept()
+    {
+        (FolderBarViewModel vm, _, _, FolderItemViewModel parent, FolderItemViewModel child) = await BuildWithSubfolder();
+        await vm.AddSubfolder(parent, "Other");
+        FolderItemViewModel other = parent.Children[1];
+
+        await vm.DeleteFolder(child);
+
+        Assert.Same(other, vm.SelectedFolder);
+    }
+
+    /// <summary>A root folder is never deleted, and neither is any folder when the host forbids deleting entries of its type.</summary>
+    [Fact]
+    public async Task DeleteFolder_RootOrDeleteForbidden_DoesNothing()
+    {
+        (FolderBarViewModel vm, Mock<IFolderRepository> folders, Mock<IEntryService> service, FolderItemViewModel parent, FolderItemViewModel child) = await BuildWithSubfolder();
+
+        Assert.False(vm.CanDeleteFolder(parent));
+        Assert.True(vm.CanDeleteFolder(child));
+        await vm.DeleteFolder(parent);
+
+        service.Verify(s => s.DeleteFolderContents(It.IsAny<string>()), Times.Never);
+        folders.Verify(f => f.Delete(It.IsAny<string>()), Times.Never);
+
+        (FolderBarViewModel locked, Mock<IFolderRepository> lockedFolders, Mock<IEntryService> lockedService) = Build([MakeFolder("notes", FolderType.Notes)], canDelete: false);
+        await locked.Load();
+        await locked.AddSubfolder(locked.RootFolders[0], "Work");
+        FolderItemViewModel sub = locked.RootFolders[0].Children[0];
+
+        Assert.False(locked.CanDeleteFolder(sub));
+        await locked.DeleteFolder(sub);
+
+        lockedService.Verify(s => s.DeleteFolderContents(It.IsAny<string>()), Times.Never);
+        lockedFolders.Verify(f => f.Delete(It.IsAny<string>()), Times.Never);
+        Assert.Single(locked.RootFolders[0].Children);
     }
 }

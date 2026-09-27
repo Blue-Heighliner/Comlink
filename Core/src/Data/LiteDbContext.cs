@@ -26,6 +26,8 @@ public sealed class LiteDbContext : ILiteDbContext
         this.engineController = engineController;
     }
 
+    private static readonly Lock mapperWarmupLock = new();
+
     private readonly IEngineController engineController;
     private LiteDatabase? db;
 
@@ -45,6 +47,7 @@ public sealed class LiteDbContext : ILiteDbContext
     public void Initialize()
     {
         db?.Dispose();
+        WarmUpMapper();
         string dataDir = engineController.AppDataPath;
         Directory.CreateDirectory(dataDir);
         db = new LiteDatabase(Path.Combine(dataDir, "Data.db"));
@@ -57,6 +60,30 @@ public sealed class LiteDbContext : ILiteDbContext
 
         EnsureIndexes();
         EnsureRootFolders();
+    }
+
+    // LiteDB's shared BsonMapper publishes a type's mapper before it has finished building it, so two threads
+    // serializing a type for the first time can collide ("Collection was modified"), e.g. a message arriving while a
+    // draft is saved. Serializing one fully populated instance of every stored shape here, once, under a lock, builds
+    // every mapper up front, including nested list element types and the host's own message type.
+    private void WarmUpMapper()
+    {
+        lock (mapperWarmupLock)
+        {
+            object message = engineController.CreateMessage();
+            engineController.SetAddresses(message, [new MessageAddress { UserName = string.Empty, Type = AddressType.To }]);
+            BsonMapper mapper = BsonMapper.Global;
+            mapper.ToDocument(new MessageEntity
+            {
+                MessageId = string.Empty,
+                Message = message,
+                DeliveryStatuses = [new DeliveryStatus { UserName = string.Empty, AddressedVia = [string.Empty] }]
+            });
+            mapper.ToDocument(new DraftEntity { Addresses = [new AddressData { UserName = string.Empty, Type = string.Empty }] });
+            mapper.ToDocument(new NoteEntity());
+            mapper.ToDocument(new ActivityLogEntity { Events = [string.Empty], EventEntries = [new ActivityLogEntry()] });
+            mapper.ToDocument(new FolderEntity { Id = string.Empty, Name = string.Empty });
+        }
     }
 
     private void EnsureIndexes()

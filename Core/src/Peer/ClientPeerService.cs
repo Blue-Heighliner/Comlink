@@ -40,9 +40,11 @@ internal sealed class ClientPeerService : IPeerService, IConnectionStatusService
     private PeerLinkControl? serverLink;
     private volatile bool isClosed;
     private volatile string serverName = string.Empty;
-    private volatile bool isConnected;
+    private readonly Lock statusLock = new();
+    private bool isConnected;
     private DateTime? lastConnectedAt;
     private DateTime? lastDisconnectedAt;
+    private int disposed;
 
     /// <inheritdoc />
     public event Func<object, Task>? MessageDelivered;
@@ -104,15 +106,20 @@ internal sealed class ClientPeerService : IPeerService, IConnectionStatusService
 
     /// <inheritdoc />
     public IReadOnlyList<PeerConnectionStatus> GetStatuses()
-        => [new PeerConnectionStatus
+    {
+        lock (statusLock)
         {
-            UserName = serverName,
-            Kind = PeerConnectionKind.Server,
-            IsConnected = isConnected,
-            LastConnectedAt = lastConnectedAt,
-            LastDisconnectedAt = lastDisconnectedAt,
-            IsClosed = isClosed
-        }];
+            return [new PeerConnectionStatus
+            {
+                UserName = serverName,
+                Kind = PeerConnectionKind.Server,
+                IsConnected = isConnected,
+                LastConnectedAt = lastConnectedAt,
+                LastDisconnectedAt = lastDisconnectedAt,
+                IsClosed = isClosed
+            }];
+        }
+    }
 
     /// <inheritdoc />
     public void SetClosed(PeerConnectionKind kind, string userName, bool closed)
@@ -213,19 +220,17 @@ internal sealed class ClientPeerService : IPeerService, IConnectionStatusService
 
     private void UpdateConnectionStatus(bool connected)
     {
-        if (isConnected == connected) { return; }
+        lock (statusLock)
+        {
+            if (isConnected == connected) { return; }
 
-        isConnected = connected;
-        if (connected)
-        {
-            lastConnectedAt = DateTime.UtcNow;
-            logger.LogInformation("Connected to server");
+            isConnected = connected;
+            if (connected) { lastConnectedAt = DateTime.UtcNow; }
+            else { lastDisconnectedAt = DateTime.UtcNow; }
         }
-        else
-        {
-            lastDisconnectedAt = DateTime.UtcNow;
-            logger.LogWarning("Server unreachable");
-        }
+
+        if (connected) { logger.LogInformation("Connected to server"); }
+        else { logger.LogWarning("Server unreachable"); }
         StatusesChanged?.Invoke();
     }
 
@@ -241,6 +246,8 @@ internal sealed class ClientPeerService : IPeerService, IConnectionStatusService
     /// <inheritdoc />
     public async ValueTask DisposeAsync()
     {
+        // Registered as both IPeerService and IConnectionStatusService, so the container disposes it twice.
+        if (Interlocked.Exchange(ref disposed, 1) != 0) { return; }
         if (transport is not null) { await transport.DisposeAsync(); }
     }
 }

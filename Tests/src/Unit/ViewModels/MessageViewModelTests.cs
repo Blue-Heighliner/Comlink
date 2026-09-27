@@ -251,4 +251,16 @@ public sealed class MessageViewModelTests
         Assert.Equal("CONFIRMED", withGroups.StatusText);
         Assert.Equal("USER1 (OPS, ALL)", withGroups.DisplayName);
     }
+
+    /// <summary>A status for a user written in different case still updates that user's row.</summary>
+    [Fact]
+    public void UpdateDeliveryStatus_DifferentCase_UpdatesRow()
+    {
+        DeliveryStatus status = new() { UserName = "DEST", Status = DestinationStatus.Sending, AddressedVia = [] };
+        MessageViewModel vm = new(MakeEntity(deliveryStatuses: [status]), format);
+
+        vm.UpdateDeliveryStatus("dest", DestinationStatus.Sent);
+
+        Assert.Equal(DestinationStatus.Sent, vm.DeliveryStatuses[0].Status);
+    }
 }

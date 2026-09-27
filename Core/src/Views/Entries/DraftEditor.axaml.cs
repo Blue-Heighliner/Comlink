@@ -67,8 +67,11 @@ public partial class DraftEditor : UserControl
 
         if (DataContext is not IDraftViewModel vm) { return; }
 
-        // Set document explicitly — AXAML binding alone can miss timing edge cases
-        BodyEditor.Document = ((TextDocumentBodyDocument)vm.BodyDocument).Document;
+        // Set document explicitly - AXAML binding alone can miss timing edge cases. A draft built without the UI's
+        // body document factory (a host registering its own) still opens, as a copy of its text, rather than crashing.
+        BodyEditor.Document = vm.BodyDocument is TextDocumentBodyDocument textDocument
+            ? textDocument.Document
+            : new TextDocument(vm.BodyDocument.Text);
 
         fillInGenerator = new FillInElementGenerator(vm.FillIns);
         BodyEditor.TextArea.TextView.ElementGenerators.Add(fillInGenerator);

@@ -63,7 +63,7 @@ public sealed partial class ContentAreaViewModel : ObservableObject, IContentAre
         this.engineController = engineController;
         this.loggerFactory = loggerFactory;
         HomeText = engineController.HomeText;
-        connection.DeliveryStatusChanged += OnDeliveryStatusChanged;
+        connection.DeliveryStatusChanged += evt => UiThread.Run(() => OnDeliveryStatusChanged(evt));
     }
 
     private readonly IEntryService entryService;
@@ -78,6 +78,7 @@ public sealed partial class ContentAreaViewModel : ObservableObject, IContentAre
 
     [ObservableProperty] private object? activeContent;
     [ObservableProperty] private bool isHomeVisible = true;
+    private int showGeneration;
 
     /// <summary>Raised when a draft is successfully sent and produces a message entity.</summary>
     public event Func<MessageEntity, Task>? DraftSent;
@@ -109,6 +110,7 @@ public sealed partial class ContentAreaViewModel : ObservableObject, IContentAre
     /// <summary>Resets the content area to the home screen.</summary>
     public void ShowHome()
     {
+        showGeneration++;
         ActiveContent = null;
         IsHomeVisible = true;
     }
@@ -116,13 +118,18 @@ public sealed partial class ContentAreaViewModel : ObservableObject, IContentAre
     /// <summary>Loads and displays the full entry ViewModel for the given entry item.</summary>
     public async Task ShowEntry(EntryItemViewModel entry)
     {
+        // Loading takes a database round trip; if the user has moved on to another entry (or home) by the time it
+        // finishes, this older load must not replace what they chose afterwards.
+        int generation = ++showGeneration;
         IsHomeVisible = false;
-        ActiveContent = await BuildEntryViewModel(entry);
+        object? content = await BuildEntryViewModel(entry);
+        if (generation == showGeneration) { ActiveContent = content; }
     }
 
     /// <summary>Displays an already-constructed entry ViewModel directly.</summary>
     public void ShowEntry(object entryVm)
     {
+        showGeneration++;
         IsHomeVisible = false;
         ActiveContent = entryVm;
     }

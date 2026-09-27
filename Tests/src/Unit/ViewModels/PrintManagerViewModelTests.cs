@@ -358,4 +358,33 @@ public sealed class PrintManagerViewModelTests
         Assert.Single(s.PageFeeds);
         Assert.Empty(vm.Queue);
     }
+
+    /// <summary>A printer failure stops the loop without wedging it: the job stays queued, and the next job queued starts printing again.</summary>
+    [Fact]
+    public async Task PrintLoop_PrinterFails_KeepsJobAndResumesOnNextEnqueue()
+    {
+        Setup s = new();
+        ObjectId noteId = new();
+        s.Notes.Setup(n => n.Get(noteId)).ReturnsAsync(new NoteEntity { Id = noteId, Body = "Line1" });
+        bool failing = true;
+        TaskCompletionSource printed = new();
+        s.OnPrintLine = (_, _) =>
+        {
+            if (failing) { throw new IOException("printer offline"); }
+            printed.TrySetResult();
+            return Task.CompletedTask;
+        };
+        PrintManagerViewModel vm = s.Build();
+        EntryItemViewModel entry = new(noteId.ToString(), "Note", EntryType.Note, DateTime.UtcNow);
+
+        vm.EnqueueManual(entry);
+        for (int i = 0; i < 50 && s.PrintedLines.Count == 0; i++) { await Task.Delay(20); }
+        await Task.Delay(50);
+        Assert.Single(vm.Queue);
+
+        failing = false;
+        vm.EnqueueManual(entry);
+
+        await printed.Task.WaitAsync(TimeSpan.FromSeconds(2));
+    }
 }

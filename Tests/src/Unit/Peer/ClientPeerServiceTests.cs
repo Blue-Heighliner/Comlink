@@ -519,4 +519,22 @@ public sealed class ClientPeerServiceTests
         cts.Cancel();
         await startTask;
     }
+
+    /// <summary>The service is registered under two interfaces, so the container disposes it twice; the transport is still disposed only once.</summary>
+    [Fact]
+    public async Task DisposeAsync_Twice_DisposesTransportOnce()
+    {
+        (ClientPeerService service, Mock<IPeerTransport> transport, _, _, _) = Build();
+        AutoAcknowledge(transport);
+        using CancellationTokenSource cts = new();
+        Task startTask = service.Start(cts.Token);
+        await Task.Delay(20);
+        cts.Cancel();
+        await startTask;
+
+        await service.DisposeAsync();
+        await service.DisposeAsync();
+
+        transport.Verify(t => t.DisposeAsync(), Times.Once);
+    }
 }

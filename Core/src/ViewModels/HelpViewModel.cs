@@ -71,7 +71,7 @@ public sealed class HelpViewModel : IHelpViewModel
             [
                 new HelpSection("Browsing", "Select a folder to list its entries. When there are more entries than fit on a page, use Prev and Next at the top of the list, which also shows which page you are on. COLLAPSE above the folders folds the folder tree back up."),
                 new HelpSection("Selecting several", "Click an entry to open it. Shift-click selects a range and Ctrl-click adds or removes single entries. Selecting several is how you choose what to export."),
-                new HelpSection("Your own folders", "Right-click a folder and choose New Folder to add a subfolder. You can delete a subfolder you created, but only once it is empty. Drag an entry onto a folder of the matching kind to move it there: messages go to Inbox or Outbox folders, drafts to Drafts folders and notes to Notes folders."),
+                new HelpSection("Your own folders", "Right-click a folder and choose New Folder to add a subfolder. Right-click a subfolder you created and choose Delete to remove it. After you confirm, it is deleted together with its subfolders and every message, draft and note inside them, which cannot be undone. Drag an entry onto a folder of the matching kind to move it there: received messages stay within Inbox and its folders, sent messages within Outbox and its folders, drafts go to Drafts folders and notes to Notes folders."),
                 new HelpSection("Deleting and printing", "Right-click an entry to print it, or to delete it where deleting is allowed for that kind of entry.")
             ]),
             new HelpTab("Backup and restore",

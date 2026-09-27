@@ -306,4 +306,24 @@ public sealed class DirectServiceConnectionTests
         Assert.Empty(peer.Sent);
         entry.Verify(e => e.UpdateDeliveryStatus("MSG1", "LOCAL", DestinationStatus.Read), Times.Once);
     }
+
+    /// <summary>The event reports the status as stored, so a late, out-of-order status that storage ignored is not shown either.</summary>
+    [Fact]
+    public async Task DeliveryStatusChanged_IgnoredLateStatus_ReportsStoredStatus()
+    {
+        DirectServiceConnection conn = Build(out _, out FakeMessageRoutingService routing, out _, out Mock<IEntryService> entry, out _);
+        MessageEntity stored = new()
+        {
+            MessageId = "MSG3",
+            DeliveryStatuses = [new DeliveryStatus { UserName = "DEST", Status = DestinationStatus.Confirmed, AddressedVia = [] }]
+        };
+        entry.Setup(e => e.UpdateDeliveryStatus("MSG3", "dest", DestinationStatus.Sent)).ReturnsAsync(stored);
+        await conn.Connect();
+        DeliveryStatusChangedEvent? evt = null;
+        conn.DeliveryStatusChanged += e => { evt = e; return Task.CompletedTask; };
+
+        await routing.FireDeliveryStatusChanged("MSG3", "dest", DestinationStatus.Sent);
+
+        Assert.Equal(DestinationStatus.Confirmed, evt!.Status);
+    }
 }

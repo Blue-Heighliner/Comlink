@@ -98,7 +98,7 @@ Both `StoreIncomingMessage` and `StoreSentMessage` take the message's logical fi
 |--------|-------------|
 | `StoreIncomingMessage(messageId, fromUser, subject, body, addresses, sentAt, isAlert = false, priority = 0, tag = "")` | Creates a `MessageEntity` in the Inbox folder (`IsOutbound = false`, `ReadStatus = Received`), fires `MessageInserted` |
 | `StoreSentMessage(messageId, subject, body, addresses, sentAt, userResults, isAlert = false, priority = 0, tag = "")` | Creates a `MessageEntity` in the Outbox (`IsOutbound = true`) with per-user delivery statuses seeded from the routing result — `Confirmed` when `Success` is `true` (a successful send already implies full MSMT delivery, see `Docs/Components/Peer.md`), otherwise `Failed` |
-| `UpdateDeliveryStatus(messageId, userName, status)` | Updates per-user delivery status on the Outbox record for `messageId` — always scoped to the outbound record, since a self-addressed message also has an Inbox record sharing the same `messageId` |
+| `UpdateDeliveryStatus(messageId, userName, status)` | Updates per-user delivery status on the Outbox record for `messageId` - always scoped to the outbound record, since a self-addressed message also has an Inbox record sharing the same `messageId`. The user name matches case-insensitively, and a status only ever moves forward (Sending, then Sent, then Confirmed or Failed, then Read): status events for different stages can arrive out of order, so a late earlier one is ignored rather than undoing a later one |
 | `MarkMessageRead(messageId)` | Transitions the Inbox record's `ReadStatus` from `Received` to `Read` and fires `MessageRead`. A no-op (returns `null`) if the record is missing or already `Read` — see [Peer.md](Peer.md#read-confirmation) |
 | `CreateDraft()` | Creates a blank draft in the Drafts folder, fires `DraftInserted` |
 | `CreateNote()` | Creates a blank note in the Notes folder, fires `NoteInserted` |
@@ -110,6 +110,7 @@ Both `StoreIncomingMessage` and `StoreSentMessage` take the message's logical fi
 | `GetActivityLogs(page)` | Paginated activity log entries, newest first |
 | `DeleteEntry(id, entryType, isOutboundMessage = false)` | Permanently deletes an entry; `isOutboundMessage` disambiguates the Inbox vs. Outbox record for a self-addressed message |
 | `MoveEntry(entryId, entryType, targetFolderId, isOutboundMessage = false)` | Moves an entry to another folder; same disambiguation as `DeleteEntry` |
+| `DeleteFolderContents(folderId)` | Permanently deletes every message, draft and note in one folder; used when a folder is deleted so no entry is left pointing at a folder that no longer exists |
 
 ---
 
@@ -120,7 +121,7 @@ Implements `IServiceConnection`, registered in both `Client` and `Headless` mode
 **Responsibilities**:
 - Forwards `IServiceConnection.SendMessage(subject, body, addresses, isAlert, priority, tag)` → `MessageRoutingService.Route` and returns the result. It does not persist anything itself — in Client mode, `DraftViewModel` calls `EntryService.StoreSentMessage` after a successful send
 - Translates `PeerService.MessageDelivered` → fires `IServiceConnection.MessageReceived`. It does not persist the message itself — in Client mode, `MainViewModel`'s handler for that event calls `EntryService.StoreIncomingMessage`
-- On `MessageRoutingService.DeliveryStatusChanged`, updates the Outbox record via `EntryService.UpdateDeliveryStatus`, then fires `IServiceConnection.DeliveryStatusChanged` with the resulting `OverallStatus`
+- On `MessageRoutingService.DeliveryStatusChanged`, updates the Outbox record via `EntryService.UpdateDeliveryStatus`, then fires `IServiceConnection.DeliveryStatusChanged` with the user's status as stored and the resulting `OverallStatus`, so an ignored late status is not shown either
 - `MarkMessageRead(messageId)`: calls `EntryService.MarkMessageRead`, fires `IServiceConnection.DeliveryStatusChanged` locally (empty `UserName`, status `Read`) so Client-mode UI reflects the read state immediately, then sends a user-read confirmation message to the original sender via `IPeerService.Send` directly — or, for a self-addressed message, calls `EntryService.UpdateDeliveryStatus` directly with no network round-trip. See [Peer.md](Peer.md#read-confirmation)
 - Implements install, user info query, and user names query by delegating to `UserService` / `IEngineController`
 
@@ -138,7 +139,7 @@ Builds the entry-reference list for a full export and writes selected entries to
 
 **Key responsibilities**:
 - `GetAllEntryRefs()` — returns an `ExportEntryRef` (`Id`, `EntryType`, `IsOutboundMessage`) for every message (both Inbox and Outbox, across every folder), draft, note, and activity log document in the database, via each repository's `GetAll()`
-- `Export(entries, zipPath, cancellation)` — for each reference, loads the full entity from the appropriate repository, maps it to a clean JSON DTO (`MessageExportData`/`DraftExportData`/`NoteExportData`/`ActivityLogExportData` in `ExportModels.cs`) via `IEngineController` for messages, and writes it as `{index}_{EntryType}_{id}.json` inside a new `ZipArchive` at `zipPath`. A reference whose entity has since been deleted is silently skipped.
+- `Export(entries, zipPath, cancellation)` - for each reference, loads the full entity from the appropriate repository, maps it to a clean JSON DTO (`MessageExportData`/`DraftExportData`/`NoteExportData`/`ActivityLogExportData` in `ExportModels.cs`) via `IEngineController` for messages, and writes it as `{index}_{EntryType}_{id}.json` inside a new `ZipArchive`. The archive is written to `zipPath + ".partial"` and only moved over `zipPath` once complete, so a cancelled or failed export (e.g. a full or removed drive) never leaves a truncated package, or destroys an existing one of the same name. A reference whose entity has since been deleted is silently skipped.
 - On cancellation (or any other failure) mid-write, the partially written zip file at `zipPath` is deleted before the exception propagates — the `try`/`catch` wraps the entire archive-writing block, so this holds regardless of how many entries had already been written.
 
 Message content is read through `IEngineController`, matching every other message read path in Engine — `ExportService` has no knowledge of the host's concrete message type.
@@ -205,7 +206,7 @@ DTOs used by `ExportService` (`Core/src/Services/ExportModels.cs`):
 |------|--------|
 | `ExportEntryRef` | `Id`, `EntryType`, `IsOutboundMessage` — identifies one entry to export |
 | `MessageExportData` | `MessageId`, `IsOutbound`, `FromUser`, `Subject`, `Body`, `Addresses[]`, `SentAt`, `IsAlert`, `Priority`, `Tag`, `ReceivedAt`, `ReadStatus`, `DeliveryStatuses[]` |
-| `DraftExportData` | `Id`, `Subject`, `Body`, `Addresses[]`, `IsSent`, `IsAlert`, `Priority`, `Tag`, `SentAt`, `CreatedAt`, `ModifiedAt` |
+| `DraftExportData` | `Id`, `Subject`, `Body`, `BodySegmentsJson`, `Addresses[]`, `IsSent`, `IsAlert`, `Priority`, `Tag`, `SentAt`, `CreatedAt`, `ModifiedAt` |
 | `NoteExportData` | `Id`, `Body`, `CreatedAt`, `ModifiedAt` |
 | `ActivityLogExportData` | `Id`, `Date`, `EventEntries[]` |
 

@@ -30,6 +30,7 @@ public sealed class ExportService : IExportService
         Id = entity.Id.ToString(),
         Subject = entity.Subject,
         Body = entity.Body,
+        BodySegmentsJson = entity.BodySegmentsJson,
         Addresses = entity.Addresses,
         IsSent = entity.IsSent,
         IsAlert = entity.IsAlert,
@@ -128,29 +129,35 @@ public sealed class ExportService : IExportService
     /// <inheritdoc />
     public async Task Export(IReadOnlyList<ExportEntryRef> entries, string zipPath, CancellationToken cancellation = default)
     {
+        // Written beside the target and moved into place only once complete, so a cancelled or failed export never
+        // destroys an existing package of the same name.
+        string tempPath = zipPath + ".partial";
         try
         {
-            using FileStream fs = new(zipPath, FileMode.Create, FileAccess.Write);
-            using ZipArchive archive = new(fs, ZipArchiveMode.Create);
-
-            int index = 0;
-            foreach (ExportEntryRef entryRef in entries)
+            await using (FileStream fs = new(tempPath, FileMode.Create, FileAccess.Write))
+            await using (ZipArchive archive = new(fs, ZipArchiveMode.Create))
             {
-                cancellation.ThrowIfCancellationRequested();
-
-                object? data = await LoadExportData(entryRef);
-                if (data is not null)
+                int index = 0;
+                foreach (ExportEntryRef entryRef in entries)
                 {
-                    ZipArchiveEntry zipEntry = archive.CreateEntry(BuildEntryFileName(index, entryRef), CompressionLevel.Optimal);
-                    using Stream entryStream = zipEntry.Open();
-                    await JsonSerializer.SerializeAsync(entryStream, data, data.GetType(), cancellationToken: cancellation);
+                    cancellation.ThrowIfCancellationRequested();
+
+                    object? data = await LoadExportData(entryRef);
+                    if (data is not null)
+                    {
+                        ZipArchiveEntry zipEntry = archive.CreateEntry(BuildEntryFileName(index, entryRef), CompressionLevel.Optimal);
+                        await using Stream entryStream = await zipEntry.OpenAsync(cancellation);
+                        await JsonSerializer.SerializeAsync(entryStream, data, data.GetType(), cancellationToken: cancellation);
+                    }
+                    index++;
                 }
-                index++;
             }
+
+            File.Move(tempPath, zipPath, overwrite: true);
         }
         catch
         {
-            TryDeleteFile(zipPath);
+            TryDeleteFile(tempPath);
             throw;
         }
     }

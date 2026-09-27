@@ -59,6 +59,8 @@ A `NodeRole.Client` instance keeps the normal layout, with a single `ConnectionR
 - `IInstallViewModel.InstallSucceeded` → initializes DB, applies user info, loads folder tree
 - `IServiceConnection.MessageReceived` → stores inbound message, prepends to entry bar when Inbox is active
 - `IServiceConnection.DeliveryStatusChanged` → passes to `IEntryBarViewModel.UpdateEntryStatus`
+
+Both `IServiceConnection` events fire on peer/transport threads, so `MainViewModel` and `ContentAreaViewModel` marshal their handlers onto the UI thread (`UiThread.Run`) before touching bound collections or properties.
 - `IContentAreaViewModel.DraftSent` → navigates to Outbox and selects sent message
 - `IFolderBarViewModel.FolderSelected` → normally calls `ContentAreaViewModel.ShowHome()` before `IEntryBarViewModel.LoadFolder`; skipped (leaving the export view showing) when `ContentArea.ActiveContent` is the `Export` ViewModel and `Export.IsCollectingEntries` is `true` — so browsing folders refreshes the entry listing to pick more entries from without losing the export view (see [IExportViewModel](#iexportviewmodel--exportviewmodel))
 - `IEntryBarViewModel.EntriesSelected` → if `ContentArea.ActiveContent` is the `Export` ViewModel and `Export.IsCollectingEntries` is `true`, adds every entry in the raised list to `Export.SelectedEntries` (so a shift-range or ctrl-click selection adds them all at once); otherwise, if exactly one entry was selected, shows it in the content area as usual — a multi-selection outside the export view opens nothing, since the content area can only display one entry at a time
@@ -74,9 +76,9 @@ Left-side folder tree. Registered as `IFolderBarViewModel → FolderBarViewModel
 
 **Events**: `FolderSelected (Action<FolderItemViewModel>)`, `EntryMoved (Action)`.
 
-**Methods**: `Load()`, `SelectFolder(FolderItemViewModel)`, `SelectFolderByType(FolderType)`, `DeselectFolder()` — clears `SelectedFolder` and its `IsSelected` flag without raising `FolderSelected` (used by `MainViewModel.ShowExportCommand`/`ShowImportCommand`), `MoveEntry(EntryItemViewModel, FolderItemViewModel)`, `AddSubfolder(FolderItemViewModel, string)`, `DeleteFolder(FolderItemViewModel)`, `CollapseAll()`.
+**Methods**: `Load()`, `SelectFolder(FolderItemViewModel)`, `SelectFolderByType(FolderType)`, `DeselectFolder()` - clears `SelectedFolder` and its `IsSelected` flag without raising `FolderSelected` (used by `MainViewModel.ShowExportCommand`/`ShowImportCommand`), `MoveEntry(EntryItemViewModel, FolderItemViewModel)`, `AddSubfolder(FolderItemViewModel, string)`, `CanDeleteFolder(FolderItemViewModel)`, `DeleteFolder(FolderItemViewModel)` - only for a subfolder, and only when `IEngineController.CanDelete` allows deleting entries of its root type, since the delete removes them. It permanently deletes the folder, all its subfolders and every entry in any of them (`IEntryService.DeleteFolderContents`, deepest folder first, so nothing is left pointing at a missing folder), and selects the parent if the selection was inside the deleted tree. `FolderBar.axaml.cs` asks for confirmation first (`ConfirmDialog`), `CollapseAll()`.
 
-**Static utility**: `FolderBarViewModel.IsCompatibleMove(EntryType, FolderType)` — used by `FolderBar.axaml.cs` drag-and-drop; not on the interface since it is a static helper.
+**Static utility**: `FolderBarViewModel.IsCompatibleMove(EntryType, FolderType, bool isOutboundMessage = false)` - used by `FolderBar.axaml.cs` drag-and-drop; not on the interface since it is a static helper. A message may only move within its own tree (received within Inbox, sent within Outbox), since its direction is fixed by the record and moving it across would list a sent message among received ones.
 
 ---
 
@@ -94,6 +96,7 @@ Middle-column paginated entry list. Registered as `IEntryBarViewModel → EntryB
 
 **Methods**:
 - `LoadFolder(FolderItemViewModel)` — also deselects the current entry via `DeselectEntry()`
+- Every load is tagged with a generation number and only the newest one repopulates `Entries`, so overlapping refreshes (e.g. a folder click racing a live insert) never list entries twice or show an older folder
 - `Refresh()`, `UpdateEntryStatus(string messageId, DestinationStatus?)`, `PrependEntry(EntryItemViewModel)`, `DeleteEntry(EntryItemViewModel)` — a silent no-op if `IEngineController.CanDelete(currentFolder.RootType)` returns `false` (see `Docs/Components/Control.md`) — `SetPendingSelectId(string)`
 - `SelectEntry(EntryItemViewModel)` — programmatic single-entry selection (used by the pending-select-after-refresh flow); deselects every other entry, including any multi-selection, and raises `EntriesSelected` with a single-item list
 - `SelectEntries(IReadOnlyList<EntryItemViewModel> added, IReadOnlyList<EntryItemViewModel> removed)` — applies a selection-list delta from the View's `SelectionChanged`: marks `added` selected and `removed` deselected, then raises `EntriesSelected` with `added` if non-empty. Deliberately does **not** assign `SelectedEntry` — see below.
@@ -109,7 +112,7 @@ Right-side content pane. Registered as `IContentAreaViewModel → ContentAreaVie
 
 **Events**: `DraftSent (Func<MessageEntity, Task>)`; `EntryDeleted (Func<Task>)` - raised, after the content area has already returned to the home screen, when the draft or note it is showing is deleted from its own editor. `MainViewModel` reloads the entry list on it.
 
-**Methods**: `ShowHome()`, `ShowEntry(EntryItemViewModel)`, `ShowEntry(object)`.
+**Methods**: `ShowHome()`, `ShowEntry(EntryItemViewModel)`, `ShowEntry(object)`. `ShowEntry(EntryItemViewModel)` loads from the database, so if another entry (or home) is shown before it finishes, its result is discarded rather than replacing what the user chose afterwards.
 
 The `DeliveryStatusChanged` handler checks `ActiveContent is IMessageViewModel` to route status updates to the currently displayed message — an empty `UserName` sets `IMessageViewModel.ReadStatus` directly (a local read-status notification), otherwise it calls `UpdateDeliveryStatus(userName, status)` (a remote destination's delivery status).
 

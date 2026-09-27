@@ -83,6 +83,7 @@ public sealed partial class EntryBarViewModel : ObservableObject, IEntryBarViewM
 
     private FolderItemViewModel? currentFolder;
     private string? pendingSelectId;
+    private int refreshGeneration;
 
     /// <summary>Gets the current page of entry items displayed in the list.</summary>
     public ObservableCollection<EntryItemViewModel> Entries { get; } = [];
@@ -154,72 +155,95 @@ public sealed partial class EntryBarViewModel : ObservableObject, IEntryBarViewM
     {
         if (currentFolder is null) { return; }
 
-        Entries.Clear();
+        // Several triggers can refresh at once (a saved draft, a received message, the user paging). Each load runs to
+        // completion, but only the newest one is shown; clearing up front and adding after the load let overlapping
+        // refreshes interleave and list entries twice.
+        int generation = ++refreshGeneration;
+        (List<EntryItemViewModel> items, int total) = await Load(currentFolder);
+        if (generation != refreshGeneration) { return; }
 
-        switch (currentFolder.RootType)
+        Entries.Clear();
+        foreach (EntryItemViewModel item in items)
+        {
+            Entries.Add(item);
+        }
+        UpdatePagination(total);
+        ApplyPendingSelect();
+    }
+
+    private async Task<(List<EntryItemViewModel> Items, int Total)> Load(FolderItemViewModel folder)
+    {
+        List<EntryItemViewModel> items = [];
+        switch (folder.RootType)
         {
             case FolderType.Inbox:
-                (List<MessageEntity> inboxMsgs, int inboxTotal) = await entryService.GetMessages(currentFolder.Id, CurrentPage);
-                foreach (MessageEntity m in inboxMsgs)
                 {
-                    string timeText = m.ReceivedAt.ToString("dd-MMM-yyyy HH:mm").ToUpperInvariant();
-                    EntryItemViewModel item = new(m.MessageId, engineController.GetFromUser(m.Message), EntryType.Message, m.ReceivedAt,
-                        secondaryText: engineController.GetSubject(m.Message), priorityText: GetPriorityLabel(m.Message), tagText: GetTagLabel(m.Message), timeText: timeText);
-                    item.OverallStatus = m.ReadStatus;
-                    Entries.Add(item);
+                    (List<MessageEntity> messages, int total) = await entryService.GetMessages(folder.Id, CurrentPage);
+                    foreach (MessageEntity m in messages)
+                    {
+                        string timeText = m.ReceivedAt.ToString("dd-MMM-yyyy HH:mm").ToUpperInvariant();
+                        EntryItemViewModel item = new(m.MessageId, engineController.GetFromUser(m.Message), EntryType.Message, m.ReceivedAt,
+                            secondaryText: engineController.GetSubject(m.Message), priorityText: GetPriorityLabel(m.Message), tagText: GetTagLabel(m.Message), timeText: timeText);
+                        item.OverallStatus = m.ReadStatus;
+                        items.Add(item);
+                    }
+                    return (items, total);
                 }
-                UpdatePagination(inboxTotal);
-                break;
 
             case FolderType.Outbox:
-                (List<MessageEntity> outboxMsgs, int outboxTotal) = await entryService.GetMessages(currentFolder.Id, CurrentPage);
-                foreach (MessageEntity m in outboxMsgs)
                 {
-                    string destinations = string.Join(", ", engineController.GetAddresses(m.Message).Select(a => a.UserName).Distinct());
-                    string timeText = m.ReceivedAt.ToString("dd-MMM-yyyy HH:mm").ToUpperInvariant();
-                    EntryItemViewModel item = new(m.MessageId, destinations, EntryType.Message, m.ReceivedAt,
-                        secondaryText: engineController.GetSubject(m.Message), priorityText: GetPriorityLabel(m.Message), tagText: GetTagLabel(m.Message), timeText: timeText, isOutboundMessage: true);
-                    item.OverallStatus = m.OverallStatus;
-                    Entries.Add(item);
+                    (List<MessageEntity> messages, int total) = await entryService.GetMessages(folder.Id, CurrentPage);
+                    foreach (MessageEntity m in messages)
+                    {
+                        string destinations = string.Join(", ", engineController.GetAddresses(m.Message).Select(a => a.UserName).Distinct());
+                        string timeText = m.ReceivedAt.ToString("dd-MMM-yyyy HH:mm").ToUpperInvariant();
+                        EntryItemViewModel item = new(m.MessageId, destinations, EntryType.Message, m.ReceivedAt,
+                            secondaryText: engineController.GetSubject(m.Message), priorityText: GetPriorityLabel(m.Message), tagText: GetTagLabel(m.Message), timeText: timeText, isOutboundMessage: true);
+                        item.OverallStatus = m.OverallStatus;
+                        items.Add(item);
+                    }
+                    return (items, total);
                 }
-                UpdatePagination(outboxTotal);
-                break;
 
             case FolderType.Drafts:
-                (List<DraftEntity> drafts, int draftTotal) = await entryService.GetDrafts(currentFolder.Id, CurrentPage, IsAlphabeticalSort);
-                foreach (DraftEntity d in drafts)
                 {
-                    string subject = string.IsNullOrEmpty(d.Subject) ? "(No subject)" : d.Subject;
-                    string timeText = d.ModifiedAt.ToString("dd-MMM-yyyy HH:mm").ToUpperInvariant();
-                    Entries.Add(new EntryItemViewModel(d.Id.ToString(), subject, EntryType.Draft, d.ModifiedAt, timeText: timeText));
+                    (List<DraftEntity> drafts, int total) = await entryService.GetDrafts(folder.Id, CurrentPage, IsAlphabeticalSort);
+                    foreach (DraftEntity d in drafts)
+                    {
+                        string subject = string.IsNullOrEmpty(d.Subject) ? "(No subject)" : d.Subject;
+                        string timeText = d.ModifiedAt.ToString("dd-MMM-yyyy HH:mm").ToUpperInvariant();
+                        items.Add(new EntryItemViewModel(d.Id.ToString(), subject, EntryType.Draft, d.ModifiedAt, timeText: timeText));
+                    }
+                    return (items, total);
                 }
-                UpdatePagination(draftTotal);
-                break;
 
             case FolderType.Notes:
-                (List<NoteEntity> notes, int noteTotal) = await entryService.GetNotes(currentFolder.Id, CurrentPage, IsAlphabeticalSort);
-                foreach (NoteEntity n in notes)
                 {
-                    string? title = (n.Body ?? string.Empty).Split('\n').FirstOrDefault()?.Trim();
-                    string timeText = n.ModifiedAt.ToString("dd-MMM-yyyy HH:mm").ToUpperInvariant();
-                    Entries.Add(new EntryItemViewModel(n.Id.ToString(),
-                        string.IsNullOrEmpty(title) ? "(Empty note)" : title, EntryType.Note, n.ModifiedAt,
-                        timeText: timeText));
+                    (List<NoteEntity> notes, int total) = await entryService.GetNotes(folder.Id, CurrentPage, IsAlphabeticalSort);
+                    foreach (NoteEntity n in notes)
+                    {
+                        string? title = (n.Body ?? string.Empty).Split('\n').FirstOrDefault()?.Trim();
+                        string timeText = n.ModifiedAt.ToString("dd-MMM-yyyy HH:mm").ToUpperInvariant();
+                        items.Add(new EntryItemViewModel(n.Id.ToString(),
+                            string.IsNullOrEmpty(title) ? "(Empty note)" : title, EntryType.Note, n.ModifiedAt,
+                            timeText: timeText));
+                    }
+                    return (items, total);
                 }
-                UpdatePagination(noteTotal);
-                break;
 
             case FolderType.Activity:
-                (List<ActivityLogEntity> logs, int logTotal) = await entryService.GetActivityLogs(CurrentPage);
-                foreach (ActivityLogEntity l in logs)
                 {
-                    Entries.Add(new EntryItemViewModel(l.Id.ToString(), l.Date.ToString("dd-MMM-yyyy").ToUpperInvariant(), EntryType.Activity, l.Date));
+                    (List<ActivityLogEntity> logs, int total) = await entryService.GetActivityLogs(CurrentPage);
+                    foreach (ActivityLogEntity l in logs)
+                    {
+                        items.Add(new EntryItemViewModel(l.Id.ToString(), l.Date.ToString("dd-MMM-yyyy").ToUpperInvariant(), EntryType.Activity, l.Date));
+                    }
+                    return (items, total);
                 }
-                UpdatePagination(logTotal);
-                break;
-        }
 
-        ApplyPendingSelect();
+            default:
+                return (items, 0);
+        }
     }
 
     /// <summary>Updates the overall delivery status on an entry already shown in the list.</summary>
@@ -293,6 +317,7 @@ public sealed partial class EntryBarViewModel : ObservableObject, IEntryBarViewM
 
         await entryService.DeleteEntry(entry.Id, entry.EntryType, entry.IsOutboundMessage);
         Entries.Remove(entry);
+        await RefreshPaginationCounts();
         EntryDeleted?.Invoke(entry);
     }
 

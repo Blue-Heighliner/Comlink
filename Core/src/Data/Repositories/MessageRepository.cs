@@ -21,6 +21,8 @@ public interface IMessageRepository
     Task Update(MessageEntity entity);
     /// <summary>Deletes the message document with the given application-level identifier and direction. See <see cref="Get"/> for why direction is required.</summary>
     Task Delete(string messageId, bool outbound);
+    /// <summary>Deletes every message in the folder with the given identifier.</summary>
+    Task DeleteAll(string folderId);
 }
 
 /// <summary>Provides data-access operations for <see cref="MessageEntity"/> documents.</summary>
@@ -66,4 +68,8 @@ public sealed class MessageRepository : IMessageRepository
     /// <inheritdoc />
     public Task Delete(string messageId, bool outbound)
         => Task.Run(() => ctx.Messages.DeleteMany(m => m.MessageId == messageId && m.IsOutbound == outbound));
+
+    /// <inheritdoc />
+    public Task DeleteAll(string folderId)
+        => Task.Run(() => ctx.Messages.DeleteMany(e => e.FolderId == folderId));
 }

@@ -394,13 +394,15 @@ public sealed class ControlProviderTests
         Assert.Equal("FALLBACK-NAME", controller.GetCertificateName("ALPHA"));
     }
 
-    /// <summary>Explicit name → that name regardless of user.</summary>
+    /// <summary>An explicit name names this node's own certificate, so it applies to the current user only; every other user keeps the wrapped provider's name, which is what a Server matches connecting certificates against.</summary>
     [Fact]
-    public void ConfiguredEngineController_ExplicitPeerCertificateNameConfig_ReturnsExactName()
+    public void ConfiguredEngineController_ExplicitPeerCertificateNameConfig_AppliesToCurrentUserOnly()
     {
-        ConfiguredEngineController controller = new(new TestEngineController(), new EngineConfig { PeerCertificateName = "MY-CERT" }, NoCurrentUser);
+        CurrentUserProvider currentUser = new() { UserName = "alpha" };
+        ConfiguredEngineController controller = new(new TestEngineController(), new EngineConfig { PeerCertificateName = "MY-CERT" }, currentUser);
+
         Assert.Equal("MY-CERT", controller.GetCertificateName("ALPHA"));
-        Assert.Equal("MY-CERT", controller.GetCertificateName("BETA"));
+        Assert.Equal("BETA", controller.GetCertificateName("BETA"));
     }
 
     /// <summary>ConnectionOptions throws when no current user is installed, since MSMT peer authentication is mandatory and there is no user to resolve an identity certificate for.</summary>

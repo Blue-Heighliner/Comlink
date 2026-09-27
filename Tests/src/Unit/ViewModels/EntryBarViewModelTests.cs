@@ -616,4 +616,41 @@ public sealed class EntryBarViewModelTests
         Assert.NotNull(vm.SelectedEntry);
         Assert.Equal(id, vm.SelectedEntry.Id);
     }
+
+    /// <summary>Two refreshes that overlap list each entry once: only the newer load is shown, rather than both loads appending.</summary>
+    [Fact]
+    public async Task Refresh_Overlapping_ShowsNewestLoadOnly()
+    {
+        Mock<IEntryService> svc = new();
+        TaskCompletionSource<(List<NoteEntity> Items, int Total)> first = new();
+        svc.SetupSequence(s => s.GetNotes(It.IsAny<string>(), It.IsAny<int>(), It.IsAny<bool>()))
+           .Returns(first.Task)
+           .ReturnsAsync((Items: new List<NoteEntity> { MakeNote("Newer") }, Total: 1));
+        EntryBarViewModel vm = new(svc.Object, format);
+
+        Task slow = vm.LoadFolder(MakeFolder("root-notes", FolderType.Notes));
+        await vm.Refresh();
+        first.SetResult((Items: [MakeNote("Older")], Total: 1));
+        await slow;
+
+        Assert.Equal("Newer", Assert.Single(vm.Entries).Title);
+    }
+
+    /// <summary>Deleting from the list updates the page count, not just the list.</summary>
+    [Fact]
+    public async Task DeleteEntry_UpdatesPagination()
+    {
+        Mock<IEntryService> svc = new();
+        NoteEntity note = MakeNote("Only");
+        svc.SetupSequence(s => s.GetNotes(It.IsAny<string>(), It.IsAny<int>(), It.IsAny<bool>()))
+           .ReturnsAsync((Items: new List<NoteEntity> { note }, Total: 51))
+           .ReturnsAsync((Items: new List<NoteEntity>(), Total: 50));
+        EntryBarViewModel vm = new(svc.Object, format);
+        await vm.LoadFolder(MakeFolder("root-notes", FolderType.Notes));
+        Assert.Equal(2, vm.TotalPages);
+
+        await vm.DeleteEntry(vm.Entries[0]);
+
+        Assert.Equal(1, vm.TotalPages);
+    }
 }

@@ -25,7 +25,9 @@ public interface IFolderBarViewModel
     Task MoveEntry(EntryItemViewModel entry, FolderItemViewModel targetFolder);
     /// <summary>Creates and persists a new subfolder under the given parent, then selects it.</summary>
     Task AddSubfolder(FolderItemViewModel parent, string name);
-    /// <summary>Deletes an empty subfolder and removes it from the tree.</summary>
+    /// <summary>Whether <paramref name="folder"/> is a subfolder the host allows deleting; deleting it also deletes everything inside it.</summary>
+    bool CanDeleteFolder(FolderItemViewModel folder);
+    /// <summary>Permanently deletes a subfolder together with all of its subfolders and every entry in any of them, then selects its parent if the selection was inside it.</summary>
     Task DeleteFolder(FolderItemViewModel folder);
     /// <summary>Collapses all folders in the tree.</summary>
     void CollapseAll();
@@ -44,10 +46,12 @@ public sealed partial class FolderBarViewModel : ObservableObject, IFolderBarVie
         return vm;
     }
 
-    /// <summary>Returns <see langword="true"/> when an entry of the given type may be moved into a folder of the given type.</summary>
-    public static bool IsCompatibleMove(EntryType entryType, FolderType folderType) => entryType switch
+    /// <summary>Returns <see langword="true"/> when an entry of the given type may be moved into a folder of the given type; a message may only move within its own direction's tree (<paramref name="isOutboundMessage"/>).</summary>
+    public static bool IsCompatibleMove(EntryType entryType, FolderType folderType, bool isOutboundMessage = false) => entryType switch
     {
-        EntryType.Message => folderType is FolderType.Inbox or FolderType.Outbox,
+        // A received message stays under Inbox and a sent one under Outbox: each tree reads and deletes its entries as
+        // its own direction, so a message moved across would no longer open or delete.
+        EntryType.Message => folderType == (isOutboundMessage ? FolderType.Outbox : FolderType.Inbox),
         EntryType.Draft => folderType is FolderType.Drafts,
         EntryType.Note => folderType is FolderType.Notes,
         _ => false
@@ -66,6 +70,16 @@ public sealed partial class FolderBarViewModel : ObservableObject, IFolderBarVie
         return null;
     }
 
+    private static List<FolderItemViewModel> Flatten(FolderItemViewModel folder)
+    {
+        List<FolderItemViewModel> all = [folder];
+        for (int i = 0; i < all.Count; i++)
+        {
+            all.AddRange(all[i].Children);
+        }
+        return all;
+    }
+
     private static void CollapseRecursive(FolderItemViewModel folder)
     {
         folder.IsExpanded = false;
@@ -77,15 +91,18 @@ public sealed partial class FolderBarViewModel : ObservableObject, IFolderBarVie
 
     /// <summary>Initializes a new <see cref="FolderBarViewModel"/> with the required repositories.</summary>
     /// <param name="folders">Repository for loading and persisting folders.</param>
-    /// <param name="entryService">Entry service for move operations.</param>
-    public FolderBarViewModel(IFolderRepository folders, IEntryService entryService)
+    /// <param name="entryService">Entry service for move and delete operations.</param>
+    /// <param name="engineController">Host rules, consulted for whether entries may be deleted.</param>
+    public FolderBarViewModel(IFolderRepository folders, IEntryService entryService, IEngineController engineController)
     {
         this.folders = folders;
         this.entryService = entryService;
+        this.engineController = engineController;
     }
 
     private readonly IFolderRepository folders;
     private readonly IEntryService entryService;
+    private readonly IEngineController engineController;
 
     [ObservableProperty] private FolderItemViewModel? selectedFolder;
 
@@ -152,7 +169,7 @@ public sealed partial class FolderBarViewModel : ObservableObject, IFolderBarVie
     /// <summary>Moves the given entry to the target folder if the types are compatible.</summary>
     public async Task MoveEntry(EntryItemViewModel entry, FolderItemViewModel targetFolder)
     {
-        if (!IsCompatibleMove(entry.EntryType, targetFolder.RootType)) { return; }
+        if (!IsCompatibleMove(entry.EntryType, targetFolder.RootType, entry.IsOutboundMessage)) { return; }
         await entryService.MoveEntry(entry.Id, entry.EntryType, targetFolder.Id, entry.IsOutboundMessage);
         EntryMoved?.Invoke();
     }
@@ -177,16 +194,30 @@ public sealed partial class FolderBarViewModel : ObservableObject, IFolderBarVie
         SelectFolder(child);
     }
 
-    /// <summary>Deletes an empty subfolder and removes it from the tree, selecting the nearest remaining folder.</summary>
+    /// <inheritdoc />
+    public bool CanDeleteFolder(FolderItemViewModel folder)
+        => folder.IsSubfolder && engineController.CanDelete(folder.RootType);
+
+    /// <inheritdoc />
     public async Task DeleteFolder(FolderItemViewModel folder)
     {
-        if (!folder.IsSubfolder || folder.Children.Count > 0) { return; }
-        await folders.Delete(folder.Id);
+        if (!CanDeleteFolder(folder)) { return; }
         FolderItemViewModel? parent = FindParent(folder.Id);
-        parent?.Children.Remove(folder);
-        if (SelectedFolder == folder)
+        if (parent is null) { return; }
+
+        List<FolderItemViewModel> doomedFolders = Flatten(folder);
+        bool selectionInside = SelectedFolder is { } selected && doomedFolders.Contains(selected);
+        doomedFolders.Reverse();
+        foreach (FolderItemViewModel doomed in doomedFolders)
         {
-            SelectFolder(parent ?? RootFolders.FirstOrDefault() ?? folder);
+            await entryService.DeleteFolderContents(doomed.Id);
+            await folders.Delete(doomed.Id);
+        }
+
+        parent.Children.Remove(folder);
+        if (selectionInside)
+        {
+            SelectFolder(parent);
         }
     }
 

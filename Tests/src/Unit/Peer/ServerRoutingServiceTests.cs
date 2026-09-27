@@ -719,13 +719,18 @@ public sealed class ServerRoutingServiceTests
         await fx.StartTask;
     }
 
+    private static void AcknowledgeWithoutConnecting(Mock<IPeerTransport> transport)
+        => transport.Setup(p => p.Request(It.IsAny<UserEndpoint>(), It.IsAny<ReadOnlyMemory<byte>>(), It.IsAny<PeerSendOptions>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(true);
+
     /// <summary>An outbound connection to a child or server going down is reflected on its row, not only inbound ones.</summary>
     [Fact]
     public async Task OutboundConnectionDisconnects_MarksRowDown()
     {
-        Fixture fx = await BuildStarted(configureTransport: (transport, connected) => AutoConnectAndAcknowledge(transport, connected));
-        await WaitUntil(() => fx.Service.GetStatuses().Single(s => s.UserName == "ServerB").IsConnected, TimeSpan.FromSeconds(2));
+        Fixture fx = await BuildStarted(configureTransport: (transport, _) => AcknowledgeWithoutConnecting(transport));
         PeerConnection outbound = new(serverBEndpoint, false, null, () => { });
+        fx.Connected.Publish(new PeerConnectionEventArgs { Connection = outbound });
+        await WaitUntil(() => fx.Service.GetStatuses().Single(s => s.UserName == "ServerB").IsConnected, TimeSpan.FromSeconds(2));
 
         fx.Disconnected.Publish(new PeerConnectionEventArgs { Connection = outbound });
 
@@ -735,6 +740,101 @@ public sealed class ServerRoutingServiceTests
 
         fx.Cts.Cancel();
         await fx.StartTask;
+    }
+
+    /// <summary>A sibling server connected both ways stays up when one direction drops, and only goes down once neither is left.</summary>
+    [Fact]
+    public async Task OneOfTwoConnectionsDrops_RowStaysUpUntilBothAreGone()
+    {
+        Fixture fx = await BuildStarted(configureTransport: (transport, _) => AcknowledgeWithoutConnecting(transport));
+        PeerConnection outbound = new(serverBEndpoint, false, null, () => { });
+        PeerConnection inbound = BuildInboundConnection("ServerB");
+        fx.Connected.Publish(new PeerConnectionEventArgs { Connection = outbound });
+        fx.Connected.Publish(new PeerConnectionEventArgs { Connection = inbound });
+        await WaitUntil(() => fx.Service.GetStatuses().Single(s => s.UserName == "ServerB").IsConnected, TimeSpan.FromSeconds(2));
+
+        fx.Disconnected.Publish(new PeerConnectionEventArgs { Connection = inbound });
+        Assert.True(Assert.Single(fx.Service.GetStatuses(), s => s.UserName == "ServerB").IsConnected);
+
+        fx.Disconnected.Publish(new PeerConnectionEventArgs { Connection = outbound });
+        Assert.False(Assert.Single(fx.Service.GetStatuses(), s => s.UserName == "ServerB").IsConnected);
+
+        fx.Cts.Cancel();
+        await fx.StartTask;
+    }
+
+    /// <summary>A message relayed by the server keeps the priority it was sent with, for children and for other servers alike.</summary>
+    [Fact]
+    public async Task Relay_KeepsMessagePriority()
+    {
+        Fixture fx = await BuildStarted();
+        AutoConnectAndAcknowledge(fx.Transport, fx.Connected);
+        PeerConnection clientA1 = BuildInboundConnection("ClientA1");
+        fx.Connected.Publish(new PeerConnectionEventArgs { Connection = clientA1 });
+        TestMessage message = MessageTo("ClientA2", "ClientB1");
+        message.Priority = 7;
+
+        fx.Received.Publish(ReceivedFrom(clientA1, Encode(message)));
+
+        await WaitUntil(() => RequestedRealPayloadTo(fx, clientA2Endpoint.Port) && RequestedRealPayloadTo(fx, serverBEndpoint.Port), TimeSpan.FromSeconds(2));
+        fx.Transport.Verify(p => p.Request(It.Is<UserEndpoint>(t => t.Port == clientA2Endpoint.Port), It.Is<ReadOnlyMemory<byte>>(p => IsRealPayload(p)), It.Is<PeerSendOptions>(o => o.Priority == 7), It.IsAny<CancellationToken>()), Times.Once);
+        fx.Transport.Verify(p => p.Request(It.Is<UserEndpoint>(t => t.Port == serverBEndpoint.Port), It.Is<ReadOnlyMemory<byte>>(p => IsRealPayload(p)), It.Is<PeerSendOptions>(o => o.Priority == 7), It.IsAny<CancellationToken>()), Times.Once);
+
+        fx.Cts.Cancel();
+        await fx.StartTask;
+    }
+
+    /// <summary>One unreachable recipient does not hold up delivery to the others: sends go out concurrently.</summary>
+    [Fact]
+    public async Task Relay_SlowRecipient_DoesNotDelayOthers()
+    {
+        Fixture fx = await BuildStarted();
+        TaskCompletionSource<bool> stuck = new();
+        fx.Transport.Setup(p => p.Request(It.IsAny<UserEndpoint>(), It.IsAny<ReadOnlyMemory<byte>>(), It.IsAny<PeerSendOptions>(), It.IsAny<CancellationToken>()))
+            .Returns<UserEndpoint, ReadOnlyMemory<byte>, PeerSendOptions?, CancellationToken>((target, _, _, _) => target.Port == clientA2Endpoint.Port ? stuck.Task : Task.FromResult(true));
+        PeerConnection clientA1 = BuildInboundConnection("ClientA1");
+        fx.Connected.Publish(new PeerConnectionEventArgs { Connection = clientA1 });
+
+        fx.Received.Publish(ReceivedFrom(clientA1, Encode(MessageTo("ClientA2", "ClientB1"))));
+
+        await WaitUntil(() => RequestedRealPayloadTo(fx, serverBEndpoint.Port), TimeSpan.FromSeconds(2));
+        stuck.SetResult(true);
+
+        fx.Cts.Cancel();
+        await fx.StartTask;
+    }
+
+    /// <summary>A message that arrives from a user after its connection was closed is not relayed.</summary>
+    [Fact]
+    public async Task MessageFromClosedUser_IsNotRelayed()
+    {
+        Fixture fx = await BuildStarted();
+        AutoConnectAndAcknowledge(fx.Transport, fx.Connected);
+        PeerConnection clientA1 = BuildInboundConnection("ClientA1");
+        fx.Connected.Publish(new PeerConnectionEventArgs { Connection = clientA1 });
+        fx.Service.SetClosed(PeerConnectionKind.Client, "ClientA1", true);
+
+        fx.Received.Publish(ReceivedFrom(clientA1, Encode(MessageTo("ClientA2"))));
+        await Task.Delay(100);
+
+        Assert.False(RequestedRealPayloadTo(fx, clientA2Endpoint.Port));
+
+        fx.Cts.Cancel();
+        await fx.StartTask;
+    }
+
+    /// <summary>Registered as both IPeerService and IConnectionStatusService, the service is disposed twice; the second is a no-op.</summary>
+    [Fact]
+    public async Task DisposeAsync_Twice_DisposesTransportOnce()
+    {
+        Fixture fx = await BuildStarted();
+        fx.Cts.Cancel();
+        await fx.StartTask;
+
+        await fx.Service.DisposeAsync();
+        await fx.Service.DisposeAsync();
+
+        fx.Transport.Verify(t => t.DisposeAsync(), Times.Once);
     }
 
     /// <summary>A heartbeat acknowledged for a user that has since been closed does not bring its row back up.</summary>

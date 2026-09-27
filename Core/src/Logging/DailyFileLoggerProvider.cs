@@ -21,6 +21,7 @@ public sealed class DailyFileLoggerProvider : ILoggerProvider
     private Mutex? crossProcessMutex;
     private DateOnly currentDate;
     private StreamWriter? writer;
+    private volatile bool fileFailureReported;
 
     private string LogDirectory
     {
@@ -43,8 +44,30 @@ public sealed class DailyFileLoggerProvider : ILoggerProvider
     public ILogger CreateLogger(string categoryName)
         => loggers.GetOrAdd(categoryName, name => new DailyFileLogger(name, this, currentUser));
 
-    /// <summary>Writes a formatted log line to the current daily file under a cross-process mutex.</summary>
+    /// <summary>Writes a formatted log line to the console and to the current daily file (under a cross-process mutex). Never throws: if the file cannot be written, the line still reaches the console.</summary>
     internal void Write(string line)
+    {
+        // A logger must never throw: an exception here propagates out of the caller's log statement and, from a
+        // hosted service, takes the whole application down (an unwritable or missing log folder once did exactly
+        // that). The console copy still gets the line when the file cannot.
+        try { Console.WriteLine(line); }
+        catch { }
+
+        try
+        {
+            WriteToFile(line);
+            fileFailureReported = false;
+        }
+        catch (Exception ex)
+        {
+            if (fileFailureReported) { return; }
+            fileFailureReported = true;
+            try { Console.WriteLine($"Log file unavailable, logging to the console only: {ex.Message}"); }
+            catch { }
+        }
+    }
+
+    private void WriteToFile(string line)
     {
         bool mutexAcquired = false;
         try
@@ -58,6 +81,7 @@ public sealed class DailyFileLoggerProvider : ILoggerProvider
                 if (writer is null || today != currentDate)
                 {
                     writer?.Dispose();
+                    writer = null;
                     currentDate = today;
                     string path = Path.Combine(LogDirectory, $"{today:yyyy-MM-dd}.log");
                     FileStream stream = new(path, FileMode.Append, FileAccess.Write, FileShare.ReadWrite);
@@ -65,7 +89,6 @@ public sealed class DailyFileLoggerProvider : ILoggerProvider
                 }
                 writer.WriteLine(line);
                 writer.Flush();
-                Console.WriteLine(line);
             }
         }
         finally
@@ -117,7 +140,7 @@ public sealed class DailyFileLogger : ILogger, IDisposable
         string message = formatter(state, exception);
         string? user = currentUser.UserName;
         DateTime dt = DateTime.Now;
-        string dateStr = $"{dt.Day:D2}-{dt.ToString("MMM").ToUpperInvariant()}-{dt.Year} {dt:HH:mm}.{dt:fff}";
+        string dateStr = dt.ToString("dd-MMM-yyyy HH:mm:ss.fff", CultureInfo.InvariantCulture).ToUpperInvariant();
         string level = logLevel == LogLevel.Information ? "INFO" : logLevel.ToString().ToUpperInvariant();
         string category = categoryName.ToUpperInvariant();
         string line = $"[{dateStr}] [{level}] [{category}] [{user ?? "----"}] {message}";

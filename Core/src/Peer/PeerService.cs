@@ -54,6 +54,7 @@ internal sealed class PeerService : IPeerService, IAsyncDisposable
     private readonly ILogger logger;
 
     private IPeerTransport? transport;
+    private int disposed;
 
     /// <inheritdoc />
     public event Func<object, Task>? MessageDelivered;
@@ -136,7 +137,8 @@ internal sealed class PeerService : IPeerService, IAsyncDisposable
     }
 
     /// <inheritdoc />
-    public ValueTask DisposeAsync() => transport?.DisposeAsync() ?? ValueTask.CompletedTask;
+    public ValueTask DisposeAsync()
+        => Interlocked.Exchange(ref disposed, 1) == 0 && transport is not null ? transport.DisposeAsync() : ValueTask.CompletedTask;
 
     private sealed record DeliveryTag(string MessageId, string UserName);
 }

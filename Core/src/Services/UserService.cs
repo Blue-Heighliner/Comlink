@@ -3,6 +3,8 @@ namespace BlueHeighliner.Comlink.Services;
 /// <summary>Manages the local user identity: loading persisted state, applying debug overrides, and installing a new user.</summary>
 public interface IUserService
 {
+    /// <summary>Raised after <see cref="Install"/> registers a user, once the user is current and its state is saved.</summary>
+    event Action? Installed;
     /// <summary>Gets the currently loaded user state.</summary>
     UserState CurrentState { get; }
     /// <summary>Returns a <see cref="UserInfo"/> for the current user, or <see langword="null"/> if no user is installed.</summary>
@@ -34,6 +36,9 @@ public sealed class UserService : IUserService
     private UserState state = new();
     private readonly SemaphoreSlim lockObject = new(1, 1);
     private string StateFilePath => Path.Combine(engineController.AppDataPath, "State.json");
+
+    /// <inheritdoc />
+    public event Action? Installed;
 
     /// <summary>Gets the currently loaded user state.</summary>
     public UserState CurrentState => state;
@@ -87,10 +92,11 @@ public sealed class UserService : IUserService
     /// <summary>Resolves <paramref name="userCode"/>, updates the local state, and persists it to disk.</summary>
     public async Task<UserInfo?> Install(string userCode, CancellationToken cancellation = default)
     {
+        UserInfo? userInfo;
         await lockObject.WaitAsync(cancellation);
         try
         {
-            UserInfo? userInfo = engineController.ResolveCode(userCode);
+            userInfo = engineController.ResolveCode(userCode);
             if (userInfo is null) { return null; }
 
             state = new UserState
@@ -106,11 +112,13 @@ public sealed class UserService : IUserService
             string stateFilePath = StateFilePath;
             Directory.CreateDirectory(Path.GetDirectoryName(stateFilePath)!);
             await File.WriteAllTextAsync(stateFilePath, JsonSerializer.Serialize(state, jsonOptions), cancellation);
-            return userInfo;
         }
         finally
         {
             lockObject.Release();
         }
+
+        Installed?.Invoke();
+        return userInfo;
     }
 }

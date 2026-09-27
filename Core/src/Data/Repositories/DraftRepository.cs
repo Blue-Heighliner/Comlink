@@ -17,6 +17,8 @@ public interface IDraftRepository
     Task Update(DraftEntity entity);
     /// <summary>Deletes the draft with the given identifier.</summary>
     Task Delete(ObjectId id);
+    /// <summary>Deletes every draft in the folder with the given identifier.</summary>
+    Task DeleteAll(string folderId);
 }
 
 /// <summary>Provides data-access operations for <see cref="DraftEntity"/> documents.</summary>
@@ -65,4 +67,8 @@ public sealed class DraftRepository : IDraftRepository
     /// <inheritdoc />
     public Task Delete(ObjectId id)
         => Task.Run(() => ctx.Drafts.Delete(id));
+
+    /// <inheritdoc />
+    public Task DeleteAll(string folderId)
+        => Task.Run(() => ctx.Drafts.DeleteMany(e => e.FolderId == folderId));
 }

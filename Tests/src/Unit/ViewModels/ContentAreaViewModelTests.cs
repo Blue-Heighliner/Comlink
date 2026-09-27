@@ -361,4 +361,42 @@ public sealed class ContentAreaViewModelTests
         };
         await conn.RaiseDeliveryStatusChanged(evt);
     }
+
+    /// <summary>When the user picks another entry before the first has loaded, the slower first load does not replace the one picked afterwards.</summary>
+    [Fact]
+    public async Task ShowEntry_OlderLoadFinishingLast_IsDiscarded()
+    {
+        Mock<IMessageRepository> messages = new();
+        TaskCompletionSource<MessageEntity?> slow = new();
+        messages.Setup(m => m.Get("SLOW", false)).Returns(slow.Task);
+        messages.Setup(m => m.Get("FAST", false)).ReturnsAsync(new MessageEntity { MessageId = "FAST", Message = new TestMessage(), ReadStatus = DestinationStatus.Read });
+        ContentAreaViewModel vm = new(MakeEngineController(), new Mock<IEntryService>().Object, new FakeServiceConnection(), messages.Object,
+            new Mock<IDraftRepository>().Object, new Mock<INoteRepository>().Object, new Mock<IActivityLogRepository>().Object, LoggerFactory.Create(_ => { }));
+
+        Task first = vm.ShowEntry(new EntryItemViewModel("SLOW", "S", EntryType.Message, DateTime.UtcNow));
+        await vm.ShowEntry(new EntryItemViewModel("FAST", "F", EntryType.Message, DateTime.UtcNow));
+        slow.SetResult(new MessageEntity { MessageId = "SLOW", Message = new TestMessage(), ReadStatus = DestinationStatus.Read });
+        await first;
+
+        Assert.Equal("FAST", Assert.IsType<MessageViewModel>(vm.ActiveContent).MessageId);
+    }
+
+    /// <summary>Going home while an entry is still loading keeps the home screen.</summary>
+    [Fact]
+    public async Task ShowHome_WhileLoading_StaysHome()
+    {
+        Mock<IMessageRepository> messages = new();
+        TaskCompletionSource<MessageEntity?> slow = new();
+        messages.Setup(m => m.Get("SLOW", false)).Returns(slow.Task);
+        ContentAreaViewModel vm = new(MakeEngineController(), new Mock<IEntryService>().Object, new FakeServiceConnection(), messages.Object,
+            new Mock<IDraftRepository>().Object, new Mock<INoteRepository>().Object, new Mock<IActivityLogRepository>().Object, LoggerFactory.Create(_ => { }));
+
+        Task loading = vm.ShowEntry(new EntryItemViewModel("SLOW", "S", EntryType.Message, DateTime.UtcNow));
+        vm.ShowHome();
+        slow.SetResult(new MessageEntity { MessageId = "SLOW", Message = new TestMessage(), ReadStatus = DestinationStatus.Read });
+        await loading;
+
+        Assert.Null(vm.ActiveContent);
+        Assert.True(vm.IsHomeVisible);
+    }
 }

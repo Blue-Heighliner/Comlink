@@ -1,0 +1,27 @@
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        x:Class="BlueHeighliner.Comlink.Views.Controls.ConfirmDialog"
+        Width="320"
+        SizeToContent="Height"
+        CanResize="False"
+        WindowStartupLocation="CenterOwner"
+        Background="#2D2D30">
+
+    <Border BorderBrush="#3E3E42" BorderThickness="1">
+        <StackPanel Margin="16,14" Spacing="12">
+            <TextBlock x:Name="MessageText"
+                       FontSize="13"
+                       TextWrapping="Wrap" />
+            <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" Spacing="8">
+                <Button x:Name="CancelBtn"
+                        Content="Cancel"
+                        FontSize="12"
+                        Padding="12,5" />
+                <Button x:Name="OkBtn"
+                        FontSize="12"
+                        Padding="12,5" />
+            </StackPanel>
+        </StackPanel>
+    </Border>
+
+</Window>

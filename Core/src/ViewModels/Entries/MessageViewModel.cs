@@ -146,7 +146,7 @@ public sealed partial class MessageViewModel : ObservableObject, IMessageViewMod
     /// <param name="status">New delivery status for the user.</param>
     public void UpdateDeliveryStatus(string userName, DestinationStatus status)
     {
-        DeliveryStatusRow? row = DeliveryStatuses.FirstOrDefault(r => r.UserName == userName);
+        DeliveryStatusRow? row = DeliveryStatuses.FirstOrDefault(r => string.Equals(r.UserName, userName, StringComparison.OrdinalIgnoreCase));
         if (row is not null) { row.Status = status; }
         OverallStatus = ComputeOverallStatus();
     }

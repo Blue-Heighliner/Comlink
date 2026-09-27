@@ -10,13 +10,13 @@ Writes all log output to a daily rotating file and to stdout.
 
 **Log format**:
 ```
-[dd-MMM-yyyy HH:mm.fff] [LEVEL] [CATEGORY] [USER] message
+[dd-MMM-yyyy HH:mm:ss.fff] [LEVEL] [CATEGORY] [USER] message
 ```
 
 Example:
 ```
-[30-JUL-2026 14:23.051] [INFO] [APP] [MYUSER] Engine started
-[30-JUL-2026 14:23.102] [ERROR] [ACTIVITY] [MYUSER] Failed to load: System.IO.IOException: ...
+[30-JUL-2026 14:23:07.051] [INFO] [APP] [MYUSER] Engine started
+[30-JUL-2026 14:23:07.102] [ERROR] [ACTIVITY] [MYUSER] Failed to load: System.IO.IOException: ...
 ```
 
 Level tokens: `INFO` for `Information`; all others uppercased (`DEBUG`, `WARNING`, `ERROR`, `CRITICAL`).
@@ -26,6 +26,8 @@ Level tokens: `INFO` for `Information`; all others uppercased (`DEBUG`, `WARNING
 **Multi-process safety**: The provider uses a named Windows Mutex (`Local\PCLog_{md5(logdir)}`) so that multiple processes writing to the same log directory serialize their writes. File is opened with `FileShare.ReadWrite` so all processes can hold handles simultaneously. Within a single process, a `lock` serializes all loggers (one per category) through a single shared `StreamWriter`.
 
 **Day rollover**: The `StreamWriter` is reopened on the first write of a new day.
+
+**Never throws**: every line is also written to the console, and a failure to write the file (for example an unwritable data folder) is swallowed after a single console notice, so logging can never take the application down. Month names use the invariant culture, so the format is the same on every machine.
 
 ## ActivityLoggerProvider
 

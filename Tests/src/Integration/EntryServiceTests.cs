@@ -242,4 +242,73 @@ public sealed class EntryServiceTests : IDisposable
         string dir = Path.Combine(appData, appName);
         if (Directory.Exists(dir)) { Directory.Delete(dir, recursive: true); }
     }
+
+    private async Task<string> StoreSentTo(string user, bool success)
+    {
+        string messageId = Guid.NewGuid().ToString("N");
+        await service.StoreSentMessage(messageId, "Hello", "Body",
+            [new AddressData { UserName = user, Type = "To" }], DateTime.UtcNow,
+            [new UserDeliveryResult { UserName = user, Success = success, AddressedVia = [] }]);
+        return messageId;
+    }
+
+    /// <summary>Status events for one send arrive in any order; a late "Sent" never moves an already Confirmed status back.</summary>
+    [Fact]
+    public async Task UpdateDeliveryStatus_LateEarlierStatus_IsIgnored()
+    {
+        string messageId = await StoreSentTo("BOB", success: true);
+
+        MessageEntity? updated = await service.UpdateDeliveryStatus(messageId, "BOB", DestinationStatus.Sent);
+
+        Assert.Equal(DestinationStatus.Confirmed, Assert.Single(updated!.DeliveryStatuses).Status);
+        (List<MessageEntity> outbox, _) = await service.GetMessages("root-outbox", 1);
+        Assert.Equal(DestinationStatus.Confirmed, Assert.Single(Assert.Single(outbox).DeliveryStatuses).Status);
+    }
+
+    /// <summary>A status that moves forward is applied, including a read confirmation after a send that was reported failed.</summary>
+    [Theory]
+    [InlineData(true, DestinationStatus.Read)]
+    [InlineData(false, DestinationStatus.Read)]
+    public async Task UpdateDeliveryStatus_LaterStatus_IsApplied(bool success, DestinationStatus later)
+    {
+        string messageId = await StoreSentTo("BOB", success);
+
+        MessageEntity? updated = await service.UpdateDeliveryStatus(messageId, "BOB", later);
+
+        Assert.Equal(later, Assert.Single(updated!.DeliveryStatuses).Status);
+    }
+
+    /// <summary>Users are matched case-insensitively, as everywhere else in routing, so a confirmation from "bob" updates "BOB".</summary>
+    [Fact]
+    public async Task UpdateDeliveryStatus_DifferentCase_UpdatesSameUser()
+    {
+        string messageId = await StoreSentTo("BOB", success: true);
+
+        MessageEntity? updated = await service.UpdateDeliveryStatus(messageId, "bob", DestinationStatus.Read);
+
+        DeliveryStatus status = Assert.Single(updated!.DeliveryStatuses);
+        Assert.Equal("BOB", status.UserName);
+        Assert.Equal(DestinationStatus.Read, status.Status);
+    }
+
+    /// <summary>DeleteFolderContents deletes every message, draft, and note in the folder and leaves other folders alone.</summary>
+    [Fact]
+    public async Task DeleteFolderContents_DeletesMessagesDraftsAndNotesOfThatFolderOnly()
+    {
+        await service.StoreIncomingMessage(Guid.NewGuid().ToString("N"), "A", "S", "B", [], DateTime.UtcNow);
+        await service.CreateDraft();
+        await service.CreateNote();
+        NoteEntity untouched = await service.CreateNote();
+        untouched.FolderId = "somewhere-else";
+        await service.SaveNote(untouched);
+
+        await service.DeleteFolderContents("root-inbox");
+        await service.DeleteFolderContents("root-drafts");
+        await service.DeleteFolderContents("root-notes");
+
+        Assert.Equal(0, (await service.GetMessages("root-inbox", 1)).Total);
+        Assert.Empty((await service.GetDrafts("root-drafts", 1, false)).Items);
+        Assert.Empty((await service.GetNotes("root-notes", 1, false)).Items);
+        Assert.Equal(untouched.Id, Assert.Single((await service.GetNotes("somewhere-else", 1, false)).Items).Id);
+    }
 }

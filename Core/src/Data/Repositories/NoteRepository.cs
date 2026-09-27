@@ -17,6 +17,8 @@ public interface INoteRepository
     Task Update(NoteEntity entity);
     /// <summary>Deletes the note with the given identifier.</summary>
     Task Delete(ObjectId id);
+    /// <summary>Deletes every note in the folder with the given identifier.</summary>
+    Task DeleteAll(string folderId);
 }
 
 /// <summary>Provides data-access operations for <see cref="NoteEntity"/> documents.</summary>
@@ -65,4 +67,8 @@ public sealed class NoteRepository : INoteRepository
     /// <inheritdoc />
     public Task Delete(ObjectId id)
         => Task.Run(() => ctx.Notes.Delete(id));
+
+    /// <inheritdoc />
+    public Task DeleteAll(string folderId)
+        => Task.Run(() => ctx.Notes.DeleteMany(e => e.FolderId == folderId));
 }

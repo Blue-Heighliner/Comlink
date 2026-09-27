@@ -406,4 +406,41 @@ public sealed class SerialPeerTransportTests
         await WaitUntil(() => received.Payloads.Count == 1);
         Assert.Equal(new byte[] { 7, 7 }, received.Payloads[0]);
     }
+
+    /// <summary>Fragments of two messages arriving interleaved are dropped rather than stitched together, and later messages still arrive.</summary>
+    [Fact]
+    public async Task Received_InterleavedFragments_AreDropped()
+    {
+        FakeMicroGateCable cable = new();
+        await using SerialPeerTransport transport = new(cable.EndA, logger, TimeSpan.FromMilliseconds(20));
+        IMicroGatePeer raw = cable.EndB.Create();
+        _ = raw.Start("SL0").AsTask();
+        transport.Open(endpoint);
+        PeerCollector received = new();
+        transport.Received.Listen(args => received.AddPayload(args.Payload.ToArray()));
+        await WaitUntil(() => raw.IsConnected);
+
+        await raw.Send(SerialFrame.EncodeData(10, 0, 2, [1]));
+        await raw.Send(SerialFrame.EncodeData(11, 0, 2, [2]));
+        await raw.Send(SerialFrame.EncodeData(10, 1, 2, [3]));
+        await raw.Send(SerialFrame.EncodeData(11, 1, 2, [4]));
+        await raw.Send(SerialFrame.EncodeData(12, 0, 1, [9]));
+
+        await WaitUntil(() => received.Payloads.Count == 1);
+        await Task.Delay(50);
+        Assert.Equal(new byte[] { 9 }, Assert.Single(received.Payloads));
+    }
+
+    /// <summary>Closing an already closed link, and disposing twice, are both harmless.</summary>
+    [Fact]
+    public async Task SetClosedTwice_ThenDisposeTwice_DoesNotThrow()
+    {
+        await using Pair pair = await ConnectedPair();
+
+        pair.A.SetClosed(endpoint, true);
+        pair.A.SetClosed(endpoint, true);
+        await WaitUntil(() => pair.AConnections.Events.Contains("disconnected"));
+        await pair.A.DisposeAsync();
+        await pair.A.DisposeAsync();
+    }
 }

@@ -154,6 +154,8 @@ sequenceDiagram
 2. `PeerService.Start` — begins accepting peer connections
 3. `InterfaceService.Start` — begins accepting interface connections (always, regardless of mode)
 
+Steps 2 and 3 (and external systems) only run once a user is installed: a fresh installation has no name, so it cannot identify itself to peers, pick its own certificate, or stamp messages it routes. When no user is installed yet, `EngineHost` waits for `UserService.Installed` and starts networking then, without a restart.
+
 ## Data Storage
 
 All persistent data lives under `IEngineController.AppDataPath` (default: `%APPDATA%/{AppName}`):

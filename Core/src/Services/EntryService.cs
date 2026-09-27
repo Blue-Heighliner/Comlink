@@ -17,7 +17,7 @@ public interface IEntryService
     event Func<MessageEntity, Task>? MessageRead;
     /// <summary>Persists a sent message to the Outbox folder, including per-user delivery status entries.</summary>
     Task<MessageEntity> StoreSentMessage(string messageId, string subject, string body, List<AddressData> addresses, DateTime sentAt, IReadOnlyList<UserDeliveryResult> userResults, bool isAlert = false, int priority = 0, string tag = "");
-    /// <summary>Updates the delivery status for a specific user on an existing message entity.</summary>
+    /// <summary>Updates the delivery status for a specific user on the Outbox record, ignoring a status that would move it backward (for example a late "Sent" after "Confirmed"); user names match case-insensitively.</summary>
     Task<MessageEntity?> UpdateDeliveryStatus(string messageId, string userName, DestinationStatus status);
     /// <summary>Persists a received message to the Inbox folder with <see cref="MessageEntity.ReadStatus"/> set to <see cref="DestinationStatus.Received"/>, and raises <see cref="MessageInserted"/>.</summary>
     Task<MessageEntity> StoreIncomingMessage(string messageId, string fromUser, string subject, string body, List<AddressData> addresses, DateTime sentAt, bool isAlert = false, int priority = 0, string tag = "");
@@ -54,6 +54,8 @@ public interface IEntryService
     /// see <see cref="DeleteEntry"/>.
     /// </summary>
     Task MoveEntry(string entryId, EntryType entryType, string targetFolderId, bool isOutboundMessage = false);
+    /// <summary>Permanently deletes every message, draft, and note in <paramref name="folderId"/>.</summary>
+    Task DeleteFolderContents(string folderId);
     /// <summary>Returns a page of activity log entries together with the total entry count.</summary>
     Task<(List<ActivityLogEntity> Items, int Total)> GetActivityLogs(int page);
 }
@@ -107,6 +109,18 @@ public sealed class EntryService : IEntryService
     /// <summary>Raised after an Inbox message's <see cref="MessageEntity.ReadStatus"/> transitions from <c>Received</c> to <c>Read</c>.</summary>
     public event Func<MessageEntity, Task>? MessageRead;
 
+    // Status events for one send are raised on separate thread-pool tasks, and can also land after the Outbox record
+    // was stored with its final result, so they arrive in any order; a status only ever moves forward, so a late
+    // "Sent" can never overwrite "Confirmed". Failed ranks with Confirmed: either ends the send, and a later read
+    // confirmation still proves the message arrived.
+    private static int DeliveryProgress(DestinationStatus status) => status switch
+    {
+        DestinationStatus.Sending => 0,
+        DestinationStatus.Sent => 1,
+        DestinationStatus.Read => 3,
+        _ => 2
+    };
+
     private object BuildMessage(string messageId, string fromUser, string subject, string body, List<AddressData> addresses, DateTime sentAt, bool isAlert, int priority, string tag)
     {
         object message = engineController.CreateMessage();
@@ -147,7 +161,7 @@ public sealed class EntryService : IEntryService
         return entity;
     }
 
-    /// <summary>Updates the delivery status for a specific user on an existing message entity.</summary>
+    /// <inheritdoc />
     public async Task<MessageEntity?> UpdateDeliveryStatus(string messageId, string userName, DestinationStatus status)
     {
         await deliveryLock.WaitAsync();
@@ -158,14 +172,18 @@ public sealed class EntryService : IEntryService
             MessageEntity? entity = await messages.Get(messageId, outbound: true);
             if (entity is null) { return null; }
 
-            DeliveryStatus? existing = entity.DeliveryStatuses.FirstOrDefault(d => d.UserName == userName);
-            if (existing is not null)
+            DeliveryStatus? existing = entity.DeliveryStatuses.FirstOrDefault(d => string.Equals(d.UserName, userName, StringComparison.OrdinalIgnoreCase));
+            if (existing is null)
+            {
+                entity.DeliveryStatuses.Add(new DeliveryStatus { UserName = userName, Status = status });
+            }
+            else if (DeliveryProgress(status) > DeliveryProgress(existing.Status))
             {
                 existing.Status = status;
             }
             else
             {
-                entity.DeliveryStatuses.Add(new DeliveryStatus { UserName = userName, Status = status });
+                return entity;
             }
 
             await messages.Update(entity);
@@ -312,6 +330,14 @@ public sealed class EntryService : IEntryService
                 try { await notes.Delete(new ObjectId(id)); } catch { }
                 break;
         }
+    }
+
+    /// <inheritdoc />
+    public async Task DeleteFolderContents(string folderId)
+    {
+        await messages.DeleteAll(folderId);
+        await drafts.DeleteAll(folderId);
+        await notes.DeleteAll(folderId);
     }
 
     /// <inheritdoc />

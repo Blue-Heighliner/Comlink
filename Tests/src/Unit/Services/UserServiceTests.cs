@@ -108,4 +108,20 @@ public sealed class UserServiceTests : IDisposable
         string dir = Path.Combine(appData, appName);
         if (Directory.Exists(dir)) { Directory.Delete(dir, recursive: true); }
     }
+
+    /// <summary>A successful Install raises Installed once the user is current; a failed one does not.</summary>
+    [Fact]
+    public async Task Install_RaisesInstalledOnlyOnSuccess()
+    {
+        engineControllerMock.Setup(r => r.ResolveCode("OK01")).Returns(new UserInfo { Name = "Ok", Code = "OK01", EnvironmentTitle = "T", EnvironmentColor = "#000000" });
+        engineControllerMock.Setup(r => r.ResolveCode("BAD")).Returns((UserInfo?)null);
+        UserService service = CreateService();
+        List<string?> raised = [];
+        service.Installed += () => raised.Add(service.GetCurrentUserInfo()?.Name);
+
+        await service.Install("BAD");
+        await service.Install("OK01");
+
+        Assert.Equal(["Ok"], raised);
+    }
 }

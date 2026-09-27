@@ -59,10 +59,12 @@ internal sealed class DirectServiceConnection : IServiceConnection
     private async Task OnDeliveryStatusChanged(string messageId, string user, DestinationStatus status)
     {
         MessageEntity? entity = await entryService.UpdateDeliveryStatus(messageId, user, status);
-        if (entity is not null && DeliveryStatusChanged is not null)
-        {
-            await DeliveryStatusChanged(new DeliveryStatusChangedEvent { MessageId = messageId, UserName = user, Status = status, OverallStatus = entity.OverallStatus });
-        }
+        if (entity is null || DeliveryStatusChanged is null) { return; }
+
+        // Reports the status as stored rather than as raised, since a late, out-of-order event may have been ignored.
+        DestinationStatus effective = entity.DeliveryStatuses
+            .FirstOrDefault(d => string.Equals(d.UserName, user, StringComparison.OrdinalIgnoreCase))?.Status ?? status;
+        await DeliveryStatusChanged(new DeliveryStatusChangedEvent { MessageId = messageId, UserName = user, Status = effective, OverallStatus = entity.OverallStatus });
     }
 
     /// <inheritdoc />

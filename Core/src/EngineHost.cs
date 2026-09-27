@@ -29,6 +29,7 @@ internal sealed class EngineHost : IHostedService
     private readonly ILogger logger;
     private readonly string displayName;
     private CancellationTokenSource? cts;
+    private int networkingStarted;
 
     /// <inheritdoc />
     public async Task StartAsync(CancellationToken cancellationToken)
@@ -36,19 +37,39 @@ internal sealed class EngineHost : IHostedService
         logger.LogInformation("{AppName} starting...", displayName);
         await userService.Load(cancellationToken);
 
-        cts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
-        CancellationToken cancellation = cts.Token;
+        cts = new CancellationTokenSource();
 
+        // Networking needs the current user (its identity certificate, and a Server's own place in the cluster), so on
+        // a first run it waits for the install screen instead of starting without one and staying offline until the
+        // next restart. Subscribing before checking means an install that lands in between is not missed.
+        userService.Installed += StartNetworking;
+        if (userService.GetCurrentUserInfo() is not null)
+        {
+            StartNetworking();
+        }
+        else
+        {
+            logger.LogInformation("{AppName} will connect once a user is installed", displayName);
+        }
+
+        logger.LogInformation("{AppName} started", displayName);
+    }
+
+    private void StartNetworking()
+    {
+        if (Interlocked.Exchange(ref networkingStarted, 1) != 0) { return; }
+        userService.Installed -= StartNetworking;
+
+        CancellationToken cancellation = cts!.Token;
         _ = Task.Run(() => peerService.Start(cancellation), cancellation);
         _ = Task.Run(() => interfaceService.Start(cancellation), cancellation);
         _ = Task.Run(() => externalSystemsService.Start(cancellation), cancellation);
-
-        logger.LogInformation("{AppName} started", displayName);
     }
 
     /// <inheritdoc />
     public Task StopAsync(CancellationToken cancellationToken)
     {
+        userService.Installed -= StartNetworking;
         cts?.Cancel();
         return Task.CompletedTask;
     }

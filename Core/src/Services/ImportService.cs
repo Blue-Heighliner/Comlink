@@ -186,6 +186,7 @@ public sealed class ImportService : IImportService
             {
                 Subject = data.Subject,
                 Body = data.Body,
+                BodySegmentsJson = data.BodySegmentsJson ?? string.Empty,
                 Addresses = data.Addresses,
                 IsSent = data.IsSent,
                 IsAlert = data.IsAlert,
@@ -214,6 +215,7 @@ public sealed class ImportService : IImportService
 
         existing.Subject = data.Subject;
         existing.Body = data.Body;
+        existing.BodySegmentsJson = data.BodySegmentsJson ?? string.Empty;
         existing.Addresses = data.Addresses;
         existing.IsSent = data.IsSent;
         existing.IsAlert = data.IsAlert;

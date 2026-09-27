@@ -68,17 +68,15 @@ public partial class FolderBar : UserControl
             menu.Items.Add(newItem);
         }
 
-        if (folder.IsSubfolder)
+        if (DataContext is IFolderBarViewModel { } bar && bar.CanDeleteFolder(folder))
         {
-            bool canDelete = folder.Children.Count == 0;
-            MenuItem deleteItem = new() { Header = "Delete", IsEnabled = canDelete };
-            if (!canDelete)
-            {
-                ToolTip.SetTip(deleteItem, "Folder must be empty to delete");
-            }
+            MenuItem deleteItem = new() { Header = "Delete" };
             deleteItem.Click += async (_, _) =>
             {
-                if (DataContext is IFolderBarViewModel vm)
+                Window? owner = this.GetVisualRoot() as Window;
+                if (owner is null || DataContext is not IFolderBarViewModel vm) { return; }
+                ConfirmDialog dialog = new("Delete Folder", $"Delete \"{folder.Name}\" and everything inside it, including its subfolders and all their messages, drafts and notes? This cannot be undone.", "Delete");
+                if (await dialog.ShowDialog<bool>(owner))
                 {
                     await vm.DeleteFolder(folder);
                 }
@@ -111,7 +109,7 @@ public partial class FolderBar : UserControl
         EntryItemViewModel? entry = e.Data.Get("entry") as EntryItemViewModel;
         FolderItemViewModel? folder = GetFolderAtPoint(e.GetPosition(FolderTree));
         e.DragEffects = entry is not null && folder is not null &&
-                        FolderBarViewModel.IsCompatibleMove(entry.EntryType, folder.RootType)
+                        FolderBarViewModel.IsCompatibleMove(entry.EntryType, folder.RootType, entry.IsOutboundMessage)
             ? DragDropEffects.Move
             : DragDropEffects.None;
     }

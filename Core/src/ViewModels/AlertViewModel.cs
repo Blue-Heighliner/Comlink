@@ -71,35 +71,36 @@ public sealed partial class AlertViewModel : ObservableObject, IAlertViewModel
             return Task.CompletedTask;
         }
 
+        int count;
         lock (pending)
         {
             pending.Add(entity.MessageId);
+            count = pending.Count;
+            ResetSoundTimer();
         }
 
-        PendingCount = pending.Count;
-
+        PendingCount = count;
         soundPlayer.Play();
-        ResetSoundTimer();
         return Task.CompletedTask;
     }
 
     private Task OnMessageRead(MessageEntity entity)
     {
-        bool removed;
+        int count;
         lock (pending)
         {
-            removed = pending.Remove(entity.MessageId);
+            if (!pending.Remove(entity.MessageId)) { return Task.CompletedTask; }
+
+            count = pending.Count;
+            if (count == 0)
+            {
+                soundTimer?.Dispose();
+                soundTimer = null;
+            }
         }
 
-        if (!removed) { return Task.CompletedTask; }
-
-        PendingCount = pending.Count;
-        if (PendingCount == 0)
-        {
-            soundTimer?.Dispose();
-            soundTimer = null;
-            soundPlayer.Stop();
-        }
+        PendingCount = count;
+        if (count == 0) { soundPlayer.Stop(); }
         return Task.CompletedTask;
     }
 

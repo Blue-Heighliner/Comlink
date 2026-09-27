@@ -30,7 +30,7 @@ internal sealed class SerialLink : IAsyncDisposable
         this.disconnected = disconnected;
         this.reconnectDelay = reconnectDelay ?? TimeSpan.FromSeconds(2);
         this.requestTimeout = requestTimeout ?? TimeSpan.FromSeconds(60);
-        connection = new PeerConnection(endpoint, false, null, Drop);
+        connection = new PeerConnection(endpoint, false, null, () => DropPeer(current));
         isClosed = startClosed;
         if (!startClosed) { openGate.TrySetResult(); }
         loop = Task.Run(Run);
@@ -49,7 +49,6 @@ internal sealed class SerialLink : IAsyncDisposable
     private readonly Task loop;
     private readonly SemaphoreSlim sendLock = new(1, 1);
     private readonly ConcurrentDictionary<uint, TaskCompletionSource<bool>> pending = new();
-    private readonly Dictionary<uint, Reassembly> reassemblies = [];
     private readonly Lock reassemblyLock = new();
     private readonly Lock closeLock = new();
     private TaskCompletionSource openGate = new(TaskCreationOptions.RunContinuationsAsynchronously);
@@ -57,8 +56,10 @@ internal sealed class SerialLink : IAsyncDisposable
     private volatile IMicroGatePeer? current;
     private volatile bool isClosed;
     private CancellationTokenSource? attempt;
+    private Reassembly? reassembly;
     private uint nextId;
     private bool failureLogged;
+    private int disposed;
 
     /// <summary>Whether the link is currently up.</summary>
     public bool IsConnected => current is not null;
@@ -69,6 +70,7 @@ internal sealed class SerialLink : IAsyncDisposable
     /// </summary>
     public void SetClosed(bool closed)
     {
+        IMicroGatePeer? toDrop = null;
         lock (closeLock)
         {
             isClosed = closed;
@@ -76,6 +78,7 @@ internal sealed class SerialLink : IAsyncDisposable
             {
                 if (openGate.Task.IsCompleted) { openGate = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously); }
                 attempt?.Cancel();
+                toDrop = current;
             }
             else
             {
@@ -83,13 +86,13 @@ internal sealed class SerialLink : IAsyncDisposable
             }
         }
 
-        if (closed) { Drop(); }
+        DropPeer(toDrop);
     }
 
     /// <summary>Drops the current link, if there is one; the connect loop then brings up a new one.</summary>
     public void Reset()
     {
-        if (!isClosed) { Drop(); }
+        if (!isClosed) { DropPeer(current); }
     }
 
     /// <summary>Sends <paramref name="data"/> and waits for the remote node's accept or reject.</summary>
@@ -119,13 +122,26 @@ internal sealed class SerialLink : IAsyncDisposable
     /// <inheritdoc />
     public async ValueTask DisposeAsync()
     {
+        if (Interlocked.Exchange(ref disposed, 1) != 0) { return; }
+
         await lifetime.CancelAsync();
         try { await loop; }
         catch (OperationCanceledException) { }
         lifetime.Dispose();
     }
 
-    private void Drop() => current?.Dispose();
+    // Disposing a MicroGate peer sends a disconnect frame and can wait several seconds for it, so it never runs on
+    // the caller's thread, which is the UI thread when a user closes or refreshes a connection.
+    private static void DropPeer(IMicroGatePeer? peer)
+    {
+        if (peer is not null) { _ = Task.Run(() => DisposeQuietly(peer)); }
+    }
+
+    private static async Task DisposeQuietly(IMicroGatePeer peer)
+    {
+        try { await peer.DisposeAsync(); }
+        catch { }
+    }
 
     private async Task SendMessage(IMicroGatePeer peer, uint id, ReadOnlyMemory<byte> data, CancellationToken cancellation)
     {
@@ -136,6 +152,8 @@ internal sealed class SerialLink : IAsyncDisposable
             throw new ArgumentOutOfRangeException(nameof(data), data.Length, "Message is too large to send over a serial link");
         }
 
+        // Every fragment of one message is sent under the lock, so fragments of different messages never interleave
+        // on the wire; the receiving side relies on this to keep only one reassembly in progress at a time.
         await sendLock.WaitAsync(cancellation);
         try
         {
@@ -167,77 +185,77 @@ internal sealed class SerialLink : IAsyncDisposable
                 if (isClosed) { attemptSource.Cancel(); }
             }
 
-            IMicroGatePeer peer = peerFactory.Create();
-            TaskCompletionSource ended = new(TaskCreationOptions.RunContinuationsAsynchronously);
-            peer.Received.Listen(OnFrame);
-            peer.StateChanged.Listen(state => { if (state == MicroGatePeerState.Disconnected) { ended.TrySetResult(); } }, () => ended.TrySetResult());
-
-            try
+            try { await RunOnce(attemptSource.Token); }
+            finally
             {
-                await peer.Start(endpoint.SerialPort!, new MicroGatePeerOptions { Address = endpoint.SerialAddress }, attemptSource.Token);
+                lock (closeLock) { attempt = null; }
             }
-            catch (OperationCanceledException)
-            {
-                await DisposeQuietly(peer);
-                if (lifetime.IsCancellationRequested) { return; }
-                continue;
-            }
-            catch (Exception ex)
-            {
-                if (!failureLogged)
-                {
-                    failureLogged = true;
-                    logger.LogWarning("Serial link to {Endpoint} cannot be established, retrying: {Message}", endpoint, ex.Message);
-                }
-
-                await DisposeQuietly(peer);
-                if (!await Delay()) { return; }
-                continue;
-            }
-
-            failureLogged = false;
-            if (isClosed)
-            {
-                await DisposeQuietly(peer);
-                continue;
-            }
-
-            current = peer;
-            logger.LogInformation("Serial link to {Endpoint} connected", endpoint);
-            connected.Publish(new PeerConnectionEventArgs { Connection = connection });
-
-            try { await ended.Task.WaitAsync(lifetime.Token); }
-            catch (OperationCanceledException) { }
-
-            current = null;
-            FailPending();
-            lock (reassemblyLock) { reassemblies.Clear(); }
-            disconnected.Publish(new PeerConnectionEventArgs { Connection = connection });
-            if (!lifetime.IsCancellationRequested && !isClosed) { logger.LogWarning("Serial link to {Endpoint} lost", endpoint); }
-
-            await DisposeQuietly(peer);
-            if (isClosed) { continue; }
-            if (!await Delay()) { return; }
         }
     }
 
-    private async Task<bool> Delay()
+    private async Task RunOnce(CancellationToken attemptToken)
     {
+        IMicroGatePeer peer = peerFactory.Create();
+        TaskCompletionSource ended = new(TaskCreationOptions.RunContinuationsAsynchronously);
+        peer.Received.Listen(OnFrame);
+        peer.StateChanged.Listen(state => { if (state == MicroGatePeerState.Disconnected) { ended.TrySetResult(); } }, () => ended.TrySetResult());
+
         try
         {
-            await Task.Delay(reconnectDelay, lifetime.Token);
-            return true;
+            await peer.Start(endpoint.SerialPort!, new MicroGatePeerOptions { Address = endpoint.SerialAddress }, attemptToken);
         }
         catch (OperationCanceledException)
         {
-            return false;
+            await DisposeQuietly(peer);
+            return;
         }
+        catch (Exception ex)
+        {
+            if (!failureLogged)
+            {
+                failureLogged = true;
+                logger.LogWarning("Serial link to {Endpoint} cannot be established, retrying: {Message}", endpoint, ex.Message);
+            }
+
+            await DisposeQuietly(peer);
+            await Delay();
+            return;
+        }
+
+        failureLogged = false;
+        bool closedMeanwhile;
+        lock (closeLock)
+        {
+            closedMeanwhile = isClosed;
+            if (!closedMeanwhile) { current = peer; }
+        }
+
+        if (closedMeanwhile)
+        {
+            await DisposeQuietly(peer);
+            return;
+        }
+
+        logger.LogInformation("Serial link to {Endpoint} connected", endpoint);
+        connected.Publish(new PeerConnectionEventArgs { Connection = connection });
+
+        try { await ended.Task.WaitAsync(lifetime.Token); }
+        catch (OperationCanceledException) { }
+
+        lock (closeLock) { current = null; }
+        FailPending();
+        lock (reassemblyLock) { reassembly = null; }
+        disconnected.Publish(new PeerConnectionEventArgs { Connection = connection });
+        if (!lifetime.IsCancellationRequested && !isClosed) { logger.LogWarning("Serial link to {Endpoint} lost", endpoint); }
+
+        await DisposeQuietly(peer);
+        if (!isClosed) { await Delay(); }
     }
 
-    private static async Task DisposeQuietly(IMicroGatePeer peer)
+    private async Task Delay()
     {
-        try { await peer.DisposeAsync(); }
-        catch { }
+        try { await Task.Delay(reconnectDelay, lifetime.Token); }
+        catch (OperationCanceledException) { }
     }
 
     private void FailPending()
@@ -274,26 +292,26 @@ internal sealed class SerialLink : IAsyncDisposable
         {
             if (frame.Index == 0)
             {
-                reassemblies[frame.Id] = new Reassembly(frame.Count);
+                reassembly = new Reassembly(frame.Id, frame.Count);
             }
-            else if (!reassemblies.TryGetValue(frame.Id, out Reassembly? existing) || existing.Next != frame.Index)
+            else if (reassembly is null || reassembly.Id != frame.Id || reassembly.Next != frame.Index)
             {
-                reassemblies.Remove(frame.Id);
+                reassembly = null;
                 return null;
             }
 
-            Reassembly reassembly = reassemblies[frame.Id];
             reassembly.Append(frame.Chunk.Span);
             if (reassembly.Length > MaxMessageSize)
             {
-                reassemblies.Remove(frame.Id);
+                reassembly = null;
                 return null;
             }
 
             if (reassembly.Next < reassembly.Count) { return null; }
 
-            reassemblies.Remove(frame.Id);
-            return reassembly.ToArray();
+            byte[] message = reassembly.ToArray();
+            reassembly = null;
+            return message;
         }
     }
 
@@ -315,10 +333,11 @@ internal sealed class SerialLink : IAsyncDisposable
         }
     }
 
-    private sealed class Reassembly(ushort count)
+    private sealed class Reassembly(uint id, ushort count)
     {
         private readonly MemoryStream buffer = new();
 
+        public uint Id { get; } = id;
         public ushort Count { get; } = count;
         public int Next { get; private set; }
         public long Length => buffer.Length;

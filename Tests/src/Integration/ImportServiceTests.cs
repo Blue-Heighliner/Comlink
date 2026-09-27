@@ -376,4 +376,19 @@ public sealed class ImportServiceTests : IDisposable
         Assert.Contains(merged.EventEntries, e => e.Message == "Original");
         Assert.Contains(merged.EventEntries, e => e.Message == "Different");
     }
+
+    /// <summary>A draft's fill-ins travel through export and import, rather than being flattened into plain text.</summary>
+    [Fact]
+    public async Task Import_Draft_KeepsFillIns()
+    {
+        string segments = "[{\"kind\":\"text\",\"text\":\"Go to \"},{\"kind\":\"fillin\",\"id\":\"abcd1234\",\"options\":[\"A\",\"B\"],\"selected\":\"B\"}]";
+        DraftEntity draft = new() { Subject = "With fill-in", Body = "Go to B", BodySegmentsJson = segments, FolderId = "root-drafts" };
+        await sourceDrafts.Insert(draft);
+        string package = await BuildPackage(new ExportEntryRef { Id = draft.Id.ToString(), EntryType = EntryType.Draft });
+
+        await import.Import(package, NeverAsked);
+
+        DraftEntity imported = Assert.Single(await destDrafts.GetAll());
+        Assert.Equal(segments, imported.BodySegmentsJson);
+    }
 }

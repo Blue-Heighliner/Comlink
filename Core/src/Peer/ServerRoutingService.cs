@@ -50,10 +50,13 @@ internal sealed class ServerRoutingService : IPeerService, IConnectionStatusServ
     private readonly ConcurrentDictionary<string, DateTime> childLastConnectedAt = new(StringComparer.OrdinalIgnoreCase);
     private readonly ConcurrentDictionary<string, DateTime> childLastDisconnectedAt = new(StringComparer.OrdinalIgnoreCase);
     private readonly ConcurrentDictionary<PeerConnection, string> inboundConnectionNames = new();
+    private readonly ConcurrentDictionary<PeerConnection, string> outboundConnectionNames = new();
+    private readonly Lock statusLock = new();
     private readonly ConcurrentDictionary<string, bool> closedNames = new(StringComparer.OrdinalIgnoreCase);
     private readonly ConcurrentDictionary<string, PeerLinkControl> monitors = new(StringComparer.OrdinalIgnoreCase);
     private IReadOnlyDictionary<string, ServerUserConfig> userMap = new Dictionary<string, ServerUserConfig>();
     private IPeerTransport? transport;
+    private int disposed;
 
     /// <inheritdoc />
     public event Func<object, Task>? MessageDelivered;
@@ -117,41 +120,47 @@ internal sealed class ServerRoutingService : IPeerService, IConnectionStatusServ
 
     private void UpdateChildStatus(string childName, bool connected)
     {
-        bool changed = childConnected.GetValueOrDefault(childName) != connected;
-        if (!changed) { return; }
+        lock (statusLock)
+        {
+            if (childConnected.GetValueOrDefault(childName) == connected) { return; }
 
-        if (connected)
-        {
-            childConnected[childName] = true;
-            childLastConnectedAt[childName] = DateTime.UtcNow;
-            logger.LogInformation("Connected to child client {ClientName}", childName);
+            if (connected)
+            {
+                childConnected[childName] = true;
+                childLastConnectedAt[childName] = DateTime.UtcNow;
+            }
+            else
+            {
+                childConnected.TryRemove(childName, out _);
+                childLastDisconnectedAt[childName] = DateTime.UtcNow;
+            }
         }
-        else
-        {
-            childConnected.TryRemove(childName, out _);
-            childLastDisconnectedAt[childName] = DateTime.UtcNow;
-            logger.LogWarning("Child client {ClientName} unreachable", childName);
-        }
+
+        if (connected) { logger.LogInformation("Connected to child client {ClientName}", childName); }
+        else { logger.LogWarning("Child client {ClientName} unreachable", childName); }
         StatusesChanged?.Invoke();
     }
 
     private void UpdateServerStatus(string serverName, bool connected)
     {
-        bool changed = serverConnected.GetValueOrDefault(serverName) != connected;
-        if (!changed) { return; }
+        lock (statusLock)
+        {
+            if (serverConnected.GetValueOrDefault(serverName) == connected) { return; }
 
-        if (connected)
-        {
-            serverConnected[serverName] = true;
-            serverLastConnectedAt[serverName] = DateTime.UtcNow;
-            logger.LogInformation("Connected to server {ServerName}", serverName);
+            if (connected)
+            {
+                serverConnected[serverName] = true;
+                serverLastConnectedAt[serverName] = DateTime.UtcNow;
+            }
+            else
+            {
+                serverConnected.TryRemove(serverName, out _);
+                serverLastDisconnectedAt[serverName] = DateTime.UtcNow;
+            }
         }
-        else
-        {
-            serverConnected.TryRemove(serverName, out _);
-            serverLastDisconnectedAt[serverName] = DateTime.UtcNow;
-            logger.LogWarning("Server {ServerName} unreachable", serverName);
-        }
+
+        if (connected) { logger.LogInformation("Connected to server {ServerName}", serverName); }
+        else { logger.LogWarning("Server {ServerName} unreachable", serverName); }
         StatusesChanged?.Invoke();
     }
 
@@ -160,14 +169,15 @@ internal sealed class ServerRoutingService : IPeerService, IConnectionStatusServ
         PeerConnection connection = args.Connection;
         if (!connection.IsInbound)
         {
+            if (ResolveNameByEndpoint(connection) is not { } outboundName) { return; }
+
+            outboundConnectionNames[connection] = outboundName;
+
             // An IP connection this node dialed only counts as up once a heartbeat is acknowledged (see
             // OnHeartbeatAcknowledged): a node that has closed the connection accepts it and drops it again without
             // answering, so counting the bare connection would flash the row green every time. A serial link only
             // comes up when the far end answers, so it is up straight away.
-            if (connection.Endpoint is { IsSerial: true } && ResolveSerialName(connection) is { } serialName)
-            {
-                UpdateStatusForName(serialName, true);
-            }
+            if (connection.Endpoint is { IsSerial: true }) { UpdateStatusForName(outboundName, true); }
             return;
         }
 
@@ -199,17 +209,18 @@ internal sealed class ServerRoutingService : IPeerService, IConnectionStatusServ
     private void OnDisconnected(PeerConnectionEventArgs args)
     {
         PeerConnection connection = args.Connection;
-        if (inboundConnectionNames.TryRemove(connection, out string? remoteName))
-        {
-            UpdateStatusForName(remoteName, false);
-            return;
-        }
+        string? remoteName = inboundConnectionNames.TryRemove(connection, out string? inboundName) ? inboundName
+            : outboundConnectionNames.TryRemove(connection, out string? outboundName) ? outboundName
+            : ResolveNameByEndpoint(connection);
+        if (remoteName is null) { return; }
 
-        if (connection.Endpoint is not null && ResolveSerialName(connection) is { } endpointName)
-        {
-            UpdateStatusForName(endpointName, false);
-        }
+        // A user can be connected both ways at once (it dialed this node, and this node dialed it); losing one of
+        // them does not make it unreachable while the other is still up.
+        if (!HasLiveConnection(remoteName)) { UpdateStatusForName(remoteName, false); }
     }
+
+    private bool HasLiveConnection(string name)
+        => inboundConnectionNames.Values.Concat(outboundConnectionNames.Values).Any(n => string.Equals(n, name, StringComparison.OrdinalIgnoreCase));
 
     private void OnHeartbeatAcknowledged(string name)
     {
@@ -231,7 +242,7 @@ internal sealed class ServerRoutingService : IPeerService, IConnectionStatusServ
         }
     }
 
-    private string? ResolveSerialName(PeerConnection connection)
+    private string? ResolveNameByEndpoint(PeerConnection connection)
         => FindNameByEndpoint(userMap.Keys, connection.Endpoint) ?? FindChildNameByEndpoint(connection.Endpoint);
 
     private string? FindNameByEndpoint(IEnumerable<string> candidates, UserEndpoint? endpoint)
@@ -258,8 +269,8 @@ internal sealed class ServerRoutingService : IPeerService, IConnectionStatusServ
     {
         string? remoteName = inboundConnectionNames.TryGetValue(args.Connection, out string? inboundName)
             ? inboundName
-            : args.Connection.Endpoint is { IsSerial: true } ? ResolveSerialName(args.Connection) : null;
-        if (remoteName is null) { return; }
+            : args.Connection.Endpoint is { IsSerial: true } ? ResolveNameByEndpoint(args.Connection) : null;
+        if (remoteName is null || closedNames.ContainsKey(remoteName)) { return; }
 
         // An empty payload is a PeerConnectionMonitor heartbeat, not a real message to relay.
         if (args.Payload.IsEmpty) { return; }
@@ -289,27 +300,21 @@ internal sealed class ServerRoutingService : IPeerService, IConnectionStatusServ
 
         if (!userMap.TryGetValue(myName, out ServerUserConfig? myConfig)) { return; }
 
-        foreach (string addressedUser in addressedUsers)
-        {
-            if (myConfig.ChildClients.Contains(addressedUser, StringComparer.OrdinalIgnoreCase))
-            {
-                await TrySendToChild(addressedUser, data);
-            }
-        }
+        List<Task> sends = [.. addressedUsers
+            .Where(user => myConfig.ChildClients.Contains(user, StringComparer.OrdinalIgnoreCase))
+            .Select(user => TrySendToChild(user, data, priority))];
 
-        HashSet<string> targetServers = new(StringComparer.OrdinalIgnoreCase);
         foreach ((string serverName, ServerUserConfig config) in userMap)
         {
             if (string.Equals(serverName, myName, StringComparison.OrdinalIgnoreCase)) { continue; }
             if (config.ChildClients.Any(child => addressedUsers.Contains(child)))
             {
-                targetServers.Add(serverName);
+                sends.Add(TrySendToServer(serverName, data, priority));
             }
         }
-        foreach (string serverName in targetServers)
-        {
-            await TrySendToServer(serverName, data);
-        }
+
+        // Recipients are reached concurrently, so one that is slow or unreachable does not hold up the others.
+        await Task.WhenAll(sends);
     }
 
     private async Task HandleFromServer(string serverName, ReadOnlyMemory<byte> data)
@@ -318,17 +323,14 @@ internal sealed class ServerRoutingService : IPeerService, IConnectionStatusServ
         if (message is null) { return; }
 
         HashSet<string> addressedUsers = GetAddressedUsers(message);
+        int priority = engineController.GetPriority(message);
         string myName = currentUserProvider.UserName ?? string.Empty;
 
         if (!userMap.TryGetValue(myName, out ServerUserConfig? myConfig)) { return; }
 
-        foreach (string addressedUser in addressedUsers)
-        {
-            if (myConfig.ChildClients.Contains(addressedUser, StringComparer.OrdinalIgnoreCase))
-            {
-                await TrySendToChild(addressedUser, data);
-            }
-        }
+        await Task.WhenAll(addressedUsers
+            .Where(user => myConfig.ChildClients.Contains(user, StringComparer.OrdinalIgnoreCase))
+            .Select(user => TrySendToChild(user, data, priority)));
     }
 
     private HashSet<string> GetAddressedUsers(object message)
@@ -340,7 +342,7 @@ internal sealed class ServerRoutingService : IPeerService, IConnectionStatusServ
         catch { return null; }
     }
 
-    private async Task TrySendToChild(string childName, ReadOnlyMemory<byte> data)
+    private async Task TrySendToChild(string childName, ReadOnlyMemory<byte> data, int priority)
     {
         if (transport is null || closedNames.ContainsKey(childName)) { return; }
         UserEndpoint? endpoint = engineController.GetEndpoint(childName);
@@ -350,16 +352,16 @@ internal sealed class ServerRoutingService : IPeerService, IConnectionStatusServ
             return;
         }
 
-        try { await transport.Request(endpoint, data, cancellation: CancellationToken.None); }
+        try { await transport.Request(endpoint, data, new PeerSendOptions { Priority = priority }, CancellationToken.None); }
         catch { }
     }
 
-    private async Task TrySendToServer(string serverName, ReadOnlyMemory<byte> data)
+    private async Task TrySendToServer(string serverName, ReadOnlyMemory<byte> data, int priority)
     {
         if (transport is null || closedNames.ContainsKey(serverName)) { return; }
         if (!userMap.TryGetValue(serverName, out ServerUserConfig? config)) { return; }
 
-        try { await transport.Request(config.Endpoint, data, cancellation: CancellationToken.None); }
+        try { await transport.Request(config.Endpoint, data, new PeerSendOptions { Priority = priority }, CancellationToken.None); }
         catch { }
     }
 
@@ -483,6 +485,8 @@ internal sealed class ServerRoutingService : IPeerService, IConnectionStatusServ
     /// <inheritdoc />
     public async ValueTask DisposeAsync()
     {
+        // Registered as both IPeerService and IConnectionStatusService, so the container disposes it twice.
+        if (Interlocked.Exchange(ref disposed, 1) != 0) { return; }
         if (transport is not null) { await transport.DisposeAsync(); }
     }
 }

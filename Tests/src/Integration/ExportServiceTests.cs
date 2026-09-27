@@ -158,4 +158,21 @@ public sealed class ExportServiceTests : IDisposable
 
         Assert.False(File.Exists(zipPath));
     }
+
+    /// <summary>A cancelled export leaves an existing package of the same name exactly as it was, and leaves no partial file behind.</summary>
+    [Fact]
+    public async Task Export_Cancelled_KeepsExistingPackage()
+    {
+        MessageEntity message = await InsertMessage(Guid.NewGuid().ToString("N"), "Subject", isOutbound: false);
+        ExportEntryRef[] refs = [new ExportEntryRef { Id = message.MessageId, EntryType = EntryType.Message }];
+        await service.Export(refs, ZipPath());
+        byte[] original = await File.ReadAllBytesAsync(ZipPath());
+        using CancellationTokenSource cts = new();
+        cts.Cancel();
+
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(() => service.Export(refs, ZipPath(), cts.Token));
+
+        Assert.Equal(original, await File.ReadAllBytesAsync(ZipPath()));
+        Assert.Equal([ZipPath()], Directory.GetFiles(exportDir));
+    }
 }

@@ -281,37 +281,9 @@ public sealed partial class MainViewModel : ObservableObject, IMainViewModel
         contentArea.DraftSent += HandleDraftSent;
         contentArea.EntryDeleted += HandleEntryDeleted;
 
-        connection.DeliveryStatusChanged += async evt =>
-        {
-            await entryBar.UpdateEntryStatus(evt.MessageId, evt.OverallStatus);
-        };
+        connection.DeliveryStatusChanged += evt => UiThread.Run(() => entryBar.UpdateEntryStatus(evt.MessageId, evt.OverallStatus));
 
-        connection.MessageReceived += async evt =>
-        {
-            try
-            {
-                MessageEntity entity = await entryService.StoreIncomingMessage(
-                    evt.MessageId, evt.FromUser, evt.Subject, evt.Body,
-                    evt.Addresses.Select(a => new Data.Entities.AddressData { UserName = a.UserName, Type = a.Type }).ToList(),
-                    evt.SentAt, evt.IsAlert, evt.Priority, evt.Tag);
-
-                FolderItemViewModel? inboxFolder = folderBar.RootFolders.FirstOrDefault(f => f.RootType == FolderType.Inbox);
-                if (inboxFolder is not null && folderBar.SelectedFolder?.Id == inboxFolder.Id)
-                {
-                    string timeText = entity.ReceivedAt.ToString("dd-MMM-yyyy HH:mm").ToUpperInvariant();
-                    string priorityText = engineController.Priorities.GetLabel(evt.Priority);
-                    string? tagText = engineController.TagsEnabled && !string.IsNullOrEmpty(evt.Tag) ? evt.Tag : null;
-                    EntryItemViewModel item = new(entity.MessageId, evt.FromUser, EntryType.Message, entity.ReceivedAt,
-                        secondaryText: evt.Subject, priorityText: priorityText, tagText: tagText, timeText: timeText);
-                    item.OverallStatus = entity.ReadStatus;
-                    await entryBar.PrependEntry(item);
-                }
-            }
-            catch (Exception ex)
-            {
-                activityLogger.LogError(ex, "Failed to store received message from {FromUser}", evt.FromUser);
-            }
-        };
+        connection.MessageReceived += evt => UiThread.Run(() => HandleMessageReceived(evt));
 
         entryService.DraftUpdated += async entity =>
         {
@@ -342,6 +314,33 @@ public sealed partial class MainViewModel : ObservableObject, IMainViewModel
                 folderBar.SelectFolderByType(FolderType.Notes);
             }
         };
+    }
+
+    private async Task HandleMessageReceived(MessageReceivedEvent evt)
+    {
+        try
+        {
+            MessageEntity entity = await entryService.StoreIncomingMessage(
+                evt.MessageId, evt.FromUser, evt.Subject, evt.Body,
+                evt.Addresses.Select(a => new Data.Entities.AddressData { UserName = a.UserName, Type = a.Type }).ToList(),
+                evt.SentAt, evt.IsAlert, evt.Priority, evt.Tag);
+
+            FolderItemViewModel? inboxFolder = folderBar.RootFolders.FirstOrDefault(f => f.RootType == FolderType.Inbox);
+            if (inboxFolder is not null && folderBar.SelectedFolder?.Id == inboxFolder.Id)
+            {
+                string timeText = entity.ReceivedAt.ToString("dd-MMM-yyyy HH:mm").ToUpperInvariant();
+                string priorityText = engineController.Priorities.GetLabel(evt.Priority);
+                string? tagText = engineController.TagsEnabled && !string.IsNullOrEmpty(evt.Tag) ? evt.Tag : null;
+                EntryItemViewModel item = new(entity.MessageId, evt.FromUser, EntryType.Message, entity.ReceivedAt,
+                    secondaryText: evt.Subject, priorityText: priorityText, tagText: tagText, timeText: timeText);
+                item.OverallStatus = entity.ReadStatus;
+                await entryBar.PrependEntry(item);
+            }
+        }
+        catch (Exception ex)
+        {
+            activityLogger.LogError(ex, "Failed to store received message from {FromUser}", evt.FromUser);
+        }
     }
 
     /// <inheritdoc />

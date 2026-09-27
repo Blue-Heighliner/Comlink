@@ -222,11 +222,12 @@ public interface IEngineController
     bool CanDelete(FolderType folderType);
 
     /// <summary>
-    /// Returns the identity certificate's subject name to search for in the system store for the given
-    /// user. MSMT peer authentication is mandatory - there is no unauthenticated mode - so when no
-    /// matching certificate exists, startup throws.
+    /// Returns the certificate subject name (common name) that belongs to the given user. For the current user it
+    /// is the identity certificate searched for in the system store; MSMT peer authentication is mandatory - there
+    /// is no unauthenticated mode - so when no matching certificate exists, startup throws. For any other user it is
+    /// the name that user's certificate is expected to carry, which a Server uses to recognize who connected to it.
     /// </summary>
-    /// <param name="userName">The local user name for which to resolve a certificate name.</param>
+    /// <param name="userName">The user name to resolve a certificate name for.</param>
     string GetCertificateName(string userName);
 
     /// <summary>
@@ -746,7 +747,9 @@ internal sealed class ConfiguredEngineController : IEngineController
         => endpoints.TryGetValue(userName, out UserEndpoint? endpoint) ? endpoint : fallback.GetEndpoint(userName);
     /// <inheritdoc />
     public string GetCertificateName(string userName)
-        => config.PeerCertificateName ?? fallback.GetCertificateName(userName);
+        => config.PeerCertificateName is { } ownName && string.Equals(userName, currentUserProvider.UserName, StringComparison.OrdinalIgnoreCase)
+            ? ownName
+            : fallback.GetCertificateName(userName);
 
     /// <inheritdoc />
     public string TrustedAuthorityCertificateName

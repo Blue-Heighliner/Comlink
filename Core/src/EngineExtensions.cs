@@ -24,21 +24,16 @@ public static class EngineExtensions
         {
             services.AddSingleton(typeof(EngineMode), mode);
 
-            EngineConfig? preConfig = services.FirstOrDefault(d => d.ServiceType == typeof(EngineConfig))?.ImplementationInstance as EngineConfig;
-            switch (preConfig?.GetNodeRole() ?? NodeRole.Peer)
+            // Chosen from the resolved IEngineController rather than EngineConfig alone, so a host that sets Role in
+            // code gets the same networking as one that sets NodeRole in config.json (which still wins when set).
+            services.AddSingleton<IPeerService>(sp => sp.GetRequiredService<IEngineController>().Role switch
             {
-                case NodeRole.Client:
-                    services.AddSingleton<IPeerService, ClientPeerService>();
-                    services.AddSingleton<IConnectionStatusService>(sp => (IConnectionStatusService)sp.GetRequiredService<IPeerService>());
-                    break;
-                case NodeRole.Server:
-                    services.AddSingleton<IPeerService, ServerRoutingService>();
-                    services.AddSingleton<IConnectionStatusService>(sp => (IConnectionStatusService)sp.GetRequiredService<IPeerService>());
-                    break;
-                default:
-                    services.AddSingleton<IConnectionStatusService, NullConnectionStatusService>();
-                    break;
-            }
+                NodeRole.Client => ActivatorUtilities.CreateInstance<ClientPeerService>(sp),
+                NodeRole.Server => ActivatorUtilities.CreateInstance<ServerRoutingService>(sp),
+                _ => ActivatorUtilities.CreateInstance<PeerService>(sp)
+            });
+            services.AddSingleton<IConnectionStatusService>(sp =>
+                sp.GetRequiredService<IPeerService>() as IConnectionStatusService ?? new NullConnectionStatusService());
 
             services.TryAddSingleton(new EngineConfig());
             services.AddConventionSingletons();
@@ -140,14 +135,25 @@ public static class EngineExtensions
     private static void ApplyConfigOverride<TInterface>(this IServiceCollection services, Func<TInterface, EngineConfig, IServiceProvider, TInterface> decorate)
         where TInterface : class
     {
-        List<ServiceDescriptor> existing = [.. services.Where(d => d.ServiceType == typeof(TInterface))];
+        List<ServiceDescriptor> existing = [.. services.Where(d => d.ServiceType == typeof(TInterface) && !d.IsKeyedService)];
+        if (existing.Count == 0)
+        {
+            throw new InvalidOperationException($"No {typeof(TInterface).Name} is registered. Register one in configureServices (for example services.AddSingleton<{typeof(TInterface).Name}, MyImplementation>()) before the config overrides are applied.");
+        }
+
         ServiceDescriptor fallback = existing[^1];
         foreach (ServiceDescriptor descriptor in existing)
         {
             services.Remove(descriptor);
         }
 
-        services.Add(new ServiceDescriptor(typeof(TInterface), ConfigOverrideFallbackKey, fallback.ImplementationType!, fallback.Lifetime));
+        // A host may register by type, by instance, or by factory; the keyed copy has to preserve whichever it used.
+        services.Add(fallback switch
+        {
+            { ImplementationInstance: { } instance } => new ServiceDescriptor(typeof(TInterface), ConfigOverrideFallbackKey, instance),
+            { ImplementationFactory: { } factory } => new ServiceDescriptor(typeof(TInterface), ConfigOverrideFallbackKey, (sp, _) => factory(sp), fallback.Lifetime),
+            _ => new ServiceDescriptor(typeof(TInterface), ConfigOverrideFallbackKey, fallback.ImplementationType!, fallback.Lifetime)
+        });
         services.AddSingleton<TInterface>(sp => decorate((TInterface)sp.GetRequiredKeyedService(typeof(TInterface), ConfigOverrideFallbackKey), sp.GetRequiredService<EngineConfig>(), sp));
     }
 

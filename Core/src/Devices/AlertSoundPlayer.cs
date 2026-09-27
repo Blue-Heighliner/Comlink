@@ -34,6 +34,9 @@ internal sealed class AlertSoundPlayer : IAlertSoundPlayer
     private const double BeepSeconds = 0.15;
     private const double SilenceSeconds = 0.85;
 
+    // Built on first use and never freed; see GetWindowsSound. Only touched under lockObject, via Play.
+    private static nint windowsSound;
+
     private readonly object lockObject = new();
     private CancellationTokenSource? cts;
 
@@ -118,8 +121,7 @@ internal sealed class AlertSoundPlayer : IAlertSoundPlayer
     {
         try
         {
-            byte[] wav = BuildWavFile(BuildPcmFrame());
-            PlaySound(wav, nint.Zero, SND_MEMORY | SND_ASYNC | SND_LOOP | SND_NODEFAULT);
+            PlaySound(GetWindowsSound(), nint.Zero, SND_MEMORY | SND_ASYNC | SND_LOOP | SND_NODEFAULT);
         }
         catch
         {
@@ -131,7 +133,7 @@ internal sealed class AlertSoundPlayer : IAlertSoundPlayer
     {
         try
         {
-            PlaySound(null, nint.Zero, 0);
+            PlaySound(nint.Zero, nint.Zero, 0);
         }
         catch
         {
@@ -173,5 +175,20 @@ internal sealed class AlertSoundPlayer : IAlertSoundPlayer
     private const uint SND_NODEFAULT = 0x0002;
 
     [DllImport("winmm.dll", EntryPoint = "PlaySoundW", SetLastError = true, CharSet = CharSet.Unicode)]
-    private static extern bool PlaySound(byte[]? pszSound, nint hmod, uint fdwSound);
+    private static extern bool PlaySound(nint pszSound, nint hmod, uint fdwSound);
+
+    // With SND_ASYNC | SND_LOOP, PlaySound keeps reading the sound from memory after it returns, so the buffer has to
+    // stay at a fixed address for as long as it may play. A managed array is only pinned for the duration of the call
+    // and can be moved or collected afterwards, so the sound lives in unmanaged memory, allocated once and kept.
+    private static nint GetWindowsSound()
+    {
+        if (windowsSound != nint.Zero) { return windowsSound; }
+
+        byte[] wav = BuildWavFile(BuildPcmFrame());
+        nint buffer = Marshal.AllocHGlobal(wav.Length);
+        Marshal.Copy(wav, 0, buffer, wav.Length);
+        windowsSound = buffer;
+        return buffer;
+    }
+
 }

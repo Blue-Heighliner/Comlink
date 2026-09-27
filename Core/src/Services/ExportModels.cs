@@ -51,6 +51,8 @@ public sealed record DraftExportData
     public required string Subject { get; init; }
     /// <summary>Plain-text body of the draft.</summary>
     public required string Body { get; init; }
+    /// <summary>The draft body with its fill-ins (see <see cref="DraftEntity.BodySegmentsJson"/>), or <see langword="null"/> in a package written before fill-ins were exported, in which case only <see cref="Body"/> is restored.</summary>
+    public string? BodySegmentsJson { get; init; }
     /// <summary>Recipient addresses on this draft.</summary>
     public required List<AddressData> Addresses { get; init; }
     /// <summary>Whether this draft has been sent.</summary>
