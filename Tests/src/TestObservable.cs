@@ -1,6 +1,6 @@
 namespace BlueHeighliner.Comlink.Tests;
 
-/// <summary>A minimal hot <see cref="IObservable{T}"/> for stubbing an <see cref="IMsmtPeer"/> mock's observable properties in tests, letting a test raise a value with <see cref="Publish"/> exactly like the old event-based API's <c>Mock.Raise</c>.</summary>
+/// <summary>A minimal hot <see cref="IObservable{T}"/> for stubbing an <see cref="IMsmtSessionPeer"/> mock's observable properties in tests, letting a test raise a value with <see cref="Publish"/> exactly like the old event-based API's <c>Mock.Raise</c>.</summary>
 internal sealed class TestObservable<T> : IObservable<T>
 {
     private readonly List<IObserver<T>> observers = [];

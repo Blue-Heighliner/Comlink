@@ -215,7 +215,15 @@ internal sealed class ClientPeerService : IPeerService, IConnectionStatusService
     private void OnDisconnected(PeerConnectionEventArgs args)
     {
         inboundConnections.TryRemove(args.Connection, out _);
-        if (IsServerConnection(args.Connection)) { UpdateConnectionStatus(false); }
+        if (!IsServerConnection(args.Connection)) { return; }
+
+        UpdateConnectionStatus(false);
+
+        // An unexpected drop (as opposed to this node's own Close/Refresh action, which already wakes the
+        // monitor itself) would otherwise sit unnoticed until the monitor's current heartbeat interval elapses -
+        // up to steadyInterval - since nothing else wakes a sleeping monitor. Waking it here lets it retry (and
+        // report the reconnect) right away instead.
+        serverLink?.Refresh();
     }
 
     private void UpdateConnectionStatus(bool connected)

@@ -12,7 +12,7 @@ public sealed class InterfaceServiceTests
     [Fact]
     public async Task HandleInterfaceMessage_ValidMessage_RoutesAsCurrentUser()
     {
-        Mock<IMsmtPeerFactory> peerFactory = new();
+        Mock<IMsmtSessionPeer.IFactory> peerFactory = new();
         Mock<IMessageRoutingService> routing = new();
         routing.Setup(r => r.Route(It.IsAny<string>(), It.IsAny<SendMessagePayload>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync(("MSGID", (IReadOnlyList<UserDeliveryResult>)[]));
@@ -42,7 +42,7 @@ public sealed class InterfaceServiceTests
     [Fact]
     public async Task HandleInterfaceMessage_NoUserInstalled_DoesNotRoute()
     {
-        Mock<IMsmtPeerFactory> peerFactory = new();
+        Mock<IMsmtSessionPeer.IFactory> peerFactory = new();
         Mock<IMessageRoutingService> routing = new();
         Mock<IUserService> user = new();
         user.Setup(s => s.GetCurrentUserInfo()).Returns((UserInfo?)null);
@@ -59,7 +59,7 @@ public sealed class InterfaceServiceTests
     [Fact]
     public async Task HandleInterfaceMessage_CorruptData_DoesNotThrow()
     {
-        Mock<IMsmtPeerFactory> peerFactory = new();
+        Mock<IMsmtSessionPeer.IFactory> peerFactory = new();
         Mock<IMessageRoutingService> routing = new();
         Mock<IUserService> user = new();
 
@@ -87,18 +87,18 @@ public sealed class InterfaceServiceTests
 
         Mock<TestEngineController> engineController = new() { CallBase = true };
         engineController.Setup(e => e.InterfacePort).Returns(port);
-        engineController.Setup(e => e.ConnectionOptions).Returns(new MsmtOptions
+        engineController.Setup(e => e.ConnectionOptions).Returns(new MsmtSessionPeerOptions
         {
             Credentials = new MsmtCredentials { Identity = serverCertificate, TrustedAuthorities = trustedAuthorities },
             RequireFullyQualifiedHostname = false
         });
 
-        await using InterfaceService svc = new(new MsmtPeerFactory(), engineController.Object, routing.Object, user.Object, noLogger);
+        await using InterfaceService svc = new(new IMsmtSessionPeer.Factory(), engineController.Object, routing.Object, user.Object, noLogger);
 
         using CancellationTokenSource cts = new();
         _ = svc.Start(cts.Token);
 
-        await using IMsmtPeer client = new MsmtPeerFactory().Create(new MsmtOptions
+        await using IMsmtSessionPeer client = new IMsmtSessionPeer.Factory().Create(new MsmtSessionPeerOptions
         {
             Credentials = new MsmtCredentials { Identity = clientCertificate, TrustedAuthorities = trustedAuthorities },
             RequireFullyQualifiedHostname = false
@@ -111,16 +111,21 @@ public sealed class InterfaceServiceTests
             Addresses = [new TestAddressEntry { UserName = "DEST", Type = "To" }]
         };
 
-        // The interface listener may still be finishing binding immediately after Start() returns
-        // control; re-send until routing observes it (harmless: Route is a no-op to production state here).
+        // The interface listener may still be finishing binding immediately after Start() returns control;
+        // reconnect and re-send until routing observes it (harmless: Route is a no-op to production state here).
         _ = Task.Run(async () =>
         {
             try
             {
                 while (!routeCalled.Task.IsCompleted)
                 {
-                    using OwnedBuffer buf = PeerSerializer.Serialize(outgoing);
-                    client.Send(new MsmtTarget { Host = "127.0.0.1", Port = port }, buf.Memory);
+                    IMsmtConnection connection = client.Connect(new MsmtNameTarget { Host = "127.0.0.1", Port = port, ServerName = "127.0.0.1" });
+                    if (await connection.Wait())
+                    {
+                        using OwnedBuffer buf = PeerSerializer.Serialize(outgoing);
+                        await connection.Request(buf.Memory);
+                    }
+                    await connection.DisposeAsync();
                     await Task.Delay(100);
                 }
             }

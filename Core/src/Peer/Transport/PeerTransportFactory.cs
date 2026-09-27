@@ -9,7 +9,7 @@ internal interface IPeerTransportFactory
 
 /// <summary>Builds a <see cref="CompositePeerTransport"/> of MSMT (IP) and MicroGate (serial), leaving out IP when no identity certificate is available.</summary>
 internal sealed class PeerTransportFactory(
-    IMsmtPeerFactory msmtFactory,
+    IMsmtSessionPeer.IFactory msmtFactory,
     IMicroGatePeerFactory microGateFactory,
     IEngineController engineController,
     ILoggerFactory loggerFactory) : IPeerTransportFactory

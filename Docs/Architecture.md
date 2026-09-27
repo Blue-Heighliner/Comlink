@@ -67,7 +67,7 @@ sequenceDiagram
     participant MRS as MessageRoutingService
     participant SL as IEngineController
     participant PS as PeerService
-    participant RP as Remote IMsmtPeer
+    participant RP as Remote IMsmtSessionPeer
     DVM->>SC: SendMessage
     SC->>MRS: Route
     MRS->>SL: GetEndpoint (per recipient)

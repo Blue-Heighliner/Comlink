@@ -763,6 +763,24 @@ public sealed class ServerRoutingServiceTests
         await fx.StartTask;
     }
 
+    /// <summary>An unexpected drop of the only live connection to a child or server wakes its heartbeat monitor immediately, instead of leaving it to sleep out its current interval before retrying.</summary>
+    [Fact]
+    public async Task OnDisconnected_UnexpectedDrop_RetriesHeartbeatImmediately()
+    {
+        Fixture fx = await BuildStarted(configureTransport: (transport, _) => AcknowledgeWithoutConnecting(transport));
+        PeerConnection outbound = new(serverBEndpoint, false, null, () => { });
+        fx.Connected.Publish(new PeerConnectionEventArgs { Connection = outbound });
+        await WaitUntil(() => fx.Service.GetStatuses().Single(s => s.UserName == "ServerB").IsConnected, TimeSpan.FromSeconds(2));
+        int countBefore = RequestsTo(fx, serverBEndpoint);
+
+        fx.Disconnected.Publish(new PeerConnectionEventArgs { Connection = outbound });
+
+        await WaitUntil(() => RequestsTo(fx, serverBEndpoint) > countBefore, TimeSpan.FromSeconds(1));
+
+        fx.Cts.Cancel();
+        await fx.StartTask;
+    }
+
     /// <summary>A message relayed by the server keeps the priority it was sent with, for children and for other servers alike.</summary>
     [Fact]
     public async Task Relay_KeepsMessagePriority()

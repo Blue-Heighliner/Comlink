@@ -143,39 +143,45 @@ public sealed class CompositePeerTransportTests
     [Fact]
     public async Task Factory_WithConnectionOptions_BuildsIpTransport()
     {
-        Mock<IMsmtPeer> peer = new();
-        peer.SetupGet(p => p.Connected).Returns(new TestObservable<MsmtConnectedEventArgs>());
-        peer.SetupGet(p => p.Disconnected).Returns(new TestObservable<MsmtDisconnectedEventArgs>());
-        peer.SetupGet(p => p.Received).Returns(new TestObservable<MsmtReceivedEventArgs>());
-        peer.SetupGet(p => p.PackageChanged).Returns(new TestObservable<MsmtPackageChangedEventArgs>());
-        peer.Setup(p => p.Request(It.IsAny<MsmtNameTarget>(), It.IsAny<IMemoryOwner<byte>>(), It.IsAny<MsmtSendOptions>(), It.IsAny<CancellationToken>()))
+        Mock<IMsmtSessionPeer> peer = new();
+        peer.SetupGet(p => p.Connected).Returns(new TestObservable<IMsmtConnection>());
+        peer.SetupGet(p => p.Disconnected).Returns(new TestObservable<MsmtDisconnection>());
+        peer.SetupGet(p => p.PackageChanged).Returns(new TestObservable<MsmtPackageChange>());
+        peer.SetupProperty(p => p.Receiver);
+        Mock<IMsmtConnection> connection = new();
+        connection.SetupGet(c => c.Direction).Returns(MsmtConnectionDirection.Outgoing);
+        connection.SetupGet(c => c.Remote).Returns(new MsmtTarget { Host = ip.IpAddress, Port = ip.Port });
+        connection.SetupGet(c => c.Status).Returns(MsmtConnectionStatus.Connected);
+        connection.Setup(c => c.Wait(It.IsAny<CancellationToken>())).ReturnsAsync(true);
+        connection.Setup(c => c.Request(It.IsAny<IMemoryOwner<byte>>(), It.IsAny<MsmtSendOptions>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync(new MsmtResponse { Success = true, Payload = Mock.Of<IMemoryOwner<byte>>() });
-        Mock<IMsmtPeerFactory> msmtFactory = new();
-        msmtFactory.Setup(f => f.Create(It.IsAny<MsmtOptions>())).Returns(peer.Object);
+        peer.Setup(p => p.Connect(It.IsAny<MsmtNameTarget>())).Returns(connection.Object);
+        Mock<IMsmtSessionPeer.IFactory> msmtFactory = new();
+        msmtFactory.Setup(f => f.Create(It.IsAny<MsmtSessionPeerOptions>())).Returns(peer.Object);
         (X509Certificate2 identity, _, X509Certificate2Collection authorities) = TestMsmtCertificates.Create();
         Mock<TestEngineController> controller = new() { CallBase = true };
-        controller.Setup(c => c.ConnectionOptions).Returns(new MsmtOptions { Credentials = new MsmtCredentials { Identity = identity, TrustedAuthorities = authorities } });
+        controller.Setup(c => c.ConnectionOptions).Returns(new MsmtSessionPeerOptions { Credentials = new MsmtCredentials { Identity = identity, TrustedAuthorities = authorities } });
         PeerTransportFactory factory = new(msmtFactory.Object, Mock.Of<IMicroGatePeerFactory>(), controller.Object, LoggerFactory.Create(_ => { }));
 
         await using IPeerTransport transport = factory.Create();
         bool ok = await transport.Request(ip, new byte[] { 1 });
 
         Assert.True(ok);
-        msmtFactory.Verify(f => f.Create(It.IsAny<MsmtOptions>()), Times.Once);
+        msmtFactory.Verify(f => f.Create(It.IsAny<MsmtSessionPeerOptions>()), Times.Once);
     }
 
     /// <summary>With no identity certificate (a node that only uses serial) the factory still builds a transport, leaving IP unavailable.</summary>
     [Fact]
     public async Task Factory_WithoutConnectionOptions_StillBuildsSerialOnlyTransport()
     {
-        Mock<IMsmtPeerFactory> msmtFactory = new();
+        Mock<IMsmtSessionPeer.IFactory> msmtFactory = new();
         Mock<TestEngineController> controller = new() { CallBase = true };
         controller.Setup(c => c.ConnectionOptions).Throws(new InvalidOperationException("no current user"));
         PeerTransportFactory factory = new(msmtFactory.Object, Mock.Of<IMicroGatePeerFactory>(), controller.Object, LoggerFactory.Create(_ => { }));
 
         await using IPeerTransport transport = factory.Create();
 
-        msmtFactory.Verify(f => f.Create(It.IsAny<MsmtOptions>()), Times.Never);
+        msmtFactory.Verify(f => f.Create(It.IsAny<MsmtSessionPeerOptions>()), Times.Never);
         await Assert.ThrowsAsync<IOException>(() => transport.Request(ip, new byte[] { 1 }));
     }
 }

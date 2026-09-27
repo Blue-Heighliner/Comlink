@@ -15,18 +15,17 @@ An interface connection represents no user of its own:
   from the message via `IEngineController`; `MessageId`, `FromUser`, and `SentAt` are ignored and
   re-assigned by `MessageRoutingService.Route`, the same call `DirectServiceConnection.SendMessage`
   makes for a GUI-composed send.
-- **Inbound → interface**: not currently supported. [MSMT](MsmtIntegration.md)'s client-request/server-
-  response model means a connection an interface client initiated can only ever be used to acknowledge
-  what that client sends, never to push a new message back down it, so mirroring a message this user
-  receives from a peer out to a connected interface — supported under the transport this replaced — would
-  require an interface tool to run its own MSMT receiver for this instance to dial back into, a materially
-  different integration shape than "open a socket and read" that is not yet provided.
+- **Inbound → interface**: not currently supported. Mirroring a message this user receives from a peer
+  out to a connected interface would need that interface client's connection kept open and correlated to
+  its own inbound peer traffic, rather than treated as a one-way injection point - see
+  [MsmtIntegration.md](MsmtIntegration.md#no-server-initiated-delivery) for why Comlink never writes back
+  down a connection a remote party opened to it, interface connections included; not yet provided.
 
 ## Connection
 
 - **Address**: `127.0.0.1` (loopback only)
 - **Port**: configurable via `IEngineController.InterfacePort`; default **50020**
-- **Transport**: MSMT, mutual TLS authenticated using this instance's own `IEngineController.ConnectionOptions` — an interface client must present a certificate signed by the same trusted authority (see [Control.md](Control.md#msmt-certificates))
+- **Transport**: MSMT session mode, mutual TLS authenticated using this instance's own `IEngineController.ConnectionOptions` - an interface client must present a certificate signed by the same trusted authority (see [Control.md](Control.md#msmt-certificates))
 - Multiple simultaneous interface connections are supported
 
 ## Delivery status
@@ -43,13 +42,16 @@ a one-way injection point, not a client of the routing result.
 ```csharp
 using BlueHeighliner.Msmt;
 
-IMsmtPeer client = new MsmtPeerFactory().Create(new MsmtOptions
+IMsmtSessionPeer client = new IMsmtSessionPeer.Factory().Create(new MsmtSessionPeerOptions
 {
     Credentials = new MsmtCredentials { Identity = myCertificate, TrustedAuthorities = trustedAuthorities }
 });
 
+IMsmtConnection connection = client.Connect(new MsmtNameTarget { Host = "127.0.0.1", Port = 50020, ServerName = "127.0.0.1" });
+await connection.Wait();
+
 // Anything sent here, encoded as whatever type the running engine's host registered for
 // IEngineController (SampleMessage in the Sample host — see Control.md), is routed out to peers
 // as if this user sent it.
-client.Send(new MsmtTarget { Host = "127.0.0.1", Port = 50020 }, messageBytes);
+connection.Send(messageBytes);
 ```

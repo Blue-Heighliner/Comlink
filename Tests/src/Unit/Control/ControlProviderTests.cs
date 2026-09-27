@@ -460,12 +460,11 @@ public sealed class ControlProviderTests
                 new EngineConfig { PeerCertificateFile = peerFile, TrustedAuthorityCertificateFile = authorityFile },
                 NoCurrentUser);
 
-            MsmtOptions options = controller.ConnectionOptions;
+            MsmtSessionPeerOptions options = controller.ConnectionOptions;
 
             Assert.Equal(client.Thumbprint, options.Credentials.Identity.Thumbprint);
             Assert.Single(options.Credentials.TrustedAuthorities);
             Assert.Equal(trustedAuthorities[0].Thumbprint, options.Credentials.TrustedAuthorities[0].Thumbprint);
-            Assert.Equal(MsmtOperationMode.Session, options.Mode);
         }
         finally
         {
@@ -815,12 +814,11 @@ public sealed class ControlProviderTests
         store.Add(authorityCert);
         try
         {
-            MsmtOptions options = MsmtCertificateLookup.BuildPeerOptions("ALPHA", _ => identityName, authorityName);
+            MsmtSessionPeerOptions options = MsmtCertificateLookup.BuildPeerOptions("ALPHA", _ => identityName, authorityName);
 
             Assert.Equal(identityCert.Thumbprint, options.Credentials.Identity.Thumbprint);
             Assert.Single(options.Credentials.TrustedAuthorities);
             Assert.Equal(authorityCert.Thumbprint, options.Credentials.TrustedAuthorities[0].Thumbprint);
-            Assert.Equal(MsmtOperationMode.Session, options.Mode);
         }
         finally
         {

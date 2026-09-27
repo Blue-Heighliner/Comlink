@@ -216,7 +216,15 @@ internal sealed class ServerRoutingService : IPeerService, IConnectionStatusServ
 
         // A user can be connected both ways at once (it dialed this node, and this node dialed it); losing one of
         // them does not make it unreachable while the other is still up.
-        if (!HasLiveConnection(remoteName)) { UpdateStatusForName(remoteName, false); }
+        if (HasLiveConnection(remoteName)) { return; }
+
+        UpdateStatusForName(remoteName, false);
+
+        // An unexpected drop (as opposed to this node's own Close/Refresh action, which already wakes the
+        // monitor itself) would otherwise sit unnoticed until the monitor's current heartbeat interval elapses -
+        // up to steadyInterval - since nothing else wakes a sleeping monitor. Waking it here lets it retry (and
+        // report the reconnect) right away instead.
+        if (monitors.TryGetValue(remoteName, out PeerLinkControl? monitor)) { monitor.Refresh(); }
     }
 
     private bool HasLiveConnection(string name)

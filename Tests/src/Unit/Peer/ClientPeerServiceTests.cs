@@ -225,6 +225,25 @@ public sealed class ClientPeerServiceTests
         await startTask;
     }
 
+    /// <summary>An unexpected disconnect (not one caused by this node's own Close/Refresh) wakes the heartbeat monitor immediately, instead of leaving it to sleep out its current interval before retrying.</summary>
+    [Fact]
+    public async Task OnDisconnected_UnexpectedDrop_RetriesHeartbeatImmediately()
+    {
+        (ClientPeerService service, Mock<IPeerTransport> transport, _, TestObservable<PeerConnectionEventArgs> disconnected, _) = Build();
+        AutoAcknowledge(transport);
+        using CancellationTokenSource cts = new();
+        Task startTask = service.Start(cts.Token);
+        await WaitUntil(() => service.GetStatuses().Single().IsConnected, TimeSpan.FromSeconds(2));
+        int countBefore = transport.Invocations.Count(i => i.Method.Name == nameof(IPeerTransport.Request));
+
+        disconnected.Publish(new PeerConnectionEventArgs { Connection = ConnectionTo(serverEndpoint) });
+
+        await WaitUntil(() => transport.Invocations.Count(i => i.Method.Name == nameof(IPeerTransport.Request)) > countBefore, TimeSpan.FromSeconds(1));
+
+        cts.Cancel();
+        await startTask;
+    }
+
     /// <summary>The row carries the name from the server's certificate, and keeps it after the connection drops.</summary>
     [Fact]
     public async Task GetStatuses_ServerCertificate_NamesTheRow()

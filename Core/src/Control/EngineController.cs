@@ -91,8 +91,8 @@ public interface IEngineController
     /// </summary>
     bool PrintReceivedDefaultEnabled { get; }
 
-    /// <summary>The peer options — including TLS identity certificate and trusted certificate authorities — used for both inbound and outbound MSMT peer connections.</summary>
-    MsmtOptions ConnectionOptions { get; }
+    /// <summary>The peer options - including TLS identity certificate and trusted certificate authorities - used for both inbound and outbound MSMT session peer connections.</summary>
+    MsmtSessionPeerOptions ConnectionOptions { get; }
 
     /// <summary>The configured role for this instance.</summary>
     NodeRole Role { get; }
@@ -403,7 +403,7 @@ public abstract class DefaultEngineController<TMessage> : IEngineController wher
     /// see <c>Docs/Components/Control.md</c>.
     /// </summary>
     /// <exception cref="InvalidOperationException">No current user is registered yet, so no identity certificate can be resolved.</exception>
-    public virtual MsmtOptions ConnectionOptions => MsmtCertificateLookup.BuildPeerOptions(currentUserProvider.UserName, GetCertificateName, TrustedAuthorityCertificateName);
+    public virtual MsmtSessionPeerOptions ConnectionOptions => MsmtCertificateLookup.BuildPeerOptions(currentUserProvider.UserName, GetCertificateName, TrustedAuthorityCertificateName);
 
     /// <inheritdoc />
     public virtual NodeRole Role => NodeRole.Peer;
@@ -456,7 +456,7 @@ internal static class MsmtCertificateLookup
     /// certificate store.
     /// </summary>
     /// <exception cref="InvalidOperationException"><paramref name="currentUserName"/> is <see langword="null"/>, so no identity certificate can be resolved.</exception>
-    public static MsmtOptions BuildPeerOptions(string? currentUserName, Func<string, string> getCertificateName, string trustedAuthorityCertificateName)
+    public static MsmtSessionPeerOptions BuildPeerOptions(string? currentUserName, Func<string, string> getCertificateName, string trustedAuthorityCertificateName)
     {
         if (currentUserName is null)
         {
@@ -469,11 +469,10 @@ internal static class MsmtCertificateLookup
         X509Certificate2 authority = FindCertificate(trustedAuthorityCertificateName)
             ?? throw new InvalidOperationException($"Peer authentication requires a trusted authority certificate named '{trustedAuthorityCertificateName}', but none was found in the system store. Install the certificate to continue.");
 
-        return new MsmtOptions
+        return new MsmtSessionPeerOptions
         {
             Credentials = new MsmtCredentials { Identity = identity, TrustedAuthorities = [authority] },
-            RequireFullyQualifiedHostname = false,
-            Mode = MsmtOperationMode.Session
+            RequireFullyQualifiedHostname = false
         };
     }
 
@@ -485,7 +484,7 @@ internal static class MsmtCertificateLookup
     /// file for the trusted authority.
     /// </summary>
     /// <exception cref="InvalidOperationException">Either file does not exist.</exception>
-    public static MsmtOptions BuildPeerOptionsFromFiles(string peerCertificateFile, string trustedAuthorityCertificateFile)
+    public static MsmtSessionPeerOptions BuildPeerOptionsFromFiles(string peerCertificateFile, string trustedAuthorityCertificateFile)
     {
         if (!File.Exists(peerCertificateFile))
         {
@@ -499,11 +498,10 @@ internal static class MsmtCertificateLookup
         X509Certificate2 identity = X509CertificateLoader.LoadPkcs12FromFile(peerCertificateFile, password: null);
         X509Certificate2 authority = X509CertificateLoader.LoadCertificateFromFile(trustedAuthorityCertificateFile);
 
-        return new MsmtOptions
+        return new MsmtSessionPeerOptions
         {
             Credentials = new MsmtCredentials { Identity = identity, TrustedAuthorities = [authority] },
-            RequireFullyQualifiedHostname = false,
-            Mode = MsmtOperationMode.Session
+            RequireFullyQualifiedHostname = false
         };
     }
 
@@ -687,7 +685,7 @@ internal sealed class ConfiguredEngineController : IEngineController
 
     /// <inheritdoc />
     /// <exception cref="InvalidOperationException">Only one of <c>PeerCertificateFile</c>/<c>TrustedAuthorityCertificateFile</c> is set - they must be set together.</exception>
-    public MsmtOptions ConnectionOptions
+    public MsmtSessionPeerOptions ConnectionOptions
     {
         get
         {

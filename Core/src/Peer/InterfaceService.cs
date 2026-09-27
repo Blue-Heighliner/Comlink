@@ -7,11 +7,12 @@ namespace BlueHeighliner.Comlink.Peer;
 /// it itself.
 /// </summary>
 /// <remarks>
-/// Mirroring an inbound peer message back out to a connected interface is not currently implemented:
-/// MSMT's client-request/server-response model means a connection an interface client initiated can only
-/// ever be used to acknowledge what that client sends, never to push a new message back down it, so an
-/// interface tool would need to run its own MSMT receiver for this instance to dial back into - a
-/// materially different integration shape than "open a socket and read" that is not yet provided. See
+/// Mirroring an inbound peer message back out to a connected interface is not currently implemented: doing
+/// so would need that interface client's connection kept open and correlated to its own inbound peer
+/// traffic, rather than treated as a one-way injection point, and this instance never writes back down a
+/// connection a remote party opened to it in the first place - see <c>Docs/Components/MsmtIntegration.md</c>.
+/// An interface tool would instead need to run its own MSMT listener for this instance to dial back into,
+/// a materially different integration shape than "open a socket and read" that is not yet provided. See
 /// <c>Docs/Components/Interface.md</c>.
 /// </remarks>
 internal interface IInterfaceService : IAsyncDisposable
@@ -25,7 +26,7 @@ internal sealed class InterfaceService : IInterfaceService
 {
     /// <summary>Initializes a new <see cref="InterfaceService"/>.</summary>
     public InterfaceService(
-        IMsmtPeerFactory peerFactory,
+        IMsmtSessionPeer.IFactory peerFactory,
         IEngineController engineController,
         IMessageRoutingService routingService,
         IUserService userService,
@@ -38,18 +39,18 @@ internal sealed class InterfaceService : IInterfaceService
         logger = loggerFactory.CreateLogger("ACTIVITY");
     }
 
-    private readonly IMsmtPeerFactory peerFactory;
+    private readonly IMsmtSessionPeer.IFactory peerFactory;
     private readonly IEngineController engineController;
     private readonly IMessageRoutingService routingService;
     private readonly IUserService userService;
     private readonly ILogger logger;
 
-    private IMsmtPeer? peer;
+    private IMsmtSessionPeer? peer;
 
     /// <inheritdoc />
     public async Task Start(CancellationToken cancellation)
     {
-        MsmtOptions options;
+        MsmtSessionPeerOptions options;
         try
         {
             options = engineController.ConnectionOptions;
@@ -61,18 +62,18 @@ internal sealed class InterfaceService : IInterfaceService
         }
 
         peer = peerFactory.Create(options);
-        peer.Received.Listen(OnReceived);
+        peer.Receiver = OnReceived;
         peer.StartListener(engineController.InterfacePort, "127.0.0.1");
 
         try { await Task.Delay(Timeout.Infinite, cancellation); }
         catch (OperationCanceledException) { }
     }
 
-    private void OnReceived(MsmtReceivedEventArgs args)
+    private ValueTask<MsmtReceiveResult?> OnReceived(IMsmtConnection connection, ReadOnlyMemory<byte> payload, bool isResponseRequested)
     {
-        byte[] copy;
-        using (args.Payload) { copy = args.Payload.Memory.ToArray(); }
+        byte[] copy = payload.ToArray();
         _ = Task.Run(() => HandleInterfaceMessage(copy));
+        return ValueTask.FromResult<MsmtReceiveResult?>(isResponseRequested ? MsmtReceiveResult.Accept() : null);
     }
 
     internal async Task HandleInterfaceMessage(ReadOnlyMemory<byte> data)

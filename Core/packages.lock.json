@@ -55,9 +55,9 @@
       },
       "BlueHeighliner.Msmt": {
         "type": "Direct",
-        "requested": "[0.1.5, )",
-        "resolved": "0.1.5",
-        "contentHash": "UpktVB34HNtp7x6ggMHoSaph6pX/0OrUJ1rFy9xZNdAfC4h7Mx/t35vtDNHQAcSOQqhOB8/4w57rJiqadzCZNQ==",
+        "requested": "[0.2.0, )",
+        "resolved": "0.2.0",
+        "contentHash": "3EOEDf7NuaAKGuP51AX9ZmNoLOlWpVgYHsuJ3766gC6728/Rko7rHFlFQ+uTDs8oE/1S0eppwJRiAgOrSg5EnQ==",
         "dependencies": {
           "BouncyCastle.Cryptography": "2.6.2",
           "Microsoft.Extensions.DependencyInjection.Abstractions": "10.0.0"
