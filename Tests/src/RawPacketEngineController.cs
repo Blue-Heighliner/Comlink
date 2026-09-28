@@ -4,7 +4,7 @@ namespace BlueHeighliner.Comlink.Tests;
 /// A <see cref="TestPacketEngineController"/> whose packets serialize to a fixed 16 byte header followed by the data
 /// (see <see cref="RawPacketSerializer"/>), so a test can say exactly how much payload fits in a packet of a given size.
 /// </summary>
-public class RawPacketEngineController(int packetSize = 16 * 1024, int packetWindow = 1) : TestPacketEngineController
+internal class RawPacketEngineController(int packetSize = 16 * 1024, int packetWindow = 1) : TestPacketEngineController
 {
     /// <inheritdoc />
     public override INetworkSerializer PacketSerializer { get; } = new RawPacketSerializer();

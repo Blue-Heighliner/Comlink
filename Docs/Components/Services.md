@@ -1,6 +1,6 @@
 # Services
 
-Business logic lives in `Core/src/Services/`. All services are registered as singletons.
+Business logic lives in `Core/src/Internal/Services/`. All services are registered as singletons.
 
 ```mermaid
 graph TD
@@ -59,7 +59,7 @@ UserInfo? installed = await service.Install("SN01", cancellation);
 Routes outbound messages to peer nodes and surfaces their delivery status. Delivery status comes entirely from `IPeerService`'s own `DestinationStatus` stream, itself derived from MSMT's delivery status (see [Peer.md](Peer.md#delivery-status)); the one application-level status above that — `Read` — comes from the user-read confirmation message flow (see [Peer.md](Peer.md#read-confirmation)).
 
 **Key responsibilities**:
-- Build the outbound message via `IEngineController` (`CreateMessage()` then the `Set*` logical-field setters, including `SetIsAlert`, `SetPriority`, `SetTag`) so it can be sent as whatever concrete type the host has configured (see [Control.md](Control.md#message-format))
+- Build the outbound message via `IEngineController` (`CreateMessage()` then the `Set*` logical-field setters, including `SetIsAlert`, `SetPriority`, `SetTag`) so it can be sent as whatever concrete type the host has configured (see [Configuration.md](Configuration.md#message-format))
 - For each recipient in `SendMessagePayload.Addresses`, deliver via `IPeerService.Send`
 - Subscribe to `IPeerService.DeliveryStatusChanged` and forward each `DestinationStatus` unchanged as its own `DeliveryStatusChanged`
 - Subscribe to `IPeerService.ConfirmationReceived` and re-raise it as `DeliveryStatusChanged(messageId, confirmingUser, DestinationStatus.Read)` — reusing the same event as peer-driven status changes
@@ -200,7 +200,7 @@ DTOs used across the service layer:
 
 ## ExportModels
 
-DTOs used by `ExportService` (`Core/src/Services/ExportModels.cs`):
+DTOs used by `ExportService` (`Core/src/Internal/Services/ExportModels.cs`):
 
 | Type | Fields |
 |------|--------|
@@ -214,7 +214,7 @@ DTOs used by `ExportService` (`Core/src/Services/ExportModels.cs`):
 
 ## ImportModels
 
-DTOs used by `ImportService` (`Core/src/Services/ImportModels.cs`):
+DTOs used by `ImportService` (`Core/src/Internal/Services/ImportModels.cs`):
 
 | Type | Fields |
 |------|--------|

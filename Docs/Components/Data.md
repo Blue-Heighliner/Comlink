@@ -1,6 +1,6 @@
 # Data Layer
 
-The data layer is active in `Client` mode only. It uses LiteDB (a single-file embedded document database) and lives in `Core/src/Data/`.
+The data layer is active in `Client` mode only. It uses LiteDB (a single-file embedded document database) and lives in `Core/src/Internal/Data/`.
 
 ## Database File
 
@@ -74,7 +74,7 @@ Stored in both Inbox (received) and Outbox (sent).
 |-------|------|-------|
 | `Id` | `ObjectId` | LiteDB auto-ID (the actual primary key) |
 | `MessageId` | `string` | Denormalized from `Message` (via `IEngineController.GetMessageId`) so LiteDB can query/index on it directly. **Not unique** — see below |
-| `Message` | `object` | The message content — subject, body, sender, addresses, sent time — as an instance of `IEngineController.MessageType`. This is the canonical representation; LiteDB serializes it using its own runtime type (via its built-in `object`-property polymorphism, storing a `_type` discriminator) and reconstructs the same concrete type on load. Read its logical fields through the registered `IEngineController` — see `Docs/Components/Peer.md` and `Docs/Components/Control.md`. |
+| `Message` | `object` | The message content — subject, body, sender, addresses, sent time — as an instance of `IEngineController.MessageType`. This is the canonical representation; LiteDB serializes it using its own runtime type (via its built-in `object`-property polymorphism, storing a `_type` discriminator) and reconstructs the same concrete type on load. Read its logical fields through the registered `IEngineController` — see `Docs/Components/Peer.md` and `Docs/Components/Configuration.md`. |
 | `DeliveryStatuses` | `List<DeliveryStatus>` | Per-user delivery state (Outbox messages) |
 | `ReadStatus` | `DestinationStatus?` | Inbox-only: `Received` when stored, `Read` once the user opens it (see `Docs/Components/Peer.md#read-confirmation`). Always `null` on Outbox records — per-destination read state lives in `DeliveryStatuses` instead |
 | `ReceivedAt` | `DateTime` | UTC timestamp; denormalized from `Message`'s sent time so LiteDB can sort/index on it directly |
@@ -94,8 +94,8 @@ Stored in both Inbox (received) and Outbox (sent).
 | `Addresses` | `List<AddressData>` | |
 | `IsSent` | `bool` | `true` after successful send |
 | `IsAlert` | `bool` | Whether this draft will be sent as an alert; see `Docs/Components/Peer.md#alert-messages` |
-| `Priority` | `int` | Priority number this draft should be sent at; see `Docs/Components/Control.md#message-composition` |
-| `Tag` | `string` | Short user-inputted tag identifying the type of this message; see `Docs/Components/Control.md#message-composition` |
+| `Priority` | `int` | Priority number this draft should be sent at; see `Docs/Components/Configuration.md#message-composition` |
+| `Tag` | `string` | Short user-inputted tag identifying the type of this message; see `Docs/Components/Configuration.md#message-composition` |
 | `SentAt` | `DateTime?` | UTC send time |
 | `ModifiedAt` | `DateTime` | UTC last edit time |
 | `FolderId` | `string` | |

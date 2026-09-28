@@ -1,6 +1,6 @@
 # Connection Identification
 
-A node is configured with the places it connects and listens, not with the users it expects there. `IEngineController.PeerPort` is where it listens for IP connections and `IEngineController.OutgoingPoints` are the IP hosts and ports it dials and the serial ports it opens. Nothing ties a user name to a point, so the same node can be reached by a different user from a different point tomorrow without any node's configuration changing. Who is on the other end of a connection is instead worked out at the moment the connection forms, and a message for a user goes over whichever connection is then identified as them.
+A node is configured with the places it connects and listens, not with the users it expects there. `PeerPort` is where it listens for IP connections and the `OutgoingPoint`s it is given are the IP hosts and ports it dials and the serial ports it opens. Nothing ties a user name to a point, so the same node can be reached by a different user from a different point tomorrow without any node's configuration changing. Who is on the other end of a connection is instead worked out at the moment the connection forms, and a message for a user goes over whichever connection is then identified as them.
 
 ## Where it happens
 
@@ -10,7 +10,7 @@ The peer services keep the established connections in a `UserConnections`, keyed
 
 ## Identifying a connection
 
-`IEngineController.IdentifyConnection(ConnectionInfo)` is the hook, virtual and optional. `ConnectionInfo` describes what is known:
+`IEngineBuilder.Identify` states the hook, which is optional. `ConnectionInfo` describes what is known:
 
 - **IP**: the remote host and port (an inbound connection's port is the remote node's ephemeral one), the certificate subject, and the common names in it.
 - **Serial**: the local port name and the HDLC station address.
@@ -18,10 +18,10 @@ The peer services keep the established connections in a `UserConnections`, keyed
 
 The hook returns a `UserIdentity`, a name plus app-specific data, or `null` to leave the decision to the engine:
 
-- **IP**: the first user (from `Users`, and every server and child client in `Servers`) whose `GetCertificateName` matches one of the certificate's common names. The certificate authority already vouched for the certificate, so when none matches the connection is still accepted, as a user named after the first common name. A certificate with no common name cannot be identified.
+- **IP**: the first user (from `Users`, and every server and child client in `Servers`) whose `CertificateName` matches one of the certificate's common names. The certificate authority already vouched for the certificate, so when none matches the connection is still accepted, as a user named after the first common name. A certificate with no common name cannot be identified.
 - **Serial**: a user named after the port. A cable carries no certificate, so a host that needs real names overrides the hook, for example with a table from port and address to user, or reads the name out of a connection message.
 
-An identity's `Data` defaults to `GetUserData(name)`, which is where a host attaches whatever it wants to a user (`config.json`'s `Users` entries can carry a `Data` map too, merged over the controller's own). The engine never interprets it; it travels with the identity for the host's own hooks. A hook that throws drops the connection.
+An identity's `Data` defaults to the data stated with `UserData` for the name, which is where a host attaches whatever it wants to a user (`config.json`'s `Users` entries can carry a `Data` map too, merged over the controller's own). The engine never interprets it; it travels with the identity for the host's own hooks. A hook that throws drops the connection.
 
 Identity establishes who a connection is for routing and status only. It is not authentication beyond what the medium gives (the certificate authority for IP, the physical cable for serial), and the `FromUser` inside a message is still whatever the sender wrote.
 
@@ -29,10 +29,10 @@ Each role then applies its own policy to the identity. A peer accepts any identi
 
 ## Connection message exchange
 
-An IP certificate names a node but says nothing app-specific, and a serial port has no name at all, so a host may have nodes introduce themselves. This is off by default and enabled by `IEngineController.ConnectionMessageType`, the type of the connection message, with `ConnectionResponseType` optionally naming a reply; both are protobuf types (or whatever `ConnectionSerializer` handles, which by default builds only those two types). The exchange runs before identification, which is then given both objects:
+An IP certificate names a node but says nothing app-specific, and a serial port has no name at all, so a host may have nodes introduce themselves. This is off by default and enabled by `ConnectionMessage<TMessage>`, which states the type of the connection message and how it is built, with `ConnectionResponse<TResponse>` optionally adding a reply; both are protobuf types (or whatever `ConnectionSerializer` handles, which by default builds only those two types). The exchange runs before identification, which is then given both objects:
 
-1. The node that opened the connection (both nodes of a serial link) builds a message with `CreateConnectionMessage(ConnectionInfo)` and sends it first. A `null` result is sent as an empty message.
-2. The node that receives a message, when a response type is configured, builds a reply with `CreateConnectionResponse(ConnectionInfo)`, whose `ConnectionMessage` is the message just received, and sends it back.
+1. The node that opened the connection (both nodes of a serial link) builds a message with the `ConnectionMessage` function and sends it first. A `null` result is sent as an empty message.
+2. The node that receives a message, when a response type is configured, builds a reply with the `ConnectionResponse` function, whose `ConnectionInfo.ConnectionMessage` is the message just received, and sends it back.
 3. Each node is identified once it holds what it is waiting for: a node that received a connection is waiting for the message, a node that opened an IP connection for the response (when a response type is configured), and both ends of a serial link for both. Identification sees the remote node's message and the remote node's response to this node's message.
 
 Once the exchange is on, every payload on every connection is framed with one leading byte (data, message, response), which is how the three are told apart, so all nodes on a network must be configured alike, as with packetization. The exchange has ten seconds to finish or the connection is dropped, and a message of the wrong type, one that does not deserialize, or one whose hook throws drops it as well. Data that arrives before the receiving node has finished identifying the connection is held (up to 64 payloads) and delivered in order once it has. Heartbeats are ordinary data, so they wait for the exchange like everything else. The exchange's own messages travel through the packetizer, when there is one, like any other payload, at the highest priority.

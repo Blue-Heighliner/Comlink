@@ -4,58 +4,50 @@ namespace BlueHeighliner.Comlink;
 [ExcludeFromCodeCoverage]
 public static class Engine
 {
-    /// <summary>Engine configuration loaded from command-line arguments.</summary>
-    internal static EngineConfig Config { get; private set; } = new();
-    /// <summary>Host-provided callback to register DI services, including the required <see cref="IEngineController"/>.</summary>
-    internal static Action<IServiceCollection> ConfigureServices { get; private set; } = _ => { };
+    /// <summary>What the host stated in its <see cref="IEngineConfiguration"/>.</summary>
+    internal static EngineBuilder Builder { get; private set; } = new();
+    /// <summary>The configuration file loaded from the command-line arguments, when the host allows one.</summary>
+    internal static EngineConfigFile ConfigFile { get; private set; } = new();
+    /// <summary>Registers the host's own services, applied to the running engine's container as well as the one its configuration is built in.</summary>
+    internal static Action<IServiceCollection>? ConfigureServices { get; private set; }
 
     /// <summary>
-    /// Loads configuration from <paramref name="args"/>, then starts the engine in Headless mode or GUI mode.
+    /// Constructs <typeparamref name="TConfiguration"/> through dependency injection and runs it, loads the configuration
+    /// file if the configuration allows one, then starts the engine in Headless mode or GUI mode.
     /// </summary>
+    /// <typeparam name="TConfiguration">
+    /// Says how the engine runs; it must at least state the host's message type. It is built from a container holding
+    /// logging (<see cref="ILoggerFactory"/>, <see cref="ILogger{TCategoryName}"/>) plus whatever <paramref name="configureServices"/>
+    /// registers, so its constructor may take any of those. That container is separate from the running engine's, which
+    /// receives the same <paramref name="configureServices"/> registrations again, so a service registered there exists once
+    /// in each.
+    /// </typeparam>
     /// <param name="args">Command-line arguments passed from the host entry point.</param>
-    /// <param name="configureServices">
-    /// Registers this host's DI services — must register an <see cref="IEngineController"/> implementation
-    /// like any other service; <see cref="Engine"/> resolves it from the same container this populates.
-    /// </param>
-    public static async Task Start(string[] args, Action<IServiceCollection> configureServices)
+    /// <param name="configureServices">Registers the host's own services: the ones <typeparamref name="TConfiguration"/> depends on, and any others the host wants in the running engine (for example a hosted service that uses <see cref="IServiceConnection"/>).</param>
+    /// <exception cref="InvalidOperationException"><typeparamref name="TConfiguration"/> cannot be constructed, or is incomplete or contradicts itself.</exception>
+    public static async Task Start<TConfiguration>(string[] args, Action<IServiceCollection>? configureServices = null) where TConfiguration : class, IEngineConfiguration
     {
         ConfigureServices = configureServices;
-
-        IEngineController controller = ResolveEngineController();
-        Config = controller.ConfigFileEnabled ? EngineConfig.Load(args) : new EngineConfig();
-
-        if (Config.HeadlessMode)
+        Builder = EngineBuilder.Build<TConfiguration>(configureServices);
+        await using (Builder)
         {
-            await RunHeadless();
-        }
-        else
-        {
-            RunGui(args);
-        }
-    }
+            ConfigFile = Builder.IsConfigFileEnabled ? EngineConfigFile.Load(args) : new EngineConfigFile();
 
-    /// <summary>
-    /// Resolves <see cref="IEngineController"/> from a minimal, throwaway service provider built from
-    /// <see cref="ConfigureServices"/> alone — <see cref="Config"/> does not exist yet at this point, so
-    /// this must happen before the real host container (which depends on <see cref="Config"/>) is built.
-    /// Only <see cref="IEngineController.ConfigFileEnabled"/> is actually consulted; every other member is
-    /// left unused for this bootstrap resolution.
-    /// </summary>
-    private static IEngineController ResolveEngineController()
-    {
-        ServiceCollection services = new();
-        ConfigureServices(services);
-        services.TryAddSingleton<ICurrentUserProvider, CurrentUserProvider>();
-        using ServiceProvider provider = services.BuildServiceProvider();
-        return provider.GetRequiredService<IEngineController>();
+            if (ConfigFile.HeadlessMode)
+            {
+                await RunHeadless();
+            }
+            else
+            {
+                RunGui(args);
+            }
+        }
     }
 
     private static async Task RunHeadless()
         => await Host.CreateDefaultBuilder()
-            .UseEngineConfig(Config)
-            .UseEngine(EngineMode.Headless)
-            .ConfigureServices((_, services) => ConfigureServices(services))
-            .UseEngineConfigOverrides()
+            .UseEngine(EngineMode.Headless, Builder, ConfigFile)
+            .ConfigureServices((_, services) => ConfigureServices?.Invoke(services))
             .ConfigureLogging(logging => logging.SetMinimumLevel(LogLevel.Information))
             .Build()
             .RunAsync();

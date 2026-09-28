@@ -9,7 +9,7 @@ implementation, typically (though not necessarily) a subclass of the optional co
 
 ## Interfaces
 
-`Core/src/ExternalSystems/ExternalSystem.cs` defines two types:
+`Core/src/Public/ExternalSystems/ExternalSystem.cs` defines two types:
 
 ```csharp
 public interface IExternalSystem
@@ -37,23 +37,22 @@ public abstract class ExternalSystemBase<TMessage> : IExternalSystem where TMess
 
 `IExternalSystem` is deliberately not generic over the message type — it is declared `object`-typed on
 `Send`/`MessageReceived` so `ExternalSystemsService` (below) can hold and drive every configured external
-system uniformly, the same reasoning as `IEngineController`'s message-format members (see
-[Control.md](Control.md#message-format)). `IEngineController.ExternalSystems`/`ExternalServer` (see
-[Control.md](Control.md#external-systems)) are typed as plain `IExternalSystem`/`IExternalSystem?` too, so
+system uniformly, the same reasoning as the engine's message-format members (see
+[Configuration.md](Configuration.md#message-format)). `IEngineBuilder.ExternalSystem`/`ExternalServer` (see
+[Configuration.md](Configuration.md#external-systems)) take a plain `IExternalSystem` too, so
 a host is free to implement `IExternalSystem` directly if it wants full control. In practice, a host
 instead subclasses the optional convenience base class `ExternalSystemBase<TMessage>`, which implements
 `IExternalSystem` on your behalf and exposes only type-safe `TMessage`-typed members — `protected abstract`
 methods for the real connection behavior (plus one `protected virtual` method, `PollIsConnected` — see
 [Lifecycle](#lifecycle) below), and `protected Task Receive(TMessage message)` to report an inbound
-message. `TMessage` should match the host's own `IEngineController.MessageType`.
+message. `TMessage` should match the host's own message type (the one given to `IEngineBuilder.Message`).
 
 `ExternalSystemBase<TMessage>`'s constructor deliberately does not take an `ILoggerFactory` — each
-external system is constructed directly by `IEngineController.ExternalSystems`, not resolved through
-DI, and that member lives on the same type backing `IEngineController` itself; taking `ILoggerFactory`
-there would create a circular dependency through the logging providers (e.g. `DailyFileLoggerProvider`)
-that themselves depend on `IEngineController` for their log file location. Instead, `AttachLogger` is
-called once by `ExternalSystemsService`, using its own (safely resolved, since it is an ordinary singleton
-rather than part of `IEngineController`'s own construction) `ILoggerFactory`, before `Start` — an external
+external system is constructed directly by the host's `IEngineConfiguration`, not resolved from the running
+engine's container; a logger injected into the configuration comes from the container the configuration was built in,
+which writes to none of the engine's logs (the engine's logging providers, e.g. `DailyFileLoggerProvider`, need the
+engine's configuration for their log file location, so they cannot exist until it has run). Instead, `AttachLogger` is
+called once by `ExternalSystemsService`, using its own `ILoggerFactory` from the running container, before `Start` — an external
 system logs to a no-op logger for any activity before that point.
 
 ## Lifecycle
@@ -107,9 +106,9 @@ called for it.
 
 ## `ExternalSystems` and `ExternalSystemsService`
 
-`IEngineController.ExternalSystems` (see [Control.md](Control.md#external-systems)) returns the list
+The external systems added with `IEngineBuilder.ExternalSystem` (see [Configuration.md](Configuration.md#external-systems)) are the list
 of external systems this instance communicates with, resolved once at startup. `ExternalSystemsService`
-(`Core/src/ExternalSystems/ExternalSystemsService.cs`, an internal hosted-service-style component started
+(`Core/src/Internal/ExternalSystems/ExternalSystemsService.cs`, an internal hosted-service-style component started
 by `EngineHost` alongside the peer and interface listeners) reads this list once and then:
 
 - Runs every external system's own `Start` loop concurrently, for the lifetime of the app.
@@ -133,8 +132,8 @@ returns immediately without subscribing to anything.
 
 ## `ExternalServer`
 
-`IEngineController.ExternalServer` (see [Control.md](Control.md#external-systems)) designates one entry of
-`ExternalSystems` — or `null`, the default — as the exclusive upstream hub for every message this instance
+`IEngineBuilder.ExternalServer` (see [Configuration.md](Configuration.md#external-systems)) designates one entry of
+the external systems — or none, the default — as the exclusive upstream hub for every message this instance
 would otherwise send out. When it is set, `ExternalSystemsService` changes the relay step above:
 
 - A message **not** received from `ExternalServer` (composed locally by the user and sent to a remote
@@ -164,7 +163,7 @@ network integration — that "connects" after a short delay, stays connected ind
 synthesizes an inbound demo message, so the receive path (mirroring to every other external system, and
 normal processing as a received message) is visible without needing an actual external system to connect
 to. It never loses its simulated connection, so it leaves `PollIsConnected` at its default rather than
-overriding it. `SampleEngineController.ExternalSystems` returns a single instance of it. A real host
+overriding it. `SampleEngineConfiguration` adds a single instance of it. A real host
 implementation replaces `TryConnect`, `Disconnect`, and `Send` with genuine connection logic for its own
 external system, and either overrides `PollIsConnected` or calls `ReportDisconnected` (or both), depending
 on how its own external system reports connection loss.

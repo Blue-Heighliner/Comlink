@@ -37,63 +37,10 @@ public sealed class TestAddressEntry
 }
 
 /// <summary>
-/// Test <see cref="IEngineController"/> mapping logical message fields onto <see cref="TestMessage"/>, with
-/// no casting required. Not <see langword="sealed"/> so tests needing to also override a non-message
-/// member per test case can do so via <c>Mock&lt;TestEngineController&gt; { CallBase = true }</c>, which
-/// falls back to this class's own (or the inherited default) behavior for anything not explicitly stubbed.
-/// <see langword="public"/> (not <see langword="internal"/>) because Moq's Castle DynamicProxy needs to
-/// generate a subclass of it, and the Tests assembly is not strong-named so it cannot grant
-/// <c>InternalsVisibleTo</c> to Moq's dynamically-generated, unsigned proxy assembly.
+/// Test <see cref="IEngineController"/> built from <see cref="TestEngineConfiguration"/>, which maps the logical message fields onto
+/// <see cref="TestMessage"/>, with the engine's defaults for everything else. Not <see langword="sealed"/> because tests
+/// override single members, and Moq subclasses it with <c>CallBase = true</c>.
 /// </summary>
-public class TestEngineController() : DefaultEngineController<TestMessage>(new CurrentUserProvider())
+internal class TestEngineController() : EngineController(EngineBuilder.Build(new TestEngineConfiguration()), new CurrentUserProvider())
 {
-    /// <inheritdoc />
-    protected override string GetMessageId(TestMessage message) => message.MessageId;
-    /// <inheritdoc />
-    protected override void SetMessageId(TestMessage message, string value) => message.MessageId = value;
-    /// <inheritdoc />
-    protected override string GetFromUser(TestMessage message) => message.FromUser;
-    /// <inheritdoc />
-    protected override void SetFromUser(TestMessage message, string value) => message.FromUser = value;
-    /// <inheritdoc />
-    protected override string GetSubject(TestMessage message) => message.Subject;
-    /// <inheritdoc />
-    protected override void SetSubject(TestMessage message, string value) => message.Subject = value;
-    /// <inheritdoc />
-    protected override string GetBody(TestMessage message) => message.Body;
-    /// <inheritdoc />
-    protected override void SetBody(TestMessage message, string value) => message.Body = value;
-
-    /// <inheritdoc />
-    protected override List<MessageAddress> GetAddresses(TestMessage message)
-        => message.Addresses
-            .Select(a => new MessageAddress { UserName = a.UserName, Type = a.Type.ParseAddressType() })
-            .ToList();
-
-    /// <inheritdoc />
-    protected override void SetAddresses(TestMessage message, List<MessageAddress> value)
-        => message.Addresses = value
-            .Select(a => new TestAddressEntry { UserName = a.UserName, Type = a.Type.ToString() })
-            .ToList();
-
-    /// <inheritdoc />
-    protected override DateTime GetSentAt(TestMessage message) => message.SentAt;
-    /// <inheritdoc />
-    protected override void SetSentAt(TestMessage message, DateTime value) => message.SentAt = value;
-    /// <inheritdoc />
-    protected override string GetConfirmationMessageId(TestMessage message) => message.ConfirmationMessageId;
-    /// <inheritdoc />
-    protected override void SetConfirmationMessageId(TestMessage message, string value) => message.ConfirmationMessageId = value;
-    /// <inheritdoc />
-    protected override bool GetIsAlert(TestMessage message) => message.IsAlert;
-    /// <inheritdoc />
-    protected override void SetIsAlert(TestMessage message, bool value) => message.IsAlert = value;
-    /// <inheritdoc />
-    protected override int GetPriority(TestMessage message) => message.Priority;
-    /// <inheritdoc />
-    protected override void SetPriority(TestMessage message, int value) => message.Priority = value;
-    /// <inheritdoc />
-    protected override string GetTag(TestMessage message) => message.Tag;
-    /// <inheritdoc />
-    protected override void SetTag(TestMessage message, string value) => message.Tag = value;
 }

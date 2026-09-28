@@ -1,12 +1,12 @@
 # Config File Reference
 
-Engine supports an optional `--config <path>` argument pointing to a JSON configuration file. It works identically in every build configuration; whether it is honored at all is decided solely by `IEngineController.ConfigFileEnabled`, which defaults to `false`.
+Engine supports an optional `--config <path>` argument pointing to a JSON configuration file. It works identically in every build configuration; whether it is honored at all is decided solely by the configuration's `ConfigFile` setting, which defaults to off.
 
 ```sh
 Sample.exe --config path/to/config.json
 ```
 
-If `--config` is omitted all fields take their defaults. If `--config` points to a non-existent or unreadable file the process throws at startup. Whether `--config` is honored at all is itself gated by `IEngineController.ConfigFileEnabled` — see [Control.md](Control.md#config-file).
+If `--config` is omitted all fields take their defaults. If `--config` points to a non-existent or unreadable file the process throws at startup. Whether `--config` is honored at all is itself gated by `ConfigFile` — see [Configuration.md](Configuration.md#config-file).
 
 All property names are PascalCase; deserialization is case-insensitive. Unrecognised fields are silently ignored. Missing fields use their defaults. An empty config file (`{}`) behaves identically to omitting `--config`.
 
@@ -181,7 +181,7 @@ Label used for the tag input's watermark in the draft editor. Lets a host call t
 
 **Type:** `bool | null` | **Default:** `null` (uses Engine default of `false`)
 
-Whether the print manager's "print received" toggle starts enabled, automatically adding every received message to the print queue (subject to `IEngineController.GetPrintCount`). The user can still toggle it off at any time in the print manager.
+Whether the print manager's "print received" toggle starts enabled, automatically adding every received message to the print queue (subject to the configuration's `PrintCount`). The user can still toggle it off at any time in the print manager.
 
 ---
 
@@ -195,7 +195,7 @@ Networking topology role: `"Peer"`, `"Client"`, or `"Server"` (case-insensitive)
 
 ### `OutgoingPoints`
 
-**Type:** `object[]` | **Default:** `[]` (uses the registered `IEngineController`'s own, none by default)
+**Type:** `object[]` | **Default:** `[]` (uses what the host stated with `OutgoingPoint`, none by default)
 
 The points this node connects out to and keeps connected: IP hosts and ports to dial, and serial ports to open. A `"Client"`-role instance uses the first as its server. Where a node listens is `PeerPort`. Nothing here says which user is at a point; that is worked out when the connection forms (see [Identification.md](Identification.md)), so a node is configured with where it connects and never with who it expects.
 
@@ -251,7 +251,7 @@ A map of user name → user entry. Keys are user names (case-insensitive). An en
 
 | Field | Type | Description |
 |-------|------|-------------|
-| `Data` | `object` | App-specific string keys and values attached to the user, merged over `IEngineController.GetUserData` for that user (config wins on a key conflict). The engine does not interpret it; it is part of the user's identity for the host's own hooks |
+| `Data` | `object` | App-specific string keys and values attached to the user, merged over the data the host stated with `UserData` for that user (config wins on a key conflict). The engine does not interpret it; it is part of the user's identity for the host's own hooks |
 
 ---
 

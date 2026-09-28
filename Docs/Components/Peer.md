@@ -4,7 +4,7 @@ The peer layer handles node-to-node message delivery. Every running instance - i
 
 ## Node Roles
 
-`NodeRole` (`IEngineController`, see [Control.md](Control.md)) selects one of three networking topologies for a running instance. `EngineExtensions.UseEngine` registers `IPeerService` as a factory that reads `IEngineController.Role` once, when the service is first resolved, so a role set in code and one set by `config.json`'s `NodeRole` (which wins when present) select the same implementation; nothing re-checks the role at runtime. `IConnectionStatusService` resolves to that same instance when it implements the interface, and to `NullConnectionStatusService` otherwise.
+`NodeRole` (stated with `IEngineBuilder.Role`, see [Configuration.md](Configuration.md#network-topology)) selects one of three networking topologies for a running instance. `EngineExtensions.UseEngine` registers `IPeerService` as a factory that reads `IEngineController.Role` once, when the service is first resolved, so a role set in code and one set by `config.json`'s `NodeRole` (which wins when present) select the same implementation; nothing re-checks the role at runtime. `IConnectionStatusService` resolves to that same instance when it implements the interface, and to `NullConnectionStatusService` otherwise.
 
 | Role | `IPeerService` implementation | Behavior |
 |------|-------------------------------|----------|
@@ -64,40 +64,13 @@ A `Server`-role instance has no inbox/outbox/notes/drafts GUI at all - `MainWind
 
 Peer traffic carries exactly one payload shape and nothing else: an instance of `IEngineController.MessageType`, serialized through `IEngineController.NetworkSerializer` - by default `ProtobufNetworkSerializer`, protobuf-net (binary) - which returns a pool-backed `IMemoryOwner<byte>` so a send does not allocate a fresh buffer every time. `INetworkSerializer.Deserialize` takes no type: the serializer makes its own wire format self-describing, and the default does so with one fixed outer `ProtobufEnvelope` around every payload, carrying the value's assembly-qualified type name and its own protobuf-net encoding as nested bytes. A receiver therefore rebuilds the right concrete type from the bytes alone, and callers that need a specific one (`ServerRoutingService`, `InterfaceService`) check the result against `IEngineController.MessageType` and drop a mismatch. That envelope belongs to the serialization layer, not to Comlink's own protocol: there is still no Comlink-level envelope or command discriminator. MSMT-level delivery (did the bytes arrive) is tracked entirely through MSMT's own delivery status (see [Delivery status](#delivery-status) below); the only application-level reply that exists is the user-read confirmation described in [Read Confirmation](#read-confirmation), and it is itself just an ordinary instance of `IEngineController.MessageType` with one field set — there is still no separate envelope or command discriminator.
 
-The concrete message type is **injectable**, not hardwired. The message-format members of `IEngineController` (see [Control.md](Control.md#message-format)) are what a host registers to supply its own DTO — they provide the type itself (`MessageType`, `CreateMessage()`) and map the engine's logical fields onto that type's real fields:
+The concrete message type is **injectable**, not hardwired. The message mapping a host states with `IEngineBuilder.Message<TMessage>` (see [Configuration.md](Configuration.md#message-format)) provides the type itself and maps the engine's logical fields onto that type's real fields: message id, sender, subject, body, addresses, sent time, confirmation id, alert flag, priority and tag, each a getter and a setter. Internally these become the `IEngineController` members `MessageType`, `CreateMessage()`, and a `Get`/`Set` pair per field, all `object`-typed.
 
-```csharp
-Type MessageType { get; }
-object CreateMessage();
-string GetMessageId(object message);
-void SetMessageId(object message, string value);
-string GetFromUser(object message);
-void SetFromUser(object message, string value);
-string GetSubject(object message);
-void SetSubject(object message, string value);
-string GetBody(object message);
-void SetBody(object message, string value);
-List<MessageAddress> GetAddresses(object message);
-void SetAddresses(object message, List<MessageAddress> value);
-DateTime GetSentAt(object message);
-void SetSentAt(object message, DateTime value);
-string GetConfirmationMessageId(object message);
-void SetConfirmationMessageId(object message, string value);
-bool GetIsAlert(object message);
-void SetIsAlert(object message, bool value);
-int GetPriority(object message);
-void SetPriority(object message, int value);
-string GetTag(object message);
-void SetTag(object message, string value);
-```
+Every layer that carries or stores a message (`PeerService`, `InterfaceService`, `MessageRoutingService`, `EntryService`, and `MessageEntity.Message` in the database, see [Data.md](Data.md)) works purely in terms of `object`, calling into `IEngineController` for every logical field it needs. The engine has no message type of its own and never assumes a particular field name or wire layout beyond what a host's own `[ProtoContract]`/`[ProtoMember]` attributes declare on its DTO.
 
-Every layer that carries or stores a message — `PeerService`, `InterfaceService`, `MessageRoutingService`, `EntryService`, and `MessageEntity.Message` in the database (see [Data.md](Data.md)) — works purely in terms of `object`, calling into `IEngineController` for every logical field it needs. The engine has no message type of its own and never assumes a particular field name or wire layout beyond what a host's own `[ProtoContract]`/`[ProtoMember]` attributes declare on its DTO.
+The mapping is **required**, with no default: the engine has no message DTO of its own, so a host that never calls `Message<TMessage>`, or leaves a field unmapped, fails at `Engine.Start` with an error naming what is missing.
 
-These members are **required**, with no generic-free default (see [Control.md](Control.md#message-format)) — `DefaultEngineController<TMessage>` declares them `protected abstract`, so the class itself is `abstract` and a host must always define and register a subclass implementing them; a host that registers no `IEngineController` at all fails at startup with a DI resolution error.
-
-The `Sample` project's `SampleEngineController` maps every logical field onto a `SampleMessage` DTO (`Id`/`Sender`/`Title`/`Text`/`Recipients` fields) to demonstrate a working implementation — the mapping, not any particular field name, is what the engine actually depends on. See `Sample/src/SampleEngineController.cs`.
-
-`SampleEngineController` derives from `DefaultEngineController<TMessage>` (see [Control.md](Control.md#message-format)), which does the `object`-to-`TMessage` cast for the message-field members once on your behalf and exposes type-safe `protected abstract` members instead, so implementations never write the cast themselves.
+The `Sample` project's `SampleEngineConfiguration` maps every logical field onto a `SampleMessage` DTO (`Id`/`Sender`/`Title`/`Text`/`Recipients` fields) to demonstrate a working configuration; the mapping, not any particular field name, is what the engine actually depends on. See `Sample/src/SampleEngineConfiguration.cs`.
 
 ## Connection Lifecycle
 

@@ -4,10 +4,9 @@ namespace BlueHeighliner.Comlink.Sample;
 /// Demonstrates injecting a custom message DTO. Field names are deliberately unlike the engine's own
 /// logical field names (<c>Id</c> vs message id, <c>Sender</c> vs sender user, <c>Title</c> vs subject,
 /// <c>Text</c> vs body, <c>Recipients</c> with a <see cref="bool"/> flag vs an address-type enum) to show
-/// that <see cref="SampleEngineController"/>'s message-field overrides are what map the engine's logical
+/// that <see cref="SampleEngineConfiguration"/>'s message mapping is what maps the engine's logical
 /// fields onto this type's real ones — the engine itself never assumes any particular field name or
-/// shape, and requires a host to supply an <see cref="IEngineController"/> since it has no built-in
-/// message type of its own.
+/// shape, and requires a host to state its message type since it has no built-in one of its own.
 /// </summary>
 [ProtoContract]
 public sealed class SampleMessage

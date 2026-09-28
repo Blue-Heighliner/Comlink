@@ -25,10 +25,10 @@ MSMT peer authentication is mandatory - there is no way to run without it. Every
 
 Two independent sources are supported, chosen per `config.json`:
 
-- **System certificate store** (the default): looked up by subject name via `IEngineController.GetCertificateName`
-  (default: the user name itself, unprefixed) and `IEngineController.TrustedAuthorityCertificateName` (default: `COMLINK-ROOT`).
+- **System certificate store** (the default): looked up by subject name via the configuration's `CertificateName`
+  (default: the user name itself, unprefixed) and `TrustedAuthority` (default: `COMLINK-ROOT`).
   Resolved once a current user is registered; before that (a fresh install with no installed user yet),
-  `IEngineController.ConnectionOptions` throws and the peer/interface listeners simply don't start, retried
+  building the MSMT options throws and the peer/interface listeners simply don't start, retried
   the next time the host restarts after a user is installed. A real deployment provisions its own
   certificates under these subject names through whatever process manages its certificate store.
 - **Certificate files**: `config.json`'s `PeerCertificateFile`/`TrustedAuthorityCertificateFile` fields load
@@ -88,14 +88,14 @@ back out to a connected interface client over the connection it opened in; see [
 
 | Component | Role |
 |-----------|------|
-| `PeerService` (`Core/src/Peer/PeerService.cs`) | Wraps a single `IPeerTransport` (IP through `MsmtPeerTransport`, which wraps the `IMsmtSessionPeer`, and serial through `SerialPeerTransport`) for `NodeRole.Peer`; keeps a connection to each outgoing point and sends to a user over the connection identified as them, serializes/deserializes instances of `IEngineController.MessageType` (see [Control.md](Control.md#message-format)), and dispatches `MessageDelivered`/`DeliveryStatusChanged` events derived directly from the transport's `Request` outcome and its `Transmitted` progress callback. |
-| `ClientPeerService` (`Core/src/Peer/ClientPeerService.cs`) | Implements `NodeRole.Client`: sends every outbound message over its one connection to the server, which delivers back down that same connection. Proactively maintains the connection via `PeerConnectionMonitor`. |
-| `ServerRoutingService` (`Core/src/Peer/ServerRoutingService.cs`) | Implements `NodeRole.Server`: accepts connections from child clients and other servers, keeps a connection to each outgoing point, and delivers to any recipient (a child or another server) over the connection identified as them. Proactively maintains each outgoing point via `PeerConnectionMonitor`. |
-| `PeerConnectionMonitor` (`Core/src/Peer/PeerConnectionMonitor.cs`) | Connects to an outgoing point and sends a periodic empty heartbeat over the connection so it opens and stays open without needing a real message. See [Session Peer](#session-peer). |
-| `MsmtPeerTransport` (`Core/src/Peer/Transport/MsmtPeerTransport.cs`) | Adapts an `IMsmtSessionPeer` to the peer transport used by `PeerService`, `ClientPeerService`, and `ServerRoutingService`, caching one outbound connection per point and sending over inbound ones as well. MSMT itself remains IP only; serial goes through `SerialPeerTransport`. |
-| `InterfaceService` (`Core/src/Peer/InterfaceService.cs`, always active) | Uses its own `IMsmtSessionPeer` to host the local interface listener described in [Interface.md](Interface.md). |
-| `IEngineController.ConnectionOptions` | Builds the `MsmtSessionPeerOptions` (identity certificate, trusted authority) used for both inbound and outbound MSMT session peer connections. See [Control.md](Control.md#msmt-certificates). |
-| `IEngineController.GetCertificateName(userName)`/`TrustedAuthorityCertificateName` | Map the local user name, and the trusted certificate authority, to certificate subject names to look up in the system store. See [Control.md](Control.md#msmt-certificates). |
+| `PeerService` (`Core/src/Internal/Peer/PeerService.cs`) | Wraps a single `IPeerTransport` (IP through `MsmtPeerTransport`, which wraps the `IMsmtSessionPeer`, and serial through `SerialPeerTransport`) for `NodeRole.Peer`; keeps a connection to each outgoing point and sends to a user over the connection identified as them, serializes/deserializes instances of `IEngineController.MessageType` (see [Configuration.md](Configuration.md#message-format)), and dispatches `MessageDelivered`/`DeliveryStatusChanged` events derived directly from the transport's `Request` outcome and its `Transmitted` progress callback. |
+| `ClientPeerService` (`Core/src/Internal/Peer/ClientPeerService.cs`) | Implements `NodeRole.Client`: sends every outbound message over its one connection to the server, which delivers back down that same connection. Proactively maintains the connection via `PeerConnectionMonitor`. |
+| `ServerRoutingService` (`Core/src/Internal/Peer/ServerRoutingService.cs`) | Implements `NodeRole.Server`: accepts connections from child clients and other servers, keeps a connection to each outgoing point, and delivers to any recipient (a child or another server) over the connection identified as them. Proactively maintains each outgoing point via `PeerConnectionMonitor`. |
+| `PeerConnectionMonitor` (`Core/src/Internal/Peer/PeerConnectionMonitor.cs`) | Connects to an outgoing point and sends a periodic empty heartbeat over the connection so it opens and stays open without needing a real message. See [Session Peer](#session-peer). |
+| `MsmtPeerTransport` (`Core/src/Internal/Peer/Transport/MsmtPeerTransport.cs`) | Adapts an `IMsmtSessionPeer` to the peer transport used by `PeerService`, `ClientPeerService`, and `ServerRoutingService`, caching one outbound connection per point and sending over inbound ones as well. MSMT itself remains IP only; serial goes through `SerialPeerTransport`. |
+| `InterfaceService` (`Core/src/Internal/Peer/InterfaceService.cs`, always active) | Uses its own `IMsmtSessionPeer` to host the local interface listener described in [Interface.md](Interface.md). |
+| `ConnectionOptions` (`IEngineController`) | Builds the `MsmtSessionPeerOptions` (identity certificate, trusted authority) used for both inbound and outbound MSMT session peer connections. See [Configuration.md](Configuration.md#msmt-certificates). |
+| `CertificateName`/`TrustedAuthority` (`IEngineBuilder`) | Map the local user name, and the trusted certificate authority, to certificate subject names to look up in the system store. See [Configuration.md](Configuration.md#msmt-certificates). |
 
 `EngineExtensions.UseEngine` calls the package's `AddMsmt()` to register `IMsmtSessionPeer.IFactory` (and
 `IMsmtMessagePeer.IFactory`, unused by Comlink) by convention.

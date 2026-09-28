@@ -1,11 +1,10 @@
 # Usage
 
-Runnable examples of `IEngineController` and `Engine.Start` in different situations.
+Runnable examples of `IEngineConfiguration` and `Engine.Start<T>` in different situations.
 
 ## Minimal host
 
-The smallest possible host: a message DTO, a controller implementing just the required
-message-field mapping, and the entry point.
+The smallest possible host: a message DTO, a configuration mapping it, and the entry point.
 
 ```csharp
 public sealed class MyMessage
@@ -14,82 +13,108 @@ public sealed class MyMessage
     public string FromUser { get; set; } = "";
     public string Subject { get; set; } = "";
     public string Body { get; set; } = "";
-    public List<MessageAddress> Addresses { get; set; } = [];
+    public List<(string UserName, AddressType Type)> Addresses { get; set; } = [];
+    public DateTime SentAt { get; set; }
+    public string ConfirmationId { get; set; } = "";
+    public bool IsAlert { get; set; }
+    public int Priority { get; set; }
+    public string Tag { get; set; } = "";
 }
 
-public sealed class MyEngineController(ICurrentUserProvider currentUserProvider)
-    : DefaultEngineController<MyMessage>(currentUserProvider)
+public sealed class MyEngineConfiguration : IEngineConfiguration
 {
-    protected override string GetMessageId(MyMessage message) => message.Id;
-    protected override void SetMessageId(MyMessage message, string value) => message.Id = value;
-    protected override string GetFromUser(MyMessage message) => message.FromUser;
-    protected override void SetFromUser(MyMessage message, string value) => message.FromUser = value;
-    protected override string GetSubject(MyMessage message) => message.Subject;
-    protected override void SetSubject(MyMessage message, string value) => message.Subject = value;
-    protected override string GetBody(MyMessage message) => message.Body;
-    protected override void SetBody(MyMessage message, string value) => message.Body = value;
-    protected override List<MessageAddress> GetAddresses(MyMessage message) => message.Addresses;
-    protected override void SetAddresses(MyMessage message, List<MessageAddress> value) => message.Addresses = value;
+    public IEngineBuilder Configure(IEngineBuilder engine) => engine
+        .Message<MyMessage>(message => message
+            .Id(m => m.Id)
+            .Sender(m => m.FromUser)
+            .Subject(m => m.Subject)
+            .Body(m => m.Body)
+            .Addresses(m => m.Addresses, (m, value) => m.Addresses = [.. value])
+            .SentAt(m => m.SentAt)
+            .ConfirmationId(m => m.ConfirmationId)
+            .IsAlert(m => m.IsAlert)
+            .Priority(m => m.Priority)
+            .Tag(m => m.Tag));
 }
 
-await Engine.Start(args, services => services.AddSingleton<IEngineController, MyEngineController>());
+await Engine.Start<MyEngineConfiguration>(args);
 ```
 
-By default this runs the Avalonia desktop UI, with no `config.json` read (`ConfigFileEnabled` is
-`false` unless overridden) and no window icon (`WindowIconUri` is `null` unless overridden).
+A field whose type already matches is mapped by naming the property (`m => m.Id`), which builds the setter for you; when the type differs (a host's own recipient shape for the addresses, or a packet's data) the getter and setter are given explicitly, as `Addresses` is above. The message type also needs `[ProtoContract]`/`[ProtoMember]` attributes for the default network serializer.
+By default this runs the Avalonia desktop UI, with no `config.json` read (`ConfigFile` is off
+unless stated) and no window icon (`WindowIcon` is the operating system's unless stated).
 
-## Overriding a single behavior
+## Stating a single behavior
 
-A host only overrides the members it needs distinct behavior for; every other member keeps
-`DefaultEngineController<TMessage>`'s own default.
+A host only states what it needs distinct behavior for; every other setting keeps the engine's default.
 
 ```csharp
-public sealed class MyEngineController(ICurrentUserProvider currentUserProvider)
-    : DefaultEngineController<MyMessage>(currentUserProvider)
-{
-    // ...required message-field members from above...
-
-    public override string HomeText => "Select a folder and entry to get started.";
-    public override Uri? WindowIconUri => new Uri("avares://MyApp/Assets/icon.png");
-}
+public IEngineBuilder Configure(IEngineBuilder engine) => engine
+    .Message<MyMessage>(/* ...required mapping from above... */)
+    .HomeText("Select a folder and entry to get started.")
+    .WindowIcon(new Uri("avares://MyApp/Assets/icon.png"));
 ```
 
 ## Enabling config.json
 
-Overriding `ConfigFileEnabled` lets a host be configured via a `config.json` file (see
-`EngineConfig` for the full set of fields) without any other code change — every member with a
+Stating `ConfigFile` lets a host be configured via a `config.json` file (see
+`EngineConfigFile` for the full set of fields) without any other code change: every setting with a
 corresponding config field is overridden automatically once enabled.
 
 ```csharp
-public sealed class MyEngineController(ICurrentUserProvider currentUserProvider)
-    : DefaultEngineController<MyMessage>(currentUserProvider)
-{
-    // ...required message-field members...
+public IEngineBuilder Configure(IEngineBuilder engine) => engine
+    .Message<MyMessage>(/* ...required mapping... */)
+    .ConfigFile();
+```
 
-    public override bool ConfigFileEnabled => true;
+## Injecting services into the configuration
+
+The configuration is constructed through dependency injection, from a container holding logging plus whatever the host
+registers, so its constructor can take services:
+
+```csharp
+public sealed class MyEngineConfiguration(ILogger<MyEngineConfiguration> logger, IUserDirectory directory) : IEngineConfiguration
+{
+    public IEngineBuilder Configure(IEngineBuilder engine)
+    {
+        logger.LogInformation("Configuring the engine");
+        return engine
+            .Message<MyMessage>(/* ...required mapping... */)
+            .Users([.. directory.GetNames()]);
+    }
 }
+
+await Engine.Start<MyEngineConfiguration>(args, services => services.AddSingleton<IUserDirectory, UserDirectory>());
 ```
 
 ## Interacting with a running engine
 
 Once `Engine.Start` has started the host, `IServiceConnection` is the surface a UI or headless
-consumer uses to send messages and observe delivery:
+consumer uses to send messages and observe delivery. A host reaches it through a service it registers with
+`configureServices`, which is applied to the running engine as well:
 
 ```csharp
-IServiceConnection connection = provider.GetRequiredService<IServiceConnection>();
-await connection.Connect();
+await Engine.Start<MyEngineConfiguration>(args, services => services.AddHostedService<Greeter>());
 
-connection.MessageReceived += async received =>
+public sealed class Greeter(IServiceConnection connection) : BackgroundService
 {
-    Console.WriteLine($"Received: {received.Message.Subject}");
-    await Task.CompletedTask;
-};
+    protected override async Task ExecuteAsync(CancellationToken stoppingToken)
+    {
+        await connection.Connect(stoppingToken);
 
-await connection.SendMessage("Hello", "Body text", [new AddressRequest { UserName = "alice" }]);
+        connection.MessageReceived += async received =>
+        {
+            Console.WriteLine($"Received: {received.Subject}");
+            await Task.CompletedTask;
+        };
+
+        await connection.SendMessage("Hello", "Body text", [new AddressRequest { UserName = "alice", Type = "To" }], cancellation: stoppingToken);
+    }
+}
 ```
 
 ## Running headless
 
-Set `HeadlessMode` in `config.json` (requires `ConfigFileEnabled`), or pass `--config` pointing at
+Set `HeadlessMode` in `config.json` (requires `ConfigFile`), or pass `--config` pointing at
 a file with `"HeadlessMode": true`, to run with no UI. `Engine.Start` is called exactly the same
-way — the same `IEngineController` implementation drives both modes.
+way: the same configuration drives both modes.

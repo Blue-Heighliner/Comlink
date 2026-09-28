@@ -15,17 +15,20 @@ dotnet add package BlueHeighliner.Comlink
 
 ## Getting started
 
-A host implements `IEngineController` (via `DefaultEngineController<TMessage>`, generic over its own message DTO) and starts the engine with `Engine.Start`:
+A host implements `IEngineConfiguration`, whose fluent `Configure` method states how the engine runs (starting with its own message DTO), and starts the engine with `Engine.Start<T>`, which constructs it through dependency injection:
 
 ```csharp
-public sealed class MyEngineController(ICurrentUserProvider currentUserProvider)
-    : DefaultEngineController<MyMessage>(currentUserProvider)
+public sealed class MyEngineConfiguration : IEngineConfiguration
 {
-    protected override string GetMessageId(MyMessage message) => message.Id;
-    // ...every other required message-field member...
+    public IEngineBuilder Configure(IEngineBuilder engine) => engine
+        .Message<MyMessage>(message => message
+            .Id(m => m.Id)
+            // ...every other logical field...
+            )
+        .HomeText("Select a folder and entry to get started.");
 }
 
-await Engine.Start(args, services => services.AddSingleton<IEngineController, MyEngineController>());
+await Engine.Start<MyEngineConfiguration>(args);
 ```
 
 See `Sample/` for a complete, runnable host, and `Docs/Usage.md` for further examples.
@@ -34,7 +37,7 @@ See `Sample/` for a complete, runnable host, and `Docs/Usage.md` for further exa
 
 | File | Covers |
 |------|--------|
-| [Docs/Api.md](Docs/Api.md) | Public API design and flow — `IEngineController`, `Engine.Start` |
+| [Docs/Api.md](Docs/Api.md) | Public API design and flow - `IEngineConfiguration`, `IEngineBuilder`, `Engine.Start` |
 | [Docs/Architecture.md](Docs/Architecture.md) | High-level design decisions |
 | [Docs/Project.md](Docs/Project.md) | This repo's own tooling: `Scripts/`, publishing, CI |
 | [Docs/Usage.md](Docs/Usage.md) | Runnable usage examples |
