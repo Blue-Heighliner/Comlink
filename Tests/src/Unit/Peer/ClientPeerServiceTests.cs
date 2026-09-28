@@ -4,9 +4,37 @@ namespace BlueHeighliner.Comlink.Tests.Unit.Peer;
 public sealed class ClientPeerServiceTests
 {
     private static readonly ILoggerFactory noLogger = LoggerFactory.Create(_ => { });
-    private static readonly UserEndpoint serverEndpoint = new() { IpAddress = "10.0.0.1", Port = 9000 };
+    private static readonly ConnectionPoint serverPoint = new() { IpAddress = "10.0.0.1", Port = 9000 };
 
-    private static (ClientPeerService Service, Mock<IPeerTransport> Transport, TestObservable<PeerConnectionEventArgs> Connected, TestObservable<PeerConnectionEventArgs> Disconnected, TestObservable<PeerReceivedEventArgs> Received) Build(bool endpointConfigured = true, UserEndpoint? endpoint = null)
+    private sealed class Fixture(ClientPeerService service, Mock<IPeerTransport> transport, TestObservable<PeerConnectionEventArgs> connected, TestObservable<PeerConnectionEventArgs> disconnected, TestObservable<PeerReceivedEventArgs> received, PeerConnection server)
+    {
+        private int isUp;
+
+        public ClientPeerService Service { get; } = service;
+        public Mock<IPeerTransport> Transport { get; } = transport;
+        public TestObservable<PeerConnectionEventArgs> Connected { get; } = connected;
+        public TestObservable<PeerConnectionEventArgs> Disconnected { get; } = disconnected;
+        public TestObservable<PeerReceivedEventArgs> Received { get; } = received;
+        public PeerConnection Server { get; } = server;
+
+        public void Come() => Connected.Publish(new PeerConnectionEventArgs { Connection = Server });
+
+        public void ComeOnce()
+        {
+            if (Interlocked.Exchange(ref isUp, 1) == 0) { Come(); }
+        }
+
+        public void Drop()
+        {
+            Interlocked.Exchange(ref isUp, 0);
+            Disconnected.Publish(new PeerConnectionEventArgs { Connection = Server });
+        }
+    }
+
+    private static PeerConnection ServerConnection(ConnectionPoint point, string name = "Server1", Action? drop = null)
+        => new(point, new ConnectionInfo { IsSerial = point.IsSerial }, drop ?? (() => { })) { User = new UserIdentity { Name = name } };
+
+    private static Fixture Build(bool pointConfigured = true, ConnectionPoint? point = null, bool reachable = true, string serverName = "Server1")
     {
         Mock<IPeerTransport> transport = new();
         TestObservable<PeerConnectionEventArgs> connected = new();
@@ -19,19 +47,32 @@ public sealed class ClientPeerServiceTests
         Mock<IPeerTransportFactory> transportFactory = new();
         transportFactory.Setup(f => f.Create()).Returns(transport.Object);
 
+        ConnectionPoint target = point ?? serverPoint;
         Mock<TestEngineController> engineController = new() { CallBase = true };
-        engineController.Setup(p => p.ServerEndpoint).Returns(endpointConfigured ? endpoint ?? serverEndpoint : null);
+        engineController.Setup(p => p.OutgoingPoints).Returns(pointConfigured ? [target] : []);
 
         ClientPeerService service = new(transportFactory.Object, engineController.Object, noLogger);
-        return (service, transport, connected, disconnected, received);
+        Fixture fixture = new(service, transport, connected, disconnected, received, ServerConnection(target, serverName));
+        if (reachable)
+        {
+            transport.Setup(p => p.Connect(target, It.IsAny<CancellationToken>())).Returns(() =>
+            {
+                fixture.ComeOnce();
+                return Task.FromResult(fixture.Server);
+            });
+        }
+        else
+        {
+            transport.Setup(p => p.Connect(target, It.IsAny<CancellationToken>())).ThrowsAsync(new IOException("refused"));
+        }
+
+        return fixture;
     }
 
-    /// <summary>Configures <paramref name="transport"/> so every <see cref="IPeerTransport.Request"/> call immediately returns a successful acknowledgement.</summary>
-    private static void AutoAcknowledge(Mock<IPeerTransport> transport, bool success = true)
-        => transport.Setup(p => p.Request(It.IsAny<UserEndpoint>(), It.IsAny<ReadOnlyMemory<byte>>(), It.IsAny<PeerSendOptions>(), It.IsAny<CancellationToken>()))
+    /// <summary>Configures the transport so every request over the server connection immediately returns an acknowledgement.</summary>
+    private static void AutoAcknowledge(Fixture fx, bool success = true)
+        => fx.Transport.Setup(p => p.Request(fx.Server, It.IsAny<ReadOnlyMemory<byte>>(), It.IsAny<PeerSendOptions>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync(success);
-
-    private static PeerConnection ConnectionTo(UserEndpoint endpoint) => new(endpoint, false, null, () => { });
 
     private static readonly INetworkSerializer serializer = new ProtobufNetworkSerializer();
 
@@ -41,47 +82,81 @@ public sealed class ClientPeerServiceTests
         return buf.Memory.ToArray();
     }
 
-    /// <summary>Start with no server endpoint configured logs an error and never creates a transport.</summary>
-    [Fact]
-    public async Task Start_NoEndpointConfigured_DoesNotStartListener()
+    private static async Task WaitUntil(Func<bool> condition, TimeSpan timeout)
     {
-        (ClientPeerService service, Mock<IPeerTransport> transport, _, _, _) = Build(endpointConfigured: false);
-
-        await service.Start(CancellationToken.None);
-
-        transport.Verify(p => p.StartListener(It.IsAny<int>()), Times.Never);
+        DateTime deadline = DateTime.UtcNow + timeout;
+        while (!condition())
+        {
+            if (DateTime.UtcNow > deadline) { throw new TimeoutException("Condition was not met in time."); }
+            await Task.Delay(10);
+        }
     }
 
-    /// <summary>Start creates a transport for the configured IP server and starts its listener so the server can deliver messages back.</summary>
-    [Fact]
-    public async Task Start_ConfiguredIpServer_StartsListener()
+    private static async Task<(Fixture Fixture, CancellationTokenSource Cts, Task StartTask)> StartConnected()
     {
-        (ClientPeerService service, Mock<IPeerTransport> transport, _, _, _) = Build();
+        Fixture fx = Build();
+        AutoAcknowledge(fx);
+        CancellationTokenSource cts = new();
+        Task startTask = fx.Service.Start(cts.Token);
+        await WaitUntil(() => fx.Service.GetStatuses().Single().IsConnected, TimeSpan.FromSeconds(2));
+        return (fx, cts, startTask);
+    }
+
+    private static int Heartbeats(Mock<IPeerTransport> transport) => transport.Invocations.Count(i => i.Method.Name == nameof(IPeerTransport.Request));
+
+    /// <summary>Start with no outgoing point configured logs an error and never creates a transport.</summary>
+    [Fact]
+    public async Task Start_NoPointConfigured_DoesNotConnect()
+    {
+        Fixture fx = Build(pointConfigured: false);
+
+        await fx.Service.Start(CancellationToken.None);
+
+        fx.Transport.Verify(p => p.Connect(It.IsAny<ConnectionPoint>(), It.IsAny<CancellationToken>()), Times.Never);
+    }
+
+    /// <summary>Start connects to the configured server and never listens: connections are bidirectional, so the server delivers over the one the client opened.</summary>
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task Start_ConnectsToServerAndStartsNoListener(bool serial)
+    {
+        ConnectionPoint point = serial ? new ConnectionPoint { SerialPort = "SL0" } : serverPoint;
+        Fixture fx = Build(point: point);
+        AutoAcknowledge(fx);
         using CancellationTokenSource cts = new();
 
-        Task startTask = service.Start(cts.Token);
-        await Task.Delay(20);
+        Task startTask = fx.Service.Start(cts.Token);
+        await WaitUntil(() => Heartbeats(fx.Transport) >= 1, TimeSpan.FromSeconds(2));
 
-        transport.Verify(p => p.StartListener(It.IsAny<int>()), Times.Once);
+        fx.Transport.Verify(p => p.StartListener(It.IsAny<int>()), Times.Never);
+        fx.Transport.Verify(p => p.Connect(point, It.IsAny<CancellationToken>()), Times.AtLeastOnce);
 
         cts.Cancel();
         await startTask;
     }
 
-    /// <summary>A serial link is one bidirectional cable, so a client whose server is reached over serial starts no IP listener.</summary>
+    /// <summary>Only the first outgoing point is the server: a client has one long-term connection.</summary>
     [Fact]
-    public async Task Start_ConfiguredSerialServer_DoesNotStartListener()
+    public async Task Start_SeveralPoints_ConnectsToTheFirstOnly()
     {
-        UserEndpoint serial = new() { SerialPort = "SL0" };
-        (ClientPeerService service, Mock<IPeerTransport> transport, _, _, _) = Build(endpoint: serial);
-        AutoAcknowledge(transport);
+        ConnectionPoint other = new() { IpAddress = "10.0.0.2", Port = 9000 };
+        Mock<IPeerTransport> transport = new();
+        transport.SetupGet(p => p.Connected).Returns(new TestObservable<PeerConnectionEventArgs>());
+        transport.SetupGet(p => p.Disconnected).Returns(new TestObservable<PeerConnectionEventArgs>());
+        transport.SetupGet(p => p.Received).Returns(new TestObservable<PeerReceivedEventArgs>());
+        transport.Setup(p => p.Connect(It.IsAny<ConnectionPoint>(), It.IsAny<CancellationToken>())).ThrowsAsync(new IOException("refused"));
+        Mock<IPeerTransportFactory> factory = new();
+        factory.Setup(f => f.Create()).Returns(transport.Object);
+        Mock<TestEngineController> engineController = new() { CallBase = true };
+        engineController.Setup(p => p.OutgoingPoints).Returns([serverPoint, other]);
+        ClientPeerService service = new(factory.Object, engineController.Object, noLogger);
         using CancellationTokenSource cts = new();
 
         Task startTask = service.Start(cts.Token);
-        await Task.Delay(20);
+        await WaitUntil(() => transport.Invocations.Any(i => i.Method.Name == nameof(IPeerTransport.Connect)), TimeSpan.FromSeconds(2));
 
-        transport.Verify(p => p.StartListener(It.IsAny<int>()), Times.Never);
-        transport.Verify(p => p.Request(serial, It.IsAny<ReadOnlyMemory<byte>>(), It.IsAny<PeerSendOptions>(), It.IsAny<CancellationToken>()), Times.AtLeastOnce);
+        transport.Verify(p => p.Connect(other, It.IsAny<CancellationToken>()), Times.Never);
 
         cts.Cancel();
         await startTask;
@@ -91,28 +166,42 @@ public sealed class ClientPeerServiceTests
     [Fact]
     public async Task Send_BeforeStart_ReturnsFalse()
     {
-        (ClientPeerService service, _, _, _, _) = Build();
+        Fixture fx = Build();
 
-        bool ok = await service.Send("ANY-USER", new TestMessage { MessageId = "M1", FromUser = "SOURCE" });
+        bool ok = await fx.Service.Send("ANY-USER", new TestMessage { MessageId = "M1", FromUser = "SOURCE" });
 
         Assert.False(ok);
     }
 
-    /// <summary>Send transmits to the configured server endpoint and returns true once acknowledged.</summary>
+    /// <summary>Send fails while the server connection is not up, without trying to reach the server itself.</summary>
+    [Fact]
+    public async Task Send_ServerUnreachable_ReturnsFalse()
+    {
+        Fixture fx = Build(reachable: false);
+        using CancellationTokenSource cts = new();
+        Task startTask = fx.Service.Start(cts.Token);
+        await Task.Delay(50);
+
+        bool ok = await fx.Service.Send("DEST", new TestMessage { MessageId = "M1", FromUser = "SOURCE" });
+
+        Assert.False(ok);
+        fx.Transport.Verify(p => p.Request(It.IsAny<PeerConnection>(), It.Is<ReadOnlyMemory<byte>>(payload => payload.Length > 0), It.IsAny<PeerSendOptions>(), It.IsAny<CancellationToken>()), Times.Never);
+
+        cts.Cancel();
+        await startTask;
+    }
+
+    /// <summary>Send transmits over the server connection and returns true once acknowledged.</summary>
     [Fact]
     public async Task Send_AfterStart_TransmitsToServerAndReturnsTrue()
     {
-        (ClientPeerService service, Mock<IPeerTransport> transport, _, _, _) = Build();
-        AutoAcknowledge(transport);
-        using CancellationTokenSource cts = new();
-        Task startTask = service.Start(cts.Token);
-        await Task.Delay(20);
+        (Fixture fx, CancellationTokenSource cts, Task startTask) = await StartConnected();
 
-        bool ok = await service.Send("DEST", new TestMessage { MessageId = "M1", FromUser = "SOURCE" });
+        bool ok = await fx.Service.Send("DEST", new TestMessage { MessageId = "M1", FromUser = "SOURCE" });
 
         Assert.True(ok);
-        transport.Verify(p => p.Request(
-            It.Is<UserEndpoint>(t => t.IpAddress == serverEndpoint.IpAddress && t.Port == serverEndpoint.Port),
+        fx.Transport.Verify(p => p.Request(
+            fx.Server,
             It.Is<ReadOnlyMemory<byte>>(payload => payload.Length > 0),
             It.IsAny<PeerSendOptions>(),
             It.IsAny<CancellationToken>()), Times.Once);
@@ -128,46 +217,54 @@ public sealed class ClientPeerServiceTests
     [Fact]
     public async Task Send_SameMessageIdCalledConcurrently_TransmitsOnlyOnce()
     {
-        (ClientPeerService service, Mock<IPeerTransport> transport, _, _, _) = Build();
-        AutoAcknowledge(transport);
-        using CancellationTokenSource cts = new();
-        Task startTask = service.Start(cts.Token);
-        await Task.Delay(20);
+        (Fixture fx, CancellationTokenSource cts, Task startTask) = await StartConnected();
 
         TestMessage message = new() { MessageId = "M1", FromUser = "SOURCE" };
         bool[] results = await Task.WhenAll(
-            service.Send("USER-A", message),
-            service.Send("USER-B", message),
-            service.Send("USER-C", message));
+            fx.Service.Send("USER-A", message),
+            fx.Service.Send("USER-B", message),
+            fx.Service.Send("USER-C", message));
 
         Assert.All(results, Assert.True);
-        transport.Verify(p => p.Request(It.IsAny<UserEndpoint>(), It.Is<ReadOnlyMemory<byte>>(payload => payload.Length > 0), It.IsAny<PeerSendOptions>(), It.IsAny<CancellationToken>()), Times.Once);
+        fx.Transport.Verify(p => p.Request(It.IsAny<PeerConnection>(), It.Is<ReadOnlyMemory<byte>>(payload => payload.Length > 0), It.IsAny<PeerSendOptions>(), It.IsAny<CancellationToken>()), Times.Once);
 
         cts.Cancel();
         await startTask;
     }
 
-    /// <summary>A valid message received over the transport fires MessageDelivered.</summary>
+    /// <summary>A valid message received over the server connection fires MessageDelivered.</summary>
     [Fact]
     public async Task Received_ValidMessage_RaisesMessageDelivered()
     {
-        (ClientPeerService service, _, _, _, TestObservable<PeerReceivedEventArgs> received) = Build();
-        using CancellationTokenSource cts = new();
-        Task startTask = service.Start(cts.Token);
-        await Task.Delay(20);
-
+        (Fixture fx, CancellationTokenSource cts, Task startTask) = await StartConnected();
         TaskCompletionSource<object> tcs = new();
-        service.MessageDelivered += message => { tcs.TrySetResult(message); return Task.CompletedTask; };
+        fx.Service.MessageDelivered += message => { tcs.TrySetResult(message); return Task.CompletedTask; };
 
-        received.Publish(new PeerReceivedEventArgs
+        fx.Received.Publish(new PeerReceivedEventArgs { Connection = fx.Server, Payload = Encode(new TestMessage { MessageId = "MSG1", FromUser = "REMOTE" }) });
+
+        TestMessage message = Assert.IsType<TestMessage>(await tcs.Task.WaitAsync(TimeSpan.FromSeconds(2)));
+        Assert.Equal("MSG1", message.MessageId);
+
+        cts.Cancel();
+        await startTask;
+    }
+
+    /// <summary>A message on any connection other than the server's is ignored: a client takes deliveries only from its server.</summary>
+    [Fact]
+    public async Task Received_FromAnotherConnection_IsIgnored()
+    {
+        (Fixture fx, CancellationTokenSource cts, Task startTask) = await StartConnected();
+        bool delivered = false;
+        fx.Service.MessageDelivered += _ => { delivered = true; return Task.CompletedTask; };
+
+        fx.Received.Publish(new PeerReceivedEventArgs
         {
-            Connection = new PeerConnection(null, true, null, () => { }),
+            Connection = new PeerConnection(null, new ConnectionInfo { IsInbound = true }, () => { }),
             Payload = Encode(new TestMessage { MessageId = "MSG1", FromUser = "REMOTE" })
         });
+        await Task.Delay(100);
 
-        object receivedMessage = await tcs.Task.WaitAsync(TimeSpan.FromSeconds(2));
-        TestMessage message = Assert.IsType<TestMessage>(receivedMessage);
-        Assert.Equal("MSG1", message.MessageId);
+        Assert.False(delivered);
 
         cts.Cancel();
         await startTask;
@@ -177,9 +274,9 @@ public sealed class ClientPeerServiceTests
     [Fact]
     public void GetStatuses_BeforeConnecting_ReturnsDisconnectedRow()
     {
-        (ClientPeerService service, _, _, _, _) = Build();
+        Fixture fx = Build();
 
-        PeerConnectionStatus status = Assert.Single(service.GetStatuses());
+        PeerConnectionStatus status = Assert.Single(fx.Service.GetStatuses());
 
         Assert.False(status.IsConnected);
         Assert.Null(status.LastConnectedAt);
@@ -190,16 +287,16 @@ public sealed class ClientPeerServiceTests
     [Fact]
     public async Task GetStatuses_ConnectionWithoutAcknowledgedHeartbeat_StaysDown()
     {
-        (ClientPeerService service, _, TestObservable<PeerConnectionEventArgs> connected, _, _) = Build();
+        Fixture fx = Build(reachable: false);
         int raised = 0;
-        service.StatusesChanged += () => raised++;
+        fx.Service.StatusesChanged += () => raised++;
         using CancellationTokenSource cts = new();
-        Task startTask = service.Start(cts.Token);
+        Task startTask = fx.Service.Start(cts.Token);
         await Task.Delay(50);
 
-        connected.Publish(new PeerConnectionEventArgs { Connection = ConnectionTo(serverEndpoint) });
+        fx.Come();
 
-        PeerConnectionStatus status = Assert.Single(service.GetStatuses());
+        PeerConnectionStatus status = Assert.Single(fx.Service.GetStatuses());
         Assert.False(status.IsConnected);
         Assert.Null(status.LastConnectedAt);
         Assert.Equal(0, raised);
@@ -212,14 +309,10 @@ public sealed class ClientPeerServiceTests
     [Fact]
     public async Task GetStatuses_HeartbeatAcknowledged_ReturnsConnectedRow()
     {
-        (ClientPeerService service, Mock<IPeerTransport> transport, _, _, _) = Build();
-        AutoAcknowledge(transport);
-        using CancellationTokenSource cts = new();
-        Task startTask = service.Start(cts.Token);
+        (Fixture fx, CancellationTokenSource cts, Task startTask) = await StartConnected();
 
-        await WaitUntil(() => service.GetStatuses().Single().IsConnected, TimeSpan.FromSeconds(2));
+        PeerConnectionStatus status = Assert.Single(fx.Service.GetStatuses());
 
-        PeerConnectionStatus status = Assert.Single(service.GetStatuses());
         Assert.NotNull(status.LastConnectedAt);
         Assert.Null(status.LastDisconnectedAt);
 
@@ -231,16 +324,12 @@ public sealed class ClientPeerServiceTests
     [Fact]
     public async Task OnDisconnected_UnexpectedDrop_RetriesHeartbeatImmediately()
     {
-        (ClientPeerService service, Mock<IPeerTransport> transport, _, TestObservable<PeerConnectionEventArgs> disconnected, _) = Build();
-        AutoAcknowledge(transport);
-        using CancellationTokenSource cts = new();
-        Task startTask = service.Start(cts.Token);
-        await WaitUntil(() => service.GetStatuses().Single().IsConnected, TimeSpan.FromSeconds(2));
-        int countBefore = transport.Invocations.Count(i => i.Method.Name == nameof(IPeerTransport.Request));
+        (Fixture fx, CancellationTokenSource cts, Task startTask) = await StartConnected();
+        int countBefore = Heartbeats(fx.Transport);
 
-        disconnected.Publish(new PeerConnectionEventArgs { Connection = ConnectionTo(serverEndpoint) });
+        fx.Drop();
 
-        await WaitUntil(() => transport.Invocations.Count(i => i.Method.Name == nameof(IPeerTransport.Request)) > countBefore, TimeSpan.FromSeconds(1));
+        await WaitUntil(() => Heartbeats(fx.Transport) > countBefore, TimeSpan.FromSeconds(1));
 
         cts.Cancel();
         await startTask;
@@ -250,41 +339,38 @@ public sealed class ClientPeerServiceTests
     [Fact]
     public async Task OnDisconnected_WhileRetrying_DoesNotCauseTightRetryLoop()
     {
-        (ClientPeerService service, Mock<IPeerTransport> transport, _, TestObservable<PeerConnectionEventArgs> disconnected, _) = Build();
-        transport.Setup(p => p.Request(It.IsAny<UserEndpoint>(), It.IsAny<ReadOnlyMemory<byte>>(), It.IsAny<PeerSendOptions>(), It.IsAny<CancellationToken>()))
+        Fixture fx = Build();
+        fx.Transport.Setup(p => p.Request(fx.Server, It.IsAny<ReadOnlyMemory<byte>>(), It.IsAny<PeerSendOptions>(), It.IsAny<CancellationToken>()))
             .Returns(() =>
             {
-                disconnected.Publish(new PeerConnectionEventArgs { Connection = ConnectionTo(serverEndpoint) });
+                fx.Drop();
                 return Task.FromException<bool>(new IOException("dropped"));
             });
         using CancellationTokenSource cts = new();
 
-        Task startTask = service.Start(cts.Token);
+        Task startTask = fx.Service.Start(cts.Token);
         await Task.Delay(500);
 
-        Assert.InRange(transport.Invocations.Count(i => i.Method.Name == nameof(IPeerTransport.Request)), 1, 2);
+        Assert.InRange(Heartbeats(fx.Transport), 1, 2);
         cts.Cancel();
         await startTask;
     }
 
-    /// <summary>The row carries the name from the server's certificate, and keeps it after the connection drops.</summary>
+    /// <summary>The row carries the name the server's connection was identified as, and keeps it after the connection drops.</summary>
     [Fact]
-    public async Task GetStatuses_ServerCertificate_NamesTheRow()
+    public async Task GetStatuses_ServerIdentity_NamesTheRow()
     {
-        (ClientPeerService service, Mock<IPeerTransport> transport, TestObservable<PeerConnectionEventArgs> connected, TestObservable<PeerConnectionEventArgs> disconnected, _) = Build();
-        AutoAcknowledge(transport);
+        Fixture fx = Build(serverName: "Server1");
+        AutoAcknowledge(fx);
         using CancellationTokenSource cts = new();
-        Assert.Equal(string.Empty, Assert.Single(service.GetStatuses()).UserName);
-        Task startTask = service.Start(cts.Token);
-        await Task.Delay(20);
-        PeerConnection connection = new(serverEndpoint, false, "CN=Server1, O=Comlink", () => { });
+        Assert.Equal(string.Empty, Assert.Single(fx.Service.GetStatuses()).UserName);
+        Task startTask = fx.Service.Start(cts.Token);
 
-        connected.Publish(new PeerConnectionEventArgs { Connection = connection });
-        await WaitUntil(() => service.GetStatuses().Single().IsConnected, TimeSpan.FromSeconds(2));
-        Assert.Equal("Server1", Assert.Single(service.GetStatuses()).UserName);
+        await WaitUntil(() => fx.Service.GetStatuses().Single().IsConnected, TimeSpan.FromSeconds(2));
+        Assert.Equal("Server1", Assert.Single(fx.Service.GetStatuses()).UserName);
 
-        disconnected.Publish(new PeerConnectionEventArgs { Connection = connection });
-        PeerConnectionStatus status = Assert.Single(service.GetStatuses());
+        fx.Drop();
+        PeerConnectionStatus status = Assert.Single(fx.Service.GetStatuses());
         Assert.False(status.IsConnected);
         Assert.Equal("Server1", status.UserName);
 
@@ -292,40 +378,22 @@ public sealed class ClientPeerServiceTests
         await startTask;
     }
 
-    /// <summary>A serial server has no certificate, so its row is named after the port.</summary>
-    [Fact]
-    public async Task GetStatuses_SerialServer_NamedAfterPort()
-    {
-        UserEndpoint serial = new() { SerialPort = "SL0" };
-        (ClientPeerService service, Mock<IPeerTransport> transport, _, _, _) = Build(endpoint: serial);
-        AutoAcknowledge(transport);
-        using CancellationTokenSource cts = new();
-        Task startTask = service.Start(cts.Token);
-        await Task.Delay(20);
-
-        Assert.Equal("SL0", Assert.Single(service.GetStatuses()).UserName);
-
-        cts.Cancel();
-        await startTask;
-    }
-
-    /// <summary>A serial server link coming up and going down is tracked exactly like an IP one.</summary>
+    /// <summary>A serial server link only comes up when the far end answers, so it counts as up as soon as it is established, and going down is tracked too.</summary>
     [Fact]
     public async Task GetStatuses_SerialServerConnectedThenDisconnected_TracksBoth()
     {
-        UserEndpoint serial = new() { SerialPort = "SL0" };
-        (ClientPeerService service, Mock<IPeerTransport> transport, TestObservable<PeerConnectionEventArgs> connected, TestObservable<PeerConnectionEventArgs> disconnected, _) = Build(endpoint: serial);
-        AutoAcknowledge(transport);
+        Fixture fx = Build(point: new ConnectionPoint { SerialPort = "SL0" }, reachable: false, serverName: "SL0");
         using CancellationTokenSource cts = new();
-        Task startTask = service.Start(cts.Token);
+        Task startTask = fx.Service.Start(cts.Token);
         await Task.Delay(20);
 
-        PeerConnection connection = ConnectionTo(new UserEndpoint { SerialPort = "sl0" });
-        connected.Publish(new PeerConnectionEventArgs { Connection = connection });
-        Assert.True(Assert.Single(service.GetStatuses()).IsConnected);
+        fx.Come();
+        PeerConnectionStatus up = Assert.Single(fx.Service.GetStatuses());
+        Assert.True(up.IsConnected);
+        Assert.Equal("SL0", up.UserName);
 
-        disconnected.Publish(new PeerConnectionEventArgs { Connection = connection });
-        PeerConnectionStatus status = Assert.Single(service.GetStatuses());
+        fx.Drop();
+        PeerConnectionStatus status = Assert.Single(fx.Service.GetStatuses());
         Assert.False(status.IsConnected);
         Assert.NotNull(status.LastDisconnectedAt);
 
@@ -333,39 +401,34 @@ public sealed class ClientPeerServiceTests
         await startTask;
     }
 
-    /// <summary>A connection to some other endpoint does not affect the server row.</summary>
+    /// <summary>A connection to some other point, or one the remote node opened, is not the server and does not affect the row.</summary>
     [Fact]
-    public async Task GetStatuses_OtherEndpointConnected_ServerRowUnchanged()
+    public async Task GetStatuses_OtherConnections_ServerRowUnchanged()
     {
-        (ClientPeerService service, _, TestObservable<PeerConnectionEventArgs> connected, _, _) = Build();
+        Fixture fx = Build(reachable: false);
         using CancellationTokenSource cts = new();
-        Task startTask = service.Start(cts.Token);
+        Task startTask = fx.Service.Start(cts.Token);
         await Task.Delay(20);
 
-        connected.Publish(new PeerConnectionEventArgs { Connection = ConnectionTo(new UserEndpoint { IpAddress = "10.9.9.9", Port = 1 }) });
-        connected.Publish(new PeerConnectionEventArgs { Connection = new PeerConnection(null, true, null, () => { }) });
+        fx.Connected.Publish(new PeerConnectionEventArgs { Connection = ServerConnection(new ConnectionPoint { IpAddress = "10.9.9.9", Port = 1 }, "Other") });
+        fx.Connected.Publish(new PeerConnectionEventArgs { Connection = new PeerConnection(null, new ConnectionInfo { IsInbound = true }, () => { }) { User = new UserIdentity { Name = "Other" } } });
 
-        Assert.False(Assert.Single(service.GetStatuses()).IsConnected);
+        Assert.False(Assert.Single(fx.Service.GetStatuses()).IsConnected);
+        Assert.Equal(string.Empty, Assert.Single(fx.Service.GetStatuses()).UserName);
 
         cts.Cancel();
         await startTask;
     }
 
-    /// <summary>After a Disconnected event for the server endpoint, GetStatuses reports the row as disconnected with a LastDisconnectedAt timestamp.</summary>
+    /// <summary>After a Disconnected event for the server connection, GetStatuses reports the row as disconnected with a LastDisconnectedAt timestamp.</summary>
     [Fact]
     public async Task GetStatuses_ServerDisconnected_ReturnsDisconnectedRowWithLastDisconnectedAt()
     {
-        (ClientPeerService service, Mock<IPeerTransport> transport, TestObservable<PeerConnectionEventArgs> connected, TestObservable<PeerConnectionEventArgs> disconnected, _) = Build();
-        AutoAcknowledge(transport);
-        using CancellationTokenSource cts = new();
-        Task startTask = service.Start(cts.Token);
-        await WaitUntil(() => service.GetStatuses().Single().IsConnected, TimeSpan.FromSeconds(2));
+        (Fixture fx, CancellationTokenSource cts, Task startTask) = await StartConnected();
 
-        PeerConnection connection = ConnectionTo(serverEndpoint);
-        connected.Publish(new PeerConnectionEventArgs { Connection = connection });
-        disconnected.Publish(new PeerConnectionEventArgs { Connection = connection });
+        fx.Drop();
 
-        PeerConnectionStatus status = Assert.Single(service.GetStatuses());
+        PeerConnectionStatus status = Assert.Single(fx.Service.GetStatuses());
         Assert.False(status.IsConnected);
         Assert.NotNull(status.LastConnectedAt);
         Assert.NotNull(status.LastDisconnectedAt);
@@ -376,36 +439,20 @@ public sealed class ClientPeerServiceTests
 
     /// <summary>
     /// Even with no real message ever sent by the caller, the background connection monitor proactively
-    /// sends an empty heartbeat request to the server, and GetStatuses reports it connected once
-    /// that heartbeat's Connected event arrives, so the status table doesn't stay perpetually disconnected
-    /// while idle.
+    /// connects to the server and sends an empty heartbeat over the connection, and GetStatuses reports it
+    /// connected, so the status table doesn't stay perpetually disconnected while idle.
     /// </summary>
     [Fact]
     public async Task GetStatuses_HeartbeatConnectsProactively_ReportsConnectedWithoutAnyRealSend()
     {
-        (ClientPeerService service, Mock<IPeerTransport> transport, TestObservable<PeerConnectionEventArgs> connected, _, _) = Build();
-        bool connectedRaised = false;
-        transport.Setup(p => p.Request(It.IsAny<UserEndpoint>(), It.IsAny<ReadOnlyMemory<byte>>(), It.IsAny<PeerSendOptions>(), It.IsAny<CancellationToken>()))
-            .Returns<UserEndpoint, ReadOnlyMemory<byte>, PeerSendOptions?, CancellationToken>((target, _, _, _) =>
-            {
-                if (!connectedRaised)
-                {
-                    connectedRaised = true;
-                    connected.Publish(new PeerConnectionEventArgs { Connection = ConnectionTo(target) });
-                }
-                return Task.FromResult(true);
-            });
+        (Fixture fx, CancellationTokenSource cts, Task startTask) = await StartConnected();
 
-        using CancellationTokenSource cts = new();
-        Task startTask = service.Start(cts.Token);
-        await WaitUntil(() => service.GetStatuses().Single().IsConnected, TimeSpan.FromSeconds(2));
-
-        transport.Verify(p => p.Request(
-            It.Is<UserEndpoint>(t => t.IpAddress == serverEndpoint.IpAddress && t.Port == serverEndpoint.Port),
+        fx.Transport.Verify(p => p.Request(
+            fx.Server,
             It.Is<ReadOnlyMemory<byte>>(payload => payload.Length == 0),
             It.IsAny<PeerSendOptions>(),
             It.IsAny<CancellationToken>()), Times.AtLeastOnce);
-        PeerConnectionStatus status = Assert.Single(service.GetStatuses());
+        PeerConnectionStatus status = Assert.Single(fx.Service.GetStatuses());
         Assert.True(status.IsConnected);
         Assert.NotNull(status.LastConnectedAt);
 
@@ -413,65 +460,49 @@ public sealed class ClientPeerServiceTests
         await startTask;
     }
 
-    private static async Task WaitUntil(Func<bool> condition, TimeSpan timeout)
-    {
-        DateTime deadline = DateTime.UtcNow + timeout;
-        while (!condition())
-        {
-            if (DateTime.UtcNow > deadline) { throw new TimeoutException("Condition was not met in time."); }
-            await Task.Delay(10);
-        }
-    }
-
-    private static (ClientPeerService Service, Mock<IPeerTransport> Transport, TestObservable<PeerConnectionEventArgs> Connected, TestObservable<PeerConnectionEventArgs> Disconnected, CancellationTokenSource Cts, Task StartTask) BuildRunning()
-    {
-        (ClientPeerService service, Mock<IPeerTransport> transport, TestObservable<PeerConnectionEventArgs> connected, TestObservable<PeerConnectionEventArgs> disconnected, _) = Build();
-        AutoAcknowledge(transport);
-        CancellationTokenSource cts = new();
-        Task startTask = service.Start(cts.Token);
-        return (service, transport, connected, disconnected, cts, startTask);
-    }
-
-    private static int Heartbeats(Mock<IPeerTransport> transport) => transport.Invocations.Count(i => i.Method.Name == nameof(IPeerTransport.Request));
-
-    /// <summary>Closing the server connection closes the endpoint in the transport, marks the row closed and down, and stops both heartbeats and sends.</summary>
+    /// <summary>Closing the server connection closes the point in the transport, drops the connection, marks the row closed and down, and stops both heartbeats and sends.</summary>
     [Fact]
-    public async Task SetClosed_True_ClosesEndpointStopsHeartbeatsAndSends()
+    public async Task SetClosed_True_ClosesPointDropsConnectionAndStopsSends()
     {
-        (ClientPeerService service, Mock<IPeerTransport> transport, TestObservable<PeerConnectionEventArgs> connected, _, CancellationTokenSource cts, Task startTask) = BuildRunning();
-        await Task.Delay(50);
-        connected.Publish(new PeerConnectionEventArgs { Connection = ConnectionTo(serverEndpoint) });
+        Fixture fx = Build();
+        AutoAcknowledge(fx);
+        using CancellationTokenSource cts = new();
+        Task startTask = fx.Service.Start(cts.Token);
+        await WaitUntil(() => fx.Service.GetStatuses().Single().IsConnected, TimeSpan.FromSeconds(2));
         int raised = 0;
-        service.StatusesChanged += () => raised++;
+        fx.Service.StatusesChanged += () => raised++;
 
-        service.SetClosed(PeerConnectionKind.Server, string.Empty, true);
+        fx.Service.SetClosed(PeerConnectionKind.Server, string.Empty, true);
 
-        transport.Verify(t => t.SetClosed(serverEndpoint, true), Times.Once);
-        PeerConnectionStatus status = Assert.Single(service.GetStatuses());
+        fx.Transport.Verify(t => t.SetClosed(serverPoint, true), Times.Once);
+        PeerConnectionStatus status = Assert.Single(fx.Service.GetStatuses());
         Assert.True(status.IsClosed);
         Assert.False(status.IsConnected);
         Assert.True(raised > 0);
-        Assert.False(await service.Send("DEST", new TestMessage { MessageId = "M1", FromUser = "SOURCE" }));
+        Assert.False(await fx.Service.Send("DEST", new TestMessage { MessageId = "M1", FromUser = "SOURCE" }));
 
         cts.Cancel();
         await startTask;
     }
 
-    /// <summary>A closed client drops the connections the server opened to it and rejects new ones, but accepts them again once reopened.</summary>
+    /// <summary>A closed client drops the server connection it is holding and any that forms while it is closed, but accepts one again once reopened.</summary>
     [Fact]
-    public async Task SetClosed_DropsAndRejectsInboundConnections_UntilReopened()
+    public async Task SetClosed_DropsConnections_UntilReopened()
     {
-        (ClientPeerService service, _, TestObservable<PeerConnectionEventArgs> connected, _, CancellationTokenSource cts, Task startTask) = BuildRunning();
-        await Task.Delay(50);
         int existingDrops = 0;
         int lateDrops = 0;
         int reopenedDrops = 0;
-        connected.Publish(new PeerConnectionEventArgs { Connection = new PeerConnection(null, true, "CN=Server", () => existingDrops++) });
+        Fixture fx = Build(reachable: false);
+        using CancellationTokenSource cts = new();
+        Task startTask = fx.Service.Start(cts.Token);
+        await Task.Delay(50);
+        PeerConnection existing = ServerConnection(serverPoint, drop: () => existingDrops++);
+        fx.Connected.Publish(new PeerConnectionEventArgs { Connection = existing });
 
-        service.SetClosed(PeerConnectionKind.Server, string.Empty, true);
-        connected.Publish(new PeerConnectionEventArgs { Connection = new PeerConnection(null, true, "CN=Server", () => lateDrops++) });
-        service.SetClosed(PeerConnectionKind.Server, string.Empty, false);
-        connected.Publish(new PeerConnectionEventArgs { Connection = new PeerConnection(null, true, "CN=Server", () => reopenedDrops++) });
+        fx.Service.SetClosed(PeerConnectionKind.Server, string.Empty, true);
+        fx.Connected.Publish(new PeerConnectionEventArgs { Connection = ServerConnection(serverPoint, drop: () => lateDrops++) });
+        fx.Service.SetClosed(PeerConnectionKind.Server, string.Empty, false);
+        fx.Connected.Publish(new PeerConnectionEventArgs { Connection = ServerConnection(serverPoint, drop: () => reopenedDrops++) });
 
         Assert.Equal(1, existingDrops);
         Assert.Equal(1, lateDrops);
@@ -481,42 +512,38 @@ public sealed class ClientPeerServiceTests
         await startTask;
     }
 
-    /// <summary>Reopening reopens the endpoint and resumes heartbeats.</summary>
+    /// <summary>Reopening reopens the point and resumes heartbeats.</summary>
     [Fact]
     public async Task SetClosed_False_ReopensAndResumesHeartbeats()
     {
-        (ClientPeerService service, Mock<IPeerTransport> transport, _, _, CancellationTokenSource cts, Task startTask) = BuildRunning();
-        await Task.Delay(50);
-        service.SetClosed(PeerConnectionKind.Server, string.Empty, true);
+        (Fixture fx, CancellationTokenSource cts, Task startTask) = await StartConnected();
+        fx.Service.SetClosed(PeerConnectionKind.Server, string.Empty, true);
         await Task.Delay(100);
-        int whileClosed = Heartbeats(transport);
+        int whileClosed = Heartbeats(fx.Transport);
 
-        service.SetClosed(PeerConnectionKind.Server, string.Empty, false);
-        await WaitUntil(() => Heartbeats(transport) > whileClosed, TimeSpan.FromSeconds(2));
+        fx.Service.SetClosed(PeerConnectionKind.Server, string.Empty, false);
+        await WaitUntil(() => Heartbeats(fx.Transport) > whileClosed, TimeSpan.FromSeconds(2));
 
-        transport.Verify(t => t.SetClosed(serverEndpoint, false), Times.Once);
-        Assert.False(Assert.Single(service.GetStatuses()).IsClosed);
-        Assert.True(await service.Send("DEST", new TestMessage { MessageId = "M2", FromUser = "SOURCE" }));
+        fx.Transport.Verify(t => t.SetClosed(serverPoint, false), Times.Once);
+        Assert.False(Assert.Single(fx.Service.GetStatuses()).IsClosed);
+        await WaitUntil(() => fx.Service.GetStatuses().Single().IsConnected, TimeSpan.FromSeconds(2));
+        Assert.True(await fx.Service.Send("DEST", new TestMessage { MessageId = "M2", FromUser = "SOURCE" }));
 
         cts.Cancel();
         await startTask;
     }
 
-    /// <summary>Refresh resets the server endpoint, drops the connections the server opened, and heartbeats straight away.</summary>
+    /// <summary>Refresh resets the server point and heartbeats straight away.</summary>
     [Fact]
-    public async Task Refresh_ResetsEndpointDropsInboundAndHeartbeatsNow()
+    public async Task Refresh_ResetsPointAndHeartbeatsNow()
     {
-        (ClientPeerService service, Mock<IPeerTransport> transport, TestObservable<PeerConnectionEventArgs> connected, _, CancellationTokenSource cts, Task startTask) = BuildRunning();
-        await WaitUntil(() => Heartbeats(transport) >= 1, TimeSpan.FromSeconds(2));
-        int drops = 0;
-        connected.Publish(new PeerConnectionEventArgs { Connection = new PeerConnection(null, true, "CN=Server", () => drops++) });
-        int before = Heartbeats(transport);
+        (Fixture fx, CancellationTokenSource cts, Task startTask) = await StartConnected();
+        int before = Heartbeats(fx.Transport);
 
-        service.Refresh(PeerConnectionKind.Server, string.Empty);
+        fx.Service.Refresh(PeerConnectionKind.Server, string.Empty);
 
-        transport.Verify(t => t.Reset(serverEndpoint), Times.Once);
-        Assert.Equal(1, drops);
-        await WaitUntil(() => Heartbeats(transport) > before, TimeSpan.FromSeconds(2));
+        fx.Transport.Verify(t => t.Reset(serverPoint), Times.Once);
+        await WaitUntil(() => Heartbeats(fx.Transport) > before, TimeSpan.FromSeconds(2));
 
         cts.Cancel();
         await startTask;
@@ -526,18 +553,17 @@ public sealed class ClientPeerServiceTests
     [Fact]
     public async Task RefreshAndSetClosed_IgnoredWhenNotApplicable()
     {
-        (ClientPeerService notStarted, _, _, _, _) = Build();
-        notStarted.SetClosed(PeerConnectionKind.Server, string.Empty, true);
-        notStarted.Refresh(PeerConnectionKind.Server, string.Empty);
-        Assert.False(Assert.Single(notStarted.GetStatuses()).IsClosed);
+        Fixture notStarted = Build();
+        notStarted.Service.SetClosed(PeerConnectionKind.Server, string.Empty, true);
+        notStarted.Service.Refresh(PeerConnectionKind.Server, string.Empty);
+        Assert.False(Assert.Single(notStarted.Service.GetStatuses()).IsClosed);
 
-        (ClientPeerService service, Mock<IPeerTransport> transport, _, _, CancellationTokenSource cts, Task startTask) = BuildRunning();
-        await Task.Delay(50);
-        service.SetClosed(PeerConnectionKind.Client, "X", true);
-        Assert.False(Assert.Single(service.GetStatuses()).IsClosed);
-        service.SetClosed(PeerConnectionKind.Server, string.Empty, true);
-        service.Refresh(PeerConnectionKind.Server, string.Empty);
-        transport.Verify(t => t.Reset(It.IsAny<UserEndpoint>()), Times.Never);
+        (Fixture fx, CancellationTokenSource cts, Task startTask) = await StartConnected();
+        fx.Service.SetClosed(PeerConnectionKind.Client, "X", true);
+        Assert.False(Assert.Single(fx.Service.GetStatuses()).IsClosed);
+        fx.Service.SetClosed(PeerConnectionKind.Server, string.Empty, true);
+        fx.Service.Refresh(PeerConnectionKind.Server, string.Empty);
+        fx.Transport.Verify(t => t.Reset(It.IsAny<ConnectionPoint>()), Times.Never);
 
         cts.Cancel();
         await startTask;
@@ -547,14 +573,14 @@ public sealed class ClientPeerServiceTests
     [Fact]
     public async Task StatusesChanged_OnServerConnect_Fires()
     {
-        (ClientPeerService service, Mock<IPeerTransport> transport, _, _, _) = Build();
-        AutoAcknowledge(transport);
+        Fixture fx = Build();
+        AutoAcknowledge(fx);
         using CancellationTokenSource cts = new();
 
         TaskCompletionSource raised = new();
-        service.StatusesChanged += () => raised.TrySetResult();
+        fx.Service.StatusesChanged += () => raised.TrySetResult();
 
-        Task startTask = service.Start(cts.Token);
+        Task startTask = fx.Service.Start(cts.Token);
 
         await raised.Task.WaitAsync(TimeSpan.FromSeconds(2));
 
@@ -566,17 +592,17 @@ public sealed class ClientPeerServiceTests
     [Fact]
     public async Task DisposeAsync_Twice_DisposesTransportOnce()
     {
-        (ClientPeerService service, Mock<IPeerTransport> transport, _, _, _) = Build();
-        AutoAcknowledge(transport);
+        Fixture fx = Build();
+        AutoAcknowledge(fx);
         using CancellationTokenSource cts = new();
-        Task startTask = service.Start(cts.Token);
+        Task startTask = fx.Service.Start(cts.Token);
         await Task.Delay(20);
         cts.Cancel();
         await startTask;
 
-        await service.DisposeAsync();
-        await service.DisposeAsync();
+        await fx.Service.DisposeAsync();
+        await fx.Service.DisposeAsync();
 
-        transport.Verify(t => t.DisposeAsync(), Times.Once);
+        fx.Transport.Verify(t => t.DisposeAsync(), Times.Once);
     }
 }

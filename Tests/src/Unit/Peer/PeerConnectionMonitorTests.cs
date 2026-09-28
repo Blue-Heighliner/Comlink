@@ -3,11 +3,19 @@ namespace BlueHeighliner.Comlink.Tests.Unit.Peer;
 /// <summary>Unit tests for <see cref="PeerConnectionMonitor"/>.</summary>
 public sealed class PeerConnectionMonitorTests
 {
-    private static readonly UserEndpoint target = new() { IpAddress = "10.0.0.1", Port = 9000 };
+    private static readonly ConnectionPoint target = new() { IpAddress = "10.0.0.1", Port = 9000 };
+
+    private static readonly PeerConnection connection = new(target, new ConnectionInfo(), () => { });
+
+    private static void AutoConnect(Mock<IPeerTransport> transport)
+        => transport.Setup(t => t.Connect(target, It.IsAny<CancellationToken>())).ReturnsAsync(connection);
 
     private static void AutoAcknowledge(Mock<IPeerTransport> transport, bool success = true)
-        => transport.Setup(t => t.Request(It.IsAny<UserEndpoint>(), It.IsAny<ReadOnlyMemory<byte>>(), It.IsAny<PeerSendOptions>(), It.IsAny<CancellationToken>()))
+    {
+        AutoConnect(transport);
+        transport.Setup(t => t.Request(connection, It.IsAny<ReadOnlyMemory<byte>>(), It.IsAny<PeerSendOptions>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync(success);
+    }
 
     private static async Task WaitUntil(Func<bool> condition, TimeSpan timeout)
     {
@@ -42,7 +50,8 @@ public sealed class PeerConnectionMonitorTests
     public async Task Maintain_WhileDisconnected_RetriesOnFastInterval()
     {
         Mock<IPeerTransport> transport = new();
-        transport.Setup(t => t.Request(It.IsAny<UserEndpoint>(), It.IsAny<ReadOnlyMemory<byte>>(), It.IsAny<PeerSendOptions>(), It.IsAny<CancellationToken>()))
+        AutoConnect(transport);
+        transport.Setup(t => t.Request(connection, It.IsAny<ReadOnlyMemory<byte>>(), It.IsAny<PeerSendOptions>(), It.IsAny<CancellationToken>()))
             .ThrowsAsync(new IOException("refused"));
         PeerConnectionMonitor monitor = new(steadyInterval: TimeSpan.FromMinutes(10), fastRetryInterval: TimeSpan.FromMilliseconds(50));
 
@@ -189,7 +198,8 @@ public sealed class PeerConnectionMonitorTests
         Mock<IPeerTransport> failing = new();
         AutoAcknowledge(failing, success: false);
         Mock<IPeerTransport> throwing = new();
-        throwing.Setup(t => t.Request(It.IsAny<UserEndpoint>(), It.IsAny<ReadOnlyMemory<byte>>(), It.IsAny<PeerSendOptions>(), It.IsAny<CancellationToken>())).ThrowsAsync(new IOException());
+        AutoConnect(throwing);
+        throwing.Setup(t => t.Request(connection, It.IsAny<ReadOnlyMemory<byte>>(), It.IsAny<PeerSendOptions>(), It.IsAny<CancellationToken>())).ThrowsAsync(new IOException());
         Mock<IPeerTransport> working = new();
         AutoAcknowledge(working);
         PeerConnectionMonitor monitor = new(steadyInterval: TimeSpan.FromMilliseconds(20), fastRetryInterval: TimeSpan.FromMilliseconds(20));
@@ -198,9 +208,9 @@ public sealed class PeerConnectionMonitorTests
         int thrownAcks = 0;
         int acks = 0;
 
-        monitor.Maintain(failing.Object, target, cts.Token, () => failedAcks++);
-        monitor.Maintain(throwing.Object, target, cts.Token, () => thrownAcks++);
-        monitor.Maintain(working.Object, target, cts.Token, () => acks++);
+        monitor.Maintain(failing.Object, target, cts.Token, _ => failedAcks++);
+        monitor.Maintain(throwing.Object, target, cts.Token, _ => thrownAcks++);
+        monitor.Maintain(working.Object, target, cts.Token, _ => acks++);
         await WaitUntil(() => acks >= 3, TimeSpan.FromSeconds(2));
 
         Assert.Equal(0, failedAcks);
@@ -217,7 +227,7 @@ public sealed class PeerConnectionMonitorTests
         PeerConnectionMonitor monitor = new(steadyInterval: TimeSpan.FromMilliseconds(20), fastRetryInterval: TimeSpan.FromMilliseconds(20));
         using CancellationTokenSource cts = new();
 
-        monitor.Maintain(transport.Object, target, cts.Token, () => throw new InvalidOperationException());
+        monitor.Maintain(transport.Object, target, cts.Token, _ => throw new InvalidOperationException());
 
         await WaitUntil(() => Heartbeats(transport) >= 3, TimeSpan.FromSeconds(2));
         cts.Cancel();
@@ -238,6 +248,39 @@ public sealed class PeerConnectionMonitorTests
             () => transport.Invocations.Count(i => i.Method.Name == nameof(IPeerTransport.Request)) >= 3,
             TimeSpan.FromSeconds(2));
 
+        cts.Cancel();
+    }
+
+    /// <summary>A heartbeat that cannot get a connection fails like any other and is retried on the fast interval, without sending anything.</summary>
+    [Fact]
+    public async Task Maintain_ConnectFails_RetriesWithoutRequesting()
+    {
+        Mock<IPeerTransport> transport = new();
+        transport.Setup(t => t.Connect(target, It.IsAny<CancellationToken>())).ThrowsAsync(new IOException("refused"));
+        PeerConnectionMonitor monitor = new(steadyInterval: TimeSpan.FromMinutes(10), fastRetryInterval: TimeSpan.FromMilliseconds(30));
+
+        using CancellationTokenSource cts = new();
+        monitor.Maintain(transport.Object, target, cts.Token);
+
+        await WaitUntil(() => transport.Invocations.Count(i => i.Method.Name == nameof(IPeerTransport.Connect)) >= 3, TimeSpan.FromSeconds(2));
+        cts.Cancel();
+        Assert.Equal(0, Heartbeats(transport));
+    }
+
+    /// <summary>The acknowledged callback is given the connection the heartbeat was acknowledged on.</summary>
+    [Fact]
+    public async Task Maintain_AcknowledgedCallback_ReceivesTheConnection()
+    {
+        Mock<IPeerTransport> transport = new();
+        AutoAcknowledge(transport);
+        PeerConnectionMonitor monitor = new(steadyInterval: TimeSpan.FromMinutes(10), fastRetryInterval: TimeSpan.FromMinutes(10));
+        using CancellationTokenSource cts = new();
+        PeerConnection? acknowledged = null;
+
+        monitor.Maintain(transport.Object, target, cts.Token, c => acknowledged = c);
+
+        await WaitUntil(() => acknowledged is not null, TimeSpan.FromSeconds(2));
+        Assert.Same(connection, acknowledged);
         cts.Cancel();
     }
 }

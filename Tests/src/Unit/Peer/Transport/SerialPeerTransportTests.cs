@@ -4,7 +4,7 @@ namespace BlueHeighliner.Comlink.Tests.Unit.Peer.Transport;
 public sealed class SerialPeerTransportTests
 {
     private static readonly ILogger logger = LoggerFactory.Create(_ => { }).CreateLogger("test");
-    private static readonly UserEndpoint endpoint = new() { SerialPort = "SL0" };
+    private static readonly ConnectionPoint point = new() { SerialPort = "SL0" };
     private static readonly TimeSpan timeout = TimeSpan.FromSeconds(5);
 
     private sealed record Pair(SerialPeerTransport A, SerialPeerTransport B, FakeMicroGateCable Cable, PeerCollector AConnections, PeerCollector BReceived) : IAsyncDisposable
@@ -48,11 +48,17 @@ public sealed class SerialPeerTransportTests
         a.Disconnected.Listen(_ => aConnections.AddEvent("disconnected"));
         b.Received.Listen(args => bReceived.AddPayload(args.Payload.ToArray()));
 
-        a.Open(endpoint);
-        b.Open(endpoint);
+        Open(a, point);
+        Open(b, point);
         await WaitUntil(() => aConnections.Events.Contains("connected"));
         return new Pair(a, b, cable, aConnections, bReceived);
     }
+
+    private static void Open(SerialPeerTransport transport, ConnectionPoint point)
+        => transport.Connect(point).ContinueWith(static task => _ = task.Exception, TaskScheduler.Default);
+
+    private static async Task<bool> Request(SerialPeerTransport transport, ConnectionPoint point, ReadOnlyMemory<byte> data, PeerSendOptions? options = null)
+        => await transport.Request(await transport.Connect(point), data, options);
 
     private static async Task WaitUntil(Func<bool> condition)
     {
@@ -70,7 +76,7 @@ public sealed class SerialPeerTransportTests
     {
         await using Pair pair = await ConnectedPair();
 
-        bool accepted = await pair.A.Request(endpoint, new byte[] { 1, 2, 3 }).WaitAsync(timeout);
+        bool accepted = await Request(pair.A, point, new byte[] { 1, 2, 3 }).WaitAsync(timeout);
 
         Assert.True(accepted);
         Assert.Equal(new byte[] { 1, 2, 3 }, Assert.Single(pair.BReceived.Payloads));
@@ -83,7 +89,7 @@ public sealed class SerialPeerTransportTests
         await using Pair pair = await ConnectedPair(maxPayloadSize: 40);
         byte[] payload = Enumerable.Range(0, 1000).Select(i => (byte)(i % 251)).ToArray();
 
-        bool accepted = await pair.A.Request(endpoint, payload).WaitAsync(timeout);
+        bool accepted = await Request(pair.A, point, payload).WaitAsync(timeout);
 
         Assert.True(accepted);
         Assert.Equal(payload, Assert.Single(pair.BReceived.Payloads));
@@ -96,7 +102,7 @@ public sealed class SerialPeerTransportTests
         await using Pair pair = await ConnectedPair(maxPayloadSize: 40);
         byte[][] payloads = [.. Enumerable.Range(1, 8).Select(n => Enumerable.Repeat((byte)n, 200).ToArray())];
 
-        bool[] results = await Task.WhenAll(payloads.Select(p => pair.A.Request(endpoint, p))).WaitAsync(timeout);
+        bool[] results = await Task.WhenAll(payloads.Select(p => Request(pair.A, point, p))).WaitAsync(timeout);
 
         Assert.All(results, Assert.True);
         await WaitUntil(() => pair.BReceived.Payloads.Count == payloads.Length);
@@ -112,7 +118,7 @@ public sealed class SerialPeerTransportTests
     {
         await using Pair pair = await ConnectedPair();
 
-        bool accepted = await pair.A.Request(endpoint, ReadOnlyMemory<byte>.Empty).WaitAsync(timeout);
+        bool accepted = await Request(pair.A, point, ReadOnlyMemory<byte>.Empty).WaitAsync(timeout);
 
         Assert.True(accepted);
         Assert.Empty(Assert.Single(pair.BReceived.Payloads));
@@ -126,7 +132,7 @@ public sealed class SerialPeerTransportTests
         PeerCollector aReceived = new();
         pair.A.Received.Listen(args => aReceived.AddPayload(args.Payload.ToArray()));
 
-        Assert.True(await pair.B.Request(endpoint, new byte[] { 9 }).WaitAsync(timeout));
+        Assert.True(await Request(pair.B, point, new byte[] { 9 }).WaitAsync(timeout));
 
         Assert.Equal(new byte[] { 9 }, Assert.Single(aReceived.Payloads));
     }
@@ -138,25 +144,28 @@ public sealed class SerialPeerTransportTests
         await using Pair pair = await ConnectedPair();
         int transmitted = 0;
 
-        await pair.A.Request(endpoint, new byte[] { 1 }, new PeerSendOptions { Transmitted = () => transmitted++ }).WaitAsync(timeout);
+        await Request(pair.A, point, new byte[] { 1 }, new PeerSendOptions { Transmitted = () => transmitted++ }).WaitAsync(timeout);
 
         Assert.Equal(1, transmitted);
     }
 
-    /// <summary>A received message's connection is the link's own connection, identified by its configured endpoint and never inbound.</summary>
+    /// <summary>A received message's connection is the link's own connection, describing the port and address it runs over and never inbound.</summary>
     [Fact]
-    public async Task Received_ConnectionCarriesConfiguredEndpoint()
+    public async Task Received_ConnectionCarriesConfiguredPoint()
     {
         await using Pair pair = await ConnectedPair();
         PeerConnection? connection = null;
         pair.B.Received.Listen(args => connection = args.Connection);
 
-        await pair.A.Request(endpoint, new byte[] { 1 }).WaitAsync(timeout);
+        await Request(pair.A, point, new byte[] { 1 }).WaitAsync(timeout);
 
         Assert.NotNull(connection);
-        Assert.Equal(endpoint, connection.Endpoint);
+        Assert.Equal(point, connection.Point);
         Assert.False(connection.IsInbound);
-        Assert.Null(connection.IdentitySubject);
+        Assert.True(connection.Info.IsSerial);
+        Assert.Equal("SL0", connection.Info.SerialPort);
+        Assert.Equal(0xFF, connection.Info.SerialAddress);
+        Assert.Null(connection.Info.CertificateSubject);
     }
 
     /// <summary>Requesting before the link has come up fails immediately instead of waiting.</summary>
@@ -166,7 +175,7 @@ public sealed class SerialPeerTransportTests
         FakeMicroGateCable cable = new();
         await using SerialPeerTransport transport = new(cable.EndA, logger, TimeSpan.FromMilliseconds(20));
 
-        await Assert.ThrowsAsync<IOException>(() => transport.Request(endpoint, new byte[] { 1 }));
+        await Assert.ThrowsAsync<IOException>(() => Request(transport, point, new byte[] { 1 }));
     }
 
     /// <summary>A request whose other end never answers fails with IOException once the request timeout elapses.</summary>
@@ -177,12 +186,12 @@ public sealed class SerialPeerTransportTests
         await using SerialPeerTransport transport = new(cable.EndA, logger, TimeSpan.FromMilliseconds(20), TimeSpan.FromMilliseconds(100));
         IMicroGatePeer silent = cable.EndB.Create();
         _ = silent.Start("SL0").AsTask();
-        transport.Open(endpoint);
+        Open(transport, point);
         TaskCompletionSource up = new();
         transport.Connected.Listen(_ => up.TrySetResult());
         await up.Task.WaitAsync(timeout);
 
-        await Assert.ThrowsAsync<IOException>(() => transport.Request(endpoint, new byte[] { 1 }));
+        await Assert.ThrowsAsync<IOException>(() => Request(transport, point, new byte[] { 1 }));
     }
 
     /// <summary>Connected and Disconnected are published as the link comes up and is lost, and the link comes back on its own.</summary>
@@ -194,7 +203,7 @@ public sealed class SerialPeerTransportTests
         pair.Cable.Cut();
 
         await WaitUntil(() => pair.AConnections.Events.SequenceEqual(["connected", "disconnected", "connected"]));
-        Assert.True(await pair.A.Request(endpoint, new byte[] { 5 }).WaitAsync(timeout));
+        Assert.True(await Request(pair.A, point, new byte[] { 5 }).WaitAsync(timeout));
     }
 
     /// <summary>A request in flight when the link is lost fails with IOException rather than hanging.</summary>
@@ -205,12 +214,12 @@ public sealed class SerialPeerTransportTests
         await using SerialPeerTransport transport = new(cable.EndA, logger, TimeSpan.FromMilliseconds(20), TimeSpan.FromSeconds(30));
         IMicroGatePeer silent = cable.EndB.Create();
         _ = silent.Start("SL0").AsTask();
-        transport.Open(endpoint);
+        Open(transport, point);
         TaskCompletionSource up = new();
         transport.Connected.Listen(_ => up.TrySetResult());
         await up.Task.WaitAsync(timeout);
 
-        Task<bool> request = transport.Request(endpoint, new byte[] { 1 });
+        Task<bool> request = Request(transport, point, new byte[] { 1 });
         cable.Cut();
 
         await Assert.ThrowsAsync<IOException>(() => request.WaitAsync(timeout));
@@ -225,8 +234,8 @@ public sealed class SerialPeerTransportTests
         await using SerialPeerTransport b = new(cable.EndB, logger, TimeSpan.FromMilliseconds(20));
         TaskCompletionSource up = new();
         a.Connected.Listen(_ => up.TrySetResult());
-        a.Open(endpoint);
-        b.Open(endpoint);
+        Open(a, point);
+        Open(b, point);
 
         await WaitUntil(() => cable.PeersCreated >= 4);
         cable.StartFailure = null;
@@ -243,7 +252,7 @@ public sealed class SerialPeerTransportTests
         pair.AConnections.Connection!.Drop();
 
         await WaitUntil(() => pair.AConnections.Events.SequenceEqual(["connected", "disconnected", "connected"]));
-        Assert.True(await pair.A.Request(endpoint, new byte[] { 5 }).WaitAsync(timeout));
+        Assert.True(await Request(pair.A, point, new byte[] { 5 }).WaitAsync(timeout));
     }
 
     /// <summary>Closing a link disconnects it and stops it reconnecting, and requests to it fail immediately as closed.</summary>
@@ -252,12 +261,12 @@ public sealed class SerialPeerTransportTests
     {
         await using Pair pair = await ConnectedPair();
 
-        pair.A.SetClosed(endpoint, true);
+        pair.A.SetClosed(point, true);
 
         await WaitUntil(() => pair.AConnections.Events.SequenceEqual(["connected", "disconnected"]));
         await Task.Delay(150);
         Assert.Equal(["connected", "disconnected"], pair.AConnections.Events);
-        IOException error = await Assert.ThrowsAsync<IOException>(() => pair.A.Request(endpoint, new byte[] { 1 }));
+        IOException error = await Assert.ThrowsAsync<IOException>(() => Request(pair.A, point, new byte[] { 1 }));
         Assert.Contains("closed", error.Message);
     }
 
@@ -266,13 +275,13 @@ public sealed class SerialPeerTransportTests
     public async Task SetClosed_ThenReopened_Reconnects()
     {
         await using Pair pair = await ConnectedPair();
-        pair.A.SetClosed(endpoint, true);
+        pair.A.SetClosed(point, true);
         await WaitUntil(() => pair.AConnections.Events.Contains("disconnected"));
 
-        pair.A.SetClosed(endpoint, false);
+        pair.A.SetClosed(point, false);
 
         await WaitUntil(() => pair.AConnections.Events.Count(e => e == "connected") == 2);
-        Assert.True(await pair.A.Request(endpoint, new byte[] { 3 }).WaitAsync(timeout));
+        Assert.True(await Request(pair.A, point, new byte[] { 3 }).WaitAsync(timeout));
     }
 
     /// <summary>A link closed before it was ever opened never touches the device until it is reopened.</summary>
@@ -282,11 +291,11 @@ public sealed class SerialPeerTransportTests
         FakeMicroGateCable cable = new();
         await using SerialPeerTransport transport = new(cable.EndA, logger, TimeSpan.FromMilliseconds(20));
 
-        transport.SetClosed(endpoint, true);
+        transport.SetClosed(point, true);
         await Task.Delay(100);
         Assert.Equal(0, cable.PeersCreated);
 
-        transport.SetClosed(endpoint, false);
+        transport.SetClosed(point, false);
         await WaitUntil(() => cable.PeersCreated >= 1);
     }
 
@@ -296,10 +305,10 @@ public sealed class SerialPeerTransportTests
     {
         FakeMicroGateCable cable = new();
         await using SerialPeerTransport transport = new(cable.EndA, logger, TimeSpan.FromMilliseconds(20));
-        transport.Open(endpoint);
+        Open(transport, point);
         await WaitUntil(() => cable.PeersCreated == 1);
 
-        transport.SetClosed(endpoint, true);
+        transport.SetClosed(point, true);
         await Task.Delay(150);
 
         Assert.Equal(1, cable.PeersCreated);
@@ -311,53 +320,53 @@ public sealed class SerialPeerTransportTests
     {
         await using Pair pair = await ConnectedPair();
 
-        pair.A.Reset(endpoint);
+        pair.A.Reset(point);
         await WaitUntil(() => pair.AConnections.Events.SequenceEqual(["connected", "disconnected", "connected"]));
 
-        pair.A.SetClosed(endpoint, true);
+        pair.A.SetClosed(point, true);
         await WaitUntil(() => pair.AConnections.Events.Count(e => e == "disconnected") == 2);
-        pair.A.Reset(endpoint);
+        pair.A.Reset(point);
         await Task.Delay(100);
         Assert.Equal(4, pair.AConnections.Events.Count);
     }
 
-    /// <summary>Reset on an endpoint that was never opened does not open it.</summary>
+    /// <summary>Reset on an point that was never opened does not open it.</summary>
     [Fact]
-    public async Task Reset_UnopenedEndpoint_DoesNotOpenIt()
+    public async Task Reset_UnopenedPoint_DoesNotOpenIt()
     {
         FakeMicroGateCable cable = new();
         await using SerialPeerTransport transport = new(cable.EndA, logger, TimeSpan.FromMilliseconds(20));
 
-        transport.Reset(endpoint);
+        transport.Reset(point);
         await Task.Delay(50);
 
         Assert.Equal(0, cable.PeersCreated);
     }
 
-    /// <summary>Two endpoints naming the same port and address share one link; a different address is a separate link.</summary>
+    /// <summary>Two points naming the same port and address share one link; a different address is a separate link.</summary>
     [Fact]
-    public async Task Open_SameEndpointTwice_SharesOneLink()
+    public async Task Open_SamePointTwice_SharesOneLink()
     {
         FakeMicroGateCable cable = new();
         await using SerialPeerTransport transport = new(cable.EndA, logger, TimeSpan.FromMilliseconds(20));
 
-        transport.Open(new UserEndpoint { SerialPort = "SL0", SerialAddress = 1 });
-        transport.Open(new UserEndpoint { SerialPort = "sl0", SerialAddress = 1 });
-        transport.Open(new UserEndpoint { SerialPort = "SL0", SerialAddress = 2 });
+        Open(transport, new ConnectionPoint { SerialPort = "SL0", SerialAddress = 1 });
+        Open(transport, new ConnectionPoint { SerialPort = "sl0", SerialAddress = 1 });
+        Open(transport, new ConnectionPoint { SerialPort = "SL0", SerialAddress = 2 });
         await WaitUntil(() => cable.PeersCreated >= 2);
         await Task.Delay(50);
 
         Assert.Equal(2, cable.PeersCreated);
     }
 
-    /// <summary>An IP endpoint is rejected: this transport only carries serial.</summary>
+    /// <summary>An IP point is rejected: this transport only carries serial.</summary>
     [Fact]
-    public async Task Request_IpEndpoint_ThrowsArgumentException()
+    public async Task Request_IpPoint_ThrowsArgumentException()
     {
         FakeMicroGateCable cable = new();
         await using SerialPeerTransport transport = new(cable.EndA, logger);
 
-        await Assert.ThrowsAsync<ArgumentException>(() => transport.Request(new UserEndpoint { IpAddress = "10.0.0.1", Port = 1 }, new byte[] { 1 }));
+        await Assert.ThrowsAsync<ArgumentException>(() => Request(transport, new ConnectionPoint { IpAddress = "10.0.0.1", Port = 1 }, new byte[] { 1 }));
     }
 
     /// <summary>A message too large to number its fragments is refused up front rather than sent partially.</summary>
@@ -367,7 +376,7 @@ public sealed class SerialPeerTransportTests
         await using Pair pair = await ConnectedPair(maxPayloadSize: SerialFrame.DataHeaderSize + 1);
         byte[] huge = new byte[ushort.MaxValue + 10];
 
-        await Assert.ThrowsAsync<ArgumentOutOfRangeException>(() => pair.A.Request(endpoint, huge));
+        await Assert.ThrowsAsync<ArgumentOutOfRangeException>(() => Request(pair.A, point, huge));
     }
 
     /// <summary>Disposing the transport stops the reconnect loop and disposes the device peer.</summary>
@@ -376,7 +385,7 @@ public sealed class SerialPeerTransportTests
     {
         FakeMicroGateCable cable = new();
         SerialPeerTransport transport = new(cable.EndA, logger, TimeSpan.FromMilliseconds(20));
-        transport.Open(endpoint);
+        Open(transport, point);
         await WaitUntil(() => cable.PeersCreated >= 1);
 
         await transport.DisposeAsync();
@@ -394,7 +403,7 @@ public sealed class SerialPeerTransportTests
         await using SerialPeerTransport transport = new(cable.EndA, logger, TimeSpan.FromMilliseconds(20));
         IMicroGatePeer raw = cable.EndB.Create();
         _ = raw.Start("SL0").AsTask();
-        transport.Open(endpoint);
+        Open(transport, point);
         PeerCollector received = new();
         transport.Received.Listen(args => received.AddPayload(args.Payload.ToArray()));
         await WaitUntil(() => raw.IsConnected);
@@ -415,7 +424,7 @@ public sealed class SerialPeerTransportTests
         await using SerialPeerTransport transport = new(cable.EndA, logger, TimeSpan.FromMilliseconds(20));
         IMicroGatePeer raw = cable.EndB.Create();
         _ = raw.Start("SL0").AsTask();
-        transport.Open(endpoint);
+        Open(transport, point);
         PeerCollector received = new();
         transport.Received.Listen(args => received.AddPayload(args.Payload.ToArray()));
         await WaitUntil(() => raw.IsConnected);
@@ -437,8 +446,8 @@ public sealed class SerialPeerTransportTests
     {
         await using Pair pair = await ConnectedPair();
 
-        pair.A.SetClosed(endpoint, true);
-        pair.A.SetClosed(endpoint, true);
+        pair.A.SetClosed(point, true);
+        pair.A.SetClosed(point, true);
         await WaitUntil(() => pair.AConnections.Events.Contains("disconnected"));
         await pair.A.DisposeAsync();
         await pair.A.DisposeAsync();

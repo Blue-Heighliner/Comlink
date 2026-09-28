@@ -5,8 +5,9 @@
   "DataFolder": "@Peer2",
   "PeerCertificateFile": "Peer2.pfx",
   "TrustedAuthorityCertificateFile": "../Root.cer",
+  "OutgoingPoints": [ { "IpAddress": "127.0.0.1", "Port": 50021 } ],
   "Users": {
-    "Peer1": { "IpAddress": "127.0.0.1", "Port": 50021 }
+    "Peer1": {}
   },
   "UserGroups": {
     "TEST": [ "Peer1", "Peer2" ]

@@ -4,28 +4,40 @@ namespace BlueHeighliner.Comlink.Tests.Unit.Peer;
 public sealed class PeerServiceTests
 {
     private static readonly ILoggerFactory noLogger = LoggerFactory.Create(_ => { });
-    private static readonly UserEndpoint fakeUserEndpoint = new() { IpAddress = "127.0.0.1", Port = 12345 };
+    private static readonly ConnectionPoint fakeConnectionPoint = new() { IpAddress = "127.0.0.1", Port = 12345 };
 
     private static Mock<IPeerTransport> BuildPeerMock()
     {
         Mock<IPeerTransport> peer = new();
         peer.SetupGet(p => p.Received).Returns(new TestObservable<PeerReceivedEventArgs>());
+        peer.SetupGet(p => p.Connected).Returns(new TestObservable<PeerConnectionEventArgs>());
+        peer.SetupGet(p => p.Disconnected).Returns(new TestObservable<PeerConnectionEventArgs>());
+        peer.Setup(p => p.Connect(It.IsAny<ConnectionPoint>(), It.IsAny<CancellationToken>())).ThrowsAsync(new IOException("no route"));
         return peer;
     }
+
+    /// <summary>Publishes a newly established connection identified as <paramref name="user"/> on <paramref name="peer"/>, the way the transport does once a connection has been identified.</summary>
+    private static PeerConnection Reach(Mock<IPeerTransport> peer, string user, bool inbound = false)
+    {
+        PeerConnection connection = new(inbound ? null : fakeConnectionPoint, new ConnectionInfo { IsInbound = inbound }, () => { }) { User = new UserIdentity { Name = user } };
+        ((TestObservable<PeerConnectionEventArgs>)peer.Object.Connected).Publish(new PeerConnectionEventArgs { Connection = connection });
+        return connection;
+    }
+
+    private static void Lose(Mock<IPeerTransport> peer, PeerConnection connection)
+        => ((TestObservable<PeerConnectionEventArgs>)peer.Object.Disconnected).Publish(new PeerConnectionEventArgs { Connection = connection });
 
     private static PeerService BuildService(Mock<IPeerTransport> peerMock, Mock<TestEngineController> engineControllerMock)
         => new(peerMock.Object, engineControllerMock.Object, noLogger);
 
     private static Mock<TestEngineController> BuildUserDirectory()
     {
-        Mock<TestEngineController> locator = new() { CallBase = true };
-        locator.Setup(l => l.GetEndpoint(It.IsAny<string>())).Returns(fakeUserEndpoint);
-        return locator;
+        return new Mock<TestEngineController> { CallBase = true };
     }
 
     /// <summary>Configures <paramref name="peer"/> so every <see cref="IPeerTransport.Request"/> call immediately returns a successful acknowledgement.</summary>
     private static void AutoAcknowledge(Mock<IPeerTransport> peer, bool success = true)
-        => peer.Setup(p => p.Request(It.IsAny<UserEndpoint>(), It.IsAny<ReadOnlyMemory<byte>>(), It.IsAny<PeerSendOptions>(), It.IsAny<CancellationToken>()))
+        => peer.Setup(p => p.Request(It.IsAny<PeerConnection>(), It.IsAny<ReadOnlyMemory<byte>>(), It.IsAny<PeerSendOptions>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync(success);
 
     private static readonly INetworkSerializer serializer = new ProtobufNetworkSerializer();
@@ -117,26 +129,71 @@ public sealed class PeerServiceTests
         Assert.False(confirmationFired);
     }
 
-    /// <summary>Send resolves the user's endpoint, serializes the message, forwards it to the peer, and returns once it is acknowledged.</summary>
+    /// <summary>Send serializes the message and forwards it over the connection identified as the user, returning once it is acknowledged.</summary>
     [Fact]
-    public async Task Send_ForwardsSerializedMessageToPeer()
+    public async Task Send_ForwardsSerializedMessageOverTheUsersConnection()
     {
         Mock<IPeerTransport> peer = BuildPeerMock();
         AutoAcknowledge(peer);
-        Mock<TestEngineController> userDirectory = new() { CallBase = true };
-        userDirectory.Setup(l => l.GetEndpoint("DEST")).Returns(fakeUserEndpoint);
-
-        PeerService svc = BuildService(peer, userDirectory);
+        PeerService svc = BuildService(peer, BuildUserDirectory());
+        PeerConnection connection = Reach(peer, "DEST");
         TestMessage msg = new() { MessageId = "M1", FromUser = "SOURCE" };
 
         bool ok = await svc.Send("DEST", msg);
 
         Assert.True(ok);
         peer.Verify(p => p.Request(
-            It.Is<UserEndpoint>(t => t.IpAddress == "127.0.0.1" && t.Port == 12345),
+            connection,
             It.IsAny<ReadOnlyMemory<byte>>(),
             It.Is<PeerSendOptions>(o => o.Priority == 0),
             It.IsAny<CancellationToken>()), Times.Once);
+    }
+
+    /// <summary>A connection the remote node opened carries messages to it just like one this node opened, and user names match ignoring case.</summary>
+    [Fact]
+    public async Task Send_InboundConnection_IsUsedAndUserMatchedIgnoringCase()
+    {
+        Mock<IPeerTransport> peer = BuildPeerMock();
+        AutoAcknowledge(peer);
+        PeerService svc = BuildService(peer, BuildUserDirectory());
+        PeerConnection inbound = Reach(peer, "Dest", inbound: true);
+
+        bool ok = await svc.Send("DEST", new TestMessage { MessageId = "M1", FromUser = "SOURCE" });
+
+        Assert.True(ok);
+        peer.Verify(p => p.Request(inbound, It.IsAny<ReadOnlyMemory<byte>>(), It.IsAny<PeerSendOptions>(), It.IsAny<CancellationToken>()), Times.Once);
+    }
+
+    /// <summary>When a user has more than one connection, the newest is the one used.</summary>
+    [Fact]
+    public async Task Send_SeveralConnectionsForOneUser_UsesTheNewest()
+    {
+        Mock<IPeerTransport> peer = BuildPeerMock();
+        AutoAcknowledge(peer);
+        PeerService svc = BuildService(peer, BuildUserDirectory());
+        PeerConnection older = Reach(peer, "DEST");
+        PeerConnection newer = Reach(peer, "DEST", inbound: true);
+
+        await svc.Send("DEST", new TestMessage { MessageId = "M1", FromUser = "SOURCE" });
+
+        peer.Verify(p => p.Request(newer, It.IsAny<ReadOnlyMemory<byte>>(), It.IsAny<PeerSendOptions>(), It.IsAny<CancellationToken>()), Times.Once);
+        peer.Verify(p => p.Request(older, It.IsAny<ReadOnlyMemory<byte>>(), It.IsAny<PeerSendOptions>(), It.IsAny<CancellationToken>()), Times.Never);
+    }
+
+    /// <summary>Once a user's connection is lost, sends to them fail until they are identified on a connection again.</summary>
+    [Fact]
+    public async Task Send_AfterConnectionLost_ReturnsFalse_UntilReconnected()
+    {
+        Mock<IPeerTransport> peer = BuildPeerMock();
+        AutoAcknowledge(peer);
+        PeerService svc = BuildService(peer, BuildUserDirectory());
+        PeerConnection connection = Reach(peer, "DEST");
+        Lose(peer, connection);
+
+        Assert.False(await svc.Send("DEST", new TestMessage { MessageId = "M1", FromUser = "SOURCE" }));
+
+        Reach(peer, "DEST");
+        Assert.True(await svc.Send("DEST", new TestMessage { MessageId = "M2", FromUser = "SOURCE" }));
     }
 
     /// <summary>Send serializes the message through IEngineController.NetworkSerializer rather than a hardcoded format, so a host override is honored.</summary>
@@ -150,6 +207,7 @@ public sealed class PeerServiceTests
         customSerializer.Setup(s => s.Serialize(It.IsAny<object>())).Returns(new FixedMemoryOwner([9, 9, 9]));
         userDirectory.Setup(l => l.NetworkSerializer).Returns(customSerializer.Object);
         PeerService svc = BuildService(peer, userDirectory);
+        Reach(peer, "DEST");
         TestMessage msg = new() { MessageId = "M1", FromUser = "SOURCE" };
 
         bool ok = await svc.Send("DEST", msg);
@@ -157,7 +215,7 @@ public sealed class PeerServiceTests
         Assert.True(ok);
         customSerializer.Verify(s => s.Serialize(msg), Times.Once);
         peer.Verify(p => p.Request(
-            It.IsAny<UserEndpoint>(),
+            It.IsAny<PeerConnection>(),
             It.Is<ReadOnlyMemory<byte>>(m => m.ToArray().SequenceEqual(new byte[] { 9, 9, 9 })),
             It.IsAny<PeerSendOptions>(),
             It.IsAny<CancellationToken>()), Times.Once);
@@ -184,37 +242,36 @@ public sealed class PeerServiceTests
     {
         Mock<IPeerTransport> peer = BuildPeerMock();
         AutoAcknowledge(peer);
-        Mock<TestEngineController> userDirectory = new() { CallBase = true };
-        userDirectory.Setup(l => l.GetEndpoint("DEST")).Returns(fakeUserEndpoint);
-
-        PeerService svc = BuildService(peer, userDirectory);
+        PeerService svc = BuildService(peer, BuildUserDirectory());
+        Reach(peer, "DEST");
         TestMessage msg = new() { MessageId = "M1", FromUser = "SOURCE", Priority = 3 };
 
         bool ok = await svc.Send("DEST", msg);
 
         Assert.True(ok);
         peer.Verify(p => p.Request(
-            It.IsAny<UserEndpoint>(),
+            It.IsAny<PeerConnection>(),
             It.IsAny<ReadOnlyMemory<byte>>(),
             It.Is<PeerSendOptions>(o => o.Priority == 3),
             It.IsAny<CancellationToken>()), Times.Once);
     }
 
-    /// <summary>Send returns false without contacting the peer when the user cannot be resolved.</summary>
+    /// <summary>Send returns false without contacting the peer, and reports the delivery as failed, when no connection is identified as the user.</summary>
     [Fact]
-    public async Task Send_UnknownUser_ReturnsFalse()
+    public async Task Send_UserWithNoConnection_ReturnsFalseAndReportsFailure()
     {
         Mock<IPeerTransport> peer = BuildPeerMock();
-        Mock<TestEngineController> userDirectory = new() { CallBase = true };
-        userDirectory.Setup(l => l.GetEndpoint("UNKNOWN")).Returns((UserEndpoint?)null);
-
-        PeerService svc = BuildService(peer, userDirectory);
+        PeerService svc = BuildService(peer, BuildUserDirectory());
+        Reach(peer, "SOMEONE-ELSE");
+        TaskCompletionSource<DestinationStatus> failed = new();
+        svc.DeliveryStatusChanged += (_, _, status) => { failed.TrySetResult(status); return Task.CompletedTask; };
         TestMessage msg = new() { MessageId = "M1", FromUser = "SOURCE" };
 
         bool ok = await svc.Send("UNKNOWN", msg);
 
         Assert.False(ok);
-        peer.Verify(p => p.Request(It.IsAny<UserEndpoint>(), It.IsAny<ReadOnlyMemory<byte>>(), It.IsAny<PeerSendOptions>(), It.IsAny<CancellationToken>()), Times.Never);
+        Assert.Equal(DestinationStatus.Failed, await failed.Task.WaitAsync(TimeSpan.FromSeconds(2)));
+        peer.Verify(p => p.Request(It.IsAny<PeerConnection>(), It.IsAny<ReadOnlyMemory<byte>>(), It.IsAny<PeerSendOptions>(), It.IsAny<CancellationToken>()), Times.Never);
     }
 
     /// <summary>Send returns false when the underlying peer request throws (e.g. the peer is unreachable).</summary>
@@ -222,11 +279,12 @@ public sealed class PeerServiceTests
     public async Task Send_PeerRequestThrows_ReturnsFalse()
     {
         Mock<IPeerTransport> peer = BuildPeerMock();
-        peer.Setup(p => p.Request(It.IsAny<UserEndpoint>(), It.IsAny<ReadOnlyMemory<byte>>(), It.IsAny<PeerSendOptions>(), It.IsAny<CancellationToken>()))
+        peer.Setup(p => p.Request(It.IsAny<PeerConnection>(), It.IsAny<ReadOnlyMemory<byte>>(), It.IsAny<PeerSendOptions>(), It.IsAny<CancellationToken>()))
             .ThrowsAsync(new InvalidOperationException());
         Mock<TestEngineController> userDirectory = BuildUserDirectory();
 
         PeerService svc = BuildService(peer, userDirectory);
+        Reach(peer, "DEST");
         TestMessage msg = new() { MessageId = "M1", FromUser = "SOURCE" };
 
         bool ok = await svc.Send("DEST", msg);
@@ -243,6 +301,7 @@ public sealed class PeerServiceTests
         Mock<TestEngineController> userDirectory = BuildUserDirectory();
 
         PeerService svc = BuildService(peer, userDirectory);
+        Reach(peer, "DEST");
         TestMessage msg = new() { MessageId = "M1", FromUser = "SOURCE" };
 
         bool ok = await svc.Send("DEST", msg);
@@ -258,11 +317,12 @@ public sealed class PeerServiceTests
     public async Task Send_ConnectionRefused_ReturnsFalsePromptly()
     {
         Mock<IPeerTransport> peer = BuildPeerMock();
-        peer.Setup(p => p.Request(It.IsAny<UserEndpoint>(), It.IsAny<ReadOnlyMemory<byte>>(), It.IsAny<PeerSendOptions>(), It.IsAny<CancellationToken>()))
+        peer.Setup(p => p.Request(It.IsAny<PeerConnection>(), It.IsAny<ReadOnlyMemory<byte>>(), It.IsAny<PeerSendOptions>(), It.IsAny<CancellationToken>()))
             .ThrowsAsync(new IOException("refused"));
         Mock<TestEngineController> userDirectory = BuildUserDirectory();
 
         PeerService svc = BuildService(peer, userDirectory);
+        Reach(peer, "DEST");
         TestMessage msg = new() { MessageId = "M1", FromUser = "SOURCE" };
 
         Task<bool> sendTask = svc.Send("DEST", msg);
@@ -280,6 +340,7 @@ public sealed class PeerServiceTests
         Mock<TestEngineController> userDirectory = BuildUserDirectory();
 
         PeerService svc = BuildService(peer, userDirectory);
+        Reach(peer, "DEST");
 
         List<(string MessageId, string UserName, DestinationStatus Status)> events = [];
         TaskCompletionSource tcs = new();
@@ -319,49 +380,28 @@ public sealed class PeerServiceTests
         await startTask;
     }
 
-    /// <summary>Start opens the link to every configured user reached over serial, so their messages are received before anything is sent to them.</summary>
+    /// <summary>Start keeps a connection open to every outgoing point, IP or serial, without being told which users are behind them.</summary>
     [Fact]
-    public async Task Start_OpensSerialEndpointsOfConfiguredUsers()
+    public async Task Start_MaintainsEveryOutgoingPoint()
     {
         Mock<IPeerTransport> transport = BuildPeerMock();
         Mock<IPeerTransportFactory> factory = new();
         factory.Setup(f => f.Create()).Returns(transport.Object);
-
-        UserEndpoint serial = new() { SerialPort = "SL0", SerialAddress = 7 };
+        ConnectionPoint serial = new() { SerialPort = "SL0", SerialAddress = 7 };
         Mock<TestEngineController> engineController = new() { CallBase = true };
-        engineController.Setup(e => e.Users).Returns(["IPUSER", "SERIALUSER", "NOBODY"]);
-        engineController.Setup(e => e.GetEndpoint("IPUSER")).Returns(fakeUserEndpoint);
-        engineController.Setup(e => e.GetEndpoint("SERIALUSER")).Returns(serial);
-        engineController.Setup(e => e.GetEndpoint("NOBODY")).Returns((UserEndpoint?)null);
+        engineController.Setup(e => e.OutgoingPoints).Returns([fakeConnectionPoint, serial]);
 
         PeerService svc = new(factory.Object, engineController.Object, noLogger);
         using CancellationTokenSource cts = new();
         Task startTask = svc.Start(cts.Token);
-        await Task.Delay(20);
 
-        transport.Verify(t => t.Open(serial), Times.Once);
-        transport.Verify(t => t.Open(fakeUserEndpoint), Times.Never);
+        await WaitUntil(
+            () => transport.Invocations.Any(i => i.Method.Name == nameof(IPeerTransport.Connect) && Equals(i.Arguments[0], serial))
+                && transport.Invocations.Any(i => i.Method.Name == nameof(IPeerTransport.Connect) && Equals(i.Arguments[0], fakeConnectionPoint)),
+            TimeSpan.FromSeconds(2));
 
         cts.Cancel();
         await startTask;
-    }
-
-    /// <summary>Send reaches a serial user through the same transport call as an IP user; the transport, not the service, chooses the medium.</summary>
-    [Fact]
-    public async Task Send_SerialEndpoint_PassesEndpointToTransport()
-    {
-        Mock<IPeerTransport> peer = BuildPeerMock();
-        AutoAcknowledge(peer);
-        UserEndpoint serial = new() { SerialPort = "SL0" };
-        Mock<TestEngineController> userDirectory = new() { CallBase = true };
-        userDirectory.Setup(l => l.GetEndpoint("DEST")).Returns(serial);
-
-        PeerService svc = BuildService(peer, userDirectory);
-
-        bool ok = await svc.Send("DEST", new TestMessage { MessageId = "M1", FromUser = "SOURCE" });
-
-        Assert.True(ok);
-        peer.Verify(p => p.Request(serial, It.IsAny<ReadOnlyMemory<byte>>(), It.IsAny<PeerSendOptions>(), It.IsAny<CancellationToken>()), Times.Once);
     }
 
     /// <summary>The transport reporting the payload as handed off raises DeliveryStatusChanged as Sent before the send completes.</summary>
@@ -371,8 +411,8 @@ public sealed class PeerServiceTests
         Mock<IPeerTransport> peer = BuildPeerMock();
         TaskCompletionSource requestStarted = new();
         TaskCompletionSource<bool> requestCompletion = new();
-        peer.Setup(p => p.Request(It.IsAny<UserEndpoint>(), It.IsAny<ReadOnlyMemory<byte>>(), It.IsAny<PeerSendOptions>(), It.IsAny<CancellationToken>()))
-            .Callback<UserEndpoint, ReadOnlyMemory<byte>, PeerSendOptions?, CancellationToken>((_, _, options, _) =>
+        peer.Setup(p => p.Request(It.IsAny<PeerConnection>(), It.IsAny<ReadOnlyMemory<byte>>(), It.IsAny<PeerSendOptions>(), It.IsAny<CancellationToken>()))
+            .Callback<PeerConnection, ReadOnlyMemory<byte>, PeerSendOptions?, CancellationToken>((_, _, options, _) =>
             {
                 requestStarted.TrySetResult();
                 options!.Transmitted!();
@@ -381,6 +421,7 @@ public sealed class PeerServiceTests
         Mock<TestEngineController> userDirectory = BuildUserDirectory();
 
         PeerService svc = BuildService(peer, userDirectory);
+        Reach(peer, "DEST");
         List<DestinationStatus> statuses = [];
         svc.DeliveryStatusChanged += (_, _, status) => { statuses.Add(status); return Task.CompletedTask; };
 
@@ -396,16 +437,15 @@ public sealed class PeerServiceTests
     [Fact]
     public async Task TransportReceived_RaisesMessageDelivered()
     {
-        Mock<IPeerTransport> peer = new();
-        TestObservable<PeerReceivedEventArgs> received = new();
-        peer.SetupGet(p => p.Received).Returns(received);
+        Mock<IPeerTransport> peer = BuildPeerMock();
+        TestObservable<PeerReceivedEventArgs> received = (TestObservable<PeerReceivedEventArgs>)peer.Object.Received;
         PeerService svc = BuildService(peer, BuildUserDirectory());
         TaskCompletionSource<object> delivered = new();
         svc.MessageDelivered += payload => { delivered.TrySetResult(payload); return Task.CompletedTask; };
 
         received.Publish(new PeerReceivedEventArgs
         {
-            Connection = new PeerConnection(null, true, null, () => { }),
+            Connection = new PeerConnection(null, new ConnectionInfo { IsInbound = true }, () => { }),
             Payload = Encode(new TestMessage { MessageId = "M1", FromUser = "REMOTE" })
         });
 

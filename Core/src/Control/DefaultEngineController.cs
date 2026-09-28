@@ -22,6 +22,9 @@ public abstract class DefaultEngineController<TMessage>(ICurrentUserProvider cur
     private readonly Dictionary<string, IReadOnlyList<string>> emptyGroups = [];
     private readonly List<string> emptyNames = [];
     private readonly Dictionary<string, ServerUserConfig> emptyServerUsers = [];
+    private readonly Dictionary<string, string> emptyData = [];
+    private readonly List<ConnectionPoint> emptyPoints = [];
+    private INetworkSerializer? connectionSerializer;
     private NotSupportedException NoPacketType => new("This engine controller has no packet type; derive from DefaultEngineController<TMessage, TPacket> to enable packetization.");
 
     /// <inheritdoc cref="IEngineController.MessageType" />
@@ -140,7 +143,13 @@ public abstract class DefaultEngineController<TMessage>(ICurrentUserProvider cur
             ? new UserInfo { Name = "TEST", Code = "CODE", EnvironmentTitle = "Test", EnvironmentColor = "#888888" }
             : null;
     /// <inheritdoc />
-    public virtual UserEndpoint? GetEndpoint(string userName) => null;
+    public virtual IReadOnlyDictionary<string, string> GetUserData(string userName) => emptyData;
+    /// <inheritdoc />
+    public virtual UserIdentity? IdentifyConnection(ConnectionInfo connection) => null;
+    /// <inheritdoc />
+    public virtual object? CreateConnectionMessage(ConnectionInfo connection) => null;
+    /// <inheritdoc />
+    public virtual object? CreateConnectionResponse(ConnectionInfo connection) => null;
 
     /// <inheritdoc />
     public virtual int PeerPort => 50021;
@@ -188,9 +197,17 @@ public abstract class DefaultEngineController<TMessage>(ICurrentUserProvider cur
     /// <inheritdoc />
     public virtual NodeRole Role => NodeRole.Peer;
     /// <inheritdoc />
-    public virtual UserEndpoint? ServerEndpoint => null;
+    public virtual IReadOnlyList<ConnectionPoint> OutgoingPoints => emptyPoints;
     /// <inheritdoc />
     public virtual IReadOnlyDictionary<string, ServerUserConfig> Servers => emptyServerUsers;
+    /// <inheritdoc />
+    public virtual Type? ConnectionMessageType => null;
+    /// <inheritdoc />
+    public virtual Type? ConnectionResponseType => null;
+    /// <inheritdoc />
+    public virtual INetworkSerializer? ConnectionSerializer => ConnectionMessageType is null
+        ? null
+        : connectionSerializer ??= new ProtobufNetworkSerializer([.. new[] { ConnectionMessageType, ConnectionResponseType }.OfType<Type>()]);
 
     /// <inheritdoc />
     public virtual bool ConfigFileEnabled => false;

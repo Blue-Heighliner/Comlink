@@ -1,7 +1,7 @@
 namespace BlueHeighliner.Comlink.Peer.Transport;
 
 /// <summary>
-/// Presents the IP and serial transports as one: each request goes to whichever transport the endpoint belongs to,
+/// Presents the IP and serial transports as one: each connect goes to whichever transport the point belongs to, and each request to the one its connection runs over,
 /// and every transport's events are merged. The IP transport is <see langword="null"/> when it cannot be built
 /// (no identity certificate), which leaves serial fully usable on a node that never uses IP.
 /// </summary>
@@ -39,17 +39,18 @@ internal sealed class CompositePeerTransport : IPeerTransport
     public void StartListener(int port) => ip?.StartListener(port);
 
     /// <inheritdoc />
-    public void Open(UserEndpoint endpoint) => Select(endpoint)?.Open(endpoint);
+    public void SetClosed(ConnectionPoint point, bool closed) => Select(point)?.SetClosed(point, closed);
 
     /// <inheritdoc />
-    public void SetClosed(UserEndpoint endpoint, bool closed) => Select(endpoint)?.SetClosed(endpoint, closed);
+    public void Reset(ConnectionPoint point) => Select(point)?.Reset(point);
 
     /// <inheritdoc />
-    public void Reset(UserEndpoint endpoint) => Select(endpoint)?.Reset(endpoint);
+    public Task<PeerConnection> Connect(ConnectionPoint point, CancellationToken cancellation = default)
+        => (Select(point) ?? throw new IOException($"IP connections are unavailable, cannot reach {point}")).Connect(point, cancellation);
 
     /// <inheritdoc />
-    public Task<bool> Request(UserEndpoint target, ReadOnlyMemory<byte> data, PeerSendOptions? options = null, CancellationToken cancellation = default)
-        => (Select(target) ?? throw new IOException($"IP connections are unavailable, cannot reach {target}")).Request(target, data, options, cancellation);
+    public Task<bool> Request(PeerConnection connection, ReadOnlyMemory<byte> data, PeerSendOptions? options = null, CancellationToken cancellation = default)
+        => (connection.IsSerial ? serial : ip ?? throw new IOException("IP connections are unavailable")).Request(connection, data, options, cancellation);
 
     /// <inheritdoc />
     public async ValueTask DisposeAsync()
@@ -58,5 +59,5 @@ internal sealed class CompositePeerTransport : IPeerTransport
         await serial.DisposeAsync();
     }
 
-    private IPeerTransport? Select(UserEndpoint endpoint) => endpoint.IsSerial ? serial : ip;
+    private IPeerTransport? Select(ConnectionPoint point) => point.IsSerial ? serial : ip;
 }

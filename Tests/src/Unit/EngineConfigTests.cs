@@ -21,52 +21,72 @@ public sealed class EngineConfigTests
         Assert.Empty(config.UserGroups);
     }
 
-    /// <summary>Empty Users produces an empty endpoint map.</summary>
+    /// <summary>Empty Users produces an empty user data map.</summary>
     [Fact]
-    public void GetUserEndpoints_EmptyUsers_ReturnsEmptyMap()
+    public void GetUserData_EmptyUsers_ReturnsEmptyMap()
     {
         EngineConfig config = new();
-        IReadOnlyDictionary<string, UserEndpoint> endpoints = config.GetUserEndpoints();
-        Assert.Empty(endpoints);
+        Assert.Empty(config.GetUserData());
     }
 
-    /// <summary>User entries are converted to UserEndpoint with correct fields.</summary>
+    /// <summary>User entries carry their data through.</summary>
     [Fact]
-    public void GetUserEndpoints_WithUsers_MapsCorrectly()
+    public void GetUserData_WithUsers_MapsCorrectly()
     {
         EngineConfig config = new()
         {
-            Users = new Dictionary<string, UserEndpointConfig>
+            Users = new Dictionary<string, UserConfig>
             {
-                ["ALPHA"] = new UserEndpointConfig { IpAddress = "10.0.0.1", Port = 7890 },
-                ["BETA"] = new UserEndpointConfig { IpAddress = "10.0.0.2", Port = 7891 }
+                ["ALPHA"] = new UserConfig { Data = new Dictionary<string, string> { ["role"] = "clerk", ["desk"] = "4" } },
+                ["BETA"] = new UserConfig()
             }
         };
 
-        IReadOnlyDictionary<string, UserEndpoint> endpoints = config.GetUserEndpoints();
+        IReadOnlyDictionary<string, IReadOnlyDictionary<string, string>> data = config.GetUserData();
 
-        Assert.Equal(2, endpoints.Count);
-        Assert.Equal("10.0.0.1", endpoints["ALPHA"].IpAddress);
-        Assert.Equal(7890, endpoints["ALPHA"].Port);
-        Assert.Equal("10.0.0.2", endpoints["BETA"].IpAddress);
+        Assert.Equal(2, data.Count);
+        Assert.Equal("clerk", data["ALPHA"]["role"]);
+        Assert.Equal("4", data["ALPHA"]["desk"]);
+        Assert.Empty(data["BETA"]);
     }
 
-    /// <summary>User lookup is case-insensitive.</summary>
+    /// <summary>User lookup is case-insensitive, and two keys differing only by case do not throw.</summary>
     [Fact]
-    public void GetUserEndpoints_LookupIsCaseInsensitive()
+    public void GetUserData_LookupIsCaseInsensitive_AndDuplicateKeysDoNotThrow()
     {
         EngineConfig config = new()
         {
-            Users = new Dictionary<string, UserEndpointConfig>
+            Users = new Dictionary<string, UserConfig>
             {
-                ["Alpha"] = new UserEndpointConfig { IpAddress = "1.2.3.4", Port = 100 }
+                ["Alpha"] = new UserConfig { Data = new Dictionary<string, string> { ["k"] = "v" } },
+                ["ALPHA"] = new UserConfig { Data = new Dictionary<string, string> { ["k"] = "w" } }
             }
         };
 
-        IReadOnlyDictionary<string, UserEndpoint> endpoints = config.GetUserEndpoints();
+        IReadOnlyDictionary<string, IReadOnlyDictionary<string, string>> data = config.GetUserData();
 
-        Assert.True(endpoints.ContainsKey("ALPHA"));
-        Assert.True(endpoints.ContainsKey("alpha"));
+        Assert.Single(data);
+        Assert.True(data.ContainsKey("alpha"));
+    }
+
+    /// <summary>Outgoing points convert to connection points, IP or serial.</summary>
+    [Fact]
+    public void GetOutgoingPoints_ConvertsEachEntry()
+    {
+        EngineConfig config = new()
+        {
+            OutgoingPoints =
+            [
+                new ConnectionPointConfig { IpAddress = "10.0.0.1", Port = 7890 },
+                new ConnectionPointConfig { SerialPort = "SL0", SerialAddress = 4 }
+            ]
+        };
+
+        IReadOnlyList<ConnectionPoint> points = config.GetOutgoingPoints();
+
+        Assert.Equal(2, points.Count);
+        Assert.Equal(new ConnectionPoint { IpAddress = "10.0.0.1", Port = 7890 }, points[0]);
+        Assert.Equal(new ConnectionPoint { SerialPort = "SL0", SerialAddress = 4 }, points[1]);
     }
 
     /// <summary>Load with no --config argument returns a default config.</summary>
@@ -93,7 +113,7 @@ public sealed class EngineConfigTests
                   "UserName": "TEST",
                   "PeerPort": 9001,
                   "InterfacePort": 9002,
-                  "Users": { "ALPHA": { "IpAddress": "1.2.3.4", "Port": 5000 } },
+                  "Users": { "ALPHA": { "Data": { "role": "clerk" } } },
                   "UserGroups": { "OPS": ["ALPHA"] }
                 }
                 """);
@@ -105,7 +125,7 @@ public sealed class EngineConfigTests
             Assert.Equal(9001, config.PeerPort);
             Assert.Equal(9002, config.InterfacePort);
             Assert.Single(config.Users);
-            Assert.Equal("1.2.3.4", config.Users["ALPHA"].IpAddress);
+            Assert.Equal("clerk", config.Users["ALPHA"].Data["role"]);
             Assert.Single(config.UserGroups);
             Assert.Contains("ALPHA", config.UserGroups["OPS"]);
         }

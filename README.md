@@ -5,7 +5,7 @@
 [![Build](https://github.com/Blue-Heighliner/Comlink/actions/workflows/build.yml/badge.svg)](https://github.com/Blue-Heighliner/Comlink/actions/workflows/build.yml)
 [![Coverage](.github/badges/badge_linecoverage.svg)](https://github.com/Blue-Heighliner/Comlink/actions/workflows/build.yml)
 
-A peer-to-peer messaging engine built on .NET 10, with a built-in Avalonia desktop GUI. Nodes connect over IP using the Mercury Secure Message Transport (MSMT) protocol, or point-to-point over MicroGate serial cables, chosen per user by configuration. The GUI is a required dependency, not optional - it can run headless (no window shown), but Avalonia and its dependencies are always loaded.
+A peer-to-peer messaging engine built on .NET 10, with a built-in Avalonia desktop GUI. Nodes connect over IP using the Mercury Secure Message Transport (MSMT) protocol, or point-to-point over MicroGate serial cables, chosen per connection point by configuration. A node is configured with where it listens and connects, and works out who is on the other end of each connection as it forms. The GUI is a required dependency, not optional - it can run headless (no window shown), but Avalonia and its dependencies are always loaded.
 
 ## Installing
 

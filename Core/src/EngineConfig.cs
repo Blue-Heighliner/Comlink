@@ -95,10 +95,12 @@ public sealed class EngineConfig
     public bool? PrintReceivedEnabled { get; init; }
 
     /// <summary>
-    /// User definitions and endpoint overrides. Keys are user names (case-insensitive).
-    /// Entries may override an existing user's endpoint or introduce an entirely new user.
+    /// User definitions. Keys are user names (case-insensitive). An entry adds a user to the directory that
+    /// <see cref="IEngineController.Users"/> reports and attaches app-specific <see cref="UserConfig.Data"/> to it. A
+    /// user says nothing about where they are reached: that is decided by <see cref="OutgoingPoints"/> and by
+    /// identifying each connection as it forms.
     /// </summary>
-    public Dictionary<string, UserEndpointConfig> Users { get; init; } = [];
+    public Dictionary<string, UserConfig> Users { get; init; } = [];
 
     /// <summary>
     /// User group definitions. Keys are group names; values are lists of member names.
@@ -113,15 +115,16 @@ public sealed class EngineConfig
     public string? NodeRole { get; init; }
 
     /// <summary>
-    /// The server endpoint a <see cref="Control.NodeRole.Client"/> instance forms its long-term MSMT
-    /// connection to. Required when <see cref="NodeRole"/> is <c>"Client"</c>; unused otherwise.
+    /// The points this node connects out to and keeps connected: IP hosts and ports to dial, serial ports to open.
+    /// A <see cref="Control.NodeRole.Client"/> uses the first as its server. An empty list uses the Engine default
+    /// (none, or whatever the registered <see cref="IEngineController"/> defines).
     /// </summary>
-    public UserEndpointConfig? ServerEndpoint { get; init; }
+    public List<ConnectionPointConfig> OutgoingPoints { get; init; } = [];
 
     /// <summary>
-    /// Full server-user-map topology for a <see cref="Control.NodeRole.Server"/> instance. Keys are
-    /// server user names (case-insensitive); describes every server in the cluster, including the
-    /// local one. Required when <see cref="NodeRole"/> is <c>"Server"</c>; unused otherwise.
+    /// Full server topology for a <see cref="Control.NodeRole.Server"/> instance. Keys are server user names
+    /// (case-insensitive); describes every server in the cluster, including the local one, and the child clients
+    /// each owns. Required when <see cref="NodeRole"/> is <c>"Server"</c>; unused otherwise.
     /// </summary>
     public Dictionary<string, ServerUserConfigEntry> ServerUsers { get; init; } = [];
 
@@ -157,56 +160,62 @@ public sealed class EngineConfig
     private string? ResolveConfigRelativePath(string? path)
         => path is null || ConfigDirectory is null || Path.IsPathRooted(path) ? path : Path.GetFullPath(Path.Combine(ConfigDirectory, path));
 
-    /// <summary>Returns the configured user entries as Engine model types, with case-insensitive key lookup.</summary>
-    public IReadOnlyDictionary<string, UserEndpoint> GetUserEndpoints()
-        => Users.ToDictionary(
-            kvp => kvp.Key,
-            kvp => kvp.Value.ToEndpoint(),
-            StringComparer.OrdinalIgnoreCase);
+    /// <summary>Returns the data attached to each configured user, with case-insensitive key lookup.</summary>
+    public IReadOnlyDictionary<string, IReadOnlyDictionary<string, string>> GetUserData()
+    {
+        Dictionary<string, IReadOnlyDictionary<string, string>> data = new(StringComparer.OrdinalIgnoreCase);
+        foreach ((string name, UserConfig user) in Users)
+        {
+            data[name] = new Dictionary<string, string>(user.Data);
+        }
+        return data;
+    }
+
+    /// <summary>Returns the configured outgoing points as Engine model types.</summary>
+    public IReadOnlyList<ConnectionPoint> GetOutgoingPoints() => [.. OutgoingPoints.Select(point => point.ToPoint())];
 
     /// <summary>Parses <see cref="NodeRole"/>, defaulting to <see cref="Control.NodeRole.Peer"/> when unset or unrecognized.</summary>
     public Control.NodeRole GetNodeRole()
         => Enum.TryParse(NodeRole, ignoreCase: true, out Control.NodeRole role) ? role : Control.NodeRole.Peer;
 
-    /// <summary>Returns the configured server user map as Engine model types, with case-insensitive key lookup.</summary>
+    /// <summary>Returns the configured server topology as Engine model types, with case-insensitive key lookup.</summary>
     public IReadOnlyDictionary<string, ServerUserConfig> GetServerUsers()
-        => ServerUsers.ToDictionary(
-            kvp => kvp.Key,
-            kvp => new ServerUserConfig
-            {
-                Endpoint = new UserEndpoint { IpAddress = kvp.Value.IpAddress, Port = kvp.Value.Port, SerialPort = kvp.Value.SerialPort, SerialAddress = kvp.Value.SerialAddress },
-                ChildClients = kvp.Value.ChildClients
-            },
-            StringComparer.OrdinalIgnoreCase);
+    {
+        Dictionary<string, ServerUserConfig> servers = new(StringComparer.OrdinalIgnoreCase);
+        foreach ((string name, ServerUserConfigEntry entry) in ServerUsers)
+        {
+            servers[name] = new ServerUserConfig { ChildClients = entry.ChildClients };
+        }
+        return servers;
+    }
 }
 
-/// <summary>JSON deserialization shape for a user endpoint entry in the config file.</summary>
-public sealed class UserEndpointConfig
+/// <summary>JSON deserialization shape for a user entry in the config file.</summary>
+public sealed class UserConfig
 {
-    /// <summary>IPv4 or IPv6 address of the remote peer node. Ignored when <see cref="SerialPort"/> is set.</summary>
+    /// <summary>App-specific information attached to the user; see <see cref="IEngineController.GetUserData"/>.</summary>
+    public Dictionary<string, string> Data { get; init; } = [];
+}
+
+/// <summary>JSON deserialization shape for an outgoing connection point in the config file.</summary>
+public sealed class ConnectionPointConfig
+{
+    /// <summary>IPv4 or IPv6 address of the remote node. Ignored when <see cref="SerialPort"/> is set.</summary>
     public string IpAddress { get; init; } = string.Empty;
-    /// <summary>TCP port of the remote peer node's peer server. Ignored when <see cref="SerialPort"/> is set.</summary>
+    /// <summary>TCP port of the remote node's listener. Ignored when <see cref="SerialPort"/> is set.</summary>
     public int Port { get; init; }
-    /// <summary>Name of the local MicroGate serial port cabled to the remote peer node; when set, this endpoint is reached over serial instead of IP.</summary>
+    /// <summary>Name of the local MicroGate serial port cabled to the remote node; when set, this point is reached over serial instead of IP.</summary>
     public string? SerialPort { get; init; }
     /// <summary>HDLC station address for the serial link. Defaults to 255 (0xFF). Both ends of the cable must use the same value.</summary>
     public byte SerialAddress { get; init; } = 0xFF;
 
-    /// <summary>Converts this entry to the engine's endpoint model.</summary>
-    public UserEndpoint ToEndpoint() => new() { IpAddress = IpAddress, Port = Port, SerialPort = SerialPort, SerialAddress = SerialAddress };
+    /// <summary>Converts this entry to the engine's connection point model.</summary>
+    public ConnectionPoint ToPoint() => new() { IpAddress = IpAddress, Port = Port, SerialPort = SerialPort, SerialAddress = SerialAddress };
 }
 
-/// <summary>JSON deserialization shape for a server user map entry in the config file.</summary>
+/// <summary>JSON deserialization shape for a server topology entry in the config file.</summary>
 public sealed class ServerUserConfigEntry
 {
-    /// <summary>IPv4 or IPv6 address this server user listens on and other servers dial to reach it.</summary>
-    public string IpAddress { get; init; } = string.Empty;
-    /// <summary>TCP port this server user listens on and other servers dial to reach it.</summary>
-    public int Port { get; init; }
-    /// <summary>Name of the local MicroGate serial port through which this server user is reached; when set, IP address and port are ignored.</summary>
-    public string? SerialPort { get; init; }
-    /// <summary>HDLC station address for the serial link. Defaults to 255 (0xFF).</summary>
-    public byte SerialAddress { get; init; } = 0xFF;
     /// <summary>Names of the client users that belong to this server.</summary>
     public List<string> ChildClients { get; init; } = [];
 }

@@ -3,7 +3,7 @@ namespace BlueHeighliner.Comlink.Tests.Unit.Peer.Transport;
 /// <summary>Unit tests for <see cref="MsmtPeerTransport"/>, the IP half of the peer transport.</summary>
 public sealed class MsmtPeerTransportTests
 {
-    private static readonly UserEndpoint target = new() { IpAddress = "10.0.0.5", Port = 4000 };
+    private static readonly ConnectionPoint target = new() { IpAddress = "10.0.0.5", Port = 4000 };
 
     private sealed record Fixture(
         MsmtPeerTransport Transport,
@@ -25,11 +25,11 @@ public sealed class MsmtPeerTransportTests
         return new Fixture(new MsmtPeerTransport(peer.Object), peer, connected, disconnected, packageChanged);
     }
 
-    private static Mock<IMsmtConnection> OutboundConnection(UserEndpoint endpoint, bool connects = true)
+    private static Mock<IMsmtConnection> OutboundConnection(ConnectionPoint point, bool connects = true)
     {
         Mock<IMsmtConnection> connection = new();
         connection.SetupGet(c => c.Direction).Returns(MsmtConnectionDirection.Outgoing);
-        connection.SetupGet(c => c.Remote).Returns(new MsmtTarget { Host = endpoint.IpAddress, Port = endpoint.Port });
+        connection.SetupGet(c => c.Remote).Returns(new MsmtTarget { Host = point.IpAddress, Port = point.Port });
         connection.SetupGet(c => c.Status).Returns(connects ? MsmtConnectionStatus.Connected : MsmtConnectionStatus.Disconnected);
         connection.Setup(c => c.Wait(It.IsAny<CancellationToken>())).ReturnsAsync(connects);
         return connection;
@@ -39,6 +39,7 @@ public sealed class MsmtPeerTransportTests
     {
         Mock<IMsmtConnection> connection = new();
         connection.SetupGet(c => c.Direction).Returns(MsmtConnectionDirection.Incoming);
+        connection.SetupGet(c => c.Remote).Returns(new MsmtTarget { Host = "10.1.2.3", Port = 51234 });
         connection.SetupGet(c => c.Identity).Returns(new MsmtIdentity { Subject = subject, Issuer = string.Empty, SerialNumber = string.Empty, Thumbprint = string.Empty });
         return connection;
     }
@@ -47,10 +48,16 @@ public sealed class MsmtPeerTransportTests
         => connection.Setup(c => c.Request(It.IsAny<IMemoryOwner<byte>>(), It.IsAny<MsmtSendOptions>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync(new MsmtResponse { Success = success, Payload = new UnownedMemory(ReadOnlyMemory<byte>.Empty) });
 
-    private static void Connects(Mock<IMsmtSessionPeer> peer, UserEndpoint endpoint, Mock<IMsmtConnection> connection)
-        => peer.Setup(p => p.Connect(It.Is<MsmtNameTarget>(t => t.Host == endpoint.IpAddress && t.Port == endpoint.Port))).Returns(connection.Object);
+    private static void Connects(Mock<IMsmtSessionPeer> peer, ConnectionPoint point, Mock<IMsmtConnection> connection)
+        => peer.Setup(p => p.Connect(It.Is<MsmtNameTarget>(t => t.Host == point.IpAddress && t.Port == point.Port))).Returns(connection.Object);
 
-    /// <summary>A request opens a connection to the endpoint's host and port, sends the payload over it, and returns the remote acknowledgement.</summary>
+    private static async Task<bool> RequestVia(Fixture fx, ConnectionPoint point, ReadOnlyMemory<byte> data, PeerSendOptions? options = null)
+    {
+        PeerConnection connection = await fx.Transport.Connect(point);
+        return await fx.Transport.Request(connection, data, options);
+    }
+
+    /// <summary>A request opens a connection to the point's host and port, sends the payload over it, and returns the remote acknowledgement.</summary>
     [Theory]
     [InlineData(true)]
     [InlineData(false)]
@@ -61,7 +68,7 @@ public sealed class MsmtPeerTransportTests
         Connects(fx.Peer, target, connection);
         Acknowledge(connection, success);
 
-        bool result = await fx.Transport.Request(target, new byte[] { 1, 2 }, new PeerSendOptions { Priority = 4 });
+        bool result = await RequestVia(fx, target, new byte[] { 1, 2 }, new PeerSendOptions { Priority = 4 });
 
         Assert.Equal(success, result);
         fx.Peer.Verify(p => p.Connect(It.Is<MsmtNameTarget>(t => t.Host == "10.0.0.5" && t.Port == 4000)), Times.Once);
@@ -71,23 +78,23 @@ public sealed class MsmtPeerTransportTests
             It.IsAny<CancellationToken>()), Times.Once);
     }
 
-    /// <summary>A second request to the same endpoint reuses the connection the first one opened instead of dialing again.</summary>
+    /// <summary>A second request to the same point reuses the connection the first one opened instead of dialing again.</summary>
     [Fact]
-    public async Task Request_SameEndpointTwice_ReusesConnection()
+    public async Task Request_SamePointTwice_ReusesConnection()
     {
         Fixture fx = Build();
         Mock<IMsmtConnection> connection = OutboundConnection(target);
         Connects(fx.Peer, target, connection);
         Acknowledge(connection);
 
-        await fx.Transport.Request(target, new byte[] { 1 });
-        await fx.Transport.Request(target, new byte[] { 2 });
+        await RequestVia(fx, target, new byte[] { 1 });
+        await RequestVia(fx, target, new byte[] { 2 });
 
         fx.Peer.Verify(p => p.Connect(It.IsAny<MsmtNameTarget>()), Times.Once);
         connection.Verify(c => c.Request(It.IsAny<IMemoryOwner<byte>>(), It.IsAny<MsmtSendOptions>(), It.IsAny<CancellationToken>()), Times.Exactly(2));
     }
 
-    /// <summary>Once the cached connection reports itself disconnected, the next request to the same endpoint opens a fresh one.</summary>
+    /// <summary>Once the cached connection reports itself disconnected, the next request to the same point opens a fresh one.</summary>
     [Fact]
     public async Task Request_CachedConnectionDisconnected_OpensFreshConnection()
     {
@@ -98,9 +105,9 @@ public sealed class MsmtPeerTransportTests
         Acknowledge(second);
         fx.Peer.SetupSequence(p => p.Connect(It.IsAny<MsmtNameTarget>())).Returns(first.Object).Returns(second.Object);
 
-        await fx.Transport.Request(target, new byte[] { 1 });
+        await RequestVia(fx, target, new byte[] { 1 });
         first.SetupGet(c => c.Status).Returns(MsmtConnectionStatus.Disconnected);
-        await fx.Transport.Request(target, new byte[] { 2 });
+        await RequestVia(fx, target, new byte[] { 2 });
 
         fx.Peer.Verify(p => p.Connect(It.IsAny<MsmtNameTarget>()), Times.Exactly(2));
         second.Verify(c => c.Request(It.IsAny<IMemoryOwner<byte>>(), It.IsAny<MsmtSendOptions>(), It.IsAny<CancellationToken>()), Times.Once);
@@ -114,7 +121,7 @@ public sealed class MsmtPeerTransportTests
         Mock<IMsmtConnection> connection = OutboundConnection(target, connects: false);
         Connects(fx.Peer, target, connection);
 
-        await Assert.ThrowsAsync<IOException>(() => fx.Transport.Request(target, new byte[] { 1 }));
+        await Assert.ThrowsAsync<IOException>(() => RequestVia(fx, target, new byte[] { 1 }));
     }
 
     /// <summary>The Transmitted callback fires when MSMT reports the package as awaiting acknowledgement, and not for other statuses.</summary>
@@ -140,7 +147,7 @@ public sealed class MsmtPeerTransportTests
             })
             .Returns(completion.Task);
 
-        Task<bool> request = fx.Transport.Request(target, new byte[] { 1 }, new PeerSendOptions { Transmitted = () => transmitted++ });
+        Task<bool> request = RequestVia(fx, target, new byte[] { 1 }, new PeerSendOptions { Transmitted = () => transmitted++ });
         completion.SetResult(new MsmtResponse { Success = true, Payload = new UnownedMemory(ReadOnlyMemory<byte>.Empty) });
         await request;
 
@@ -160,8 +167,8 @@ public sealed class MsmtPeerTransportTests
             .ReturnsAsync(new MsmtResponse { Success = true, Payload = new UnownedMemory(ReadOnlyMemory<byte>.Empty) });
         Action shared = () => { };
 
-        await fx.Transport.Request(target, new byte[] { 1 }, new PeerSendOptions { Transmitted = shared });
-        await fx.Transport.Request(target, new byte[] { 2 }, new PeerSendOptions { Transmitted = shared });
+        await RequestVia(fx, target, new byte[] { 1 }, new PeerSendOptions { Transmitted = shared });
+        await RequestVia(fx, target, new byte[] { 2 }, new PeerSendOptions { Transmitted = shared });
 
         Assert.Equal(2, tags.Count);
         Assert.NotEqual(tags[0], tags[1]);
@@ -176,7 +183,7 @@ public sealed class MsmtPeerTransportTests
         Connects(fx.Peer, target, connection);
         Acknowledge(connection);
 
-        await fx.Transport.Request(target, new byte[] { 1 }, new PeerSendOptions { Priority = int.MinValue });
+        await RequestVia(fx, target, new byte[] { 1 }, new PeerSendOptions { Priority = int.MinValue });
 
         connection.Verify(c => c.Request(It.IsAny<IMemoryOwner<byte>>(), It.Is<MsmtSendOptions>(o => o.Priority == int.MinValue + 1), It.IsAny<CancellationToken>()), Times.Once);
     }
@@ -190,12 +197,12 @@ public sealed class MsmtPeerTransportTests
         Connects(fx.Peer, target, connection);
         Acknowledge(connection);
 
-        await fx.Transport.Request(target, new byte[] { 1 });
+        await RequestVia(fx, target, new byte[] { 1 });
 
         connection.Verify(c => c.Request(It.IsAny<IMemoryOwner<byte>>(), It.Is<MsmtSendOptions>(o => o.Tag == null), It.IsAny<CancellationToken>()), Times.Once);
     }
 
-    /// <summary>An outbound connection is published as connected, with the endpoint it dialed, the first time something is sent to it.</summary>
+    /// <summary>An outbound connection is published as connected, with the point it dialed, the first time something is sent to it.</summary>
     [Fact]
     public async Task Connected_Outbound_PublishedOnFirstRequest()
     {
@@ -206,11 +213,13 @@ public sealed class MsmtPeerTransportTests
         PeerConnection? published = null;
         fx.Transport.Connected.Listen(args => published = args.Connection);
 
-        await fx.Transport.Request(target, new byte[] { 1 });
+        await RequestVia(fx, target, new byte[] { 1 });
 
         Assert.NotNull(published);
         Assert.False(published.IsInbound);
-        Assert.Equal(target, published.Endpoint);
+        Assert.Equal(target, published.Point);
+        Assert.Equal("10.0.0.5", published.Info.Host);
+        Assert.Equal(4000, published.Info.Port);
     }
 
     /// <summary>Reusing a cached connection for a second request does not publish a second Connected event.</summary>
@@ -224,13 +233,13 @@ public sealed class MsmtPeerTransportTests
         int publishCount = 0;
         fx.Transport.Connected.Listen(_ => publishCount++);
 
-        await fx.Transport.Request(target, new byte[] { 1 });
-        await fx.Transport.Request(target, new byte[] { 2 });
+        await RequestVia(fx, target, new byte[] { 1 });
+        await RequestVia(fx, target, new byte[] { 2 });
 
         Assert.Equal(1, publishCount);
     }
 
-    /// <summary>A connection a remote node opened to this node's listener is published as inbound, with its certificate subject and no endpoint.</summary>
+    /// <summary>A connection a remote node opened to this node's listener is published as inbound, with its certificate subject and no point.</summary>
     [Fact]
     public void Connected_Inbound_CarriesCertificateSubject()
     {
@@ -242,8 +251,9 @@ public sealed class MsmtPeerTransportTests
 
         Assert.NotNull(connection);
         Assert.True(connection.IsInbound);
-        Assert.Null(connection.Endpoint);
-        Assert.Equal("CN=Alice", connection.IdentitySubject);
+        Assert.Null(connection.Point);
+        Assert.Equal("CN=Alice", connection.Info.CertificateSubject);
+        Assert.Equal(["Alice"], connection.Info.CertificateNames);
     }
 
     /// <summary>Dropping the published connection disposes the underlying MSMT connection.</summary>
@@ -322,10 +332,10 @@ public sealed class MsmtPeerTransportTests
         fx.Disconnected.Publish(new MsmtDisconnection { Connection = known.Object });
 
         PeerConnection connection = Assert.Single(disconnected);
-        Assert.Equal("CN=Alice", connection.IdentitySubject);
+        Assert.Equal("CN=Alice", connection.Info.CertificateSubject);
     }
 
-    /// <summary>Closing an endpoint drops its live outbound connection and makes requests to it fail without dialing MSMT; other endpoints are unaffected.</summary>
+    /// <summary>Closing an point drops its live outbound connection and makes requests to it fail without dialing MSMT; other points are unaffected.</summary>
     [Fact]
     public async Task SetClosed_DropsConnectionAndBlocksRequests()
     {
@@ -333,22 +343,22 @@ public sealed class MsmtPeerTransportTests
         Mock<IMsmtConnection> connection = OutboundConnection(target);
         Connects(fx.Peer, target, connection);
         Acknowledge(connection);
-        await fx.Transport.Request(target, new byte[] { 1 });
+        await RequestVia(fx, target, new byte[] { 1 });
 
         fx.Transport.SetClosed(target, true);
 
         connection.Verify(c => c.Dispose(), Times.Once);
-        await Assert.ThrowsAsync<IOException>(() => fx.Transport.Request(target, new byte[] { 1 }));
+        await Assert.ThrowsAsync<IOException>(() => RequestVia(fx, target, new byte[] { 1 }));
         fx.Peer.Verify(p => p.Connect(It.IsAny<MsmtNameTarget>()), Times.Once);
 
-        UserEndpoint other = new() { IpAddress = "10.9.9.9", Port = 1 };
+        ConnectionPoint other = new() { IpAddress = "10.9.9.9", Port = 1 };
         Mock<IMsmtConnection> otherConnection = OutboundConnection(other);
         Connects(fx.Peer, other, otherConnection);
         Acknowledge(otherConnection);
-        Assert.True(await fx.Transport.Request(other, new byte[] { 1 }));
+        Assert.True(await RequestVia(fx, other, new byte[] { 1 }));
     }
 
-    /// <summary>Reopening an endpoint lets requests to it through again.</summary>
+    /// <summary>Reopening an point lets requests to it through again.</summary>
     [Fact]
     public async Task SetClosed_ThenReopened_AllowsRequests()
     {
@@ -360,10 +370,10 @@ public sealed class MsmtPeerTransportTests
 
         fx.Transport.SetClosed(target, false);
 
-        Assert.True(await fx.Transport.Request(target, new byte[] { 1 }));
+        Assert.True(await RequestVia(fx, target, new byte[] { 1 }));
     }
 
-    /// <summary>Reset drops the live outbound connection to the endpoint but leaves it open for new requests.</summary>
+    /// <summary>Reset drops the live outbound connection to the point but leaves it open for new requests.</summary>
     [Fact]
     public async Task Reset_DropsConnectionButStaysOpen()
     {
@@ -373,17 +383,17 @@ public sealed class MsmtPeerTransportTests
         Mock<IMsmtConnection> second = OutboundConnection(target);
         Acknowledge(second);
         fx.Peer.SetupSequence(p => p.Connect(It.IsAny<MsmtNameTarget>())).Returns(first.Object).Returns(second.Object);
-        await fx.Transport.Request(target, new byte[] { 1 });
+        await RequestVia(fx, target, new byte[] { 1 });
 
         fx.Transport.Reset(target);
 
         first.Verify(c => c.Dispose(), Times.Once);
-        Assert.True(await fx.Transport.Request(target, new byte[] { 1 }));
+        Assert.True(await RequestVia(fx, target, new byte[] { 1 }));
         fx.Peer.Verify(p => p.Connect(It.IsAny<MsmtNameTarget>()), Times.Exactly(2));
         second.Verify(c => c.Request(It.IsAny<IMemoryOwner<byte>>(), It.IsAny<MsmtSendOptions>(), It.IsAny<CancellationToken>()), Times.Once);
     }
 
-    /// <summary>Reset does nothing to a closed endpoint, and does nothing when there is no connection to drop.</summary>
+    /// <summary>Reset does nothing to a closed point, and does nothing when there is no connection to drop.</summary>
     [Fact]
     public void Reset_WhenClosedOrNotConnected_DoesNothing()
     {
@@ -396,17 +406,90 @@ public sealed class MsmtPeerTransportTests
         fx.Peer.Verify(p => p.Connect(It.IsAny<MsmtNameTarget>()), Times.Never);
     }
 
-    /// <summary>StartListener forwards the port, and Open is a no-op since IP connections are dialed on demand.</summary>
+    /// <summary>StartListener forwards the port without dialing anything.</summary>
     [Fact]
-    public void StartListener_ForwardsPort_AndOpenDoesNothing()
+    public void StartListener_ForwardsPort()
     {
         Fixture fx = Build();
 
         fx.Transport.StartListener(50021);
-        fx.Transport.Open(target);
 
         fx.Peer.Verify(p => p.StartListener(50021, "0.0.0.0"), Times.Once);
         fx.Peer.Verify(p => p.Connect(It.IsAny<MsmtNameTarget>()), Times.Never);
+    }
+
+    /// <summary>Connect returns the same connection object for a point until that connection is lost, so callers can tell connections apart by reference.</summary>
+    [Fact]
+    public async Task Connect_SamePointTwice_ReturnsSameConnection()
+    {
+        Fixture fx = Build();
+        Mock<IMsmtConnection> connection = OutboundConnection(target);
+        Connects(fx.Peer, target, connection);
+
+        PeerConnection first = await fx.Transport.Connect(target);
+        PeerConnection second = await fx.Transport.Connect(target);
+
+        Assert.Same(first, second);
+    }
+
+    /// <summary>Connect to a closed point fails without dialing.</summary>
+    [Fact]
+    public async Task Connect_ClosedPoint_ThrowsIOException()
+    {
+        Fixture fx = Build();
+        fx.Transport.SetClosed(target, true);
+
+        await Assert.ThrowsAsync<IOException>(() => fx.Transport.Connect(target));
+
+        fx.Peer.Verify(p => p.Connect(It.IsAny<MsmtNameTarget>()), Times.Never);
+    }
+
+    /// <summary>A connection the remote node opened carries this node's requests too, since session connections are bidirectional.</summary>
+    [Fact]
+    public async Task Request_OverInboundConnection_SendsOnThatConnection()
+    {
+        Fixture fx = Build();
+        Mock<IMsmtConnection> msmt = InboundConnection("CN=Alice");
+        Acknowledge(msmt);
+        PeerConnection? connection = null;
+        fx.Transport.Connected.Listen(args => connection = args.Connection);
+        fx.Connected.Publish(msmt.Object);
+
+        bool result = await fx.Transport.Request(connection!, new byte[] { 5 }, new PeerSendOptions { Priority = 2 });
+
+        Assert.True(result);
+        msmt.Verify(c => c.Request(
+            It.Is<IMemoryOwner<byte>>(payload => payload.Memory.ToArray().SequenceEqual(new byte[] { 5 })),
+            It.Is<MsmtSendOptions>(o => o.Priority == 2),
+            It.IsAny<CancellationToken>()), Times.Once);
+    }
+
+    /// <summary>A request over a connection that has been lost fails with an IOException.</summary>
+    [Fact]
+    public async Task Request_OverLostConnection_ThrowsIOException()
+    {
+        Fixture fx = Build();
+        Mock<IMsmtConnection> msmt = InboundConnection("CN=Alice");
+        Acknowledge(msmt);
+        PeerConnection? connection = null;
+        fx.Transport.Connected.Listen(args => connection = args.Connection);
+        fx.Connected.Publish(msmt.Object);
+        fx.Disconnected.Publish(new MsmtDisconnection { Connection = msmt.Object });
+
+        await Assert.ThrowsAsync<IOException>(() => fx.Transport.Request(connection!, new byte[] { 1 }));
+    }
+
+    /// <summary>Every common name in the remote certificate's subject is reported, in order.</summary>
+    [Fact]
+    public void Connected_Inbound_ReportsEveryCommonName()
+    {
+        Fixture fx = Build();
+        PeerConnection? connection = null;
+        fx.Transport.Connected.Listen(args => connection = args.Connection);
+
+        fx.Connected.Publish(InboundConnection("CN=Alice, O=Org, CN=Alias").Object);
+
+        Assert.Equal(["Alice", "Alias"], connection!.Info.CertificateNames);
     }
 
     /// <summary>Disposing the transport disposes the MSMT peer.</summary>

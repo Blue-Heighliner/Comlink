@@ -3,7 +3,7 @@ namespace BlueHeighliner.Comlink.Tests.Unit.Peer.Transport;
 /// <summary>Unit tests for <see cref="PacketizingPeerTransport"/>.</summary>
 public sealed class PacketizingPeerTransportTests
 {
-    private static readonly UserEndpoint target = new() { IpAddress = "10.0.0.5", Port = 4000 };
+    private static readonly PeerConnection target = new(new ConnectionPoint { IpAddress = "10.0.0.5", Port = 4000 }, new ConnectionInfo { Host = "10.0.0.5", Port = 4000 }, () => { });
     private static readonly ILogger logger = LoggerFactory.Create(_ => { }).CreateLogger("test");
     private static int Header => RawPacketSerializer.HeaderSize;
 
@@ -52,8 +52,8 @@ public sealed class PacketizingPeerTransportTests
         inner.SetupGet(t => t.Received).Returns(received);
         inner.SetupGet(t => t.Connected).Returns(connected);
         inner.SetupGet(t => t.Disconnected).Returns(disconnected);
-        inner.Setup(t => t.Request(It.IsAny<UserEndpoint>(), It.IsAny<ReadOnlyMemory<byte>>(), It.IsAny<PeerSendOptions>(), It.IsAny<CancellationToken>()))
-            .Returns<UserEndpoint, ReadOnlyMemory<byte>, PeerSendOptions?, CancellationToken>((_, data, options, _) =>
+        inner.Setup(t => t.Request(It.IsAny<PeerConnection>(), It.IsAny<ReadOnlyMemory<byte>>(), It.IsAny<PeerSendOptions>(), It.IsAny<CancellationToken>()))
+            .Returns<PeerConnection, ReadOnlyMemory<byte>, PeerSendOptions?, CancellationToken>((_, data, options, _) =>
             {
                 Sent sent = new(data.ToArray(), options);
                 lock (sends) { sends.Add(sent); }
@@ -91,7 +91,7 @@ public sealed class PacketizingPeerTransportTests
 
     private static byte[] Payload(int length) => [.. Enumerable.Range(0, length).Select(i => (byte)(i % 251))];
 
-    private static PeerConnection Connection() => new(null, true, null, () => { });
+    private static PeerConnection Connection() => new(null, new ConnectionInfo { IsInbound = true }, () => { });
 
     private static List<byte[]> Packets(byte[] payload)
     {
@@ -266,13 +266,13 @@ public sealed class PacketizingPeerTransportTests
         Assert.Equal(second[0], fx.Sends[3].Data[Header]);
     }
 
-    /// <summary>Priority only orders packets going to the same endpoint, so a busy endpoint never holds up another.</summary>
+    /// <summary>Priority only orders packets going to the same connection, so a busy connection never holds up another.</summary>
     [Fact]
-    public async Task Request_DifferentEndpoints_DoNotWaitForEachOther()
+    public async Task Request_DifferentConnections_DoNotWaitForEachOther()
     {
         Manual manual = new();
         Fixture fx = Build(respond: manual.Respond);
-        UserEndpoint other = new() { IpAddress = "10.0.0.6", Port = 4000 };
+        PeerConnection other = new(new ConnectionPoint { IpAddress = "10.0.0.6", Port = 4000 }, new ConnectionInfo(), () => { });
 
         Task<bool> first = fx.Transport.Request(target, Payload(5));
         await WaitUntil(() => fx.Sends.Count == 1);
@@ -538,22 +538,41 @@ public sealed class PacketizingPeerTransportTests
         Assert.Same(connection, Assert.Single(came));
     }
 
+    /// <summary>When a connection is lost its scheduler is disposed, so packets still queued for it fail instead of waiting for a connection that is gone.</summary>
+    [Fact]
+    public async Task Disconnected_FailsPacketsStillQueued()
+    {
+        Manual manual = new();
+        Fixture fx = Build(respond: manual.Respond);
+        PeerConnection connection = Connection();
+
+        Task<bool> request = fx.Transport.Request(connection, Payload(35));
+        await WaitUntil(() => fx.Sends.Count == 1);
+        fx.Disconnected.Publish(new PeerConnectionEventArgs { Connection = connection });
+        manual.Complete(0);
+
+        await Assert.ThrowsAsync<IOException>(() => request);
+    }
+
     /// <summary>Everything that is not about payloads goes straight to the wrapped transport.</summary>
     [Fact]
     public async Task ManagementCalls_GoToWrappedTransport()
     {
         Fixture fx = Build();
+        ConnectionPoint point = new() { IpAddress = "10.0.0.5", Port = 4000 };
+        fx.Inner.Setup(t => t.Connect(point, It.IsAny<CancellationToken>())).ReturnsAsync(target);
 
         fx.Transport.StartListener(50021);
-        fx.Transport.Open(target);
-        fx.Transport.SetClosed(target, true);
-        fx.Transport.Reset(target);
+        PeerConnection connected = await fx.Transport.Connect(point);
+        fx.Transport.SetClosed(point, true);
+        fx.Transport.Reset(point);
         await fx.Transport.DisposeAsync();
 
+        Assert.Same(target, connected);
         fx.Inner.Verify(t => t.StartListener(50021), Times.Once);
-        fx.Inner.Verify(t => t.Open(target), Times.Once);
-        fx.Inner.Verify(t => t.SetClosed(target, true), Times.Once);
-        fx.Inner.Verify(t => t.Reset(target), Times.Once);
+        fx.Inner.Verify(t => t.Connect(point, It.IsAny<CancellationToken>()), Times.Once);
+        fx.Inner.Verify(t => t.SetClosed(point, true), Times.Once);
+        fx.Inner.Verify(t => t.Reset(point), Times.Once);
         fx.Inner.Verify(t => t.DisposeAsync(), Times.Once);
     }
 }

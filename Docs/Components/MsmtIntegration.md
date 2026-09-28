@@ -46,10 +46,10 @@ automatically by MSMT's own idle keep-alive, rather than a fresh TLS connection 
 Unlike message mode, a session connection is a real object the caller gets back and manages - MSMT itself
 never reconnects or discards one on Comlink's behalf beyond a handshake timeout, a stall, or the negotiated
 session lifetime ending. `MsmtPeerTransport` (see below) owns this: it opens one outbound connection to a
-given endpoint the first time something is sent to it, and reuses that same connection for every later send
-to the same endpoint until MSMT reports it disconnected, at which point the next send opens a fresh one.
-`ClientPeerService` and `ServerRoutingService` additionally run a background `PeerConnectionMonitor` per
-hierarchical target (a client's server; a server's own children and sibling servers), sending an empty
+given point when it is connected to, and reuses that same connection for every later request over it
+until MSMT reports it disconnected, at which point the next connect opens a fresh one.
+Every peer service additionally runs a background `PeerConnectionMonitor` per outgoing point
+(a client's server; a server's or peer's configured points), sending an empty
 heartbeat payload on an interval so each of those connections is proactively opened and kept alive even
 when no real message is being sent - see [Peer.md](Peer.md#connection-status-client-and-server) for the
 full mechanism and why `IMsmtReachabilityChecker.Reach` is not used for this.
@@ -70,31 +70,29 @@ instead, never raised there - while `Disconnected` covers both directions. A rec
 acknowledged explicitly through the `Receiver` delegate's return value (`MsmtReceiveResult.Accept()`/`Reject()`,
 or `null` when `isResponseRequested` is `false`); nothing is auto-accepted.
 
-## No Server-Initiated Delivery
+## Bidirectional Connections
 
-Even though a session connection is bidirectional, Comlink never replies to a peer by writing back down a
-connection that peer itself opened to this node's listener - every component that needs to deliver a
-message to a specific remote peer (`PeerService`, `ClientPeerService`, `ServerRoutingService`) always does
-so by dialing out to that peer's own listener as a client, identified by certificate subject rather than
-any self-declared name, so delivery never depends on which connection happens to already be open. On the
-receiving side, `IMsmtConnection.Direction` distinguishes an accepted connection from one this node dialed,
-and `IMsmtConnection.Identity` exposes the remote peer's certificate subject (a plain distinguished-name
-string, e.g. `CN=Client1`) for `ServerRoutingService` to match against `IEngineController.GetCertificateName`
-- see [Peer.md](Peer.md#connection-status-client-and-server). For the same reason, `InterfaceService` does
-not mirror inbound peer messages back out to a connected interface client over the connection it opened in:
-an interface tool would need to run its own MSMT listener for Comlink to dial back into instead, a
-materially different integration shape than "open a socket and read" that is not yet provided. See
-[Peer.md](Peer.md) and [Interface.md](Interface.md).
+A session connection is bidirectional, and Comlink uses it that way: a request goes over whichever
+connection is currently identified as the recipient (see [Identification.md](Identification.md)), whether
+this node dialed it or the recipient did. That is why a client needs no listener of its own and a server
+needs no address for its children: the server delivers back down the connection the client opened. Because no
+node is configured with the users it expects, a connection is matched to a user by the certificate it
+presents, not by where it was dialed: `IMsmtConnection.Direction` distinguishes an accepted connection from one
+this node dialed, and `IMsmtConnection.Identity` exposes the remote peer's certificate subject (a plain
+distinguished-name string, e.g. `CN=Client1`), which `MsmtPeerTransport` turns into the connection's
+`ConnectionInfo` (host, port, and every common name). `InterfaceService` does not mirror inbound peer messages
+back out to a connected interface client over the connection it opened in; see [Peer.md](Peer.md) and
+[Interface.md](Interface.md).
 
 ## Comlink Integration
 
 | Component | Role |
 |-----------|------|
-| `PeerService` (`Core/src/Peer/PeerService.cs`) | Wraps a single `IPeerTransport` (IP through `MsmtPeerTransport`, which wraps the `IMsmtSessionPeer`, and serial through `SerialPeerTransport`) for `NodeRole.Peer`; resolves user names to endpoints via `IEngineController.GetEndpoint`, serializes/deserializes instances of `IEngineController.MessageType` (see [Control.md](Control.md#message-format)), and dispatches `MessageDelivered`/`DeliveryStatusChanged` events derived directly from the transport's `Request` outcome and its `Transmitted` progress callback. |
-| `ClientPeerService` (`Core/src/Peer/ClientPeerService.cs`) | Implements `NodeRole.Client`: sends every outbound message to the configured server, and also runs its own listener so the server can dial back in to deliver messages to it. Proactively maintains its connection to the server via `PeerConnectionMonitor`. |
-| `ServerRoutingService` (`Core/src/Peer/ServerRoutingService.cs`) | Implements `NodeRole.Server`: accepts connections from child clients and other servers, and delivers to any recipient (a child or another server) by dialing out to that recipient's own endpoint. Proactively maintains a connection to each own child and each sibling server via `PeerConnectionMonitor`. |
-| `PeerConnectionMonitor` (`Core/src/Peer/PeerConnectionMonitor.cs`) | Sends a periodic empty heartbeat `Request` to a hierarchical target so its connection opens and stays open without needing a real message. See [Session Peer](#session-peer). |
-| `MsmtPeerTransport` (`Core/src/Peer/Transport/MsmtPeerTransport.cs`) | Adapts an `IMsmtSessionPeer` to the peer transport used by `PeerService`, `ClientPeerService`, and `ServerRoutingService`, caching one outbound connection per endpoint so they can also reach users over serial. MSMT itself remains IP only. |
+| `PeerService` (`Core/src/Peer/PeerService.cs`) | Wraps a single `IPeerTransport` (IP through `MsmtPeerTransport`, which wraps the `IMsmtSessionPeer`, and serial through `SerialPeerTransport`) for `NodeRole.Peer`; keeps a connection to each outgoing point and sends to a user over the connection identified as them, serializes/deserializes instances of `IEngineController.MessageType` (see [Control.md](Control.md#message-format)), and dispatches `MessageDelivered`/`DeliveryStatusChanged` events derived directly from the transport's `Request` outcome and its `Transmitted` progress callback. |
+| `ClientPeerService` (`Core/src/Peer/ClientPeerService.cs`) | Implements `NodeRole.Client`: sends every outbound message over its one connection to the server, which delivers back down that same connection. Proactively maintains the connection via `PeerConnectionMonitor`. |
+| `ServerRoutingService` (`Core/src/Peer/ServerRoutingService.cs`) | Implements `NodeRole.Server`: accepts connections from child clients and other servers, keeps a connection to each outgoing point, and delivers to any recipient (a child or another server) over the connection identified as them. Proactively maintains each outgoing point via `PeerConnectionMonitor`. |
+| `PeerConnectionMonitor` (`Core/src/Peer/PeerConnectionMonitor.cs`) | Connects to an outgoing point and sends a periodic empty heartbeat over the connection so it opens and stays open without needing a real message. See [Session Peer](#session-peer). |
+| `MsmtPeerTransport` (`Core/src/Peer/Transport/MsmtPeerTransport.cs`) | Adapts an `IMsmtSessionPeer` to the peer transport used by `PeerService`, `ClientPeerService`, and `ServerRoutingService`, caching one outbound connection per point and sending over inbound ones as well. MSMT itself remains IP only; serial goes through `SerialPeerTransport`. |
 | `InterfaceService` (`Core/src/Peer/InterfaceService.cs`, always active) | Uses its own `IMsmtSessionPeer` to host the local interface listener described in [Interface.md](Interface.md). |
 | `IEngineController.ConnectionOptions` | Builds the `MsmtSessionPeerOptions` (identity certificate, trusted authority) used for both inbound and outbound MSMT session peer connections. See [Control.md](Control.md#msmt-certificates). |
 | `IEngineController.GetCertificateName(userName)`/`TrustedAuthorityCertificateName` | Map the local user name, and the trusted certificate authority, to certificate subject names to look up in the system store. See [Control.md](Control.md#msmt-certificates). |

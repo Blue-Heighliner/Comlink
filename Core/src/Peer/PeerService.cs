@@ -25,7 +25,10 @@ internal interface IPeerService
 /// Implements <see cref="IPeerService"/> for <see cref="NodeRole.Peer"/> by wrapping an <see cref="IPeerTransport"/>.
 /// Traffic carries an instance of <see cref="IEngineController.MessageType"/> directly with no envelope; delivery
 /// confirmation is derived from the transport's own acknowledgement of the send, not from an application-level
-/// reply. Each user's <see cref="IEngineController.GetEndpoint"/> decides whether they are reached over IP or serial.
+/// reply. The node listens on <see cref="IEngineController.PeerPort"/> and keeps a connection open to each of its
+/// <see cref="IEngineController.OutgoingPoints"/>; which user is behind a connection is worked out when it forms, and a
+/// message for a user goes over whichever connection is currently identified as them, in whichever direction it was
+/// opened.
 /// </summary>
 internal sealed class PeerService : IPeerService, IAsyncDisposable
 {
@@ -52,6 +55,8 @@ internal sealed class PeerService : IPeerService, IAsyncDisposable
     private readonly IPeerTransportFactory? transportFactory;
     private readonly IEngineController engineController;
     private readonly ILogger logger;
+    private readonly PeerConnectionMonitor connectionMonitor = new();
+    private readonly UserConnections connections = new();
 
     private IPeerTransport? transport;
     private int disposed;
@@ -68,12 +73,9 @@ internal sealed class PeerService : IPeerService, IAsyncDisposable
     {
         Wire(transportFactory!.Create());
         transport!.StartListener(engineController.PeerPort);
-        foreach (string userName in engineController.Users)
+        foreach (ConnectionPoint point in engineController.OutgoingPoints)
         {
-            if (engineController.GetEndpoint(userName) is { IsSerial: true } endpoint)
-            {
-                transport.Open(endpoint);
-            }
+            connectionMonitor.Maintain(transport, point, cancellation);
         }
 
         try { await Task.Delay(Timeout.Infinite, cancellation); }
@@ -85,15 +87,19 @@ internal sealed class PeerService : IPeerService, IAsyncDisposable
     {
         if (transport is null) { return false; }
 
-        UserEndpoint? endpoint = engineController.GetEndpoint(userName);
-        if (endpoint is null) { return false; }
-
         DeliveryTag tag = new(engineController.GetMessageId(message), userName);
+        if (connections.Get(userName) is not { } connection)
+        {
+            logger.LogWarning("{MessageId} cannot be sent to {User}: no connection is identified as them", tag.MessageId, userName);
+            RaiseDeliveryStatusChanged(tag, DestinationStatus.Failed);
+            return false;
+        }
+
         try
         {
             using IMemoryOwner<byte> buf = engineController.NetworkSerializer.Serialize(message);
             bool accepted = await transport.Request(
-                endpoint,
+                connection,
                 buf.Memory,
                 new PeerSendOptions { Priority = engineController.GetPriority(message), Transmitted = () => RaiseDeliveryStatusChanged(tag, DestinationStatus.Sent) },
                 cancellation);
@@ -119,6 +125,8 @@ internal sealed class PeerService : IPeerService, IAsyncDisposable
     {
         transport = newTransport;
         newTransport.Received.Listen(OnReceived);
+        newTransport.Connected.Listen(args => connections.Add(args.Connection));
+        newTransport.Disconnected.Listen(args => connections.Remove(args.Connection));
     }
 
     private void OnReceived(PeerReceivedEventArgs args)

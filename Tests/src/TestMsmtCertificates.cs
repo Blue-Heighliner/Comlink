@@ -17,6 +17,19 @@ internal static class TestMsmtCertificates
         }
     }
 
+    /// <summary>Creates one leaf certificate per name, each with that name as its common name, and the CA collection that trusts them all.</summary>
+    /// <param name="commonNames">The common name of each certificate to create.</param>
+    /// <returns>The certificates keyed by common name, and the trusted authority collection.</returns>
+    public static (Dictionary<string, X509Certificate2> Identities, X509Certificate2Collection TrustedAuthorities) CreateNamed(params string[] commonNames)
+    {
+        (X509Certificate2 authority, RSA authorityKey) = CreateAuthority();
+        using (authorityKey)
+        {
+            Dictionary<string, X509Certificate2> identities = commonNames.ToDictionary(name => name, name => CreateLeaf(authority, authorityKey, $"CN={name}"), StringComparer.OrdinalIgnoreCase);
+            return (identities, [authority]);
+        }
+    }
+
     private static (X509Certificate2 Authority, RSA AuthorityKey) CreateAuthority()
     {
         RSA authorityKey = RSA.Create(2048);

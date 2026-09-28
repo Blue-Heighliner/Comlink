@@ -23,7 +23,7 @@ The engine runs in one of two modes selected at startup via `EngineMode`:
 
 | Mode | Description |
 |------|-------------|
-| `Client` | Desktop UI via Engine's Avalonia layer. Includes LiteDB persistence, all ViewModels, and a peer listener for receiving messages. |
+| `Client` | Desktop UI via Engine's Avalonia layer. Includes LiteDB persistence, all ViewModels, and a peer listener for receiving connections. |
 | `Headless` | Runs as a normal peer client — same LiteDB persistence, same `IServiceConnection` — but with no UI. |
 
 Both modes run `PeerService` to accept and send peer-to-peer messages over [MSMT](Components/MsmtIntegration.md), and both always run `InterfaceService`, hosting the local interface listener for external programs — see [Interface.md](Components/Interface.md). The interface listener is not tied to Headless mode; it is active regardless of which mode the engine runs in.
@@ -43,7 +43,7 @@ Core/src/
 ├── ExternalSystems/ Conduits to systems outside Comlink — connect/poll/send/receive lifecycle
 │                  and the relay/mirror coordinator — see Components/ExternalSystems.md
 ├── Logging/        Daily file logger + activity log writer
-├── Models/         Shared DTOs (UserInfo, UserEndpoint, UserState, Folder, etc.)
+├── Models/         Shared DTOs (UserInfo, ConnectionPoint, UserState, Folder, etc.)
 ├── Peer/           P2P networking - send/receive messages between nodes over MSMT (IP) or a
 │   │               MicroGate serial cable, and the local interface listener (always active) -
 │   │               see Components/Interface.md
@@ -65,14 +65,13 @@ sequenceDiagram
     participant DVM as DraftViewModel
     participant SC as IServiceConnection
     participant MRS as MessageRoutingService
-    participant SL as IEngineController
     participant PS as PeerService
     participant RP as Remote IMsmtSessionPeer
     DVM->>SC: SendMessage
     SC->>MRS: Route
-    MRS->>SL: GetEndpoint (per recipient)
     MRS->>PS: Send (IEngineController.MessageType instance, tagged for delivery status)
-    PS->>RP: MSMT send
+    PS->>PS: Find the connection identified as the recipient
+    PS->>RP: MSMT send over that connection
     RP-->>PS: MSMT Acknowledged
     PS-->>MRS: DeliveryStatusChanged (Confirmed)
     MRS-->>SC: DeliveryStatusChanged event

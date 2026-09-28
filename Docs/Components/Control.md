@@ -157,20 +157,41 @@ How this instance's own local user identity is established: a fixed debug overri
 ### User Directory
 
 ```csharp
-UserEndpoint? GetEndpoint(string userName);
 IReadOnlyDictionary<string, IReadOnlyList<string>> UserGroups { get; }
 IReadOnlyList<string> Users { get; }
+IReadOnlyDictionary<string, string> GetUserData(string userName);
 ```
 
-Everything the engine knows about addressable users and groups: resolving a user name to its peer endpoint for outbound P2P delivery, either an IP host and port or a MicroGate serial port (`GetEndpoint` returns `null` when the user is unknown), group membership for address expansion (members may be user names or other group names, enabling nested hierarchies), and the full list of known user and group names for the destination auto-complete in the draft editor.
+Everything the engine knows about addressable users and groups: group membership for address expansion (members may be user names or other group names, enabling nested hierarchies), the full list of known user and group names for the destination auto-complete in the draft editor, and the app-specific data attached to a user. A user is only a name here: nothing says where a user is reached, since that is worked out when a connection forms (see [Identification.md](Identification.md)). `GetUserData` returns whatever extra information a host attaches to a user (a role, a station, a display name) as string keys and values, an empty map when there is none; the engine does not interpret it, it travels with the user's `UserIdentity` to the host's own hooks.
 
 When a message is sent to a group, the Engine records which addressed groups each user was reached through. The sent message view shows this context — e.g. `USER-A (OPS)` — so the operator can see which group membership drove delivery.
 
-**Engine default:** no known users, groups, or names for any of the three members.
+**Engine default:** no known users, groups, or names, and no data for any user.
 
-**Config override:** resolves `config.json`'s `Users` map before falling back to the wrapped provider for `GetEndpoint`; merges `config.json`'s `UserGroups` over the wrapped provider's own groups for `UserGroups` (a config entry replaces a same-named group from the wrapped provider; groups only defined by the wrapped provider still pass through); and unions the wrapped provider's names with `config.json`'s `Users`/`UserGroups` keys, deduplicated and sorted, for `Users`. See [Config.md](Config.md).
+**Config override:** merges `config.json`'s `UserGroups` over the wrapped provider's own groups for `UserGroups` (a config entry replaces a same-named group from the wrapped provider; groups only defined by the wrapped provider still pass through); unions the wrapped provider's names with `config.json`'s `Users`/`UserGroups` keys, deduplicated and sorted, for `Users`; and merges the `Data` of the matching `config.json` `Users` entry over the wrapped provider's own data for `GetUserData` (config winning on a key conflict). See [Config.md](Config.md).
 
-**Sample override:** `SampleEngineController` overrides `Users` to return three hard-coded built-in user names, matching its built-in codes above; `config.json`'s `Users`/`UserGroups` names are still unioned in, and `GetEndpoint`/`UserGroups` still use the Engine default, applied separately at the Engine level.
+**Sample override:** `SampleEngineController` overrides `Users` to return three hard-coded built-in user names, matching its built-in codes above; `config.json`'s `Users`/`UserGroups` names are still unioned in, and `UserGroups`/`GetUserData` still use the Engine default, applied separately at the Engine level.
+
+---
+
+### Connection Identification
+
+```csharp
+UserIdentity? IdentifyConnection(ConnectionInfo connection);
+Type? ConnectionMessageType { get; }
+Type? ConnectionResponseType { get; }
+INetworkSerializer? ConnectionSerializer { get; }
+object? CreateConnectionMessage(ConnectionInfo connection);
+object? CreateConnectionResponse(ConnectionInfo connection);
+```
+
+Who is on the other end of a connection, decided as the connection forms. `IdentifyConnection` is handed a `ConnectionInfo` (for IP the remote host, port and certificate names, for serial the port and address, and the connection message and response when those are configured) and returns a `UserIdentity`, or `null` to let the engine decide. `ConnectionMessageType` (with `ConnectionResponseType` for an optional reply) makes the node that opens a connection send a message first, built by `CreateConnectionMessage`, and the receiver answer with `CreateConnectionResponse`; identification then sees both, so a host can carry a user name, a station or any other detail across the wire. `ConnectionSerializer` is `null` exactly when `ConnectionMessageType` is, and by default builds only the two types. The exchange, the framing it puts on the wire, and what the engine does by default are described in [Identification.md](Identification.md). Every node on a network must be configured alike, as with packetization.
+
+**Engine default:** `IdentifyConnection` returns `null` (the engine identifies an IP connection by its certificate name and a serial connection by its port name), and no connection message or response type is set, so no exchange takes place.
+
+**Config override:** none, because these are behavior, not settings; `ConfiguredEngineController` delegates all of them to the wrapped provider.
+
+**Sample override:** none.
 
 ---
 
@@ -181,7 +202,7 @@ int PeerPort { get; }
 int InterfacePort { get; }
 ```
 
-TCP port numbers for the peer listener and the local interface listener (always active, in every mode; see [Interface.md](Interface.md)).
+TCP port numbers for the peer listener (the one place a node accepts IP connections) and the local interface listener (always active, in every mode; see [Interface.md](Interface.md)).
 
 | Port | Default |
 |------|---------|
@@ -347,17 +368,17 @@ Override `ConnectionOptions` only when you need custom certificate pinning, a no
 
 ```csharp
 NodeRole Role { get; }
-UserEndpoint? ServerEndpoint { get; }
+IReadOnlyList<ConnectionPoint> OutgoingPoints { get; }
 IReadOnlyDictionary<string, ServerUserConfig> Servers { get; }
 ```
 
-This instance's place in the peer/client/server networking topology — see [Peer.md](Peer.md#node-roles). `Role` selects one of `NodeRole.Peer`/`Client`/`Server` (the enum lives in `Core/src/Control/NodeRole.cs`); `ServerEndpoint` is the server endpoint a `Client`-role instance forms its single long-term connection to (unused outside `Client`); `Servers` is the full server-user map a `Server`-role instance routes with, keyed by server user name — every server in the cluster, not just the local one (unused outside `Server`).
+This instance's place in the peer/client/server networking topology — see [Peer.md](Peer.md#node-roles). `Role` selects one of `NodeRole.Peer`/`Client`/`Server` (the enum lives in `Core/src/Control/NodeRole.cs`); `OutgoingPoints` are the IP hosts and ports this node dials and the serial ports it opens, each kept connected by a heartbeat (a `Client`-role instance connects to the first only), while the port it listens on is `PeerPort`; `Servers` is the server topology a `Server`-role instance routes with, keyed by server user name — every server in the cluster, not just the local one, and the child clients each owns (unused outside `Server`). A node is configured only with where it connects and listens, never with which users it expects there: `Servers` names who belongs where but not how to reach them, and a connection is matched to a user by [identification](Identification.md).
 
 This is the read-only surface a host's own code can use to query the resolved topology at runtime; it is not what actually selects the `IPeerService` implementation (`PeerService`/`ClientPeerService`/`ServerRoutingService`) — that happens earlier, directly from `EngineConfig.NodeRole`, synchronously in `EngineExtensions.UseEngine`, before the container (and therefore `IEngineController`) exists to consult.
 
-**Engine default:** always `NodeRole.Peer`, no server endpoint, no server users.
+**Engine default:** always `NodeRole.Peer`, no outgoing points, no server users.
 
-**Config override:** `config.json`'s `NodeRole` overrides `Role` when set and recognized (`"Peer"`/`"Client"`/`"Server"`, case-insensitive; an unrecognized value falls back to the wrapped provider rather than forcing `Peer`); `config.json`'s `ServerEndpoint` overrides `ServerEndpoint` when set; and `ServerUsers` merges over `Servers`'s own server users (a config entry replaces a same-named server user from the wrapped provider; server users only defined by the wrapped provider still pass through). See [Config.md](Config.md).
+**Config override:** `config.json`'s `NodeRole` overrides `Role` when set and recognized (`"Peer"`/`"Client"`/`"Server"`, case-insensitive; an unrecognized value falls back to the wrapped provider rather than forcing `Peer`); `config.json`'s `OutgoingPoints` replaces `OutgoingPoints` when it lists any; and `ServerUsers` merges over `Servers`'s own server users (a config entry replaces a same-named server user from the wrapped provider; server users only defined by the wrapped provider still pass through). See [Config.md](Config.md).
 
 **Sample override:** none — the Engine default plus the automatic config override already cover every genuinely useful case.
 

@@ -2,16 +2,13 @@ namespace BlueHeighliner.Comlink.Peer;
 
 /// <summary>
 /// Implements <see cref="IPeerService"/> for <see cref="NodeRole.Client"/>: sends every outbound message
-/// to the configured server (<see cref="IEngineController"/>), regardless of addressee — the server
-/// performs the actual user-to-connection routing. Over IP it also runs its own listener on <see
-/// cref="IEngineController.PeerPort"/> so the server can deliver messages back to this client - MSMT's
-/// client-request/server-response model means the server can never push over a connection this client
-/// initiated, so a genuinely separate connection, dialed by the server back to this client, carries that
-/// direction instead; a serial link is a single bidirectional cable and needs no such second connection.
-/// A background <see cref="PeerConnectionMonitor"/> proactively opens and maintains a
-/// connection to the server with a recurring heartbeat, independent of whether any real message is being
-/// sent, so <see cref="GetStatuses"/> reflects the connection's live state continuously rather than only the
-/// moment a message last happened to flow. See <c>Docs/Components/Peer.md</c>.
+/// over its one long-term connection to the server (the first of <see cref="IEngineController.OutgoingPoints"/>),
+/// regardless of addressee - the server performs the actual user-to-connection routing. Connections are
+/// bidirectional, so the server delivers messages back down the same connection and the client never listens.
+/// A background <see cref="PeerConnectionMonitor"/> proactively opens and maintains that connection with a
+/// recurring heartbeat, independent of whether any real message is being sent, so <see cref="GetStatuses"/> reflects
+/// the connection's live state continuously rather than only the moment a message last happened to flow. Who the
+/// server is comes from identifying the connection, the same as for any other. See <c>Docs/Components/Peer.md</c>.
 /// </summary>
 internal sealed class ClientPeerService : IPeerService, IConnectionStatusService, IAsyncDisposable
 {
@@ -33,10 +30,9 @@ internal sealed class ClientPeerService : IPeerService, IConnectionStatusService
 
     private readonly ConcurrentDictionary<string, Task<bool>> inFlightSends = new();
 
-    private readonly ConcurrentDictionary<PeerConnection, byte> inboundConnections = new();
-
     private IPeerTransport? transport;
-    private UserEndpoint? serverEndpoint;
+    private ConnectionPoint? serverPoint;
+    private PeerConnection? serverConnection;
     private PeerLinkControl? serverLink;
     private volatile bool isClosed;
     private volatile string serverName = string.Empty;
@@ -63,25 +59,19 @@ internal sealed class ClientPeerService : IPeerService, IConnectionStatusService
     /// <inheritdoc />
     public async Task Start(CancellationToken cancellation)
     {
-        UserEndpoint? endpoint = engineController.ServerEndpoint;
-        if (endpoint is null)
+        ConnectionPoint? point = engineController.OutgoingPoints.FirstOrDefault();
+        if (point is null)
         {
-            logger.LogError("Client role requires a configured server endpoint; none was provided");
+            logger.LogError("Client role requires an outgoing connection point to its server; none was provided");
             return;
         }
 
-        serverEndpoint = endpoint;
-        if (endpoint.IsSerial) { serverName = endpoint.SerialPort!; }
+        serverPoint = point;
         transport = transportFactory.Create();
         transport.Connected.Listen(OnConnected);
         transport.Disconnected.Listen(OnDisconnected);
         transport.Received.Listen(OnReceived);
-        if (!endpoint.IsSerial)
-        {
-            transport.StartListener(engineController.PeerPort);
-            logger.LogInformation("Client peer listening for server-originated deliveries");
-        }
-        serverLink = connectionMonitor.Maintain(transport, endpoint, cancellation, OnHeartbeatAcknowledged);
+        serverLink = connectionMonitor.Maintain(transport, point, cancellation, OnHeartbeatAcknowledged);
 
         try { await Task.Delay(Timeout.Infinite, cancellation); }
         catch (OperationCanceledException) { }
@@ -124,14 +114,14 @@ internal sealed class ClientPeerService : IPeerService, IConnectionStatusService
     /// <inheritdoc />
     public void SetClosed(PeerConnectionKind kind, string userName, bool closed)
     {
-        if (kind != PeerConnectionKind.Server || transport is null || serverEndpoint is null || serverLink is null || isClosed == closed) { return; }
+        if (kind != PeerConnectionKind.Server || transport is null || serverPoint is null || serverLink is null || isClosed == closed) { return; }
 
         isClosed = closed;
-        transport.SetClosed(serverEndpoint, closed);
+        transport.SetClosed(serverPoint, closed);
         if (closed)
         {
             serverLink.Close();
-            DropInbound();
+            serverConnection?.Drop();
             UpdateConnectionStatus(false);
         }
         else
@@ -145,26 +135,21 @@ internal sealed class ClientPeerService : IPeerService, IConnectionStatusService
     /// <inheritdoc />
     public void Refresh(PeerConnectionKind kind, string userName)
     {
-        if (kind != PeerConnectionKind.Server || transport is null || serverEndpoint is null || serverLink is null || isClosed) { return; }
+        if (kind != PeerConnectionKind.Server || transport is null || serverPoint is null || serverLink is null || isClosed) { return; }
 
-        transport.Reset(serverEndpoint);
-        DropInbound();
+        transport.Reset(serverPoint);
         serverLink.Refresh();
-    }
-
-    private void DropInbound()
-    {
-        foreach (PeerConnection connection in inboundConnections.Keys) { connection.Drop(); }
     }
 
     private async Task<bool> SendOnce(string messageId, object message, CancellationToken cancellation)
     {
-        if (transport is null || serverEndpoint is null || isClosed) { return false; }
+        PeerConnection? connection = serverConnection;
+        if (transport is null || connection is null || isClosed) { return false; }
 
         try
         {
             using IMemoryOwner<byte> buf = engineController.NetworkSerializer.Serialize(message);
-            return await transport.Request(serverEndpoint, buf.Memory, new PeerSendOptions { Priority = engineController.GetPriority(message) }, cancellation);
+            return await transport.Request(connection, buf.Memory, new PeerSendOptions { Priority = engineController.GetPriority(message) }, cancellation);
         }
         catch
         {
@@ -181,39 +166,36 @@ internal sealed class ClientPeerService : IPeerService, IConnectionStatusService
 
     private void OnConnected(PeerConnectionEventArgs args)
     {
-        if (args.Connection.IsInbound)
-        {
-            if (isClosed)
-            {
-                args.Connection.Drop();
-                return;
-            }
+        PeerConnection connection = args.Connection;
+        if (!IsServerConnection(connection)) { return; }
 
-            inboundConnections[args.Connection] = 0;
+        if (isClosed)
+        {
+            connection.Drop();
+            return;
         }
 
-        if (!IsServerConnection(args.Connection)) { return; }
-
-        if (args.Connection.IdentitySubject is { } subject) { serverName = PeerIdentity.ExtractCommonName(subject); }
+        serverConnection = connection;
+        if (connection.User is { } user) { serverName = user.Name; }
 
         // An IP connection only counts as up once a heartbeat is acknowledged (see OnHeartbeatAcknowledged); a serial
         // link is cabled to exactly one node and only ever comes up when that node answers, so it is up immediately.
-        if (args.Connection.Endpoint is { IsSerial: true })
+        if (connection.IsSerial)
         {
             UpdateConnectionStatus(true);
         }
     }
 
-    private void OnHeartbeatAcknowledged()
+    private void OnHeartbeatAcknowledged(PeerConnection connection)
     {
-        if (!isClosed) { UpdateConnectionStatus(true); }
+        if (!isClosed && ReferenceEquals(connection, serverConnection)) { UpdateConnectionStatus(true); }
     }
 
     private void OnDisconnected(PeerConnectionEventArgs args)
     {
-        inboundConnections.TryRemove(args.Connection, out _);
-        if (!IsServerConnection(args.Connection)) { return; }
+        if (!ReferenceEquals(args.Connection, serverConnection)) { return; }
 
+        serverConnection = null;
         UpdateConnectionStatus(false);
 
         // An unexpected drop (as opposed to this node's own Close/Refresh action, which already wakes the
@@ -240,10 +222,14 @@ internal sealed class ClientPeerService : IPeerService, IConnectionStatusService
     }
 
     private bool IsServerConnection(PeerConnection connection)
-        => serverEndpoint is { } expected && expected.Equals(connection.Endpoint);
+        => !connection.IsInbound && serverPoint is { } expected && expected.Equals(connection.Point);
 
     private void OnReceived(PeerReceivedEventArgs args)
-        => _ = Task.Run(() => HandleMessage(args.Payload));
+    {
+        if (!ReferenceEquals(args.Connection, serverConnection)) { return; }
+
+        _ = Task.Run(() => HandleMessage(args.Payload));
+    }
 
     internal Task<bool> HandleMessage(ReadOnlyMemory<byte> data)
         => PeerMessageDispatcher.Dispatch(data, engineController, logger, MessageDelivered, ConfirmationReceived);

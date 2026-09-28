@@ -3,7 +3,7 @@ namespace BlueHeighliner.Comlink.Peer.Transport;
 /// <summary>
 /// Wraps another <see cref="IPeerTransport"/> so that payloads travel as the prioritized packets an <see cref="IPacketizer"/>
 /// breaks them into rather than as one message: a request sends every packet as its own request on the wrapped
-/// transport, through a <see cref="PacketScheduler"/> per endpoint that always sends the highest-priority queued
+/// transport, through a <see cref="PacketScheduler"/> per connection that always sends the highest-priority queued
 /// packet next and never has more than a window of them in flight, so a higher-priority payload overtakes the remaining packets of a lower-priority one that is still
 /// being transmitted; received packets are reassembled per connection and only a complete payload is published. An empty payload is a
 /// <see cref="PeerConnectionMonitor"/> heartbeat and passes through untouched in both directions.
@@ -27,7 +27,7 @@ internal sealed class PacketizingPeerTransport : IPeerTransport
     private readonly int window;
     private readonly ILogger logger;
     private readonly ConcurrentDictionary<PeerConnection, IPacketAssembler> assemblers = new();
-    private readonly ConcurrentDictionary<string, PacketScheduler> schedulers = new();
+    private readonly ConcurrentDictionary<PeerConnection, PacketScheduler> schedulers = new();
     private readonly PeerEvent<PeerReceivedEventArgs> received = new();
     private readonly PeerEvent<PeerConnectionEventArgs> connected = new();
     private readonly PeerEvent<PeerConnectionEventArgs> disconnected = new();
@@ -45,18 +45,18 @@ internal sealed class PacketizingPeerTransport : IPeerTransport
     public void StartListener(int port) => inner.StartListener(port);
 
     /// <inheritdoc />
-    public void Open(UserEndpoint endpoint) => inner.Open(endpoint);
+    public void SetClosed(ConnectionPoint point, bool closed) => inner.SetClosed(point, closed);
 
     /// <inheritdoc />
-    public void SetClosed(UserEndpoint endpoint, bool closed) => inner.SetClosed(endpoint, closed);
+    public void Reset(ConnectionPoint point) => inner.Reset(point);
 
     /// <inheritdoc />
-    public void Reset(UserEndpoint endpoint) => inner.Reset(endpoint);
+    public Task<PeerConnection> Connect(ConnectionPoint point, CancellationToken cancellation = default) => inner.Connect(point, cancellation);
 
     /// <inheritdoc />
-    public async Task<bool> Request(UserEndpoint target, ReadOnlyMemory<byte> data, PeerSendOptions? options = null, CancellationToken cancellation = default)
+    public async Task<bool> Request(PeerConnection connection, ReadOnlyMemory<byte> data, PeerSendOptions? options = null, CancellationToken cancellation = default)
     {
-        if (data.IsEmpty) { return await inner.Request(target, data, options, cancellation); }
+        if (data.IsEmpty) { return await inner.Request(connection, data, options, cancellation); }
 
         IReadOnlyList<Packet> packets = packetizer.Split(data, options?.Priority ?? 0);
         try
@@ -74,9 +74,9 @@ internal sealed class PacketizingPeerTransport : IPeerTransport
             // Every packet is queued before any is awaited, so the scheduler orders them against the packets of
             // other payloads. The packets of a payload that has failed are dropped rather than sent; none already
             // being sent is cancelled, since cancelling a packet already written closes the connection they share.
-            PacketScheduler scheduler = schedulers.GetOrAdd(target.Key, _ => new PacketScheduler(inner, window));
+            PacketScheduler scheduler = schedulers.GetOrAdd(connection, key => new PacketScheduler(inner, key, window));
             PacketScheduler.Payload payload = new();
-            Task<bool>[] sends = [.. packets.Select(packet => scheduler.Enqueue(target, packet, transmitted, payload, cancellation))];
+            Task<bool>[] sends = [.. packets.Select(packet => scheduler.Enqueue(packet, transmitted, payload, cancellation))];
             bool[] accepted = await Task.WhenAll(sends);
             return accepted.All(result => result);
         }
@@ -124,6 +124,7 @@ internal sealed class PacketizingPeerTransport : IPeerTransport
     private void OnDisconnected(PeerConnectionEventArgs args)
     {
         if (assemblers.TryRemove(args.Connection, out IPacketAssembler? assembler)) { assembler.Dispose(); }
+        if (schedulers.TryRemove(args.Connection, out PacketScheduler? scheduler)) { scheduler.Dispose(); }
         disconnected.Publish(args);
     }
 }

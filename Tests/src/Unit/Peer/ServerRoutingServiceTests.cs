@@ -5,65 +5,70 @@ public sealed class ServerRoutingServiceTests
 {
     private static readonly ILoggerFactory noLogger = LoggerFactory.Create(_ => { });
 
-    private static readonly UserEndpoint serverAEndpoint = new() { IpAddress = "10.0.0.1", Port = 9001 };
-    private static readonly UserEndpoint serverBEndpoint = new() { IpAddress = "10.0.0.2", Port = 9002 };
-    private static readonly UserEndpoint clientA1Endpoint = new() { IpAddress = "10.0.1.1", Port = 9101 };
-    private static readonly UserEndpoint clientA2Endpoint = new() { IpAddress = "10.0.1.2", Port = 9102 };
-    private static readonly UserEndpoint clientA1SerialEndpoint = new() { SerialPort = "SL1" };
-    private static readonly UserEndpoint serverBSerialEndpoint = new() { SerialPort = "SL9", SerialAddress = 3 };
+    private static readonly ConnectionPoint serverBPoint = new() { IpAddress = "10.0.0.2", Port = 9002 };
+    private static readonly ConnectionPoint serverBSerialPoint = new() { SerialPort = "SL9", SerialAddress = 3 };
+    private static readonly ConnectionPoint clientA1SerialPoint = new() { SerialPort = "SL1" };
 
-    /// <summary>Distinguishes a real routed message from a background <see cref="PeerConnectionMonitor"/> heartbeat (an empty payload), which every started fixture also sends to each of its hierarchical targets.</summary>
     private static bool IsRealPayload(ReadOnlyMemory<byte> payload) => payload.Length > 0;
 
-    /// <summary>Builds an inbound (accepted) IP connection identified by <paramref name="userName"/>'s certificate subject.</summary>
-    private static PeerConnection BuildInboundConnection(string userName, Action? drop = null)
-        => new(null, true, $"CN=USER-{userName}", drop ?? (() => { }));
+    private static UserIdentity Identity(string name) => new() { Name = name };
 
-    /// <summary>Builds the connection of a serial link this node opened to <paramref name="endpoint"/>.</summary>
-    private static PeerConnection BuildSerialConnection(UserEndpoint endpoint) => new(endpoint, false, null, () => { });
+    /// <summary>Builds a connection a remote node opened to this one, identified as <paramref name="user"/>.</summary>
+    private static PeerConnection Inbound(string user, Action? drop = null)
+        => new(null, new ConnectionInfo { IsInbound = true }, drop ?? (() => { })) { User = Identity(user) };
+
+    /// <summary>Builds a connection this node opened to <paramref name="point"/>, identified as <paramref name="user"/>.</summary>
+    private static PeerConnection Outbound(ConnectionPoint point, string user, Action? drop = null)
+        => new(point, new ConnectionInfo(), drop ?? (() => { })) { User = Identity(user) };
+
+    /// <summary>Builds the connection of a serial link to <paramref name="point"/>, identified as <paramref name="user"/>.</summary>
+    private static PeerConnection Serial(ConnectionPoint point, string user)
+        => new(point, new ConnectionInfo { IsSerial = true }, () => { }) { User = Identity(user) };
 
     private static PeerReceivedEventArgs ReceivedFrom(PeerConnection connection, ReadOnlyMemory<byte> payload)
         => new() { Connection = connection, Payload = payload };
 
-    /// <summary>Configures <paramref name="transport"/> so every Request publishes Connected (for the endpoint it was sent to) via <paramref name="connectedObservable"/> and resolves successfully, simulating an on-demand outbound connection.</summary>
-    private static void AutoConnectAndAcknowledge(Mock<IPeerTransport> transport, TestObservable<PeerConnectionEventArgs> connectedObservable, bool success = true)
-        => transport.Setup(p => p.Request(It.IsAny<UserEndpoint>(), It.IsAny<ReadOnlyMemory<byte>>(), It.IsAny<PeerSendOptions>(), It.IsAny<CancellationToken>()))
-            .Returns<UserEndpoint, ReadOnlyMemory<byte>, PeerSendOptions?, CancellationToken>((target, _, _, _) =>
-            {
-                connectedObservable.Publish(new PeerConnectionEventArgs { Connection = new PeerConnection(target, false, null, () => { }) });
-                return Task.FromResult(success);
-            });
+    private sealed class Fixture(
+        ServerRoutingService service,
+        Mock<IPeerTransport> transport,
+        TestObservable<PeerConnectionEventArgs> connected,
+        TestObservable<PeerConnectionEventArgs> disconnected,
+        TestObservable<PeerReceivedEventArgs> received,
+        Task startTask,
+        CancellationTokenSource cts)
+    {
+        public ServerRoutingService Service { get; } = service;
+        public Mock<IPeerTransport> Transport { get; } = transport;
+        public TestObservable<PeerConnectionEventArgs> Connected { get; } = connected;
+        public TestObservable<PeerConnectionEventArgs> Disconnected { get; } = disconnected;
+        public TestObservable<PeerReceivedEventArgs> Received { get; } = received;
+        public Task StartTask { get; } = startTask;
+        public CancellationTokenSource Cts { get; } = cts;
 
-    private sealed record Fixture(
-        ServerRoutingService Service,
-        Mock<IPeerTransport> Transport,
-        TestObservable<PeerConnectionEventArgs> Connected,
-        TestObservable<PeerConnectionEventArgs> Disconnected,
-        TestObservable<PeerReceivedEventArgs> Received,
-        Task StartTask,
-        CancellationTokenSource Cts);
+        public void Come(PeerConnection connection) => Connected.Publish(new PeerConnectionEventArgs { Connection = connection });
+
+        public void Lose(PeerConnection connection) => Disconnected.Publish(new PeerConnectionEventArgs { Connection = connection });
+
+        public void Receive(PeerConnection connection, ReadOnlyMemory<byte> payload) => Received.Publish(ReceivedFrom(connection, payload));
+    }
 
     /// <summary>
     /// Builds a service for "ServerA" (this instance) with children ClientA1/ClientA2, alongside "ServerB"
-    /// with children ClientB1/ClientB2, and starts it so its receiver is live. <paramref name="configureTransport"/>,
-    /// if given, runs against the mocked transport before <c>Start</c> is called, so it can also observe the
-    /// background connection monitor's own immediate heartbeat sends. <paramref name="userMap"/> and
-    /// <paramref name="childEndpoints"/> override the default all-IP topology.
+    /// with children ClientB1/ClientB2, and starts it so its receiver is live. <paramref name="outgoing"/> are its
+    /// outgoing points (by default none); <paramref name="configureTransport"/>, if given, runs against the mocked
+    /// transport before <c>Start</c> is called, so it can also observe the background monitors' own immediate
+    /// heartbeats. Every request is acknowledged unless <paramref name="configureTransport"/> says otherwise.
     /// </summary>
     private static async Task<Fixture> BuildStarted(
         Action<Mock<IPeerTransport>, TestObservable<PeerConnectionEventArgs>>? configureTransport = null,
         Dictionary<string, ServerUserConfig>? userMap = null,
-        Dictionary<string, UserEndpoint>? childEndpoints = null)
+        IReadOnlyList<ConnectionPoint>? outgoing = null,
+        string self = "ServerA")
     {
         userMap ??= new Dictionary<string, ServerUserConfig>(StringComparer.OrdinalIgnoreCase)
         {
-            ["ServerA"] = new ServerUserConfig { Endpoint = serverAEndpoint, ChildClients = ["ClientA1", "ClientA2"] },
-            ["ServerB"] = new ServerUserConfig { Endpoint = serverBEndpoint, ChildClients = ["ClientB1", "ClientB2"] }
-        };
-        childEndpoints ??= new Dictionary<string, UserEndpoint>(StringComparer.OrdinalIgnoreCase)
-        {
-            ["ClientA1"] = clientA1Endpoint,
-            ["ClientA2"] = clientA2Endpoint
+            ["ServerA"] = new ServerUserConfig { ChildClients = ["ClientA1", "ClientA2"] },
+            ["ServerB"] = new ServerUserConfig { ChildClients = ["ClientB1", "ClientB2"] }
         };
 
         Mock<IPeerTransport> transport = new();
@@ -73,17 +78,19 @@ public sealed class ServerRoutingServiceTests
         transport.SetupGet(p => p.Connected).Returns(connected);
         transport.SetupGet(p => p.Disconnected).Returns(disconnected);
         transport.SetupGet(p => p.Received).Returns(received);
+        transport.Setup(p => p.Connect(It.IsAny<ConnectionPoint>(), It.IsAny<CancellationToken>())).ThrowsAsync(new IOException("unreachable"));
+        transport.Setup(p => p.Request(It.IsAny<PeerConnection>(), It.IsAny<ReadOnlyMemory<byte>>(), It.IsAny<PeerSendOptions>(), It.IsAny<CancellationToken>())).ReturnsAsync(true);
 
         Mock<IPeerTransportFactory> transportFactory = new();
         transportFactory.Setup(f => f.Create()).Returns(transport.Object);
 
         Mock<TestEngineController> engineController = new() { CallBase = true };
         engineController.Setup(p => p.Servers).Returns(userMap);
-        engineController.Setup(p => p.GetCertificateName(It.IsAny<string>())).Returns((string name) => $"USER-{name}");
-        engineController.Setup(p => p.GetEndpoint(It.IsAny<string>())).Returns((string name) => childEndpoints.GetValueOrDefault(name));
+        engineController.Setup(p => p.PeerPort).Returns(9001);
+        engineController.Setup(p => p.OutgoingPoints).Returns(outgoing ?? []);
 
         Mock<ICurrentUserProvider> currentUser = new();
-        currentUser.SetupGet(p => p.UserName).Returns("ServerA");
+        currentUser.SetupGet(p => p.UserName).Returns(self);
 
         ServerRoutingService service = new(transportFactory.Object, engineController.Object, currentUser.Object, noLogger);
 
@@ -94,6 +101,17 @@ public sealed class ServerRoutingServiceTests
         await Task.Delay(20);
 
         return new Fixture(service, transport, connected, disconnected, received, startTask, cts);
+    }
+
+    /// <summary>Makes <paramref name="point"/> reachable: connecting to it publishes the given connection as established (once) and returns it.</summary>
+    private static void Reachable(Mock<IPeerTransport> transport, TestObservable<PeerConnectionEventArgs> connected, ConnectionPoint point, PeerConnection connection)
+    {
+        int isUp = 0;
+        transport.Setup(p => p.Connect(point, It.IsAny<CancellationToken>())).Returns(() =>
+        {
+            if (Interlocked.Exchange(ref isUp, 1) == 0) { connected.Publish(new PeerConnectionEventArgs { Connection = connection }); }
+            return Task.FromResult(connection);
+        });
     }
 
     private static readonly INetworkSerializer serializer = new ProtobufNetworkSerializer();
@@ -121,131 +139,175 @@ public sealed class ServerRoutingServiceTests
         }
     }
 
-    private static bool RequestedRealPayloadTo(Fixture fx, int port)
-        => fx.Transport.Invocations.Any(i => i.Method.Name == nameof(IPeerTransport.Request) && ((UserEndpoint)i.Arguments[0]).Port == port && IsRealPayload((ReadOnlyMemory<byte>)i.Arguments[1]));
+    private static int Requests(Fixture fx, PeerConnection connection, bool real = false)
+        => fx.Transport.Invocations.Count(i => i.Method.Name == nameof(IPeerTransport.Request)
+            && ReferenceEquals(i.Arguments[0], connection) && (!real || IsRealPayload((ReadOnlyMemory<byte>)i.Arguments[1])));
 
-    /// <summary>An inbound connection whose certificate identifies a known child of this server is tracked as a child connection.</summary>
+    private static bool SentReal(Fixture fx, PeerConnection connection) => Requests(fx, connection, real: true) > 0;
+
+    private static async Task Stop(Fixture fx)
+    {
+        fx.Cts.Cancel();
+        await fx.StartTask;
+    }
+
+    /// <summary>A connection identified as one of this server's children is tracked as a child connection.</summary>
     [Fact]
     public async Task OnConnected_KnownChild_TrackedAsChild()
     {
         Fixture fx = await BuildStarted();
         int drops = 0;
-        PeerConnection clientA1 = BuildInboundConnection("ClientA1", () => drops++);
 
-        fx.Connected.Publish(new PeerConnectionEventArgs { Connection = clientA1 });
+        fx.Come(Inbound("ClientA1", () => drops++));
 
-        Assert.Contains(fx.Service.GetStatuses(), s => s.UserName == "ClientA1" && s.IsConnected);
+        Assert.Contains(fx.Service.GetStatuses(), s => s.UserName == "ClientA1" && s.IsConnected && s.Kind == PeerConnectionKind.Client);
         Assert.Equal(0, drops);
-
-        fx.Cts.Cancel();
-        await fx.StartTask;
+        await Stop(fx);
     }
 
-    /// <summary>An inbound connection whose certificate identifies an unrecognized identity is dropped and ignored.</summary>
+    /// <summary>The identity may differ in case from the topology's spelling; the row keeps the configured name.</summary>
+    [Fact]
+    public async Task OnConnected_IdentityInDifferentCase_MatchesConfiguredName()
+    {
+        Fixture fx = await BuildStarted();
+
+        fx.Come(Inbound("CLIENTA1"));
+
+        Assert.Contains(fx.Service.GetStatuses(), s => s.UserName == "ClientA1" && s.IsConnected);
+        await Stop(fx);
+    }
+
+    /// <summary>A connection identified as neither a child nor another server in the cluster is dropped and ignored.</summary>
     [Fact]
     public async Task OnConnected_UnrecognizedIdentity_Dropped()
     {
         Fixture fx = await BuildStarted();
         int drops = 0;
-        PeerConnection stranger = BuildInboundConnection("UNKNOWN-USER", () => drops++);
 
-        fx.Connected.Publish(new PeerConnectionEventArgs { Connection = stranger });
+        fx.Come(Inbound("UNKNOWN-USER", () => drops++));
 
         Assert.Equal(1, drops);
-
-        fx.Cts.Cancel();
-        await fx.StartTask;
+        Assert.All(fx.Service.GetStatuses(), s => Assert.False(s.IsConnected));
+        await Stop(fx);
     }
 
-    /// <summary>The server listens on its own IP endpoint's port.</summary>
+    /// <summary>A connection identified as this server's own name is not a child or another server, so it is dropped.</summary>
     [Fact]
-    public async Task Start_IpEndpoint_StartsListener()
+    public async Task OnConnected_IdentifiedAsSelf_Dropped()
+    {
+        Fixture fx = await BuildStarted();
+        int drops = 0;
+
+        fx.Come(Inbound("ServerA", () => drops++));
+
+        Assert.Equal(1, drops);
+        await Stop(fx);
+    }
+
+    /// <summary>The server listens on the peer port whatever role it plays, since nothing about where it is reached is configured per user.</summary>
+    [Fact]
+    public async Task Start_StartsListenerOnPeerPort()
     {
         Fixture fx = await BuildStarted();
 
-        fx.Transport.Verify(t => t.StartListener(serverAEndpoint.Port), Times.Once);
-
-        fx.Cts.Cancel();
-        await fx.StartTask;
+        fx.Transport.Verify(t => t.StartListener(9001), Times.Once);
+        await Stop(fx);
     }
 
-    /// <summary>A server whose own endpoint is serial has no IP address to listen on, so it starts no listener.</summary>
+    /// <summary>A server whose own name is missing from the topology cannot route, and starts nothing.</summary>
     [Fact]
-    public async Task Start_SerialOwnEndpoint_DoesNotStartListener()
+    public async Task Start_SelfNotInTopology_StartsNothing()
     {
-        Dictionary<string, ServerUserConfig> userMap = new(StringComparer.OrdinalIgnoreCase)
-        {
-            ["ServerA"] = new ServerUserConfig { Endpoint = new UserEndpoint { SerialPort = "SL0" }, ChildClients = ["ClientA1"] },
-            ["ServerB"] = new ServerUserConfig { Endpoint = serverBEndpoint, ChildClients = ["ClientB1"] }
-        };
-        Fixture fx = await BuildStarted(userMap: userMap);
+        Fixture fx = await BuildStarted(self: "Stranger", outgoing: [serverBPoint]);
 
         fx.Transport.Verify(t => t.StartListener(It.IsAny<int>()), Times.Never);
-
-        fx.Cts.Cancel();
-        await fx.StartTask;
+        fx.Transport.Verify(t => t.Connect(It.IsAny<ConnectionPoint>(), It.IsAny<CancellationToken>()), Times.Never);
+        await Stop(fx);
     }
 
-    /// <summary>A message from one child addressed to a sibling child is routed directly to that sibling, not forwarded to any server.</summary>
+    /// <summary>Every outgoing point, IP or serial, is connected to and kept connected, without knowing who is behind it.</summary>
+    [Fact]
+    public async Task Start_MaintainsEveryOutgoingPoint()
+    {
+        Fixture fx = await BuildStarted(outgoing: [serverBPoint, serverBSerialPoint]);
+
+        await WaitUntil(
+            () => fx.Transport.Invocations.Any(i => i.Method.Name == nameof(IPeerTransport.Connect) && Equals(i.Arguments[0], serverBPoint))
+                && fx.Transport.Invocations.Any(i => i.Method.Name == nameof(IPeerTransport.Connect) && Equals(i.Arguments[0], serverBSerialPoint)),
+            TimeSpan.FromSeconds(2));
+
+        await Stop(fx);
+    }
+
+    /// <summary>A message from one child addressed to a sibling child goes straight over that sibling's connection, not to any server.</summary>
     [Fact]
     public async Task FromChild_AddressedToSiblingChild_RoutesToSibling()
     {
         Fixture fx = await BuildStarted();
-        AutoConnectAndAcknowledge(fx.Transport, fx.Connected);
+        PeerConnection clientA1 = Inbound("ClientA1");
+        PeerConnection clientA2 = Inbound("ClientA2");
+        PeerConnection serverB = Inbound("ServerB");
+        fx.Come(clientA1);
+        fx.Come(clientA2);
+        fx.Come(serverB);
 
-        PeerConnection clientA1 = BuildInboundConnection("ClientA1");
-        fx.Connected.Publish(new PeerConnectionEventArgs { Connection = clientA1 });
+        fx.Receive(clientA1, Encode(MessageTo("ClientA2")));
 
-        fx.Received.Publish(ReceivedFrom(clientA1, Encode(MessageTo("ClientA2"))));
-
-        await WaitUntil(() => RequestedRealPayloadTo(fx, clientA2Endpoint.Port), TimeSpan.FromSeconds(2));
-        fx.Transport.Verify(p => p.Request(It.Is<UserEndpoint>(t => t.Port == clientA2Endpoint.Port), It.Is<ReadOnlyMemory<byte>>(p => IsRealPayload(p)), It.IsAny<PeerSendOptions>(), It.IsAny<CancellationToken>()), Times.Once);
-        fx.Transport.Verify(p => p.Request(It.Is<UserEndpoint>(t => t.Port == serverBEndpoint.Port), It.Is<ReadOnlyMemory<byte>>(p => IsRealPayload(p)), It.IsAny<PeerSendOptions>(), It.IsAny<CancellationToken>()), Times.Never);
-
-        fx.Cts.Cancel();
-        await fx.StartTask;
+        await WaitUntil(() => SentReal(fx, clientA2), TimeSpan.FromSeconds(2));
+        Assert.Equal(1, Requests(fx, clientA2, real: true));
+        Assert.Equal(0, Requests(fx, serverB, real: true));
+        Assert.Equal(0, Requests(fx, clientA1, real: true));
+        await Stop(fx);
     }
 
-    /// <summary>A message from a child addressed to a child of another server is forwarded to that server once.</summary>
+    /// <summary>A message from a child addressed to a child of another server is forwarded over that server's connection once.</summary>
     [Fact]
     public async Task FromChild_AddressedToRemoteServersChild_ForwardsToThatServerOnce()
     {
         Fixture fx = await BuildStarted();
-        AutoConnectAndAcknowledge(fx.Transport, fx.Connected);
-
-        PeerConnection clientA1 = BuildInboundConnection("ClientA1");
-        fx.Connected.Publish(new PeerConnectionEventArgs { Connection = clientA1 });
+        PeerConnection clientA1 = Inbound("ClientA1");
+        PeerConnection serverB = Inbound("ServerB");
+        fx.Come(clientA1);
+        fx.Come(serverB);
 
         // Addressed to both of ServerB's children, which should still forward to ServerB exactly once.
-        fx.Received.Publish(ReceivedFrom(clientA1, Encode(MessageTo("ClientB1", "ClientB2"))));
+        fx.Receive(clientA1, Encode(MessageTo("ClientB1", "ClientB2")));
 
-        await WaitUntil(() => RequestedRealPayloadTo(fx, serverBEndpoint.Port), TimeSpan.FromSeconds(2));
-        fx.Transport.Verify(p => p.Request(It.Is<UserEndpoint>(t => t.Port == serverBEndpoint.Port), It.Is<ReadOnlyMemory<byte>>(p => IsRealPayload(p)), It.IsAny<PeerSendOptions>(), It.IsAny<CancellationToken>()), Times.Once);
-
-        fx.Cts.Cancel();
-        await fx.StartTask;
+        await WaitUntil(() => SentReal(fx, serverB), TimeSpan.FromSeconds(2));
+        await Task.Delay(50);
+        Assert.Equal(1, Requests(fx, serverB, real: true));
+        await Stop(fx);
     }
 
-    /// <summary>A child with no configured endpoint (missing from the Users map) is silently skipped, not thrown for, when addressed.</summary>
+    /// <summary>A server reached over a connection this server opened is forwarded to just the same as one that opened a connection to it.</summary>
     [Fact]
-    public async Task FromChild_SiblingHasNoConfiguredEndpoint_DoesNotSendOrThrow()
+    public async Task FromChild_ForwardToServerReachedByOutgoingPoint_UsesThatConnection()
     {
-        Dictionary<string, ServerUserConfig> userMap = new(StringComparer.OrdinalIgnoreCase)
-        {
-            ["ServerA"] = new ServerUserConfig { Endpoint = serverAEndpoint, ChildClients = ["ClientA1", "ClientA2"] }
-        };
-        Fixture fx = await BuildStarted(userMap: userMap, childEndpoints: []);
+        PeerConnection serverB = Outbound(serverBPoint, "ServerB");
+        Fixture fx = await BuildStarted(configureTransport: (transport, connected) => Reachable(transport, connected, serverBPoint, serverB), outgoing: [serverBPoint]);
+        PeerConnection clientA1 = Inbound("ClientA1");
+        fx.Come(clientA1);
+        await WaitUntil(() => fx.Service.GetStatuses().Single(s => s.UserName == "ServerB").IsConnected, TimeSpan.FromSeconds(2));
 
-        PeerConnection clientA1 = BuildInboundConnection("ClientA1");
-        fx.Connected.Publish(new PeerConnectionEventArgs { Connection = clientA1 });
+        fx.Receive(clientA1, Encode(MessageTo("ClientB1")));
 
-        fx.Received.Publish(ReceivedFrom(clientA1, Encode(MessageTo("ClientA2"))));
+        await WaitUntil(() => SentReal(fx, serverB), TimeSpan.FromSeconds(2));
+        await Stop(fx);
+    }
+
+    /// <summary>A recipient with no connection identified as them is skipped, not thrown for.</summary>
+    [Fact]
+    public async Task FromChild_RecipientNotConnected_DoesNotSendOrThrow()
+    {
+        Fixture fx = await BuildStarted();
+        PeerConnection clientA1 = Inbound("ClientA1");
+        fx.Come(clientA1);
+
+        fx.Receive(clientA1, Encode(MessageTo("ClientA2")));
 
         await Task.Delay(50);
-        fx.Transport.Verify(p => p.Request(It.IsAny<UserEndpoint>(), It.IsAny<ReadOnlyMemory<byte>>(), It.IsAny<PeerSendOptions>(), It.IsAny<CancellationToken>()), Times.Never);
-
-        fx.Cts.Cancel();
-        await fx.StartTask;
+        fx.Transport.Verify(p => p.Request(It.IsAny<PeerConnection>(), It.Is<ReadOnlyMemory<byte>>(payload => IsRealPayload(payload)), It.IsAny<PeerSendOptions>(), It.IsAny<CancellationToken>()), Times.Never);
+        await Stop(fx);
     }
 
     /// <summary>A message received from another server is delivered only to local children it addresses, never re-forwarded to other servers.</summary>
@@ -253,20 +315,18 @@ public sealed class ServerRoutingServiceTests
     public async Task FromServer_AddressedToLocalChild_DeliversLocallyOnlyNeverReforwarded()
     {
         Fixture fx = await BuildStarted();
-        AutoConnectAndAcknowledge(fx.Transport, fx.Connected);
+        PeerConnection serverB = Inbound("ServerB");
+        PeerConnection clientA1 = Inbound("ClientA1");
+        fx.Come(serverB);
+        fx.Come(clientA1);
 
-        PeerConnection serverB = BuildInboundConnection("ServerB");
-        fx.Connected.Publish(new PeerConnectionEventArgs { Connection = serverB });
+        fx.Receive(serverB, Encode(MessageTo("ClientA1", "ClientB1")));
 
-        fx.Received.Publish(ReceivedFrom(serverB, Encode(MessageTo("ClientA1"))));
-
-        await WaitUntil(() => RequestedRealPayloadTo(fx, clientA1Endpoint.Port), TimeSpan.FromSeconds(2));
-        fx.Transport.Verify(p => p.Request(It.Is<UserEndpoint>(t => t.Port == clientA1Endpoint.Port), It.Is<ReadOnlyMemory<byte>>(p => IsRealPayload(p)), It.IsAny<PeerSendOptions>(), It.IsAny<CancellationToken>()), Times.Once);
-        // Never re-forwarded back out to ServerB.
-        fx.Transport.Verify(p => p.Request(It.Is<UserEndpoint>(t => t.Port == serverBEndpoint.Port), It.Is<ReadOnlyMemory<byte>>(p => IsRealPayload(p)), It.IsAny<PeerSendOptions>(), It.IsAny<CancellationToken>()), Times.Never);
-
-        fx.Cts.Cancel();
-        await fx.StartTask;
+        await WaitUntil(() => SentReal(fx, clientA1), TimeSpan.FromSeconds(2));
+        await Task.Delay(50);
+        Assert.Equal(1, Requests(fx, clientA1, real: true));
+        Assert.Equal(0, Requests(fx, serverB, real: true));
+        await Stop(fx);
     }
 
     /// <summary>GetStatuses returns one row per own child client (ClientA1, ClientA2) plus one row for the other server (ServerB), excluding this instance's own name, all initially disconnected.</summary>
@@ -278,43 +338,28 @@ public sealed class ServerRoutingServiceTests
         IReadOnlyList<PeerConnectionStatus> statuses = fx.Service.GetStatuses();
 
         Assert.Equal(3, statuses.Count);
-        Assert.Contains(statuses, s => s.UserName == "ClientA1" && !s.IsConnected);
+        Assert.Contains(statuses, s => s.UserName == "ClientA1" && !s.IsConnected && s.Kind == PeerConnectionKind.Client);
         Assert.Contains(statuses, s => s.UserName == "ClientA2" && !s.IsConnected);
-        Assert.Contains(statuses, s => s.UserName == "ServerB" && !s.IsConnected);
-
-        fx.Cts.Cancel();
-        await fx.StartTask;
+        Assert.Contains(statuses, s => s.UserName == "ServerB" && !s.IsConnected && s.Kind == PeerConnectionKind.Server);
+        await Stop(fx);
     }
 
     /// <summary>
-    /// Even with no real message ever routed, the background connection monitor proactively sends an empty
-    /// heartbeat request to every own child and every sibling server, and GetStatuses reports them connected
-    /// once those heartbeats' Connected events arrive, so the status table doesn't stay perpetually
-    /// disconnected while idle.
+    /// Even with no real message ever routed, the background monitor of an outgoing point proactively connects and sends
+    /// an empty heartbeat, and GetStatuses reports the server behind it connected once that heartbeat is acknowledged.
     /// </summary>
     [Fact]
-    public async Task GetStatuses_HeartbeatConnectsChildrenAndServersProactively_ReportsConnectedWithoutAnyRealTraffic()
+    public async Task GetStatuses_OutgoingPointHeartbeat_ReportsServerConnectedWithoutAnyRealTraffic()
     {
-        Fixture fx = await BuildStarted(configureTransport: (transport, connected) => AutoConnectAndAcknowledge(transport, connected));
+        PeerConnection serverB = Outbound(serverBPoint, "ServerB");
+        Fixture fx = await BuildStarted(configureTransport: (transport, connected) => Reachable(transport, connected, serverBPoint, serverB), outgoing: [serverBPoint]);
 
-        await WaitUntil(() => fx.Service.GetStatuses().All(s => s.IsConnected), TimeSpan.FromSeconds(2));
+        await WaitUntil(() => fx.Service.GetStatuses().Single(s => s.UserName == "ServerB").IsConnected, TimeSpan.FromSeconds(2));
 
-        foreach (UserEndpoint expected in new[] { clientA1Endpoint, clientA2Endpoint, serverBEndpoint })
-        {
-            fx.Transport.Verify(p => p.Request(
-                It.Is<UserEndpoint>(t => t.Port == expected.Port),
-                It.Is<ReadOnlyMemory<byte>>(payload => payload.Length == 0),
-                It.IsAny<PeerSendOptions>(),
-                It.IsAny<CancellationToken>()), Times.AtLeastOnce);
-        }
-
-        IReadOnlyList<PeerConnectionStatus> statuses = fx.Service.GetStatuses();
-        Assert.Equal(3, statuses.Count);
-        Assert.All(statuses, s => Assert.True(s.IsConnected));
-        Assert.All(statuses, s => Assert.NotNull(s.LastConnectedAt));
-
-        fx.Cts.Cancel();
-        await fx.StartTask;
+        fx.Transport.Verify(p => p.Request(serverB, It.Is<ReadOnlyMemory<byte>>(payload => payload.Length == 0), It.IsAny<PeerSendOptions>(), It.IsAny<CancellationToken>()), Times.AtLeastOnce);
+        PeerConnectionStatus status = Assert.Single(fx.Service.GetStatuses(), s => s.UserName == "ServerB");
+        Assert.NotNull(status.LastConnectedAt);
+        await Stop(fx);
     }
 
     /// <summary>A bare outbound IP connection to another server does not count as up until a heartbeat over it is acknowledged, so a server that closed this one and drops the connection straight away never flashes green.</summary>
@@ -325,15 +370,13 @@ public sealed class ServerRoutingServiceTests
         int raised = 0;
         fx.Service.StatusesChanged += () => raised++;
 
-        fx.Connected.Publish(new PeerConnectionEventArgs { Connection = new PeerConnection(serverBEndpoint, false, null, () => { }) });
+        fx.Come(Outbound(serverBPoint, "ServerB"));
 
         PeerConnectionStatus status = Assert.Single(fx.Service.GetStatuses(), s => s.UserName == "ServerB");
         Assert.False(status.IsConnected);
         Assert.Null(status.LastConnectedAt);
         Assert.Equal(0, raised);
-
-        fx.Cts.Cancel();
-        await fx.StartTask;
+        await Stop(fx);
     }
 
     /// <summary>After a known child's connection disconnects, GetStatuses reports it disconnected with a LastDisconnectedAt timestamp.</summary>
@@ -341,20 +384,17 @@ public sealed class ServerRoutingServiceTests
     public async Task GetStatuses_ChildDisconnects_ReturnsDisconnectedRowWithLastDisconnectedAt()
     {
         Fixture fx = await BuildStarted();
-        PeerConnection clientA1 = BuildInboundConnection("ClientA1");
+        PeerConnection clientA1 = Inbound("ClientA1");
 
-        fx.Connected.Publish(new PeerConnectionEventArgs { Connection = clientA1 });
+        fx.Come(clientA1);
         Assert.Contains(fx.Service.GetStatuses(), s => s.UserName == "ClientA1" && s.IsConnected);
-
-        fx.Disconnected.Publish(new PeerConnectionEventArgs { Connection = clientA1 });
+        fx.Lose(clientA1);
 
         PeerConnectionStatus status = Assert.Single(fx.Service.GetStatuses(), s => s.UserName == "ClientA1");
         Assert.False(status.IsConnected);
         Assert.NotNull(status.LastConnectedAt);
         Assert.NotNull(status.LastDisconnectedAt);
-
-        fx.Cts.Cancel();
-        await fx.StartTask;
+        await Stop(fx);
     }
 
     /// <summary>Once a known child client connects, GetStatuses reports its row as connected with a LastConnectedAt timestamp.</summary>
@@ -363,15 +403,13 @@ public sealed class ServerRoutingServiceTests
     {
         Fixture fx = await BuildStarted();
 
-        fx.Connected.Publish(new PeerConnectionEventArgs { Connection = BuildInboundConnection("ClientA1") });
+        fx.Come(Inbound("ClientA1"));
 
         PeerConnectionStatus status = Assert.Single(fx.Service.GetStatuses(), s => s.UserName == "ClientA1");
         Assert.True(status.IsConnected);
         Assert.NotNull(status.LastConnectedAt);
         Assert.Null(status.LastDisconnectedAt);
-
-        fx.Cts.Cancel();
-        await fx.StartTask;
+        await Stop(fx);
     }
 
     /// <summary>Once a recognized sibling server connects and then disconnects, GetStatuses reports its row as disconnected with a LastDisconnectedAt timestamp.</summary>
@@ -379,20 +417,17 @@ public sealed class ServerRoutingServiceTests
     public async Task GetStatuses_ServerDisconnects_ReturnsDisconnectedRowWithLastDisconnectedAt()
     {
         Fixture fx = await BuildStarted();
-        PeerConnection serverB = BuildInboundConnection("ServerB");
+        PeerConnection serverB = Inbound("ServerB");
 
-        fx.Connected.Publish(new PeerConnectionEventArgs { Connection = serverB });
+        fx.Come(serverB);
         Assert.Contains(fx.Service.GetStatuses(), s => s.UserName == "ServerB" && s.IsConnected);
-
-        fx.Disconnected.Publish(new PeerConnectionEventArgs { Connection = serverB });
+        fx.Lose(serverB);
 
         PeerConnectionStatus status = Assert.Single(fx.Service.GetStatuses(), s => s.UserName == "ServerB");
         Assert.False(status.IsConnected);
         Assert.NotNull(status.LastConnectedAt);
         Assert.NotNull(status.LastDisconnectedAt);
-
-        fx.Cts.Cancel();
-        await fx.StartTask;
+        await Stop(fx);
     }
 
     /// <summary>Malformed (non-empty, non-deserializable) bytes from a recognized child are dropped silently: no relay Request happens and nothing throws.</summary>
@@ -400,18 +435,49 @@ public sealed class ServerRoutingServiceTests
     public async Task FromChild_MalformedPayload_IsDroppedWithoutSendOrThrow()
     {
         Fixture fx = await BuildStarted();
-        AutoConnectAndAcknowledge(fx.Transport, fx.Connected);
+        PeerConnection clientA1 = Inbound("ClientA1");
+        PeerConnection clientA2 = Inbound("ClientA2");
+        fx.Come(clientA1);
+        fx.Come(clientA2);
 
-        PeerConnection clientA1 = BuildInboundConnection("ClientA1");
-        fx.Connected.Publish(new PeerConnectionEventArgs { Connection = clientA1 });
-
-        fx.Received.Publish(ReceivedFrom(clientA1, new byte[] { 0xFF, 0xFE, 0xFD }));
+        fx.Receive(clientA1, new byte[] { 0xFF, 0xFE, 0xFD });
 
         await Task.Delay(50);
-        fx.Transport.Verify(p => p.Request(It.IsAny<UserEndpoint>(), It.Is<ReadOnlyMemory<byte>>(p => IsRealPayload(p)), It.IsAny<PeerSendOptions>(), It.IsAny<CancellationToken>()), Times.Never);
+        fx.Transport.Verify(p => p.Request(It.IsAny<PeerConnection>(), It.Is<ReadOnlyMemory<byte>>(payload => IsRealPayload(payload)), It.IsAny<PeerSendOptions>(), It.IsAny<CancellationToken>()), Times.Never);
+        await Stop(fx);
+    }
 
-        fx.Cts.Cancel();
-        await fx.StartTask;
+    /// <summary>A heartbeat (an empty payload) from a child is not a message and is not relayed.</summary>
+    [Fact]
+    public async Task FromChild_EmptyPayload_IsIgnored()
+    {
+        Fixture fx = await BuildStarted();
+        PeerConnection clientA1 = Inbound("ClientA1");
+        PeerConnection clientA2 = Inbound("ClientA2");
+        fx.Come(clientA1);
+        fx.Come(clientA2);
+
+        fx.Receive(clientA1, ReadOnlyMemory<byte>.Empty);
+
+        await Task.Delay(50);
+        Assert.Equal(0, Requests(fx, clientA2));
+        await Stop(fx);
+    }
+
+    /// <summary>A message on a connection that was rejected, or never announced, is ignored.</summary>
+    [Fact]
+    public async Task Received_OnUnknownConnection_IsIgnored()
+    {
+        Fixture fx = await BuildStarted();
+        PeerConnection clientA2 = Inbound("ClientA2");
+        fx.Come(clientA2);
+
+        fx.Receive(Inbound("ClientA1"), Encode(MessageTo("ClientA2")));
+        fx.Receive(Inbound("Stranger"), Encode(MessageTo("ClientA2")));
+
+        await Task.Delay(50);
+        Assert.Equal(0, Requests(fx, clientA2));
+        await Stop(fx);
     }
 
     /// <summary>IPeerService.Send (this server instance originating its own message) is routed exactly like a message received from itself as a child.</summary>
@@ -419,137 +485,117 @@ public sealed class ServerRoutingServiceTests
     public async Task Send_FromServerItself_RoutesLikeAChildMessage()
     {
         Fixture fx = await BuildStarted();
-        AutoConnectAndAcknowledge(fx.Transport, fx.Connected);
-
+        PeerConnection clientA2 = Inbound("ClientA2");
+        fx.Come(clientA2);
         TestMessage message = MessageTo("ClientA2");
         message.MessageId = "SELF-M1";
 
         bool ok = await fx.Service.Send("ClientA2", message);
 
         Assert.True(ok);
-        await WaitUntil(() => RequestedRealPayloadTo(fx, clientA2Endpoint.Port), TimeSpan.FromSeconds(2));
-        fx.Transport.Verify(p => p.Request(It.Is<UserEndpoint>(t => t.Port == clientA2Endpoint.Port), It.Is<ReadOnlyMemory<byte>>(p => IsRealPayload(p)), It.IsAny<PeerSendOptions>(), It.IsAny<CancellationToken>()), Times.Once);
-
-        fx.Cts.Cancel();
-        await fx.StartTask;
+        await WaitUntil(() => SentReal(fx, clientA2), TimeSpan.FromSeconds(2));
+        Assert.Equal(1, Requests(fx, clientA2, real: true));
+        await Stop(fx);
     }
 
-    private static Dictionary<string, ServerUserConfig> SerialTopology() => new(StringComparer.OrdinalIgnoreCase)
-    {
-        ["ServerA"] = new ServerUserConfig { Endpoint = serverAEndpoint, ChildClients = ["ClientA1", "ClientA2"] },
-        ["ServerB"] = new ServerUserConfig { Endpoint = serverBSerialEndpoint, ChildClients = ["ClientB1"] }
-    };
-
-    private static Dictionary<string, UserEndpoint> SerialChildren() => new(StringComparer.OrdinalIgnoreCase)
-    {
-        ["ClientA1"] = clientA1SerialEndpoint,
-        ["ClientA2"] = clientA2Endpoint
-    };
-
-    /// <summary>A child cabled over serial is recognized by the port it is configured on, with no certificate, and its link coming up and going down drives its status row.</summary>
+    /// <summary>A child cabled over serial is recognized by the identity its link was given, and its link coming up and going down drives its status row.</summary>
     [Fact]
-    public async Task SerialChild_ConnectedThenDisconnected_TracksStatusByEndpoint()
+    public async Task SerialChild_ConnectedThenDisconnected_TracksStatus()
     {
-        Fixture fx = await BuildStarted(userMap: SerialTopology(), childEndpoints: SerialChildren());
-        PeerConnection link = BuildSerialConnection(new UserEndpoint { SerialPort = "sl1" });
+        Fixture fx = await BuildStarted();
+        PeerConnection link = Serial(clientA1SerialPoint, "ClientA1");
 
-        fx.Connected.Publish(new PeerConnectionEventArgs { Connection = link });
+        fx.Come(link);
         Assert.Contains(fx.Service.GetStatuses(), s => s.UserName == "ClientA1" && s.IsConnected && s.Kind == PeerConnectionKind.Client);
 
-        fx.Disconnected.Publish(new PeerConnectionEventArgs { Connection = link });
+        fx.Lose(link);
         PeerConnectionStatus status = Assert.Single(fx.Service.GetStatuses(), s => s.UserName == "ClientA1");
         Assert.False(status.IsConnected);
         Assert.NotNull(status.LastDisconnectedAt);
-
-        fx.Cts.Cancel();
-        await fx.StartTask;
+        await Stop(fx);
     }
 
-    /// <summary>A sibling server cabled over serial is tracked as a server row by its configured endpoint.</summary>
+    /// <summary>A sibling server cabled over serial is tracked as a server row.</summary>
     [Fact]
-    public async Task SerialServer_ConnectedThenDisconnected_TracksStatusByEndpoint()
+    public async Task SerialServer_ConnectedThenDisconnected_TracksStatus()
     {
-        Fixture fx = await BuildStarted(userMap: SerialTopology(), childEndpoints: SerialChildren());
-        PeerConnection link = BuildSerialConnection(serverBSerialEndpoint);
+        Fixture fx = await BuildStarted();
+        PeerConnection link = Serial(serverBSerialPoint, "ServerB");
 
-        fx.Connected.Publish(new PeerConnectionEventArgs { Connection = link });
+        fx.Come(link);
         Assert.Contains(fx.Service.GetStatuses(), s => s.UserName == "ServerB" && s.IsConnected && s.Kind == PeerConnectionKind.Server);
 
-        fx.Disconnected.Publish(new PeerConnectionEventArgs { Connection = link });
+        fx.Lose(link);
         Assert.Contains(fx.Service.GetStatuses(), s => s.UserName == "ServerB" && !s.IsConnected);
-
-        fx.Cts.Cancel();
-        await fx.StartTask;
+        await Stop(fx);
     }
 
-    /// <summary>A message arriving on a child's serial link is attributed to that child by port and routed onward like any other child message.</summary>
+    /// <summary>A message arriving on a child's serial link is attributed to that child and routed onward like any other child message, over the serial link to a serial server.</summary>
     [Fact]
     public async Task SerialChild_MessageReceived_RoutedAsFromThatChild()
     {
-        Fixture fx = await BuildStarted(userMap: SerialTopology(), childEndpoints: SerialChildren());
-        AutoConnectAndAcknowledge(fx.Transport, fx.Connected);
-        PeerConnection link = BuildSerialConnection(clientA1SerialEndpoint);
+        Fixture fx = await BuildStarted();
+        PeerConnection link = Serial(clientA1SerialPoint, "ClientA1");
+        PeerConnection serverB = Serial(serverBSerialPoint, "ServerB");
+        PeerConnection clientA2 = Inbound("ClientA2");
+        fx.Come(link);
+        fx.Come(serverB);
+        fx.Come(clientA2);
 
-        fx.Received.Publish(ReceivedFrom(link, Encode(MessageTo("ClientA2", "ClientB1"))));
+        fx.Receive(link, Encode(MessageTo("ClientA2", "ClientB1")));
 
-        await WaitUntil(() => RequestedRealPayloadTo(fx, clientA2Endpoint.Port), TimeSpan.FromSeconds(2));
-        fx.Transport.Verify(p => p.Request(It.Is<UserEndpoint>(t => t.Port == clientA2Endpoint.Port), It.Is<ReadOnlyMemory<byte>>(p => IsRealPayload(p)), It.IsAny<PeerSendOptions>(), It.IsAny<CancellationToken>()), Times.Once);
-        fx.Transport.Verify(p => p.Request(serverBSerialEndpoint, It.Is<ReadOnlyMemory<byte>>(p => IsRealPayload(p)), It.IsAny<PeerSendOptions>(), It.IsAny<CancellationToken>()), Times.Once);
-
-        fx.Cts.Cancel();
-        await fx.StartTask;
+        await WaitUntil(() => SentReal(fx, clientA2) && SentReal(fx, serverB), TimeSpan.FromSeconds(2));
+        Assert.Equal(1, Requests(fx, clientA2, real: true));
+        Assert.Equal(1, Requests(fx, serverB, real: true));
+        await Stop(fx);
     }
 
     /// <summary>A message arriving on the serial link of a sibling server is treated as already routed: delivered to local children only, never re-forwarded.</summary>
     [Fact]
     public async Task SerialServer_MessageReceived_DeliversToLocalChildrenOnly()
     {
-        Fixture fx = await BuildStarted(userMap: SerialTopology(), childEndpoints: SerialChildren());
-        AutoConnectAndAcknowledge(fx.Transport, fx.Connected);
-        PeerConnection link = BuildSerialConnection(serverBSerialEndpoint);
+        Fixture fx = await BuildStarted();
+        PeerConnection serverB = Serial(serverBSerialPoint, "ServerB");
+        PeerConnection clientA2 = Inbound("ClientA2");
+        fx.Come(serverB);
+        fx.Come(clientA2);
 
-        fx.Received.Publish(ReceivedFrom(link, Encode(MessageTo("ClientA2", "ClientB1"))));
+        fx.Receive(serverB, Encode(MessageTo("ClientA2", "ClientB1")));
 
-        await WaitUntil(() => RequestedRealPayloadTo(fx, clientA2Endpoint.Port), TimeSpan.FromSeconds(2));
-        fx.Transport.Verify(p => p.Request(serverBSerialEndpoint, It.Is<ReadOnlyMemory<byte>>(p => IsRealPayload(p)), It.IsAny<PeerSendOptions>(), It.IsAny<CancellationToken>()), Times.Never);
-
-        fx.Cts.Cancel();
-        await fx.StartTask;
+        await WaitUntil(() => SentReal(fx, clientA2), TimeSpan.FromSeconds(2));
+        Assert.Equal(0, Requests(fx, serverB, real: true));
+        await Stop(fx);
     }
 
-    /// <summary>A message arriving on a serial link no configured user is cabled to is ignored.</summary>
+    /// <summary>A message arriving on a serial link nobody has been identified on is ignored.</summary>
     [Fact]
     public async Task SerialUnknownLink_MessageReceived_Ignored()
     {
-        Fixture fx = await BuildStarted(userMap: SerialTopology(), childEndpoints: SerialChildren());
-        AutoConnectAndAcknowledge(fx.Transport, fx.Connected);
+        Fixture fx = await BuildStarted();
+        PeerConnection clientA2 = Inbound("ClientA2");
+        fx.Come(clientA2);
 
-        fx.Received.Publish(ReceivedFrom(BuildSerialConnection(new UserEndpoint { SerialPort = "NOPE" }), Encode(MessageTo("ClientA2"))));
+        fx.Receive(Serial(new ConnectionPoint { SerialPort = "NOPE" }, "NOPE"), Encode(MessageTo("ClientA2")));
 
         await Task.Delay(50);
-        Assert.False(RequestedRealPayloadTo(fx, clientA2Endpoint.Port));
-
-        fx.Cts.Cancel();
-        await fx.StartTask;
+        Assert.Equal(0, Requests(fx, clientA2));
+        await Stop(fx);
     }
 
-    private static int RequestsTo(Fixture fx, UserEndpoint endpoint, bool real = false)
-        => fx.Transport.Invocations.Count(i => i.Method.Name == nameof(IPeerTransport.Request)
-            && endpoint.Equals(i.Arguments[0]) && (!real || IsRealPayload((ReadOnlyMemory<byte>)i.Arguments[1])));
-
-    /// <summary>Closing a child closes its endpoint in the transport, marks its row closed and down, and leaves other rows alone.</summary>
+    /// <summary>Closing a child marks its row closed and down, drops its connections, and leaves other rows alone.</summary>
     [Fact]
-    public async Task SetClosed_Child_ClosesEndpointAndMarksRow()
+    public async Task SetClosed_Child_DropsConnectionsAndMarksRow()
     {
         Fixture fx = await BuildStarted();
-        fx.Connected.Publish(new PeerConnectionEventArgs { Connection = BuildInboundConnection("ClientA1") });
-        fx.Connected.Publish(new PeerConnectionEventArgs { Connection = BuildInboundConnection("ClientA2") });
+        int drops = 0;
+        fx.Come(Inbound("ClientA1", () => drops++));
+        fx.Come(Inbound("ClientA2"));
         int raised = 0;
         fx.Service.StatusesChanged += () => raised++;
 
         fx.Service.SetClosed(PeerConnectionKind.Client, "ClientA1", true);
 
-        fx.Transport.Verify(t => t.SetClosed(clientA1Endpoint, true), Times.Once);
+        Assert.Equal(1, drops);
         PeerConnectionStatus closed = Assert.Single(fx.Service.GetStatuses(), s => s.UserName == "ClientA1");
         Assert.True(closed.IsClosed);
         Assert.False(closed.IsConnected);
@@ -558,42 +604,42 @@ public sealed class ServerRoutingServiceTests
         Assert.False(other.IsClosed);
         Assert.True(other.IsConnected);
         Assert.True(raised > 0);
-
-        fx.Cts.Cancel();
-        await fx.StartTask;
+        await Stop(fx);
     }
 
-    /// <summary>Closing a sibling server closes that server's endpoint in the transport.</summary>
+    /// <summary>Closing a sibling server closes the outgoing point it was reached through, and stops that point's heartbeats.</summary>
     [Fact]
-    public async Task SetClosed_Server_ClosesServerEndpoint()
+    public async Task SetClosed_Server_ClosesItsOutgoingPoint()
     {
-        Fixture fx = await BuildStarted();
+        PeerConnection serverB = Outbound(serverBPoint, "ServerB");
+        Fixture fx = await BuildStarted(configureTransport: (transport, connected) => Reachable(transport, connected, serverBPoint, serverB), outgoing: [serverBPoint]);
+        await WaitUntil(() => fx.Service.GetStatuses().Single(s => s.UserName == "ServerB").IsConnected, TimeSpan.FromSeconds(2));
 
         fx.Service.SetClosed(PeerConnectionKind.Server, "ServerB", true);
 
-        fx.Transport.Verify(t => t.SetClosed(serverBEndpoint, true), Times.Once);
-        Assert.True(Assert.Single(fx.Service.GetStatuses(), s => s.UserName == "ServerB").IsClosed);
-
-        fx.Cts.Cancel();
-        await fx.StartTask;
+        fx.Transport.Verify(t => t.SetClosed(serverBPoint, true), Times.Once);
+        PeerConnectionStatus status = Assert.Single(fx.Service.GetStatuses(), s => s.UserName == "ServerB");
+        Assert.True(status.IsClosed);
+        Assert.False(status.IsConnected);
+        await Stop(fx);
     }
 
-    /// <summary>A closed child's existing inbound connection is dropped, and new ones from it are rejected until it is reopened.</summary>
+    /// <summary>A closed child's existing connection is dropped, and new ones from it are rejected until it is reopened.</summary>
     [Fact]
-    public async Task SetClosed_Child_DropsExistingAndRejectsNewInboundUntilReopened()
+    public async Task SetClosed_Child_DropsExistingAndRejectsNewUntilReopened()
     {
         Fixture fx = await BuildStarted();
         int existing = 0;
         int rejected = 0;
         int accepted = 0;
-        fx.Connected.Publish(new PeerConnectionEventArgs { Connection = BuildInboundConnection("ClientA1", () => existing++) });
+        fx.Come(Inbound("ClientA1", () => existing++));
 
         fx.Service.SetClosed(PeerConnectionKind.Client, "ClientA1", true);
-        fx.Connected.Publish(new PeerConnectionEventArgs { Connection = BuildInboundConnection("ClientA1", () => rejected++) });
+        fx.Come(Inbound("ClientA1", () => rejected++));
         Assert.False(Assert.Single(fx.Service.GetStatuses(), s => s.UserName == "ClientA1").IsConnected);
 
         fx.Service.SetClosed(PeerConnectionKind.Client, "ClientA1", false);
-        fx.Connected.Publish(new PeerConnectionEventArgs { Connection = BuildInboundConnection("ClientA1", () => accepted++) });
+        fx.Come(Inbound("ClientA1", () => accepted++));
 
         Assert.Equal(1, existing);
         Assert.Equal(1, rejected);
@@ -601,9 +647,7 @@ public sealed class ServerRoutingServiceTests
         PeerConnectionStatus status = Assert.Single(fx.Service.GetStatuses(), s => s.UserName == "ClientA1");
         Assert.False(status.IsClosed);
         Assert.True(status.IsConnected);
-
-        fx.Cts.Cancel();
-        await fx.StartTask;
+        await Stop(fx);
     }
 
     /// <summary>Nothing is delivered to a closed child, while other children still receive.</summary>
@@ -611,18 +655,17 @@ public sealed class ServerRoutingServiceTests
     public async Task SetClosed_Child_MessagesToItAreNotSent()
     {
         Fixture fx = await BuildStarted();
-        AutoConnectAndAcknowledge(fx.Transport, fx.Connected);
+        PeerConnection clientA1 = Inbound("ClientA1");
+        PeerConnection clientA2 = Inbound("ClientA2");
+        fx.Come(clientA1);
+        fx.Come(clientA2);
         fx.Service.SetClosed(PeerConnectionKind.Client, "ClientA2", true);
-        PeerConnection clientA1 = BuildInboundConnection("ClientA1");
-        fx.Connected.Publish(new PeerConnectionEventArgs { Connection = clientA1 });
 
-        fx.Received.Publish(ReceivedFrom(clientA1, Encode(MessageTo("ClientA2"))));
+        fx.Receive(clientA1, Encode(MessageTo("ClientA2")));
         await Task.Delay(100);
 
-        Assert.Equal(0, RequestsTo(fx, clientA2Endpoint, real: true));
-
-        fx.Cts.Cancel();
-        await fx.StartTask;
+        Assert.Equal(0, Requests(fx, clientA2, real: true));
+        await Stop(fx);
     }
 
     /// <summary>Nothing is forwarded to a closed sibling server.</summary>
@@ -630,157 +673,139 @@ public sealed class ServerRoutingServiceTests
     public async Task SetClosed_Server_MessagesToItAreNotForwarded()
     {
         Fixture fx = await BuildStarted();
-        AutoConnectAndAcknowledge(fx.Transport, fx.Connected);
+        PeerConnection clientA1 = Inbound("ClientA1");
+        PeerConnection serverB = Inbound("ServerB");
+        fx.Come(clientA1);
+        fx.Come(serverB);
         fx.Service.SetClosed(PeerConnectionKind.Server, "ServerB", true);
-        PeerConnection clientA1 = BuildInboundConnection("ClientA1");
-        fx.Connected.Publish(new PeerConnectionEventArgs { Connection = clientA1 });
 
-        fx.Received.Publish(ReceivedFrom(clientA1, Encode(MessageTo("ClientB1"))));
+        fx.Receive(clientA1, Encode(MessageTo("ClientB1")));
         await Task.Delay(100);
 
-        Assert.Equal(0, RequestsTo(fx, serverBEndpoint, real: true));
-
-        fx.Cts.Cancel();
-        await fx.StartTask;
+        Assert.Equal(0, Requests(fx, serverB, real: true));
+        await Stop(fx);
     }
 
-    /// <summary>A closed child gets no heartbeats, and reopening it resumes them straight away.</summary>
+    /// <summary>A closed server's outgoing point gets no heartbeats, and reopening it resumes them straight away.</summary>
     [Fact]
-    public async Task SetClosed_Child_StopsHeartbeats_ReopenResumesThem()
+    public async Task SetClosed_Server_StopsHeartbeats_ReopenResumesThem()
     {
-        Fixture fx = await BuildStarted(configureTransport: (transport, connected) => AutoConnectAndAcknowledge(transport, connected));
-        await WaitUntil(() => RequestsTo(fx, clientA1Endpoint) >= 1, TimeSpan.FromSeconds(2));
+        PeerConnection serverB = Outbound(serverBPoint, "ServerB");
+        Fixture fx = await BuildStarted(configureTransport: (transport, connected) => Reachable(transport, connected, serverBPoint, serverB), outgoing: [serverBPoint]);
+        await WaitUntil(() => Requests(fx, serverB) >= 1, TimeSpan.FromSeconds(2));
 
-        fx.Service.SetClosed(PeerConnectionKind.Client, "ClientA1", true);
+        fx.Service.SetClosed(PeerConnectionKind.Server, "ServerB", true);
         await Task.Delay(100);
-        int whileClosed = RequestsTo(fx, clientA1Endpoint);
+        int whileClosed = Requests(fx, serverB);
         await Task.Delay(150);
-        Assert.Equal(whileClosed, RequestsTo(fx, clientA1Endpoint));
+        Assert.Equal(whileClosed, Requests(fx, serverB));
 
-        fx.Service.SetClosed(PeerConnectionKind.Client, "ClientA1", false);
-        await WaitUntil(() => RequestsTo(fx, clientA1Endpoint) > whileClosed, TimeSpan.FromSeconds(2));
-        fx.Transport.Verify(t => t.SetClosed(clientA1Endpoint, false), Times.Once);
-
-        fx.Cts.Cancel();
-        await fx.StartTask;
+        fx.Service.SetClosed(PeerConnectionKind.Server, "ServerB", false);
+        await WaitUntil(() => Requests(fx, serverB) > whileClosed, TimeSpan.FromSeconds(2));
+        fx.Transport.Verify(t => t.SetClosed(serverBPoint, false), Times.Once);
+        await Stop(fx);
     }
 
-    /// <summary>Refresh resets the endpoint, drops that user's inbound connections, and heartbeats straight away; it does nothing while closed.</summary>
+    /// <summary>Refresh resets the point a server is reached through, drops its connections, and heartbeats straight away; it does nothing while closed.</summary>
     [Fact]
-    public async Task Refresh_ResetsDropsInboundAndHeartbeatsNow_IgnoredWhenClosed()
+    public async Task Refresh_Server_ResetsPointDropsConnectionsAndHeartbeatsNow_IgnoredWhenClosed()
     {
-        Fixture fx = await BuildStarted(configureTransport: (transport, connected) => AutoConnectAndAcknowledge(transport, connected));
-        await WaitUntil(() => RequestsTo(fx, clientA1Endpoint) >= 1, TimeSpan.FromSeconds(2));
         int drops = 0;
-        fx.Connected.Publish(new PeerConnectionEventArgs { Connection = BuildInboundConnection("ClientA1", () => drops++) });
-        int before = RequestsTo(fx, clientA1Endpoint);
+        PeerConnection serverB = Outbound(serverBPoint, "ServerB", () => drops++);
+        Fixture fx = await BuildStarted(configureTransport: (transport, connected) => Reachable(transport, connected, serverBPoint, serverB), outgoing: [serverBPoint]);
+        await WaitUntil(() => Requests(fx, serverB) >= 1, TimeSpan.FromSeconds(2));
+        int before = Requests(fx, serverB);
 
-        fx.Service.Refresh(PeerConnectionKind.Client, "ClientA1");
+        fx.Service.Refresh(PeerConnectionKind.Server, "ServerB");
 
-        fx.Transport.Verify(t => t.Reset(clientA1Endpoint), Times.Once);
+        fx.Transport.Verify(t => t.Reset(serverBPoint), Times.Once);
         Assert.Equal(1, drops);
-        await WaitUntil(() => RequestsTo(fx, clientA1Endpoint) > before, TimeSpan.FromSeconds(2));
+        await WaitUntil(() => Requests(fx, serverB) > before, TimeSpan.FromSeconds(2));
 
-        fx.Service.SetClosed(PeerConnectionKind.Client, "ClientA1", true);
+        fx.Service.SetClosed(PeerConnectionKind.Server, "ServerB", true);
+        fx.Service.Refresh(PeerConnectionKind.Server, "ServerB");
+        fx.Transport.Verify(t => t.Reset(serverBPoint), Times.Once);
+        await Stop(fx);
+    }
+
+    /// <summary>Refreshing a child that connected to this server drops its connection so it forms a new one.</summary>
+    [Fact]
+    public async Task Refresh_Child_DropsItsConnections()
+    {
+        Fixture fx = await BuildStarted();
+        int drops = 0;
+        fx.Come(Inbound("ClientA1", () => drops++));
+
         fx.Service.Refresh(PeerConnectionKind.Client, "ClientA1");
-        fx.Transport.Verify(t => t.Reset(clientA1Endpoint), Times.Once);
 
-        fx.Cts.Cancel();
-        await fx.StartTask;
+        Assert.Equal(1, drops);
+        await Stop(fx);
     }
 
     /// <summary>Closing or refreshing a name the server does not track does nothing.</summary>
     [Fact]
     public async Task SetClosedAndRefresh_UnknownName_DoNothing()
     {
-        Fixture fx = await BuildStarted();
+        Fixture fx = await BuildStarted(outgoing: [serverBPoint]);
+        int drops = 0;
+        fx.Come(Inbound("ClientA1", () => drops++));
 
         fx.Service.SetClosed(PeerConnectionKind.Client, "Nobody", true);
         fx.Service.Refresh(PeerConnectionKind.Client, "Nobody");
 
-        fx.Transport.Verify(t => t.SetClosed(It.IsAny<UserEndpoint>(), It.IsAny<bool>()), Times.Never);
-        fx.Transport.Verify(t => t.Reset(It.IsAny<UserEndpoint>()), Times.Never);
-
-        fx.Cts.Cancel();
-        await fx.StartTask;
+        fx.Transport.Verify(t => t.SetClosed(It.IsAny<ConnectionPoint>(), It.IsAny<bool>()), Times.Never);
+        fx.Transport.Verify(t => t.Reset(It.IsAny<ConnectionPoint>()), Times.Never);
+        Assert.Equal(0, drops);
+        await Stop(fx);
     }
 
-    /// <summary>A serial child can be closed too: the transport closes its serial endpoint, which releases the port.</summary>
-    [Fact]
-    public async Task SetClosed_SerialChild_ClosesSerialEndpoint()
-    {
-        Fixture fx = await BuildStarted(userMap: SerialTopology(), childEndpoints: SerialChildren());
-        fx.Connected.Publish(new PeerConnectionEventArgs { Connection = BuildSerialConnection(clientA1SerialEndpoint) });
-
-        fx.Service.SetClosed(PeerConnectionKind.Client, "ClientA1", true);
-
-        fx.Transport.Verify(t => t.SetClosed(clientA1SerialEndpoint, true), Times.Once);
-        Assert.False(Assert.Single(fx.Service.GetStatuses(), s => s.UserName == "ClientA1").IsConnected);
-
-        fx.Cts.Cancel();
-        await fx.StartTask;
-    }
-
-    private static void AcknowledgeWithoutConnecting(Mock<IPeerTransport> transport)
-        => transport.Setup(p => p.Request(It.IsAny<UserEndpoint>(), It.IsAny<ReadOnlyMemory<byte>>(), It.IsAny<PeerSendOptions>(), It.IsAny<CancellationToken>()))
-            .ReturnsAsync(true);
-
-    /// <summary>An outbound connection to a child or server going down is reflected on its row, not only inbound ones.</summary>
+    /// <summary>An outbound connection going down is reflected on its row, not only inbound ones.</summary>
     [Fact]
     public async Task OutboundConnectionDisconnects_MarksRowDown()
     {
-        Fixture fx = await BuildStarted(configureTransport: (transport, _) => AcknowledgeWithoutConnecting(transport));
-        PeerConnection outbound = new(serverBEndpoint, false, null, () => { });
-        fx.Connected.Publish(new PeerConnectionEventArgs { Connection = outbound });
+        PeerConnection serverB = Outbound(serverBPoint, "ServerB");
+        Fixture fx = await BuildStarted(configureTransport: (transport, connected) => Reachable(transport, connected, serverBPoint, serverB), outgoing: [serverBPoint]);
         await WaitUntil(() => fx.Service.GetStatuses().Single(s => s.UserName == "ServerB").IsConnected, TimeSpan.FromSeconds(2));
 
-        fx.Disconnected.Publish(new PeerConnectionEventArgs { Connection = outbound });
+        fx.Lose(serverB);
 
         PeerConnectionStatus status = Assert.Single(fx.Service.GetStatuses(), s => s.UserName == "ServerB");
         Assert.False(status.IsConnected);
         Assert.NotNull(status.LastDisconnectedAt);
-
-        fx.Cts.Cancel();
-        await fx.StartTask;
+        await Stop(fx);
     }
 
     /// <summary>A sibling server connected both ways stays up when one direction drops, and only goes down once neither is left.</summary>
     [Fact]
     public async Task OneOfTwoConnectionsDrops_RowStaysUpUntilBothAreGone()
     {
-        Fixture fx = await BuildStarted(configureTransport: (transport, _) => AcknowledgeWithoutConnecting(transport));
-        PeerConnection outbound = new(serverBEndpoint, false, null, () => { });
-        PeerConnection inbound = BuildInboundConnection("ServerB");
-        fx.Connected.Publish(new PeerConnectionEventArgs { Connection = outbound });
-        fx.Connected.Publish(new PeerConnectionEventArgs { Connection = inbound });
+        PeerConnection outbound = Outbound(serverBPoint, "ServerB");
+        Fixture fx = await BuildStarted(configureTransport: (transport, connected) => Reachable(transport, connected, serverBPoint, outbound), outgoing: [serverBPoint]);
+        PeerConnection inbound = Inbound("ServerB");
+        fx.Come(inbound);
         await WaitUntil(() => fx.Service.GetStatuses().Single(s => s.UserName == "ServerB").IsConnected, TimeSpan.FromSeconds(2));
 
-        fx.Disconnected.Publish(new PeerConnectionEventArgs { Connection = inbound });
+        fx.Lose(inbound);
         Assert.True(Assert.Single(fx.Service.GetStatuses(), s => s.UserName == "ServerB").IsConnected);
 
-        fx.Disconnected.Publish(new PeerConnectionEventArgs { Connection = outbound });
+        fx.Lose(outbound);
         Assert.False(Assert.Single(fx.Service.GetStatuses(), s => s.UserName == "ServerB").IsConnected);
-
-        fx.Cts.Cancel();
-        await fx.StartTask;
+        await Stop(fx);
     }
 
-    /// <summary>An unexpected drop of the only live connection to a child or server wakes its heartbeat monitor immediately, instead of leaving it to sleep out its current interval before retrying.</summary>
+    /// <summary>An unexpected drop of the only live connection through an outgoing point wakes its heartbeat monitor immediately, instead of leaving it to sleep out its current interval before retrying.</summary>
     [Fact]
     public async Task OnDisconnected_UnexpectedDrop_RetriesHeartbeatImmediately()
     {
-        Fixture fx = await BuildStarted(configureTransport: (transport, _) => AcknowledgeWithoutConnecting(transport));
-        PeerConnection outbound = new(serverBEndpoint, false, null, () => { });
-        fx.Connected.Publish(new PeerConnectionEventArgs { Connection = outbound });
+        PeerConnection serverB = Outbound(serverBPoint, "ServerB");
+        Fixture fx = await BuildStarted(configureTransport: (transport, connected) => Reachable(transport, connected, serverBPoint, serverB), outgoing: [serverBPoint]);
         await WaitUntil(() => fx.Service.GetStatuses().Single(s => s.UserName == "ServerB").IsConnected, TimeSpan.FromSeconds(2));
-        int countBefore = RequestsTo(fx, serverBEndpoint);
+        int countBefore = Requests(fx, serverB);
 
-        fx.Disconnected.Publish(new PeerConnectionEventArgs { Connection = outbound });
+        fx.Lose(serverB);
 
-        await WaitUntil(() => RequestsTo(fx, serverBEndpoint) > countBefore, TimeSpan.FromSeconds(1));
-
-        fx.Cts.Cancel();
-        await fx.StartTask;
+        await WaitUntil(() => Requests(fx, serverB) > countBefore, TimeSpan.FromSeconds(1));
+        await Stop(fx);
     }
 
     /// <summary>A message relayed by the server keeps the priority it was sent with, for children and for other servers alike.</summary>
@@ -788,20 +813,21 @@ public sealed class ServerRoutingServiceTests
     public async Task Relay_KeepsMessagePriority()
     {
         Fixture fx = await BuildStarted();
-        AutoConnectAndAcknowledge(fx.Transport, fx.Connected);
-        PeerConnection clientA1 = BuildInboundConnection("ClientA1");
-        fx.Connected.Publish(new PeerConnectionEventArgs { Connection = clientA1 });
+        PeerConnection clientA1 = Inbound("ClientA1");
+        PeerConnection clientA2 = Inbound("ClientA2");
+        PeerConnection serverB = Inbound("ServerB");
+        fx.Come(clientA1);
+        fx.Come(clientA2);
+        fx.Come(serverB);
         TestMessage message = MessageTo("ClientA2", "ClientB1");
         message.Priority = 7;
 
-        fx.Received.Publish(ReceivedFrom(clientA1, Encode(message)));
+        fx.Receive(clientA1, Encode(message));
 
-        await WaitUntil(() => RequestedRealPayloadTo(fx, clientA2Endpoint.Port) && RequestedRealPayloadTo(fx, serverBEndpoint.Port), TimeSpan.FromSeconds(2));
-        fx.Transport.Verify(p => p.Request(It.Is<UserEndpoint>(t => t.Port == clientA2Endpoint.Port), It.Is<ReadOnlyMemory<byte>>(p => IsRealPayload(p)), It.Is<PeerSendOptions>(o => o.Priority == 7), It.IsAny<CancellationToken>()), Times.Once);
-        fx.Transport.Verify(p => p.Request(It.Is<UserEndpoint>(t => t.Port == serverBEndpoint.Port), It.Is<ReadOnlyMemory<byte>>(p => IsRealPayload(p)), It.Is<PeerSendOptions>(o => o.Priority == 7), It.IsAny<CancellationToken>()), Times.Once);
-
-        fx.Cts.Cancel();
-        await fx.StartTask;
+        await WaitUntil(() => SentReal(fx, clientA2) && SentReal(fx, serverB), TimeSpan.FromSeconds(2));
+        fx.Transport.Verify(p => p.Request(clientA2, It.Is<ReadOnlyMemory<byte>>(payload => IsRealPayload(payload)), It.Is<PeerSendOptions>(o => o.Priority == 7), It.IsAny<CancellationToken>()), Times.Once);
+        fx.Transport.Verify(p => p.Request(serverB, It.Is<ReadOnlyMemory<byte>>(payload => IsRealPayload(payload)), It.Is<PeerSendOptions>(o => o.Priority == 7), It.IsAny<CancellationToken>()), Times.Once);
+        await Stop(fx);
     }
 
     /// <summary>One unreachable recipient does not hold up delivery to the others: sends go out concurrently.</summary>
@@ -809,19 +835,20 @@ public sealed class ServerRoutingServiceTests
     public async Task Relay_SlowRecipient_DoesNotDelayOthers()
     {
         Fixture fx = await BuildStarted();
+        PeerConnection clientA1 = Inbound("ClientA1");
+        PeerConnection clientA2 = Inbound("ClientA2");
+        PeerConnection serverB = Inbound("ServerB");
         TaskCompletionSource<bool> stuck = new();
-        fx.Transport.Setup(p => p.Request(It.IsAny<UserEndpoint>(), It.IsAny<ReadOnlyMemory<byte>>(), It.IsAny<PeerSendOptions>(), It.IsAny<CancellationToken>()))
-            .Returns<UserEndpoint, ReadOnlyMemory<byte>, PeerSendOptions?, CancellationToken>((target, _, _, _) => target.Port == clientA2Endpoint.Port ? stuck.Task : Task.FromResult(true));
-        PeerConnection clientA1 = BuildInboundConnection("ClientA1");
-        fx.Connected.Publish(new PeerConnectionEventArgs { Connection = clientA1 });
+        fx.Transport.Setup(p => p.Request(clientA2, It.IsAny<ReadOnlyMemory<byte>>(), It.IsAny<PeerSendOptions>(), It.IsAny<CancellationToken>())).Returns(stuck.Task);
+        fx.Come(clientA1);
+        fx.Come(clientA2);
+        fx.Come(serverB);
 
-        fx.Received.Publish(ReceivedFrom(clientA1, Encode(MessageTo("ClientA2", "ClientB1"))));
+        fx.Receive(clientA1, Encode(MessageTo("ClientA2", "ClientB1")));
 
-        await WaitUntil(() => RequestedRealPayloadTo(fx, serverBEndpoint.Port), TimeSpan.FromSeconds(2));
+        await WaitUntil(() => SentReal(fx, serverB), TimeSpan.FromSeconds(2));
         stuck.SetResult(true);
-
-        fx.Cts.Cancel();
-        await fx.StartTask;
+        await Stop(fx);
     }
 
     /// <summary>A message that arrives from a user after its connection was closed is not relayed.</summary>
@@ -829,18 +856,17 @@ public sealed class ServerRoutingServiceTests
     public async Task MessageFromClosedUser_IsNotRelayed()
     {
         Fixture fx = await BuildStarted();
-        AutoConnectAndAcknowledge(fx.Transport, fx.Connected);
-        PeerConnection clientA1 = BuildInboundConnection("ClientA1");
-        fx.Connected.Publish(new PeerConnectionEventArgs { Connection = clientA1 });
+        PeerConnection clientA1 = Inbound("ClientA1");
+        PeerConnection clientA2 = Inbound("ClientA2");
+        fx.Come(clientA1);
+        fx.Come(clientA2);
         fx.Service.SetClosed(PeerConnectionKind.Client, "ClientA1", true);
 
-        fx.Received.Publish(ReceivedFrom(clientA1, Encode(MessageTo("ClientA2"))));
+        fx.Receive(clientA1, Encode(MessageTo("ClientA2")));
         await Task.Delay(100);
 
-        Assert.False(RequestedRealPayloadTo(fx, clientA2Endpoint.Port));
-
-        fx.Cts.Cancel();
-        await fx.StartTask;
+        Assert.Equal(0, Requests(fx, clientA2, real: true));
+        await Stop(fx);
     }
 
     /// <summary>Registered as both IPeerService and IConnectionStatusService, the service is disposed twice; the second is a no-op.</summary>
@@ -848,8 +874,7 @@ public sealed class ServerRoutingServiceTests
     public async Task DisposeAsync_Twice_DisposesTransportOnce()
     {
         Fixture fx = await BuildStarted();
-        fx.Cts.Cancel();
-        await fx.StartTask;
+        await Stop(fx);
 
         await fx.Service.DisposeAsync();
         await fx.Service.DisposeAsync();
@@ -861,17 +886,16 @@ public sealed class ServerRoutingServiceTests
     [Fact]
     public async Task HeartbeatAcknowledged_ForClosedUser_DoesNotMarkUp()
     {
-        Fixture fx = await BuildStarted(configureTransport: (transport, connected) => AutoConnectAndAcknowledge(transport, connected));
-        await WaitUntil(() => fx.Service.GetStatuses().Single(s => s.UserName == "ClientA1").IsConnected, TimeSpan.FromSeconds(2));
+        PeerConnection serverB = Outbound(serverBPoint, "ServerB");
+        Fixture fx = await BuildStarted(configureTransport: (transport, connected) => Reachable(transport, connected, serverBPoint, serverB), outgoing: [serverBPoint]);
+        await WaitUntil(() => fx.Service.GetStatuses().Single(s => s.UserName == "ServerB").IsConnected, TimeSpan.FromSeconds(2));
 
-        fx.Service.SetClosed(PeerConnectionKind.Client, "ClientA1", true);
+        fx.Service.SetClosed(PeerConnectionKind.Server, "ServerB", true);
         await Task.Delay(100);
 
-        PeerConnectionStatus status = Assert.Single(fx.Service.GetStatuses(), s => s.UserName == "ClientA1");
+        PeerConnectionStatus status = Assert.Single(fx.Service.GetStatuses(), s => s.UserName == "ServerB");
         Assert.True(status.IsClosed);
         Assert.False(status.IsConnected);
-
-        fx.Cts.Cancel();
-        await fx.StartTask;
+        await Stop(fx);
     }
 }

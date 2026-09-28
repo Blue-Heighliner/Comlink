@@ -6,7 +6,8 @@ namespace BlueHeighliner.Comlink.Control;
 /// field mapping, how that message type is serialized and packetized (and at what packet size and window) for the network, app
 /// identity/presentation, local user identity, the user/group directory, listener ports, alert settings,
 /// message composition, the automatic print policy, MSMT peer certificate naming and peer options, network
-/// topology, the external systems this instance communicates with, and whether <c>config.json</c> is read at all. External drive discovery and printer discovery/driving are real
+/// topology, the points this node connects out to, how the user on the other end of a connection is identified
+/// (optionally after a connection message exchange), the external systems this instance communicates with, and whether <c>config.json</c> is read at all. External drive discovery and printer discovery/driving are real
 /// OS-level behavior, not configuration or rules, so they live on <see cref="Devices.IExternalDriveProvider"/>
 /// and <see cref="Devices.IPrintDriver"/> instead. See <c>Docs/Components/Control.md</c>.
 /// </summary>
@@ -53,7 +54,7 @@ public interface IEngineController
     int PacketSize { get; }
 
     /// <summary>
-    /// How many packets may be in flight to one endpoint at once. A higher-priority payload sent meanwhile goes out
+    /// How many packets may be in flight over one connection at once. A higher-priority payload sent meanwhile goes out
     /// as soon as the packets already in flight finish, so the window is how many it can end up waiting behind: 1
     /// (the default) is the most responsive, while a wider window keeps a link with a long round trip busier. Must
     /// be at least 1. Ignored while <see cref="PacketType"/> is <see langword="null"/>.
@@ -138,17 +139,40 @@ public interface IEngineController
     /// <summary>The configured role for this instance.</summary>
     NodeRole Role { get; }
     /// <summary>
-    /// The server endpoint a <see cref="NodeRole.Client"/> instance forms its single long-term
-    /// connection to, or <see langword="null"/> if none is configured. Unused outside <see cref="NodeRole.Client"/>.
+    /// The points this node connects out to, and keeps connected: IP hosts and ports of other nodes to dial, and
+    /// serial ports to open. A node configures only where it connects and listens (see <see cref="PeerPort"/>),
+    /// never which users it expects there: who is on the other end of a connection is worked out when it forms, by
+    /// <see cref="IdentifyConnection"/>. A serial cable joins two nodes and is opened from both ends, so a serial
+    /// port is listed here on each. A <see cref="NodeRole.Client"/> connects to the first point only.
     /// </summary>
-    UserEndpoint? ServerEndpoint { get; }
+    IReadOnlyList<ConnectionPoint> OutgoingPoints { get; }
     /// <summary>
-    /// The full server-user map a <see cref="NodeRole.Server"/> instance routes with, keyed by server user
-    /// name (case-insensitive) — every server in the cluster, not just the local one. Unused outside
-    /// <see cref="NodeRole.Server"/>.
+    /// The server topology a <see cref="NodeRole.Server"/> instance routes with, keyed by server user name
+    /// (case-insensitive): every server in the cluster, not just the local one, and the child clients each owns. It
+    /// says who belongs where, not how to reach them, so a connection is matched to a server or child by the identity
+    /// <see cref="IdentifyConnection"/> gives it. Unused outside <see cref="NodeRole.Server"/>.
     /// </summary>
     IReadOnlyDictionary<string, ServerUserConfig> Servers { get; }
 
+    /// <summary>
+    /// The type of the connection message, or <see langword="null"/> (the default) for none. When set, the node that
+    /// opens a connection sends one (both ends of a serial link do) as the first thing on it, built by
+    /// <see cref="CreateConnectionMessage"/>, and the connection is not usable, nor identified, until the exchange
+    /// completes. Every node must be configured alike, since neither side can tell whether the other expects one.
+    /// </summary>
+    Type? ConnectionMessageType { get; }
+    /// <summary>
+    /// The type of the connection response, or <see langword="null"/> (the default) for none. Only used while
+    /// <see cref="ConnectionMessageType"/> is set: the node that receives a connection message answers it with a response
+    /// built by <see cref="CreateConnectionResponse"/>, which the opening node waits for before the connection is usable.
+    /// </summary>
+    Type? ConnectionResponseType { get; }
+    /// <summary>
+    /// Serializes and deserializes connection messages and responses. <see langword="null"/> exactly when
+    /// <see cref="ConnectionMessageType"/> is. Defaults to a <see cref="ProtobufNetworkSerializer"/> that builds only
+    /// the message and response types.
+    /// </summary>
+    INetworkSerializer? ConnectionSerializer { get; }
     /// <summary>When <see langword="true"/>, a <c>--config</c> argument is read; when <see langword="false"/> (the default), it is ignored and <see cref="EngineConfig"/> always uses its defaults.</summary>
     bool ConfigFileEnabled { get; }
 
@@ -265,9 +289,38 @@ public interface IEngineController
     /// <summary>Resolves <paramref name="userCode"/> to its <see cref="UserInfo"/>, or <see langword="null"/> if the code is unrecognized.</summary>
     /// <param name="userCode">The user installation code to resolve.</param>
     UserInfo? ResolveCode(string userCode);
-    /// <summary>Returns the endpoint for <paramref name="userName"/>, an IP host and port or a MicroGate serial port, or <see langword="null"/> if the user is unknown.</summary>
-    /// <param name="userName">The user name to resolve.</param>
-    UserEndpoint? GetEndpoint(string userName);
+    /// <summary>
+    /// Returns the app-specific information attached to <paramref name="userName"/>, an empty map when there is none. The
+    /// engine does not interpret it: it travels with the user's <see cref="UserIdentity"/>, so a host can attach whatever
+    /// it needs to a user (a role, a station, a display name) and read it back wherever the user is identified.
+    /// </summary>
+    /// <param name="userName">The user to describe.</param>
+    IReadOnlyDictionary<string, string> GetUserData(string userName);
+
+    /// <summary>
+    /// Decides who is on the other end of a connection that has just formed, from what is known about it: for IP the
+    /// remote host, port and certificate names, for serial the port and address, and the connection message and
+    /// response when those are configured. Returns <see langword="null"/> (the default) to let the engine decide:
+    /// an IP connection is the user whose <see cref="GetCertificateName"/> matches a name in its certificate (or, when
+    /// none does, a user named after that certificate name), and a serial connection is a user named after its port.
+    /// A host overrides this to identify by anything else, such as a serial port to user table, or a user name carried
+    /// in the connection message. The user's <see cref="UserIdentity.Data"/> is normally <see cref="GetUserData"/>.
+    /// </summary>
+    /// <param name="connection">What is known about the connection.</param>
+    UserIdentity? IdentifyConnection(ConnectionInfo connection);
+
+    /// <summary>
+    /// Builds the connection message to send on a connection that has just formed, or returns <see langword="null"/> to
+    /// send an empty one. Only called while <see cref="ConnectionMessageType"/> is set.
+    /// </summary>
+    /// <param name="connection">What is known about the connection.</param>
+    object? CreateConnectionMessage(ConnectionInfo connection);
+    /// <summary>
+    /// Builds the response to the connection message in <see cref="ConnectionInfo.ConnectionMessage"/>, or returns
+    /// <see langword="null"/> to send an empty one. Only called while <see cref="ConnectionResponseType"/> is set.
+    /// </summary>
+    /// <param name="connection">What is known about the connection, including the message just received.</param>
+    object? CreateConnectionResponse(ConnectionInfo connection);
 
     /// <summary>
     /// Returns how many times <paramref name="message"/> should be automatically added to the print queue
@@ -409,13 +462,13 @@ internal sealed class ConfiguredEngineController : IEngineController
         this.fallback = fallback;
         this.config = config;
         this.currentUserProvider = currentUserProvider;
-        endpoints = config.GetUserEndpoints();
+        userData = config.GetUserData();
     }
 
     private readonly IEngineController fallback;
     private readonly EngineConfig config;
     private readonly ICurrentUserProvider currentUserProvider;
-    private readonly IReadOnlyDictionary<string, UserEndpoint> endpoints;
+    private readonly IReadOnlyDictionary<string, IReadOnlyDictionary<string, string>> userData;
 
     /// <inheritdoc />
     public Type MessageType => fallback.MessageType;
@@ -603,10 +656,7 @@ internal sealed class ConfiguredEngineController : IEngineController
             : fallback.Role;
 
     /// <inheritdoc />
-    public UserEndpoint? ServerEndpoint =>
-        config.ServerEndpoint is { } endpoint
-            ? endpoint.ToEndpoint()
-            : fallback.ServerEndpoint;
+    public IReadOnlyList<ConnectionPoint> OutgoingPoints => config.OutgoingPoints.Count > 0 ? config.GetOutgoingPoints() : fallback.OutgoingPoints;
 
     /// <inheritdoc />
     public IReadOnlyDictionary<string, ServerUserConfig> Servers
@@ -623,6 +673,13 @@ internal sealed class ConfiguredEngineController : IEngineController
     }
 
     /// <inheritdoc />
+    public Type? ConnectionMessageType => fallback.ConnectionMessageType;
+    /// <inheritdoc />
+    public Type? ConnectionResponseType => fallback.ConnectionResponseType;
+    /// <inheritdoc />
+    public INetworkSerializer? ConnectionSerializer => fallback.ConnectionSerializer;
+
+    /// <inheritdoc />
     public bool ConfigFileEnabled => fallback.ConfigFileEnabled;
 
     /// <inheritdoc />
@@ -634,8 +691,21 @@ internal sealed class ConfiguredEngineController : IEngineController
     /// <inheritdoc />
     public UserInfo? ResolveCode(string userCode) => fallback.ResolveCode(userCode);
     /// <inheritdoc />
-    public UserEndpoint? GetEndpoint(string userName)
-        => endpoints.TryGetValue(userName, out UserEndpoint? endpoint) ? endpoint : fallback.GetEndpoint(userName);
+    public IReadOnlyDictionary<string, string> GetUserData(string userName)
+    {
+        IReadOnlyDictionary<string, string> inherited = fallback.GetUserData(userName);
+        if (!userData.TryGetValue(userName, out IReadOnlyDictionary<string, string>? configured) || configured.Count == 0) { return inherited; }
+
+        Dictionary<string, string> merged = new(inherited);
+        foreach ((string key, string value) in configured) { merged[key] = value; }
+        return merged;
+    }
+    /// <inheritdoc />
+    public UserIdentity? IdentifyConnection(ConnectionInfo connection) => fallback.IdentifyConnection(connection);
+    /// <inheritdoc />
+    public object? CreateConnectionMessage(ConnectionInfo connection) => fallback.CreateConnectionMessage(connection);
+    /// <inheritdoc />
+    public object? CreateConnectionResponse(ConnectionInfo connection) => fallback.CreateConnectionResponse(connection);
     /// <inheritdoc />
     public string GetCertificateName(string userName)
         => config.PeerCertificateName is { } ownName && string.Equals(userName, currentUserProvider.UserName, StringComparison.OrdinalIgnoreCase)

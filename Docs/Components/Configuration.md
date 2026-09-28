@@ -9,13 +9,14 @@ All external configuration and rule-based behavior — including the concrete me
 | Message Format | `MessageType`, `CreateMessage()`, and a `Get`/`Set` pair for each logical field (message id, sender, subject, body, addresses, sent time, confirmation id, alert flag, priority, tag) |
 | App Settings | `AppName`, `AppVersion`, `AppDataPath`, `IsKioskMode`, `HomeText` |
 | User Identity | `DebugUserName`, `ResolveCode(userCode)` |
-| User Directory | `GetEndpoint(userName)`, `UserGroups`, `Users` |
+| User Directory | `UserGroups`, `Users`, `GetUserData(userName)` |
+| Connection Identification | `IdentifyConnection(connection)`, `ConnectionMessageType`, `ConnectionResponseType`, `ConnectionSerializer`, `CreateConnectionMessage(connection)`, `CreateConnectionResponse(connection)` |
 | Ports | `PeerPort` (default `50021`), `InterfacePort` (default `50020`) |
 | Alert Settings | `AlertLabel`, `AlarmSoundDuration`, `QuickConfirmationEnabled`, `ComposeAlertsEnabled` |
 | Message Composition | `Priorities`, `TagsEnabled`, `TagLabel`, `BlockedCombinations` |
 | Print Policy | `PrintReceivedDefaultEnabled`, `GetPrintCount(message)` |
 | MSMT Certificates | `GetCertificateName(userName)`, `TrustedAuthorityCertificateName`, `ConnectionOptions` |
-| Network Topology | `Role`, `ServerEndpoint`, `Servers` |
+| Network Topology | `Role`, `OutgoingPoints`, `Servers` |
 | Config File | `ConfigFileEnabled` |
 | External Systems | `ExternalSystems`, `ExternalServer` |
 

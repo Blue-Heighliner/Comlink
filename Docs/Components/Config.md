@@ -31,10 +31,10 @@ All property names are PascalCase; deserialization is case-insensitive. Unrecogn
   "MessageTagLabel": null,
   "PrintReceivedEnabled": null,
   "NodeRole": null,
-  "ServerEndpoint": null,
+  "OutgoingPoints": [],
   "ServerUsers": {},
   "Users": {
-    "USER-A": { "IpAddress": "192.168.1.10", "Port": 7890 }
+    "USER-A": { "Data": { "role": "clerk" } }
   },
   "UserGroups": {
     "OPS": ["USER-A", "USER-B"]
@@ -64,7 +64,7 @@ Debug user name override. When set, `UserService` skips `State.json` entirely an
 
 **Type:** `int | null` | **Default:** `null` (uses Engine default of `50021`)
 
-TCP port on which the peer-to-peer server listens for inbound messages from other nodes. Must be reachable from all peer nodes that will send messages to this user.
+TCP port on which this node listens for IP connections opened by other nodes: peers dialing this peer, and clients and other servers connecting to a server. A `"Client"`-role instance opens its connection outward and does not listen, so the port is unused there. Must be reachable from every node that has this node as an outgoing point.
 
 ---
 
@@ -193,22 +193,27 @@ Networking topology role: `"Peer"`, `"Client"`, or `"Server"` (case-insensitive)
 
 ---
 
-### `ServerEndpoint`
+### `OutgoingPoints`
 
-**Type:** `object | null` | **Default:** `null`
+**Type:** `object[]` | **Default:** `[]` (uses the registered `IEngineController`'s own, none by default)
 
-The server endpoint a `"Client"`-role instance forms its long-term connection through. Required when `NodeRole` is `"Client"`; ignored otherwise.
+The points this node connects out to and keeps connected: IP hosts and ports to dial, and serial ports to open. A `"Client"`-role instance uses the first as its server. Where a node listens is `PeerPort`. Nothing here says which user is at a point; that is worked out when the connection forms (see [Identification.md](Identification.md)), so a node is configured with where it connects and never with who it expects.
 
 ```json
-"ServerEndpoint": { "IpAddress": "10.0.0.1", "Port": 50021 }
+"OutgoingPoints": [
+  { "IpAddress": "10.0.0.1", "Port": 50021 },
+  { "SerialPort": "SL0" }
+]
 ```
 
 | Field | Type | Description |
 |-------|------|-------------|
-| `IpAddress` | `string` | IPv4 or IPv6 address of the server |
-| `Port` | `int` | TCP port the server listens on |
-| `SerialPort` | `string` | Name of the local MicroGate serial port cabled to the server. When set, `IpAddress` and `Port` are ignored and the server is reached over serial |
+| `IpAddress` | `string` | IPv4 or IPv6 address of the remote node |
+| `Port` | `int` | TCP port the remote node listens on |
+| `SerialPort` | `string` | Name of the local MicroGate serial port cabled to the remote node. When set, `IpAddress` and `Port` are ignored and the point is reached over serial. List the port on both nodes that share the cable |
 | `SerialAddress` | `int` | HDLC station address for the serial link (0-255, default 255). Must match on both ends of the cable |
+
+A serial link carries no certificate, so by default its user is named after the port; override `IdentifyConnection` or configure a connection message to give it a real name.
 
 ---
 
@@ -216,21 +221,17 @@ The server endpoint a `"Client"`-role instance forms its long-term connection th
 
 **Type:** `object` | **Default:** `{}`
 
-The full server-user-map topology for a `"Server"`-role instance: a map of server user name → endpoint and child client list. Describes **every** server in the cluster, not just the local one — see [Peer.md](Peer.md#server). Required (with at least an entry for the local server user) when `NodeRole` is `"Server"`; ignored otherwise.
+The server topology for a `"Server"`-role instance: a map of server user name → child client list. Describes **every** server in the cluster, not just the local one, and says who belongs where but not how to reach anyone (connections are matched to these names by identity; see [Peer.md](Peer.md#server)). Required (with at least an entry for the local server user) when `NodeRole` is `"Server"`; ignored otherwise.
 
 ```json
 "ServerUsers": {
-  "SERVER-A": { "IpAddress": "10.0.0.1", "Port": 50021, "ChildClients": ["CLIENT-A1", "CLIENT-A2"] },
-  "SERVER-B": { "IpAddress": "10.0.0.2", "Port": 50021, "ChildClients": ["CLIENT-B1"] }
+  "SERVER-A": { "ChildClients": ["CLIENT-A1", "CLIENT-A2"] },
+  "SERVER-B": { "ChildClients": ["CLIENT-B1"] }
 }
 ```
 
 | Field | Type | Description |
 |-------|------|-------------|
-| `IpAddress` | `string` | IPv4 or IPv6 address this server user listens on and other servers dial to reach it |
-| `Port` | `int` | TCP port this server user listens on and other servers dial to reach it |
-| `SerialPort` | `string` | Name of the local MicroGate serial port through which this server user is reached. When set, `IpAddress` and `Port` are ignored. On the local server's own entry a serial endpoint means no TCP listener is started |
-| `SerialAddress` | `int` | HDLC station address for the serial link (0-255, default 255) |
 | `ChildClients` | `string[]` | Names of the client users that belong to this server |
 
 ---
@@ -239,23 +240,18 @@ The full server-user-map topology for a `"Server"`-role instance: a map of serve
 
 **Type:** `object` | **Default:** `{}`
 
-A map of user name → endpoint used by the `IEngineController.GetEndpoint` implementation. Keys are user names (case-insensitive). Entries may override the endpoint of an existing known user or introduce an entirely new user.
+A map of user name → user entry. Keys are user names (case-insensitive). An entry adds a user to the directory that address auto-complete and connection identification know about, and can attach app-specific data to it. It says nothing about where the user is reached.
 
 ```json
 "Users": {
-  "USER-A": { "IpAddress": "192.168.1.10", "Port": 7890 },
-  "NEW-USER": { "IpAddress": "192.168.1.12", "Port": 7890 }
+  "USER-A": { "Data": { "role": "clerk", "desk": "4" } },
+  "NEW-USER": {}
 }
 ```
 
 | Field | Type | Description |
 |-------|------|-------------|
-| `IpAddress` | `string` | IPv4 or IPv6 address of the remote node |
-| `Port` | `int` | TCP port of the remote node's peer server |
-| `SerialPort` | `string` | Name of the local MicroGate serial port cabled to the remote node. When set, `IpAddress` and `Port` are ignored and the user is reached over serial |
-| `SerialAddress` | `int` | HDLC station address for the serial link (0-255, default 255). Must match on both ends of the cable |
-
-A user reached over serial needs no certificate: the cable itself is the identity. For example, `"USER-C": { "SerialPort": "SL0" }` reaches `USER-C` over the first MicroGate port. Serial links are opened at startup for every configured user that uses one.
+| `Data` | `object` | App-specific string keys and values attached to the user, merged over `IEngineController.GetUserData` for that user (config wins on a key conflict). The engine does not interpret it; it is part of the user's identity for the host's own hooks |
 
 ---
 
@@ -281,8 +277,9 @@ Sending to `ALL` delivers to `USER-A`, `USER-B`, and `NEW-USER`. Cycles are igno
 ```json
 {
   "PeerPort": 50021,
+  "OutgoingPoints": [ { "IpAddress": "192.168.1.11", "Port": 50021 } ],
   "Users": {
-    "USER-B": { "IpAddress": "192.168.1.11", "Port": 50021 }
+    "USER-B": {}
   }
 }
 ```
@@ -300,8 +297,9 @@ Sending to `ALL` delivers to `USER-A`, `USER-B`, and `NEW-USER`. Cycles are igno
   "DataFolder": "@TEST1",
   "PeerCertificateFile": "TEST1.pfx",
   "TrustedAuthorityCertificateFile": "../Root.cer",
+  "OutgoingPoints": [ { "IpAddress": "127.0.0.1", "Port": 50030 } ],
   "Users": {
-    "TEST2": { "IpAddress": "127.0.0.1", "Port": 50030 }
+    "TEST2": {}
   }
 }
 ```
@@ -313,8 +311,8 @@ Sending to `ALL` delivers to `USER-A`, `USER-B`, and `NEW-USER`. Cycles are igno
 ```json
 {
   "Users": {
-    "USER-A": { "IpAddress": "10.0.0.1", "Port": 50021 },
-    "USER-B": { "IpAddress": "10.0.0.2", "Port": 50021 }
+    "USER-A": {},
+    "USER-B": {}
   },
   "UserGroups": {
     "WEST": ["USER-A", "USER-B"],
@@ -328,9 +326,7 @@ Sending to `ALL` delivers to `USER-A`, `USER-B`, and `NEW-USER`. Cycles are igno
 ```json
 {
   "PeerCertificateName": "MY-CUSTOM-CERT",
-  "Users": {
-    "USER-B": { "IpAddress": "192.168.1.11", "Port": 50021 }
-  }
+  "OutgoingPoints": [ { "IpAddress": "192.168.1.11", "Port": 50021 } ]
 }
 ```
 
@@ -340,9 +336,7 @@ Sending to `ALL` delivers to `USER-A`, `USER-B`, and `NEW-USER`. Cycles are igno
 {
   "PeerCertificateFile": "identity.pfx",
   "TrustedAuthorityCertificateFile": "authority.cer",
-  "Users": {
-    "USER-B": { "IpAddress": "192.168.1.11", "Port": 50021 }
-  }
+  "OutgoingPoints": [ { "IpAddress": "192.168.1.11", "Port": 50021 } ]
 }
 ```
 
@@ -356,19 +350,20 @@ A client, running as user `CLIENT-A1`, pointed at its server:
 {
   "UserName": "CLIENT-A1",
   "NodeRole": "Client",
-  "ServerEndpoint": { "IpAddress": "10.0.0.1", "Port": 50021 }
+  "OutgoingPoints": [ { "IpAddress": "10.0.0.1", "Port": 50021 } ]
 }
 ```
 
-The server it connects to, running as user `SERVER-A`, with the full cluster's topology — including the other server, `SERVER-B`, and its own children:
+The server it connects to, running as user `SERVER-A`, with the full cluster's topology — including the other server, `SERVER-B`, and its own children. It listens on `PeerPort` for its clients, and dials `SERVER-B`; `SERVER-B` needs no point for `SERVER-A`, since the connection carries traffic both ways:
 
 ```json
 {
   "UserName": "SERVER-A",
   "NodeRole": "Server",
+  "OutgoingPoints": [ { "IpAddress": "10.0.0.2", "Port": 50021 } ],
   "ServerUsers": {
-    "SERVER-A": { "IpAddress": "10.0.0.1", "Port": 50021, "ChildClients": ["CLIENT-A1", "CLIENT-A2"] },
-    "SERVER-B": { "IpAddress": "10.0.0.2", "Port": 50021, "ChildClients": ["CLIENT-B1"] }
+    "SERVER-A": { "ChildClients": ["CLIENT-A1", "CLIENT-A2"] },
+    "SERVER-B": { "ChildClients": ["CLIENT-B1"] }
   }
 }
 ```

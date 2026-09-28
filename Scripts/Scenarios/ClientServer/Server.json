@@ -7,10 +7,10 @@
   "TrustedAuthorityCertificateFile": "../Root.cer",
   "NodeRole": "Server",
   "ServerUsers": {
-    "Server": { "IpAddress": "127.0.0.1", "Port": 50121, "ChildClients": [ "Client1", "Client2" ] }
+    "Server": { "ChildClients": [ "Client1", "Client2" ] }
   },
   "Users": {
-    "Client1": { "IpAddress": "127.0.0.1", "Port": 50123 },
-    "Client2": { "IpAddress": "127.0.0.1", "Port": 50125 }
+    "Client1": {},
+    "Client2": {}
   }
 }

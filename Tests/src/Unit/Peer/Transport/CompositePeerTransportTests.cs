@@ -3,8 +3,8 @@ namespace BlueHeighliner.Comlink.Tests.Unit.Peer.Transport;
 /// <summary>Unit tests for <see cref="CompositePeerTransport"/> and <see cref="PeerTransportFactory"/>.</summary>
 public sealed class CompositePeerTransportTests
 {
-    private static readonly UserEndpoint ip = new() { IpAddress = "10.0.0.1", Port = 5 };
-    private static readonly UserEndpoint serial = new() { SerialPort = "SL0" };
+    private static readonly ConnectionPoint ip = new() { IpAddress = "10.0.0.1", Port = 5 };
+    private static readonly ConnectionPoint serial = new() { SerialPort = "SL0" };
 
     private sealed record Part(Mock<IPeerTransport> Transport, TestObservable<PeerReceivedEventArgs> Received, TestObservable<PeerConnectionEventArgs> Connected, TestObservable<PeerConnectionEventArgs> Disconnected);
 
@@ -17,36 +17,64 @@ public sealed class CompositePeerTransportTests
         transport.SetupGet(t => t.Received).Returns(received);
         transport.SetupGet(t => t.Connected).Returns(connected);
         transport.SetupGet(t => t.Disconnected).Returns(disconnected);
-        transport.Setup(t => t.Request(It.IsAny<UserEndpoint>(), It.IsAny<ReadOnlyMemory<byte>>(), It.IsAny<PeerSendOptions>(), It.IsAny<CancellationToken>())).ReturnsAsync(true);
+        transport.Setup(t => t.Request(It.IsAny<PeerConnection>(), It.IsAny<ReadOnlyMemory<byte>>(), It.IsAny<PeerSendOptions>(), It.IsAny<CancellationToken>())).ReturnsAsync(true);
+        transport.Setup(t => t.Connect(It.IsAny<ConnectionPoint>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync((ConnectionPoint point, CancellationToken _) => Connection(point));
         return new Part(transport, received, connected, disconnected);
     }
 
-    /// <summary>A request to a serial endpoint goes to the serial transport and one to an IP endpoint goes to the IP transport.</summary>
+    private static PeerConnection Connection(ConnectionPoint point)
+        => new(point, new ConnectionInfo { IsSerial = point.IsSerial }, () => { });
+
+    /// <summary>A connect to a serial point goes to the serial transport and one to an IP point goes to the IP transport.</summary>
     [Fact]
-    public async Task Request_RoutesByEndpointKind()
+    public async Task Connect_RoutesByPointKind()
     {
         Part ipPart = BuildPart();
         Part serialPart = BuildPart();
         CompositePeerTransport composite = new(ipPart.Transport.Object, serialPart.Transport.Object);
 
-        await composite.Request(ip, new byte[] { 1 });
-        await composite.Request(serial, new byte[] { 2 });
+        await composite.Connect(ip);
+        await composite.Connect(serial);
 
-        ipPart.Transport.Verify(t => t.Request(ip, It.IsAny<ReadOnlyMemory<byte>>(), It.IsAny<PeerSendOptions>(), It.IsAny<CancellationToken>()), Times.Once);
-        ipPart.Transport.Verify(t => t.Request(serial, It.IsAny<ReadOnlyMemory<byte>>(), It.IsAny<PeerSendOptions>(), It.IsAny<CancellationToken>()), Times.Never);
-        serialPart.Transport.Verify(t => t.Request(serial, It.IsAny<ReadOnlyMemory<byte>>(), It.IsAny<PeerSendOptions>(), It.IsAny<CancellationToken>()), Times.Once);
-        serialPart.Transport.Verify(t => t.Request(ip, It.IsAny<ReadOnlyMemory<byte>>(), It.IsAny<PeerSendOptions>(), It.IsAny<CancellationToken>()), Times.Never);
+        ipPart.Transport.Verify(t => t.Connect(ip, It.IsAny<CancellationToken>()), Times.Once);
+        ipPart.Transport.Verify(t => t.Connect(serial, It.IsAny<CancellationToken>()), Times.Never);
+        serialPart.Transport.Verify(t => t.Connect(serial, It.IsAny<CancellationToken>()), Times.Once);
+        serialPart.Transport.Verify(t => t.Connect(ip, It.IsAny<CancellationToken>()), Times.Never);
     }
 
-    /// <summary>With no IP transport, IP requests fail with IOException while serial keeps working.</summary>
+    /// <summary>A request over a serial connection goes to the serial transport and one over an IP connection goes to the IP transport.</summary>
     [Fact]
-    public async Task Request_NoIpTransport_IpFailsSerialWorks()
+    public async Task Request_RoutesByConnectionKind()
+    {
+        Part ipPart = BuildPart();
+        Part serialPart = BuildPart();
+        CompositePeerTransport composite = new(ipPart.Transport.Object, serialPart.Transport.Object);
+        PeerConnection ipConnection = Connection(ip);
+        PeerConnection serialConnection = Connection(serial);
+        PeerConnection inbound = new(null, new ConnectionInfo { IsInbound = true }, () => { });
+
+        await composite.Request(ipConnection, new byte[] { 1 });
+        await composite.Request(serialConnection, new byte[] { 2 });
+        await composite.Request(inbound, new byte[] { 3 });
+
+        ipPart.Transport.Verify(t => t.Request(ipConnection, It.IsAny<ReadOnlyMemory<byte>>(), It.IsAny<PeerSendOptions>(), It.IsAny<CancellationToken>()), Times.Once);
+        ipPart.Transport.Verify(t => t.Request(inbound, It.IsAny<ReadOnlyMemory<byte>>(), It.IsAny<PeerSendOptions>(), It.IsAny<CancellationToken>()), Times.Once);
+        ipPart.Transport.Verify(t => t.Request(serialConnection, It.IsAny<ReadOnlyMemory<byte>>(), It.IsAny<PeerSendOptions>(), It.IsAny<CancellationToken>()), Times.Never);
+        serialPart.Transport.Verify(t => t.Request(serialConnection, It.IsAny<ReadOnlyMemory<byte>>(), It.IsAny<PeerSendOptions>(), It.IsAny<CancellationToken>()), Times.Once);
+        serialPart.Transport.Verify(t => t.Request(ipConnection, It.IsAny<ReadOnlyMemory<byte>>(), It.IsAny<PeerSendOptions>(), It.IsAny<CancellationToken>()), Times.Never);
+    }
+
+    /// <summary>With no IP transport, IP connects and requests fail with IOException while serial keeps working.</summary>
+    [Fact]
+    public async Task NoIpTransport_IpFailsSerialWorks()
     {
         Part serialPart = BuildPart();
         CompositePeerTransport composite = new(null, serialPart.Transport.Object);
 
-        await Assert.ThrowsAsync<IOException>(() => composite.Request(ip, new byte[] { 1 }));
-        Assert.True(await composite.Request(serial, new byte[] { 1 }));
+        await Assert.ThrowsAsync<IOException>(() => composite.Connect(ip));
+        await Assert.ThrowsAsync<IOException>(() => composite.Request(Connection(ip), new byte[] { 1 }));
+        Assert.True(await composite.Request(await composite.Connect(serial), new byte[] { 1 }));
     }
 
     /// <summary>Received, Connected, and Disconnected from both transports are merged.</summary>
@@ -60,7 +88,7 @@ public sealed class CompositePeerTransportTests
         composite.Received.Listen(_ => log.Add("received"));
         composite.Connected.Listen(_ => log.Add("connected"));
         composite.Disconnected.Listen(_ => log.Add("disconnected"));
-        PeerConnection connection = new(null, true, null, () => { });
+        PeerConnection connection = new(null, new ConnectionInfo { IsInbound = true }, () => { });
 
         foreach (Part part in new[] { ipPart, serialPart })
         {
@@ -86,26 +114,9 @@ public sealed class CompositePeerTransportTests
         serialPart.Transport.Verify(t => t.StartListener(It.IsAny<int>()), Times.Never);
     }
 
-    /// <summary>Open goes to the transport the endpoint belongs to, and nowhere when that is the missing IP transport.</summary>
+    /// <summary>SetClosed and Reset reach the transport the point belongs to, and are harmless with no IP transport.</summary>
     [Fact]
-    public void Open_RoutesByEndpointKind()
-    {
-        Part ipPart = BuildPart();
-        Part serialPart = BuildPart();
-        CompositePeerTransport composite = new(ipPart.Transport.Object, serialPart.Transport.Object);
-
-        composite.Open(serial);
-        composite.Open(ip);
-        new CompositePeerTransport(null, serialPart.Transport.Object).Open(ip);
-
-        serialPart.Transport.Verify(t => t.Open(serial), Times.Once);
-        serialPart.Transport.Verify(t => t.Open(ip), Times.Never);
-        ipPart.Transport.Verify(t => t.Open(ip), Times.Once);
-    }
-
-    /// <summary>SetClosed and Reset reach the transport the endpoint belongs to, and are harmless with no IP transport.</summary>
-    [Fact]
-    public void SetClosedAndReset_RouteByEndpointKind()
+    public void SetClosedAndReset_RouteByPointKind()
     {
         Part ipPart = BuildPart();
         Part serialPart = BuildPart();
@@ -139,40 +150,96 @@ public sealed class CompositePeerTransportTests
         serialPart.Transport.Verify(t => t.DisposeAsync(), Times.Once);
     }
 
-    /// <summary>With an identity certificate available the factory builds an IP transport as well as the serial one.</summary>
-    [Fact]
-    public async Task Factory_WithConnectionOptions_BuildsIpTransport()
+    private static MsmtSessionPeerOptions IpOptions()
+    {
+        (X509Certificate2 identity, _, X509Certificate2Collection authorities) = TestMsmtCertificates.Create();
+        return new MsmtSessionPeerOptions { Credentials = new MsmtCredentials { Identity = identity, TrustedAuthorities = authorities } };
+    }
+
+    private static (PeerTransportFactory Factory, Mock<IMsmtSessionPeer.IFactory> MsmtFactory, List<byte[]> Sent) BuildIpFactory(IEngineController controller)
     {
         Mock<IMsmtSessionPeer> peer = new();
         peer.SetupGet(p => p.Connected).Returns(new TestObservable<IMsmtConnection>());
         peer.SetupGet(p => p.Disconnected).Returns(new TestObservable<MsmtDisconnection>());
         peer.SetupGet(p => p.PackageChanged).Returns(new TestObservable<MsmtPackageChange>());
         peer.SetupProperty(p => p.Receiver);
+        List<byte[]> sent = [];
         Mock<IMsmtConnection> connection = new();
         connection.SetupGet(c => c.Direction).Returns(MsmtConnectionDirection.Outgoing);
         connection.SetupGet(c => c.Remote).Returns(new MsmtTarget { Host = ip.IpAddress, Port = ip.Port });
         connection.SetupGet(c => c.Status).Returns(MsmtConnectionStatus.Connected);
+        connection.SetupGet(c => c.Identity).Returns(new MsmtIdentity { Subject = "CN=Remote", Issuer = string.Empty, SerialNumber = string.Empty, Thumbprint = string.Empty });
         connection.Setup(c => c.Wait(It.IsAny<CancellationToken>())).ReturnsAsync(true);
         connection.Setup(c => c.Request(It.IsAny<IMemoryOwner<byte>>(), It.IsAny<MsmtSendOptions>(), It.IsAny<CancellationToken>()))
+            .Callback<IMemoryOwner<byte>, MsmtSendOptions?, CancellationToken>((payload, _, _) => sent.Add(payload.Memory.ToArray()))
             .ReturnsAsync(new MsmtResponse { Success = true, Payload = Mock.Of<IMemoryOwner<byte>>() });
         peer.Setup(p => p.Connect(It.IsAny<MsmtNameTarget>())).Returns(connection.Object);
         Mock<IMsmtSessionPeer.IFactory> msmtFactory = new();
         msmtFactory.Setup(f => f.Create(It.IsAny<MsmtSessionPeerOptions>())).Returns(peer.Object);
-        (X509Certificate2 identity, _, X509Certificate2Collection authorities) = TestMsmtCertificates.Create();
+        return (new PeerTransportFactory(msmtFactory.Object, Mock.Of<IMicroGatePeerFactory>(), controller, LoggerFactory.Create(_ => { })), msmtFactory, sent);
+    }
+
+    /// <summary>With an identity certificate available the factory builds an IP transport as well as the serial one.</summary>
+    [Fact]
+    public async Task Factory_WithConnectionOptions_BuildsIpTransport()
+    {
         Mock<TestEngineController> controller = new() { CallBase = true };
-        controller.Setup(c => c.ConnectionOptions).Returns(new MsmtSessionPeerOptions { Credentials = new MsmtCredentials { Identity = identity, TrustedAuthorities = authorities } });
-        PeerTransportFactory factory = new(msmtFactory.Object, Mock.Of<IMicroGatePeerFactory>(), controller.Object, LoggerFactory.Create(_ => { }));
+        controller.Setup(c => c.ConnectionOptions).Returns(IpOptions());
+        (PeerTransportFactory factory, Mock<IMsmtSessionPeer.IFactory> msmtFactory, _) = BuildIpFactory(controller.Object);
 
         await using IPeerTransport transport = factory.Create();
-        bool ok = await transport.Request(ip, new byte[] { 1 });
+        bool ok = await transport.Request(await transport.Connect(ip), new byte[] { 1 });
 
         Assert.True(ok);
         msmtFactory.Verify(f => f.Create(It.IsAny<MsmtSessionPeerOptions>()), Times.Once);
     }
 
-    /// <summary>With no packet type (the default) the transport is used as it is and full payloads are sent.</summary>
+    /// <summary>With no packet type (the default) full payloads are sent as they are.</summary>
     [Fact]
-    public async Task Factory_WithoutPacketType_DoesNotWrapTransport()
+    public async Task Factory_WithoutPacketType_SendsFullPayloads()
+    {
+        Mock<TestEngineController> controller = new() { CallBase = true };
+        controller.Setup(c => c.ConnectionOptions).Returns(IpOptions());
+        (PeerTransportFactory factory, _, List<byte[]> sent) = BuildIpFactory(controller.Object);
+        await using IPeerTransport transport = factory.Create();
+
+        await transport.Request(await transport.Connect(ip), new byte[] { 1, 2, 3 });
+
+        Assert.Equal(new byte[] { 1, 2, 3 }, Assert.Single(sent));
+    }
+
+    /// <summary>With a packet type payloads are sent as packets, so what goes on the wire is not the payload itself.</summary>
+    [Fact]
+    public async Task Factory_WithPacketType_SendsPackets()
+    {
+        Mock<TestPacketEngineController> controller = new() { CallBase = true };
+        controller.Setup(c => c.ConnectionOptions).Returns(IpOptions());
+        (PeerTransportFactory factory, _, List<byte[]> sent) = BuildIpFactory(controller.Object);
+        await using IPeerTransport transport = factory.Create();
+
+        await transport.Request(await transport.Connect(ip), new byte[] { 1, 2, 3 });
+
+        byte[] packet = Assert.Single(sent);
+        Assert.NotEqual(new byte[] { 1, 2, 3 }, packet);
+        Assert.True(packet.Length > 3);
+    }
+
+    /// <summary>A connection message type without a serializer stops the transport being created rather than failing every connection later.</summary>
+    [Fact]
+    public void Factory_ConnectionMessageWithoutSerializer_Throws()
+    {
+        Mock<TestEngineController> controller = new() { CallBase = true };
+        controller.Setup(c => c.ConnectionMessageType).Returns(typeof(TestHello));
+        controller.Setup(c => c.ConnectionSerializer).Returns((INetworkSerializer?)null);
+        controller.Setup(c => c.ConnectionOptions).Throws(new InvalidOperationException("no current user"));
+        PeerTransportFactory factory = new(Mock.Of<IMsmtSessionPeer.IFactory>(), Mock.Of<IMicroGatePeerFactory>(), controller.Object, LoggerFactory.Create(_ => { }));
+
+        Assert.Throws<InvalidOperationException>(() => factory.Create());
+    }
+
+    /// <summary>The factory always produces a transport that identifies its connections.</summary>
+    [Fact]
+    public async Task Factory_AlwaysBuildsIdentifyingTransport()
     {
         Mock<TestEngineController> controller = new() { CallBase = true };
         controller.Setup(c => c.ConnectionOptions).Throws(new InvalidOperationException("no current user"));
@@ -180,20 +247,7 @@ public sealed class CompositePeerTransportTests
 
         await using IPeerTransport transport = factory.Create();
 
-        Assert.IsType<CompositePeerTransport>(transport);
-    }
-
-    /// <summary>With a packet type the transport is wrapped so payloads are sent as packets.</summary>
-    [Fact]
-    public async Task Factory_WithPacketType_WrapsTransport()
-    {
-        Mock<TestPacketEngineController> controller = new() { CallBase = true };
-        controller.Setup(c => c.ConnectionOptions).Throws(new InvalidOperationException("no current user"));
-        PeerTransportFactory factory = new(Mock.Of<IMsmtSessionPeer.IFactory>(), Mock.Of<IMicroGatePeerFactory>(), controller.Object, LoggerFactory.Create(_ => { }));
-
-        await using IPeerTransport transport = factory.Create();
-
-        Assert.IsType<PacketizingPeerTransport>(transport);
+        Assert.IsType<IdentifyingPeerTransport>(transport);
     }
 
     /// <summary>A packet size the packet format leaves no room in, or a window below 1, stops the transport being created rather than failing every send later.</summary>
@@ -222,7 +276,7 @@ public sealed class CompositePeerTransportTests
 
         await using IPeerTransport transport = factory.Create();
 
-        Assert.IsType<CompositePeerTransport>(transport);
+        Assert.IsType<IdentifyingPeerTransport>(transport);
     }
 
     /// <summary>With no identity certificate (a node that only uses serial) the factory still builds a transport, leaving IP unavailable.</summary>
@@ -237,6 +291,6 @@ public sealed class CompositePeerTransportTests
         await using IPeerTransport transport = factory.Create();
 
         msmtFactory.Verify(f => f.Create(It.IsAny<MsmtSessionPeerOptions>()), Times.Never);
-        await Assert.ThrowsAsync<IOException>(() => transport.Request(ip, new byte[] { 1 }));
+        await Assert.ThrowsAsync<IOException>(() => transport.Connect(ip));
     }
 }

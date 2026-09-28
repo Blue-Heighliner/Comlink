@@ -1,13 +1,12 @@
 namespace BlueHeighliner.Comlink.Peer;
 
 /// <summary>
-/// Proactively opens, and continuously maintains, a connection to each of a Client or Server role's
-/// hierarchical peers (a Client's own server, or a Server's own children and sibling servers) by requesting
-/// an empty heartbeat payload and awaiting its outcome - <see cref="PeerMessageDispatcher.Dispatch"/> and
-/// <see cref="ServerRoutingService"/> both treat an empty payload as a no-op, so it never reaches the remote
-/// peer's application logic. Over IP a heartbeat reuses the same cached session connection a real send would
-/// create, so the connection genuinely stays open between heartbeats rather than flapping; over serial a
-/// heartbeat is what first opens the link to the port, which then reconnects on its own.
+/// Proactively opens, and continuously maintains, the connection to one of this node's outgoing
+/// <see cref="ConnectionPoint"/>s by connecting to it and requesting an empty heartbeat payload over the connection,
+/// awaiting its outcome - <see cref="PeerMessageDispatcher.Dispatch"/> and <see cref="ServerRoutingService"/> both treat
+/// an empty payload as a no-op, so it never reaches the remote peer's application logic. Over IP a heartbeat reuses the
+/// same cached session connection, so the connection genuinely stays open between heartbeats rather than flapping; over
+/// serial the first connect is what creates the link to the port, which then reconnects on its own.
 /// </summary>
 /// <remarks>
 /// While the last heartbeat did not succeed - including the very first one, which commonly races the
@@ -25,28 +24,28 @@ internal sealed class PeerConnectionMonitor(TimeSpan? steadyInterval = null, Tim
     private readonly TimeSpan fastRetryInterval = fastRetryInterval ?? TimeSpan.FromSeconds(2);
 
     /// <summary>
-    /// Starts requesting an empty heartbeat payload from <paramref name="target"/> through <paramref
-    /// name="transport"/> in the background, immediately and then repeatedly - on <see cref="fastRetryInterval"/>
+    /// Starts connecting to <paramref name="target"/> through <paramref name="transport"/> and requesting an empty
+    /// heartbeat payload over the connection in the background, immediately and then repeatedly - on <see cref="fastRetryInterval"/>
     /// while disconnected, on <see cref="steadyInterval"/> once connected - until <paramref
     /// name="cancellation"/> is triggered.
     /// </summary>
     /// <param name="transport">The transport to send heartbeats through.</param>
-    /// <param name="target">The hierarchical peer to maintain a connection to.</param>
+    /// <param name="target">The point to maintain a connection to.</param>
     /// <param name="cancellation">Stops sending heartbeats.</param>
     /// <param name="acknowledged">
-    /// Invoked each time the remote node acknowledges a heartbeat. A connection only counts as up once a heartbeat has
+    /// Invoked with the connection each time the remote node acknowledges a heartbeat. A connection only counts as up once a heartbeat has
     /// been acknowledged: a remote node that has closed the connection accepts it and drops it again without ever
     /// answering, and treating the bare connection as up would flash it green every time.
     /// </param>
     /// <returns>A handle that can pause, resume, or immediately trigger the heartbeat loop.</returns>
-    public PeerLinkControl Maintain(IPeerTransport transport, UserEndpoint target, CancellationToken cancellation, Action? acknowledged = null)
+    public PeerLinkControl Maintain(IPeerTransport transport, ConnectionPoint target, CancellationToken cancellation, Action<PeerConnection>? acknowledged = null)
     {
         PeerLinkControl control = new();
         _ = Task.Run(() => Loop(transport, target, control, acknowledged, cancellation), cancellation);
         return control;
     }
 
-    private async Task Loop(IPeerTransport transport, UserEndpoint target, PeerLinkControl control, Action? acknowledged, CancellationToken cancellation)
+    private async Task Loop(IPeerTransport transport, ConnectionPoint target, PeerLinkControl control, Action<PeerConnection>? acknowledged, CancellationToken cancellation)
     {
         while (!cancellation.IsCancellationRequested)
         {
@@ -54,9 +53,11 @@ internal sealed class PeerConnectionMonitor(TimeSpan? steadyInterval = null, Tim
             if (!control.IsClosed)
             {
                 bool connected;
+                PeerConnection? connection = null;
                 try
                 {
-                    connected = await transport.Request(target, ReadOnlyMemory<byte>.Empty, new PeerSendOptions { Priority = int.MinValue }, cancellation);
+                    connection = await transport.Connect(target, cancellation);
+                    connected = await transport.Request(connection, ReadOnlyMemory<byte>.Empty, new PeerSendOptions { Priority = int.MinValue }, cancellation);
                 }
                 catch
                 {
@@ -65,9 +66,9 @@ internal sealed class PeerConnectionMonitor(TimeSpan? steadyInterval = null, Tim
 
                 delay = connected ? steadyInterval : fastRetryInterval;
                 control.ReportOutcome(connected);
-                if (connected)
+                if (connected && connection is not null)
                 {
-                    try { acknowledged?.Invoke(); }
+                    try { acknowledged?.Invoke(connection); }
                     catch { }
                 }
             }

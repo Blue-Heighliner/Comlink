@@ -625,41 +625,57 @@ public sealed class ControlProviderTests
     public void DefaultEngineController_UserDirectoryAlwaysEmpty()
     {
         TestEngineController controller = new();
-        Assert.Null(controller.GetEndpoint("ANY"));
+        Assert.Empty(controller.GetUserData("ANY"));
         Assert.Empty(controller.UserGroups);
         Assert.Empty(controller.Users);
     }
 
-    /// <summary>Returns endpoint for a configured user.</summary>
+    /// <summary>A configured user's data is returned for that user.</summary>
     [Fact]
-    public void ConfiguredEngineController_KnownUser_ReturnsEndpoint()
+    public void ConfiguredEngineController_KnownUser_ReturnsConfiguredData()
     {
         EngineConfig config = new()
         {
-            Users = new Dictionary<string, UserEndpointConfig>
+            Users = new Dictionary<string, UserConfig>
             {
-                ["ALPHA"] = new UserEndpointConfig { IpAddress = "192.168.1.10", Port = 7890 }
+                ["ALPHA"] = new UserConfig { Data = new Dictionary<string, string> { ["role"] = "clerk" } }
             }
         };
         ConfiguredEngineController controller = new(new TestEngineController(), config, NoCurrentUser);
 
-        UserEndpoint? result = controller.GetEndpoint("ALPHA");
+        IReadOnlyDictionary<string, string> result = controller.GetUserData("alpha");
 
-        Assert.NotNull(result);
-        Assert.Equal("192.168.1.10", result.IpAddress);
-        Assert.Equal(7890, result.Port);
+        Assert.Equal("clerk", result["role"]);
     }
 
-    /// <summary>Falls back to the wrapped provider for an unknown user.</summary>
+    /// <summary>Configured data is merged over the wrapped provider's own data for the same user, config winning on conflicts.</summary>
     [Fact]
-    public void ConfiguredEngineController_UnknownUser_FallsBack()
+    public void ConfiguredEngineController_UserData_MergesConfigOverFallback()
     {
-        UserEndpoint fallbackEndpoint = new() { IpAddress = "10.0.0.1", Port = 1 };
         Mock<IEngineController> fallback = new();
-        fallback.Setup(f => f.GetEndpoint("UNKNOWN")).Returns(fallbackEndpoint);
+        fallback.Setup(f => f.GetUserData("ALPHA")).Returns(new Dictionary<string, string> { ["role"] = "fallback", ["desk"] = "4" });
+        EngineConfig config = new()
+        {
+            Users = new Dictionary<string, UserConfig> { ["ALPHA"] = new UserConfig { Data = new Dictionary<string, string> { ["role"] = "config" } } }
+        };
+        ConfiguredEngineController controller = new(fallback.Object, config, NoCurrentUser);
+
+        IReadOnlyDictionary<string, string> result = controller.GetUserData("ALPHA");
+
+        Assert.Equal("config", result["role"]);
+        Assert.Equal("4", result["desk"]);
+    }
+
+    /// <summary>Falls back to the wrapped provider's data for an unconfigured user.</summary>
+    [Fact]
+    public void ConfiguredEngineController_UnknownUser_FallsBackToFallbackData()
+    {
+        IReadOnlyDictionary<string, string> fallbackData = new Dictionary<string, string> { ["k"] = "v" };
+        Mock<IEngineController> fallback = new();
+        fallback.Setup(f => f.GetUserData("UNKNOWN")).Returns(fallbackData);
         ConfiguredEngineController controller = new(fallback.Object, new EngineConfig(), NoCurrentUser);
 
-        Assert.Same(fallbackEndpoint, controller.GetEndpoint("UNKNOWN"));
+        Assert.Same(fallbackData, controller.GetUserData("UNKNOWN"));
     }
 
     /// <summary>Config groups are merged over the fallback's own groups, config winning on key conflicts.</summary>
@@ -691,10 +707,10 @@ public sealed class ControlProviderTests
 
         EngineConfig config = new()
         {
-            Users = new Dictionary<string, UserEndpointConfig>
+            Users = new Dictionary<string, UserConfig>
             {
-                ["CHARLIE"] = new UserEndpointConfig { IpAddress = "1.2.3.4", Port = 1 },
-                ["ALPHA"] = new UserEndpointConfig { IpAddress = "1.2.3.5", Port = 2 }
+                ["CHARLIE"] = new UserConfig(),
+                ["ALPHA"] = new UserConfig()
             },
             UserGroups = new Dictionary<string, List<string>>
             {
@@ -716,13 +732,13 @@ public sealed class ControlProviderTests
         Assert.Empty(controller.Users);
     }
 
-    /// <summary>The default implementation is always Peer with no server endpoint or server users configured.</summary>
+    /// <summary>The default implementation is always Peer with no outgoing points or server users configured.</summary>
     [Fact]
     public void DefaultEngineController_PeerWithNothingConfigured()
     {
         TestEngineController controller = new();
         Assert.Equal(NodeRole.Peer, controller.Role);
-        Assert.Null(controller.ServerEndpoint);
+        Assert.Empty(controller.OutgoingPoints);
         Assert.Empty(controller.Servers);
     }
 
@@ -756,30 +772,31 @@ public sealed class ControlProviderTests
         Assert.Equal(NodeRole.Server, controller.Role);
     }
 
-    /// <summary>Falls back to the wrapped provider when config does not set an endpoint.</summary>
+    /// <summary>Falls back to the wrapped provider when config lists no outgoing points.</summary>
     [Fact]
-    public void ConfiguredEngineController_FallsBackWhenServerEndpointNotConfigured()
+    public void ConfiguredEngineController_FallsBackWhenOutgoingPointsNotConfigured()
     {
-        UserEndpoint fallbackEndpoint = new() { IpAddress = "10.0.0.1", Port = 1 };
+        IReadOnlyList<ConnectionPoint> fallbackPoints = [new ConnectionPoint { IpAddress = "10.0.0.1", Port = 1 }];
         Mock<IEngineController> fallback = new();
-        fallback.Setup(f => f.ServerEndpoint).Returns(fallbackEndpoint);
+        fallback.Setup(f => f.OutgoingPoints).Returns(fallbackPoints);
         ConfiguredEngineController controller = new(fallback.Object, new EngineConfig(), NoCurrentUser);
 
-        Assert.Same(fallbackEndpoint, controller.ServerEndpoint);
+        Assert.Same(fallbackPoints, controller.OutgoingPoints);
     }
 
-    /// <summary>A configured endpoint overrides the fallback.</summary>
+    /// <summary>Configured outgoing points replace the fallback's.</summary>
     [Fact]
-    public void ConfiguredEngineController_ServerEndpointOverridesFromConfig()
+    public void ConfiguredEngineController_OutgoingPointsOverrideFromConfig()
     {
-        EngineConfig config = new() { ServerEndpoint = new UserEndpointConfig { IpAddress = "10.0.0.5", Port = 9000 } };
-        ConfiguredEngineController controller = new(new TestEngineController(), config, NoCurrentUser);
+        Mock<IEngineController> fallback = new();
+        fallback.Setup(f => f.OutgoingPoints).Returns([new ConnectionPoint { IpAddress = "10.0.0.1", Port = 1 }]);
+        EngineConfig config = new() { OutgoingPoints = [new ConnectionPointConfig { IpAddress = "10.0.0.5", Port = 9000 }] };
+        ConfiguredEngineController controller = new(fallback.Object, config, NoCurrentUser);
 
-        UserEndpoint? result = controller.ServerEndpoint;
+        ConnectionPoint point = Assert.Single(controller.OutgoingPoints);
 
-        Assert.NotNull(result);
-        Assert.Equal("10.0.0.5", result.IpAddress);
-        Assert.Equal(9000, result.Port);
+        Assert.Equal("10.0.0.5", point.IpAddress);
+        Assert.Equal(9000, point.Port);
     }
 
     /// <summary>Config server users are merged over the fallback's own, config winning on key conflicts.</summary>
@@ -790,24 +807,74 @@ public sealed class ControlProviderTests
         fallback.Setup(f => f.Servers).Returns(
             new Dictionary<string, ServerUserConfig>
             {
-                ["SERVER-A"] = new ServerUserConfig { Endpoint = new UserEndpoint { IpAddress = "1.1.1.1", Port = 1 }, ChildClients = ["FALLBACK-CHILD"] },
-                ["ONLY-FALLBACK"] = new ServerUserConfig { Endpoint = new UserEndpoint { IpAddress = "2.2.2.2", Port = 2 }, ChildClients = [] }
+                ["SERVER-A"] = new ServerUserConfig { ChildClients = ["FALLBACK-CHILD"] },
+                ["ONLY-FALLBACK"] = new ServerUserConfig { ChildClients = ["OTHER"] }
             });
 
         EngineConfig config = new()
         {
             ServerUsers = new Dictionary<string, ServerUserConfigEntry>
             {
-                ["SERVER-A"] = new ServerUserConfigEntry { IpAddress = "9.9.9.9", Port = 9, ChildClients = ["CONFIG-CHILD"] }
+                ["SERVER-A"] = new ServerUserConfigEntry { ChildClients = ["CONFIG-CHILD"] }
             }
         };
         ConfiguredEngineController controller = new(fallback.Object, config, NoCurrentUser);
 
         IReadOnlyDictionary<string, ServerUserConfig> servers = controller.Servers;
 
-        Assert.Equal("9.9.9.9", servers["SERVER-A"].Endpoint.IpAddress);
         Assert.Equal(["CONFIG-CHILD"], servers["SERVER-A"].ChildClients);
-        Assert.Equal("2.2.2.2", servers["ONLY-FALLBACK"].Endpoint.IpAddress);
+        Assert.Equal(["OTHER"], servers["ONLY-FALLBACK"].ChildClients);
+    }
+
+    /// <summary>By default no connection is identified by the controller (the engine decides), and no connection message is configured.</summary>
+    [Fact]
+    public void DefaultEngineController_NoConnectionHooks()
+    {
+        TestEngineController controller = new();
+        ConnectionInfo connection = new() { Host = "10.0.0.1" };
+
+        Assert.Null(controller.IdentifyConnection(connection));
+        Assert.Null(controller.ConnectionMessageType);
+        Assert.Null(controller.ConnectionResponseType);
+        Assert.Null(controller.ConnectionSerializer);
+        Assert.Null(controller.CreateConnectionMessage(connection));
+        Assert.Null(controller.CreateConnectionResponse(connection));
+    }
+
+    /// <summary>Naming a connection message type gives a serializer that builds only the message and response types.</summary>
+    [Fact]
+    public void DefaultEngineController_ConnectionSerializer_BuildsOnlyTheConfiguredTypes()
+    {
+        Mock<TestEngineController> controller = new() { CallBase = true };
+        controller.Setup(c => c.ConnectionMessageType).Returns(typeof(TestHello));
+        controller.Setup(c => c.ConnectionResponseType).Returns(typeof(TestWelcome));
+
+        INetworkSerializer serializer = controller.Object.ConnectionSerializer!;
+        using IMemoryOwner<byte> hello = serializer.Serialize(new TestHello { Name = "A" });
+        using IMemoryOwner<byte> welcome = serializer.Serialize(new TestWelcome { Station = 4 });
+
+        Assert.Equal("A", Assert.IsType<TestHello>(serializer.Deserialize(hello.Memory)).Name);
+        Assert.Equal(4, Assert.IsType<TestWelcome>(serializer.Deserialize(welcome.Memory)).Station);
+        using IMemoryOwner<byte> foreign = new ProtobufNetworkSerializer().Serialize(new TestMessage());
+        Assert.Null(serializer.Deserialize(foreign.Memory));
+    }
+
+    /// <summary>The connection hooks and types are not configurable from config.json and delegate to the wrapped provider.</summary>
+    [Fact]
+    public void ConfiguredEngineController_ConnectionHooks_DelegateToFallback()
+    {
+        ConnectionInfo connection = new() { Host = "10.0.0.1" };
+        UserIdentity identity = new() { Name = "BOB" };
+        object message = new();
+        Mock<IEngineController> fallback = new();
+        fallback.Setup(f => f.IdentifyConnection(connection)).Returns(identity);
+        fallback.Setup(f => f.CreateConnectionMessage(connection)).Returns(message);
+        fallback.Setup(f => f.ConnectionMessageType).Returns(typeof(TestHello));
+        ConfiguredEngineController controller = new(fallback.Object, new EngineConfig(), NoCurrentUser);
+
+        Assert.Same(identity, controller.IdentifyConnection(connection));
+        Assert.Same(message, controller.CreateConnectionMessage(connection));
+        Assert.Equal(typeof(TestHello), controller.ConnectionMessageType);
     }
 
     /// <summary>The default implementation always disables config file reading.</summary>

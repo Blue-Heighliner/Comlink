@@ -1,9 +1,10 @@
 namespace BlueHeighliner.Comlink.Peer.Transport;
 
 /// <summary>
-/// The serial half of the peer transport: one persistent <see cref="SerialLink"/> per distinct serial endpoint,
-/// created the first time it is opened or sent to. A serial cable joins exactly two nodes, so the remote node's
-/// identity is simply whichever user is configured for that port; there is no certificate exchange and no listener.
+/// The serial half of the peer transport: one persistent <see cref="SerialLink"/> per distinct serial point, created
+/// the first time it is connected to. A serial cable joins exactly two nodes and is opened from both ends, so there is
+/// no listener and no certificate exchange: who is on the other end is worked out from the port and address, or from the
+/// connection message.
 /// </summary>
 internal sealed class SerialPeerTransport : IPeerTransport
 {
@@ -40,20 +41,26 @@ internal sealed class SerialPeerTransport : IPeerTransport
     }
 
     /// <inheritdoc />
-    public void Open(UserEndpoint endpoint) => GetLink(endpoint);
+    public void SetClosed(ConnectionPoint point, bool closed) => GetLink(point, closed).SetClosed(closed);
 
     /// <inheritdoc />
-    public void SetClosed(UserEndpoint endpoint, bool closed) => GetLink(endpoint, closed).SetClosed(closed);
-
-    /// <inheritdoc />
-    public void Reset(UserEndpoint endpoint)
+    public void Reset(ConnectionPoint point)
     {
-        if (links.TryGetValue(endpoint.Key, out Lazy<SerialLink>? link) && link.IsValueCreated) { link.Value.Reset(); }
+        if (links.TryGetValue(point.Key, out Lazy<SerialLink>? link) && link.IsValueCreated) { link.Value.Reset(); }
     }
 
     /// <inheritdoc />
-    public Task<bool> Request(UserEndpoint target, ReadOnlyMemory<byte> data, PeerSendOptions? options = null, CancellationToken cancellation = default)
-        => GetLink(target).Request(data, options, cancellation);
+    public Task<PeerConnection> Connect(ConnectionPoint point, CancellationToken cancellation = default)
+    {
+        SerialLink link = GetLink(point);
+        return link.IsConnected
+            ? Task.FromResult(link.Connection)
+            : Task.FromException<PeerConnection>(new IOException(link.IsClosed ? $"Serial link to {point} is closed" : $"Serial link to {point} is not connected"));
+    }
+
+    /// <inheritdoc />
+    public Task<bool> Request(PeerConnection connection, ReadOnlyMemory<byte> data, PeerSendOptions? options = null, CancellationToken cancellation = default)
+        => GetLink(connection.Point ?? throw new ArgumentException("A serial connection always has a point", nameof(connection))).Request(data, options, cancellation);
 
     /// <inheritdoc />
     public async ValueTask DisposeAsync()
@@ -64,10 +71,10 @@ internal sealed class SerialPeerTransport : IPeerTransport
         }
     }
 
-    private SerialLink GetLink(UserEndpoint endpoint, bool startClosed = false)
+    private SerialLink GetLink(ConnectionPoint point, bool startClosed = false)
     {
-        if (!endpoint.IsSerial) { throw new ArgumentException("Endpoint is not a serial endpoint", nameof(endpoint)); }
+        if (!point.IsSerial) { throw new ArgumentException("Point is not a serial point", nameof(point)); }
 
-        return links.GetOrAdd(endpoint.Key, _ => new Lazy<SerialLink>(() => new SerialLink(endpoint, peerFactory, logger, received, connected, disconnected, reconnectDelay, requestTimeout, startClosed))).Value;
+        return links.GetOrAdd(point.Key, _ => new Lazy<SerialLink>(() => new SerialLink(point, peerFactory, logger, received, connected, disconnected, reconnectDelay, requestTimeout, startClosed))).Value;
     }
 }

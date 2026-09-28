@@ -7,7 +7,7 @@ internal interface IPeerTransportFactory
     IPeerTransport Create();
 }
 
-/// <summary>Builds a <see cref="CompositePeerTransport"/> of MSMT (IP) and MicroGate (serial), leaving out IP when no identity certificate is available, and wraps it in a <see cref="PacketizingPeerTransport"/> when <see cref="IEngineController.PacketType"/> is set.</summary>
+/// <summary>Builds a <see cref="CompositePeerTransport"/> of MSMT (IP) and MicroGate (serial), leaving out IP when no identity certificate is available, wraps it in a <see cref="PacketizingPeerTransport"/> when <see cref="IEngineController.PacketType"/> is set, and finally in an <see cref="IdentifyingPeerTransport"/> that identifies each connection.</summary>
 internal sealed class PeerTransportFactory(
     IMsmtSessionPeer.IFactory msmtFactory,
     IMicroGatePeerFactory microGateFactory,
@@ -31,7 +31,21 @@ internal sealed class PeerTransportFactory(
         }
 
         IPeerTransport transport = new CompositePeerTransport(ip, new SerialPeerTransport(microGateFactory, logger));
-        return packetizer is null ? transport : new PacketizingPeerTransport(transport, packetizer, engineController.PacketWindow, logger);
+        if (packetizer is not null) { transport = new PacketizingPeerTransport(transport, packetizer, engineController.PacketWindow, logger); }
+        return CreateIdentifying(transport, logger);
+    }
+
+    private IdentifyingPeerTransport CreateIdentifying(IPeerTransport transport, ILogger logger)
+    {
+        try
+        {
+            return new IdentifyingPeerTransport(transport, engineController, logger);
+        }
+        catch (Exception ex)
+        {
+            logger.LogError("Connection identification is misconfigured, so networking cannot start: {Message}", ex.Message);
+            throw;
+        }
     }
 
     // Logged as well as thrown because the peer services start on a background task, where a throw alone would go unseen.

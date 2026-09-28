@@ -1,7 +1,7 @@
 namespace BlueHeighliner.Comlink.Peer.Transport;
 
 /// <summary>
-/// Hands the packets queued for one endpoint to the wrapped transport, at most a window's worth at a time, always
+/// Hands the packets queued for one connection to the wrapped transport, at most a window's worth at a time, always
 /// the highest-priority queued packet next and first come, first served among equals. Holding the rest back here
 /// rather than queueing them all on the wrapped transport is what lets a higher-priority payload sent while a
 /// lower-priority one is still being transmitted go out right after the packets already in flight, on any
@@ -9,7 +9,7 @@ namespace BlueHeighliner.Comlink.Peer.Transport;
 /// queued. A wider window keeps more packets in flight at once, which suits a link with a long round trip, at the
 /// cost of that many packets a more urgent payload can end up waiting behind.
 /// </summary>
-internal sealed class PacketScheduler(IPeerTransport transport, int window) : IDisposable
+internal sealed class PacketScheduler(IPeerTransport transport, PeerConnection connection, int window) : IDisposable
 {
     private readonly Lock gate = new();
     private readonly PriorityQueue<Item, (long NegatedPriority, long Sequence)> queue = new();
@@ -17,16 +17,15 @@ internal sealed class PacketScheduler(IPeerTransport transport, int window) : ID
     private int workers;
     private bool disposed;
 
-    /// <summary>Queues <paramref name="packet"/> to be sent to <paramref name="target"/>.</summary>
-    /// <param name="target">The endpoint to send to.</param>
+    /// <summary>Queues <paramref name="packet"/> to be sent over the connection.</summary>
     /// <param name="packet">The packet, which must stay valid until the returned task completes.</param>
     /// <param name="transmitted">Invoked once the packet has been handed to the remote end.</param>
     /// <param name="payload">The payload the packet belongs to; once one of its packets fails the rest are not sent.</param>
     /// <param name="cancellation">Cancels the packet while it is still queued, and is passed on to the wrapped transport once it is being sent.</param>
     /// <returns>A task that completes once the packet has been sent and acknowledged, rejected, failed, cancelled while queued, or dropped.</returns>
-    public Task<bool> Enqueue(UserEndpoint target, Packet packet, Action? transmitted, Payload payload, CancellationToken cancellation)
+    public Task<bool> Enqueue(Packet packet, Action? transmitted, Payload payload, CancellationToken cancellation)
     {
-        Item item = new(target, packet, transmitted, payload, cancellation);
+        Item item = new(packet, transmitted, payload, cancellation);
 
         // Registered before the packet is queued, so the pump can never finish with it before its registration exists to
         // be disposed. A token that is already cancelled cancels it on the spot, and the pump skips it.
@@ -112,7 +111,7 @@ internal sealed class PacketScheduler(IPeerTransport transport, int window) : ID
     {
         try
         {
-            bool accepted = await transport.Request(item.Target, item.Packet.Data.Memory, new PeerSendOptions { Priority = item.Packet.Priority, Transmitted = item.Transmitted }, item.Cancellation);
+            bool accepted = await transport.Request(connection, item.Packet.Data.Memory, new PeerSendOptions { Priority = item.Packet.Priority, Transmitted = item.Transmitted }, item.Cancellation);
             if (!accepted) { item.Payload.Fail(); }
             item.Result.TrySetResult(accepted);
         }
@@ -150,9 +149,8 @@ internal sealed class PacketScheduler(IPeerTransport transport, int window) : ID
         public void Fail() => Volatile.Write(ref failed, true);
     }
 
-    private sealed class Item(UserEndpoint target, Packet packet, Action? transmitted, Payload payload, CancellationToken cancellation)
+    private sealed class Item(Packet packet, Action? transmitted, Payload payload, CancellationToken cancellation)
     {
-        public UserEndpoint Target { get; } = target;
         public Packet Packet { get; } = packet;
         public Action? Transmitted { get; } = transmitted;
         public Payload Payload { get; } = payload;
