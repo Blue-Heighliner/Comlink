@@ -11,10 +11,18 @@ internal interface IMessageViewModel
     string Body { get; }
     /// <summary>Gets the name of the user that originated the message.</summary>
     string FromUser { get; }
-    /// <summary>Gets a comma-separated list of primary recipient user names.</summary>
+    /// <summary>Gets the uppercase section header label for <see cref="ToList"/>; see <see cref="IEngineController.AddressTypes"/>.</summary>
+    string ToLabel { get; }
+    /// <summary>Gets a comma-separated list of primary recipients, each followed by its custom instructions when it has any.</summary>
     string ToList { get; }
-    /// <summary>Gets a comma-separated list of carbon-copy recipient user names.</summary>
+    /// <summary>Gets the uppercase section header label for <see cref="CcList"/>; see <see cref="IEngineController.AddressTypes"/>.</summary>
+    string CcLabel { get; }
+    /// <summary>Gets a comma-separated list of carbon-copy recipients, each followed by its custom instructions when it has any.</summary>
     string CcList { get; }
+    /// <summary>Gets the uppercase section header label for <see cref="ExternalList"/>; see <see cref="IEngineController.AddressTypes"/>.</summary>
+    string ExternalLabel { get; }
+    /// <summary>Gets a comma-separated list of the addresses outside the system, each followed by its custom instructions when it has any. These are information for the user only; nothing is delivered to them.</summary>
+    string ExternalList { get; }
     /// <summary>Gets the timestamp when the message was received or stored.</summary>
     DateTime ReceivedAt { get; }
     /// <summary>Gets a value indicating whether this message is an alert.</summary>
@@ -75,6 +83,11 @@ internal sealed partial class DeliveryStatusRow : ObservableObject
 /// <summary>ViewModel for displaying a received or sent message and its per-user delivery statuses.</summary>
 internal sealed partial class MessageViewModel : ObservableObject, IMessageViewModel
 {
+    private static string Describe(List<MessageAddress> addresses, AddressType type)
+        => string.Join(", ", addresses
+            .Where(a => a.Type == type)
+            .Select(a => string.IsNullOrWhiteSpace(a.Information) ? a.UserName : $"{a.UserName} - {a.Information}"));
+
     /// <summary>Initializes the ViewModel from the given message entity.</summary>
     /// <param name="entity">The message entity to display.</param>
     /// <param name="engineController">Maps logical fields onto the entity's stored message.</param>
@@ -87,8 +100,13 @@ internal sealed partial class MessageViewModel : ObservableObject, IMessageViewM
         ReceivedAt = entity.ReceivedAt;
         IsAlert = engineController.GetIsAlert(entity.Message);
         List<MessageAddress> addresses = engineController.GetAddresses(entity.Message);
-        ToList = string.Join(", ", addresses.Where(a => a.Type == AddressType.To).Select(a => a.UserName));
-        CcList = string.Join(", ", addresses.Where(a => a.Type == AddressType.Cc).Select(a => a.UserName));
+        IReadOnlyList<AddressTypeOption> addressTypes = engineController.AddressTypes;
+        ToLabel = addressTypes.GetLabel(AddressType.To).ToUpperInvariant();
+        ToList = Describe(addresses, AddressType.To);
+        CcLabel = addressTypes.GetLabel(AddressType.Cc).ToUpperInvariant();
+        CcList = Describe(addresses, AddressType.Cc);
+        ExternalLabel = addressTypes.GetLabel(AddressType.External).ToUpperInvariant();
+        ExternalList = Describe(addresses, AddressType.External);
         foreach (DeliveryStatus d in entity.DeliveryStatuses)
         {
             DeliveryStatuses.Add(new DeliveryStatusRow(d.UserName, d.Status, d.AddressedVia));
@@ -118,10 +136,18 @@ internal sealed partial class MessageViewModel : ObservableObject, IMessageViewM
     public string Body { get; }
     /// <summary>Gets the name of the user that originated the message.</summary>
     public string FromUser { get; }
-    /// <summary>Gets a comma-separated list of primary recipient user names.</summary>
+    /// <summary>Gets the uppercase section header label for <see cref="ToList"/>; see <see cref="IEngineController.AddressTypes"/>.</summary>
+    public string ToLabel { get; }
+    /// <summary>Gets a comma-separated list of primary recipients, each followed by its custom instructions when it has any.</summary>
     public string ToList { get; }
-    /// <summary>Gets a comma-separated list of carbon-copy recipient user names.</summary>
+    /// <summary>Gets the uppercase section header label for <see cref="CcList"/>; see <see cref="IEngineController.AddressTypes"/>.</summary>
+    public string CcLabel { get; }
+    /// <summary>Gets a comma-separated list of carbon-copy recipients, each followed by its custom instructions when it has any.</summary>
     public string CcList { get; }
+    /// <summary>Gets the uppercase section header label for <see cref="ExternalList"/>; see <see cref="IEngineController.AddressTypes"/>.</summary>
+    public string ExternalLabel { get; }
+    /// <summary>Gets a comma-separated list of the addresses outside the system, each followed by its custom instructions when it has any. These are information for the user only; nothing is delivered to them.</summary>
+    public string ExternalList { get; }
     /// <summary>Gets the timestamp when the message was received or stored.</summary>
     public DateTime ReceivedAt { get; }
     /// <summary>Gets a value indicating whether this message is an alert.</summary>

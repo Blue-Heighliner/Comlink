@@ -39,6 +39,8 @@ public sealed class SampleRecipient
 {
     /// <summary>User name of the addressee.</summary>
     [ProtoMember(1)] public string User { get; set; } = string.Empty;
-    /// <summary><see langword="true"/> for a carbon-copy recipient; <see langword="false"/> for a primary recipient.</summary>
-    [ProtoMember(2)] public bool IsCc { get; set; }
+    /// <summary>How the recipient is addressed: <c>TO</c>, <c>CC</c>, or <c>OUTSIDE</c> for an address outside the system.</summary>
+    [ProtoMember(2)] public string Kind { get; set; } = "TO";
+    /// <summary>Custom instructions attached to the recipient, such as <c>Deliver to Eastside Office</c>.</summary>
+    [ProtoMember(3)] public string Note { get; set; } = string.Empty;
 }

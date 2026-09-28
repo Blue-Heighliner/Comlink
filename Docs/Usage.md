@@ -13,7 +13,7 @@ public sealed class MyMessage
     public string FromUser { get; set; } = "";
     public string Subject { get; set; } = "";
     public string Body { get; set; } = "";
-    public List<(string UserName, AddressType Type)> Addresses { get; set; } = [];
+    public List<(string Name, AddressType Type)> Addresses { get; set; } = [];
     public DateTime SentAt { get; set; }
     public string ConfirmationId { get; set; } = "";
     public bool IsAlert { get; set; }
@@ -40,7 +40,7 @@ public sealed class MyEngineConfiguration : IEngineConfiguration
 await Engine.Start<MyEngineConfiguration>(args);
 ```
 
-A field whose type already matches is mapped by naming the property (`m => m.Id`), which builds the setter for you; when the type differs (a host's own recipient shape for the addresses, or a packet's data) the getter and setter are given explicitly, as `Addresses` is above. The message type also needs `[ProtoContract]`/`[ProtoMember]` attributes for the default network serializer.
+A field whose type already matches is mapped by naming the property (`m => m.Id`), which builds the setter for you; when the type differs (a host's own recipient shape for the addresses, or a packet's data) the getter and setter are given explicitly, as `Addresses` is above. `Addresses` also has an overload taking `(string Name, AddressType Type, string Information)` tuples, for a host whose recipient shape carries custom per-address instructions (e.g. `OMAHA - Deliver to Eastside Office`); `Information` is optional and defaults to an empty string when the two-tuple overload above is used instead. The message type also needs `[ProtoContract]`/`[ProtoMember]` attributes for the default network serializer.
 By default this runs the Avalonia desktop UI, with no `config.json` read (`ConfigFile` is off
 unless stated) and no window icon (`WindowIcon` is the operating system's unless stated).
 

@@ -19,6 +19,11 @@ public sealed class DraftViewModelTests
         mock.Setup(t => t.TagsEnabled).Returns(tagsEnabled);
         mock.Setup(t => t.TagLabel).Returns(tagLabel);
         mock.Setup(p => p.BlockedCombinations).Returns(blocks ?? []);
+        mock.Setup(a => a.AddressTypes).Returns([
+            new AddressTypeOption { Type = AddressType.To, Label = "To" },
+            new AddressTypeOption { Type = AddressType.Cc, Label = "Cc" },
+            new AddressTypeOption { Type = AddressType.External, Label = "External" }
+        ]);
         return mock.Object;
     }
 
@@ -305,12 +310,42 @@ public sealed class DraftViewModelTests
         Assert.Equal(["ALPHA", "BETA"], vm.AllUserNames);
     }
 
-    /// <summary>AddressTypes is ["To", "Cc"].</summary>
+    /// <summary>AddressTypes reflects To, Cc and External, each paired with its display label.</summary>
     [Fact]
-    public void AddressTypes_IsToAndCc()
+    public void AddressTypes_IsToCcAndExternal()
     {
         DraftViewModel vm = Build(out _, out _);
-        Assert.Equal(["To", "Cc"], vm.AddressTypes);
+        Assert.Equal([AddressType.To, AddressType.Cc, AddressType.External], vm.AddressTypes.Select(t => t.Type));
+        Assert.Equal(["To", "Cc", "External"], vm.AddressTypes.Select(t => t.Label));
+    }
+
+    /// <summary>An address added with custom instructions keeps them (trimmed), and the field is cleared for the next one.</summary>
+    [Fact]
+    public void AddAddressCommand_WithInformation_KeepsItAndClearsTheField()
+    {
+        DraftViewModel vm = Build(out _, out _);
+        vm.NewAddressUser = "OMAHA";
+        vm.NewAddressType = vm.AddressTypes.Single(t => t.Type == AddressType.External);
+        vm.NewAddressInformation = "  Deliver to Eastside Office  ";
+
+        vm.AddAddressCommand.Execute(null);
+
+        AddressData address = Assert.Single(vm.Addresses);
+        Assert.Equal("External", address.Type);
+        Assert.Equal("Deliver to Eastside Office", address.Information);
+        Assert.Equal(string.Empty, vm.NewAddressInformation);
+    }
+
+    /// <summary>An address added with no instructions has an empty Information.</summary>
+    [Fact]
+    public void AddAddressCommand_WithoutInformation_HasEmptyInformation()
+    {
+        DraftViewModel vm = Build(out _, out _);
+        vm.NewAddressUser = "BRAVO";
+
+        vm.AddAddressCommand.Execute(null);
+
+        Assert.Equal(string.Empty, Assert.Single(vm.Addresses).Information);
     }
 
     /// <summary>Id is a non-empty string.</summary>
@@ -345,7 +380,7 @@ public sealed class DraftViewModelTests
     {
         DraftViewModel vm = Build(out _, out _);
         vm.NewAddressUser = "BRAVO";
-        vm.NewAddressType = "Cc";
+        vm.NewAddressType = vm.AddressTypes.Single(t => t.Type == AddressType.Cc);
 
         vm.AddAddressCommand.Execute(null);
 

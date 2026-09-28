@@ -23,6 +23,9 @@ internal sealed class LoopbackPeerTransport : IPeerTransport
     /// <summary>Gets a value indicating whether this end's connections are serial rather than IP.</summary>
     public bool IsSerial { get; init; }
 
+    /// <summary>Gets or sets how long a request on this end is held before it is delivered, given the payload; a held request can be cancelled.</summary>
+    public Func<byte[], TimeSpan>? DelayFor { get; set; }
+
     /// <summary>Every payload delivered to this end, in order.</summary>
     public ConcurrentQueue<byte[]> Delivered { get; } = [];
 
@@ -99,6 +102,7 @@ internal sealed class LoopbackPeerTransport : IPeerTransport
         if (IsSilent) { return true; }
 
         byte[] copy = data.ToArray();
+        if (DelayFor?.Invoke(copy) is { } delay && delay > TimeSpan.Zero) { await Task.Delay(delay, cancellation); }
         await Task.Run(() =>
         {
             remote!.Delivered.Enqueue(copy);

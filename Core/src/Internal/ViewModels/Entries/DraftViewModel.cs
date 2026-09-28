@@ -13,7 +13,9 @@ internal interface IDraftViewModel
     /// <summary>Gets or sets the user name being typed into the address field (auto-uppercased).</summary>
     string NewAddressUser { get; set; }
     /// <summary>Gets or sets the address type selected in the address field.</summary>
-    string NewAddressType { get; set; }
+    AddressTypeOption NewAddressType { get; set; }
+    /// <summary>Gets or sets the custom instructions being typed for the address (for example <c>Deliver to Eastside Office</c>).</summary>
+    string NewAddressInformation { get; set; }
     /// <summary>Gets or sets a value indicating whether this draft has been sent.</summary>
     bool IsSent { get; set; }
     /// <summary>Gets or sets a value indicating whether this draft will be sent as an alert.</summary>
@@ -67,8 +69,8 @@ internal interface IDraftViewModel
     IReadOnlyDictionary<string, IFillInViewModel> FillIns { get; }
     /// <summary>Gets all known user names available for recipient auto-complete.</summary>
     IReadOnlyList<string> AllUserNames { get; }
-    /// <summary>Gets the list of valid address type labels.</summary>
-    IReadOnlyList<string> AddressTypes { get; }
+    /// <summary>Gets the selectable address types, each paired with its display label; see <see cref="IEngineController.AddressTypes"/>.</summary>
+    IReadOnlyList<AddressTypeOption> AddressTypes { get; }
     /// <summary>Saves the current draft state to the data store.</summary>
     IAsyncRelayCommand SaveCommand { get; }
     /// <summary>Sends the draft as a message.</summary>
@@ -83,7 +85,7 @@ internal interface IDraftViewModel
     IAsyncRelayCommand DeleteCommand { get; }
     /// <summary>Raised after the draft has been deleted.</summary>
     event Func<Task>? Deleted;
-    /// <summary>Adds the current <see cref="NewAddressUser"/> and <see cref="NewAddressType"/> as a recipient.</summary>
+    /// <summary>Adds the current <see cref="NewAddressUser"/>, <see cref="NewAddressType"/> and <see cref="NewAddressInformation"/> as a recipient.</summary>
     IRelayCommand AddAddressCommand { get; }
     /// <summary>Removes the specified address from the recipient list.</summary>
     IRelayCommand<AddressData> RemoveAddressCommand { get; }
@@ -151,6 +153,8 @@ internal sealed partial class DraftViewModel : ObservableObject, IDraftViewModel
         ComposeAlertsEnabled = engineController.ComposeAlertsEnabled;
         TagsEnabled = engineController.TagsEnabled;
         TagLabel = engineController.TagLabel;
+        AddressTypes = engineController.AddressTypes;
+        newAddressType = AddressTypes[0];
 
         allPriorities = engineController.Priorities;
         availablePriorities = FilterPriorities(entity.Tag);
@@ -177,7 +181,8 @@ internal sealed partial class DraftViewModel : ObservableObject, IDraftViewModel
 
     [ObservableProperty] private string subject;
     [ObservableProperty] private string newAddressUser = string.Empty;
-    [ObservableProperty] private string newAddressType = "To";
+    [ObservableProperty] private AddressTypeOption newAddressType;
+    [ObservableProperty] private string newAddressInformation = string.Empty;
     [ObservableProperty] private bool isSent;
     [ObservableProperty] private bool isAlert;
     [ObservableProperty] private MessagePriorityOption selectedPriority;
@@ -212,7 +217,7 @@ internal sealed partial class DraftViewModel : ObservableObject, IDraftViewModel
     /// <inheritdoc />
     public IReadOnlyList<string> AllUserNames { get; }
     /// <inheritdoc />
-    public IReadOnlyList<string> AddressTypes { get; } = ["To", "Cc"];
+    public IReadOnlyList<AddressTypeOption> AddressTypes { get; }
     /// <inheritdoc />
     public string AlertLabel { get; }
     /// <inheritdoc />
@@ -421,7 +426,7 @@ internal sealed partial class DraftViewModel : ObservableObject, IDraftViewModel
 
             SendMessageResult? result = await connection.SendMessage(
                 Subject, body,
-                Addresses.Select(a => new AddressRequest { UserName = a.UserName, Type = a.Type }).ToList(),
+                Addresses.Select(a => new AddressRequest { UserName = a.UserName, Type = a.Type, Information = a.Information }).ToList(),
                 IsAlert, SelectedPriority.Value, Tag);
             if (result is null)
             {
@@ -460,8 +465,9 @@ internal sealed partial class DraftViewModel : ObservableObject, IDraftViewModel
     private void AddAddress()
     {
         if (string.IsNullOrWhiteSpace(NewAddressUser)) { return; }
-        Addresses.Add(new AddressData { UserName = NewAddressUser.Trim(), Type = NewAddressType });
+        Addresses.Add(new AddressData { UserName = NewAddressUser.Trim(), Type = NewAddressType.Type.ToString(), Information = NewAddressInformation.Trim() });
         NewAddressUser = string.Empty;
+        NewAddressInformation = string.Empty;
     }
 
     [RelayCommand]

@@ -26,7 +26,7 @@ public sealed class InterfaceServiceTests
         {
             Subject = "Hi",
             Body = "Body",
-            Addresses = [new TestAddressEntry { UserName = "DEST", Type = "To" }],
+            Addresses = [new TestAddressEntry { UserName = "DEST", Type = "To" }, new TestAddressEntry { UserName = "OMAHA", Type = "External", Information = "Deliver to Eastside Office" }],
             IsAlert = true,
             Priority = 2
         };
@@ -35,7 +35,7 @@ public sealed class InterfaceServiceTests
         await svc.HandleInterfaceMessage(buf.Memory.ToArray());
 
         routing.Verify(r => r.Route("LOCAL", It.Is<SendMessagePayload>(p =>
-            p.Subject == "Hi" && p.Body == "Body" && p.Addresses.Count == 1 && p.Addresses[0].UserName == "DEST" && p.IsAlert && p.Priority == 2),
+            p.Subject == "Hi" && p.Body == "Body" && p.Addresses.Count == 2 && p.Addresses[0].UserName == "DEST" && p.Addresses[1].Type == "External" && p.Addresses[1].Information == "Deliver to Eastside Office" && p.IsAlert && p.Priority == 2),
             It.IsAny<CancellationToken>()), Times.Once);
     }
 

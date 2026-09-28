@@ -32,11 +32,17 @@ internal sealed class MessageBuilder<TMessage> : IMessageBuilder<TMessage> where
     public IMessageBuilder<TMessage> Body(Expression<Func<TMessage, string>> property) => Map(nameof(Body), property);
 
     /// <inheritdoc />
-    public IMessageBuilder<TMessage> Addresses(Func<TMessage, IEnumerable<(string UserName, AddressType Type)>> get, Action<TMessage, IReadOnlyList<(string UserName, AddressType Type)>> set)
+    public IMessageBuilder<TMessage> Addresses(Func<TMessage, IEnumerable<(string Name, AddressType Type, string Information)>> get, Action<TMessage, IReadOnlyList<(string Name, AddressType Type, string Information)>> set)
         => Map<List<MessageAddress>>(
             nameof(Addresses),
-            message => [.. get(message).Select(address => new MessageAddress { UserName = address.UserName, Type = address.Type })],
-            (message, addresses) => set(message, [.. addresses.Select(address => (address.UserName, address.Type))]));
+            message => [.. get(message).Select(address => new MessageAddress { UserName = address.Name, Type = address.Type, Information = address.Information })],
+            (message, addresses) => set(message, [.. addresses.Select(address => (address.UserName, address.Type, address.Information))]));
+
+    /// <inheritdoc />
+    public IMessageBuilder<TMessage> Addresses(Func<TMessage, IEnumerable<(string Name, AddressType Type)>> get, Action<TMessage, IReadOnlyList<(string Name, AddressType Type)>> set)
+        => Addresses(
+            message => get(message).Select(address => (address.Name, address.Type, string.Empty)),
+            (message, addresses) => set(message, [.. addresses.Select(address => (address.Name, address.Type))]));
 
     /// <inheritdoc />
     public IMessageBuilder<TMessage> SentAt(Func<TMessage, DateTime> get, Action<TMessage, DateTime> set) => Map(nameof(SentAt), get, set);

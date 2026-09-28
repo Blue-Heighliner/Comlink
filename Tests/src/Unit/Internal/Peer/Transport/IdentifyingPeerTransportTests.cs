@@ -398,6 +398,27 @@ public sealed class IdentifyingPeerTransportTests
         Assert.Equal("ALICE/1", endB.Connected[0].User!.Name);
     }
 
+    /// <summary>A node that is fully identified before its own response has finished sending keeps the response going and stays connected: establishing must not cancel what the exchange still has in flight.</summary>
+    [Fact]
+    public async Task Handshake_EstablishedWhileResponseStillSending_StaysConnected()
+    {
+        Mock<TestEngineController> a = HandshakeController();
+        a.Setup(c => c.CreateConnectionMessage(It.IsAny<ConnectionInfo>())).Returns(new TestHello { Name = "ALICE" });
+        a.Setup(c => c.IdentifyConnection(It.IsAny<ConnectionInfo>())).Returns(new UserIdentity { Name = "BOB" });
+        Mock<TestEngineController> b = HandshakeController();
+        b.Setup(c => c.CreateConnectionMessage(It.IsAny<ConnectionInfo>())).Returns(new TestHello { Name = "BOB" });
+        b.Setup(c => c.IdentifyConnection(It.IsAny<ConnectionInfo>())).Returns(new UserIdentity { Name = "ALICE" });
+        (End endA, End endB) = Pair(a.Object, b.Object, serial: true);
+        endB.Raw.DelayFor = data => data[0] == 3 ? TimeSpan.FromMilliseconds(300) : TimeSpan.Zero;
+
+        PeerConnection link = await endA.Transport.Connect(serialPoint);
+
+        Assert.Equal("BOB", link.User!.Name);
+        await WaitUntil(() => endB.Connected.Count == 1);
+        Assert.Empty(endB.Disconnected);
+        Assert.Empty(endA.Disconnected);
+    }
+
     /// <summary>If the other end never answers the connection message, the connection is dropped once the timeout passes and connecting fails.</summary>
     [Fact]
     public async Task Handshake_NoAnswer_TimesOutAndDrops()

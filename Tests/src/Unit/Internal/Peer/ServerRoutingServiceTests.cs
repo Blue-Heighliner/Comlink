@@ -260,6 +260,32 @@ public sealed class ServerRoutingServiceTests
         await Stop(fx);
     }
 
+    /// <summary>An external address is never routed, even when it is spelled like a child or a server: the server takes no action for it.</summary>
+    [Fact]
+    public async Task FromChild_ExternalAddressNamedLikeAChild_IsNotRelayed()
+    {
+        Fixture fx = await BuildStarted();
+        PeerConnection clientA1 = Inbound("ClientA1");
+        PeerConnection clientA2 = Inbound("ClientA2");
+        PeerConnection serverB = Inbound("ServerB");
+        fx.Come(clientA1);
+        fx.Come(clientA2);
+        fx.Come(serverB);
+        TestMessage message = new()
+        {
+            MessageId = "M1",
+            FromUser = "SOURCE",
+            Addresses = [new TestAddressEntry { UserName = "ClientA2", Type = "External" }, new TestAddressEntry { UserName = "ClientB1", Type = "External", Information = "By hand" }]
+        };
+
+        fx.Receive(clientA1, Encode(message));
+
+        await Task.Delay(100);
+        Assert.Equal(0, Requests(fx, clientA2, real: true));
+        Assert.Equal(0, Requests(fx, serverB, real: true));
+        await Stop(fx);
+    }
+
     /// <summary>A message from a child addressed to a child of another server is forwarded over that server's connection once.</summary>
     [Fact]
     public async Task FromChild_AddressedToRemoteServersChild_ForwardsToThatServerOnce()

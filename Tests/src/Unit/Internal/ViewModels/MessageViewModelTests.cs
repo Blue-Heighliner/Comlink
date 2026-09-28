@@ -20,7 +20,7 @@ public sealed class MessageViewModelTests
         format.SetBody(message, body);
         format.SetFromUser(message, fromUser);
         format.SetAddresses(message, [.. (addresses ?? [new AddressData { UserName = "DEST", Type = "To" }])
-            .Select(a => new MessageAddress { UserName = a.UserName, Type = a.Type.ParseAddressType() })]);
+            .Select(a => new MessageAddress { UserName = a.UserName, Type = a.Type.ParseAddressType(), Information = a.Information })]);
         return new MessageEntity
         {
             MessageId = id,
@@ -28,6 +28,63 @@ public sealed class MessageViewModelTests
             ReceivedAt = new DateTime(2025, 7, 4, 10, 0, 0, DateTimeKind.Utc),
             DeliveryStatuses = [.. (deliveryStatuses ?? [])]
         };
+    }
+
+    /// <summary>Recipients are listed by role, with their custom instructions after a dash, and external addresses get their own list.</summary>
+    [Fact]
+    public void Ctor_ListsRecipientsByRole_WithInformation()
+    {
+        MessageEntity entity = MakeEntity(addresses:
+        [
+            new AddressData { UserName = "BETA", Type = "To" },
+            new AddressData { UserName = "GAMMA", Type = "To", Information = "Urgent" },
+            new AddressData { UserName = "DELTA", Type = "Cc" },
+            new AddressData { UserName = "OMAHA", Type = "External", Information = "Deliver to Eastside Office" },
+            new AddressData { UserName = "RENO", Type = "External" }
+        ]);
+
+        MessageViewModel vm = new(entity, format);
+
+        Assert.Equal("BETA, GAMMA - Urgent", vm.ToList);
+        Assert.Equal("DELTA", vm.CcList);
+        Assert.Equal("OMAHA - Deliver to Eastside Office, RENO", vm.ExternalList);
+    }
+
+    /// <summary>A message with no external addresses has an empty external list, so the view hides its row.</summary>
+    [Fact]
+    public void Ctor_NoExternalAddresses_ExternalListIsEmpty()
+        => Assert.Empty(new MessageViewModel(MakeEntity(), format).ExternalList);
+
+    /// <summary>The section header labels default to the uppercase address type names.</summary>
+    [Fact]
+    public void Ctor_DefaultAddressTypeLabels_AreUppercaseTypeNames()
+    {
+        MessageViewModel vm = new(MakeEntity(), format);
+
+        Assert.Equal("TO", vm.ToLabel);
+        Assert.Equal("CC", vm.CcLabel);
+        Assert.Equal("EXTERNAL", vm.ExternalLabel);
+    }
+
+    /// <summary>A host-overridden address type label is reflected, uppercased, in the corresponding section header.</summary>
+    [Fact]
+    public void Ctor_OverriddenAddressTypeLabel_IsReflectedUppercased()
+    {
+        Mock<IEngineController> mock = new(MockBehavior.Loose) { CallBase = false };
+        mock.Setup(e => e.GetSubject(It.IsAny<object>())).Returns(format.GetSubject);
+        mock.Setup(e => e.GetBody(It.IsAny<object>())).Returns(format.GetBody);
+        mock.Setup(e => e.GetFromUser(It.IsAny<object>())).Returns(format.GetFromUser);
+        mock.Setup(e => e.GetIsAlert(It.IsAny<object>())).Returns(format.GetIsAlert);
+        mock.Setup(e => e.GetAddresses(It.IsAny<object>())).Returns(format.GetAddresses);
+        mock.Setup(e => e.AddressTypes).Returns([
+            new AddressTypeOption { Type = AddressType.To, Label = "To" },
+            new AddressTypeOption { Type = AddressType.Cc, Label = "Cc" },
+            new AddressTypeOption { Type = AddressType.External, Label = "Outside" }
+        ]);
+
+        MessageViewModel vm = new(MakeEntity(), mock.Object);
+
+        Assert.Equal("OUTSIDE", vm.ExternalLabel);
     }
 
     /// <summary>ViewModel exposes all message fields from the entity.</summary>

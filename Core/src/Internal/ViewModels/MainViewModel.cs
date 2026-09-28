@@ -322,7 +322,7 @@ internal sealed partial class MainViewModel : ObservableObject, IMainViewModel
         {
             MessageEntity entity = await entryService.StoreIncomingMessage(
                 evt.MessageId, evt.FromUser, evt.Subject, evt.Body,
-                evt.Addresses.Select(a => new Data.Entities.AddressData { UserName = a.UserName, Type = a.Type }).ToList(),
+                evt.Addresses.Select(a => new Data.Entities.AddressData { UserName = a.UserName, Type = a.Type, Information = a.Information }).ToList(),
                 evt.SentAt, evt.IsAlert, evt.Priority, evt.Tag);
 
             FolderItemViewModel? inboxFolder = folderBar.RootFolders.FirstOrDefault(f => f.RootType == FolderType.Inbox);

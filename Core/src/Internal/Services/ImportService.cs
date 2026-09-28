@@ -148,7 +148,7 @@ internal sealed class ImportService : IImportService
         engineController.SetSubject(message, data.Subject);
         engineController.SetBody(message, data.Body);
         engineController.SetAddresses(message, data.Addresses
-            .Select(a => new MessageAddress { UserName = a.UserName, Type = a.Type.ParseAddressType() })
+            .Select(a => new MessageAddress { UserName = a.UserName, Type = a.Type.ParseAddressType(), Information = a.Information })
             .ToList());
         engineController.SetSentAt(message, data.SentAt);
         engineController.SetIsAlert(message, data.IsAlert);

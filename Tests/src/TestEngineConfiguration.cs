@@ -13,8 +13,8 @@ public sealed class TestEngineConfiguration(bool packets = false) : IEngineConfi
             .Subject(m => m.Subject)
             .Body(m => m.Body)
             .Addresses(
-                m => m.Addresses.Select(a => (a.UserName, a.Type.ParseAddressType())),
-                (m, value) => m.Addresses = [.. value.Select(a => new TestAddressEntry { UserName = a.UserName, Type = a.Type.ToString() })])
+                m => m.Addresses.Select(a => (a.UserName, a.Type.ParseAddressType(), a.Information)),
+                (m, value) => m.Addresses = [.. value.Select(a => new TestAddressEntry { UserName = a.Name, Type = a.Type.ToString(), Information = a.Information })])
             .SentAt(m => m.SentAt)
             .ConfirmationId(m => m.ConfirmationMessageId)
             .IsAlert(m => m.IsAlert)

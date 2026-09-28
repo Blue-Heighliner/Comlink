@@ -11,7 +11,7 @@ public sealed class MessageBuilderTests
             .Sender(m => m.FromUser, (m, v) => m.FromUser = v)
             .Subject(m => m.Subject, (m, v) => m.Subject = v)
             .Body(m => m.Body, (m, v) => m.Body = v)
-            .Addresses(m => m.Addresses.Select(a => (a.UserName, a.Type.ParseAddressType())), (m, v) => m.Addresses = [.. v.Select(a => new TestAddressEntry { UserName = a.UserName, Type = a.Type.ToString() })])
+            .Addresses(m => m.Addresses.Select(a => (a.UserName, a.Type.ParseAddressType(), a.Information)), (m, v) => m.Addresses = [.. v.Select(a => new TestAddressEntry { UserName = a.Name, Type = a.Type.ToString(), Information = a.Information })])
             .SentAt(m => m.SentAt, (m, v) => m.SentAt = v)
             .ConfirmationId(m => m.ConfirmationMessageId, (m, v) => m.ConfirmationMessageId = v)
             .IsAlert(m => m.IsAlert, (m, v) => m.IsAlert = v)
@@ -112,7 +112,7 @@ public sealed class MessageBuilderTests
         public string Sender { get; set; } = "";
         public string Subject { get; set; } = "";
         public string Body { get; set; } = "";
-        public List<(string UserName, AddressType Type)> Addresses { get; set; } = [];
+        public List<(string Name, AddressType Type, string Information)> Addresses { get; set; } = [];
         public DateTime SentAt { get; set; }
         public string ConfirmationId { get; set; } = "";
         public bool IsAlert { get; set; }
@@ -166,11 +166,33 @@ public sealed class MessageBuilderTests
         MessageMap map = Complete().Build();
         object message = map.Create();
 
-        map.SetAddresses(message, [new MessageAddress { UserName = "A", Type = AddressType.To }, new MessageAddress { UserName = "B", Type = AddressType.Cc }]);
+        map.SetAddresses(message, [
+            new MessageAddress { UserName = "A", Type = AddressType.To },
+            new MessageAddress { UserName = "B", Type = AddressType.Cc },
+            new MessageAddress { UserName = "OMAHA", Type = AddressType.External, Information = "Deliver to Eastside Office" }]);
 
         TestMessage typed = Assert.IsType<TestMessage>(message);
-        Assert.Equal([("A", "To"), ("B", "Cc")], typed.Addresses.Select(a => (a.UserName, a.Type)));
+        Assert.Equal([("A", "To", ""), ("B", "Cc", ""), ("OMAHA", "External", "Deliver to Eastside Office")], typed.Addresses.Select(a => (a.UserName, a.Type, a.Information)));
         List<MessageAddress> read = map.GetAddresses(message);
-        Assert.Equal([("A", AddressType.To), ("B", AddressType.Cc)], read.Select(a => (a.UserName, a.Type)));
+        Assert.Equal([("A", AddressType.To, ""), ("B", AddressType.Cc, ""), ("OMAHA", AddressType.External, "Deliver to Eastside Office")], read.Select(a => (a.UserName, a.Type, a.Information)));
+    }
+
+    /// <summary>A host with no use for per-address instructions can map addresses with the two-tuple overload; every address reads back with an empty <c>Information</c>.</summary>
+    [Fact]
+    public void Addresses_TwoTupleOverload_MapsWithEmptyInformation()
+    {
+        MessageBuilder<TestMessage> builder = new();
+        builder.Id(m => m.MessageId, (m, v) => m.MessageId = v).Sender(m => "", (m, v) => { }).Subject(m => "", (m, v) => { }).Body(m => "", (m, v) => { })
+            .Addresses(
+                m => m.Addresses.Select(a => (a.UserName, a.Type.ParseAddressType())),
+                (m, v) => m.Addresses = [.. v.Select(a => new TestAddressEntry { UserName = a.Name, Type = a.Type.ToString() })])
+            .SentAt(m => default, (m, v) => { }).ConfirmationId(m => "", (m, v) => { }).IsAlert(m => false, (m, v) => { }).Priority(m => 0, (m, v) => { }).Tag(m => "", (m, v) => { });
+        MessageMap map = builder.Build();
+        object message = map.Create();
+
+        map.SetAddresses(message, [new MessageAddress { UserName = "A", Type = AddressType.To, Information = "ignored" }]);
+
+        MessageAddress address = Assert.Single(map.GetAddresses(message));
+        Assert.Equal(("A", AddressType.To, ""), (address.UserName, address.Type, address.Information));
     }
 }

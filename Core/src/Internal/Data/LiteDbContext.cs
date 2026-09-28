@@ -79,7 +79,7 @@ internal sealed class LiteDbContext : ILiteDbContext
                 Message = message,
                 DeliveryStatuses = [new DeliveryStatus { UserName = string.Empty, AddressedVia = [string.Empty] }]
             });
-            mapper.ToDocument(new DraftEntity { Addresses = [new AddressData { UserName = string.Empty, Type = string.Empty }] });
+            mapper.ToDocument(new DraftEntity { Addresses = [new AddressData { UserName = string.Empty, Type = string.Empty, Information = string.Empty }] });
             mapper.ToDocument(new NoteEntity());
             mapper.ToDocument(new ActivityLogEntity { Events = [string.Empty], EventEntries = [new ActivityLogEntry()] });
             mapper.ToDocument(new FolderEntity { Id = string.Empty, Name = string.Empty });

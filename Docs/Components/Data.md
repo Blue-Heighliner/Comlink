@@ -137,7 +137,7 @@ One record per day, accumulated throughout the day.
 
 ### Embedded Types
 
-**`AddressData`**: `UserName (string)`, `Type (string)` — `"To"` or `"Cc"`
+**`AddressData`**: `UserName (string)`, `Type (string)` (`"To"`, `"Cc"` or `"External"`), `Information (string)` (free-form instructions for the user, e.g. `Deliver to Eastside Office`)
 
 **`DeliveryStatus`**: `UserName (string)`, `Status (DestinationStatus enum)` — `Sending`, `Sent`, `Failed`, `Confirmed`, `Read` (`Received` never appears here — see `ReadStatus` above)
 

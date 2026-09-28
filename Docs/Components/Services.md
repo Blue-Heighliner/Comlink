@@ -69,6 +69,8 @@ Routes outbound messages to peer nodes and surfaces their delivery status. Deliv
 
 **Result timing**: `IPeerService.Send` does not return until MSMT has fully acknowledged the message, so `Route`'s own per-user `UserDeliveryResult.Success` already reflects the final outcome by the time `Route` returns — there is no separate "sent but not yet confirmed" pending state to track.
 
+**External addresses**: An `AddressType.External` address is information for the reader only (with its `Information`, e.g. `OMAHA - Deliver to Eastside Office`). It is stored and shown with the message but never routed: no group expansion, no delivery, no status row, and the server ignores it when choosing recipients.
+
 **Self-addressing**: When a recipient user name matches the sending user (`fromUser`), that recipient is delivered in-process via `IPeerService.DeliverLocal` — no network connection is opened, and the delivery status for that user is immediately raised as `Confirmed`. A message can address itself alongside remote users in the same `Route` call; each recipient is handled independently.
 
 ```csharp

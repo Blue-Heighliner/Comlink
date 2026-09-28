@@ -135,6 +135,53 @@ public sealed class MessageRoutingServiceTests
         Assert.Contains(fake.Sent, s => s.User.Equals("Beta", StringComparison.OrdinalIgnoreCase));
     }
 
+    /// <summary>An external address is information for the user only: nothing is sent to it, it gets no delivery result, and a group of the same name is not expanded, but it stays on the message with its instructions.</summary>
+    [Fact]
+    public async Task RouteAsync_ExternalAddress_TakesNoActionButStaysOnTheMessage()
+    {
+        FakePeerService fake = new();
+        Mock<TestEngineController> controller = new() { CallBase = true };
+        controller.Setup(c => c.UserGroups).Returns(new Dictionary<string, IReadOnlyList<string>> { ["OMAHA"] = ["Gamma"] });
+        MessageRoutingService service = new(fake, controller.Object, loggerFactory);
+        SendMessagePayload payload = new()
+        {
+            Subject = "Hi",
+            Body = "Body",
+            Addresses =
+            [
+                new AddressPayload { UserName = "Alpha", Type = "To" },
+                new AddressPayload { UserName = "OMAHA", Type = "External", Information = "Deliver to Eastside Office" },
+                new AddressPayload { UserName = "Source", Type = "External" }
+            ]
+        };
+
+        (string _, IReadOnlyList<UserDeliveryResult> results) = await service.Route("Source", payload, default);
+
+        Assert.Equal(["Alpha"], fake.Sent.Select(s => s.User));
+        Assert.Equal(["Alpha"], results.Select(r => r.UserName));
+        Assert.Empty(fake.DeliveredLocally);
+        TestMessage sent = fake.Sent[0].Message;
+        TestAddressEntry external = Assert.Single(sent.Addresses, a => a.UserName == "OMAHA");
+        Assert.Equal("External", external.Type);
+        Assert.Equal("Deliver to Eastside Office", external.Information);
+        Assert.Equal(3, sent.Addresses.Count);
+    }
+
+    /// <summary>A message addressed only to external addresses is routed to nobody and returns no results.</summary>
+    [Fact]
+    public async Task RouteAsync_OnlyExternalAddresses_SendsToNobody()
+    {
+        FakePeerService fake = new();
+        MessageRoutingService service = new(fake, format, loggerFactory);
+        SendMessagePayload payload = new() { Subject = "Hi", Body = "Body", Addresses = [new AddressPayload { UserName = "OMAHA", Type = "External" }] };
+
+        (string messageId, IReadOnlyList<UserDeliveryResult> results) = await service.Route("Source", payload, default);
+
+        Assert.NotEmpty(messageId);
+        Assert.Empty(results);
+        Assert.Empty(fake.Sent);
+    }
+
     /// <summary>Verifies that Route still returns a message ID even when all peer sends fail.</summary>
     [Fact]
     public async Task RouteAsync_WhenPeerSendFails_StillReturnsMessageId()

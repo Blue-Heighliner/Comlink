@@ -34,6 +34,8 @@ public sealed class TestAddressEntry
     [ProtoMember(1)] public string UserName { get; set; } = string.Empty;
     /// <summary>Address type (e.g. <c>"To"</c>, <c>"Cc"</c>).</summary>
     [ProtoMember(2)] public string Type { get; set; } = "To";
+    /// <summary>Custom instructions attached to the address.</summary>
+    [ProtoMember(3)] public string Information { get; set; } = string.Empty;
 }
 
 /// <summary>

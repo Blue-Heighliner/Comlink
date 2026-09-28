@@ -76,6 +76,8 @@ public sealed class EngineBuilderTests
         Assert.Equal("USER", controller.GetCertificateName("USER"));
         Assert.True(controller.CanDelete(FolderType.Inbox));
         Assert.Equal(1, controller.GetPrintCount(new TestMessage()));
+        Assert.Equal([AddressType.To, AddressType.Cc, AddressType.External], controller.AddressTypes.Select(t => t.Type));
+        Assert.Equal(["To", "Cc", "External"], controller.AddressTypes.Select(t => t.Label));
     }
 
     /// <summary>Everything a host can state about the application and the ports is reported back.</summary>
@@ -142,6 +144,16 @@ public sealed class EngineBuilderTests
 
         Assert.False(controller.TagsEnabled);
         Assert.Equal("Tag", controller.TagLabel);
+    }
+
+    /// <summary>An overridden address type label replaces the default for that type only; the others keep theirs.</summary>
+    [Fact]
+    public void AddressTypeLabel_Stated_ReplacesOnlyThatTypesDefault()
+    {
+        (_, EngineController controller) = Build(engine => engine.AddressTypeLabel(AddressType.External, "OUTSIDE"));
+
+        Assert.Equal(["To", "Cc", "OUTSIDE"], controller.AddressTypes.Select(t => t.Label));
+        Assert.Equal([AddressType.To, AddressType.Cc, AddressType.External], controller.AddressTypes.Select(t => t.Type));
     }
 
     /// <summary>Stating priorities twice replaces the earlier list rather than adding to it.</summary>

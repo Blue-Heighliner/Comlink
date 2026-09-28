@@ -100,7 +100,7 @@ internal sealed class InterfaceService : IInterfaceService
         {
             Subject = engineController.GetSubject(message),
             Body = engineController.GetBody(message),
-            Addresses = engineController.GetAddresses(message).Select(a => new AddressPayload { UserName = a.UserName, Type = a.Type.ToString() }).ToList(),
+            Addresses = engineController.GetAddresses(message).Select(a => new AddressPayload { UserName = a.UserName, Type = a.Type.ToString(), Information = a.Information }).ToList(),
             IsAlert = engineController.GetIsAlert(message),
             Priority = engineController.GetPriority(message),
             Tag = engineController.GetTag(message)

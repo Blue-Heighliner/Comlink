@@ -91,6 +91,12 @@ public interface IEngineBuilder
     /// <summary>Blocks a tag and priority combination when composing a draft. Either may be <see langword="null"/> to match any value.</summary>
     IEngineBuilder BlockTag(string? tag, int? priority);
 
+    /// <summary>
+    /// Overrides the display label shown for an address type: in the address type picker, the per-address badge, and
+    /// the message view's section headers. Defaults to the enum name (<c>To</c>, <c>Cc</c>, <c>External</c>).
+    /// </summary>
+    IEngineBuilder AddressTypeLabel(AddressType type, string label);
+
     /// <summary>Sets whether the print manager's "print received" toggle starts enabled, printing every received message from startup. Off by default.</summary>
     IEngineBuilder PrintReceived(bool enabledByDefault = true);
 

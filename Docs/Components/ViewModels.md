@@ -124,7 +124,7 @@ When `ShowEntry(EntryItemViewModel)` opens an Inbox message whose `ReadStatus` i
 
 Read-only message display. Constructed with `new MessageViewModel(MessageEntity)` — not DI-registered.
 
-**Properties**: `MessageId`, `Subject`, `Body`, `FromUser`, `ToList`, `CcList`, `ReceivedAt (DateTime)`, `IsAlert`, `HasDeliveryStatuses`, `DeliveryStatuses (ObservableCollection<DeliveryStatusRow>)`, `OverallStatus`, `OverallStatusText`, `ReadStatus`, `ReadStatusText`, `IsDeliveryExpanded`, `DeliveryExpandIndicator`.
+**Properties**: `MessageId`, `Subject`, `Body`, `FromUser`, `ToLabel`, `ToList`, `CcLabel`, `CcList`, `ExternalLabel`, `ExternalList` (each list entry is the name, followed by ` - ` and the information when there is any; each `*Label` is the section header, uppercased, defaulting to the address type's enum name unless the engine configuration overrides it), `ReceivedAt (DateTime)`, `IsAlert`, `HasDeliveryStatuses`, `DeliveryStatuses (ObservableCollection<DeliveryStatusRow>)`, `OverallStatus`, `OverallStatusText`, `ReadStatus`, `ReadStatusText`, `IsDeliveryExpanded`, `DeliveryExpandIndicator`.
 
 **Commands**: `ToggleDeliveryCommand (IRelayCommand)`.
 
@@ -140,7 +140,7 @@ Read-only message display. Constructed with `new MessageViewModel(MessageEntity)
 
 Editable draft with fill-in support. Constructed with `new DraftViewModel(entity, ...)` — not DI-registered.
 
-**Properties**: `Id`, `Subject`, `NewAddressUser` (auto-uppercased), `NewAddressType`, `IsSent`, `IsAlert`, `AlertLabel (string)`, `ComposeAlertsEnabled (bool)`, `AvailablePriorities (IReadOnlyList<MessagePriorityOption>)`, `SelectedPriority (MessagePriorityOption)`, `Tag (string)`, `TagsEnabled (bool)`, `TagLabel (string)`, `PlsoMode (PlsoMode)`, `PlsoButtonText`, `IsSaving`, `StatusMessage`, `Addresses (ObservableCollection<AddressData>)`, `BodyDocument (IBodyDocument)`, `FillIns (IReadOnlyDictionary<string, IFillInViewModel>)`, `AllUserNames`, `AddressTypes`.
+**Properties**: `Id`, `Subject`, `NewAddressUser` (auto-uppercased), `NewAddressType (AddressTypeOption)`, `NewAddressInformation` (cleared after each add), `IsSent`, `IsAlert`, `AlertLabel (string)`, `ComposeAlertsEnabled (bool)`, `AvailablePriorities (IReadOnlyList<MessagePriorityOption>)`, `SelectedPriority (MessagePriorityOption)`, `Tag (string)`, `TagsEnabled (bool)`, `TagLabel (string)`, `PlsoMode (PlsoMode)`, `PlsoButtonText`, `IsSaving`, `StatusMessage`, `Addresses (ObservableCollection<AddressData>)`, `BodyDocument (IBodyDocument)`, `FillIns (IReadOnlyDictionary<string, IFillInViewModel>)`, `AllUserNames`, `AddressTypes (IReadOnlyList<AddressTypeOption>)` (`To`, `Cc`, `External`, each paired with its display label - overridable per type in the engine configuration).
 
 `IsAlert` is persisted on `DraftEntity.IsAlert` across save/reload and passed through `IServiceConnection.SendMessage(..., IsAlert)` on send — see [Peer.md](Peer.md#alert-messages).
 

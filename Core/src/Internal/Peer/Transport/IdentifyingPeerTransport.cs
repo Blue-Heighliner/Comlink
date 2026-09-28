@@ -139,7 +139,7 @@ internal sealed class IdentifyingPeerTransport : IPeerTransport
     {
         _ = Task.Run(async () =>
         {
-            try { await Task.Delay(handshakeTimeout, session.Lifetime.Token); }
+            try { await Task.Delay(handshakeTimeout, session.Deadline.Token); }
             catch (OperationCanceledException) { return; }
 
             Fail(session, "did not complete the connection message exchange in time");
@@ -172,7 +172,7 @@ internal sealed class IdentifyingPeerTransport : IPeerTransport
             frame = Frame(kind, body.Memory);
         }
 
-        return await inner.Request(session.Connection, frame, new PeerSendOptions { Priority = int.MaxValue }, session.Lifetime.Token);
+        return await inner.Request(session.Connection, frame, new PeerSendOptions { Priority = int.MaxValue }, session.Aborted.Token);
     }
 
     private void OnReceived(PeerReceivedEventArgs args)
@@ -325,7 +325,7 @@ internal sealed class IdentifyingPeerTransport : IPeerTransport
 
         foreach (PeerReceivedEventArgs buffered in pending) { received.Publish(buffered); }
         session.Established.TrySetResult(true);
-        session.Lifetime.Cancel();
+        session.Deadline.Cancel();
     }
 
     private void Fail(Session session, string reason)
@@ -339,7 +339,8 @@ internal sealed class IdentifyingPeerTransport : IPeerTransport
 
         logger.LogWarning("Dropped a connection that {Reason}", reason);
         session.Established.TrySetResult(false);
-        session.Lifetime.Cancel();
+        session.Deadline.Cancel();
+        session.Aborted.Cancel();
         session.Connection.Drop();
     }
 
@@ -357,7 +358,8 @@ internal sealed class IdentifyingPeerTransport : IPeerTransport
 
         args.Connection.Info = args.Connection.Info with { ConnectionMessage = null, ConnectionResponse = null };
         session.Established.TrySetResult(false);
-        session.Lifetime.Cancel();
+        session.Deadline.Cancel();
+        session.Aborted.Cancel();
         if (wasPublished) { disconnected.Publish(args); }
     }
 
@@ -405,7 +407,8 @@ internal sealed class IdentifyingPeerTransport : IPeerTransport
     {
         public PeerConnection Connection { get; } = connection;
         public Lock Gate { get; } = new();
-        public CancellationTokenSource Lifetime { get; } = new();
+        public CancellationTokenSource Deadline { get; } = new();
+        public CancellationTokenSource Aborted { get; } = new();
         public TaskCompletionSource<bool> Established { get; } = new(TaskCreationOptions.RunContinuationsAsynchronously);
         public List<PeerReceivedEventArgs> Pending { get; set; } = [];
         public SessionState State { get; set; }

@@ -128,7 +128,7 @@ internal sealed class EntryService : IEntryService
         engineController.SetFromUser(message, fromUser);
         engineController.SetSubject(message, subject);
         engineController.SetBody(message, body);
-        engineController.SetAddresses(message, addresses.Select(a => new MessageAddress { UserName = a.UserName, Type = a.Type.ParseAddressType() }).ToList());
+        engineController.SetAddresses(message, addresses.Select(a => new MessageAddress { UserName = a.UserName, Type = a.Type.ParseAddressType(), Information = a.Information }).ToList());
         engineController.SetSentAt(message, sentAt);
         engineController.SetIsAlert(message, isAlert);
         engineController.SetPriority(message, priority);

@@ -1,6 +1,7 @@
 <UserControl xmlns="https://github.com/avaloniaui"
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
              xmlns:vm="using:BlueHeighliner.Comlink.ViewModels.Entries"
+             xmlns:converters="using:BlueHeighliner.Comlink.ViewModels"
              xmlns:avaloniaEdit="clr-namespace:AvaloniaEdit;assembly=AvaloniaEdit"
              x:Class="BlueHeighliner.Comlink.Views.Entries.DraftEditor"
              x:DataType="vm:DraftViewModel"
@@ -147,16 +148,22 @@
         <ItemsControl ItemsSource="{Binding Addresses}">
           <ItemsControl.ItemTemplate>
             <DataTemplate>
-              <Grid ColumnDefinitions="60,*,Auto" Margin="0,2">
+              <Grid ColumnDefinitions="70,Auto,*,Auto" Margin="0,2">
                 <Border Grid.Column="0"
                         Background="#3C3C3C"
                         CornerRadius="3"
                         Padding="6,2"
                         HorizontalAlignment="Left">
-                  <TextBlock Text="{Binding Type}"
-                             FontSize="11"
+                  <TextBlock FontSize="11"
                              FontWeight="SemiBold"
-                             Foreground="#858585" />
+                             Foreground="#858585">
+                    <TextBlock.Text>
+                      <MultiBinding Converter="{x:Static converters:AddressTypeLabelConverter.Instance}">
+                        <Binding Path="Type" />
+                        <Binding Path="$parent[UserControl].DataContext.AddressTypes" />
+                      </MultiBinding>
+                    </TextBlock.Text>
+                  </TextBlock>
                 </Border>
                 <TextBlock Grid.Column="1"
                            Text="{Binding UserName}"
@@ -164,7 +171,15 @@
                            Foreground="#CCCCCC"
                            VerticalAlignment="Center"
                            Margin="8,0" />
-                <Button Grid.Column="2"
+                <TextBlock Grid.Column="2"
+                           Text="{Binding Information}"
+                           IsVisible="{Binding Information, Converter={x:Static StringConverters.IsNotNullOrEmpty}}"
+                           FontSize="13"
+                           FontStyle="Italic"
+                           Foreground="#858585"
+                           TextWrapping="Wrap"
+                           VerticalAlignment="Center" />
+                <Button Grid.Column="3"
                         Content="×"
                         Command="{Binding $parent[UserControl].DataContext.RemoveAddressCommand}"
                         CommandParameter="{Binding}"
@@ -178,7 +193,7 @@
         </ItemsControl>
 
         <!-- Add address row -->
-        <Grid ColumnDefinitions="80,*,Auto"
+        <Grid ColumnDefinitions="90,*,*,Auto"
               IsVisible="{Binding !IsSent}"
               Margin="0,4,0,0">
           <ComboBox Grid.Column="0"
@@ -187,7 +202,13 @@
                     Background="#3C3C3C"
                     BorderThickness="0"
                     FontSize="12"
-                    Height="30" />
+                    Height="30">
+            <ComboBox.ItemTemplate>
+              <DataTemplate>
+                <TextBlock Text="{Binding Label}" />
+              </DataTemplate>
+            </ComboBox.ItemTemplate>
+          </ComboBox>
           <AutoCompleteBox Grid.Column="1"
                            x:Name="UserInput"
                            Text="{Binding NewAddressUser}"
@@ -198,8 +219,18 @@
                            FontSize="13"
                            Margin="8,0"
                            Height="30" />
-          <Button Grid.Column="2"
+          <TextBox Grid.Column="2"
+                   Text="{Binding NewAddressInformation}"
+                   Watermark="Information..."
+                   FontSize="13"
+                   Height="30">
+            <TextBox.KeyBindings>
+              <KeyBinding Gesture="Enter" Command="{Binding AddAddressCommand}" />
+            </TextBox.KeyBindings>
+          </TextBox>
+          <Button Grid.Column="3"
                   Content="Add"
+                  Margin="8,0,0,0"
                   Command="{Binding AddAddressCommand}"
                   Padding="10,4"
                   FontSize="12" />

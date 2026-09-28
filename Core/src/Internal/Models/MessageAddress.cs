@@ -5,6 +5,8 @@ internal sealed class MessageAddress
 {
     /// <summary>Name of the recipient user.</summary>
     public required string UserName { get; init; }
-    /// <summary>Address role (To or Cc) for this recipient.</summary>
+    /// <summary>Address role (To, Cc or External) for this recipient.</summary>
     public required AddressType Type { get; init; }
+    /// <summary>Custom instructions the sender attached to this address (for example <c>Deliver to Eastside Office</c>), or an empty string when there are none.</summary>
+    public string Information { get; init; } = string.Empty;
 }

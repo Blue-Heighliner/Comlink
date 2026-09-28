@@ -295,7 +295,7 @@ internal sealed class ServerRoutingService : IPeerService, IConnectionStatusServ
     }
 
     private HashSet<string> GetAddressedUsers(object message)
-        => new(engineController.GetAddresses(message).Select(a => a.UserName), StringComparer.OrdinalIgnoreCase);
+        => new(engineController.GetAddresses(message).Where(a => a.Type != AddressType.External).Select(a => a.UserName), StringComparer.OrdinalIgnoreCase);
 
     private object? TryDeserialize(ReadOnlyMemory<byte> data)
     {

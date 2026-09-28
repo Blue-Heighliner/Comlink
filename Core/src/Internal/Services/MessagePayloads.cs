@@ -22,6 +22,8 @@ internal sealed class AddressPayload
 {
     /// <summary>Name of the addressed user.</summary>
     public string UserName { get; set; } = string.Empty;
-    /// <summary>Address type (e.g. "To", "Cc").</summary>
+    /// <summary>Address type ("To", "Cc" or "External").</summary>
     public string Type { get; set; } = "To";
+    /// <summary>Custom instructions attached to the address, or an empty string when there are none.</summary>
+    public string Information { get; set; } = string.Empty;
 }

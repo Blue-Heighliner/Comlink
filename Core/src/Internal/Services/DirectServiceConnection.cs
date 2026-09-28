@@ -47,7 +47,7 @@ internal sealed class DirectServiceConnection : IServiceConnection
             FromUser = engineController.GetFromUser(payload),
             Subject = engineController.GetSubject(payload),
             Body = engineController.GetBody(payload),
-            Addresses = engineController.GetAddresses(payload).Select(a => new AddressRequest { UserName = a.UserName, Type = a.Type.ToString() }).ToList(),
+            Addresses = engineController.GetAddresses(payload).Select(a => new AddressRequest { UserName = a.UserName, Type = a.Type.ToString(), Information = a.Information }).ToList(),
             SentAt = engineController.GetSentAt(payload),
             IsAlert = engineController.GetIsAlert(payload),
             Priority = engineController.GetPriority(payload),
@@ -98,7 +98,7 @@ internal sealed class DirectServiceConnection : IServiceConnection
         {
             Subject = subject,
             Body = body,
-            Addresses = addresses.Select(a => new AddressPayload { UserName = a.UserName, Type = a.Type }).ToList(),
+            Addresses = addresses.Select(a => new AddressPayload { UserName = a.UserName, Type = a.Type, Information = a.Information }).ToList(),
             IsAlert = isAlert,
             Priority = priority,
             Tag = tag

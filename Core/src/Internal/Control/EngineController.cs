@@ -125,6 +125,13 @@ internal interface IEngineController
     string TagLabel { get; }
     /// <summary>Every blocked tag/priority combination rule, enforced when composing a draft.</summary>
     IReadOnlyList<TagPriorityBlock> BlockedCombinations { get; }
+    /// <summary>
+    /// Every address type, in a fixed order (<see cref="AddressType.To"/>, <see cref="AddressType.Cc"/>,
+    /// <see cref="AddressType.External"/>), paired with its display label - shown in the address type picker, the
+    /// per-address badge, and the message view's section headers. A label defaults to the enum name unless overridden
+    /// with <see cref="IEngineBuilder.AddressTypeLabel"/>.
+    /// </summary>
+    IReadOnlyList<AddressTypeOption> AddressTypes { get; }
 
     /// <summary>
     /// When <see langword="true"/>, the print manager's "print received" toggle (<see cref="ViewModels.IPrintManagerViewModel.PrintReceivedEnabled"/>)
@@ -369,6 +376,7 @@ internal class EngineController(EngineBuilder builder, ICurrentUserProvider curr
     private readonly MessageMap message = builder.MessageMap ?? throw new InvalidOperationException("The engine configuration must state its message type with Message<TMessage>(...).");
     private readonly PacketMap? packet = builder.PacketMap;
     private readonly IReadOnlyList<MessagePriorityOption> defaultPriorities = [new MessagePriorityOption { Name = "Normal", Value = 0 }];
+    private readonly IReadOnlyList<AddressType> addressTypeOrder = [AddressType.To, AddressType.Cc, AddressType.External];
     private readonly Dictionary<string, string> noData = [];
     private INetworkSerializer? connectionSerializer;
 
@@ -427,6 +435,9 @@ internal class EngineController(EngineBuilder builder, ICurrentUserProvider curr
     public virtual string TagLabel => builder.TagLabelValue ?? "Tag";
     /// <inheritdoc />
     public virtual IReadOnlyList<TagPriorityBlock> BlockedCombinations => builder.BlockedCombinations;
+    /// <inheritdoc />
+    public virtual IReadOnlyList<AddressTypeOption> AddressTypes
+        => [.. addressTypeOrder.Select(type => new AddressTypeOption { Type = type, Label = builder.AddressTypeLabels.TryGetValue(type, out string? label) ? label : type.ToString() })];
 
     /// <inheritdoc />
     public virtual bool PrintReceivedDefaultEnabled => builder.PrintReceivedValue ?? false;

@@ -13,6 +13,7 @@ internal sealed class EngineBuilder : IEngineBuilder, IAsyncDisposable
     private readonly List<string> users = [];
     private readonly List<MessagePriorityOption> priorities = [];
     private readonly List<TagPriorityBlock> blocked = [];
+    private readonly Dictionary<AddressType, string> addressTypeLabels = [];
     private readonly List<ConnectionPoint> outgoingPoints = [];
     private readonly List<IExternalSystem> externalSystems = [];
     private ServiceProvider? bootstrap;
@@ -65,6 +66,8 @@ internal sealed class EngineBuilder : IEngineBuilder, IAsyncDisposable
     public string? TagLabelValue { get; private set; }
     /// <summary>The blocked tag and priority combinations.</summary>
     public IReadOnlyList<TagPriorityBlock> BlockedCombinations => blocked;
+    /// <summary>The overridden address type display labels, by address type.</summary>
+    public IReadOnlyDictionary<AddressType, string> AddressTypeLabels => addressTypeLabels;
     /// <summary>Whether printing received messages starts on, if stated.</summary>
     public bool? PrintReceivedValue { get; private set; }
     /// <summary>How many copies of a received message print, if stated.</summary>
@@ -311,6 +314,13 @@ internal sealed class EngineBuilder : IEngineBuilder, IAsyncDisposable
     public IEngineBuilder BlockTag(string? tag, int? priority)
     {
         blocked.Add(new TagPriorityBlock { Tag = tag, Priority = priority });
+        return this;
+    }
+
+    /// <inheritdoc />
+    public IEngineBuilder AddressTypeLabel(AddressType type, string label)
+    {
+        addressTypeLabels[type] = label;
         return this;
     }
 

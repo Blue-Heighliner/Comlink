@@ -198,7 +198,7 @@ internal sealed class ExportService : IExportService
         Subject = engineController.GetSubject(entity.Message),
         Body = engineController.GetBody(entity.Message),
         Addresses = engineController.GetAddresses(entity.Message)
-            .Select(a => new AddressData { UserName = a.UserName, Type = a.Type.ToString() })
+            .Select(a => new AddressData { UserName = a.UserName, Type = a.Type.ToString(), Information = a.Information })
             .ToList(),
         SentAt = engineController.GetSentAt(entity.Message),
         IsAlert = engineController.GetIsAlert(entity.Message),

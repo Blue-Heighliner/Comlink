@@ -143,7 +143,7 @@ public sealed class DirectServiceConnectionTests
             FromUser = "REMOTE",
             Subject = "Hi",
             Body = "Body text",
-            Addresses = [new TestAddressEntry { UserName = "LOCAL", Type = "To" }],
+            Addresses = [new TestAddressEntry { UserName = "LOCAL", Type = "To" }, new TestAddressEntry { UserName = "OMAHA", Type = "External", Information = "Deliver to Eastside Office" }],
             SentAt = new DateTime(2025, 7, 4, 12, 0, 0, DateTimeKind.Utc),
             Priority = 2
         };
@@ -154,8 +154,10 @@ public sealed class DirectServiceConnectionTests
         Assert.Equal("REMOTE", received.FromUser);
         Assert.Equal("Hi", received.Subject);
         Assert.Equal("Body text", received.Body);
-        Assert.Single(received.Addresses);
+        Assert.Equal(2, received.Addresses.Count);
         Assert.Equal("LOCAL", received.Addresses[0].UserName);
+        Assert.Equal("External", received.Addresses[1].Type);
+        Assert.Equal("Deliver to Eastside Office", received.Addresses[1].Information);
         Assert.Equal(2, received.Priority);
     }
 

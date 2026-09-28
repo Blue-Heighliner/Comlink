@@ -79,6 +79,8 @@ internal sealed class MessageRoutingService : IMessageRoutingService
         Dictionary<string, List<string>> userAddressedVia = new(StringComparer.OrdinalIgnoreCase);
         foreach (AddressPayload address in payload.Addresses)
         {
+            if (address.Type.ParseAddressType() == AddressType.External) { continue; }
+
             if (groupMap.ContainsKey(address.UserName))
             {
                 HashSet<string> expanded = new(StringComparer.OrdinalIgnoreCase);
@@ -110,7 +112,7 @@ internal sealed class MessageRoutingService : IMessageRoutingService
         engineController.SetFromUser(message, fromUser);
         engineController.SetSubject(message, payload.Subject);
         engineController.SetBody(message, payload.Body);
-        engineController.SetAddresses(message, payload.Addresses.Select(a => new MessageAddress { UserName = a.UserName, Type = a.Type.ParseAddressType() }).ToList());
+        engineController.SetAddresses(message, payload.Addresses.Select(a => new MessageAddress { UserName = a.UserName, Type = a.Type.ParseAddressType(), Information = a.Information }).ToList());
         engineController.SetSentAt(message, sentAt);
         engineController.SetIsAlert(message, payload.IsAlert);
         engineController.SetPriority(message, payload.Priority);

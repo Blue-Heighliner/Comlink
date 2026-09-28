@@ -34,11 +34,19 @@ public interface IMessageBuilder<TMessage> where TMessage : class, new()
     IMessageBuilder<TMessage> Body(Expression<Func<TMessage, string>> property);
 
     /// <summary>
-    /// Maps the recipient list, converting between the host's own recipient shape and the engine's: a user name paired
-    /// with whether the recipient is addressed to (<see cref="AddressType.To"/>) or copied (<see cref="AddressType.Cc"/>).
+    /// Maps the recipient list, converting between the host's own recipient shape and the engine's: a name, whether it is
+    /// addressed to (<see cref="AddressType.To"/>), copied (<see cref="AddressType.Cc"/>) or outside the system
+    /// (<see cref="AddressType.External"/>, information for the user that the engine takes no action for), and any custom
+    /// instructions attached to it (for example <c>Deliver to Eastside Office</c>, an empty string when there are none).
     /// The getter is called whenever the engine needs to know who a message is for, and the setter when it builds a message.
     /// </summary>
-    IMessageBuilder<TMessage> Addresses(Func<TMessage, IEnumerable<(string UserName, AddressType Type)>> get, Action<TMessage, IReadOnlyList<(string UserName, AddressType Type)>> set);
+    IMessageBuilder<TMessage> Addresses(Func<TMessage, IEnumerable<(string Name, AddressType Type, string Information)>> get, Action<TMessage, IReadOnlyList<(string Name, AddressType Type, string Information)>> set);
+
+    /// <summary>
+    /// Maps the recipient list the same way as the other <c>Addresses</c> overload, for a host whose own recipient
+    /// shape has no place for custom instructions; every address maps with an empty <c>Information</c>.
+    /// </summary>
+    IMessageBuilder<TMessage> Addresses(Func<TMessage, IEnumerable<(string Name, AddressType Type)>> get, Action<TMessage, IReadOnlyList<(string Name, AddressType Type)>> set);
 
     /// <summary>Maps the UTC time the message was sent.</summary>
     IMessageBuilder<TMessage> SentAt(Func<TMessage, DateTime> get, Action<TMessage, DateTime> set);

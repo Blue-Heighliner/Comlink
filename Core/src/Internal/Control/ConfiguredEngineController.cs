@@ -179,6 +179,8 @@ internal sealed class ConfiguredEngineController : IEngineController
     public string TagLabel => string.IsNullOrEmpty(config.MessageTagLabel) ? fallback.TagLabel : config.MessageTagLabel;
     /// <inheritdoc />
     public IReadOnlyList<TagPriorityBlock> BlockedCombinations => fallback.BlockedCombinations;
+    /// <inheritdoc />
+    public IReadOnlyList<AddressTypeOption> AddressTypes => fallback.AddressTypes;
 
     /// <inheritdoc />
     public bool PrintReceivedDefaultEnabled => config.PrintReceivedEnabled ?? fallback.PrintReceivedDefaultEnabled;

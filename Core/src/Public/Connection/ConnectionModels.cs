@@ -28,8 +28,10 @@ public sealed class AddressRequest
 {
     /// <summary>User name of the addressee.</summary>
     public string UserName { get; set; } = string.Empty;
-    /// <summary>Address type (e.g. <c>"To"</c>, <c>"Cc"</c>).</summary>
+    /// <summary>Address type (<c>"To"</c>, <c>"Cc"</c> or <c>"External"</c>); an external address is information for the user and is never delivered.</summary>
     public string Type { get; set; } = "To";
+    /// <summary>Custom instructions attached to the address (for example <c>Deliver to Eastside Office</c>), or an empty string when there are none.</summary>
+    public string Information { get; set; } = string.Empty;
 }
 
 /// <summary>Delivery outcome for a single destination user after a send operation.</summary>
