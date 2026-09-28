@@ -105,10 +105,19 @@ internal sealed class AlertSoundPlayer : IAlertSoundPlayer
                 // leaks to the app's console — playback failure is already best-effort here.
                 Task<string> stdout = process.StandardOutput.ReadToEndAsync(cancellation);
                 Task<string> stderr = process.StandardError.ReadToEndAsync(cancellation);
-                await process.StandardInput.BaseStream.WriteAsync(frame, cancellation);
-                process.StandardInput.Close();
-                await process.WaitForExitAsync(cancellation);
-                await Task.WhenAll(stdout, stderr);
+                try
+                {
+                    await process.StandardInput.BaseStream.WriteAsync(frame, cancellation);
+                    process.StandardInput.Close();
+                    await process.WaitForExitAsync(cancellation);
+                    await Task.WhenAll(stdout, stderr);
+                }
+                catch
+                {
+                    // Disposing a Process does not stop it, so without this the beep would keep sounding after Stop.
+                    if (!process.HasExited) { process.Kill(); }
+                    throw;
+                }
             }
             catch
             {

@@ -106,7 +106,14 @@ internal sealed class InterfaceService : IInterfaceService
             Tag = engineController.GetTag(message)
         };
 
-        await routingService.Route(userInfo.Name, payload, CancellationToken.None);
+        try
+        {
+            await routingService.Route(userInfo.Name, payload, CancellationToken.None);
+        }
+        catch (Exception ex)
+        {
+            logger.LogError(ex, "Failed to route a message received on the interface");
+        }
     }
 
     /// <inheritdoc />

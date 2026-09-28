@@ -246,6 +246,27 @@ public sealed class ClientPeerServiceTests
         await startTask;
     }
 
+    /// <summary>When every attempt fails and each one is followed by a disconnect (a server accepting and immediately dropping a connection it has closed), the disconnects do not wake the monitor, so retries stay on the retry interval instead of becoming a tight loop.</summary>
+    [Fact]
+    public async Task OnDisconnected_WhileRetrying_DoesNotCauseTightRetryLoop()
+    {
+        (ClientPeerService service, Mock<IPeerTransport> transport, _, TestObservable<PeerConnectionEventArgs> disconnected, _) = Build();
+        transport.Setup(p => p.Request(It.IsAny<UserEndpoint>(), It.IsAny<ReadOnlyMemory<byte>>(), It.IsAny<PeerSendOptions>(), It.IsAny<CancellationToken>()))
+            .Returns(() =>
+            {
+                disconnected.Publish(new PeerConnectionEventArgs { Connection = ConnectionTo(serverEndpoint) });
+                return Task.FromException<bool>(new IOException("dropped"));
+            });
+        using CancellationTokenSource cts = new();
+
+        Task startTask = service.Start(cts.Token);
+        await Task.Delay(500);
+
+        Assert.InRange(transport.Invocations.Count(i => i.Method.Name == nameof(IPeerTransport.Request)), 1, 2);
+        cts.Cancel();
+        await startTask;
+    }
+
     /// <summary>The row carries the name from the server's certificate, and keeps it after the connection drops.</summary>
     [Fact]
     public async Task GetStatuses_ServerCertificate_NamesTheRow()

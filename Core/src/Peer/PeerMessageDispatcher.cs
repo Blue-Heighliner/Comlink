@@ -38,18 +38,12 @@ internal static class PeerMessageDispatcher
             {
                 string confirmingUser = engineController.GetFromUser(message);
                 logger.LogInformation("{MessageId} read confirmation received from {User}", confirmationMessageId, confirmingUser);
-                if (confirmationReceived is not null)
-                {
-                    await confirmationReceived(confirmationMessageId, confirmingUser);
-                }
+                await confirmationReceived.InvokeAll(confirmationMessageId, confirmingUser);
                 return true;
             }
 
             logger.LogInformation("{MessageId} received from {FromUser}", engineController.GetMessageId(message), engineController.GetFromUser(message));
-            if (messageDelivered is not null)
-            {
-                await messageDelivered(message);
-            }
+            await messageDelivered.InvokeAll(message);
             return true;
         }
         catch

@@ -210,10 +210,7 @@ public sealed class EntryService : IEntryService
 
         await messages.Insert(entity);
 
-        if (MessageInserted is not null)
-        {
-            await MessageInserted(entity);
-        }
+        await MessageInserted.InvokeAll(entity);
 
         return entity;
     }
@@ -231,10 +228,7 @@ public sealed class EntryService : IEntryService
         entity.ReadStatus = DestinationStatus.Read;
         await messages.Update(entity);
 
-        if (MessageRead is not null)
-        {
-            await MessageRead(entity);
-        }
+        await MessageRead.InvokeAll(entity);
 
         return entity;
     }
@@ -246,10 +240,7 @@ public sealed class EntryService : IEntryService
         DraftEntity entity = new() { FolderId = draftsId };
         await drafts.Insert(entity);
 
-        if (DraftInserted is not null)
-        {
-            await DraftInserted(entity);
-        }
+        await DraftInserted.InvokeAll(entity);
 
         return entity;
     }
@@ -261,10 +252,7 @@ public sealed class EntryService : IEntryService
         NoteEntity entity = new() { FolderId = notesId };
         await notes.Insert(entity);
 
-        if (NoteInserted is not null)
-        {
-            await NoteInserted(entity);
-        }
+        await NoteInserted.InvokeAll(entity);
 
         return entity;
     }
@@ -274,10 +262,7 @@ public sealed class EntryService : IEntryService
     {
         entity.ModifiedAt = DateTime.UtcNow;
         await drafts.Update(entity);
-        if (!entity.IsSent && DraftUpdated is not null)
-        {
-            await DraftUpdated(entity);
-        }
+        if (!entity.IsSent) { await DraftUpdated.InvokeAll(entity); }
     }
 
     /// <summary>Persists changes to an existing note and raises <see cref="NoteUpdated"/>.</summary>
@@ -285,10 +270,7 @@ public sealed class EntryService : IEntryService
     {
         entity.ModifiedAt = DateTime.UtcNow;
         await notes.Update(entity);
-        if (NoteUpdated is not null)
-        {
-            await NoteUpdated(entity);
-        }
+        await NoteUpdated.InvokeAll(entity);
     }
 
     /// <summary>Returns a page of messages from the specified folder together with the total message count.</summary>

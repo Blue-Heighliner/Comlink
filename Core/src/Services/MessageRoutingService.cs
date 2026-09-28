@@ -59,18 +59,12 @@ internal sealed class MessageRoutingService : IMessageRoutingService
     private async Task OnPeerDeliveryStatusChanged(string messageId, string user, DestinationStatus status)
     {
         logger.LogInformation("{MessageId} status for {User}: {Status}", messageId, user, status);
-        if (DeliveryStatusChanged is not null)
-        {
-            await DeliveryStatusChanged(messageId, user, status);
-        }
+        await DeliveryStatusChanged.InvokeAll(messageId, user, status);
     }
 
     private async Task OnPeerConfirmationReceived(string messageId, string confirmingUser)
     {
-        if (DeliveryStatusChanged is not null)
-        {
-            await DeliveryStatusChanged(messageId, confirmingUser, DestinationStatus.Read);
-        }
+        await DeliveryStatusChanged.InvokeAll(messageId, confirmingUser, DestinationStatus.Read);
     }
 
     /// <inheritdoc />
@@ -142,10 +136,7 @@ internal sealed class MessageRoutingService : IMessageRoutingService
             await peerService.DeliverLocal(message);
             IReadOnlyList<string> via = userAddressedVia.TryGetValue(selfUser, out List<string>? v) ? v.AsReadOnly() : Array.Empty<string>();
             logger.LogInformation("{MessageId} delivered locally to {User}", messageId, selfUser);
-            if (DeliveryStatusChanged is not null)
-            {
-                await DeliveryStatusChanged(messageId, selfUser, DestinationStatus.Confirmed);
-            }
+            await DeliveryStatusChanged.InvokeAll(messageId, selfUser, DestinationStatus.Confirmed);
             allResults.Add(new UserDeliveryResult { UserName = selfUser, Success = true, AddressedVia = [.. via] });
         }
 

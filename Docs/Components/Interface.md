@@ -4,9 +4,13 @@ The engine always exposes a local **interface listener** — in both `Client` an
 lets an external program compose messages through this user's own identity. An interface connection is
 not a request/response control channel — it uses the same transport and message type as a peer connection
 (see [MsmtIntegration.md](MsmtIntegration.md) and [Peer.md](Peer.md#message-format)) and carries nothing
-but instances of `IEngineController.MessageType`, with no envelope or command discriminator. That type is
-injectable by the host (see [Control.md](Control.md)); an external program must encode/decode whatever
-concrete type the running engine is configured with.
+but instances of `IEngineController.MessageType`, with no command discriminator. That type is
+injectable by the host (see [Control.md](Control.md)), and so is how it is serialized: an external program must
+encode whatever concrete type the running engine is configured with using the engine's
+`IEngineController.NetworkSerializer`. With the default, `ProtobufNetworkSerializer`, that is a protobuf-net
+envelope holding the type's assembly-qualified name and the message's own protobuf-net encoding as nested bytes,
+and only the engine's own message type is accepted. Payloads on an interface connection are never packetized,
+whatever `IEngineController.PacketType` is.
 
 An interface connection represents no user of its own:
 
@@ -50,8 +54,8 @@ IMsmtSessionPeer client = new IMsmtSessionPeer.Factory().Create(new MsmtSessionP
 IMsmtConnection connection = client.Connect(new MsmtNameTarget { Host = "127.0.0.1", Port = 50020, ServerName = "127.0.0.1" });
 await connection.Wait();
 
-// Anything sent here, encoded as whatever type the running engine's host registered for
-// IEngineController (SampleMessage in the Sample host — see Control.md), is routed out to peers
-// as if this user sent it.
+// Anything sent here, serialized the way the running engine's NetworkSerializer does it for the message
+// type its host registered (SampleMessage in the Sample host), is routed out to peers as if this user
+// sent it.
 connection.Send(messageBytes);
 ```

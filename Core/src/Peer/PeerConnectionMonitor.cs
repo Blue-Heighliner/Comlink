@@ -64,6 +64,7 @@ internal sealed class PeerConnectionMonitor(TimeSpan? steadyInterval = null, Tim
                 }
 
                 delay = connected ? steadyInterval : fastRetryInterval;
+                control.ReportOutcome(connected);
                 if (connected)
                 {
                     try { acknowledged?.Invoke(); }

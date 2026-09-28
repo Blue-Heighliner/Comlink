@@ -22,6 +22,7 @@ global using BlueHeighliner.Msmt;
 global using BlueHeighliner.MicroGate;
 global using Xunit;
 global using System.Buffers;
+global using System.Buffers.Binary;
 global using System.Collections.Concurrent;
 global using System.Collections.ObjectModel;
 global using System.Globalization;

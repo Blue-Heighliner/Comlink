@@ -163,6 +163,21 @@ public sealed class PeerServiceTests
             It.IsAny<CancellationToken>()), Times.Once);
     }
 
+    /// <summary>Delivering locally waits for every subscriber of MessageDelivered, not only the last, so a slow earlier one (storing the message) has finished when it returns.</summary>
+    [Fact]
+    public async Task DeliverLocal_AwaitsEverySubscriber()
+    {
+        Mock<IPeerTransport> peer = BuildPeerMock();
+        PeerService svc = BuildService(peer, BuildUserDirectory());
+        bool firstDone = false;
+        svc.MessageDelivered += async _ => { await Task.Delay(50); firstDone = true; };
+        svc.MessageDelivered += _ => Task.CompletedTask;
+
+        await svc.DeliverLocal(new TestMessage { MessageId = "M1", FromUser = "SOURCE" });
+
+        Assert.True(firstDone);
+    }
+
     /// <summary>Send passes the message's IEngineController.GetPriority value through as the MSMT send priority.</summary>
     [Fact]
     public async Task Send_UsesMessagePriorityAsSendPriority()

@@ -112,10 +112,7 @@ internal sealed class PeerService : IPeerService, IAsyncDisposable
     public async Task DeliverLocal(object payload)
     {
         logger.LogInformation("{MessageId} delivered locally from {FromUser}", engineController.GetMessageId(payload), engineController.GetFromUser(payload));
-        if (MessageDelivered is not null)
-        {
-            await MessageDelivered(payload);
-        }
+        await MessageDelivered.InvokeAll(payload);
     }
 
     private void Wire(IPeerTransport newTransport)
@@ -133,7 +130,11 @@ internal sealed class PeerService : IPeerService, IAsyncDisposable
     private void RaiseDeliveryStatusChanged(DeliveryTag tag, DestinationStatus status)
     {
         if (DeliveryStatusChanged is null) { return; }
-        _ = Task.Run(() => DeliveryStatusChanged(tag.MessageId, tag.UserName, status));
+        _ = Task.Run(async () =>
+        {
+            try { await DeliveryStatusChanged.InvokeAll(tag.MessageId, tag.UserName, status); }
+            catch (Exception ex) { logger.LogError(ex, "Failed to handle the delivery status of {MessageId} to {UserName}", tag.MessageId, tag.UserName); }
+        });
     }
 
     /// <inheritdoc />

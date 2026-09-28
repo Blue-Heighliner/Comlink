@@ -101,6 +101,42 @@ public sealed class PeerConnectionMonitorTests
         cts.Cancel();
     }
 
+    /// <summary>Losing the connection while the last heartbeat succeeded wakes the monitor, which would otherwise sleep out its whole steady interval.</summary>
+    [Fact]
+    public async Task NotifyLost_AfterSuccessfulHeartbeat_HeartbeatsImmediately()
+    {
+        Mock<IPeerTransport> transport = new();
+        AutoAcknowledge(transport);
+        PeerConnectionMonitor monitor = new(steadyInterval: TimeSpan.FromMinutes(10), fastRetryInterval: TimeSpan.FromMinutes(10));
+        using CancellationTokenSource cts = new();
+        PeerLinkControl control = monitor.Maintain(transport.Object, target, cts.Token);
+        await WaitUntil(() => Heartbeats(transport) == 1, TimeSpan.FromSeconds(2));
+
+        control.NotifyLost();
+
+        await WaitUntil(() => Heartbeats(transport) == 2, TimeSpan.FromSeconds(2));
+        cts.Cancel();
+    }
+
+    /// <summary>Losing the connection while heartbeats are already failing leaves the monitor on its retry interval, so a connection that is dropped as soon as it is made cannot start a tight loop.</summary>
+    [Fact]
+    public async Task NotifyLost_WhileHeartbeatsFail_DoesNotWake()
+    {
+        Mock<IPeerTransport> transport = new();
+        AutoAcknowledge(transport, success: false);
+        PeerConnectionMonitor monitor = new(steadyInterval: TimeSpan.FromMinutes(10), fastRetryInterval: TimeSpan.FromMinutes(10));
+        using CancellationTokenSource cts = new();
+        PeerLinkControl control = monitor.Maintain(transport.Object, target, cts.Token);
+        await WaitUntil(() => Heartbeats(transport) == 1, TimeSpan.FromSeconds(2));
+        await Task.Delay(50);
+
+        control.NotifyLost();
+        await Task.Delay(200);
+
+        Assert.Equal(1, Heartbeats(transport));
+        cts.Cancel();
+    }
+
     /// <summary>A closed monitor stops heartbeating, so nothing re-opens the connection, until it is opened again.</summary>
     [Fact]
     public async Task Close_StopsHeartbeats_OpenResumesImmediately()

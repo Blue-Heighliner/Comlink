@@ -147,6 +147,40 @@ public sealed class MsmtPeerTransportTests
         Assert.Equal(1, transmitted);
     }
 
+    /// <summary>Sends that share one Transmitted callback, as the packets of a payload do, get tags that are not equal to each other, since MSMT replaces an earlier send with an equal tag.</summary>
+    [Fact]
+    public async Task Request_SharedTransmittedCallback_GetsDistinctTags()
+    {
+        Fixture fx = Build();
+        Mock<IMsmtConnection> connection = OutboundConnection(target);
+        Connects(fx.Peer, target, connection);
+        List<object?> tags = [];
+        connection.Setup(c => c.Request(It.IsAny<IMemoryOwner<byte>>(), It.IsAny<MsmtSendOptions>(), It.IsAny<CancellationToken>()))
+            .Callback<IMemoryOwner<byte>, MsmtSendOptions?, CancellationToken>((_, options, _) => tags.Add(options!.Tag))
+            .ReturnsAsync(new MsmtResponse { Success = true, Payload = new UnownedMemory(ReadOnlyMemory<byte>.Empty) });
+        Action shared = () => { };
+
+        await fx.Transport.Request(target, new byte[] { 1 }, new PeerSendOptions { Transmitted = shared });
+        await fx.Transport.Request(target, new byte[] { 2 }, new PeerSendOptions { Transmitted = shared });
+
+        Assert.Equal(2, tags.Count);
+        Assert.NotEqual(tags[0], tags[1]);
+    }
+
+    /// <summary>The lowest possible priority, which MSMT would mis-order because it negates it, is sent as the lowest priority MSMT can order correctly.</summary>
+    [Fact]
+    public async Task Request_LowestPriority_IsClampedSoMsmtOrdersItLast()
+    {
+        Fixture fx = Build();
+        Mock<IMsmtConnection> connection = OutboundConnection(target);
+        Connects(fx.Peer, target, connection);
+        Acknowledge(connection);
+
+        await fx.Transport.Request(target, new byte[] { 1 }, new PeerSendOptions { Priority = int.MinValue });
+
+        connection.Verify(c => c.Request(It.IsAny<IMemoryOwner<byte>>(), It.Is<MsmtSendOptions>(o => o.Priority == int.MinValue + 1), It.IsAny<CancellationToken>()), Times.Once);
+    }
+
     /// <summary>A send with no Transmitted callback carries no tag, so MSMT does no per-package progress tracking for it.</summary>
     [Fact]
     public async Task Request_WithoutTransmittedCallback_HasNoTag()
@@ -345,6 +379,8 @@ public sealed class MsmtPeerTransportTests
 
         first.Verify(c => c.Dispose(), Times.Once);
         Assert.True(await fx.Transport.Request(target, new byte[] { 1 }));
+        fx.Peer.Verify(p => p.Connect(It.IsAny<MsmtNameTarget>()), Times.Exactly(2));
+        second.Verify(c => c.Request(It.IsAny<IMemoryOwner<byte>>(), It.IsAny<MsmtSendOptions>(), It.IsAny<CancellationToken>()), Times.Once);
     }
 
     /// <summary>Reset does nothing to a closed endpoint, and does nothing when there is no connection to drop.</summary>

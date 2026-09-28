@@ -105,6 +105,21 @@ file static class PrintOperations
         return string.IsNullOrEmpty(name) ? null : name;
     }
 
+    private static string? ReadWithTimeout(Process process)
+    {
+        Task<string> stdout = process.StandardOutput.ReadToEndAsync();
+        Task<string> stderr = process.StandardError.ReadToEndAsync();
+        if (!process.WaitForExit(TimeSpan.FromSeconds(15)))
+        {
+            // lpstat blocks for a long time when the CUPS daemon is unreachable, and this runs while the print manager is being constructed.
+            process.Kill(entireProcessTree: true);
+            return null;
+        }
+
+        Task.WaitAll(stdout, stderr);
+        return stdout.Result;
+    }
+
     private static string? RunPowerShell(string command)
     {
         try
@@ -124,11 +139,7 @@ file static class PrintOperations
             process.Start();
             // Drain (rather than inherit) stderr too, so a tool's own diagnostic chatter never leaks to
             // the app's console — this is a best-effort discovery call, so it's discarded, not logged.
-            Task<string> stderr = process.StandardError.ReadToEndAsync();
-            string output = process.StandardOutput.ReadToEnd();
-            process.WaitForExit();
-            stderr.Wait();
-            return output;
+            return ReadWithTimeout(process);
         }
         catch
         {
@@ -417,11 +428,7 @@ file static class PrintOperations
             // Drain (rather than inherit) stderr too, so a tool's own diagnostic chatter — e.g. lpstat's
             // "No destinations added." when no printer is configured — never leaks to the app's console;
             // this is a best-effort discovery/status call, so it's discarded, not logged.
-            Task<string> stderr = process.StandardError.ReadToEndAsync();
-            string output = process.StandardOutput.ReadToEnd();
-            process.WaitForExit();
-            stderr.Wait();
-            return output;
+            return ReadWithTimeout(process);
         }
         catch
         {

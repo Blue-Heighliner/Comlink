@@ -40,6 +40,76 @@ public sealed class ControlProviderTests
         Assert.IsType<TestNetworkSerializer>(new TestNetworkSerializerOverride().NetworkSerializer);
     }
 
+    /// <summary>An engine controller with one generic parameter has no packet type, serializer or packet fields, so nothing is packetized.</summary>
+    [Fact]
+    public void DefaultEngineController_WithoutPacketType_DoesNotPacketize()
+    {
+        IEngineController controller = new TestEngineController();
+
+        Assert.Null(controller.PacketType);
+        Assert.Null(controller.PacketSerializer);
+        Assert.Throws<NotSupportedException>(() => controller.CreatePacket());
+        Assert.Throws<NotSupportedException>(() => controller.GetPacketIndex(new object()));
+    }
+
+    /// <summary>A controller with a packet type reports it, defaults to the protobuf packet serializer, and can override that.</summary>
+    [Fact]
+    public void PacketEngineController_ReportsPacketTypeAndSerializer()
+    {
+        IEngineController controller = new TestPacketEngineController();
+        IEngineController custom = new TestPacketSerializerOverride();
+
+        Assert.Equal(typeof(TestPacket), controller.PacketType);
+        Assert.IsType<ProtobufNetworkSerializer>(controller.PacketSerializer);
+        Assert.IsType<TestNetworkSerializer>(custom.PacketSerializer);
+        Assert.IsType<TestPacket>(controller.CreatePacket());
+    }
+
+    /// <summary>The packet field members get and set the fields of the host's packet type.</summary>
+    [Fact]
+    public void PacketEngineController_PacketFields_RoundTripThroughTheController()
+    {
+        IEngineController controller = new TestPacketEngineController();
+        object packet = controller.CreatePacket();
+
+        controller.SetPayloadId(packet, 7);
+        controller.SetPacketIndex(packet, 2);
+        controller.SetPacketCount(packet, 5);
+        controller.SetPayloadLength(packet, 99);
+        controller.SetPacketData(packet, new byte[] { 1, 2, 3 });
+
+        Assert.Equal(7, controller.GetPayloadId(packet));
+        Assert.Equal(2, controller.GetPacketIndex(packet));
+        Assert.Equal(5, controller.GetPacketCount(packet));
+        Assert.Equal(99, controller.GetPayloadLength(packet));
+        Assert.Equal(new byte[] { 1, 2, 3 }, controller.GetPacketData(packet).ToArray());
+        Assert.Equal(new byte[] { 1, 2, 3 }, ((TestPacket)packet).Data);
+    }
+
+    /// <summary>The default packet size is 16 KiB and the default window is 1, and a host can set both.</summary>
+    [Fact]
+    public void DefaultEngineController_PacketSizeAndWindow_HaveDefaultsAndAreOverridable()
+    {
+        TestEngineController defaults = new();
+        TestPacketSizeOverride overridden = new();
+
+        Assert.Equal(16 * 1024, defaults.PacketSize);
+        Assert.Equal(1, defaults.PacketWindow);
+        Assert.Equal(512, overridden.PacketSize);
+        Assert.Equal(4, overridden.PacketWindow);
+    }
+
+    private sealed class TestPacketSizeOverride : TestPacketEngineController
+    {
+        public override int PacketSize => 512;
+        public override int PacketWindow => 4;
+    }
+
+    private sealed class TestPacketSerializerOverride : TestPacketEngineController
+    {
+        public override INetworkSerializer PacketSerializer { get; } = new TestNetworkSerializer();
+    }
+
     private sealed class TestNetworkSerializer : INetworkSerializer
     {
         public IMemoryOwner<byte> Serialize(object value) => throw new NotSupportedException();
@@ -759,6 +829,30 @@ public sealed class ControlProviderTests
         Assert.False(controller.ConfigFileEnabled);
     }
 
+    /// <summary>The packet type, serializer and field members have no config.json field and delegate straight to the wrapped controller.</summary>
+    [Fact]
+    public void ConfiguredEngineController_PacketMembers_DelegateToFallback()
+    {
+        TestPacketEngineController fallback = new();
+        ConfiguredEngineController controller = new(fallback, new EngineConfig(), NoCurrentUser);
+
+        Assert.Equal(typeof(TestPacket), controller.PacketType);
+        Assert.Same(fallback.PacketSerializer, controller.PacketSerializer);
+        Assert.Equal(fallback.PacketSize, controller.PacketSize);
+        Assert.Equal(fallback.PacketWindow, controller.PacketWindow);
+        object packet = controller.CreatePacket();
+        controller.SetPayloadId(packet, 9);
+        controller.SetPacketIndex(packet, 1);
+        controller.SetPacketCount(packet, 2);
+        controller.SetPayloadLength(packet, 30);
+        controller.SetPacketData(packet, new byte[] { 5 });
+        Assert.Equal(9, controller.GetPayloadId(packet));
+        Assert.Equal(1, controller.GetPacketIndex(packet));
+        Assert.Equal(2, controller.GetPacketCount(packet));
+        Assert.Equal(30, controller.GetPayloadLength(packet));
+        Assert.Equal(new byte[] { 5 }, controller.GetPacketData(packet).ToArray());
+    }
+
     /// <summary>Every message-field member has no config.json field and always delegates straight to the wrapped provider, working through the real TestMessage mapping.</summary>
     [Fact]
     public void ConfiguredEngineController_MessageFieldMembers_AlwaysDelegateToFallback()
@@ -768,6 +862,10 @@ public sealed class ControlProviderTests
 
         Assert.Equal(fallback.MessageType, controller.MessageType);
         Assert.Same(fallback.NetworkSerializer, controller.NetworkSerializer);
+        Assert.Null(controller.PacketType);
+        Assert.Null(controller.PacketSerializer);
+        Assert.Equal(fallback.PacketSize, controller.PacketSize);
+        Assert.Equal(fallback.PacketWindow, controller.PacketWindow);
 
         object message = controller.CreateMessage();
         Assert.IsType<TestMessage>(message);

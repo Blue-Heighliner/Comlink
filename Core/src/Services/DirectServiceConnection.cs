@@ -53,7 +53,7 @@ internal sealed class DirectServiceConnection : IServiceConnection
             Priority = engineController.GetPriority(payload),
             Tag = engineController.GetTag(payload)
         };
-        await MessageReceived(evt);
+        await MessageReceived.InvokeAll(evt);
     }
 
     private async Task OnDeliveryStatusChanged(string messageId, string user, DestinationStatus status)
@@ -64,7 +64,7 @@ internal sealed class DirectServiceConnection : IServiceConnection
         // Reports the status as stored rather than as raised, since a late, out-of-order event may have been ignored.
         DestinationStatus effective = entity.DeliveryStatuses
             .FirstOrDefault(d => string.Equals(d.UserName, user, StringComparison.OrdinalIgnoreCase))?.Status ?? status;
-        await DeliveryStatusChanged(new DeliveryStatusChangedEvent { MessageId = messageId, UserName = user, Status = effective, OverallStatus = entity.OverallStatus });
+        await DeliveryStatusChanged.InvokeAll(new DeliveryStatusChangedEvent { MessageId = messageId, UserName = user, Status = effective, OverallStatus = entity.OverallStatus });
     }
 
     /// <inheritdoc />
@@ -118,10 +118,7 @@ internal sealed class DirectServiceConnection : IServiceConnection
         MessageEntity? entity = await entryService.MarkMessageRead(messageId);
         if (entity is null) { return false; }
 
-        if (DeliveryStatusChanged is not null)
-        {
-            await DeliveryStatusChanged(new DeliveryStatusChangedEvent { MessageId = messageId, Status = DestinationStatus.Read, OverallStatus = DestinationStatus.Read });
-        }
+        await DeliveryStatusChanged.InvokeAll(new DeliveryStatusChangedEvent { MessageId = messageId, Status = DestinationStatus.Read, OverallStatus = DestinationStatus.Read });
 
         UserInfo? userInfo = userService.GetCurrentUserInfo();
         if (userInfo is null) { return true; }

@@ -462,6 +462,22 @@ public sealed class DraftViewModelTests
         connMock.Verify(c => c.SendMessage(It.IsAny<string>(), It.IsAny<string>(), It.IsAny<List<AddressRequest>>(), It.IsAny<bool>(), It.IsAny<int>(), It.IsAny<string>(), It.IsAny<CancellationToken>()), Times.Never);
     }
 
+    /// <summary>SendCommand reports that no user is installed when the send is refused for that reason, rather than failing on a missing result.</summary>
+    [Fact]
+    public async Task SendCommand_NoUserInstalled_SaysSoAndKeepsDraftUnsent()
+    {
+        DraftEntity entity = new() { Subject = "Hello", Body = "World", Addresses = [new AddressData { UserName = "ALPHA", Type = "To" }], FolderId = "root-drafts" };
+        DraftViewModel vm = Build(out Mock<IEntryService> entryMock, out Mock<IServiceConnection> connMock, entity: entity);
+        connMock.Setup(c => c.SendMessage(It.IsAny<string>(), It.IsAny<string>(), It.IsAny<List<AddressRequest>>(), It.IsAny<bool>(), It.IsAny<int>(), It.IsAny<string>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync((SendMessageResult?)null);
+
+        await vm.SendCommand.ExecuteAsync(null);
+
+        Assert.Equal("Cannot send until a user is installed", vm.StatusMessage);
+        Assert.False(vm.IsSent);
+        entryMock.Verify(e => e.StoreSentMessage(It.IsAny<string>(), It.IsAny<string>(), It.IsAny<string>(), It.IsAny<List<AddressData>>(), It.IsAny<DateTime>(), It.IsAny<IReadOnlyList<UserDeliveryResult>>(), It.IsAny<bool>(), It.IsAny<int>(), It.IsAny<string>()), Times.Never);
+    }
+
     /// <summary>SendCommand with addresses and successful send sets IsSent and StatusMessage.</summary>
     [Fact]
     public async Task SendCommand_WithAddresses_SendsAndSetsIsSent()

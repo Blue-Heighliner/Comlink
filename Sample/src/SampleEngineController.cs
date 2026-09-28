@@ -2,8 +2,8 @@ namespace BlueHeighliner.Comlink.Sample;
 
 /// <summary>
 /// Sample <see cref="IEngineController"/> mapping the engine's logical message fields onto
-/// <see cref="SampleMessage"/> (with no casting required — see <see cref="DefaultEngineController{TMessage}"/>),
-/// and demonstrating every other control override Sample has distinct, non-config-file behavior worth
+/// <see cref="SampleMessage"/> (with no casting required, see <see cref="DefaultEngineController{TMessage}"/>) and
+/// the packet fields onto <see cref="SamplePacket"/>, and demonstrating every other control override Sample has distinct, non-config-file behavior worth
 /// showing — every other member uses the Engine default, with <c>config.json</c> applied on top
 /// automatically (see <c>Docs/Components/Control.md</c>):
 /// <list type="bullet">
@@ -16,12 +16,13 @@ namespace BlueHeighliner.Comlink.Sample;
 /// <item><description><see cref="CanDelete"/> — only <see cref="FolderType.Drafts"/> and <see cref="FolderType.Notes"/> entries can be deleted; Inbox, Outbox, and Activity are protected.</description></item>
 /// <item><description><see cref="ConfigFileEnabled"/> — <see langword="true"/>, so Sample honors a <c>--config</c> argument, unlike the Engine default.</description></item>
 /// <item><description><see cref="ExternalSystems"/> — a single demo <see cref="SampleExternalSystem"/>, showing the external-system conduit pattern.</description></item>
+/// <item><description>Packetization: deriving from <see cref="DefaultEngineController{TMessage, TPacket}"/> with <see cref="SamplePacket"/> enables it with the default packet size, window and serializer.</description></item>
 /// </list>
 /// Actual alarm sound playback and printer discovery/driving are real platform behavior always provided by
 /// the engine itself, not something Sample overrides here.
 /// </summary>
 /// <param name="currentUserProvider">Tracks the user name of the currently running instance, forwarded to the base class.</param>
-public sealed class SampleEngineController(ICurrentUserProvider currentUserProvider) : DefaultEngineController<SampleMessage>(currentUserProvider)
+public sealed class SampleEngineController(ICurrentUserProvider currentUserProvider) : DefaultEngineController<SampleMessage, SamplePacket>(currentUserProvider)
 {
     private readonly Dictionary<string, UserInfo> userCodes = new()
     {
@@ -108,6 +109,27 @@ public sealed class SampleEngineController(ICurrentUserProvider currentUserProvi
 
     /// <inheritdoc />
     public override UserInfo? ResolveCode(string userCode) => userCodes.GetValueOrDefault(userCode.ToUpperInvariant());
+
+    /// <inheritdoc />
+    protected override int GetPayloadId(SamplePacket packet) => packet.Group;
+    /// <inheritdoc />
+    protected override void SetPayloadId(SamplePacket packet, int value) => packet.Group = value;
+    /// <inheritdoc />
+    protected override int GetPacketIndex(SamplePacket packet) => packet.Position;
+    /// <inheritdoc />
+    protected override void SetPacketIndex(SamplePacket packet, int value) => packet.Position = value;
+    /// <inheritdoc />
+    protected override int GetPacketCount(SamplePacket packet) => packet.Total;
+    /// <inheritdoc />
+    protected override void SetPacketCount(SamplePacket packet, int value) => packet.Total = value;
+    /// <inheritdoc />
+    protected override int GetPayloadLength(SamplePacket packet) => packet.FullLength;
+    /// <inheritdoc />
+    protected override void SetPayloadLength(SamplePacket packet, int value) => packet.FullLength = value;
+    /// <inheritdoc />
+    protected override ReadOnlyMemory<byte> GetPacketData(SamplePacket packet) => packet.Chunk;
+    /// <inheritdoc />
+    protected override void SetPacketData(SamplePacket packet, ReadOnlyMemory<byte> value) => packet.Chunk = value.ToArray();
 
     /// <inheritdoc />
     public override int GetPrintCount(SampleMessage message) => message.Alert ? 2 : 1;

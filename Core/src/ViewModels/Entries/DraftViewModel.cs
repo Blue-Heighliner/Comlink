@@ -423,6 +423,11 @@ public sealed partial class DraftViewModel : ObservableObject, IDraftViewModel
                 Subject, body,
                 Addresses.Select(a => new AddressRequest { UserName = a.UserName, Type = a.Type }).ToList(),
                 IsAlert, SelectedPriority.Value, Tag);
+            if (result is null)
+            {
+                StatusMessage = "Cannot send until a user is installed";
+                return;
+            }
 
             entity.IsSent = true;
             entity.SentAt = DateTime.UtcNow;
@@ -430,7 +435,7 @@ public sealed partial class DraftViewModel : ObservableObject, IDraftViewModel
 
             DateTime sentAt = entity.SentAt ?? DateTime.UtcNow;
             MessageEntity sentMessage = await entryService.StoreSentMessage(
-                result!.MessageId, Subject, body, [.. Addresses], sentAt, result.UserResults, IsAlert, SelectedPriority.Value, Tag);
+                result.MessageId, Subject, body, [.. Addresses], sentAt, result.UserResults, IsAlert, SelectedPriority.Value, Tag);
 
             IsSent = true;
             StatusMessage = "Sent";

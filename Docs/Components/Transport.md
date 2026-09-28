@@ -11,6 +11,8 @@
 
 The composite routes each `Request` and `Open` by `UserEndpoint.IsSerial` and merges the `Received`, `Connected`, and `Disconnected` streams of both halves. A `Request` completes only when the remote node has acknowledged the message, and throws if it could not be delivered; both halves honor that same contract, which is what lets the services stay medium agnostic.
 
+When `IEngineController.PacketType` is set, the factory wraps the composite in a `PacketizingPeerTransport` (a decorator with the same contract), so every peer, client and server service gets packetization without knowing about it.
+
 The IP half needs an identity certificate for the current user, which is unavailable before a user is installed or on a node that never uses IP. In that case the factory logs a warning and builds the composite without it: IP requests then fail with `IOException` while serial keeps working. This is what allows a serial-only node to run with no certificates at all.
 
 ## Endpoints and identity

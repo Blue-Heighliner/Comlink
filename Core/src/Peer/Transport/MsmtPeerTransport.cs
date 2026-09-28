@@ -70,7 +70,8 @@ internal sealed class MsmtPeerTransport : IPeerTransport
         if (closed.ContainsKey(target.Key)) { throw new IOException($"Connection to {target} is closed"); }
 
         IMsmtConnection connection = await GetConnection(target, cancellation);
-        MsmtSendOptions sendOptions = new() { Priority = options?.Priority ?? 0, Tag = options?.Transmitted is { } transmitted ? new TransmittedTag(transmitted) : null };
+        // MSMT orders sends by the negated priority, which overflows for int.MinValue and would put the lowest priority first.
+        MsmtSendOptions sendOptions = new() { Priority = Math.Max(options?.Priority ?? 0, int.MinValue + 1), Tag = options?.Transmitted is { } transmitted ? new TransmittedTag(transmitted) : null };
         try
         {
             MsmtResponse response = await connection.Request(data, sendOptions, cancellation);
@@ -116,9 +117,11 @@ internal sealed class MsmtPeerTransport : IPeerTransport
             ? new PeerConnection(new UserEndpoint { IpAddress = c.Remote.Host, Port = c.Remote.Port }, false, c.Identity?.Subject, c.Dispose)
             : new PeerConnection(null, true, c.Identity?.Subject, c.Dispose));
 
+    // Removed as well as disposed: disposing only starts the close, so the connection can still report itself connected for
+    // a moment, and the next request must not reuse it.
     private void DropOutbound(UserEndpoint endpoint)
     {
-        if (outbound.TryGetValue(endpoint.Key, out IMsmtConnection? connection)) { connection.Dispose(); }
+        if (outbound.TryRemove(endpoint.Key, out IMsmtConnection? connection)) { connection.Dispose(); }
     }
 
     private void MarkConnected(IMsmtConnection connection) => connected.Publish(new PeerConnectionEventArgs { Connection = Wrap(connection) });
@@ -146,5 +149,10 @@ internal sealed class MsmtPeerTransport : IPeerTransport
         }
     }
 
-    private sealed record TransmittedTag(Action Transmitted);
+    // MSMT tracks tagged sends by tag, replacing an earlier send that has an equal one, so tags must be equal only to
+    // themselves: sends that share a callback (the packets of one payload) would otherwise overwrite each other.
+    private sealed class TransmittedTag(Action transmitted)
+    {
+        public void Transmitted() => transmitted();
+    }
 }

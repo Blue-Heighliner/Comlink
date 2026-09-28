@@ -39,6 +39,23 @@ public sealed class InterfaceServiceTests
             It.IsAny<CancellationToken>()), Times.Once);
     }
 
+    /// <summary>A failure while routing a message from an interface is logged rather than escaping into a task nobody observes.</summary>
+    [Fact]
+    public async Task HandleInterfaceMessage_RoutingFails_DoesNotThrow()
+    {
+        Mock<IMsmtSessionPeer.IFactory> peerFactory = new();
+        Mock<IMessageRoutingService> routing = new();
+        routing.Setup(r => r.Route(It.IsAny<string>(), It.IsAny<SendMessagePayload>(), It.IsAny<CancellationToken>())).ThrowsAsync(new InvalidOperationException("database is locked"));
+        Mock<IUserService> user = new();
+        user.Setup(s => s.GetCurrentUserInfo()).Returns(MakeUserInfo("LOCAL"));
+        InterfaceService svc = new(peerFactory.Object, format, routing.Object, user.Object, noLogger);
+        using IMemoryOwner<byte> buf = serializer.Serialize(new TestMessage { Subject = "Hi" });
+
+        await svc.HandleInterfaceMessage(buf.Memory.ToArray());
+
+        routing.Verify(r => r.Route("LOCAL", It.IsAny<SendMessagePayload>(), It.IsAny<CancellationToken>()), Times.Once);
+    }
+
     /// <summary>A message received from an interface is dropped without routing when no user is installed.</summary>
     [Fact]
     public async Task HandleInterfaceMessage_NoUserInstalled_DoesNotRoute()

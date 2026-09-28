@@ -61,10 +61,19 @@ internal sealed class EngineHost : IHostedService
         userService.Installed -= StartNetworking;
 
         CancellationToken cancellation = cts!.Token;
-        _ = Task.Run(() => peerService.Start(cancellation), cancellation);
-        _ = Task.Run(() => interfaceService.Start(cancellation), cancellation);
-        _ = Task.Run(() => externalSystemsService.Start(cancellation), cancellation);
+        RunInBackground("Peer service", () => peerService.Start(cancellation), cancellation);
+        RunInBackground("Interface service", () => interfaceService.Start(cancellation), cancellation);
+        RunInBackground("External systems service", () => externalSystemsService.Start(cancellation), cancellation);
     }
+
+    // Each service runs until cancelled, so one that ends any other way has failed, and nothing else would ever say so.
+    private void RunInBackground(string name, Func<Task> run, CancellationToken cancellation)
+        => _ = Task.Run(async () =>
+        {
+            try { await run(); }
+            catch (OperationCanceledException) when (cancellation.IsCancellationRequested) { }
+            catch (Exception ex) { logger.LogCritical(ex, "{Service} stopped unexpectedly", name); }
+        }, cancellation);
 
     /// <inheritdoc />
     public Task StopAsync(CancellationToken cancellationToken)

@@ -3,11 +3,10 @@ namespace BlueHeighliner.Comlink.Control;
 /// <summary>
 /// Single control interface consolidating every extension point through which a host application
 /// customises Engine behaviour without modifying Engine code: the concrete message type and its logical
-/// field mapping, how that message type is serialized for the network, app identity/presentation, local
-/// user identity, the user/group directory, listener ports, alert settings, message composition, the
-/// automatic print policy, MSMT peer certificate naming and peer options, network topology, the external
-/// systems this instance communicates with, and whether
-/// <c>config.json</c> is read at all. External drive discovery and printer discovery/driving are real
+/// field mapping, how that message type is serialized and packetized (and at what packet size and window) for the network, app
+/// identity/presentation, local user identity, the user/group directory, listener ports, alert settings,
+/// message composition, the automatic print policy, MSMT peer certificate naming and peer options, network
+/// topology, the external systems this instance communicates with, and whether <c>config.json</c> is read at all. External drive discovery and printer discovery/driving are real
 /// OS-level behavior, not configuration or rules, so they live on <see cref="Devices.IExternalDriveProvider"/>
 /// and <see cref="Devices.IPrintDriver"/> instead. See <c>Docs/Components/Control.md</c>.
 /// </summary>
@@ -26,6 +25,40 @@ public interface IEngineController
     /// different wire format, as long as every node this instance talks to is configured the same way.
     /// </summary>
     INetworkSerializer NetworkSerializer { get; }
+
+    /// <summary>
+    /// The concrete packet type payloads are broken into for the network, or <see langword="null"/> (the default)
+    /// for no packetization, in which case full payloads are sent as they are. When set, every payload is cut into
+    /// prioritized packets of this type and reassembled on the other side, so a large payload does not hold up
+    /// higher-priority ones queued behind it; the engine does all of that itself, and this type only says how a
+    /// packet looks on the wire, through <see cref="PacketSerializer"/> and the packet field members below. Every
+    /// node this instance talks to must be configured alike, since neither side can tell whether the other
+    /// packetizes. Peer, client and server traffic is packetized; interface connections never are.
+    /// </summary>
+    Type? PacketType { get; }
+
+    /// <summary>
+    /// Serializes and deserializes instances of <see cref="PacketType"/> to and from the bytes actually sent
+    /// across the network, like <see cref="NetworkSerializer"/> does for messages. <see langword="null"/> exactly
+    /// when <see cref="PacketType"/> is.
+    /// </summary>
+    INetworkSerializer? PacketSerializer { get; }
+
+    /// <summary>
+    /// The largest a serialized packet may be, in bytes. Smaller packets let a higher-priority payload cut in
+    /// sooner; larger ones carry less framing overhead. The engine works out how much payload fits in a packet
+    /// by measuring what <see cref="PacketSerializer"/> makes of one, so it must leave room for the packet's own
+    /// fields. Ignored while <see cref="PacketType"/> is <see langword="null"/>.
+    /// </summary>
+    int PacketSize { get; }
+
+    /// <summary>
+    /// How many packets may be in flight to one endpoint at once. A higher-priority payload sent meanwhile goes out
+    /// as soon as the packets already in flight finish, so the window is how many it can end up waiting behind: 1
+    /// (the default) is the most responsive, while a wider window keeps a link with a long round trip busier. Must
+    /// be at least 1. Ignored while <see cref="PacketType"/> is <see langword="null"/>.
+    /// </summary>
+    int PacketWindow { get; }
 
     /// <summary>The application name, used as the default data folder name and in log headers.</summary>
     string AppName { get; }
@@ -206,6 +239,29 @@ public interface IEngineController
     /// <summary>Sets the tag on <paramref name="message"/>.</summary>
     void SetTag(object message, string value);
 
+    /// <summary>Creates a new, empty instance of <see cref="PacketType"/>. Only called while <see cref="PacketType"/> is set.</summary>
+    object CreatePacket();
+    /// <summary>Gets the identifier shared by every packet of one payload, which tells packets of different payloads apart.</summary>
+    int GetPayloadId(object packet);
+    /// <summary>Sets the payload identifier on <paramref name="packet"/>.</summary>
+    void SetPayloadId(object packet, int value);
+    /// <summary>Gets the zero-based position of <paramref name="packet"/> among the packets of its payload.</summary>
+    int GetPacketIndex(object packet);
+    /// <summary>Sets the position of <paramref name="packet"/> among the packets of its payload.</summary>
+    void SetPacketIndex(object packet, int value);
+    /// <summary>Gets how many packets the payload <paramref name="packet"/> belongs to was broken into.</summary>
+    int GetPacketCount(object packet);
+    /// <summary>Sets the number of packets the payload <paramref name="packet"/> belongs to was broken into.</summary>
+    void SetPacketCount(object packet, int value);
+    /// <summary>Gets the length in bytes of the whole payload <paramref name="packet"/> belongs to.</summary>
+    int GetPayloadLength(object packet);
+    /// <summary>Sets the length in bytes of the whole payload <paramref name="packet"/> belongs to.</summary>
+    void SetPayloadLength(object packet, int value);
+    /// <summary>Gets the slice of the payload <paramref name="packet"/> carries.</summary>
+    ReadOnlyMemory<byte> GetPacketData(object packet);
+    /// <summary>Sets the slice of the payload <paramref name="packet"/> carries; the value is only valid for the duration of the call, so a packet that stores it must copy it.</summary>
+    void SetPacketData(object packet, ReadOnlyMemory<byte> value);
+
     /// <summary>Resolves <paramref name="userCode"/> to its <see cref="UserInfo"/>, or <see langword="null"/> if the code is unrecognized.</summary>
     /// <param name="userCode">The user installation code to resolve.</param>
     UserInfo? ResolveCode(string userCode);
@@ -245,212 +301,6 @@ public interface IEngineController
     /// throws.
     /// </summary>
     string TrustedAuthorityCertificateName { get; }
-}
-
-/// <summary>
-/// Implements <see cref="IEngineController"/> against a concrete message type <typeparamref name="TMessage"/>,
-/// with sensible hardcoded defaults for every other app area. Message-field members are implemented
-/// explicitly (casting <c>object</c> to <typeparamref name="TMessage"/> once on your behalf) and exposed as
-/// type-safe <c>protected abstract</c> members instead — a derived class never sees or writes an
-/// <c>object</c>-to-<typeparamref name="TMessage"/> cast; see <c>Sample/src/SampleEngineController.cs</c>
-/// for a working example. Every other member describes non-config-file behavior; see
-/// <see cref="ConfiguredEngineController"/> for how <c>config.json</c> overrides the subset with a
-/// corresponding field. Non-abstract members are <see langword="virtual"/> so a host can inherit and
-/// override just the ones it actually wants to change — see <c>Docs/Components/Control.md</c>.
-/// </summary>
-/// <typeparam name="TMessage">
-/// The concrete message type. Must be protobuf-net serializable (carry <c>[ProtoContract]</c>/<c>[ProtoMember]</c>
-/// attributes) for wire transport, LiteDB-serializable for storage, and have a public parameterless
-/// constructor (used by the default <see cref="CreateMessage"/> implementation).
-/// </typeparam>
-public abstract class DefaultEngineController<TMessage> : IEngineController where TMessage : class, new()
-{
-    /// <summary>Initializes a new instance reading the current user from <paramref name="currentUserProvider"/> for <see cref="ConnectionOptions"/>.</summary>
-    /// <param name="currentUserProvider">Tracks the user name of the currently running instance.</param>
-    protected DefaultEngineController(ICurrentUserProvider currentUserProvider)
-        => this.currentUserProvider = currentUserProvider;
-
-    private readonly ICurrentUserProvider currentUserProvider;
-    private readonly Dictionary<string, IReadOnlyList<string>> emptyGroups = [];
-    private readonly List<string> emptyNames = [];
-    private readonly Dictionary<string, ServerUserConfig> emptyServerUsers = [];
-
-    /// <inheritdoc cref="IEngineController.MessageType" />
-    public Type MessageType => typeof(TMessage);
-
-    /// <inheritdoc cref="IEngineController.NetworkSerializer" />
-    public virtual INetworkSerializer NetworkSerializer { get; } = new ProtobufNetworkSerializer();
-
-    /// <summary>Creates a new, empty <typeparamref name="TMessage"/>. The default implementation returns <c>new TMessage()</c>; override for custom construction.</summary>
-    protected virtual TMessage CreateMessage() => new();
-    /// <summary>Gets the application-level message identifier from <paramref name="message"/>.</summary>
-    protected abstract string GetMessageId(TMessage message);
-    /// <summary>Sets the application-level message identifier on <paramref name="message"/>.</summary>
-    protected abstract void SetMessageId(TMessage message, string value);
-    /// <summary>Gets the sender user name from <paramref name="message"/>.</summary>
-    protected abstract string GetFromUser(TMessage message);
-    /// <summary>Sets the sender user name on <paramref name="message"/>.</summary>
-    protected abstract void SetFromUser(TMessage message, string value);
-    /// <summary>Gets the subject line from <paramref name="message"/>.</summary>
-    protected abstract string GetSubject(TMessage message);
-    /// <summary>Sets the subject line on <paramref name="message"/>.</summary>
-    protected abstract void SetSubject(TMessage message, string value);
-    /// <summary>Gets the body text from <paramref name="message"/>.</summary>
-    protected abstract string GetBody(TMessage message);
-    /// <summary>Sets the body text on <paramref name="message"/>.</summary>
-    protected abstract void SetBody(TMessage message, string value);
-    /// <summary>Gets the recipient address list from <paramref name="message"/>.</summary>
-    protected abstract List<MessageAddress> GetAddresses(TMessage message);
-    /// <summary>Sets the recipient address list on <paramref name="message"/>.</summary>
-    protected abstract void SetAddresses(TMessage message, List<MessageAddress> value);
-    /// <summary>Gets the UTC sent timestamp from <paramref name="message"/>.</summary>
-    protected abstract DateTime GetSentAt(TMessage message);
-    /// <summary>Sets the UTC sent timestamp on <paramref name="message"/>.</summary>
-    protected abstract void SetSentAt(TMessage message, DateTime value);
-    /// <summary>Gets the message ID <paramref name="message"/> is a user-read confirmation for, or an empty string if it is not a confirmation.</summary>
-    protected abstract string GetConfirmationMessageId(TMessage message);
-    /// <summary>Sets the message ID <paramref name="message"/> is a user-read confirmation for.</summary>
-    protected abstract void SetConfirmationMessageId(TMessage message, string value);
-    /// <summary>Gets whether <paramref name="message"/> is an alert.</summary>
-    protected abstract bool GetIsAlert(TMessage message);
-    /// <summary>Sets whether <paramref name="message"/> is an alert.</summary>
-    protected abstract void SetIsAlert(TMessage message, bool value);
-    /// <summary>Gets the priority number of <paramref name="message"/>.</summary>
-    protected abstract int GetPriority(TMessage message);
-    /// <summary>Sets the priority number on <paramref name="message"/>.</summary>
-    protected abstract void SetPriority(TMessage message, int value);
-    /// <summary>Gets the tag identifying the type of <paramref name="message"/>, or an empty string if none was set.</summary>
-    protected abstract string GetTag(TMessage message);
-    /// <summary>Sets the tag on <paramref name="message"/>.</summary>
-    protected abstract void SetTag(TMessage message, string value);
-
-    object IEngineController.CreateMessage() => CreateMessage();
-    string IEngineController.GetMessageId(object message) => GetMessageId((TMessage)message);
-    void IEngineController.SetMessageId(object message, string value) => SetMessageId((TMessage)message, value);
-    string IEngineController.GetFromUser(object message) => GetFromUser((TMessage)message);
-    void IEngineController.SetFromUser(object message, string value) => SetFromUser((TMessage)message, value);
-    string IEngineController.GetSubject(object message) => GetSubject((TMessage)message);
-    void IEngineController.SetSubject(object message, string value) => SetSubject((TMessage)message, value);
-    string IEngineController.GetBody(object message) => GetBody((TMessage)message);
-    void IEngineController.SetBody(object message, string value) => SetBody((TMessage)message, value);
-    List<MessageAddress> IEngineController.GetAddresses(object message) => GetAddresses((TMessage)message);
-    void IEngineController.SetAddresses(object message, List<MessageAddress> value) => SetAddresses((TMessage)message, value);
-    DateTime IEngineController.GetSentAt(object message) => GetSentAt((TMessage)message);
-    void IEngineController.SetSentAt(object message, DateTime value) => SetSentAt((TMessage)message, value);
-    string IEngineController.GetConfirmationMessageId(object message) => GetConfirmationMessageId((TMessage)message);
-    void IEngineController.SetConfirmationMessageId(object message, string value) => SetConfirmationMessageId((TMessage)message, value);
-    bool IEngineController.GetIsAlert(object message) => GetIsAlert((TMessage)message);
-    void IEngineController.SetIsAlert(object message, bool value) => SetIsAlert((TMessage)message, value);
-    int IEngineController.GetPriority(object message) => GetPriority((TMessage)message);
-    void IEngineController.SetPriority(object message, int value) => SetPriority((TMessage)message, value);
-    string IEngineController.GetTag(object message) => GetTag((TMessage)message);
-    void IEngineController.SetTag(object message, string value) => SetTag((TMessage)message, value);
-
-    /// <summary>The default <see cref="AppDataPath"/> reads <see cref="AppName"/> through virtual dispatch, so a host overriding only <see cref="AppName"/> automatically gets a matching default data folder.</summary>
-    public virtual string AppName => Assembly.GetEntryAssembly()?.GetName().Name ?? "App";
-    /// <inheritdoc />
-    public virtual string AppVersion => Assembly.GetEntryAssembly()?.GetName().Version is { } version ? $"{version.Major}.{version.Minor}.{version.Build}" : "1.0.0";
-    /// <inheritdoc />
-    public virtual string AppDataPath => Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), AppName);
-    /// <inheritdoc />
-    public virtual bool IsKioskMode => false;
-    /// <inheritdoc />
-    public virtual string HomeText => "HOME";
-    /// <inheritdoc />
-    public virtual Uri? WindowIconUri => null;
-
-    /// <inheritdoc />
-    public virtual string? DebugUserName => null;
-    /// <inheritdoc />
-    public virtual IReadOnlyList<string> Users => emptyNames;
-    /// <inheritdoc />
-    public virtual IReadOnlyDictionary<string, IReadOnlyList<string>> UserGroups => emptyGroups;
-    /// <inheritdoc />
-    public virtual UserInfo? ResolveCode(string userCode)
-        => userCode.Equals("CODE", StringComparison.OrdinalIgnoreCase)
-            ? new UserInfo { Name = "TEST", Code = "CODE", EnvironmentTitle = "Test", EnvironmentColor = "#888888" }
-            : null;
-    /// <inheritdoc />
-    public virtual UserEndpoint? GetEndpoint(string userName) => null;
-
-    /// <inheritdoc />
-    public virtual int PeerPort => 50021;
-    /// <inheritdoc />
-    public virtual int InterfacePort => 50020;
-
-    /// <inheritdoc />
-    public virtual string AlertLabel => "ALERT";
-    /// <inheritdoc />
-    public virtual TimeSpan AlarmSoundDuration => TimeSpan.FromSeconds(30);
-    /// <inheritdoc />
-    public virtual bool QuickConfirmationEnabled => true;
-    /// <inheritdoc />
-    public virtual bool ComposeAlertsEnabled => true;
-
-    /// <inheritdoc />
-    public virtual IReadOnlyList<MessagePriorityOption> Priorities { get; } = [new MessagePriorityOption { Name = "Normal", Value = 0 }];
-    /// <inheritdoc />
-    public virtual bool TagsEnabled => true;
-    /// <inheritdoc />
-    public virtual string TagLabel => "Tag";
-    /// <inheritdoc />
-    public virtual IReadOnlyList<TagPriorityBlock> BlockedCombinations { get; } = [];
-
-    /// <inheritdoc />
-    public virtual bool PrintReceivedDefaultEnabled => false;
-    /// <summary>Returns how many times <paramref name="message"/> should be automatically added to the print queue when it arrives. The default returns <c>1</c> for every message; override to inspect the message's fields.</summary>
-    public virtual int GetPrintCount(TMessage message) => 1;
-
-    int IEngineController.GetPrintCount(object message) => GetPrintCount((TMessage)message);
-
-    /// <inheritdoc />
-    public virtual bool CanDelete(FolderType folderType) => true;
-
-    /// <summary>
-    /// Builds peer options by looking up the certificates returned by <see cref="GetCertificateName"/> and
-    /// <see cref="TrustedAuthorityCertificateName"/> (through virtual dispatch, so overriding just those
-    /// members is enough for most customization needs) in the system certificate store. <see
-    /// langword="virtual"/> so a host can override the whole policy directly when that is not sufficient —
-    /// see <c>Docs/Components/Control.md</c>.
-    /// </summary>
-    /// <exception cref="InvalidOperationException">No current user is registered yet, so no identity certificate can be resolved.</exception>
-    public virtual MsmtSessionPeerOptions ConnectionOptions => MsmtCertificateLookup.BuildPeerOptions(currentUserProvider.UserName, GetCertificateName, TrustedAuthorityCertificateName);
-
-    /// <inheritdoc />
-    public virtual NodeRole Role => NodeRole.Peer;
-    /// <inheritdoc />
-    public virtual UserEndpoint? ServerEndpoint => null;
-    /// <inheritdoc />
-    public virtual IReadOnlyDictionary<string, ServerUserConfig> Servers => emptyServerUsers;
-
-    /// <inheritdoc />
-    public virtual bool ConfigFileEnabled => false;
-
-    /// <summary>
-    /// The external systems this instance communicates with — each a conduit relaying messages to and from
-    /// another system outside Comlink. <see cref="ExternalSystemBase{TMessage}"/> is available as an
-    /// optional convenience base class for implementing one (see <c>Docs/Components/ExternalSystems.md</c>), but is
-    /// not required — any <see cref="IExternalSystem"/> implementation works here. Read once at startup by
-    /// <see cref="ExternalSystemsService"/>: every message this instance receives (from a peer, or from any
-    /// other external system) is sent through every other external system in the returned list, and every
-    /// message received from one is processed exactly like an ordinary received message. The default is an
-    /// empty list — override to provide one or more.
-    /// </summary>
-    public virtual IReadOnlyList<IExternalSystem> ExternalSystems { get; } = [];
-
-    /// <summary>
-    /// The single external system, from <see cref="ExternalSystems"/>, that should exclusively receive
-    /// every message this instance would otherwise send out. The default is <see langword="null"/>,
-    /// disabling this gateway behavior — override to designate one of <see cref="ExternalSystems"/>'s own
-    /// entries as the exclusive upstream hub.
-    /// </summary>
-    public virtual IExternalSystem? ExternalServer { get; } = null;
-
-    /// <inheritdoc />
-    public virtual string GetCertificateName(string userName) => userName;
-
-    /// <inheritdoc />
-    public virtual string TrustedAuthorityCertificateName => "COMLINK-ROOT";
 }
 
 /// <summary>
@@ -572,6 +422,14 @@ internal sealed class ConfiguredEngineController : IEngineController
     /// <inheritdoc />
     public INetworkSerializer NetworkSerializer => fallback.NetworkSerializer;
     /// <inheritdoc />
+    public Type? PacketType => fallback.PacketType;
+    /// <inheritdoc />
+    public INetworkSerializer? PacketSerializer => fallback.PacketSerializer;
+    /// <inheritdoc />
+    public int PacketSize => fallback.PacketSize;
+    /// <inheritdoc />
+    public int PacketWindow => fallback.PacketWindow;
+    /// <inheritdoc />
     public object CreateMessage() => fallback.CreateMessage();
     /// <inheritdoc />
     public string GetMessageId(object message) => fallback.GetMessageId(message);
@@ -613,6 +471,28 @@ internal sealed class ConfiguredEngineController : IEngineController
     public string GetTag(object message) => fallback.GetTag(message);
     /// <inheritdoc />
     public void SetTag(object message, string value) => fallback.SetTag(message, value);
+    /// <inheritdoc />
+    public object CreatePacket() => fallback.CreatePacket();
+    /// <inheritdoc />
+    public int GetPayloadId(object packet) => fallback.GetPayloadId(packet);
+    /// <inheritdoc />
+    public void SetPayloadId(object packet, int value) => fallback.SetPayloadId(packet, value);
+    /// <inheritdoc />
+    public int GetPacketIndex(object packet) => fallback.GetPacketIndex(packet);
+    /// <inheritdoc />
+    public void SetPacketIndex(object packet, int value) => fallback.SetPacketIndex(packet, value);
+    /// <inheritdoc />
+    public int GetPacketCount(object packet) => fallback.GetPacketCount(packet);
+    /// <inheritdoc />
+    public void SetPacketCount(object packet, int value) => fallback.SetPacketCount(packet, value);
+    /// <inheritdoc />
+    public int GetPayloadLength(object packet) => fallback.GetPayloadLength(packet);
+    /// <inheritdoc />
+    public void SetPayloadLength(object packet, int value) => fallback.SetPayloadLength(packet, value);
+    /// <inheritdoc />
+    public ReadOnlyMemory<byte> GetPacketData(object packet) => fallback.GetPacketData(packet);
+    /// <inheritdoc />
+    public void SetPacketData(object packet, ReadOnlyMemory<byte> value) => fallback.SetPacketData(packet, value);
 
     /// <inheritdoc />
     public string AppName => fallback.AppName;

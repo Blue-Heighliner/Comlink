@@ -224,7 +224,7 @@ internal sealed class ServerRoutingService : IPeerService, IConnectionStatusServ
         // monitor itself) would otherwise sit unnoticed until the monitor's current heartbeat interval elapses -
         // up to steadyInterval - since nothing else wakes a sleeping monitor. Waking it here lets it retry (and
         // report the reconnect) right away instead.
-        if (monitors.TryGetValue(remoteName, out PeerLinkControl? monitor)) { monitor.Refresh(); }
+        if (monitors.TryGetValue(remoteName, out PeerLinkControl? monitor)) { monitor.NotifyLost(); }
     }
 
     private bool HasLiveConnection(string name)
@@ -289,12 +289,18 @@ internal sealed class ServerRoutingService : IPeerService, IConnectionStatusServ
 
         if (childNames.Contains(remoteName, StringComparer.OrdinalIgnoreCase))
         {
-            _ = Task.Run(() => HandleFromChild(remoteName, copy));
+            _ = Task.Run(() => Relay(() => HandleFromChild(remoteName, copy)));
         }
         else
         {
-            _ = Task.Run(() => HandleFromServer(remoteName, copy));
+            _ = Task.Run(() => Relay(() => HandleFromServer(remoteName, copy)));
         }
+    }
+
+    private async Task Relay(Func<Task> relay)
+    {
+        try { await relay(); }
+        catch (Exception ex) { logger.LogError(ex, "Failed to relay a message"); }
     }
 
     private async Task HandleFromChild(string childName, ReadOnlyMemory<byte> data)
@@ -494,10 +500,7 @@ internal sealed class ServerRoutingService : IPeerService, IConnectionStatusServ
     public async Task DeliverLocal(object payload)
     {
         logger.LogInformation("{MessageId} delivered locally from {FromUser}", engineController.GetMessageId(payload), engineController.GetFromUser(payload));
-        if (MessageDelivered is not null)
-        {
-            await MessageDelivered(payload);
-        }
+        await MessageDelivered.InvokeAll(payload);
     }
 
     /// <inheritdoc />

@@ -1,0 +1,38 @@
+# Packetizer
+
+Packetization breaks a payload into prioritized packets that are sent over the network in its place, and puts the packets a remote node sent back together. It exists for priority: the transport can only interleave whole messages, so a large low-priority payload holds up every higher-priority payload queued behind it. Sent as several packets, the same payload lets those go out between its packets.
+
+The logic is the engine's and is the same for every host. What is the host's is only what a packet looks like: its type, how it is serialized, and where the few fields the engine needs are stored in it. A host derives its controller from `DefaultEngineController<TMessage, TPacket>` to enable it, which sets `IEngineController.PacketType`; with the ordinary `DefaultEngineController<TMessage>` `PacketType` is `null`, nothing is packetized, and full payloads are sent as they are. Setting it is a decision for the whole network, since neither side can tell whether the other packetizes: a packetizing node drops a raw payload because it does not deserialize as a packet, and a non-packetizing node cannot use a packet, so both fail closed rather than misbehave.
+
+## The packet format
+
+The engine needs five things in every packet, which the controller's packet members get and set: the payload id shared by all packets of one payload, the packet's index and the packet count, the payload's total length, and the slice of the payload the packet carries. The host stores them however it likes in its `TPacket`, and `PacketSerializer` decides what it looks like on the wire (protobuf-net by default, through the same self-describing envelope messages use, which costs a fixed overhead per packet). A custom serializer can be as lean as the host wants.
+
+`PacketSize` is the limit on a serialized packet, not on the data in it. Since how big a packet comes out is up to the host's serializer, the engine measures it rather than assuming: when the transport is created it searches for the largest chunk whose serialized packet fits, using the largest possible field values so that real packets never come out bigger. That works for a format that grows the data too, such as a text encoding. If not even one byte fits, the transport is not created and the error is logged. A packet that still comes out over the limit later fails the send instead of going out.
+
+## Where it applies
+
+Packetization is a decorator on the transport, `PacketizingPeerTransport`, added by `PeerTransportFactory` only when `PacketType` is set. Everything above the transport is unaware of it:
+
+- **Sending**: `Request` splits the payload and queues every packet with the `PacketScheduler` for the target endpoint, which hands the wrapped transport at most `IEngineController.PacketWindow` packets at a time (1 by default), always the highest-priority queued packet next and first come, first served among equals. So when a higher-priority payload is sent while a lower-priority one is still being transmitted, the packets already in flight finish (they cannot be recalled), the higher-priority packets go out next, and the remaining lower-priority packets are paused until nothing more urgent is queued. The window is how many packets a more urgent payload can end up waiting behind: 1 is the most responsive, and a wider window keeps a link with a long round trip busier by having the next packets already on their way. The ordering is done here rather than left to the wrapped transport, so it holds on every medium, and it is per endpoint, since packets to different endpoints do not compete. A packet being sent is never cancelled, because cancelling one already written closes the connection they all share, but a payload cancelled while its packets are still queued completes at once and none of them are sent. The request is accepted only if every packet was, and fails if any could not be delivered; once a packet fails, the rest of its payload is dropped rather than sent for nothing. `Transmitted` fires once, after the last packet has been transmitted.
+- **Receiving**: packets are reassembled by one assembler per connection, so senders never mix. Only a complete payload is published, so the services still see whole payloads. A packet that cannot be assembled is dropped with a warning. Losing a connection discards its half-received payloads.
+- **Heartbeats**: an empty payload is a `PeerConnectionMonitor` heartbeat and passes through untouched in both directions.
+- **Server relay**: a server reassembles what a child sent, as it always needs the whole message to route it, and packetizes it again for each recipient.
+- **Interface connections** are never packetized: they are a local injection point that external tools talk to directly.
+
+## Splitting and reassembly
+
+The payload is cut into consecutive chunks, all the same size except possibly the last, one per packet, and every packet inherits the payload's priority. The payload id is a non-negative `int` counter that starts at a random value (wrapping back to zero rather than going negative, so the largest id is also the widest a serializer has to encode), so a payload's packets are told apart from another's by their id. Because all chunks but the last are the same size, where a chunk belongs follows from its index and that size, and the last simply ends the payload, so no offset needs to be sent. The assembler rents one pooled buffer of the payload's full length and writes each chunk straight into place whatever order it arrives in; a duplicate packet is ignored, and chunk sizes that do not add up to the payload length are rejected when the last packet arrives.
+
+The assembler treats every sender as untrusted, because a server relays what a child sends:
+
+- The announced payload length is checked against a maximum (64 MiB) before anything is allocated, and the packet count against a maximum (65535).
+- The fields must be consistent, both within a packet and with the earlier packets of the same payload.
+- The buffer is zeroed when rented, so nothing an earlier payload left in the pooled array can ever be handed on.
+- At most a set number of payloads (32) are partly received at once. The oldest is dropped beyond that, which bounds the memory a lost packet or a sender that never finishes can tie up.
+
+Packetizing also lifts the transport's own limit on a single message, since each packet is small.
+
+## Serial links
+
+A serial link sends in call order and ignores priority itself, but because the scheduler hands it packets in priority order, packetized payloads are ordered by priority there too. Payloads sent without packetization are not.

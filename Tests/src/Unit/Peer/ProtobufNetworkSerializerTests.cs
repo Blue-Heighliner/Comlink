@@ -97,4 +97,47 @@ public sealed class ProtobufNetworkSerializerTests
 
         Assert.Null(serializer.Deserialize(stream.ToArray()));
     }
+
+    private static byte[] Envelope(string typeName)
+    {
+        using MemoryStream stream = new();
+        Serializer.Serialize(stream, new ProtobufEnvelope { TypeName = typeName, Payload = [] });
+        return stream.ToArray();
+    }
+
+    /// <summary>A serializer told which types it may build builds those, and only those, whatever type name a sender puts in the envelope.</summary>
+    [Fact]
+    public void Deserialize_KnownTypes_OnlyBuildsThose()
+    {
+        using IMemoryOwner<byte> other = serializer.Serialize(new OtherDto { Name = "n" });
+        using IMemoryOwner<byte> message = serializer.Serialize(new TestMessage { MessageId = "M1" });
+        ProtobufNetworkSerializer restricted = new(typeof(TestMessage));
+
+        Assert.Null(restricted.Deserialize(other.Memory));
+        Assert.IsType<TestMessage>(restricted.Deserialize(message.Memory));
+        Assert.IsType<OtherDto>(new ProtobufNetworkSerializer(typeof(OtherDto), typeof(TestMessage)).Deserialize(other.Memory));
+    }
+
+    /// <summary>A serializer told nothing still refuses a named type that is not a protobuf contract, rather than loading whatever a sender names.</summary>
+    [Fact]
+    public void Deserialize_UnrestrictedSerializer_RefusesTypesWithoutAContract()
+    {
+        Assert.Null(serializer.Deserialize(Envelope(typeof(Uri).AssemblyQualifiedName!)));
+    }
+
+    /// <summary>An engine controller's serializers build only its own message and packet types.</summary>
+    [Fact]
+    public void EngineControllerSerializers_OnlyBuildTheirOwnTypes()
+    {
+        TestPacketEngineController controller = new();
+        using IMemoryOwner<byte> other = serializer.Serialize(new OtherDto { Name = "n" });
+        using IMemoryOwner<byte> message = serializer.Serialize(new TestMessage { MessageId = "M1" });
+        using IMemoryOwner<byte> packet = serializer.Serialize(new TestPacket { Count = 1 });
+
+        Assert.Null(controller.NetworkSerializer.Deserialize(other.Memory));
+        Assert.Null(controller.NetworkSerializer.Deserialize(packet.Memory));
+        Assert.IsType<TestMessage>(controller.NetworkSerializer.Deserialize(message.Memory));
+        Assert.Null(controller.PacketSerializer.Deserialize(message.Memory));
+        Assert.IsType<TestPacket>(controller.PacketSerializer.Deserialize(packet.Memory));
+    }
 }

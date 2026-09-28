@@ -170,6 +170,61 @@ public sealed class CompositePeerTransportTests
         msmtFactory.Verify(f => f.Create(It.IsAny<MsmtSessionPeerOptions>()), Times.Once);
     }
 
+    /// <summary>With no packet type (the default) the transport is used as it is and full payloads are sent.</summary>
+    [Fact]
+    public async Task Factory_WithoutPacketType_DoesNotWrapTransport()
+    {
+        Mock<TestEngineController> controller = new() { CallBase = true };
+        controller.Setup(c => c.ConnectionOptions).Throws(new InvalidOperationException("no current user"));
+        PeerTransportFactory factory = new(Mock.Of<IMsmtSessionPeer.IFactory>(), Mock.Of<IMicroGatePeerFactory>(), controller.Object, LoggerFactory.Create(_ => { }));
+
+        await using IPeerTransport transport = factory.Create();
+
+        Assert.IsType<CompositePeerTransport>(transport);
+    }
+
+    /// <summary>With a packet type the transport is wrapped so payloads are sent as packets.</summary>
+    [Fact]
+    public async Task Factory_WithPacketType_WrapsTransport()
+    {
+        Mock<TestPacketEngineController> controller = new() { CallBase = true };
+        controller.Setup(c => c.ConnectionOptions).Throws(new InvalidOperationException("no current user"));
+        PeerTransportFactory factory = new(Mock.Of<IMsmtSessionPeer.IFactory>(), Mock.Of<IMicroGatePeerFactory>(), controller.Object, LoggerFactory.Create(_ => { }));
+
+        await using IPeerTransport transport = factory.Create();
+
+        Assert.IsType<PacketizingPeerTransport>(transport);
+    }
+
+    /// <summary>A packet size the packet format leaves no room in, or a window below 1, stops the transport being created rather than failing every send later.</summary>
+    [Theory]
+    [InlineData(17, 1)]
+    [InlineData(16384, 0)]
+    public void Factory_InvalidPacketization_Throws(int packetSize, int window)
+    {
+        Mock<TestPacketEngineController> controller = new() { CallBase = true };
+        controller.Setup(c => c.PacketSize).Returns(packetSize);
+        controller.Setup(c => c.PacketWindow).Returns(window);
+        PeerTransportFactory factory = new(Mock.Of<IMsmtSessionPeer.IFactory>(), Mock.Of<IMicroGatePeerFactory>(), controller.Object, LoggerFactory.Create(_ => { }));
+
+        Assert.Throws<InvalidOperationException>(() => factory.Create());
+    }
+
+    /// <summary>The packet size and window are not looked at while there is no packet type, so a leftover invalid value does no harm.</summary>
+    [Fact]
+    public async Task Factory_InvalidPacketizationWithoutPacketType_IsIgnored()
+    {
+        Mock<TestEngineController> controller = new() { CallBase = true };
+        controller.Setup(c => c.PacketSize).Returns(1);
+        controller.Setup(c => c.PacketWindow).Returns(0);
+        controller.Setup(c => c.ConnectionOptions).Throws(new InvalidOperationException("no current user"));
+        PeerTransportFactory factory = new(Mock.Of<IMsmtSessionPeer.IFactory>(), Mock.Of<IMicroGatePeerFactory>(), controller.Object, LoggerFactory.Create(_ => { }));
+
+        await using IPeerTransport transport = factory.Create();
+
+        Assert.IsType<CompositePeerTransport>(transport);
+    }
+
     /// <summary>With no identity certificate (a node that only uses serial) the factory still builds a transport, leaving IP unavailable.</summary>
     [Fact]
     public async Task Factory_WithoutConnectionOptions_StillBuildsSerialOnlyTransport()
