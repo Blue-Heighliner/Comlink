@@ -39,7 +39,7 @@ internal interface IEntryService
     /// Returns a page of messages from the specified folder together with the total message count. A non-empty
     /// <paramref name="filter"/> matches <see cref="EntryFilter.Search"/> case-insensitively against the message's
     /// subject, sender, destinations, tag, priority label and security level name; <see cref="EntryFilter.DateFrom"/>/<see cref="EntryFilter.DateTo"/>
-    /// bound its received date; <see cref="EntryFilter.SecurityLevel"/>/<see cref="EntryFilter.Priority"/>/<see cref="EntryFilter.AlertOnly"/>
+    /// bound its received date; <see cref="EntryFilter.Author"/> matches its sender and <see cref="EntryFilter.Destination"/> any addressee (both by substring); <see cref="EntryFilter.SecurityLevel"/>/<see cref="EntryFilter.Priority"/>/<see cref="EntryFilter.AlertOnly"/>
     /// match exactly. Filtering loads the whole folder rather than paginating the LiteDB query directly, since a
     /// message's fields live inside the host's own opaque message type and cannot be queried in the database.
     /// </summary>
@@ -48,6 +48,7 @@ internal interface IEntryService
     /// Returns a page of drafts from the specified folder together with the total draft count. A non-empty
     /// <paramref name="filter"/> matches <see cref="EntryFilter.Search"/> against subject or tag;
     /// <see cref="EntryFilter.DateFrom"/>/<see cref="EntryFilter.DateTo"/> bound the last-modified date;
+    /// <see cref="EntryFilter.Destination"/> matches any addressee by substring;
     /// <see cref="EntryFilter.SecurityLevel"/>/<see cref="EntryFilter.Priority"/>/<see cref="EntryFilter.AlertOnly"/> match exactly.
     /// </summary>
     Task<(List<DraftEntity> Items, int Total)> GetDrafts(string folderId, int page, bool alphabetical, EntryFilter? filter = null);
@@ -343,6 +344,8 @@ internal sealed class EntryService : IEntryService
         if (filter.Priority is { } priority && engineController.GetPriority(message) != priority) { return false; }
         if (filter.AlertOnly is true && !engineController.GetIsAlert(message)) { return false; }
         if (filter.SecurityLevel is { } level && !string.Equals(engineController.GetSecurityLevel(message), level, StringComparison.OrdinalIgnoreCase)) { return false; }
+        if (!string.IsNullOrWhiteSpace(filter.Author) && !Contains(engineController.GetFromUser(message), filter.Author.Trim())) { return false; }
+        if (!string.IsNullOrWhiteSpace(filter.Destination) && !engineController.GetAddresses(message).Any(a => Contains(a.UserName, filter.Destination.Trim()))) { return false; }
         if (string.IsNullOrWhiteSpace(filter.Search)) { return true; }
         string search = filter.Search;
 
@@ -363,6 +366,7 @@ internal sealed class EntryService : IEntryService
         if (filter.Priority is { } priority && entity.Priority != priority) { return false; }
         if (filter.AlertOnly is true && !entity.IsAlert) { return false; }
         if (filter.SecurityLevel is { } level && !string.Equals(entity.SecurityLevel, level, StringComparison.OrdinalIgnoreCase)) { return false; }
+        if (!string.IsNullOrWhiteSpace(filter.Destination) && !entity.Addresses.Any(a => Contains(a.UserName, filter.Destination.Trim()))) { return false; }
         return string.IsNullOrWhiteSpace(filter.Search) || Contains(entity.Subject, filter.Search) || Contains(entity.Tag, filter.Search);
     }
 

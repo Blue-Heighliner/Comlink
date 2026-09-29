@@ -265,6 +265,56 @@ public sealed class EntryBarViewModelTests
         svc.Verify(s => s.GetMessages("root-inbox", 1, new EntryFilter { AlertOnly = true }), Times.Once);
     }
 
+    /// <summary>The author filter is shown for the Inbox only and passes the trimmed text through as EntryFilter.Author.</summary>
+    [Fact]
+    public async Task AuthorFilter_Inbox_PassesAuthorToServiceAndCountsAsActive()
+    {
+        Mock<IEntryService> svc = new();
+        svc.Setup(s => s.GetMessages(It.IsAny<string>(), It.IsAny<int>(), It.IsAny<EntryFilter>())).ReturnsAsync((Items: new List<MessageEntity>(), Total: 0));
+        EntryBarViewModel vm = new(svc.Object, format);
+        await vm.LoadFolder(MakeFolder("root-inbox", FolderType.Inbox));
+
+        vm.AuthorFilter = "  alice ";
+
+        Assert.True(vm.ShowAuthorFilter);
+        Assert.False(vm.ShowDestinationFilter);
+        Assert.Equal(1, vm.ActiveFilterCount);
+        svc.Verify(s => s.GetMessages("root-inbox", 1, new EntryFilter { Author = "alice" }), Times.Once);
+    }
+
+    /// <summary>The destination filter is shown for the Outbox and Drafts only and passes through as EntryFilter.Destination.</summary>
+    [Fact]
+    public async Task DestinationFilter_Outbox_PassesDestinationToService()
+    {
+        Mock<IEntryService> svc = new();
+        svc.Setup(s => s.GetMessages(It.IsAny<string>(), It.IsAny<int>(), It.IsAny<EntryFilter>())).ReturnsAsync((Items: new List<MessageEntity>(), Total: 0));
+        EntryBarViewModel vm = new(svc.Object, format);
+        await vm.LoadFolder(MakeFolder("root-outbox", FolderType.Outbox));
+
+        vm.DestinationFilter = "bob";
+
+        Assert.True(vm.ShowDestinationFilter);
+        Assert.False(vm.ShowAuthorFilter);
+        svc.Verify(s => s.GetMessages("root-outbox", 1, new EntryFilter { Destination = "bob" }), Times.Once);
+    }
+
+    /// <summary>Loading another folder clears the author and destination text.</summary>
+    [Fact]
+    public async Task LoadFolder_ClearsAuthorAndDestinationFilters()
+    {
+        Mock<IEntryService> svc = new();
+        svc.Setup(s => s.GetMessages(It.IsAny<string>(), It.IsAny<int>(), It.IsAny<EntryFilter>())).ReturnsAsync((Items: new List<MessageEntity>(), Total: 0));
+        EntryBarViewModel vm = new(svc.Object, format);
+        await vm.LoadFolder(MakeFolder("root-inbox", FolderType.Inbox));
+        vm.AuthorFilter = "alice";
+
+        await vm.LoadFolder(MakeFolder("root-outbox", FolderType.Outbox));
+
+        Assert.Equal(string.Empty, vm.AuthorFilter);
+        Assert.Equal(string.Empty, vm.DestinationFilter);
+        Assert.Equal(0, vm.ActiveFilterCount);
+    }
+
     /// <summary>LoadFolder resets every filter control left over from a previously viewed folder, not just the search text.</summary>
     [Fact]
     public async Task LoadFolder_ResetsAllFiltersFromPreviousFolder()

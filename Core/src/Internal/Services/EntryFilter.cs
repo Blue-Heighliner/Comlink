@@ -22,6 +22,10 @@ internal sealed record EntryFilter
     /// does this by default when the user picks only a date and no time.
     /// </summary>
     public DateTime? DateTo { get; init; }
+    /// <summary>Case-insensitive substring match against a message's sender user name. Messages only (used for the Inbox); ignored for drafts and notes. Whitespace-only is treated the same as <see langword="null"/>.</summary>
+    public string? Author { get; init; }
+    /// <summary>Case-insensitive substring match against any addressee's user name (To, Cc or External). Messages and drafts (used for the Outbox and Drafts); ignored for notes. Whitespace-only is treated the same as <see langword="null"/>.</summary>
+    public string? Destination { get; init; }
     /// <summary>Matches only entries sent/composed at this exact security level name. Messages and drafts; ignored for notes.</summary>
     public string? SecurityLevel { get; init; }
     /// <summary>Matches only entries sent/composed at this exact priority number. Messages and drafts; ignored for notes.</summary>
@@ -34,5 +38,5 @@ internal sealed record EntryFilter
     /// entirely in this case and paginates the folder's LiteDB query directly, rather than loading the whole
     /// folder to filter in memory.
     /// </summary>
-    public bool IsEmpty => string.IsNullOrWhiteSpace(Search) && DateFrom is null && DateTo is null && SecurityLevel is null && Priority is null && AlertOnly is null;
+    public bool IsEmpty => string.IsNullOrWhiteSpace(Search) && DateFrom is null && DateTo is null && string.IsNullOrWhiteSpace(Author) && string.IsNullOrWhiteSpace(Destination) && SecurityLevel is null && Priority is null && AlertOnly is null;
 }

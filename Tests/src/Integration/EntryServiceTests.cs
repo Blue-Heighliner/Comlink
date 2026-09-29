@@ -262,6 +262,51 @@ public sealed class EntryServiceTests : IDisposable
         Assert.Equal("Restricted memo", format.GetSubject(Assert.Single(items).Message));
     }
 
+    /// <summary>A message filter's Author matches the sender by case-insensitive substring.</summary>
+    [Fact]
+    public async Task GetMessagesAsync_FilterAuthor_MatchesSenderSubstring()
+    {
+        await service.StoreIncomingMessage(Guid.NewGuid().ToString(), "ALICE", "From alice", "Body", [], DateTime.UtcNow);
+        await service.StoreIncomingMessage(Guid.NewGuid().ToString(), "BOB", "From bob", "Body", [], DateTime.UtcNow);
+
+        (List<MessageEntity> items, int total) = await service.GetMessages("root-inbox", 1, filter: new EntryFilter { Author = "lic" });
+
+        Assert.Equal(1, total);
+        Assert.Equal("From alice", format.GetSubject(Assert.Single(items).Message));
+    }
+
+    /// <summary>A message filter's Destination matches any addressee by case-insensitive substring.</summary>
+    [Fact]
+    public async Task GetMessagesAsync_FilterDestination_MatchesAnyAddressee()
+    {
+        await service.StoreIncomingMessage(Guid.NewGuid().ToString(), "S", "To carol", "Body", [new AddressData { UserName = "DAVE" }, new AddressData { UserName = "CAROL" }], DateTime.UtcNow);
+        await service.StoreIncomingMessage(Guid.NewGuid().ToString(), "S", "To dave only", "Body", [new AddressData { UserName = "DAVE" }], DateTime.UtcNow);
+
+        (List<MessageEntity> items, int total) = await service.GetMessages("root-inbox", 1, filter: new EntryFilter { Destination = "carol" });
+
+        Assert.Equal(1, total);
+        Assert.Equal("To carol", format.GetSubject(Assert.Single(items).Message));
+    }
+
+    /// <summary>A draft filter's Destination matches any addressee by case-insensitive substring.</summary>
+    [Fact]
+    public async Task GetDraftsAsync_FilterDestination_MatchesAnyAddressee()
+    {
+        DraftEntity match = await service.CreateDraft();
+        match.Subject = "Match";
+        match.Addresses = [new AddressData { UserName = "ERIN" }];
+        await service.SaveDraft(match);
+        DraftEntity other = await service.CreateDraft();
+        other.Subject = "Other";
+        other.Addresses = [new AddressData { UserName = "FRANK" }];
+        await service.SaveDraft(other);
+
+        (List<DraftEntity> items, int total) = await service.GetDrafts("root-drafts", 1, alphabetical: false, filter: new EntryFilter { Destination = "eri" });
+
+        Assert.Equal(1, total);
+        Assert.Equal("Match", Assert.Single(items).Subject);
+    }
+
     /// <summary>A message filter's Priority matches the exact stored priority number.</summary>
     [Fact]
     public async Task GetMessagesAsync_FilterMatchesPriorityExactly()

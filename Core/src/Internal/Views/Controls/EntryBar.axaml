@@ -59,22 +59,25 @@
                 HorizontalAlignment="Stretch"
                 HorizontalContentAlignment="Stretch"
                 Cursor="Hand">
-          <Grid ColumnDefinitions="*,Auto,16">
-            <TextBlock Grid.Column="0"
-                       Text="FILTERS"
-                       FontSize="11"
-                       Foreground="#5A5A5A"
-                       FontWeight="SemiBold"
-                       LetterSpacing="1"
-                       VerticalAlignment="Center" />
-            <TextBlock Grid.Column="1"
-                       Text="{Binding ActiveFilterCount, StringFormat='{}{0} active'}"
-                       FontSize="11"
-                       FontWeight="SemiBold"
-                       Foreground="#98C379"
-                       VerticalAlignment="Center"
-                       Margin="8,0"
-                       IsVisible="{Binding HasActiveFilters}" />
+          <Grid ColumnDefinitions="16,*,16">
+            <StackPanel Grid.Column="1"
+                        Orientation="Horizontal"
+                        Spacing="8"
+                        HorizontalAlignment="Center"
+                        VerticalAlignment="Center">
+              <TextBlock Text="FILTERS"
+                         FontSize="11"
+                         Foreground="#5A5A5A"
+                         FontWeight="SemiBold"
+                         LetterSpacing="1"
+                         VerticalAlignment="Center" />
+              <TextBlock Text="{Binding ActiveFilterCount, StringFormat='{}{0} active'}"
+                         FontSize="11"
+                         FontWeight="SemiBold"
+                         Foreground="#98C379"
+                         VerticalAlignment="Center"
+                         IsVisible="{Binding HasActiveFilters}" />
+            </StackPanel>
             <TextBlock Grid.Column="2"
                        Text="{Binding FiltersExpandIndicator}"
                        FontSize="10"
@@ -104,6 +107,26 @@
             <TextBlock Text="TO" FontSize="10" Foreground="#5A5A5A" FontWeight="SemiBold" LetterSpacing="1" />
             <DatePicker SelectedDate="{Binding DateTo}" FontSize="12" HorizontalAlignment="Stretch" />
             <TimePicker SelectedTime="{Binding TimeTo}" FontSize="12" HorizontalAlignment="Stretch" />
+          </StackPanel>
+
+          <StackPanel Spacing="3" IsVisible="{Binding ShowAuthorFilter}">
+            <TextBlock Text="AUTHOR" FontSize="10" Foreground="#5A5A5A" FontWeight="SemiBold" LetterSpacing="1" />
+            <TextBox Text="{Binding AuthorFilter}"
+                     Watermark="Sender name..."
+                     Background="#3C3C3C"
+                     BorderThickness="0"
+                     FontSize="12"
+                     Height="26" />
+          </StackPanel>
+
+          <StackPanel Spacing="3" IsVisible="{Binding ShowDestinationFilter}">
+            <TextBlock Text="DESTINATION" FontSize="10" Foreground="#5A5A5A" FontWeight="SemiBold" LetterSpacing="1" />
+            <TextBox Text="{Binding DestinationFilter}"
+                     Watermark="Recipient name..."
+                     Background="#3C3C3C"
+                     BorderThickness="0"
+                     FontSize="12"
+                     Height="26" />
           </StackPanel>
 
           <StackPanel Spacing="3" IsVisible="{Binding ShowSecurityLevelFilter}">
@@ -171,7 +194,8 @@
               Background="Transparent"
               Foreground="#858585"
               FontSize="11"
-              Padding="4,2" />
+              Padding="4,2"
+              HorizontalAlignment="Center" />
     </Border>
 
     <!-- Entry List -->

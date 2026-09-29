@@ -52,6 +52,14 @@ internal interface IEntryBarViewModel
     PriorityFilterOption SelectedPriorityFilter { get; set; }
     /// <summary>Gets or sets a value indicating whether only entries flagged as an alert are shown. Setting it resets to the first page and reloads.</summary>
     bool AlertOnlyFilter { get; set; }
+    /// <summary>Gets or sets the sender name filter (case-insensitive substring), Inbox only. Setting it resets to the first page and reloads.</summary>
+    string AuthorFilter { get; set; }
+    /// <summary>Gets or sets the addressee name filter (case-insensitive substring), Outbox and Drafts only. Setting it resets to the first page and reloads.</summary>
+    string DestinationFilter { get; set; }
+    /// <summary>Gets or sets a value indicating whether the author filter box is shown for the current folder; Inbox only.</summary>
+    bool ShowAuthorFilter { get; set; }
+    /// <summary>Gets or sets a value indicating whether the destination filter box is shown for the current folder; Outbox and Drafts only.</summary>
+    bool ShowDestinationFilter { get; set; }
     /// <summary>Gets or sets a value indicating whether the security level filter picker is shown for the current folder; Inbox, Outbox and Drafts only, and only when at least one security level is configured.</summary>
     bool ShowSecurityLevelFilter { get; set; }
     /// <summary>Gets or sets a value indicating whether the priority filter picker is shown for the current folder; Inbox, Outbox and Drafts only.</summary>
@@ -59,8 +67,8 @@ internal interface IEntryBarViewModel
     /// <summary>Gets or sets a value indicating whether the alert-only filter checkbox is shown for the current folder; Inbox, Outbox and Drafts only.</summary>
     bool ShowAlertFilter { get; set; }
     /// <summary>
-    /// Gets or sets a value indicating whether the collapsible filter section (date range, security level, priority,
-    /// alert-only) is expanded. Collapsed by default. Collapsing only hides the controls - it never clears or disables
+    /// Gets or sets a value indicating whether the collapsible filter section (date range, author/destination, security level,
+    /// priority, alert-only) is expanded. Collapsed by default. Collapsing only hides the controls - it never clears or disables
     /// the filters themselves, so search continues to run against the same already-filtered set either way; see
     /// <see cref="Services.EntryFilter"/>.
     /// </summary>
@@ -153,6 +161,16 @@ internal sealed partial class EntryBarViewModel : ObservableObject, IEntryBarVie
     [NotifyPropertyChangedFor(nameof(ActiveFilterCount))]
     [NotifyPropertyChangedFor(nameof(HasActiveFilters))]
     private bool alertOnlyFilter;
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(ActiveFilterCount))]
+    [NotifyPropertyChangedFor(nameof(HasActiveFilters))]
+    private string authorFilter = string.Empty;
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(ActiveFilterCount))]
+    [NotifyPropertyChangedFor(nameof(HasActiveFilters))]
+    private string destinationFilter = string.Empty;
+    [ObservableProperty] private bool showAuthorFilter;
+    [ObservableProperty] private bool showDestinationFilter;
     [ObservableProperty] private bool showSecurityLevelFilter;
     [ObservableProperty] private bool showPriorityFilter;
     [ObservableProperty] private bool showAlertFilter;
@@ -186,6 +204,8 @@ internal sealed partial class EntryBarViewModel : ObservableObject, IEntryBarVie
                 Search = Search,
                 DateFrom = CombinedDateFrom,
                 DateTo = CombinedDateTo,
+                Author = ShowAuthorFilter && !string.IsNullOrWhiteSpace(AuthorFilter) ? AuthorFilter.Trim() : null,
+                Destination = ShowDestinationFilter && !string.IsNullOrWhiteSpace(DestinationFilter) ? DestinationFilter.Trim() : null,
                 SecurityLevel = SelectedSecurityLevelFilter.Name,
                 Priority = SelectedPriorityFilter.Value,
                 AlertOnly = AlertOnlyFilter ? true : null
@@ -207,6 +227,8 @@ internal sealed partial class EntryBarViewModel : ObservableObject, IEntryBarVie
         TimeFrom = null;
         DateTo = null;
         TimeTo = null;
+        AuthorFilter = string.Empty;
+        DestinationFilter = string.Empty;
         SelectedSecurityLevelFilter = AvailableSecurityLevelFilters[0];
         SelectedPriorityFilter = AvailablePriorityFilters[0];
         AlertOnlyFilter = false;
@@ -217,6 +239,8 @@ internal sealed partial class EntryBarViewModel : ObservableObject, IEntryBarVie
     partial void OnTimeFromChanged(TimeSpan? value) => ResetPageAndRefresh();
     partial void OnDateToChanged(DateTimeOffset? value) => ResetPageAndRefresh();
     partial void OnTimeToChanged(TimeSpan? value) => ResetPageAndRefresh();
+    partial void OnAuthorFilterChanged(string value) => ResetPageAndRefresh();
+    partial void OnDestinationFilterChanged(string value) => ResetPageAndRefresh();
     partial void OnSelectedSecurityLevelFilterChanged(SecurityLevelFilterOption value) => ResetPageAndRefresh();
     partial void OnSelectedPriorityFilterChanged(PriorityFilterOption value) => ResetPageAndRefresh();
     partial void OnAlertOnlyFilterChanged(bool value) => ResetPageAndRefresh();
@@ -233,6 +257,8 @@ internal sealed partial class EntryBarViewModel : ObservableObject, IEntryBarVie
     public int ActiveFilterCount
         => (DateFrom is not null ? 1 : 0)
          + (DateTo is not null ? 1 : 0)
+         + (ShowAuthorFilter && !string.IsNullOrWhiteSpace(AuthorFilter) ? 1 : 0)
+         + (ShowDestinationFilter && !string.IsNullOrWhiteSpace(DestinationFilter) ? 1 : 0)
          + (SelectedSecurityLevelFilter.Name is not null ? 1 : 0)
          + (SelectedPriorityFilter.Value is not null ? 1 : 0)
          + (AlertOnlyFilter ? 1 : 0);
@@ -269,6 +295,8 @@ internal sealed partial class EntryBarViewModel : ObservableObject, IEntryBarVie
             ShowSortToggle = folder.RootType is FolderType.Drafts or FolderType.Notes;
             ShowSearch = folder.RootType is FolderType.Inbox or FolderType.Outbox or FolderType.Drafts or FolderType.Notes;
             bool isMessageOrDraftFolder = folder.RootType is FolderType.Inbox or FolderType.Outbox or FolderType.Drafts;
+            ShowAuthorFilter = folder.RootType is FolderType.Inbox;
+            ShowDestinationFilter = folder.RootType is FolderType.Outbox or FolderType.Drafts;
             ShowSecurityLevelFilter = isMessageOrDraftFolder && engineController.SecurityLevels.Count > 0;
             ShowPriorityFilter = isMessageOrDraftFolder;
             ShowAlertFilter = isMessageOrDraftFolder;
