@@ -6,6 +6,9 @@ obj/
 Logs/
 TestResults/
 
+# Avalonia's XAML build server writes machine-specific IPC handshake files here between builds.
+.avalonia-build-tasks/
+
 # Coverage badge: ReportGenerator writes every color/metric variant here, but only the one
 # badge referenced from README.md is meant to be committed.
 .github/badges/*
