@@ -14,8 +14,9 @@ internal sealed partial class EntryItemViewModel : ObservableObject
     /// <param name="timeText">Optional formatted timestamp string.</param>
     /// <param name="fixedStatusText">Optional static status string that takes precedence when no overall status is set.</param>
     /// <param name="isOutboundMessage">For Message entries, whether this row represents the Outbox (sent) record rather than the Inbox (received) record.</param>
+    /// <param name="securityLevelColorHex">For Message entries, the hex color of the message's security level, or <see langword="null"/> when it has none recognized.</param>
     public EntryItemViewModel(string id, string title, EntryType entryType, DateTime sortDate,
-        string? secondaryText = null, string? priorityText = null, string? tagText = null, string? timeText = null, string? fixedStatusText = null, bool isOutboundMessage = false)
+        string? secondaryText = null, string? priorityText = null, string? tagText = null, string? timeText = null, string? fixedStatusText = null, bool isOutboundMessage = false, string? securityLevelColorHex = null)
     {
         Id = id;
         Title = title;
@@ -27,6 +28,7 @@ internal sealed partial class EntryItemViewModel : ObservableObject
         TimeText = timeText;
         FixedStatusText = fixedStatusText;
         IsOutboundMessage = isOutboundMessage;
+        SecurityLevelColorHex = securityLevelColorHex;
     }
 
     [ObservableProperty] private bool isSelected;
@@ -61,6 +63,13 @@ internal sealed partial class EntryItemViewModel : ObservableObject
     /// which document to load, move, or delete. Meaningless for other entry types.
     /// </summary>
     public bool IsOutboundMessage { get; }
+
+    /// <summary>
+    /// For <see cref="Data.EntryType.Message"/> entries, the hex color of the message's security level (see
+    /// <see cref="Control.IEngineController.SecurityLevels"/>), or <see langword="null"/> when it has none recognized -
+    /// no security levels configured, or a level name no longer among them. Renders as a colored banner atop the row.
+    /// </summary>
+    public string? SecurityLevelColorHex { get; }
 
     /// <summary>Gets the status text to display, derived from the overall delivery status or the fixed status text.</summary>
     public string? StatusText => OverallStatus?.ToString().ToUpperInvariant() ?? FixedStatusText;

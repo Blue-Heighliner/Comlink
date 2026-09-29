@@ -17,7 +17,7 @@ public sealed class ContentAreaViewModelTests
         public Task<UserInfo?> GetUserInfo(CancellationToken cancellation = default) => Task.FromResult<UserInfo?>(null);
         public Task<List<string>> GetUserNames(CancellationToken cancellation = default) => Task.FromResult(new List<string>());
         public Task<UserInfo?> InstallUser(string userCode, CancellationToken cancellation = default) => Task.FromResult<UserInfo?>(null);
-        public Task<SendMessageResult?> SendMessage(string subject, string body, List<AddressRequest> addresses, bool isAlert = false, int priority = 0, string tag = "", CancellationToken cancellation = default) => Task.FromResult<SendMessageResult?>(null);
+        public Task<SendMessageResult?> SendMessage(string subject, string body, List<AddressRequest> addresses, bool isAlert = false, int priority = 0, string tag = "", string securityLevel = "", CancellationToken cancellation = default) => Task.FromResult<SendMessageResult?>(null);
 
         public Task<bool> MarkMessageRead(string messageId, CancellationToken cancellation = default)
         {
@@ -54,7 +54,7 @@ public sealed class ContentAreaViewModelTests
         Mock<IActivityLogRepository> activityLogs = new();
         ILoggerFactory loggerFactory = LoggerFactory.Create(_ => { });
         return new ContentAreaViewModel(MakeEngineController(homeText), entry.Object, connection, messages.Object,
-            drafts.Object, notes.Object, activityLogs.Object, loggerFactory);
+            drafts.Object, notes.Object, activityLogs.Object, loggerFactory, new CurrentUserProvider());
     }
 
     private static ContentAreaViewModel BuildWithEditors(out Mock<INoteRepository> notes, out Mock<IDraftRepository> drafts, out Mock<IEntryService> entry)
@@ -63,7 +63,7 @@ public sealed class ContentAreaViewModelTests
         notes = new Mock<INoteRepository>();
         drafts = new Mock<IDraftRepository>();
         return new ContentAreaViewModel(MakeEngineController(), entry.Object, new FakeServiceConnection(), new Mock<IMessageRepository>().Object,
-            drafts.Object, notes.Object, new Mock<IActivityLogRepository>().Object, LoggerFactory.Create(_ => { }));
+            drafts.Object, notes.Object, new Mock<IActivityLogRepository>().Object, LoggerFactory.Create(_ => { }), new CurrentUserProvider());
     }
 
     /// <summary>Deleting the open note from its editor deletes it, returns to the home screen, and tells listeners so they can refresh the list.</summary>
@@ -119,7 +119,7 @@ public sealed class ContentAreaViewModelTests
         Mock<IBodyDocumentFactory> factory = new();
         factory.Setup(f => f.Create()).Returns(document);
         ContentAreaViewModel vm = new(MakeEngineController(), entry.Object, new FakeServiceConnection(), new Mock<IMessageRepository>().Object,
-            drafts.Object, new Mock<INoteRepository>().Object, new Mock<IActivityLogRepository>().Object, LoggerFactory.Create(_ => { }), factory.Object);
+            drafts.Object, new Mock<INoteRepository>().Object, new Mock<IActivityLogRepository>().Object, LoggerFactory.Create(_ => { }), new CurrentUserProvider(), factory.Object);
         DraftEntity draft = new() { Id = new ObjectId(), Subject = "S", Body = "B", Addresses = [], FolderId = "root-drafts" };
         drafts.Setup(d => d.Get(draft.Id)).ReturnsAsync(draft);
 
@@ -185,7 +185,7 @@ public sealed class ContentAreaViewModelTests
         MessageEntity outboundEntity = new() { MessageId = "MSG1", Message = new TestMessage(), IsOutbound = true };
         messages.Setup(m => m.Get("MSG1", true)).ReturnsAsync(outboundEntity);
         ContentAreaViewModel vm = new(MakeEngineController(), entry.Object, new FakeServiceConnection(), messages.Object,
-            drafts.Object, notes.Object, activityLogs.Object, loggerFactory);
+            drafts.Object, notes.Object, activityLogs.Object, loggerFactory, new CurrentUserProvider());
         EntryItemViewModel item = new("MSG1", "Title", EntryType.Message, DateTime.UtcNow, isOutboundMessage: true);
 
         await vm.ShowEntry(item);
@@ -207,7 +207,7 @@ public sealed class ContentAreaViewModelTests
         MessageEntity inboundEntity = new() { MessageId = "MSG1", Message = new TestMessage(), IsOutbound = false };
         messages.Setup(m => m.Get("MSG1", false)).ReturnsAsync(inboundEntity);
         ContentAreaViewModel vm = new(MakeEngineController(), entry.Object, new FakeServiceConnection(), messages.Object,
-            drafts.Object, notes.Object, activityLogs.Object, loggerFactory);
+            drafts.Object, notes.Object, activityLogs.Object, loggerFactory, new CurrentUserProvider());
         EntryItemViewModel item = new("MSG1", "Title", EntryType.Message, DateTime.UtcNow);
 
         await vm.ShowEntry(item);
@@ -230,7 +230,7 @@ public sealed class ContentAreaViewModelTests
         messages.Setup(m => m.Get("MSG1", false)).ReturnsAsync(inboundEntity);
         FakeServiceConnection connection = new();
         ContentAreaViewModel vm = new(MakeEngineController(), entry.Object, connection, messages.Object,
-            drafts.Object, notes.Object, activityLogs.Object, loggerFactory);
+            drafts.Object, notes.Object, activityLogs.Object, loggerFactory, new CurrentUserProvider());
         EntryItemViewModel item = new("MSG1", "Title", EntryType.Message, DateTime.UtcNow);
 
         await vm.ShowEntry(item);
@@ -254,7 +254,7 @@ public sealed class ContentAreaViewModelTests
         messages.Setup(m => m.Get("MSG1", false)).ReturnsAsync(inboundEntity);
         FakeServiceConnection connection = new();
         ContentAreaViewModel vm = new(MakeEngineController(), entry.Object, connection, messages.Object,
-            drafts.Object, notes.Object, activityLogs.Object, loggerFactory);
+            drafts.Object, notes.Object, activityLogs.Object, loggerFactory, new CurrentUserProvider());
         EntryItemViewModel item = new("MSG1", "Title", EntryType.Message, DateTime.UtcNow);
 
         await vm.ShowEntry(item);
@@ -276,7 +276,7 @@ public sealed class ContentAreaViewModelTests
         messages.Setup(m => m.Get("MSG1", true)).ReturnsAsync(outboundEntity);
         FakeServiceConnection connection = new();
         ContentAreaViewModel vm = new(MakeEngineController(), entry.Object, connection, messages.Object,
-            drafts.Object, notes.Object, activityLogs.Object, loggerFactory);
+            drafts.Object, notes.Object, activityLogs.Object, loggerFactory, new CurrentUserProvider());
         EntryItemViewModel item = new("MSG1", "Title", EntryType.Message, DateTime.UtcNow, isOutboundMessage: true);
 
         await vm.ShowEntry(item);
@@ -371,7 +371,7 @@ public sealed class ContentAreaViewModelTests
         messages.Setup(m => m.Get("SLOW", false)).Returns(slow.Task);
         messages.Setup(m => m.Get("FAST", false)).ReturnsAsync(new MessageEntity { MessageId = "FAST", Message = new TestMessage(), ReadStatus = DestinationStatus.Read });
         ContentAreaViewModel vm = new(MakeEngineController(), new Mock<IEntryService>().Object, new FakeServiceConnection(), messages.Object,
-            new Mock<IDraftRepository>().Object, new Mock<INoteRepository>().Object, new Mock<IActivityLogRepository>().Object, LoggerFactory.Create(_ => { }));
+            new Mock<IDraftRepository>().Object, new Mock<INoteRepository>().Object, new Mock<IActivityLogRepository>().Object, LoggerFactory.Create(_ => { }), new CurrentUserProvider());
 
         Task first = vm.ShowEntry(new EntryItemViewModel("SLOW", "S", EntryType.Message, DateTime.UtcNow));
         await vm.ShowEntry(new EntryItemViewModel("FAST", "F", EntryType.Message, DateTime.UtcNow));
@@ -389,7 +389,7 @@ public sealed class ContentAreaViewModelTests
         TaskCompletionSource<MessageEntity?> slow = new();
         messages.Setup(m => m.Get("SLOW", false)).Returns(slow.Task);
         ContentAreaViewModel vm = new(MakeEngineController(), new Mock<IEntryService>().Object, new FakeServiceConnection(), messages.Object,
-            new Mock<IDraftRepository>().Object, new Mock<INoteRepository>().Object, new Mock<IActivityLogRepository>().Object, LoggerFactory.Create(_ => { }));
+            new Mock<IDraftRepository>().Object, new Mock<INoteRepository>().Object, new Mock<IActivityLogRepository>().Object, LoggerFactory.Create(_ => { }), new CurrentUserProvider());
 
         Task loading = vm.ShowEntry(new EntryItemViewModel("SLOW", "S", EntryType.Message, DateTime.UtcNow));
         vm.ShowHome();

@@ -75,6 +75,12 @@ internal sealed class MessageBuilder<TMessage> : IMessageBuilder<TMessage> where
     public IMessageBuilder<TMessage> Tag(Expression<Func<TMessage, string>> property) => Map(nameof(Tag), property);
 
     /// <inheritdoc />
+    public IMessageBuilder<TMessage> SecurityLevel(Func<TMessage, string> get, Action<TMessage, string> set) => Map(nameof(SecurityLevel), get, set);
+
+    /// <inheritdoc />
+    public IMessageBuilder<TMessage> SecurityLevel(Expression<Func<TMessage, string>> property) => Map(nameof(SecurityLevel), property);
+
+    /// <inheritdoc />
     public IMessageBuilder<TMessage> Serializer(INetworkSerializer serializer)
     {
         this.serializer = serializer;
@@ -92,7 +98,7 @@ internal sealed class MessageBuilder<TMessage> : IMessageBuilder<TMessage> where
     /// <exception cref="InvalidOperationException">A logical field has not been mapped.</exception>
     public MessageMap Build()
     {
-        string[] missing = [.. new[] { nameof(Id), nameof(Sender), nameof(Subject), nameof(Body), nameof(Addresses), nameof(SentAt), nameof(ConfirmationId), nameof(IsAlert), nameof(Priority), nameof(Tag) }.Where(name => !fields.ContainsKey(name))];
+        string[] missing = [.. new[] { nameof(Id), nameof(Sender), nameof(Subject), nameof(Body), nameof(Addresses), nameof(SentAt), nameof(ConfirmationId), nameof(IsAlert), nameof(Priority), nameof(Tag), nameof(SecurityLevel) }.Where(name => !fields.ContainsKey(name))];
         if (missing.Length > 0) { throw new InvalidOperationException($"The message mapping for {typeof(TMessage).Name} does not map: {string.Join(", ", missing)}"); }
 
         Func<object, T> Getter<T>(string name) => message => ((Func<TMessage, T>)fields[name].Get)((TMessage)message);
@@ -122,7 +128,9 @@ internal sealed class MessageBuilder<TMessage> : IMessageBuilder<TMessage> where
             GetPriority = Getter<int>(nameof(Priority)),
             SetPriority = Setter<int>(nameof(Priority)),
             GetTag = Getter<string>(nameof(Tag)),
-            SetTag = Setter<string>(nameof(Tag))
+            SetTag = Setter<string>(nameof(Tag)),
+            GetSecurityLevel = Getter<string>(nameof(SecurityLevel)),
+            SetSecurityLevel = Setter<string>(nameof(SecurityLevel))
         };
     }
 

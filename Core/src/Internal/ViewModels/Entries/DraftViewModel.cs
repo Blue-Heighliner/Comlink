@@ -37,6 +37,15 @@ internal interface IDraftViewModel
     /// <summary>Gets or sets the priority level this draft will be sent at.</summary>
     MessagePriorityOption SelectedPriority { get; set; }
     /// <summary>
+    /// Gets the security levels available to send this draft at: every level configured with
+    /// <see cref="IEngineBuilder.SecurityLevels"/> up to and including the current user's own assigned level (see
+    /// <see cref="IEngineController.GetUserSecurityLevel"/>): a user can declassify to a lower level but never send
+    /// above their own clearance. Empty when no security levels are configured, in which case the picker is hidden.
+    /// </summary>
+    IReadOnlyList<SecurityLevel> AvailableSecurityLevels { get; }
+    /// <summary>Gets or sets the security level this draft will be sent at, or <see langword="null"/> when no security levels are configured.</summary>
+    SecurityLevel? SelectedSecurityLevel { get; set; }
+    /// <summary>
     /// Gets or sets the short, user-inputted tag identifying the type of this message; see
     /// <see cref="IEngineController.GetTag"/>. Setting a tag that <see cref="IEngineController.BlockedCombinations"/>
     /// blocks for the current <see cref="SelectedPriority"/> is rejected — the value silently reverts to the
@@ -125,6 +134,7 @@ internal sealed partial class DraftViewModel : ObservableObject, IDraftViewModel
     /// <param name="engineController">Provides the shared alert label text, whether the alert checkbox is shown, the available message priority levels, tag input visibility/label, and blocked tag/priority combinations enforced on send.</param>
     /// <param name="bodyDocument">Optional body document implementation; defaults to <see cref="StringBodyDocument"/> when <see langword="null"/>.</param>
     /// <param name="confirmationWindow">How long an armed delete waits for its confirming press; defaults to a few seconds.</param>
+    /// <param name="currentSecurityLevel">The current user's own assigned security level name; see <see cref="IEngineController.GetUserSecurityLevel"/>.</param>
     public DraftViewModel(
         DraftEntity entity,
         IEntryService entryService,
@@ -133,7 +143,8 @@ internal sealed partial class DraftViewModel : ObservableObject, IDraftViewModel
         ILoggerFactory loggerFactory,
         IEngineController engineController,
         IBodyDocument? bodyDocument = null,
-        TimeSpan? confirmationWindow = null)
+        TimeSpan? confirmationWindow = null,
+        string currentSecurityLevel = "")
     {
         this.entity = entity;
         CanDelete = engineController.CanDelete(FolderType.Drafts);
@@ -162,6 +173,12 @@ internal sealed partial class DraftViewModel : ObservableObject, IDraftViewModel
             ?? AvailablePriorities.FirstOrDefault()
             ?? new MessagePriorityOption { Name = "Normal", Value = 0 };
 
+        IReadOnlyList<SecurityLevel> allSecurityLevels = engineController.SecurityLevels;
+        int ownRank = allSecurityLevels.GetRank(currentSecurityLevel);
+        AvailableSecurityLevels = ownRank < 0 ? [] : [.. allSecurityLevels.Take(ownRank + 1)];
+        selectedSecurityLevel = AvailableSecurityLevels.FirstOrDefault(l => string.Equals(l.Name, entity.SecurityLevel, StringComparison.OrdinalIgnoreCase))
+            ?? AvailableSecurityLevels.LastOrDefault();
+
         foreach (AddressData a in entity.Addresses)
         {
             Addresses.Add(a);
@@ -187,6 +204,7 @@ internal sealed partial class DraftViewModel : ObservableObject, IDraftViewModel
     [ObservableProperty] private bool isAlert;
     [ObservableProperty] private MessagePriorityOption selectedPriority;
     [ObservableProperty] private IReadOnlyList<MessagePriorityOption> availablePriorities = [];
+    [ObservableProperty] private SecurityLevel? selectedSecurityLevel;
     [ObservableProperty] private string tag = string.Empty;
     [ObservableProperty] private PlsoMode plsoMode;
     [ObservableProperty] private bool isSaving;
@@ -218,6 +236,8 @@ internal sealed partial class DraftViewModel : ObservableObject, IDraftViewModel
     public IReadOnlyList<string> AllUserNames { get; }
     /// <inheritdoc />
     public IReadOnlyList<AddressTypeOption> AddressTypes { get; }
+    /// <inheritdoc />
+    public IReadOnlyList<SecurityLevel> AvailableSecurityLevels { get; }
     /// <inheritdoc />
     public string AlertLabel { get; }
     /// <inheritdoc />
@@ -388,6 +408,7 @@ internal sealed partial class DraftViewModel : ObservableObject, IDraftViewModel
             entity.IsAlert = IsAlert;
             entity.Priority = SelectedPriority.Value;
             entity.Tag = Tag;
+            entity.SecurityLevel = SelectedSecurityLevel?.Name ?? string.Empty;
             await entryService.SaveDraft(entity);
             StatusMessage = "Saved";
         }
@@ -423,11 +444,13 @@ internal sealed partial class DraftViewModel : ObservableObject, IDraftViewModel
             entity.IsAlert = IsAlert;
             entity.Priority = SelectedPriority.Value;
             entity.Tag = Tag;
+            string securityLevel = SelectedSecurityLevel?.Name ?? string.Empty;
+            entity.SecurityLevel = securityLevel;
 
             SendMessageResult? result = await connection.SendMessage(
                 Subject, body,
                 Addresses.Select(a => new AddressRequest { UserName = a.UserName, Type = a.Type, Information = a.Information }).ToList(),
-                IsAlert, SelectedPriority.Value, Tag);
+                IsAlert, SelectedPriority.Value, Tag, securityLevel);
             if (result is null)
             {
                 StatusMessage = "Cannot send until a user is installed";
@@ -440,7 +463,7 @@ internal sealed partial class DraftViewModel : ObservableObject, IDraftViewModel
 
             DateTime sentAt = entity.SentAt ?? DateTime.UtcNow;
             MessageEntity sentMessage = await entryService.StoreSentMessage(
-                result.MessageId, Subject, body, [.. Addresses], sentAt, result.UserResults, IsAlert, SelectedPriority.Value, Tag);
+                result.MessageId, Subject, body, [.. Addresses], sentAt, result.UserResults, IsAlert, SelectedPriority.Value, Tag, securityLevel);
 
             IsSent = true;
             StatusMessage = "Sent";

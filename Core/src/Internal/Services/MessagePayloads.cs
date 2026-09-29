@@ -15,6 +15,8 @@ internal sealed class SendMessagePayload
     public int Priority { get; set; }
     /// <summary>Tag identifying the type of this message; see <see cref="Control.IEngineController.GetTag"/>.</summary>
     public string Tag { get; set; } = string.Empty;
+    /// <summary>Security level name this message is sent at; see <see cref="Control.IEngineController.GetSecurityLevel"/>.</summary>
+    public string SecurityLevel { get; set; } = string.Empty;
 }
 
 /// <summary>A single recipient address entry used in <see cref="SendMessagePayload"/>.</summary>

@@ -101,6 +101,12 @@ internal sealed partial class EntryBarViewModel : ObservableObject, IEntryBarVie
         return string.IsNullOrEmpty(tag) ? null : tag;
     }
 
+    private string? GetSecurityLevelColor(object message)
+    {
+        string level = engineController.GetSecurityLevel(message);
+        return engineController.SecurityLevels.IsRecognized(level) ? engineController.SecurityLevels.GetColor(level) : null;
+    }
+
     /// <summary>Loads the first page of entries for the given folder and resets pagination.</summary>
     public async Task LoadFolder(FolderItemViewModel folder)
     {
@@ -183,7 +189,8 @@ internal sealed partial class EntryBarViewModel : ObservableObject, IEntryBarVie
                     {
                         string timeText = m.ReceivedAt.ToString("dd-MMM-yyyy HH:mm").ToUpperInvariant();
                         EntryItemViewModel item = new(m.MessageId, engineController.GetFromUser(m.Message), EntryType.Message, m.ReceivedAt,
-                            secondaryText: engineController.GetSubject(m.Message), priorityText: GetPriorityLabel(m.Message), tagText: GetTagLabel(m.Message), timeText: timeText);
+                            secondaryText: engineController.GetSubject(m.Message), priorityText: GetPriorityLabel(m.Message), tagText: GetTagLabel(m.Message), timeText: timeText,
+                            securityLevelColorHex: GetSecurityLevelColor(m.Message));
                         item.OverallStatus = m.ReadStatus;
                         items.Add(item);
                     }
@@ -198,7 +205,8 @@ internal sealed partial class EntryBarViewModel : ObservableObject, IEntryBarVie
                         string destinations = string.Join(", ", engineController.GetAddresses(m.Message).Select(a => a.UserName).Distinct());
                         string timeText = m.ReceivedAt.ToString("dd-MMM-yyyy HH:mm").ToUpperInvariant();
                         EntryItemViewModel item = new(m.MessageId, destinations, EntryType.Message, m.ReceivedAt,
-                            secondaryText: engineController.GetSubject(m.Message), priorityText: GetPriorityLabel(m.Message), tagText: GetTagLabel(m.Message), timeText: timeText, isOutboundMessage: true);
+                            secondaryText: engineController.GetSubject(m.Message), priorityText: GetPriorityLabel(m.Message), tagText: GetTagLabel(m.Message), timeText: timeText, isOutboundMessage: true,
+                            securityLevelColorHex: GetSecurityLevelColor(m.Message));
                         item.OverallStatus = m.OverallStatus;
                         items.Add(item);
                     }

@@ -64,6 +64,23 @@ public interface IEngineBuilder
     /// <summary>Sets how the data attached to any user is looked up, in place of the per-user calls.</summary>
     IEngineBuilder UserData(Func<string, IReadOnlyDictionary<string, string>> lookup);
 
+    /// <summary>
+    /// Defines the ordered set of security levels a message may be sent at, from lowest to highest: each level
+    /// ranks higher than the one stated before it. Each level is a display name paired with the hex color shown
+    /// for it in the top banner. Empty (the default) turns the whole feature off: every message maps to an empty
+    /// security level and no destination is ever blocked for lacking one.
+    /// </summary>
+    IEngineBuilder SecurityLevels(params (string Name, string Color)[] levels);
+
+    /// <summary>
+    /// Assigns a user to run at a security level by name (see <see cref="SecurityLevels"/>), merged with anything
+    /// already assigned. A user with no assignment runs at the lowest configured level.
+    /// </summary>
+    IEngineBuilder UserSecurityLevel(string userName, string levelName);
+
+    /// <summary>Sets how the security level for any user name is looked up, in place of the per-user calls.</summary>
+    IEngineBuilder UserSecurityLevel(Func<string, string> lookup);
+
     /// <summary>Sets the TCP port this node listens on for IP connections from other nodes. Defaults to 50021.</summary>
     IEngineBuilder PeerPort(int port);
 

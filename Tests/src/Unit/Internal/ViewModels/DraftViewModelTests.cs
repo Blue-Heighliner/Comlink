@@ -24,6 +24,7 @@ public sealed class DraftViewModelTests
             new AddressTypeOption { Type = AddressType.Cc, Label = "Cc" },
             new AddressTypeOption { Type = AddressType.External, Label = "External" }
         ]);
+        mock.Setup(a => a.SecurityLevels).Returns([]);
         return mock.Object;
     }
 
@@ -494,7 +495,7 @@ public sealed class DraftViewModelTests
         await vm.SendCommand.ExecuteAsync(null);
 
         Assert.Equal("Add at least one recipient", vm.StatusMessage);
-        connMock.Verify(c => c.SendMessage(It.IsAny<string>(), It.IsAny<string>(), It.IsAny<List<AddressRequest>>(), It.IsAny<bool>(), It.IsAny<int>(), It.IsAny<string>(), It.IsAny<CancellationToken>()), Times.Never);
+        connMock.Verify(c => c.SendMessage(It.IsAny<string>(), It.IsAny<string>(), It.IsAny<List<AddressRequest>>(), It.IsAny<bool>(), It.IsAny<int>(), It.IsAny<string>(), It.IsAny<string>(), It.IsAny<CancellationToken>()), Times.Never);
     }
 
     /// <summary>SendCommand reports that no user is installed when the send is refused for that reason, rather than failing on a missing result.</summary>
@@ -503,7 +504,7 @@ public sealed class DraftViewModelTests
     {
         DraftEntity entity = new() { Subject = "Hello", Body = "World", Addresses = [new AddressData { UserName = "ALPHA", Type = "To" }], FolderId = "root-drafts" };
         DraftViewModel vm = Build(out Mock<IEntryService> entryMock, out Mock<IServiceConnection> connMock, entity: entity);
-        connMock.Setup(c => c.SendMessage(It.IsAny<string>(), It.IsAny<string>(), It.IsAny<List<AddressRequest>>(), It.IsAny<bool>(), It.IsAny<int>(), It.IsAny<string>(), It.IsAny<CancellationToken>()))
+        connMock.Setup(c => c.SendMessage(It.IsAny<string>(), It.IsAny<string>(), It.IsAny<List<AddressRequest>>(), It.IsAny<bool>(), It.IsAny<int>(), It.IsAny<string>(), It.IsAny<string>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync((SendMessageResult?)null);
 
         await vm.SendCommand.ExecuteAsync(null);
@@ -532,7 +533,7 @@ public sealed class DraftViewModelTests
             UserResults = [new UserDeliveryResult { UserName = "ALPHA", Success = true, AddressedVia = [] }]
         };
         connMock.Setup(c => c.SendMessage(It.IsAny<string>(), It.IsAny<string>(),
-                It.IsAny<List<AddressRequest>>(), It.IsAny<bool>(), It.IsAny<int>(), It.IsAny<string>(), It.IsAny<CancellationToken>()))
+                It.IsAny<List<AddressRequest>>(), It.IsAny<bool>(), It.IsAny<int>(), It.IsAny<string>(), It.IsAny<string>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync(sendResult);
 
         MessageEntity sentMessage = new() { MessageId = "MSG-001" };
@@ -569,7 +570,7 @@ public sealed class DraftViewModelTests
             UserResults = [new UserDeliveryResult { UserName = "ALPHA", Success = true, AddressedVia = [] }]
         };
         connMock.Setup(c => c.SendMessage(It.IsAny<string>(), It.IsAny<string>(),
-                It.IsAny<List<AddressRequest>>(), It.IsAny<bool>(), 3, It.IsAny<string>(), It.IsAny<CancellationToken>()))
+                It.IsAny<List<AddressRequest>>(), It.IsAny<bool>(), 3, It.IsAny<string>(), It.IsAny<string>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync(sendResult);
 
         MessageEntity sentMessage = new() { MessageId = "MSG-001" };
@@ -582,7 +583,7 @@ public sealed class DraftViewModelTests
         await vm.SendCommand.ExecuteAsync(null);
 
         connMock.Verify(c => c.SendMessage(It.IsAny<string>(), It.IsAny<string>(),
-            It.IsAny<List<AddressRequest>>(), It.IsAny<bool>(), 3, It.IsAny<string>(), It.IsAny<CancellationToken>()), Times.Once);
+            It.IsAny<List<AddressRequest>>(), It.IsAny<bool>(), 3, It.IsAny<string>(), It.IsAny<string>(), It.IsAny<CancellationToken>()), Times.Once);
         entryMock.Verify(e => e.StoreSentMessage(It.IsAny<string>(), It.IsAny<string>(), It.IsAny<string>(),
             It.IsAny<List<AddressData>>(), It.IsAny<DateTime>(),
             It.IsAny<IReadOnlyList<UserDeliveryResult>>(), It.IsAny<bool>(), 3, It.IsAny<string>()), Times.Once);
@@ -609,7 +610,7 @@ public sealed class DraftViewModelTests
             UserResults = [new UserDeliveryResult { UserName = "ALPHA", Success = true, AddressedVia = [] }]
         };
         connMock.Setup(c => c.SendMessage(It.IsAny<string>(), It.IsAny<string>(),
-                It.IsAny<List<AddressRequest>>(), It.IsAny<bool>(), It.IsAny<int>(), "URGENT", It.IsAny<CancellationToken>()))
+                It.IsAny<List<AddressRequest>>(), It.IsAny<bool>(), It.IsAny<int>(), "URGENT", It.IsAny<string>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync(sendResult);
 
         MessageEntity sentMessage = new() { MessageId = "MSG-001" };
@@ -622,7 +623,7 @@ public sealed class DraftViewModelTests
         await vm.SendCommand.ExecuteAsync(null);
 
         connMock.Verify(c => c.SendMessage(It.IsAny<string>(), It.IsAny<string>(),
-            It.IsAny<List<AddressRequest>>(), It.IsAny<bool>(), It.IsAny<int>(), "URGENT", It.IsAny<CancellationToken>()), Times.Once);
+            It.IsAny<List<AddressRequest>>(), It.IsAny<bool>(), It.IsAny<int>(), "URGENT", It.IsAny<string>(), It.IsAny<CancellationToken>()), Times.Once);
         entryMock.Verify(e => e.StoreSentMessage(It.IsAny<string>(), It.IsAny<string>(), It.IsAny<string>(),
             It.IsAny<List<AddressData>>(), It.IsAny<DateTime>(),
             It.IsAny<IReadOnlyList<UserDeliveryResult>>(), It.IsAny<bool>(), It.IsAny<int>(), "URGENT"), Times.Once);
@@ -651,6 +652,6 @@ public sealed class DraftViewModelTests
         await vm.SendCommand.ExecuteAsync(null);
 
         Assert.Equal("This tag/priority combination is not allowed", vm.StatusMessage);
-        connMock.Verify(c => c.SendMessage(It.IsAny<string>(), It.IsAny<string>(), It.IsAny<List<AddressRequest>>(), It.IsAny<bool>(), It.IsAny<int>(), It.IsAny<string>(), It.IsAny<CancellationToken>()), Times.Never);
+        connMock.Verify(c => c.SendMessage(It.IsAny<string>(), It.IsAny<string>(), It.IsAny<List<AddressRequest>>(), It.IsAny<bool>(), It.IsAny<int>(), It.IsAny<string>(), It.IsAny<string>(), It.IsAny<CancellationToken>()), Times.Never);
     }
 }

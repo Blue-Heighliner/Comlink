@@ -11,7 +11,10 @@ public sealed class MessageViewModelTests
         string body = "Test body",
         string fromUser = "SENDER",
         AddressData[]? addresses = null,
-        DeliveryStatus[]? deliveryStatuses = null)
+        DeliveryStatus[]? deliveryStatuses = null,
+        int priority = 0,
+        string tag = "",
+        string securityLevel = "")
     {
         string id = messageId ?? Guid.NewGuid().ToString("N").ToUpperInvariant();
         object message = format.CreateMessage();
@@ -19,6 +22,9 @@ public sealed class MessageViewModelTests
         format.SetSubject(message, subject);
         format.SetBody(message, body);
         format.SetFromUser(message, fromUser);
+        format.SetPriority(message, priority);
+        format.SetTag(message, tag);
+        format.SetSecurityLevel(message, securityLevel);
         format.SetAddresses(message, [.. (addresses ?? [new AddressData { UserName = "DEST", Type = "To" }])
             .Select(a => new MessageAddress { UserName = a.UserName, Type = a.Type.ParseAddressType(), Information = a.Information })]);
         return new MessageEntity
@@ -75,6 +81,13 @@ public sealed class MessageViewModelTests
         mock.Setup(e => e.GetBody(It.IsAny<object>())).Returns(format.GetBody);
         mock.Setup(e => e.GetFromUser(It.IsAny<object>())).Returns(format.GetFromUser);
         mock.Setup(e => e.GetIsAlert(It.IsAny<object>())).Returns(format.GetIsAlert);
+        mock.Setup(e => e.GetPriority(It.IsAny<object>())).Returns(format.GetPriority);
+        mock.Setup(e => e.GetTag(It.IsAny<object>())).Returns(format.GetTag);
+        mock.Setup(e => e.GetSecurityLevel(It.IsAny<object>())).Returns(format.GetSecurityLevel);
+        mock.Setup(e => e.Priorities).Returns(format.Priorities);
+        mock.Setup(e => e.TagsEnabled).Returns(format.TagsEnabled);
+        mock.Setup(e => e.TagLabel).Returns(format.TagLabel);
+        mock.Setup(e => e.SecurityLevels).Returns(format.SecurityLevels);
         mock.Setup(e => e.GetAddresses(It.IsAny<object>())).Returns(format.GetAddresses);
         mock.Setup(e => e.AddressTypes).Returns([
             new AddressTypeOption { Type = AddressType.To, Label = "To" },
@@ -294,6 +307,45 @@ public sealed class MessageViewModelTests
         MessageViewModel vm = new(entity, format);
 
         Assert.True(vm.IsAlert);
+    }
+
+    /// <summary>Priority, tag and tag visibility are exposed from the stored message via IEngineController.</summary>
+    [Fact]
+    public void Ctor_ExposesPriorityAndTag()
+    {
+        MessageEntity entity = MakeEntity(tag: "URGENT");
+
+        MessageViewModel vm = new(entity, format);
+
+        Assert.Equal("Normal", vm.PriorityLabel);
+        Assert.True(vm.TagsEnabled);
+        Assert.Equal("URGENT", vm.Tag);
+    }
+
+    /// <summary>An empty or unrecognized security level (no security levels configured) yields a null SecurityLevelColorHex rather than a fallback color.</summary>
+    [Fact]
+    public void Ctor_NoSecurityLevel_SecurityLevelColorHexIsNull()
+    {
+        MessageEntity entity = MakeEntity();
+
+        MessageViewModel vm = new(entity, format);
+
+        Assert.Equal("", vm.SecurityLevelName);
+        Assert.Null(vm.SecurityLevelColorHex);
+    }
+
+    /// <summary>A recognized security level exposes both its name and its configured color.</summary>
+    [Fact]
+    public void Ctor_RecognizedSecurityLevel_ExposesNameAndColor()
+    {
+        Mock<TestEngineController> controller = new() { CallBase = true };
+        controller.Setup(c => c.SecurityLevels).Returns([new SecurityLevel { Name = "RESTRICTED", Color = "#C62828" }]);
+        MessageEntity entity = MakeEntity(securityLevel: "RESTRICTED");
+
+        MessageViewModel vm = new(entity, controller.Object);
+
+        Assert.Equal("RESTRICTED", vm.SecurityLevelName);
+        Assert.Equal("#C62828", vm.SecurityLevelColorHex);
     }
 
     /// <summary>DeliveryStatusRow.StatusText is the uppercase status name, and DisplayName includes addressed group context when present.</summary>

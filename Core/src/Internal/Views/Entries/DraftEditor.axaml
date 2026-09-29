@@ -53,6 +53,25 @@
               </DataTemplate>
             </ComboBox.ItemTemplate>
           </ComboBox>
+          <ComboBox ItemsSource="{Binding AvailableSecurityLevels}"
+                    SelectedItem="{Binding SelectedSecurityLevel}"
+                    Background="#3C3C3C"
+                    BorderThickness="0"
+                    FontSize="12"
+                    Height="26"
+                    VerticalAlignment="Center">
+            <ComboBox.IsVisible>
+              <MultiBinding Converter="{x:Static BoolConverters.And}">
+                <Binding Path="!IsSent" />
+                <Binding Path="SelectedSecurityLevel" Converter="{x:Static ObjectConverters.IsNotNull}" />
+              </MultiBinding>
+            </ComboBox.IsVisible>
+            <ComboBox.ItemTemplate>
+              <DataTemplate>
+                <TextBlock Text="{Binding Name}" />
+              </DataTemplate>
+            </ComboBox.ItemTemplate>
+          </ComboBox>
           <CheckBox Content="{Binding AlertLabel}"
                      IsChecked="{Binding IsAlert}"
                      Foreground="#E06C75"

@@ -31,6 +31,8 @@ public sealed class SampleMessage
     [ProtoMember(9)] public int Importance { get; set; }
     /// <summary>Short user-inputted tag identifying the type of this message.</summary>
     [ProtoMember(10)] public string Category { get; set; } = string.Empty;
+    /// <summary>Security level name this message was sent at.</summary>
+    [ProtoMember(11)] public string Classification { get; set; } = string.Empty;
 }
 
 /// <summary>A single recipient entry within a <see cref="SampleMessage"/>.</summary>

@@ -7,7 +7,7 @@ public sealed class InterfaceServiceTests
     private readonly IEngineController format = new TestEngineController();
     private static readonly INetworkSerializer serializer = new ProtobufNetworkSerializer();
 
-    private static UserInfo MakeUserInfo(string name) => new() { Name = name, Code = "C1", EnvironmentTitle = "T", EnvironmentColor = "#000" };
+    private static UserInfo MakeUserInfo(string name) => new() { Name = name, Code = "C1" };
 
     /// <summary>A message received from an interface is routed as if sent by the currently installed user.</summary>
     [Fact]

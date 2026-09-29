@@ -50,9 +50,7 @@ internal sealed class UserService : IUserService
         return new UserInfo
         {
             Name = state.UserName!,
-            Code = state.UserCode!,
-            EnvironmentTitle = state.EnvironmentTitle!,
-            EnvironmentColor = state.EnvironmentColor!
+            Code = state.UserCode!
         };
     }
 
@@ -66,9 +64,7 @@ internal sealed class UserService : IUserService
             state = new UserState
             {
                 UserName = name,
-                UserCode = name,
-                EnvironmentTitle = "DEBUG",
-                EnvironmentColor = "#FF6200"
+                UserCode = name
             };
             currentUserProvider.UserName = name;
             return;
@@ -102,9 +98,7 @@ internal sealed class UserService : IUserService
             state = new UserState
             {
                 UserName = userInfo.Name,
-                UserCode = userInfo.Code,
-                EnvironmentTitle = userInfo.EnvironmentTitle,
-                EnvironmentColor = userInfo.EnvironmentColor
+                UserCode = userInfo.Code
             };
 
             currentUserProvider.UserName = userInfo.Name;

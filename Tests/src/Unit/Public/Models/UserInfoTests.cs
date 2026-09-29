@@ -10,15 +10,11 @@ public sealed class UserInfoTests
         UserInfo info = new()
         {
             Name = "TestNode",
-            Code = "TN01",
-            EnvironmentTitle = "Production",
-            EnvironmentColor = "#1565C0"
+            Code = "TN01"
         };
 
         Assert.Equal("TestNode", info.Name);
         Assert.Equal("TN01", info.Code);
-        Assert.Equal("Production", info.EnvironmentTitle);
-        Assert.Equal("#1565C0", info.EnvironmentColor);
     }
 
     /// <summary>Verifies that a new <see cref="Folder"/> has an empty children collection by default.</summary>

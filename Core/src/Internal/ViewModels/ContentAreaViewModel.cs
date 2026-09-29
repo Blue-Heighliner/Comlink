@@ -41,6 +41,7 @@ internal sealed partial class ContentAreaViewModel : ObservableObject, IContentA
     /// <param name="notes">Repository for loading note entries.</param>
     /// <param name="activityLogs">Repository for loading activity log entries.</param>
     /// <param name="loggerFactory">Factory for creating named loggers.</param>
+    /// <param name="currentUserProvider">Tracks the current user's name, read to resolve their own security level for a newly opened draft.</param>
     /// <param name="bodyDocumentFactory">Factory for the body document of a draft opened from the list; must match the one used for new drafts, or the draft editor cannot bind it. Defaults to plain string documents when <see langword="null"/>.</param>
     public ContentAreaViewModel(
         IEngineController engineController,
@@ -51,6 +52,7 @@ internal sealed partial class ContentAreaViewModel : ObservableObject, IContentA
         INoteRepository notes,
         IActivityLogRepository activityLogs,
         ILoggerFactory loggerFactory,
+        ICurrentUserProvider currentUserProvider,
         IBodyDocumentFactory? bodyDocumentFactory = null)
     {
         this.bodyDocumentFactory = bodyDocumentFactory;
@@ -62,6 +64,7 @@ internal sealed partial class ContentAreaViewModel : ObservableObject, IContentA
         this.activityLogs = activityLogs;
         this.engineController = engineController;
         this.loggerFactory = loggerFactory;
+        this.currentUserProvider = currentUserProvider;
         HomeText = engineController.HomeText;
         connection.DeliveryStatusChanged += evt => UiThread.Run(() => OnDeliveryStatusChanged(evt));
     }
@@ -74,6 +77,7 @@ internal sealed partial class ContentAreaViewModel : ObservableObject, IContentA
     private readonly IActivityLogRepository activityLogs;
     private readonly IEngineController engineController;
     private readonly ILoggerFactory loggerFactory;
+    private readonly ICurrentUserProvider currentUserProvider;
     private readonly IBodyDocumentFactory? bodyDocumentFactory;
 
     [ObservableProperty] private object? activeContent;
@@ -173,7 +177,8 @@ internal sealed partial class ContentAreaViewModel : ObservableObject, IContentA
         DraftEntity? entity = await drafts.Get(oid);
         if (entity is null) { return null; }
         List<string> userNames = await connection.GetUserNames();
-        DraftViewModel vm = new(entity, entryService, connection, userNames, loggerFactory, engineController, bodyDocumentFactory?.Create());
+        string currentSecurityLevel = engineController.GetUserSecurityLevel(currentUserProvider.UserName ?? string.Empty);
+        DraftViewModel vm = new(entity, entryService, connection, userNames, loggerFactory, engineController, bodyDocumentFactory?.Create(), currentSecurityLevel: currentSecurityLevel);
         vm.DraftSent += async (IDraftViewModel _, MessageEntity msg) =>
         {
             ShowEntry(new MessageViewModel(msg, engineController));

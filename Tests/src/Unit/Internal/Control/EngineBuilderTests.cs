@@ -202,7 +202,7 @@ public sealed class EngineBuilderTests
     [Fact]
     public void UserCodes_StatedResolverReplacesTheDefault()
     {
-        (_, EngineController stated) = Build(engine => engine.UserCodes(code => code == "X" ? new UserInfo { Name = "XUSER", Code = "X", EnvironmentTitle = "E", EnvironmentColor = "#000" } : null));
+        (_, EngineController stated) = Build(engine => engine.UserCodes(code => code == "X" ? new UserInfo { Name = "XUSER", Code = "X" } : null));
         (_, EngineController fallback) = Build(engine => engine);
 
         Assert.Equal("XUSER", stated.ResolveCode("X")!.Name);

@@ -25,6 +25,8 @@ internal sealed class DraftEntity
     public int Priority { get; set; }
     /// <summary>Tag identifying the type of this draft; see <see cref="IEngineController.GetTag"/>.</summary>
     public string Tag { get; set; } = string.Empty;
+    /// <summary>Security level name this draft should be sent at; see <see cref="IEngineController.GetSecurityLevel"/>.</summary>
+    public string SecurityLevel { get; set; } = string.Empty;
     /// <summary>UTC timestamp when the draft was sent, or <c>null</c> if not yet sent.</summary>
     public DateTime? SentAt { get; set; }
     /// <summary>Identifier of the folder this draft belongs to.</summary>

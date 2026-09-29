@@ -6,9 +6,7 @@ public sealed class InstallViewModelTests
     private static UserInfo MakeUserInfo(string name) => new()
     {
         Name = name,
-        Code = "CODE1",
-        EnvironmentTitle = "PROD",
-        EnvironmentColor = "#FF0000"
+        Code = "CODE1"
     };
 
     /// <summary>Empty UserCode sets ErrorMessage without calling the service.</summary>

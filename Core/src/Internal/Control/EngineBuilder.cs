@@ -9,6 +9,8 @@ internal sealed class EngineBuilder : IEngineBuilder, IAsyncDisposable
 {
     private readonly Dictionary<string, IReadOnlyList<string>> groups = new(StringComparer.OrdinalIgnoreCase);
     private readonly Dictionary<string, Dictionary<string, string>> userData = new(StringComparer.OrdinalIgnoreCase);
+    private readonly List<SecurityLevel> securityLevels = [];
+    private readonly Dictionary<string, string> userSecurityLevels = new(StringComparer.OrdinalIgnoreCase);
     private readonly Dictionary<string, ServerUserConfig> servers = new(StringComparer.OrdinalIgnoreCase);
     private readonly List<string> users = [];
     private readonly List<MessagePriorityOption> priorities = [];
@@ -46,6 +48,12 @@ internal sealed class EngineBuilder : IEngineBuilder, IAsyncDisposable
     public IReadOnlyDictionary<string, Dictionary<string, string>> UserDataByName => userData;
     /// <summary>How the data attached to any user is looked up, if stated.</summary>
     public Func<string, IReadOnlyDictionary<string, string>>? UserDataLookup { get; private set; }
+    /// <summary>The configured security levels, in ascending order; empty when none were stated.</summary>
+    public IReadOnlyList<SecurityLevel> SecurityLevelValues => securityLevels;
+    /// <summary>The security levels assigned to users by name.</summary>
+    public IReadOnlyDictionary<string, string> UserSecurityLevelsByName => userSecurityLevels;
+    /// <summary>How the security level for any user name is looked up, if stated.</summary>
+    public Func<string, string>? UserSecurityLevelLookup { get; private set; }
     /// <summary>The peer listener port, if stated.</summary>
     public int? PeerPortValue { get; private set; }
     /// <summary>The interface listener port, if stated.</summary>
@@ -249,6 +257,28 @@ internal sealed class EngineBuilder : IEngineBuilder, IAsyncDisposable
     public IEngineBuilder UserData(Func<string, IReadOnlyDictionary<string, string>> lookup)
     {
         UserDataLookup = lookup;
+        return this;
+    }
+
+    /// <inheritdoc />
+    public IEngineBuilder SecurityLevels(params (string Name, string Color)[] levels)
+    {
+        securityLevels.Clear();
+        securityLevels.AddRange(levels.Select(level => new SecurityLevel { Name = level.Name, Color = level.Color }));
+        return this;
+    }
+
+    /// <inheritdoc />
+    public IEngineBuilder UserSecurityLevel(string userName, string levelName)
+    {
+        userSecurityLevels[userName] = levelName;
+        return this;
+    }
+
+    /// <inheritdoc />
+    public IEngineBuilder UserSecurityLevel(Func<string, string> lookup)
+    {
+        UserSecurityLevelLookup = lookup;
         return this;
     }
 

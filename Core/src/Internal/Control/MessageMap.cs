@@ -49,4 +49,8 @@ internal sealed class MessageMap
     public required Func<object, string> GetTag { get; init; }
     /// <summary>Writes the tag.</summary>
     public required Action<object, string> SetTag { get; init; }
+    /// <summary>Reads the security level.</summary>
+    public required Func<object, string> GetSecurityLevel { get; init; }
+    /// <summary>Writes the security level.</summary>
+    public required Action<object, string> SetSecurityLevel { get; init; }
 }

@@ -8,7 +8,7 @@ namespace BlueHeighliner.Comlink.Sample;
 /// <list type="bullet">
 /// <item><description>home text - a product-appropriate home screen welcome text.</description></item>
 /// <item><description>window icon - Sample's own envelope icon instead of the operating system's.</description></item>
-/// <item><description>user codes and users - three hard-coded test codes and the three built-in user names matching them.</description></item>
+/// <item><description>user codes and users - one hard-coded install code per site used across <c>Scripts/Scenarios/</c> (Client1, Client2, Server, Server1, Server2, Peer1, Peer2), so every scenario's <c>UserName</c> is a recognized user without needing its own code.</description></item>
 /// <item><description>priorities and blocked tags - three priority levels and both blocked-combination kinds.</description></item>
 /// <item><description>print count - prints an alert message twice and every other received message once.</description></item>
 /// <item><description>deleting - only drafts and notes can be deleted; Inbox, Outbox, and Activity are protected.</description></item>
@@ -16,6 +16,7 @@ namespace BlueHeighliner.Comlink.Sample;
 /// <item><description>external systems - a single demo <see cref="SampleExternalSystem"/>, showing the external-system conduit pattern.</description></item>
 /// <item><description>packetization - enabled with <see cref="SamplePacket"/>, using the default packet size, window and serializer.</description></item>
 /// <item><description>address type labels - renames the <see cref="AddressType.External"/> label to <c>OUTSIDE</c>, matching the <c>Kind</c> vocabulary <see cref="SampleRecipient"/> already uses for it.</description></item>
+/// <item><description>security levels - three placeholder levels (<c>PUBLIC</c>, <c>INTERNAL</c>, <c>RESTRICTED</c>); the <c>Peer</c> scenario's sites run at <c>PUBLIC</c>, the <c>ClientServer</c>/<c>ServerCluster</c> scenarios' clients at <c>INTERNAL</c>, and their servers at <c>RESTRICTED</c>.</description></item>
 /// </list>
 /// Actual alarm sound playback and printer discovery and driving are real platform behavior always provided by the
 /// engine itself, not something Sample states here.
@@ -24,9 +25,13 @@ public sealed class SampleEngineConfiguration : IEngineConfiguration
 {
     private readonly Dictionary<string, UserInfo> userCodes = new()
     {
-        ["CODE1"] = new UserInfo { Name = "TEST1", Code = "CODE1", EnvironmentTitle = "DEV", EnvironmentColor = "#1565C0" },
-        ["CODE2"] = new UserInfo { Name = "TEST2", Code = "CODE2", EnvironmentTitle = "DEV", EnvironmentColor = "#1565C0" },
-        ["CODE3"] = new UserInfo { Name = "TEST3", Code = "CODE3", EnvironmentTitle = "DEV", EnvironmentColor = "#1565C0" }
+        ["CLIENT1"] = new UserInfo { Name = "Client1", Code = "CLIENT1" },
+        ["CLIENT2"] = new UserInfo { Name = "Client2", Code = "CLIENT2" },
+        ["SERVER"] = new UserInfo { Name = "Server", Code = "SERVER" },
+        ["SERVER1"] = new UserInfo { Name = "Server1", Code = "SERVER1" },
+        ["SERVER2"] = new UserInfo { Name = "Server2", Code = "SERVER2" },
+        ["PEER1"] = new UserInfo { Name = "Peer1", Code = "PEER1" },
+        ["PEER2"] = new UserInfo { Name = "Peer2", Code = "PEER2" }
     };
 
     /// <inheritdoc />
@@ -44,7 +49,8 @@ public sealed class SampleEngineConfiguration : IEngineConfiguration
                 .ConfirmationId(m => m.ConfirmsId)
                 .IsAlert(m => m.Alert)
                 .Priority(m => m.Importance)
-                .Tag(m => m.Category))
+                .Tag(m => m.Category)
+                .SecurityLevel(m => m.Classification))
             .Packets<SamplePacket>(packet => packet
                 .PayloadId(p => p.Group)
                 .Index(p => p.Position)
@@ -54,7 +60,7 @@ public sealed class SampleEngineConfiguration : IEngineConfiguration
             .HomeText("Select a folder and entry to get started, or create a new draft or note.")
             .WindowIcon(new Uri("avares://BlueHeighliner.Comlink.Sample/Assets/envelope.png"))
             .UserCodes(code => userCodes.GetValueOrDefault(code.ToUpperInvariant()))
-            .Users("TEST1", "TEST2", "TEST3")
+            .Users("Client1", "Client2", "Server", "Server1", "Server2", "Peer1", "Peer2")
             .Priorities(
                 ("Low", 0),
                 ("Medium", 1),
@@ -62,6 +68,16 @@ public sealed class SampleEngineConfiguration : IEngineConfiguration
             .BlockTag("SPAM", null)
             .BlockTag(null, 2)
             .AddressTypeLabel(AddressType.External, "OUTSIDE")
+            .SecurityLevels(
+                ("PUBLIC", "#2E7D32"),
+                ("INTERNAL", "#1565C0"),
+                ("RESTRICTED", "#C62828"))
+            .UserSecurityLevel(userName => userName.ToUpperInvariant() switch
+            {
+                "SERVER" or "SERVER1" or "SERVER2" => "RESTRICTED",
+                "CLIENT1" or "CLIENT2" => "INTERNAL",
+                _ => "PUBLIC"
+            })
             .PrintCount<SampleMessage>(message => message.Alert ? 2 : 1)
             .CanDelete(folder => folder is FolderType.Drafts or FolderType.Notes)
             .ConfigFile()

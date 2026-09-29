@@ -82,6 +82,16 @@ public interface IMessageBuilder<TMessage> where TMessage : class, new()
     IMessageBuilder<TMessage> Tag(Expression<Func<TMessage, string>> property);
 
     /// <summary>
+    /// Maps the security level this message was sent at, one of the names given to <see cref="IEngineBuilder.SecurityLevels"/>,
+    /// or an empty string when no security levels are configured. A destination user whose own assigned level
+    /// (see <see cref="IEngineBuilder.UserSecurityLevel(string,string)"/>) ranks lower is never sent this message.
+    /// </summary>
+    IMessageBuilder<TMessage> SecurityLevel(Func<TMessage, string> get, Action<TMessage, string> set);
+
+    /// <summary>Maps the same field by the property or field the expression reads, such as <c>x => x.SecurityLevel</c>, building the setter from it. The member must have the same type and be assignable.</summary>
+    IMessageBuilder<TMessage> SecurityLevel(Expression<Func<TMessage, string>> property);
+
+    /// <summary>
     /// Replaces the serializer that turns messages into the bytes sent across the network. The default is a
     /// <see cref="ProtobufNetworkSerializer"/> that builds only <typeparamref name="TMessage"/>, so the message type then
     /// needs <c>[ProtoContract]</c>/<c>[ProtoMember]</c> attributes. Every node on a network must use a matching serializer.

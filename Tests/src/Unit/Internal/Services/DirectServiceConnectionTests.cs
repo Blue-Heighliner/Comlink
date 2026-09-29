@@ -70,7 +70,7 @@ public sealed class DirectServiceConnectionTests
     public async Task GetUserInfo_WhenInstalled_ReturnsUserInfo()
     {
         DirectServiceConnection conn = Build(out _, out _, out Mock<IUserService> user, out _, out _);
-        UserInfo info = new() { Name = "ALPHA", Code = "A1", EnvironmentTitle = "PROD", EnvironmentColor = "#FF0000" };
+        UserInfo info = new() { Name = "ALPHA", Code = "A1" };
         user.Setup(s => s.GetCurrentUserInfo()).Returns(info);
 
         UserInfo? result = await conn.GetUserInfo();
@@ -119,7 +119,7 @@ public sealed class DirectServiceConnectionTests
     public async Task InstallUser_DelegatesToUserService()
     {
         DirectServiceConnection conn = Build(out _, out _, out Mock<IUserService> user, out _, out _);
-        UserInfo info = new() { Name = "BRAVO", Code = "B2", EnvironmentTitle = "TEST", EnvironmentColor = "#0000FF" };
+        UserInfo info = new() { Name = "BRAVO", Code = "B2" };
         user.Setup(s => s.Install("CODE1", It.IsAny<CancellationToken>())).ReturnsAsync(info);
 
         UserInfo? result = await conn.InstallUser("CODE1");
@@ -210,9 +210,7 @@ public sealed class DirectServiceConnectionTests
         user.Setup(s => s.GetCurrentUserInfo()).Returns(new UserInfo
         {
             Name = "ALPHA",
-            Code = "A",
-            EnvironmentTitle = "T",
-            EnvironmentColor = "#000"
+            Code = "A"
         });
         IReadOnlyList<UserDeliveryResult> userResults =
             [new UserDeliveryResult { UserName = "DEST", Success = true, AddressedVia = [] }];
@@ -236,9 +234,7 @@ public sealed class DirectServiceConnectionTests
         user.Setup(s => s.GetCurrentUserInfo()).Returns(new UserInfo
         {
             Name = "ALPHA",
-            Code = "A",
-            EnvironmentTitle = "T",
-            EnvironmentColor = "#000"
+            Code = "A"
         });
         routing.RouteResult = ("MSGID1", []);
 
@@ -266,7 +262,7 @@ public sealed class DirectServiceConnectionTests
     public async Task MarkMessageRead_ForRemoteSender_SendsConfirmationAndRaisesReadEvent()
     {
         DirectServiceConnection conn = Build(out FakePeerService peer, out _, out Mock<IUserService> user, out Mock<IEntryService> entry, out _);
-        user.Setup(s => s.GetCurrentUserInfo()).Returns(new UserInfo { Name = "LOCAL", Code = "A", EnvironmentTitle = "T", EnvironmentColor = "#000" });
+        user.Setup(s => s.GetCurrentUserInfo()).Returns(new UserInfo { Name = "LOCAL", Code = "A" });
 
         TestMessage stored = new() { MessageId = "MSG1", FromUser = "REMOTE" };
         MessageEntity entity = new() { MessageId = "MSG1", Message = stored };
@@ -296,7 +292,7 @@ public sealed class DirectServiceConnectionTests
     public async Task MarkMessageRead_ForSelfAddressedMessage_UpdatesStatusWithoutSending()
     {
         DirectServiceConnection conn = Build(out FakePeerService peer, out _, out Mock<IUserService> user, out Mock<IEntryService> entry, out _);
-        user.Setup(s => s.GetCurrentUserInfo()).Returns(new UserInfo { Name = "LOCAL", Code = "A", EnvironmentTitle = "T", EnvironmentColor = "#000" });
+        user.Setup(s => s.GetCurrentUserInfo()).Returns(new UserInfo { Name = "LOCAL", Code = "A" });
 
         TestMessage stored = new() { MessageId = "MSG1", FromUser = "LOCAL" };
         MessageEntity entity = new() { MessageId = "MSG1", Message = stored };

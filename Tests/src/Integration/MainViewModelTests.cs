@@ -8,9 +8,7 @@ public sealed class MainViewModelTests
     private static UserInfo MakeUserInfo(string name = "ALPHA") => new()
     {
         Name = name,
-        Code = "CODE1",
-        EnvironmentTitle = "PROD",
-        EnvironmentColor = "#FF0000"
+        Code = "CODE1"
     };
 
     /// <summary>Helper that assembles all mocks and builds a <see cref="MainViewModel"/>.</summary>
@@ -148,6 +146,8 @@ public sealed class MainViewModelTests
         s.Connection.Setup(c => c.Connect(It.IsAny<CancellationToken>())).Returns(Task.CompletedTask);
         s.Connection.Setup(c => c.GetUserInfo(It.IsAny<CancellationToken>())).ReturnsAsync(MakeUserInfo("BETA"));
         s.FolderBar.Setup(f => f.Load()).Returns(Task.CompletedTask);
+        s.EngineController.Setup(e => e.GetUserSecurityLevel("BETA")).Returns("INTERNAL");
+        s.EngineController.Setup(e => e.SecurityLevels).Returns([new SecurityLevel { Name = "INTERNAL", Color = "#1565C0" }]);
         MainViewModel vm = s.BuildVm();
 
         await vm.Initialize();
@@ -156,7 +156,8 @@ public sealed class MainViewModelTests
         s.Db.Verify(d => d.Initialize(), Times.Once);
         s.FolderBar.Verify(f => f.Load(), Times.Once);
         Assert.Equal("BETA", vm.UserName);
-        Assert.Equal("PROD", vm.EnvironmentTitle);
+        Assert.Equal("INTERNAL", vm.SecurityLevelName);
+        Assert.Equal("#1565C0", vm.SecurityLevelColor);
         Assert.False(vm.IsInstallScreenVisible);
     }
 

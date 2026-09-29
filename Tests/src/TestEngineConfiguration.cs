@@ -19,7 +19,8 @@ public sealed class TestEngineConfiguration(bool packets = false) : IEngineConfi
             .ConfirmationId(m => m.ConfirmationMessageId)
             .IsAlert(m => m.IsAlert)
             .Priority(m => m.Priority)
-            .Tag(m => m.Tag));
+            .Tag(m => m.Tag)
+            .SecurityLevel(m => m.SecurityLevel));
 
         if (packets)
         {

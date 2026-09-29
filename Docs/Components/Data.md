@@ -96,6 +96,7 @@ Stored in both Inbox (received) and Outbox (sent).
 | `IsAlert` | `bool` | Whether this draft will be sent as an alert; see `Docs/Components/Peer.md#alert-messages` |
 | `Priority` | `int` | Priority number this draft should be sent at; see `Docs/Components/Configuration.md#message-composition` |
 | `Tag` | `string` | Short user-inputted tag identifying the type of this message; see `Docs/Components/Configuration.md#message-composition` |
+| `SecurityLevel` | `string` | Security level name this draft should be sent at, one of `IEngineController.SecurityLevels`, or an empty string when none are configured |
 | `SentAt` | `DateTime?` | UTC send time |
 | `ModifiedAt` | `DateTime` | UTC last edit time |
 | `FolderId` | `string` | |

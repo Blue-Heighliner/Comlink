@@ -21,6 +21,31 @@
                      FontWeight="SemiBold"
                      Foreground="#CCCCCC"
                      TextWrapping="Wrap" />
+          <Border Background="#3C3C3C"
+                  CornerRadius="3"
+                  Padding="6,2"
+                  VerticalAlignment="Center">
+            <TextBlock Text="{Binding PriorityLabel}" FontSize="10" FontWeight="Bold" Foreground="#CCCCCC" />
+          </Border>
+          <Border Background="#3C3C3C"
+                  CornerRadius="3"
+                  Padding="6,2"
+                  VerticalAlignment="Center">
+            <Border.IsVisible>
+              <MultiBinding Converter="{x:Static BoolConverters.And}">
+                <Binding Path="TagsEnabled" />
+                <Binding Path="Tag" Converter="{x:Static StringConverters.IsNotNullOrEmpty}" />
+              </MultiBinding>
+            </Border.IsVisible>
+            <TextBlock Text="{Binding Tag}" FontSize="10" FontWeight="Bold" Foreground="#CCCCCC" />
+          </Border>
+          <Border IsVisible="{Binding SecurityLevelColorHex, Converter={x:Static ObjectConverters.IsNotNull}}"
+                  Background="{Binding SecurityLevelColorHex, Converter={x:Static converters:ColorHexToBrushConverter.Instance}}"
+                  CornerRadius="3"
+                  Padding="6,2"
+                  VerticalAlignment="Center">
+            <TextBlock Text="{Binding SecurityLevelName}" FontSize="10" FontWeight="Bold" Foreground="White" />
+          </Border>
           <Border IsVisible="{Binding IsAlert}"
                   Background="#C0392B"
                   CornerRadius="3"

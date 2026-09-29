@@ -295,7 +295,22 @@ internal sealed class ServerRoutingService : IPeerService, IConnectionStatusServ
     }
 
     private HashSet<string> GetAddressedUsers(object message)
-        => new(engineController.GetAddresses(message).Where(a => a.Type != AddressType.External).Select(a => a.UserName), StringComparer.OrdinalIgnoreCase);
+    {
+        HashSet<string> addressed = new(engineController.GetAddresses(message).Where(a => a.Type != AddressType.External).Select(a => a.UserName), StringComparer.OrdinalIgnoreCase);
+
+        IReadOnlyList<SecurityLevel> securityLevels = engineController.SecurityLevels;
+        int messageLevelRank = securityLevels.GetRank(engineController.GetSecurityLevel(message));
+        if (messageLevelRank < 0) { return addressed; }
+
+        List<string> blocked = [.. addressed.Where(user => securityLevels.GetRank(engineController.GetUserSecurityLevel(user)) < messageLevelRank)];
+        if (blocked.Count > 0)
+        {
+            logger.LogWarning("Blocked relay to {Users}: security level not supported by destination", string.Join(", ", blocked));
+            addressed.ExceptWith(blocked);
+        }
+
+        return addressed;
+    }
 
     private object? TryDeserialize(ReadOnlyMemory<byte> data)
     {

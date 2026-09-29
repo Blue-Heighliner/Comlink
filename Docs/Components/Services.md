@@ -38,11 +38,11 @@ Manages user installation and persists user identity to `State.json`.
 - Install a new user by resolving a code (`Install`)
 - Apply a debug override (`IEngineController.DebugUserName`) that bypasses `State.json`
 
-**State file**: `{AppDataPath}/State.json` — contains `UserName`, `UserCode`, `EnvironmentTitle`, `EnvironmentColor`. `IsInstalled` is a computed property: `true` when `UserName` is non-null.
+**State file**: `{AppDataPath}/State.json` contains `UserName`, `UserCode`. `IsInstalled` is a computed property: `true` when `UserName` is non-null. The security level shown in the title bar banner (see `MainViewModel`) is not persisted here; it is resolved fresh from `IEngineController.GetUserSecurityLevel(UserName)` each time, so a level a host reassigns to a user takes effect for an already-installed user without reinstalling.
 
 **Thread safety**: `Install` uses a `SemaphoreSlim(1,1)` to prevent concurrent installs.
 
-**Debug override**: If `IEngineController.DebugUserName` is non-null, `Load` skips the state file entirely and uses it (uppercased) with a synthetic `EnvironmentTitle = "DEBUG"` and color `#FF6200`. Useful for development without a real user code.
+**Debug override**: If `IEngineController.DebugUserName` is non-null, `Load` skips the state file entirely and uses it (uppercased) as both `UserName` and `UserCode`. Useful for development without a real user code.
 
 ```csharp
 // Consumers call:
@@ -70,6 +70,8 @@ Routes outbound messages to peer nodes and surfaces their delivery status. Deliv
 **Result timing**: `IPeerService.Send` does not return until MSMT has fully acknowledged the message, so `Route`'s own per-user `UserDeliveryResult.Success` already reflects the final outcome by the time `Route` returns — there is no separate "sent but not yet confirmed" pending state to track.
 
 **External addresses**: An `AddressType.External` address is information for the reader only (with its `Information`, e.g. `OMAHA - Deliver to Eastside Office`). It is stored and shown with the message but never routed: no group expansion, no delivery, no status row, and the server ignores it when choosing recipients.
+
+**Security levels**: `Route` reads the message's security level name (`SendMessagePayload.SecurityLevel`) and, before sending, drops any destination whose own assigned level (`IEngineController.GetUserSecurityLevel`) ranks lower - it is never dialed, and its `UserDeliveryResult.Success` is `false`. Unrecognized or empty level names (no security levels configured at all) skip the check entirely, so a host with no use for the feature sees no behavior change. The check applies per destination, so a message can still reach every recipient cleared for it even when others in the same address list are blocked.
 
 **Self-addressing**: When a recipient user name matches the sending user (`fromUser`), that recipient is delivered in-process via `IPeerService.DeliverLocal` — no network connection is opened, and the delivery status for that user is immediately raised as `Confirmed`. A message can address itself alongside remote users in the same `Route` call; each recipient is handled independently.
 

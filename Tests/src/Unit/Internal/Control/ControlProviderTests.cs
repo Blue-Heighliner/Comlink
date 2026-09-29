@@ -221,7 +221,7 @@ public sealed class ControlProviderTests
     [Fact]
     public void ConfiguredEngineController_ResolveCode_AlwaysDelegatesToFallback()
     {
-        UserInfo fallbackInfo = new() { Name = "X", Code = "Y", EnvironmentTitle = "Z", EnvironmentColor = "#000" };
+        UserInfo fallbackInfo = new() { Name = "X", Code = "Y" };
         Mock<IEngineController> fallback = new();
         fallback.Setup(f => f.ResolveCode("ANY")).Returns(fallbackInfo);
         ConfiguredEngineController controller = new(fallback.Object, new EngineConfigFile(), NoCurrentUser);

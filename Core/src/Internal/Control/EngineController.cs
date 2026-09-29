@@ -132,6 +132,21 @@ internal interface IEngineController
     /// with <see cref="IEngineBuilder.AddressTypeLabel"/>.
     /// </summary>
     IReadOnlyList<AddressTypeOption> AddressTypes { get; }
+    /// <summary>
+    /// Every configured security level, in ascending order (index 0 is lowest); empty when
+    /// <see cref="IEngineBuilder.SecurityLevels"/> was never stated, which turns the whole feature off. A
+    /// message may only be sent at one of these levels, and a destination user's own assigned level (see
+    /// <see cref="GetUserSecurityLevel"/>) must rank at or above it.
+    /// </summary>
+    IReadOnlyList<SecurityLevel> SecurityLevels { get; }
+
+    /// <summary>
+    /// Returns the security level name the given user runs at; see <see cref="IEngineBuilder.UserSecurityLevel(string,string)"/>.
+    /// Defaults to the lowest configured level for a user with no assignment, or an empty string when no security
+    /// levels are configured at all.
+    /// </summary>
+    /// <param name="userName">The user name to resolve a security level for.</param>
+    string GetUserSecurityLevel(string userName);
 
     /// <summary>
     /// When <see langword="true"/>, the print manager's "print received" toggle (<see cref="ViewModels.IPrintManagerViewModel.PrintReceivedEnabled"/>)
@@ -269,6 +284,13 @@ internal interface IEngineController
     string GetTag(object message);
     /// <summary>Sets the tag on <paramref name="message"/>.</summary>
     void SetTag(object message, string value);
+    /// <summary>
+    /// Gets the security level name <paramref name="message"/> was sent at, one of <see cref="SecurityLevels"/>, or
+    /// an empty string when no security levels are configured.
+    /// </summary>
+    string GetSecurityLevel(object message);
+    /// <summary>Sets the security level name on <paramref name="message"/>.</summary>
+    void SetSecurityLevel(object message, string value);
 
     /// <summary>Creates a new, empty instance of <see cref="PacketType"/>. Only called while <see cref="PacketType"/> is set.</summary>
     object CreatePacket();
@@ -438,6 +460,17 @@ internal class EngineController(EngineBuilder builder, ICurrentUserProvider curr
     /// <inheritdoc />
     public virtual IReadOnlyList<AddressTypeOption> AddressTypes
         => [.. addressTypeOrder.Select(type => new AddressTypeOption { Type = type, Label = builder.AddressTypeLabels.TryGetValue(type, out string? label) ? label : type.ToString() })];
+    /// <inheritdoc />
+    public virtual IReadOnlyList<SecurityLevel> SecurityLevels => builder.SecurityLevelValues;
+
+    /// <inheritdoc />
+    public virtual string GetUserSecurityLevel(string userName)
+    {
+        if (builder.UserSecurityLevelsByName.TryGetValue(userName, out string? stated)) { return stated; }
+        string? looked = builder.UserSecurityLevelLookup?.Invoke(userName);
+        if (looked is not null) { return looked; }
+        return builder.SecurityLevelValues.Count > 0 ? builder.SecurityLevelValues[0].Name : string.Empty;
+    }
 
     /// <inheritdoc />
     public virtual bool PrintReceivedDefaultEnabled => builder.PrintReceivedValue ?? false;
@@ -515,6 +548,10 @@ internal class EngineController(EngineBuilder builder, ICurrentUserProvider curr
     public virtual string GetTag(object value) => message.GetTag(value);
     /// <inheritdoc />
     public virtual void SetTag(object value, string tag) => message.SetTag(value, tag);
+    /// <inheritdoc />
+    public virtual string GetSecurityLevel(object value) => message.GetSecurityLevel(value);
+    /// <inheritdoc />
+    public virtual void SetSecurityLevel(object value, string level) => message.SetSecurityLevel(value, level);
 
     /// <inheritdoc />
     public virtual object CreatePacket() => Packet.Create();
@@ -544,7 +581,7 @@ internal class EngineController(EngineBuilder builder, ICurrentUserProvider curr
         => builder.UserCodeResolver is { } resolve
             ? resolve(userCode)
             : userCode.Equals("CODE", StringComparison.OrdinalIgnoreCase)
-                ? new UserInfo { Name = "TEST", Code = "CODE", EnvironmentTitle = "Test", EnvironmentColor = "#888888" }
+                ? new UserInfo { Name = "TEST", Code = "CODE" }
                 : null;
 
     /// <inheritdoc />

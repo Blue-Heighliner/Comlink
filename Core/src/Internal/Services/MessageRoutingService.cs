@@ -105,6 +105,20 @@ internal sealed class MessageRoutingService : IMessageRoutingService
         }
 
         List<string> targetUsers = [.. userAddressedVia.Keys];
+
+        IReadOnlyList<SecurityLevel> securityLevels = engineController.SecurityLevels;
+        int messageLevelRank = securityLevels.GetRank(payload.SecurityLevel);
+        List<string> blockedUsers = messageLevelRank < 0
+            ? []
+            : [.. targetUsers.Where(user => securityLevels.GetRank(engineController.GetUserSecurityLevel(user)) < messageLevelRank)];
+        if (blockedUsers.Count > 0)
+        {
+            targetUsers = [.. targetUsers.Except(blockedUsers, StringComparer.OrdinalIgnoreCase)];
+            logger.LogWarning(
+                "{MessageId} blocked for {Users}: security level {Level} not supported by destination",
+                messageId, string.Join(", ", blockedUsers), payload.SecurityLevel);
+        }
+
         logger.LogInformation("{MessageId} sending to {Destinations}", messageId, string.Join(", ", targetUsers));
 
         object message = engineController.CreateMessage();
@@ -117,6 +131,7 @@ internal sealed class MessageRoutingService : IMessageRoutingService
         engineController.SetIsAlert(message, payload.IsAlert);
         engineController.SetPriority(message, payload.Priority);
         engineController.SetTag(message, payload.Tag);
+        engineController.SetSecurityLevel(message, payload.SecurityLevel);
 
         string? selfUser = targetUsers.FirstOrDefault(user => string.Equals(user, fromUser, StringComparison.OrdinalIgnoreCase));
         List<string> remoteUsers = selfUser is null ? targetUsers : targetUsers.Where(user => !string.Equals(user, fromUser, StringComparison.OrdinalIgnoreCase)).ToList();
@@ -141,6 +156,13 @@ internal sealed class MessageRoutingService : IMessageRoutingService
             await DeliveryStatusChanged.InvokeAll(messageId, selfUser, DestinationStatus.Confirmed);
             allResults.Add(new UserDeliveryResult { UserName = selfUser, Success = true, AddressedVia = [.. via] });
         }
+
+        allResults.AddRange(blockedUsers.Select(user => new UserDeliveryResult
+        {
+            UserName = user,
+            Success = false,
+            AddressedVia = [.. userAddressedVia.TryGetValue(user, out List<string>? via) ? via : []]
+        }));
 
         return (messageId, allResults);
     }

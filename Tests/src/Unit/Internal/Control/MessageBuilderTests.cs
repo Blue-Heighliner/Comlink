@@ -16,7 +16,8 @@ public sealed class MessageBuilderTests
             .ConfirmationId(m => m.ConfirmationMessageId, (m, v) => m.ConfirmationMessageId = v)
             .IsAlert(m => m.IsAlert, (m, v) => m.IsAlert = v)
             .Priority(m => m.Priority, (m, v) => m.Priority = v)
-            .Tag(m => m.Tag, (m, v) => m.Tag = v);
+            .Tag(m => m.Tag, (m, v) => m.Tag = v)
+            .SecurityLevel(m => m.SecurityLevel, (m, v) => m.SecurityLevel = v);
         return builder;
     }
 
@@ -31,7 +32,7 @@ public sealed class MessageBuilderTests
 
         Assert.Contains("TestMessage", error.Message);
         string[] missing = error.Message[(error.Message.IndexOf(':') + 1)..].Split(',', StringSplitOptions.TrimEntries);
-        Assert.Equal(["Sender", "Subject", "Addresses", "SentAt", "ConfirmationId", "IsAlert", "Priority", "Tag"], missing);
+        Assert.Equal(["Sender", "Subject", "Addresses", "SentAt", "ConfirmationId", "IsAlert", "Priority", "Tag", "SecurityLevel"], missing);
     }
 
     /// <summary>The map reads and writes each field of the host's message through the object-typed accessors.</summary>
@@ -118,6 +119,7 @@ public sealed class MessageBuilderTests
         public bool IsAlert { get; set; }
         public int Priority { get; set; }
         public string Tag { get; set; } = "";
+        public string SecurityLevel { get; set; } = "";
     }
 
     /// <summary>Every field whose type already matches can be mapped by naming the property alone, and behaves exactly like the explicit getter and setter.</summary>
@@ -127,7 +129,8 @@ public sealed class MessageBuilderTests
         MessageBuilder<Plain> builder = new();
         builder.Id(m => m.Id).Sender(m => m.Sender).Subject(m => m.Subject).Body(m => m.Body)
             .Addresses(m => m.Addresses, (m, v) => m.Addresses = [.. v])
-            .SentAt(m => m.SentAt).ConfirmationId(m => m.ConfirmationId).IsAlert(m => m.IsAlert).Priority(m => m.Priority).Tag(m => m.Tag);
+            .SentAt(m => m.SentAt).ConfirmationId(m => m.ConfirmationId).IsAlert(m => m.IsAlert).Priority(m => m.Priority).Tag(m => m.Tag)
+            .SecurityLevel(m => m.SecurityLevel);
         MessageMap map = builder.Build();
         object message = map.Create();
         DateTime sentAt = new(2026, 9, 28, 0, 0, 0, DateTimeKind.Utc);
@@ -141,13 +144,16 @@ public sealed class MessageBuilderTests
         map.SetIsAlert(message, true);
         map.SetPriority(message, 4);
         map.SetTag(message, "TAG");
+        map.SetSecurityLevel(message, "RESTRICTED");
 
         Plain typed = Assert.IsType<Plain>(message);
         Assert.Equal(("ID", "FROM", "SUBJECT", "BODY"), (typed.Id, typed.Sender, typed.Subject, typed.Body));
         Assert.Equal(sentAt, typed.SentAt);
         Assert.Equal(("CONFIRMS", true, 4, "TAG"), (typed.ConfirmationId, typed.IsAlert, typed.Priority, typed.Tag));
+        Assert.Equal("RESTRICTED", typed.SecurityLevel);
         Assert.Equal("ID", map.GetId(message));
         Assert.Equal(4, map.GetPriority(message));
+        Assert.Equal("RESTRICTED", map.GetSecurityLevel(message));
     }
 
     /// <summary>A property overload that cannot supply a setter fails when the mapping is stated, naming the expression.</summary>
@@ -186,7 +192,8 @@ public sealed class MessageBuilderTests
             .Addresses(
                 m => m.Addresses.Select(a => (a.UserName, a.Type.ParseAddressType())),
                 (m, v) => m.Addresses = [.. v.Select(a => new TestAddressEntry { UserName = a.Name, Type = a.Type.ToString() })])
-            .SentAt(m => default, (m, v) => { }).ConfirmationId(m => "", (m, v) => { }).IsAlert(m => false, (m, v) => { }).Priority(m => 0, (m, v) => { }).Tag(m => "", (m, v) => { });
+            .SentAt(m => default, (m, v) => { }).ConfirmationId(m => "", (m, v) => { }).IsAlert(m => false, (m, v) => { }).Priority(m => 0, (m, v) => { }).Tag(m => "", (m, v) => { })
+            .SecurityLevel(m => "", (m, v) => { });
         MessageMap map = builder.Build();
         object message = map.Create();
 

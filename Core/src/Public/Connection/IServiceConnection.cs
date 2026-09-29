@@ -20,9 +20,11 @@ public interface IServiceConnection
     /// <paramref name="addresses"/>. When <paramref name="isAlert"/> is <see langword="true"/>, recipients'
     /// Client-mode UI alarms until the message is read; see <c>Docs/Components/ViewModels.md</c>. <paramref name="priority"/>
     /// is used verbatim as the MSMT send priority (see <see cref="IMessageBuilder{TMessage}"/>). <paramref name="tag"/>
-    /// is stored in the message's tag field (see <see cref="IMessageBuilder{TMessage}"/>).
+    /// is stored in the message's tag field (see <see cref="IMessageBuilder{TMessage}"/>). <paramref name="securityLevel"/>
+    /// is the security level name this message is sent at; a destination user whose own assigned level ranks lower
+    /// is never sent the message (see <see cref="IMessageBuilder{TMessage}"/>).
     /// </summary>
-    Task<SendMessageResult?> SendMessage(string subject, string body, List<AddressRequest> addresses, bool isAlert = false, int priority = 0, string tag = "", CancellationToken cancellation = default);
+    Task<SendMessageResult?> SendMessage(string subject, string body, List<AddressRequest> addresses, bool isAlert = false, int priority = 0, string tag = "", string securityLevel = "", CancellationToken cancellation = default);
     /// <summary>
     /// Marks the Inbox record for <paramref name="messageId"/> as read (no-op if already read or not
     /// found) and sends a user-read confirmation message back to the original sender so it can advance

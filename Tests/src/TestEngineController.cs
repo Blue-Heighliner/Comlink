@@ -24,6 +24,8 @@ public sealed class TestMessage
     [ProtoMember(9)] public int Priority { get; set; }
     /// <summary>Tag identifying the type of this message.</summary>
     [ProtoMember(10)] public string Tag { get; set; } = string.Empty;
+    /// <summary>Security level name this message was sent at.</summary>
+    [ProtoMember(11)] public string SecurityLevel { get; set; } = string.Empty;
 }
 
 /// <summary>A single address entry within a <see cref="TestMessage"/>.</summary>

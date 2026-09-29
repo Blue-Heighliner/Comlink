@@ -90,7 +90,7 @@ How this instance's own local user identity is established: a fixed debug overri
 
 **Config file:** `UserName` overrides the debug user when set. See [Config.md](Config.md). Code resolution has no `config.json` field.
 
-**Sample:** `SampleEngineConfiguration` states three hard-coded test codes (`CODE1`/`CODE2`/`CODE3`) instead of the default's one; it states no debug user, so `config.json`'s `UserName` applies on its own.
+**Sample:** `SampleEngineConfiguration` states one hard-coded install code per site used across `Scripts/Scenarios/` (`CLIENT1`, `CLIENT2`, `SERVER`, `SERVER1`, `SERVER2`, `PEER1`, `PEER2`, each resolving to the like-named user) instead of the default's one; it states no debug user, so `config.json`'s `UserName` applies on its own.
 
 ---
 
@@ -201,6 +201,27 @@ Overrides the display label shown for one address type, everywhere it appears in
 **Config file:** none; address type labels have no `config.json` field.
 
 **Sample:** `SampleEngineConfiguration` renames `External` to `"OUTSIDE"`, matching the `Kind` vocabulary `SampleRecipient` already uses for it (see [Message Format](#message-format)).
+
+---
+
+### Security Levels
+
+```csharp
+engine
+    .SecurityLevels(("PUBLIC", "#2E7D32"), ("INTERNAL", "#1565C0"), ("RESTRICTED", "#C62828"))
+    .UserSecurityLevel("ALICE", "INTERNAL")
+    .UserSecurityLevel(userName => directory.LevelFor(userName));
+```
+
+Defines the ordered set of security levels a message may be sent at (`Message<TMessage>.SecurityLevel`, see [Message Format](#message-format)): each a display name paired with the hex color shown for it in the title bar's banner (`SecurityLevelBanner`, replacing the fixed orange "DEBUG" banner every user used to see). Order matters: each level ranks higher than the one stated before it, so the last one given is the most senior. `UserSecurityLevel` assigns individual users to a level by name, or (the `Func<string, string>` overload) replaces the per-user lookup wholesale, the same additive-versus-wholesale pattern as `UserData`; a user with no assignment runs at the lowest configured level.
+
+A destination user may only receive a message whose security level their own assigned level ranks at or above: `MessageRoutingService.Route` drops any lower-ranked destination before sending, and the draft editor's security level picker only ever offers the sending user's own level and lower, so a message can be deliberately declassified but never sent above the sender's own clearance. Turning the feature off entirely is just leaving `SecurityLevels` empty (the default): every message maps to an empty security level, the picker is hidden, and no destination is ever blocked for lacking one.
+
+**Default:** no security levels; the feature is off.
+
+**Config file:** none; security levels have no `config.json` field.
+
+**Sample:** `SampleEngineConfiguration` defines three placeholder levels (`PUBLIC`, `INTERNAL`, `RESTRICTED`) and assigns them by site: `Peer1`/`Peer2` run at `PUBLIC`, `Client1`/`Client2` at `INTERNAL`, and the server sites (`Server`, `Server1`, `Server2`) at `RESTRICTED`.
 
 ---
 

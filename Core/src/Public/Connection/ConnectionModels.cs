@@ -21,6 +21,8 @@ public sealed class MessageReceivedEvent
     public int Priority { get; set; }
     /// <summary>Tag identifying the type of this message; see <see cref="IMessageBuilder{TMessage}"/>.</summary>
     public string Tag { get; set; } = string.Empty;
+    /// <summary>Security level name this message was sent at, or an empty string when no security levels are configured; see <see cref="IMessageBuilder{TMessage}"/>.</summary>
+    public string SecurityLevel { get; set; } = string.Empty;
 }
 
 /// <summary>Represents a single addressee in a send or receive operation.</summary>

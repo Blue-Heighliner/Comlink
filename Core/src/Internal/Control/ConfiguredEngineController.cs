@@ -84,6 +84,10 @@ internal sealed class ConfiguredEngineController : IEngineController
     /// <inheritdoc />
     public void SetTag(object message, string value) => fallback.SetTag(message, value);
     /// <inheritdoc />
+    public string GetSecurityLevel(object message) => fallback.GetSecurityLevel(message);
+    /// <inheritdoc />
+    public void SetSecurityLevel(object message, string value) => fallback.SetSecurityLevel(message, value);
+    /// <inheritdoc />
     public object CreatePacket() => fallback.CreatePacket();
     /// <inheritdoc />
     public int GetPayloadId(object packet) => fallback.GetPayloadId(packet);
@@ -181,6 +185,10 @@ internal sealed class ConfiguredEngineController : IEngineController
     public IReadOnlyList<TagPriorityBlock> BlockedCombinations => fallback.BlockedCombinations;
     /// <inheritdoc />
     public IReadOnlyList<AddressTypeOption> AddressTypes => fallback.AddressTypes;
+    /// <inheritdoc />
+    public IReadOnlyList<SecurityLevel> SecurityLevels => fallback.SecurityLevels;
+    /// <inheritdoc />
+    public string GetUserSecurityLevel(string userName) => fallback.GetUserSecurityLevel(userName);
 
     /// <inheritdoc />
     public bool PrintReceivedDefaultEnabled => config.PrintReceivedEnabled ?? fallback.PrintReceivedDefaultEnabled;

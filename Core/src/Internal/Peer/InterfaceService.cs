@@ -103,7 +103,8 @@ internal sealed class InterfaceService : IInterfaceService
             Addresses = engineController.GetAddresses(message).Select(a => new AddressPayload { UserName = a.UserName, Type = a.Type.ToString(), Information = a.Information }).ToList(),
             IsAlert = engineController.GetIsAlert(message),
             Priority = engineController.GetPriority(message),
-            Tag = engineController.GetTag(message)
+            Tag = engineController.GetTag(message),
+            SecurityLevel = engineController.GetSecurityLevel(message)
         };
 
         try

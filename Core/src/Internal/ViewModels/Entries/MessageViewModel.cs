@@ -27,6 +27,16 @@ internal interface IMessageViewModel
     DateTime ReceivedAt { get; }
     /// <summary>Gets a value indicating whether this message is an alert.</summary>
     bool IsAlert { get; }
+    /// <summary>Gets the priority label this message was sent at; see <see cref="IEngineController.Priorities"/>.</summary>
+    string PriorityLabel { get; }
+    /// <summary>Gets a value indicating whether the tag field is shown; see <see cref="IEngineController.TagsEnabled"/>.</summary>
+    bool TagsEnabled { get; }
+    /// <summary>Gets the short, user-inputted tag identifying the type of this message, or an empty string if none was set.</summary>
+    string Tag { get; }
+    /// <summary>Gets the security level name this message was sent at, or an empty string when no security levels are configured.</summary>
+    string SecurityLevelName { get; }
+    /// <summary>Gets the hex color for <see cref="SecurityLevelName"/>, or <see langword="null"/> when it has none recognized.</summary>
+    string? SecurityLevelColorHex { get; }
     /// <summary>
     /// Gets or sets this Inbox message's own read status (<c>Received</c>/<c>Read</c>); <see langword="null"/>
     /// for an Outbox message, which tracks read state per-destination in <see cref="DeliveryStatuses"/> instead.
@@ -99,6 +109,11 @@ internal sealed partial class MessageViewModel : ObservableObject, IMessageViewM
         FromUser = engineController.GetFromUser(entity.Message);
         ReceivedAt = entity.ReceivedAt;
         IsAlert = engineController.GetIsAlert(entity.Message);
+        PriorityLabel = engineController.Priorities.GetLabel(engineController.GetPriority(entity.Message));
+        TagsEnabled = engineController.TagsEnabled;
+        Tag = engineController.GetTag(entity.Message);
+        SecurityLevelName = engineController.GetSecurityLevel(entity.Message);
+        SecurityLevelColorHex = engineController.SecurityLevels.IsRecognized(SecurityLevelName) ? engineController.SecurityLevels.GetColor(SecurityLevelName) : null;
         List<MessageAddress> addresses = engineController.GetAddresses(entity.Message);
         IReadOnlyList<AddressTypeOption> addressTypes = engineController.AddressTypes;
         ToLabel = addressTypes.GetLabel(AddressType.To).ToUpperInvariant();
@@ -152,6 +167,16 @@ internal sealed partial class MessageViewModel : ObservableObject, IMessageViewM
     public DateTime ReceivedAt { get; }
     /// <summary>Gets a value indicating whether this message is an alert.</summary>
     public bool IsAlert { get; }
+    /// <summary>Gets the priority label this message was sent at; see <see cref="IEngineController.Priorities"/>.</summary>
+    public string PriorityLabel { get; }
+    /// <summary>Gets a value indicating whether the tag field is shown; see <see cref="IEngineController.TagsEnabled"/>.</summary>
+    public bool TagsEnabled { get; }
+    /// <summary>Gets the short, user-inputted tag identifying the type of this message, or an empty string if none was set.</summary>
+    public string Tag { get; }
+    /// <summary>Gets the security level name this message was sent at, or an empty string when no security levels are configured.</summary>
+    public string SecurityLevelName { get; }
+    /// <summary>Gets the hex color for <see cref="SecurityLevelName"/>, or <see langword="null"/> when it has none recognized.</summary>
+    public string? SecurityLevelColorHex { get; }
     /// <summary>Gets the uppercase display text for <see cref="ReadStatus"/>, or empty if <see langword="null"/>.</summary>
     public string ReadStatusText => ReadStatus?.ToString().ToUpperInvariant() ?? string.Empty;
     /// <summary>Gets a value indicating whether this message has any per-user delivery status rows.</summary>

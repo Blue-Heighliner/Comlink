@@ -30,9 +30,7 @@ public sealed class UserServiceTests : IDisposable
         UserInfo expected = new()
         {
             Name = "TestUser",
-            Code = "TS01",
-            EnvironmentTitle = "Test",
-            EnvironmentColor = "#FF0000"
+            Code = "TS01"
         };
         engineControllerMock.Setup(r => r.ResolveCode("TS01")).Returns(expected);
 
@@ -63,9 +61,7 @@ public sealed class UserServiceTests : IDisposable
         UserInfo userInfo = new()
         {
             Name = "MyNode",
-            Code = "MN01",
-            EnvironmentTitle = "Prod",
-            EnvironmentColor = "#00FF00"
+            Code = "MN01"
         };
         engineControllerMock.Setup(r => r.ResolveCode("MN01")).Returns(userInfo);
 
@@ -84,9 +80,7 @@ public sealed class UserServiceTests : IDisposable
         UserInfo userInfo = new()
         {
             Name = "Restored",
-            Code = "RS01",
-            EnvironmentTitle = "QA",
-            EnvironmentColor = "#0000FF"
+            Code = "RS01"
         };
         engineControllerMock.Setup(r => r.ResolveCode("RS01")).Returns(userInfo);
 
@@ -113,7 +107,7 @@ public sealed class UserServiceTests : IDisposable
     [Fact]
     public async Task Install_RaisesInstalledOnlyOnSuccess()
     {
-        engineControllerMock.Setup(r => r.ResolveCode("OK01")).Returns(new UserInfo { Name = "Ok", Code = "OK01", EnvironmentTitle = "T", EnvironmentColor = "#000000" });
+        engineControllerMock.Setup(r => r.ResolveCode("OK01")).Returns(new UserInfo { Name = "Ok", Code = "OK01" });
         engineControllerMock.Setup(r => r.ResolveCode("BAD")).Returns((UserInfo?)null);
         UserService service = CreateService();
         List<string?> raised = [];
