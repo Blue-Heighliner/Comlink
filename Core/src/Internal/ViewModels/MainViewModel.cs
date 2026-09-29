@@ -66,6 +66,10 @@ internal interface IMainViewModel
     IImportViewModel Import { get; }
     /// <summary>Gets the staged send ViewModel driving the staged send screen.</summary>
     IStagedSendViewModel StagedSend { get; }
+    /// <summary>Gets the auto forward ViewModel driving the auto forward screen.</summary>
+    IAutoForwardViewModel AutoForward { get; }
+    /// <summary>Gets a value indicating whether the current user has access to at least one auto forward controller, and so should see the title bar's AUTO FORWARD button at all.</summary>
+    bool HasAutoForwardAccess { get; }
     /// <summary>Gets the print manager ViewModel driving the print queue screen.</summary>
     IPrintManagerViewModel PrintManager { get; }
     /// <summary>Creates a new draft and displays it in the content area.</summary>
@@ -78,6 +82,8 @@ internal interface IMainViewModel
     IRelayCommand ShowImportCommand { get; }
     /// <summary>Displays the staged send screen in the content area.</summary>
     IRelayCommand ShowStagedSendCommand { get; }
+    /// <summary>Displays the auto forward screen in the content area, refreshing which controllers the current user has access to first.</summary>
+    IRelayCommand ShowAutoForwardCommand { get; }
     /// <summary>Displays the print manager screen in the content area.</summary>
     IRelayCommand ShowPrintManagerCommand { get; }
     /// <summary>Restores the content area to its default (home) state, without disturbing any other ViewModel's state.</summary>
@@ -107,6 +113,7 @@ internal sealed partial class MainViewModel : ObservableObject, IMainViewModel
     /// <param name="export">Export ViewModel driving the export screen.</param>
     /// <param name="import">Import ViewModel driving the import screen.</param>
     /// <param name="stagedSend">Staged send ViewModel driving the staged send screen.</param>
+    /// <param name="autoForward">Auto forward ViewModel driving the auto forward screen.</param>
     /// <param name="printManager">Print manager ViewModel driving the print queue screen.</param>
     /// <param name="help">Help ViewModel driving the help window opened from the title bar.</param>
     /// <param name="connectionStatus">Connection status ViewModel driving <see cref="IsServerMode"/>'s connections table and <see cref="IsClientMode"/>'s connection row.</param>
@@ -126,6 +133,7 @@ internal sealed partial class MainViewModel : ObservableObject, IMainViewModel
         IExportViewModel export,
         IImportViewModel import,
         IStagedSendViewModel stagedSend,
+        IAutoForwardViewModel autoForward,
         IPrintManagerViewModel printManager,
         IHelpViewModel help,
         IConnectionStatusViewModel connectionStatus,
@@ -145,6 +153,7 @@ internal sealed partial class MainViewModel : ObservableObject, IMainViewModel
         this.export = export;
         this.import = import;
         this.stagedSend = stagedSend;
+        this.autoForward = autoForward;
         this.printManager = printManager;
         Help = help;
         this.connectionStatus = connectionStatus;
@@ -173,6 +182,7 @@ internal sealed partial class MainViewModel : ObservableObject, IMainViewModel
     private readonly IExportViewModel export;
     private readonly IImportViewModel import;
     private readonly IStagedSendViewModel stagedSend;
+    private readonly IAutoForwardViewModel autoForward;
     private readonly IPrintManagerViewModel printManager;
     private readonly IConnectionStatusViewModel connectionStatus;
     private readonly ICurrentUserProvider currentUserProvider;
@@ -196,6 +206,7 @@ internal sealed partial class MainViewModel : ObservableObject, IMainViewModel
     [ObservableProperty] private string securityLevelName = string.Empty;
     [ObservableProperty] private string securityLevelColor = "#1565C0";
     [ObservableProperty] private string appVersion;
+    [ObservableProperty] private bool hasAutoForwardAccess;
 
     /// <inheritdoc />
     public bool IsServerMode { get; }
@@ -225,6 +236,8 @@ internal sealed partial class MainViewModel : ObservableObject, IMainViewModel
     public IImportViewModel Import => import;
     /// <inheritdoc />
     public IStagedSendViewModel StagedSend => stagedSend;
+    /// <inheritdoc />
+    public IAutoForwardViewModel AutoForward => autoForward;
     /// <inheritdoc />
     public IPrintManagerViewModel PrintManager => printManager;
     /// <inheritdoc />
@@ -394,6 +407,7 @@ internal sealed partial class MainViewModel : ObservableObject, IMainViewModel
         string level = engineController.GetUserSecurityLevel(info.Name);
         SecurityLevelName = level;
         SecurityLevelColor = engineController.SecurityLevels.GetColor(level);
+        HasAutoForwardAccess = engineController.AutoForwardControllers.Any(c => c.Users.Contains(info.Name, StringComparer.OrdinalIgnoreCase));
         return Task.CompletedTask;
     }
 
@@ -465,6 +479,14 @@ internal sealed partial class MainViewModel : ObservableObject, IMainViewModel
     {
         DeselectFolderAndEntry();
         contentArea.ShowEntry(stagedSend);
+    }
+
+    [RelayCommand]
+    private void ShowAutoForward()
+    {
+        DeselectFolderAndEntry();
+        autoForward.RefreshCommand.Execute(null);
+        contentArea.ShowEntry(autoForward);
     }
 
     [RelayCommand]

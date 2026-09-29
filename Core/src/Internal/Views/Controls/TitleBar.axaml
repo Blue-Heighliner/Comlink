@@ -37,6 +37,12 @@
               Content="SEND QUEUE"
               Foreground="#CCCCCC"
               Click="OnStagedSendClick" />
+      <Button x:Name="AutoForwardButton"
+              Classes="titlebar-action"
+              Content="AUTO FORWARD"
+              Foreground="#CCCCCC"
+              IsVisible="False"
+              Click="OnAutoForwardClick" />
       <Button x:Name="PrintManagerButton"
               Classes="titlebar-action"
               Content="PRINTS"

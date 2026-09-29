@@ -423,4 +423,52 @@ public sealed class RepositoryTests : IDisposable
 
         Assert.Equal(2, all.Count);
     }
+
+    /// <summary>AutoForwardTargetsRepository.Get returns null for a controller that has never been saved.</summary>
+    [Fact]
+    public async Task AutoForwardTargets_Get_NeverSaved_ReturnsNull()
+    {
+        AutoForwardTargetsRepository repo = new(ctx);
+
+        Assert.Null(await repo.Get("Alerts"));
+    }
+
+    /// <summary>Save then Get round-trips the target list under the controller's own name.</summary>
+    [Fact]
+    public async Task AutoForwardTargets_Save_ThenGet_RoundTrips()
+    {
+        AutoForwardTargetsRepository repo = new(ctx);
+        await repo.Save("Alerts", ["ALICE", "BOB"]);
+
+        AutoForwardTargetsEntity? found = await repo.Get("Alerts");
+
+        Assert.NotNull(found);
+        Assert.Equal("Alerts", found.Id);
+        Assert.Equal(["ALICE", "BOB"], found.Targets);
+    }
+
+    /// <summary>Saving again for the same controller replaces its target list rather than creating a second document.</summary>
+    [Fact]
+    public async Task AutoForwardTargets_Save_Twice_ReplacesTargetList()
+    {
+        AutoForwardTargetsRepository repo = new(ctx);
+        await repo.Save("Alerts", ["ALICE"]);
+
+        await repo.Save("Alerts", ["BOB"]);
+
+        AutoForwardTargetsEntity? found = await repo.Get("Alerts");
+        Assert.Equal(["BOB"], found!.Targets);
+    }
+
+    /// <summary>Different controllers keep independent target lists.</summary>
+    [Fact]
+    public async Task AutoForwardTargets_Save_DifferentControllers_AreIndependent()
+    {
+        AutoForwardTargetsRepository repo = new(ctx);
+        await repo.Save("Alerts", ["ALICE"]);
+        await repo.Save("Backups", ["BOB"]);
+
+        Assert.Equal(["ALICE"], (await repo.Get("Alerts"))!.Targets);
+        Assert.Equal(["BOB"], (await repo.Get("Backups"))!.Targets);
+    }
 }

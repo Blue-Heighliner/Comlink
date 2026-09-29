@@ -49,6 +49,8 @@ internal interface IStagedSendViewModel
 {
     /// <summary>Gets the current staged send queue, in the order entries were added.</summary>
     ObservableCollection<StagedSendEntry> Queue { get; }
+    /// <summary>Gets a value indicating whether <see cref="Queue"/> is non-empty.</summary>
+    bool HasQueue { get; }
     /// <summary>Gets a value indicating whether <see cref="SendAllCommand"/> is currently running.</summary>
     bool IsSending { get; }
     /// <summary>Gets the status message displayed after (or during) a send-all attempt.</summary>
@@ -80,6 +82,7 @@ internal sealed partial class StagedSendViewModel : ObservableObject, IStagedSen
         this.connection = connection;
         this.entryService = entryService;
         activityLogger = loggerFactory.CreateLogger("ACTIVITY");
+        Queue.CollectionChanged += (_, _) => OnPropertyChanged(nameof(HasQueue));
     }
 
     private readonly IServiceConnection connection;
@@ -98,6 +101,9 @@ internal sealed partial class StagedSendViewModel : ObservableObject, IStagedSen
 
     /// <inheritdoc />
     public ObservableCollection<StagedSendEntry> Queue { get; } = [];
+
+    /// <inheritdoc />
+    public bool HasQueue => Queue.Count > 0;
 
     /// <inheritdoc />
     public void Enqueue(IReadOnlyList<StagedSendData> sends, StagedSendMode mode, TimeSpan? delay)

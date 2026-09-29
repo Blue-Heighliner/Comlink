@@ -32,6 +32,8 @@
                        ShowExportCommand="{Binding ShowExportCommand}"
                        ShowImportCommand="{Binding ShowImportCommand}"
                        ShowStagedSendCommand="{Binding ShowStagedSendCommand}"
+                       ShowAutoForwardCommand="{Binding ShowAutoForwardCommand}"
+                       HasAutoForwardAccess="{Binding HasAutoForwardAccess}"
                        ShowPrintManagerCommand="{Binding ShowPrintManagerCommand}"
                        IsInstallScreenVisible="{Binding IsInstallScreenVisible}"
                        IsServerMode="{Binding IsServerMode}"

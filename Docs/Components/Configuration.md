@@ -352,6 +352,38 @@ a second apart (`StagedSendMode.Sequential`, `stagedSendDelay: TimeSpan.FromSeco
 
 ---
 
+### Auto Forward Controllers
+
+```csharp
+engine.AutoForwardController<MyMessage>(
+    "Escalation",
+    users: ["Alice", "Bob"],
+    filter: message => message.Priority >= 2);
+```
+
+Adds a custom auto forward controller, shown as an option in the auto forward screen to every user named in
+`users` - each of them can open it there and maintain their own locally-saved target list, added to and removed
+from freely, persisted between restarts (see `Docs/Components/ViewModels.md`, `IAutoForwardViewModel`). Whenever
+this instance receives a message `filter` accepts, it is forwarded automatically, unchanged in subject and body,
+to every user currently on that target list - no action needed from the user beyond having set the target list up
+once. `filter` receives the message as an instance of the configured message type, the same as
+`PrintCount<TMessage>`; it is never consulted for a user with no access to the controller, or whose target list is
+currently empty, so an inaccessible or unconfigured controller costs nothing per received message beyond that one
+check. The controller's own name is never sent as one of the forwarded message's own addresses, even if a user
+adds themselves to their own target list, avoiding a self-forward loop. Calling this again with the same name
+(case-insensitive) replaces the earlier controller of that name in place; a new name adds another alongside it.
+
+**Default:** no controllers; the auto forward screen's title bar button is hidden entirely for every user, since
+no one has access to anything.
+
+**Config file:** none; controllers are behavior, not settings. A target list, once a user sets it up, is
+per-installation local data (see `Docs/Components/Data.md`, `AutoForwardTargetsEntity`), not config file state.
+
+**Sample:** an `"Escalation"` controller, open to every Peer/Client scenario site, that matches any received alert
+or `URGENT`-tagged message.
+
+---
+
 ### MSMT Certificates
 
 ```csharp

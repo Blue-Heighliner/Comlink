@@ -23,6 +23,7 @@ internal sealed class EngineBuilder : IEngineBuilder, IAsyncDisposable
     private readonly List<Action<IMessageReceivedHookContext>> messageReceivedHooks = [];
     private readonly List<ExportFormatDefinition> exportFormats = [];
     private readonly List<ImportFormatDefinition> importFormats = [];
+    private readonly List<AutoForwardControllerDefinition> autoForwardControllers = [];
     private ServiceProvider? bootstrap;
 
     /// <summary>The message mapping, or <see langword="null"/> until <see cref="Message{TMessage}"/> is called.</summary>
@@ -127,6 +128,8 @@ internal sealed class EngineBuilder : IEngineBuilder, IAsyncDisposable
     public IReadOnlyList<ExportFormatDefinition> ExportFormats => exportFormats;
     /// <summary>The custom import formats, in the order added.</summary>
     public IReadOnlyList<ImportFormatDefinition> ImportFormats => importFormats;
+    /// <summary>The custom auto forward controllers, in the order added.</summary>
+    public IReadOnlyList<AutoForwardControllerDefinition> AutoForwardControllers => autoForwardControllers;
 
     /// <summary>
     /// Constructs <typeparamref name="TConfiguration"/> from a bootstrap container, so it can take dependencies, then
@@ -522,6 +525,16 @@ internal sealed class EngineBuilder : IEngineBuilder, IAsyncDisposable
         int existingIndex = importFormats.FindIndex(f => string.Equals(f.Name, name, StringComparison.OrdinalIgnoreCase));
         if (existingIndex >= 0) { importFormats[existingIndex] = definition; }
         else { importFormats.Add(definition); }
+        return this;
+    }
+
+    /// <inheritdoc />
+    public IEngineBuilder AutoForwardController<TMessage>(string name, IEnumerable<string> users, Func<TMessage, bool> filter) where TMessage : class
+    {
+        AutoForwardControllerDefinition definition = new() { Name = name, Users = [.. users], Filter = message => filter((TMessage)message) };
+        int existingIndex = autoForwardControllers.FindIndex(c => string.Equals(c.Name, name, StringComparison.OrdinalIgnoreCase));
+        if (existingIndex >= 0) { autoForwardControllers[existingIndex] = definition; }
+        else { autoForwardControllers.Add(definition); }
         return this;
     }
 

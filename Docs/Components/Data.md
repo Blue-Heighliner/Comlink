@@ -19,6 +19,7 @@ Collections initialized:
 | `notes` | `NoteEntity` | Text notes |
 | `activity_logs` | `ActivityLogEntity` | Daily activity entries |
 | `folders` | `FolderEntity` | Folder hierarchy |
+| `auto_forward_targets` | `AutoForwardTargetsEntity` | Auto forward controller target lists |
 
 On each `Initialize()` call, root folders are auto-created (Inbox, Outbox, Drafts, Notes, Activity) if absent.
 
@@ -136,6 +137,10 @@ One record per day, accumulated throughout the day.
 | `RootType` | `FolderType?` | `null` for user-created subfolders |
 | `ParentId` | `string?` | `null` for root folders |
 
+### `AutoForwardTargetsEntity`
+
+One document per configured auto forward controller, keyed by the controller's own name rather than an auto-generated ID: `Id (string)` is that name verbatim (see `Docs/Components/Configuration.md#auto-forward-controllers`), and `Targets (List<string>)` is the user names it currently forwards a matching received message to - empty until a user with access adds at least one. No document exists for a controller until its target list is saved for the first time.
+
 ### Embedded Types
 
 **`AddressData`**: `UserName (string)`, `Type (string)` (`"To"`, `"Cc"` or `"External"`), `Information (string)` (free-form instructions for the user, e.g. `Deliver to Eastside Office`)
@@ -194,4 +199,8 @@ Same interface shape as `DraftRepository`, including `GetAll()` and `GetAllInFol
 | `Get(id)` | Single folder |
 | `GetRootId(type)` | ID of the root folder for a given `FolderType` |
 | `GetTree()` | Builds hierarchical `Folder` tree (returns root `Folder` objects with `Children`) |
+
+### `AutoForwardTargetsRepository`
+
+`Get(controllerName)` returns that controller's `AutoForwardTargetsEntity` by its name (the document's own `Id`), or `null` if its target list has never been saved. `Save(controllerName, targets)` upserts the document, replacing the whole target list in one call rather than adding or removing individual entries - `AutoForwardViewModel` reads the current `Targets` collection, mutates it, and saves the entire result back, so there is no separate add/remove operation at the repository level.
 | `Insert / Delete` | |

@@ -21,6 +21,8 @@ internal interface IImportViewModel
     ImportFormatOption SelectedFormat { get; set; }
     /// <summary>Gets the files found on <see cref="SelectedDrive"/> matching <see cref="SelectedFormat"/>.</summary>
     IReadOnlyList<ImportPackageInfo> AvailablePackages { get; }
+    /// <summary>Gets a value indicating whether <see cref="AvailablePackages"/> is non-empty.</summary>
+    bool HasPackages { get; }
     /// <summary>Gets a value indicating whether an import is currently running.</summary>
     bool IsImporting { get; }
     /// <summary>Gets the status message displayed after (or during) an import attempt.</summary>
@@ -67,11 +69,16 @@ internal sealed partial class ImportViewModel : ObservableObject, IImportViewMod
     [ObservableProperty] private ExternalDriveInfo? selectedDrive;
     [ObservableProperty] private IReadOnlyList<ImportFormatOption> availableFormats;
     [ObservableProperty] private ImportFormatOption selectedFormat;
-    [ObservableProperty] private IReadOnlyList<ImportPackageInfo> availablePackages = [];
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(HasPackages))]
+    private IReadOnlyList<ImportPackageInfo> availablePackages = [];
 
     [ObservableProperty]
     [NotifyCanExecuteChangedFor(nameof(StartImportCommand))]
     private bool isImporting;
+
+    /// <inheritdoc />
+    public bool HasPackages => AvailablePackages.Count > 0;
 
     partial void OnSelectedDriveChanged(ExternalDriveInfo? value) => RefreshPackages();
 

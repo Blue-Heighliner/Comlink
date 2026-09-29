@@ -1,0 +1,114 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:vm="using:BlueHeighliner.Comlink.ViewModels"
+             xmlns:control="using:BlueHeighliner.Comlink.Control"
+             x:Class="BlueHeighliner.Comlink.Views.AutoForwardView"
+             x:DataType="vm:AutoForwardViewModel"
+             Background="#1E1E1E">
+
+  <DockPanel Margin="24,20">
+
+    <!-- Toolbar -->
+    <Border DockPanel.Dock="Top"
+            BorderBrush="#3E3E42"
+            BorderThickness="0,0,0,1"
+            Padding="0,0,0,10"
+            Margin="0,0,0,16">
+      <DockPanel>
+        <Button DockPanel.Dock="Right"
+                Content="×"
+                Command="{Binding $parent[Window].DataContext.ShowHomeCommand}"
+                ToolTip.Tip="Close"
+                FontSize="16"
+                Padding="8,0"
+                Foreground="#858585" />
+        <TextBlock Text="AUTO FORWARD"
+                   FontSize="11"
+                   FontWeight="SemiBold"
+                   Foreground="#858585"
+                   LetterSpacing="1"
+                   VerticalAlignment="Center" />
+      </DockPanel>
+    </Border>
+
+    <TextBlock DockPanel.Dock="Top"
+               Text="No auto forward controllers available"
+               IsVisible="{Binding !HasControllers}"
+               FontSize="12"
+               Foreground="#858585" />
+
+    <StackPanel DockPanel.Dock="Top"
+                IsVisible="{Binding HasControllers}"
+                Spacing="16">
+
+      <!-- Controller -->
+      <StackPanel Spacing="6">
+        <TextBlock Text="CONTROLLER" FontSize="11" FontWeight="SemiBold" Foreground="#858585" LetterSpacing="1" />
+        <ComboBox ItemsSource="{Binding AvailableControllers}"
+                  SelectedItem="{Binding SelectedController}"
+                  Background="#3C3C3C"
+                  BorderThickness="0"
+                  FontSize="13"
+                  HorizontalAlignment="Stretch">
+          <ComboBox.ItemTemplate>
+            <DataTemplate DataType="{x:Type control:AutoForwardControllerDefinition}">
+              <TextBlock Text="{Binding Name}" />
+            </DataTemplate>
+          </ComboBox.ItemTemplate>
+        </ComboBox>
+      </StackPanel>
+
+      <!-- Targets -->
+      <StackPanel Spacing="6">
+        <TextBlock Text="TARGETS" FontSize="11" FontWeight="SemiBold" Foreground="#858585" LetterSpacing="1" />
+        <TextBlock Text="No targets yet - a matching received message has nowhere to forward to"
+                   IsVisible="{Binding !HasTargets}"
+                   FontSize="12"
+                   Foreground="#858585" />
+        <ItemsControl ItemsSource="{Binding Targets}">
+          <ItemsControl.ItemTemplate>
+            <DataTemplate>
+              <Grid ColumnDefinitions="*,Auto" Margin="0,2">
+                <TextBlock Grid.Column="0"
+                           Text="{Binding}"
+                           FontSize="13"
+                           VerticalAlignment="Center" />
+                <Button Grid.Column="1"
+                        Content="×"
+                        Command="{Binding $parent[UserControl].DataContext.RemoveTargetCommand}"
+                        CommandParameter="{Binding}"
+                        FontSize="14"
+                        Padding="4,0"
+                        Foreground="#858585" />
+              </Grid>
+            </DataTemplate>
+          </ItemsControl.ItemTemplate>
+        </ItemsControl>
+
+        <!-- Add target row -->
+        <Grid ColumnDefinitions="*,Auto" Margin="0,4,0,0">
+          <AutoCompleteBox Grid.Column="0"
+                           Text="{Binding NewTargetUser}"
+                           Watermark="User name..."
+                           ItemsSource="{Binding AllUserNames}"
+                           FilterMode="StartsWith"
+                           MinimumPrefixLength="1"
+                           FontSize="13"
+                           Height="30">
+            <AutoCompleteBox.KeyBindings>
+              <KeyBinding Gesture="Enter" Command="{Binding AddTargetCommand}" />
+            </AutoCompleteBox.KeyBindings>
+          </AutoCompleteBox>
+          <Button Grid.Column="1"
+                  Content="Add"
+                  Margin="8,0,0,0"
+                  Command="{Binding AddTargetCommand}"
+                  Padding="10,4"
+                  FontSize="12" />
+        </Grid>
+      </StackPanel>
+
+    </StackPanel>
+
+  </DockPanel>
+</UserControl>

@@ -45,6 +45,14 @@ internal partial class TitleBar : UserControl
     public static readonly StyledProperty<ICommand?> ShowStagedSendCommandProperty =
         AvaloniaProperty.Register<TitleBar, ICommand?>(nameof(ShowStagedSendCommand));
 
+    /// <summary>Identifies the <see cref="ShowAutoForwardCommand"/> styled property.</summary>
+    public static readonly StyledProperty<ICommand?> ShowAutoForwardCommandProperty =
+        AvaloniaProperty.Register<TitleBar, ICommand?>(nameof(ShowAutoForwardCommand));
+
+    /// <summary>Identifies the <see cref="HasAutoForwardAccess"/> styled property.</summary>
+    public static readonly StyledProperty<bool> HasAutoForwardAccessProperty =
+        AvaloniaProperty.Register<TitleBar, bool>(nameof(HasAutoForwardAccess));
+
     /// <summary>Identifies the <see cref="ShowPrintManagerCommand"/> styled property.</summary>
     public static readonly StyledProperty<ICommand?> ShowPrintManagerCommandProperty =
         AvaloniaProperty.Register<TitleBar, ICommand?>(nameof(ShowPrintManagerCommand));
@@ -156,6 +164,20 @@ internal partial class TitleBar : UserControl
         set => SetValue(ShowStagedSendCommandProperty, value);
     }
 
+    /// <summary>Gets or sets the command invoked when the user clicks the Auto Forward button.</summary>
+    public ICommand? ShowAutoForwardCommand
+    {
+        get => GetValue(ShowAutoForwardCommandProperty);
+        set => SetValue(ShowAutoForwardCommandProperty, value);
+    }
+
+    /// <summary>Gets or sets a value indicating whether the current user has access to at least one auto forward controller, showing the Auto Forward button.</summary>
+    public bool HasAutoForwardAccess
+    {
+        get => GetValue(HasAutoForwardAccessProperty);
+        set => SetValue(HasAutoForwardAccessProperty, value);
+    }
+
     /// <summary>Gets or sets the command invoked when the user clicks the Prints button.</summary>
     public ICommand? ShowPrintManagerCommand
     {
@@ -241,6 +263,11 @@ internal partial class TitleBar : UserControl
         {
             UpdateActionButtonsVisibility();
         }
+        if (change.Property == HasAutoForwardAccessProperty)
+        {
+            Button? autoForwardButton = this.FindControl<Button>("AutoForwardButton");
+            if (autoForwardButton is not null) { autoForwardButton.IsVisible = HasAutoForwardAccess; }
+        }
         if (change.Property == IsKioskModeProperty)
         {
             ApplyKioskMode();
@@ -315,6 +342,9 @@ internal partial class TitleBar : UserControl
 
     private void OnStagedSendClick(object? sender, Avalonia.Interactivity.RoutedEventArgs e)
         => ShowStagedSendCommand?.Execute(null);
+
+    private void OnAutoForwardClick(object? sender, Avalonia.Interactivity.RoutedEventArgs e)
+        => ShowAutoForwardCommand?.Execute(null);
 
     private void OnPrintManagerClick(object? sender, Avalonia.Interactivity.RoutedEventArgs e)
         => ShowPrintManagerCommand?.Execute(null);

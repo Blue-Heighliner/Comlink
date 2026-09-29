@@ -13,6 +13,8 @@ internal interface ILiteDbContext : IDisposable
     ILiteCollection<ActivityLogEntity> ActivityLogs { get; }
     /// <summary>Collection of persisted folders.</summary>
     ILiteCollection<FolderEntity> Folders { get; }
+    /// <summary>Collection of persisted auto forward controller target lists.</summary>
+    ILiteCollection<AutoForwardTargetsEntity> AutoForwardTargets { get; }
     /// <summary>Opens the database file, binds all collections, and ensures indexes and root folders exist.</summary>
     void Initialize();
 }
@@ -41,6 +43,8 @@ internal sealed class LiteDbContext : ILiteDbContext
     public ILiteCollection<ActivityLogEntity> ActivityLogs { get; private set; } = null!;
     /// <summary>Collection of persisted folders.</summary>
     public ILiteCollection<FolderEntity> Folders { get; private set; } = null!;
+    /// <summary>Collection of persisted auto forward controller target lists.</summary>
+    public ILiteCollection<AutoForwardTargetsEntity> AutoForwardTargets { get; private set; } = null!;
 
 
     /// <summary>Opens the database file, binds all collections, and ensures indexes and root folders exist.</summary>
@@ -57,6 +61,7 @@ internal sealed class LiteDbContext : ILiteDbContext
         Notes = db.GetCollection<NoteEntity>("notes");
         ActivityLogs = db.GetCollection<ActivityLogEntity>("activity_logs");
         Folders = db.GetCollection<FolderEntity>("folders");
+        AutoForwardTargets = db.GetCollection<AutoForwardTargetsEntity>("auto_forward_targets");
 
         EnsureIndexes();
         EnsureRootFolders();
@@ -83,6 +88,7 @@ internal sealed class LiteDbContext : ILiteDbContext
             mapper.ToDocument(new NoteEntity());
             mapper.ToDocument(new ActivityLogEntity { Events = [string.Empty], EventEntries = [new ActivityLogEntry()] });
             mapper.ToDocument(new FolderEntity { Id = string.Empty, Name = string.Empty });
+            mapper.ToDocument(new AutoForwardTargetsEntity { Id = string.Empty, Targets = [string.Empty] });
         }
     }
 

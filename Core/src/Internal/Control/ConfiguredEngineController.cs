@@ -267,6 +267,8 @@ internal sealed class ConfiguredEngineController : IEngineController
     public IReadOnlyList<ExportFormatDefinition> ExportFormats => fallback.ExportFormats;
     /// <inheritdoc />
     public IReadOnlyList<ImportFormatDefinition> ImportFormats => fallback.ImportFormats;
+    /// <inheritdoc />
+    public IReadOnlyList<AutoForwardControllerDefinition> AutoForwardControllers => fallback.AutoForwardControllers;
 
     /// <inheritdoc />
     public UserInfo? ResolveCode(string userCode) => fallback.ResolveCode(userCode);

@@ -29,6 +29,7 @@ public sealed class ImportViewModelTests
         Assert.Null(vm.SelectedDrive);
         Assert.Equal("Package", vm.SelectedFormat.Label);
         Assert.Empty(vm.AvailablePackages);
+        Assert.False(vm.HasPackages);
         Assert.False(vm.IsImporting);
         Assert.Null(vm.StatusMessage);
         Assert.Null(vm.PendingConflict);
@@ -107,6 +108,7 @@ public sealed class ImportViewModelTests
         vm.SelectedDrive = driveA;
 
         Assert.Equal([packageA], vm.AvailablePackages);
+        Assert.True(vm.HasPackages);
     }
 
     /// <summary>Clearing SelectedDrive clears AvailablePackages without calling the import service.</summary>
@@ -121,6 +123,7 @@ public sealed class ImportViewModelTests
         vm.SelectedDrive = null;
 
         Assert.Empty(vm.AvailablePackages);
+        Assert.False(vm.HasPackages);
         s.ImportService.Verify(i => i.GetPackages(It.IsAny<string>()), Times.Once);
     }
 

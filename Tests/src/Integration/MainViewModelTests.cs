@@ -25,6 +25,7 @@ public sealed class MainViewModelTests
         public Mock<IExportViewModel> Export { get; } = new();
         public Mock<IImportViewModel> Import { get; } = new();
         public Mock<IStagedSendViewModel> StagedSend { get; } = new();
+        public Mock<IAutoForwardViewModel> AutoForward { get; } = new();
         public Mock<IPrintManagerViewModel> PrintManager { get; } = new();
         public Mock<IHelpViewModel> Help { get; } = new();
         public Mock<IConnectionStatusViewModel> ConnectionStatus { get; } = new();
@@ -56,6 +57,7 @@ public sealed class MainViewModelTests
                 Export.Object,
                 Import.Object,
                 StagedSend.Object,
+                AutoForward.Object,
                 PrintManager.Object,
                 Help.Object,
                 ConnectionStatus.Object,
@@ -81,6 +83,7 @@ public sealed class MainViewModelTests
         Assert.Same(s.Export.Object, vm.Export);
         Assert.Same(s.Import.Object, vm.Import);
         Assert.Same(s.StagedSend.Object, vm.StagedSend);
+        Assert.Same(s.AutoForward.Object, vm.AutoForward);
         Assert.Same(s.Help.Object, vm.Help);
     }
 
@@ -162,6 +165,44 @@ public sealed class MainViewModelTests
         Assert.Equal("INTERNAL", vm.SecurityLevelName);
         Assert.Equal("#1565C0", vm.SecurityLevelColor);
         Assert.False(vm.IsInstallScreenVisible);
+    }
+
+    /// <summary>Initialize sets HasAutoForwardAccess when the installed user is named in at least one configured auto forward controller.</summary>
+    [Fact]
+    public async Task Initialize_UserHasAutoForwardAccess_SetsHasAutoForwardAccessTrue()
+    {
+        Setup s = new();
+        s.Connection.Setup(c => c.Connect(It.IsAny<CancellationToken>())).Returns(Task.CompletedTask);
+        s.Connection.Setup(c => c.GetUserInfo(It.IsAny<CancellationToken>())).ReturnsAsync(MakeUserInfo("BETA"));
+        s.FolderBar.Setup(f => f.Load()).Returns(Task.CompletedTask);
+        s.EngineController.Setup(e => e.AutoForwardControllers).Returns((IReadOnlyList<AutoForwardControllerDefinition>)
+        [
+            new AutoForwardControllerDefinition { Name = "Alerts", Users = ["BETA"], Filter = _ => true }
+        ]);
+        MainViewModel vm = s.BuildVm();
+
+        await vm.Initialize();
+
+        Assert.True(vm.HasAutoForwardAccess);
+    }
+
+    /// <summary>Initialize leaves HasAutoForwardAccess false when the installed user is not named in any configured auto forward controller.</summary>
+    [Fact]
+    public async Task Initialize_UserHasNoAutoForwardAccess_LeavesHasAutoForwardAccessFalse()
+    {
+        Setup s = new();
+        s.Connection.Setup(c => c.Connect(It.IsAny<CancellationToken>())).Returns(Task.CompletedTask);
+        s.Connection.Setup(c => c.GetUserInfo(It.IsAny<CancellationToken>())).ReturnsAsync(MakeUserInfo("BETA"));
+        s.FolderBar.Setup(f => f.Load()).Returns(Task.CompletedTask);
+        s.EngineController.Setup(e => e.AutoForwardControllers).Returns((IReadOnlyList<AutoForwardControllerDefinition>)
+        [
+            new AutoForwardControllerDefinition { Name = "Alerts", Users = ["OTHER"], Filter = _ => true }
+        ]);
+        MainViewModel vm = s.BuildVm();
+
+        await vm.Initialize();
+
+        Assert.False(vm.HasAutoForwardAccess);
     }
 
     /// <summary>Initialize shows the install screen when no user is installed and does not load the folder bar.</summary>
@@ -525,6 +566,34 @@ public sealed class MainViewModelTests
         s.Import.Raise(i => i.StagedSendsReady += null!);
 
         s.ContentArea.Verify(c => c.ShowEntry((object)s.StagedSend.Object), Times.Once);
+    }
+
+    /// <summary>ShowAutoForwardCommand refreshes the auto forward ViewModel's controller access and displays it in the content area.</summary>
+    [Fact]
+    public void ShowAutoForwardCommand_RefreshesAccessAndShowsAutoForwardView()
+    {
+        Setup s = new();
+        s.AutoForward.Setup(a => a.RefreshCommand).Returns(new AsyncRelayCommand(() => Task.CompletedTask));
+        MainViewModel vm = s.BuildVm();
+
+        vm.ShowAutoForwardCommand.Execute(null);
+
+        s.AutoForward.VerifyGet(a => a.RefreshCommand, Times.Once);
+        s.ContentArea.Verify(c => c.ShowEntry((object)s.AutoForward.Object), Times.Once);
+    }
+
+    /// <summary>ShowAutoForwardCommand deselects the currently selected folder and entry.</summary>
+    [Fact]
+    public void ShowAutoForwardCommand_DeselectsFolderAndEntry()
+    {
+        Setup s = new();
+        s.AutoForward.Setup(a => a.RefreshCommand).Returns(new AsyncRelayCommand(() => Task.CompletedTask));
+        MainViewModel vm = s.BuildVm();
+
+        vm.ShowAutoForwardCommand.Execute(null);
+
+        s.FolderBar.Verify(f => f.DeselectFolder(), Times.Once);
+        s.EntryBar.Verify(e => e.DeselectEntry(), Times.Once);
     }
 
     /// <summary>ShowPrintManagerCommand displays the print manager ViewModel in the content area.</summary>

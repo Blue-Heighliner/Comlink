@@ -25,6 +25,7 @@ public sealed class StagedSendViewModelTests
 
         Assert.Equal(["A", "B"], vm.Queue.Select(e => e.Subject));
         Assert.All(vm.Queue, e => Assert.Equal(StagedSendStatus.Pending, e.Status));
+        Assert.True(vm.HasQueue);
     }
 
     /// <summary>RemoveCommand removes a single entry from the queue.</summary>
@@ -49,6 +50,7 @@ public sealed class StagedSendViewModelTests
         vm.ClearCommand.Execute(null);
 
         Assert.Empty(vm.Queue);
+        Assert.False(vm.HasQueue);
     }
 
     /// <summary>SendAllCommand cannot execute with an empty queue.</summary>

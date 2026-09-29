@@ -103,7 +103,7 @@
                   Spacing="6">
         <TextBlock Text="FILES" FontSize="11" FontWeight="SemiBold" Foreground="#858585" LetterSpacing="1" />
         <TextBlock Text="No files found on this drive for the selected format"
-                   IsVisible="{Binding !AvailablePackages.Count}"
+                   IsVisible="{Binding !HasPackages}"
                    FontSize="12"
                    Foreground="#858585" />
         <ItemsControl ItemsSource="{Binding AvailablePackages}">

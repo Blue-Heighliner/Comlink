@@ -139,11 +139,29 @@ same freshly-built `IUserConnectionHookContext`/`IMessageReceivedHookContext`, s
 through `IMessageRoutingService.RouteMessage`/`IPeerService.SendPacket` respectively on that context's behalf. A
 failing hook is logged and never stops the rest, of that event or a later one, from running.
 
+## Auto Forward
+
+`AutoForwardService` (started by `EngineHost` alongside the peer and interface listeners, in both Client and
+Headless mode, a no-op if the host configured no auto forward controllers at all - see
+[Configuration.md](Configuration.md#auto-forward-controllers)) subscribes to `MessageDelivered` and, for each
+delivered message, checks every `IEngineController.AutoForwardControllers` entry this instance's own installed
+user is named in: a controller whose `Filter` accepts the message is forwarded to every user currently on that
+controller's locally-saved target list (`IAutoForwardTargetsRepository`, see `Docs/Components/Data.md`), unless
+that list is empty, in which case nothing happens. A forwarded message is a freshly built instance of the
+configured message type carrying the original's subject, body, and other content fields unchanged, addressed to
+the target list and routed via `IMessageRoutingService.RouteMessage` from this instance's own installed user - the
+same routing path a hook-originated send uses - so it becomes an ordinary Outbox record and a new message ID, not
+a re-send of the original. The current user's own name is always excluded from the forwarded address list, even
+if present in the saved target list, since that message would otherwise be re-delivered right back to this same
+instance, matching the same controller's filter again and forwarding forever. A controller with no access, or an
+inaccessible one, or a `Filter` that throws, is skipped without affecting any other configured controller - a
+failure is logged the same way a failing hook is.
+
 ## Events
 
 | Event | Raised by | Consumed by |
 |-------|-----------|-------------|
-| `PeerService.MessageDelivered` | PeerService | DirectServiceConnection, EngineHooksService |
+| `PeerService.MessageDelivered` | PeerService | DirectServiceConnection, EngineHooksService, AutoForwardService |
 | `PeerService.ConfirmationReceived` | PeerService | MessageRoutingService |
 | `PeerService.DeliveryStatusChanged` | PeerService | MessageRoutingService |
 | `PeerService.UserConnected` / `UserDisconnected` | PeerService, ClientPeerService, ServerRoutingService | EngineHooksService |

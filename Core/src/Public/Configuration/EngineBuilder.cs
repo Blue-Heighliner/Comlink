@@ -227,4 +227,21 @@ public interface IEngineBuilder
     /// <param name="stagedSendMode">Whether this format's staged sends are all sent at once, or one at a time. Defaults to <see cref="Control.StagedSendMode.Sequential"/>.</param>
     /// <param name="stagedSendDelay">While <paramref name="stagedSendMode"/> is <see cref="Control.StagedSendMode.Sequential"/>, an optional pause between each send. <see langword="null"/> (the default) sends the next immediately.</param>
     IEngineBuilder ImportFormat(string name, Func<Stream, IImportFormatContext, CancellationToken, Task> read, StagedSendMode stagedSendMode = StagedSendMode.Sequential, TimeSpan? stagedSendDelay = null);
+
+    /// <summary>
+    /// Adds a custom auto forward controller, shown as an option in the client's auto forward screen to every user
+    /// named in <paramref name="users"/>. Any of them can open it there and maintain their own locally-saved target
+    /// list (added to and removed from freely, persisted between restarts); whenever this instance receives a
+    /// message that <paramref name="filter"/> accepts, it is automatically forwarded, unchanged in subject and
+    /// body, to every user currently on that target list - no action needed beyond having set the target list up
+    /// once. <paramref name="filter"/> is never consulted for a user with no access, or with an empty target list,
+    /// so an inaccessible or unconfigured controller costs nothing per received message beyond that one check.
+    /// Calling this again with the same <paramref name="name"/> (case-insensitive) replaces the earlier controller
+    /// of that name in place; a new name adds another alongside it.
+    /// </summary>
+    /// <typeparam name="TMessage">The host's message type, as given to <see cref="Message{TMessage}"/>.</typeparam>
+    /// <param name="name">Display name shown for this controller in the auto forward screen.</param>
+    /// <param name="users">User names allowed to open this controller and maintain its target list.</param>
+    /// <param name="filter">Answers whether a received message should be auto-forwarded through this controller.</param>
+    IEngineBuilder AutoForwardController<TMessage>(string name, IEnumerable<string> users, Func<TMessage, bool> filter) where TMessage : class;
 }
