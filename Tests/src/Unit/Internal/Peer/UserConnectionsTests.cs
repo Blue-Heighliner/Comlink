@@ -93,4 +93,73 @@ public sealed class UserConnectionsTests
     [Fact]
     public void Add_UnidentifiedConnection_Throws()
         => Assert.Throws<ArgumentException>(() => new UserConnections().Add(Connection(null)));
+
+    /// <summary>AddNewlyOnline reports true for a user's first connection, and false for a second one for the same already-online user.</summary>
+    [Fact]
+    public void AddNewlyOnline_SecondConnectionForSameUser_ReportsFalse()
+    {
+        UserConnections connections = new();
+
+        Assert.True(connections.AddNewlyOnline(Connection("Alice")));
+        Assert.False(connections.AddNewlyOnline(Connection("Alice", inbound: true)));
+    }
+
+    /// <summary>Adding the same connection twice reports false the second time, matching Add's own de-duplication.</summary>
+    [Fact]
+    public void AddNewlyOnline_SameConnectionTwice_ReportsFalseTheSecondTime()
+    {
+        UserConnections connections = new();
+        PeerConnection connection = Connection("Alice");
+
+        Assert.True(connections.AddNewlyOnline(connection));
+        Assert.False(connections.AddNewlyOnline(connection));
+    }
+
+    /// <summary>RemoveNowOffline reports NowOffline only once a user's last connection is removed, not for one of several.</summary>
+    [Fact]
+    public void RemoveNowOffline_LastConnection_ReportsNowOffline()
+    {
+        UserConnections connections = new();
+        PeerConnection first = Connection("Alice");
+        PeerConnection second = Connection("Alice", inbound: true);
+        connections.Add(first);
+        connections.Add(second);
+
+        (string? name, bool nowOffline) = connections.RemoveNowOffline(second);
+        Assert.Equal("Alice", name);
+        Assert.False(nowOffline);
+
+        (name, nowOffline) = connections.RemoveNowOffline(first);
+        Assert.Equal("Alice", name);
+        Assert.True(nowOffline);
+    }
+
+    /// <summary>RemoveNowOffline for a connection never added reports no user and NowOffline false.</summary>
+    [Fact]
+    public void RemoveNowOffline_UnknownConnection_ReportsNoUser()
+    {
+        UserConnections connections = new();
+
+        (string? name, bool nowOffline) = connections.RemoveNowOffline(Connection("Alice"));
+
+        Assert.Null(name);
+        Assert.False(nowOffline);
+    }
+
+    /// <summary>GetUsers lists every distinct user with a recorded connection, and drops one once its last connection is removed.</summary>
+    [Fact]
+    public void GetUsers_ReflectsCurrentlyRecordedUsers()
+    {
+        UserConnections connections = new();
+        PeerConnection alice = Connection("Alice");
+        PeerConnection bob = Connection("Bob");
+        connections.Add(alice);
+        connections.Add(bob);
+
+        Assert.Equal(["Alice", "Bob"], connections.GetUsers().Order());
+
+        connections.Remove(alice);
+
+        Assert.Equal(["Bob"], connections.GetUsers());
+    }
 }

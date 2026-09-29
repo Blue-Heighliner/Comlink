@@ -13,6 +13,16 @@ internal interface IMessageRoutingService
     /// delivered in-process, so this method never returns before every recipient's outcome, remote or local, is final.
     /// </summary>
     Task<(string MessageId, IReadOnlyList<UserDeliveryResult> UserResults)> Route(string fromUser, SendMessagePayload payload, CancellationToken cancellation);
+
+    /// <summary>
+    /// The same as <see cref="Route"/>, except every field this reads (addresses, security level) comes straight from
+    /// <paramref name="message"/> itself, via <see cref="Control.IEngineController"/>'s Get accessors, rather than
+    /// from a <see cref="SendMessagePayload"/> - so the caller builds the whole message (an instance of
+    /// <see cref="Control.IEngineController.MessageType"/>) itself instead of stating loose fields. Its message ID,
+    /// sender, and sent time are still overwritten with a freshly generated ID, <paramref name="fromUser"/>, and the
+    /// current UTC time, exactly as <see cref="Route"/> also does, so a caller only needs to set the content fields.
+    /// </summary>
+    Task<(string MessageId, IReadOnlyList<UserDeliveryResult> UserResults)> RouteMessage(string fromUser, object message, CancellationToken cancellation);
 }
 
 /// <summary>Routes outbound messages to peer users and surfaces their delivery status.</summary>
@@ -68,18 +78,47 @@ internal sealed class MessageRoutingService : IMessageRoutingService
     }
 
     /// <inheritdoc />
-    public async Task<(string MessageId, IReadOnlyList<UserDeliveryResult> UserResults)> Route(string fromUser, SendMessagePayload payload, CancellationToken cancellation)
+    public Task<(string MessageId, IReadOnlyList<UserDeliveryResult> UserResults)> Route(string fromUser, SendMessagePayload payload, CancellationToken cancellation)
     {
         string messageId = Guid.NewGuid().ToString("N").ToUpperInvariant();
-        DateTime sentAt = DateTime.UtcNow;
+        List<MessageAddress> addresses = [.. payload.Addresses.Select(a => new MessageAddress { UserName = a.UserName, Type = a.Type.ParseAddressType(), Information = a.Information })];
 
+        object message = engineController.CreateMessage();
+        engineController.SetMessageId(message, messageId);
+        engineController.SetFromUser(message, fromUser);
+        engineController.SetSubject(message, payload.Subject);
+        engineController.SetBody(message, payload.Body);
+        engineController.SetAddresses(message, addresses);
+        engineController.SetSentAt(message, DateTime.UtcNow);
+        engineController.SetIsAlert(message, payload.IsAlert);
+        engineController.SetPriority(message, payload.Priority);
+        engineController.SetTag(message, payload.Tag);
+        engineController.SetSecurityLevel(message, payload.SecurityLevel);
+
+        return RouteBuiltMessage(fromUser, messageId, message, addresses, payload.SecurityLevel, cancellation);
+    }
+
+    /// <inheritdoc />
+    public Task<(string MessageId, IReadOnlyList<UserDeliveryResult> UserResults)> RouteMessage(string fromUser, object message, CancellationToken cancellation)
+    {
+        string messageId = Guid.NewGuid().ToString("N").ToUpperInvariant();
+        engineController.SetMessageId(message, messageId);
+        engineController.SetFromUser(message, fromUser);
+        engineController.SetSentAt(message, DateTime.UtcNow);
+
+        return RouteBuiltMessage(fromUser, messageId, message, engineController.GetAddresses(message), engineController.GetSecurityLevel(message), cancellation);
+    }
+
+    private async Task<(string MessageId, IReadOnlyList<UserDeliveryResult> UserResults)> RouteBuiltMessage(
+        string fromUser, string messageId, object message, List<MessageAddress> addresses, string securityLevel, CancellationToken cancellation)
+    {
         IReadOnlyDictionary<string, IReadOnlyList<string>> groupMap = engineController.UserGroups;
 
         // Expand group addresses to individual users, tracking which top-level addressed groups contain each user.
         Dictionary<string, List<string>> userAddressedVia = new(StringComparer.OrdinalIgnoreCase);
-        foreach (AddressPayload address in payload.Addresses)
+        foreach (MessageAddress address in addresses)
         {
-            if (address.Type.ParseAddressType() == AddressType.External) { continue; }
+            if (address.Type == AddressType.External) { continue; }
 
             if (groupMap.ContainsKey(address.UserName))
             {
@@ -107,7 +146,7 @@ internal sealed class MessageRoutingService : IMessageRoutingService
         List<string> targetUsers = [.. userAddressedVia.Keys];
 
         IReadOnlyList<SecurityLevel> securityLevels = engineController.SecurityLevels;
-        int messageLevelRank = securityLevels.GetRank(payload.SecurityLevel);
+        int messageLevelRank = securityLevels.GetRank(securityLevel);
         List<string> blockedUsers = messageLevelRank < 0
             ? []
             : [.. targetUsers.Where(user => securityLevels.GetRank(engineController.GetUserSecurityLevel(user)) < messageLevelRank)];
@@ -116,22 +155,10 @@ internal sealed class MessageRoutingService : IMessageRoutingService
             targetUsers = [.. targetUsers.Except(blockedUsers, StringComparer.OrdinalIgnoreCase)];
             logger.LogWarning(
                 "{MessageId} blocked for {Users}: security level {Level} not supported by destination",
-                messageId, string.Join(", ", blockedUsers), payload.SecurityLevel);
+                messageId, string.Join(", ", blockedUsers), securityLevel);
         }
 
         logger.LogInformation("{MessageId} sending to {Destinations}", messageId, string.Join(", ", targetUsers));
-
-        object message = engineController.CreateMessage();
-        engineController.SetMessageId(message, messageId);
-        engineController.SetFromUser(message, fromUser);
-        engineController.SetSubject(message, payload.Subject);
-        engineController.SetBody(message, payload.Body);
-        engineController.SetAddresses(message, payload.Addresses.Select(a => new MessageAddress { UserName = a.UserName, Type = a.Type.ParseAddressType(), Information = a.Information }).ToList());
-        engineController.SetSentAt(message, sentAt);
-        engineController.SetIsAlert(message, payload.IsAlert);
-        engineController.SetPriority(message, payload.Priority);
-        engineController.SetTag(message, payload.Tag);
-        engineController.SetSecurityLevel(message, payload.SecurityLevel);
 
         string? selfUser = targetUsers.FirstOrDefault(user => string.Equals(user, fromUser, StringComparison.OrdinalIgnoreCase));
         List<string> remoteUsers = selfUser is null ? targetUsers : targetUsers.Where(user => !string.Equals(user, fromUser, StringComparison.OrdinalIgnoreCase)).ToList();

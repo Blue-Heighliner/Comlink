@@ -11,6 +11,14 @@ public sealed class MessageRoutingServiceTests
         public event Func<object, Task>? MessageDelivered;
         public event Func<string, string, Task>? ConfirmationReceived;
         public event Func<string, string, DestinationStatus, Task>? DeliveryStatusChanged;
+#pragma warning disable CS0067
+        public event Func<string, Task>? UserConnected;
+        public event Func<string, Task>? UserDisconnected;
+#pragma warning restore CS0067
+
+        public IReadOnlyList<string> GetConnectedUsers() => [];
+        public bool IsUserConnected(string userName) => false;
+        public Task<bool> SendPacket(string userName, object packet, CancellationToken cancellation = default) => Task.FromResult(true);
 
         public List<(string User, TestMessage Message)> Sent { get; } = [];
         public List<TestMessage> DeliveredLocally { get; } = [];
@@ -456,5 +464,60 @@ public sealed class MessageRoutingServiceTests
 
         cts.Cancel();
         await startTask;
+    }
+
+    /// <summary>RouteMessage reads its addresses and security level from the message object itself, via IEngineController, rather than from a SendMessagePayload.</summary>
+    [Fact]
+    public async Task RouteMessage_ReadsAddressesFromMessageItself()
+    {
+        FakePeerService fake = new();
+        MessageRoutingService service = new(fake, format, loggerFactory);
+        TestMessage message = new() { Subject = "Hi", Body = "Body" };
+        format.SetAddresses(message, [new MessageAddress { UserName = "TargetUser", Type = AddressType.To }]);
+
+        await service.RouteMessage("SourceUser", message, default);
+
+        Assert.Single(fake.Sent);
+        Assert.Equal("TargetUser", fake.Sent[0].User, ignoreCase: true);
+        Assert.Same(message, fake.Sent[0].Message);
+    }
+
+    /// <summary>RouteMessage overwrites the message's own MessageId/FromUser/SentAt with a freshly generated ID, the given fromUser, and the current time, regardless of what the caller set them to.</summary>
+    [Fact]
+    public async Task RouteMessage_OverwritesMessageIdFromUserAndSentAt()
+    {
+        FakePeerService fake = new();
+        MessageRoutingService service = new(fake, format, loggerFactory);
+        TestMessage message = new() { MessageId = "STALE-ID", FromUser = "WRONG-USER", SentAt = new DateTime(2000, 1, 1) };
+        format.SetAddresses(message, [new MessageAddress { UserName = "TargetUser", Type = AddressType.To }]);
+        DateTime before = DateTime.UtcNow;
+
+        (string messageId, _) = await service.RouteMessage("SourceUser", message, default);
+
+        Assert.NotEqual("STALE-ID", messageId);
+        Assert.True(Guid.TryParseExact(messageId, "N", out _));
+        Assert.Equal(messageId, message.MessageId);
+        Assert.Equal("SourceUser", message.FromUser, ignoreCase: true);
+        Assert.InRange(message.SentAt, before, DateTime.UtcNow);
+    }
+
+    /// <summary>RouteMessage applies the same security-level filtering as Route, reading the blocking level from the message itself.</summary>
+    [Fact]
+    public async Task RouteMessage_BlocksDestinationsBelowTheMessagesSecurityLevel()
+    {
+        Mock<TestEngineController> controller = new() { CallBase = true };
+        controller.Setup(c => c.SecurityLevels).Returns((IReadOnlyList<SecurityLevel>)[new SecurityLevel { Name = "LOW", Color = "#000" }, new SecurityLevel { Name = "HIGH", Color = "#000" }]);
+        controller.Setup(c => c.GetUserSecurityLevel("Cleared")).Returns("HIGH");
+        controller.Setup(c => c.GetUserSecurityLevel("Blocked")).Returns("LOW");
+        FakePeerService fake = new();
+        MessageRoutingService service = new(fake, controller.Object, loggerFactory);
+        TestMessage message = new() { Subject = "Secret", Body = "Body", SecurityLevel = "HIGH" };
+        controller.Object.SetAddresses(message, [new MessageAddress { UserName = "Cleared", Type = AddressType.To }, new MessageAddress { UserName = "Blocked", Type = AddressType.To }]);
+
+        (_, IReadOnlyList<UserDeliveryResult> results) = await service.RouteMessage("SourceUser", message, default);
+
+        Assert.Contains(fake.Sent, s => s.User.Equals("Cleared", StringComparison.OrdinalIgnoreCase));
+        Assert.DoesNotContain(fake.Sent, s => s.User.Equals("Blocked", StringComparison.OrdinalIgnoreCase));
+        Assert.Contains(results, r => r.UserName.Equals("Blocked", StringComparison.OrdinalIgnoreCase) && !r.Success);
     }
 }

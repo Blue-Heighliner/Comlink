@@ -10,7 +10,13 @@ public sealed class DirectServiceConnectionTests
 #pragma warning disable CS0067
         public event Func<string, string, Task>? ConfirmationReceived;
         public event Func<string, string, DestinationStatus, Task>? DeliveryStatusChanged;
+        public event Func<string, Task>? UserConnected;
+        public event Func<string, Task>? UserDisconnected;
 #pragma warning restore CS0067
+        public IReadOnlyList<string> ConnectedUsers { get; set; } = [];
+        public IReadOnlyList<string> GetConnectedUsers() => ConnectedUsers;
+        public bool IsUserConnected(string userName) => ConnectedUsers.Contains(userName);
+        public Task<bool> SendPacket(string userName, object packet, CancellationToken cancellation = default) => Task.FromResult(true);
         public List<(string UserName, TestMessage Message)> Sent { get; } = [];
         public bool ReturnSuccess { get; set; } = true;
 
@@ -39,6 +45,13 @@ public sealed class DirectServiceConnectionTests
             string fromUser, SendMessagePayload payload, CancellationToken cancellation)
         {
             LastPayload = payload;
+            if (RouteResult is null) { throw new InvalidOperationException("RouteResult not configured"); }
+            return Task.FromResult(RouteResult.Value);
+        }
+
+        public Task<(string MessageId, IReadOnlyList<UserDeliveryResult> UserResults)> RouteMessage(
+            string fromUser, object message, CancellationToken cancellation)
+        {
             if (RouteResult is null) { throw new InvalidOperationException("RouteResult not configured"); }
             return Task.FromResult(RouteResult.Value);
         }
@@ -112,6 +125,18 @@ public sealed class DirectServiceConnectionTests
         List<string> names = await conn.GetUserNames();
 
         Assert.Empty(names);
+    }
+
+    /// <summary>GetConnectedUsers returns whatever IPeerService.GetConnectedUsers reports.</summary>
+    [Fact]
+    public async Task GetConnectedUsers_DelegatesToPeerService()
+    {
+        DirectServiceConnection conn = Build(out FakePeerService peer, out _, out _, out _, out _);
+        peer.ConnectedUsers = ["ALPHA", "BETA"];
+
+        List<string> connected = await conn.GetConnectedUsers();
+
+        Assert.Equal(["ALPHA", "BETA"], connected);
     }
 
     /// <summary>InstallUser delegates to IUserService.Install and returns its result.</summary>

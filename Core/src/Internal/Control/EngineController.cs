@@ -7,7 +7,8 @@ namespace BlueHeighliner.Comlink.Control;
 /// identity/presentation, local user identity, the user/group directory, listener ports, alert settings,
 /// message composition, the automatic print policy, MSMT peer certificate naming and peer options, network
 /// topology, the points this node connects out to, how the user on the other end of a connection is identified
-/// (optionally after a connection message exchange), the external systems this instance communicates with, and whether <c>config.json</c> is read at all. External drive discovery and printer discovery/driving are real
+/// (optionally after a connection message exchange), the external systems this instance communicates with, the
+/// hooks run on connection and message activity, and whether <c>config.json</c> is read at all. External drive discovery and printer discovery/driving are real
 /// OS-level behavior, not configuration or rules, so they live on <see cref="Devices.IExternalDriveProvider"/>
 /// and <see cref="Devices.IPrintDriver"/> instead. See <c>Docs/Components/Configuration.md</c>.
 /// </summary>
@@ -223,6 +224,15 @@ internal interface IEngineController
     /// as the exclusive upstream hub. See <c>Docs/Components/ExternalSystems.md</c>.
     /// </summary>
     IExternalSystem? ExternalServer { get; }
+
+    /// <summary>Every hook run when a user goes from having no live peer connection to having at least one.</summary>
+    IReadOnlyList<Action<IUserConnectionHookContext>> UserConnectedHooks { get; }
+
+    /// <summary>Every hook run when a user goes from having at least one live peer connection to having none.</summary>
+    IReadOnlyList<Action<IUserConnectionHookContext>> UserDisconnectedHooks { get; }
+
+    /// <summary>Every hook run whenever this instance receives a new (non-confirmation) message from a peer.</summary>
+    IReadOnlyList<Action<IMessageReceivedHookContext>> MessageReceivedHooks { get; }
 
     /// <summary>Creates a new, empty instance of <see cref="MessageType"/>.</summary>
     object CreateMessage();
@@ -504,6 +514,13 @@ internal class EngineController(EngineBuilder builder, ICurrentUserProvider curr
     public virtual IExternalSystem? ExternalServer => builder.ExternalServerValue;
 
     /// <inheritdoc />
+    public virtual IReadOnlyList<Action<IUserConnectionHookContext>> UserConnectedHooks => builder.UserConnectedHooks;
+    /// <inheritdoc />
+    public virtual IReadOnlyList<Action<IUserConnectionHookContext>> UserDisconnectedHooks => builder.UserDisconnectedHooks;
+    /// <inheritdoc />
+    public virtual IReadOnlyList<Action<IMessageReceivedHookContext>> MessageReceivedHooks => builder.MessageReceivedHooks;
+
+    /// <inheritdoc />
     public virtual string TrustedAuthorityCertificateName => builder.TrustedAuthorityValue ?? "COMLINK-ROOT";
 
     /// <inheritdoc />
@@ -612,4 +629,30 @@ internal class EngineController(EngineBuilder builder, ICurrentUserProvider curr
     public virtual string GetCertificateName(string userName) => builder.CertificateNameValue?.Invoke(userName) ?? userName;
 
     private PacketMap Packet => packet ?? throw new NotSupportedException("This engine has no packet type; state one with Packets<TPacket>(...) to enable packetization.");
+}
+
+/// <summary>Extension members for <see cref="IEngineController"/>.</summary>
+internal static class EngineControllerExtensions
+{
+    extension(IEngineController engineController)
+    {
+        /// <summary>
+        /// Reads every logical field of <paramref name="payload"/> (an instance of <see cref="IEngineController.MessageType"/>)
+        /// into a new <see cref="MessageReceivedEvent"/>. Shared by <see cref="DirectServiceConnection"/> and
+        /// <see cref="EngineHooksService"/>, so both surface the exact same fields for an inbound message.
+        /// </summary>
+        public MessageReceivedEvent ToMessageReceivedEvent(object payload) => new()
+        {
+            MessageId = engineController.GetMessageId(payload),
+            FromUser = engineController.GetFromUser(payload),
+            Subject = engineController.GetSubject(payload),
+            Body = engineController.GetBody(payload),
+            Addresses = [.. engineController.GetAddresses(payload).Select(a => new AddressRequest { UserName = a.UserName, Type = a.Type.ToString(), Information = a.Information })],
+            SentAt = engineController.GetSentAt(payload),
+            IsAlert = engineController.GetIsAlert(payload),
+            Priority = engineController.GetPriority(payload),
+            Tag = engineController.GetTag(payload),
+            SecurityLevel = engineController.GetSecurityLevel(payload)
+        };
+    }
 }

@@ -70,6 +70,9 @@ public sealed class EngineBuilderTests
         Assert.Empty(controller.Servers);
         Assert.Empty(controller.ExternalSystems);
         Assert.Null(controller.ExternalServer);
+        Assert.Empty(controller.UserConnectedHooks);
+        Assert.Empty(controller.UserDisconnectedHooks);
+        Assert.Empty(controller.MessageReceivedHooks);
         Assert.Null(controller.PacketType);
         Assert.Single(controller.Priorities);
         Assert.Equal("Normal", controller.Priorities[0].Name);
@@ -293,6 +296,24 @@ public sealed class EngineBuilderTests
 
         Assert.Equal([first, hub], controller.ExternalSystems);
         Assert.Same(hub, controller.ExternalServer);
+    }
+
+    /// <summary>OnUserConnected/OnUserDisconnected/OnMessageReceived each accumulate every hook added, in order, rather than replacing the last one.</summary>
+    [Fact]
+    public void ConnectionAndMessageHooks_AddedInOrder_AllAreKept()
+    {
+        Action<IUserConnectionHookContext> connectedA = _ => { };
+        Action<IUserConnectionHookContext> connectedB = _ => { };
+        Action<IUserConnectionHookContext> disconnectedA = _ => { };
+        Action<IMessageReceivedHookContext> receivedA = _ => { };
+        (_, EngineController controller) = Build(engine => engine
+            .OnUserConnected(connectedA).OnUserConnected(connectedB)
+            .OnUserDisconnected(disconnectedA)
+            .OnMessageReceived(receivedA));
+
+        Assert.Equal([connectedA, connectedB], controller.UserConnectedHooks);
+        Assert.Equal([disconnectedA], controller.UserDisconnectedHooks);
+        Assert.Equal([receivedA], controller.MessageReceivedHooks);
     }
 
     private sealed class Dependency(string name)

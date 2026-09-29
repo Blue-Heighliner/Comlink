@@ -17,6 +17,7 @@ namespace BlueHeighliner.Comlink.Sample;
 /// <item><description>packetization - enabled with <see cref="SamplePacket"/>, using the default packet size, window and serializer.</description></item>
 /// <item><description>address type labels - renames the <see cref="AddressType.External"/> label to <c>OUTSIDE</c>, matching the <c>Kind</c> vocabulary <see cref="SampleRecipient"/> already uses for it.</description></item>
 /// <item><description>security levels - three placeholder levels (<c>PUBLIC</c>, <c>INTERNAL</c>, <c>RESTRICTED</c>); the <c>Peer</c> scenario's sites run at <c>PUBLIC</c>, the <c>ClientServer</c>/<c>ServerCluster</c> scenarios' clients at <c>INTERNAL</c>, and their servers at <c>RESTRICTED</c>.</description></item>
+/// <item><description>connection and message hooks - a newly connected user is welcomed with who else is currently online (<see cref="IEngineHookContext.ConnectedUsers"/>), everyone still online is told when someone disconnects, and any received message tagged <c>PING</c> gets an automatic <c>PONG</c> reply (all via <see cref="IEngineHookContext.SendMessage"/>).</description></item>
 /// </list>
 /// Actual alarm sound playback and printer discovery and driving are real platform behavior always provided by the
 /// engine itself, not something Sample states here.
@@ -81,5 +82,28 @@ public sealed class SampleEngineConfiguration : IEngineConfiguration
             .PrintCount<SampleMessage>(message => message.Alert ? 2 : 1)
             .CanDelete(folder => folder is FolderType.Drafts or FolderType.Notes)
             .ConfigFile()
-            .ExternalSystem(new SampleExternalSystem());
+            .ExternalSystem(new SampleExternalSystem())
+            .OnUserConnected(context =>
+            {
+                string userName = context.TargetUser;
+                List<string> others = [.. context.ConnectedUsers.Select(u => u.Name).Where(name => !string.Equals(name, userName, StringComparison.OrdinalIgnoreCase))];
+                string body = others.Count > 0 ? $"Also online right now: {string.Join(", ", others)}." : "You're the only one online right now.";
+                context.SendMessage(new SampleMessage { Title = "Welcome", Text = body, Recipients = [new SampleRecipient { User = userName }] });
+            })
+            .OnUserDisconnected(context =>
+            {
+                string userName = context.TargetUser;
+                foreach (UserInfo user in context.ConnectedUsers)
+                {
+                    context.SendMessage(new SampleMessage { Title = "Offline", Text = $"{userName} just went offline.", Recipients = [new SampleRecipient { User = user.Name }] });
+                }
+            })
+            .OnMessageReceived(context =>
+            {
+                SampleMessage message = (SampleMessage)context.Message;
+                if (string.Equals(message.Category, "PING", StringComparison.OrdinalIgnoreCase))
+                {
+                    context.SendMessage(new SampleMessage { Title = "Re: " + message.Title, Text = "PONG", Recipients = [new SampleRecipient { User = message.Sender }] });
+                }
+            });
 }

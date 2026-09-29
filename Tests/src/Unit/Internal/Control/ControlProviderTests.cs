@@ -975,6 +975,24 @@ public sealed class ControlProviderTests
         Assert.Same(externalSystem.Object, Assert.Single(controller.ExternalSystems));
     }
 
+    /// <summary>UserConnectedHooks/UserDisconnectedHooks/MessageReceivedHooks have no config.json field and always delegate to the wrapped provider.</summary>
+    [Fact]
+    public void ConfiguredEngineController_ConnectionAndMessageHooks_AlwaysDelegateToFallback()
+    {
+        Action<IUserConnectionHookContext> connectedHook = _ => { };
+        Action<IUserConnectionHookContext> disconnectedHook = _ => { };
+        Action<IMessageReceivedHookContext> receivedHook = _ => { };
+        Mock<IEngineController> fallback = new();
+        fallback.Setup(f => f.UserConnectedHooks).Returns([connectedHook]);
+        fallback.Setup(f => f.UserDisconnectedHooks).Returns([disconnectedHook]);
+        fallback.Setup(f => f.MessageReceivedHooks).Returns([receivedHook]);
+        ConfiguredEngineController controller = new(fallback.Object, new EngineConfigFile(), NoCurrentUser);
+
+        Assert.Same(connectedHook, Assert.Single(controller.UserConnectedHooks));
+        Assert.Same(disconnectedHook, Assert.Single(controller.UserDisconnectedHooks));
+        Assert.Same(receivedHook, Assert.Single(controller.MessageReceivedHooks));
+    }
+
     /// <summary>With neither certificate file field configured, ConnectionOptions falls back to the system store lookup - and throws the same way DefaultEngineController does when no current user is registered.</summary>
     [Fact]
     public void ConfiguredEngineController_NoCertificateFilesConfigured_FallsBackToStoreLookup()

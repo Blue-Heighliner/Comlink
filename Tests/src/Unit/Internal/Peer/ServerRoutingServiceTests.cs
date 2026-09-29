@@ -165,6 +165,46 @@ public sealed class ServerRoutingServiceTests
         await Stop(fx);
     }
 
+    /// <summary>A known child coming online raises UserConnected and appears in GetConnectedUsers; going offline raises UserDisconnected and removes them.</summary>
+    [Fact]
+    public async Task OnConnected_KnownChild_RaisesUserConnectedAndUserDisconnected()
+    {
+        Fixture fx = await BuildStarted();
+        List<string> connected = [];
+        List<string> disconnectedNames = [];
+        fx.Service.UserConnected += name => { connected.Add(name); return Task.CompletedTask; };
+        fx.Service.UserDisconnected += name => { disconnectedNames.Add(name); return Task.CompletedTask; };
+        PeerConnection connection = Inbound("ClientA1");
+
+        fx.Come(connection);
+
+        await WaitUntil(() => connected.Count > 0, TimeSpan.FromSeconds(2));
+        Assert.Equal(["ClientA1"], connected);
+        Assert.Contains("ClientA1", fx.Service.GetConnectedUsers());
+
+        fx.Lose(connection);
+
+        await WaitUntil(() => disconnectedNames.Count > 0, TimeSpan.FromSeconds(2));
+        Assert.Equal(["ClientA1"], disconnectedNames);
+        Assert.DoesNotContain("ClientA1", fx.Service.GetConnectedUsers());
+        await Stop(fx);
+    }
+
+    /// <summary>A connection dropped as unrecognized never counts as coming online, so it never raises UserConnected.</summary>
+    [Fact]
+    public async Task OnConnected_UnrecognizedIdentity_DoesNotRaiseUserConnected()
+    {
+        Fixture fx = await BuildStarted();
+        bool raised = false;
+        fx.Service.UserConnected += _ => { raised = true; return Task.CompletedTask; };
+
+        fx.Come(Inbound("UNKNOWN-USER"));
+        await Task.Delay(50);
+
+        Assert.False(raised);
+        await Stop(fx);
+    }
+
     /// <summary>The identity may differ in case from the topology's spelling; the row keeps the configured name.</summary>
     [Fact]
     public async Task OnConnected_IdentityInDifferentCase_MatchesConfiguredName()

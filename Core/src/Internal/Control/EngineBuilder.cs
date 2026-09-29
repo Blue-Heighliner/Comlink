@@ -18,6 +18,9 @@ internal sealed class EngineBuilder : IEngineBuilder, IAsyncDisposable
     private readonly Dictionary<AddressType, string> addressTypeLabels = [];
     private readonly List<ConnectionPoint> outgoingPoints = [];
     private readonly List<IExternalSystem> externalSystems = [];
+    private readonly List<Action<IUserConnectionHookContext>> userConnectedHooks = [];
+    private readonly List<Action<IUserConnectionHookContext>> userDisconnectedHooks = [];
+    private readonly List<Action<IMessageReceivedHookContext>> messageReceivedHooks = [];
     private ServiceProvider? bootstrap;
 
     /// <summary>The message mapping, or <see langword="null"/> until <see cref="Message{TMessage}"/> is called.</summary>
@@ -112,6 +115,12 @@ internal sealed class EngineBuilder : IEngineBuilder, IAsyncDisposable
     public IReadOnlyList<IExternalSystem> ExternalSystems => externalSystems;
     /// <summary>The designated upstream hub, if any.</summary>
     public IExternalSystem? ExternalServerValue { get; private set; }
+    /// <summary>The hooks run when a user comes online.</summary>
+    public IReadOnlyList<Action<IUserConnectionHookContext>> UserConnectedHooks => userConnectedHooks;
+    /// <summary>The hooks run when a user goes offline.</summary>
+    public IReadOnlyList<Action<IUserConnectionHookContext>> UserDisconnectedHooks => userDisconnectedHooks;
+    /// <summary>The hooks run when a message is received.</summary>
+    public IReadOnlyList<Action<IMessageReceivedHookContext>> MessageReceivedHooks => messageReceivedHooks;
 
     /// <summary>
     /// Constructs <typeparamref name="TConfiguration"/> from a bootstrap container, so it can take dependencies, then
@@ -466,6 +475,27 @@ internal sealed class EngineBuilder : IEngineBuilder, IAsyncDisposable
     {
         ExternalSystem(system);
         ExternalServerValue = system;
+        return this;
+    }
+
+    /// <inheritdoc />
+    public IEngineBuilder OnUserConnected(Action<IUserConnectionHookContext> hook)
+    {
+        userConnectedHooks.Add(hook);
+        return this;
+    }
+
+    /// <inheritdoc />
+    public IEngineBuilder OnUserDisconnected(Action<IUserConnectionHookContext> hook)
+    {
+        userDisconnectedHooks.Add(hook);
+        return this;
+    }
+
+    /// <inheritdoc />
+    public IEngineBuilder OnMessageReceived(Action<IMessageReceivedHookContext> hook)
+    {
+        messageReceivedHooks.Add(hook);
         return this;
     }
 

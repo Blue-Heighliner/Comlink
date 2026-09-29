@@ -327,6 +327,59 @@ Each external system is constructed directly by the configuration, not resolved 
 
 ---
 
+### Connection & Message Hooks
+
+```csharp
+engine
+    .OnUserConnected(context => context.SendMessage(new MyMessage { ... }))
+    .OnUserDisconnected(context =>
+    {
+        foreach (UserInfo user in context.ConnectedUsers) { context.SendMessage(new MyMessage { ... }); }
+    })
+    .OnMessageReceived(context =>
+    {
+        MyMessage message = (MyMessage)context.Message;
+        if (message.Body.Contains("ping", StringComparison.OrdinalIgnoreCase))
+        {
+            context.SendMessage(new MyMessage { ... });
+        }
+    });
+```
+
+Runs host code in reaction to peer activity, independent of any UI: `OnUserConnected`/`OnUserDisconnected` fire once
+each time a user goes from unreachable to reachable over at least one live peer connection, or the other way
+around (see [Peer.md](Peer.md#connection--message-hooks) for exactly what counts as "a live connection" for each
+`NodeRole`), handed an `IUserConnectionHookContext` whose `TargetUser` names that user; `OnMessageReceived` fires
+for every new (non-confirmation) message this instance receives, handed an `IMessageReceivedHookContext` whose
+`Message` is that message, as an instance of the configured message type - the same as anywhere else a host's own
+message type crosses the engine boundary, a hook never sees an internal representation of it. Both context types
+extend the common `IEngineHookContext`: `CurrentUser` (this instance's own installed user), `Users`/`ConnectedUsers`
+(every known user, and the subset of them currently reachable, each as a `UserInfo` carrying its directly-assigned
+group memberships but no real installation code), `IsConnected(userName)`, and two ways to originate new outbound
+traffic:
+
+- `SendMessage(object message)` - `message` must be an instance of the configured message type; its message ID,
+  sender, and sent time are overwritten before it is routed (mirroring `IServiceConnection.SendMessage`'s own
+  field handling), so a hook only needs to set the content fields.
+- `SendPacket(object packet, params IEnumerable<string> userNames)` - sends a raw, already-built packet (an
+  instance of the configured packet type; throws if none is configured, or if the packet type doesn't match)
+  directly to each named user, bypassing the normal packetization/reassembly a full message goes through and
+  routing's address expansion entirely, since a packet carries no address list of its own.
+
+Both are fire-and-forget: a hook does not track or await the send it makes, so neither returns anything, and a
+failed send is logged rather than thrown back into the hook. Calling a builder method more than once adds another
+hook rather than replacing the last one: every hook added for an event runs, in the order added, each time it
+fires, all handed the same context instance so they see a consistent snapshot. A hook that throws is logged and
+never stops the rest, of that firing or a later one, from running.
+
+**Default:** no hooks of any kind; `EngineHooksService` (which runs them) does nothing when none are configured.
+
+**Config file:** none; hooks are behavior, not settings.
+
+**Sample:** `SampleEngineConfiguration` sends a newly connected user a welcome message naming who else is currently online (`ConnectedUsers`), tells everyone still online when someone disconnects, and auto-replies `PONG` to any received message tagged `PING` - all via `SendMessage`, so every hook's effect shows up as an ordinary message in the recipient's Inbox rather than a log line only visible from the host process's own console.
+
+---
+
 ### `IExternalDriveProvider` (not configurable)
 
 ```csharp
@@ -376,6 +429,7 @@ event Func<DeliveryStatusChangedEvent, Task>? DeliveryStatusChanged;
 Task Connect(CancellationToken cancellation = default);
 Task<UserInfo?> GetUserInfo(CancellationToken cancellation = default);
 Task<List<string>> GetUserNames(CancellationToken cancellation = default);
+Task<List<string>> GetConnectedUsers(CancellationToken cancellation = default);
 Task<UserInfo?> InstallUser(string userCode, CancellationToken cancellation = default);
 Task<SendMessageResult?> SendMessage(string subject, string body, List<AddressRequest> addresses, bool isAlert = false, int priority = 0, string tag = "", CancellationToken cancellation = default);
 Task<bool> MarkMessageRead(string messageId, CancellationToken cancellation = default);
@@ -383,7 +437,7 @@ Task<bool> MarkMessageRead(string messageId, CancellationToken cancellation = de
 
 High-level API for host code to interact with the running Engine. Engine registers `DirectServiceConnection`, which calls Engine services in-process, in both Client and Headless mode - Headless mode acts as a normal peer client, just without a GUI. External programs instead plug into the message stream over the local interface listener (see [Interface.md](Interface.md)), which is unrelated to this interface.
 
-Host applications resolve `IServiceConnection` from the container to send messages, install the user, and subscribe to inbound delivery events.
+Host applications resolve `IServiceConnection` from the container to send messages, install the user, and subscribe to inbound delivery events. `GetConnectedUsers` reports who is currently reachable over a live peer connection (`IPeerService.GetConnectedUsers`), unlike `GetUserNames`'s fixed configured directory - the same distinction [Connection & Message Hooks](#connection--message-hooks)'s `IEngineHookContext.Users`/`ConnectedUsers` expose to a hook, through its own simpler, synchronous surface rather than this interface directly.
 
 **Default:** `DirectServiceConnection`, registered in both Client and Headless mode.
 

@@ -55,6 +55,22 @@ internal sealed class ClientPeerService : IPeerService, IConnectionStatusService
 #pragma warning restore CS0067
     /// <inheritdoc />
     public event Action? StatusesChanged;
+    /// <inheritdoc />
+    public event Func<string, Task>? UserConnected;
+    /// <inheritdoc />
+    public event Func<string, Task>? UserDisconnected;
+
+    /// <inheritdoc />
+    public IReadOnlyList<string> GetConnectedUsers()
+    {
+        lock (statusLock) { return isConnected ? [serverName] : []; }
+    }
+
+    /// <inheritdoc />
+    public bool IsUserConnected(string userName)
+    {
+        lock (statusLock) { return isConnected && string.Equals(serverName, userName, StringComparison.OrdinalIgnoreCase); }
+    }
 
     /// <inheritdoc />
     public async Task Start(CancellationToken cancellation)
@@ -158,6 +174,25 @@ internal sealed class ClientPeerService : IPeerService, IConnectionStatusService
     }
 
     /// <inheritdoc />
+    public async Task<bool> SendPacket(string userName, object packet, CancellationToken cancellation = default)
+    {
+        // Ignores userName, the same as Send: every send here goes over the one connection to the server, which
+        // performs the actual user-to-connection routing.
+        PeerConnection? connection = serverConnection;
+        if (transport is null || connection is null || isClosed) { return false; }
+
+        try
+        {
+            using IMemoryOwner<byte> buf = engineController.PacketSerializer!.Serialize(packet);
+            return await transport.Request(connection, buf.Memory, new PeerSendOptions { Priority = 0 }, cancellation);
+        }
+        catch
+        {
+            return false;
+        }
+    }
+
+    /// <inheritdoc />
     public async Task DeliverLocal(object payload)
     {
         logger.LogInformation("{MessageId} delivered locally from {FromUser}", engineController.GetMessageId(payload), engineController.GetFromUser(payload));
@@ -219,6 +254,7 @@ internal sealed class ClientPeerService : IPeerService, IConnectionStatusService
         if (connected) { logger.LogInformation("Connected to server"); }
         else { logger.LogWarning("Server unreachable"); }
         StatusesChanged?.Invoke();
+        PeerConnectionNotifier.Raise(connected ? UserConnected : UserDisconnected, serverName, connected ? "connecting" : "disconnecting", logger);
     }
 
     private bool IsServerConnection(PeerConnection connection)

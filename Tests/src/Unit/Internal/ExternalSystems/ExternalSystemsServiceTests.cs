@@ -9,9 +9,14 @@ public sealed class ExternalSystemsServiceTests
 #pragma warning disable CS0067
         public event Func<string, string, Task>? ConfirmationReceived;
         public event Func<string, string, DestinationStatus, Task>? DeliveryStatusChanged;
+        public event Func<string, Task>? UserConnected;
+        public event Func<string, Task>? UserDisconnected;
 #pragma warning restore CS0067
+        public IReadOnlyList<string> GetConnectedUsers() => [];
+        public bool IsUserConnected(string userName) => false;
         public Task Start(CancellationToken cancellation) => Task.CompletedTask;
         public Task<bool> Send(string userName, object message, CancellationToken cancellation = default) => Task.FromResult(true);
+        public Task<bool> SendPacket(string userName, object packet, CancellationToken cancellation = default) => Task.FromResult(true);
 
         public List<object> DeliveredLocally { get; } = [];
 

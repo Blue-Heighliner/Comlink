@@ -41,20 +41,7 @@ internal sealed class DirectServiceConnection : IServiceConnection
     private async Task OnMessageDelivered(object payload)
     {
         if (MessageReceived is null) { return; }
-        MessageReceivedEvent evt = new()
-        {
-            MessageId = engineController.GetMessageId(payload),
-            FromUser = engineController.GetFromUser(payload),
-            Subject = engineController.GetSubject(payload),
-            Body = engineController.GetBody(payload),
-            Addresses = engineController.GetAddresses(payload).Select(a => new AddressRequest { UserName = a.UserName, Type = a.Type.ToString(), Information = a.Information }).ToList(),
-            SentAt = engineController.GetSentAt(payload),
-            IsAlert = engineController.GetIsAlert(payload),
-            Priority = engineController.GetPriority(payload),
-            Tag = engineController.GetTag(payload),
-            SecurityLevel = engineController.GetSecurityLevel(payload)
-        };
-        await MessageReceived.InvokeAll(evt);
+        await MessageReceived.InvokeAll(engineController.ToMessageReceivedEvent(payload));
     }
 
     private async Task OnDeliveryStatusChanged(string messageId, string user, DestinationStatus status)
@@ -84,6 +71,10 @@ internal sealed class DirectServiceConnection : IServiceConnection
             return Task.FromResult<List<string>>([]);
         }
     }
+
+    /// <inheritdoc />
+    public Task<List<string>> GetConnectedUsers(CancellationToken cancellation = default)
+        => Task.FromResult<List<string>>([.. peerService.GetConnectedUsers()]);
 
     /// <inheritdoc />
     public Task<UserInfo?> InstallUser(string userCode, CancellationToken cancellation = default)

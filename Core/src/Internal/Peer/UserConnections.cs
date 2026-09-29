@@ -26,6 +26,25 @@ internal interface IUserConnections
 
     /// <summary>Whether any connection is identified as <paramref name="userName"/>.</summary>
     bool Has(string userName);
+
+    /// <summary>Returns the names of every user with at least one connection currently recorded.</summary>
+    IReadOnlyList<string> GetUsers();
+
+    /// <summary>
+    /// Records <paramref name="connection"/> under the user it is identified as, the same as <see cref="Add"/>, and
+    /// atomically reports whether this was their first live connection - whether they were unreachable a moment
+    /// ago. Needed because two connections to the same user (e.g. one this node dialed and one it accepted) can
+    /// complete concurrently, so checking <see cref="Has"/> and calling <see cref="Add"/> as two separate steps
+    /// could let both connections win the race and both report the user as newly online.
+    /// </summary>
+    bool AddNewlyOnline(PeerConnection connection);
+
+    /// <summary>
+    /// Forgets <paramref name="connection"/>, the same as <see cref="Remove"/>, and atomically reports the user it
+    /// belonged to plus whether this left them with no live connections at all (now unreachable), for the same
+    /// concurrency reason as <see cref="AddNewlyOnline"/>.
+    /// </summary>
+    (string? UserName, bool NowOffline) RemoveNowOffline(PeerConnection connection);
 }
 
 /// <inheritdoc />
@@ -93,5 +112,54 @@ internal sealed class UserConnections : IUserConnections
     public bool Has(string userName)
     {
         lock (gate) { return byUser.ContainsKey(userName); }
+    }
+
+    /// <inheritdoc />
+    public IReadOnlyList<string> GetUsers()
+    {
+        lock (gate) { return [.. byUser.Keys]; }
+    }
+
+    /// <inheritdoc />
+    public bool AddNewlyOnline(PeerConnection connection)
+    {
+        string name = connection.User?.Name ?? throw new ArgumentException("The connection has not been identified", nameof(connection));
+        lock (gate)
+        {
+            if (byConnection.ContainsKey(connection)) { return false; }
+
+            bool wasOffline = !byUser.ContainsKey(name);
+            byConnection[connection] = name;
+            if (!byUser.TryGetValue(name, out List<PeerConnection>? connections))
+            {
+                connections = [];
+                byUser[name] = connections;
+            }
+
+            connections.Add(connection);
+            return wasOffline;
+        }
+    }
+
+    /// <inheritdoc />
+    public (string? UserName, bool NowOffline) RemoveNowOffline(PeerConnection connection)
+    {
+        lock (gate)
+        {
+            if (!byConnection.Remove(connection, out string? name)) { return (null, false); }
+
+            bool nowOffline = false;
+            if (byUser.TryGetValue(name, out List<PeerConnection>? connections))
+            {
+                connections.Remove(connection);
+                if (connections.Count == 0)
+                {
+                    byUser.Remove(name);
+                    nowOffline = true;
+                }
+            }
+
+            return (name, nowOffline);
+        }
     }
 }

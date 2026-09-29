@@ -13,6 +13,8 @@ public interface IServiceConnection
     Task<UserInfo?> GetUserInfo(CancellationToken cancellation = default);
     /// <summary>Returns the names of all known users in the messaging system.</summary>
     Task<List<string>> GetUserNames(CancellationToken cancellation = default);
+    /// <summary>Returns the names of every user currently reachable over at least one live peer connection, unlike <see cref="GetUserNames"/>'s fixed configured directory.</summary>
+    Task<List<string>> GetConnectedUsers(CancellationToken cancellation = default);
     /// <summary>Registers this instance as a user using <paramref name="userCode"/> and returns the resulting <see cref="UserInfo"/>.</summary>
     Task<UserInfo?> InstallUser(string userCode, CancellationToken cancellation = default);
     /// <summary>

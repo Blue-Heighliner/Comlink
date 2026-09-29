@@ -258,6 +258,13 @@ internal sealed class ConfiguredEngineController : IEngineController
     public IExternalSystem? ExternalServer => fallback.ExternalServer;
 
     /// <inheritdoc />
+    public IReadOnlyList<Action<IUserConnectionHookContext>> UserConnectedHooks => fallback.UserConnectedHooks;
+    /// <inheritdoc />
+    public IReadOnlyList<Action<IUserConnectionHookContext>> UserDisconnectedHooks => fallback.UserDisconnectedHooks;
+    /// <inheritdoc />
+    public IReadOnlyList<Action<IMessageReceivedHookContext>> MessageReceivedHooks => fallback.MessageReceivedHooks;
+
+    /// <inheritdoc />
     public UserInfo? ResolveCode(string userCode) => fallback.ResolveCode(userCode);
     /// <inheritdoc />
     public IReadOnlyDictionary<string, string> GetUserData(string userName)

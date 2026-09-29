@@ -15,8 +15,8 @@ public sealed class PublicApiTests
         Assert.Equal(
             [
                 "AddressRequest", "AddressType", "ConnectionInfo", "ConnectionPoint", "DeliveryStatusChangedEvent", "DestinationStatus",
-                "Engine", "ExternalSystemBase`1", "FolderType", "IEngineBuilder", "IEngineConfiguration", "IExternalSystem",
-                "IMessageBuilder`1", "INetworkSerializer", "IPacketBuilder`1", "IServiceConnection",
+                "Engine", "ExternalSystemBase`1", "FolderType", "IEngineBuilder", "IEngineConfiguration", "IEngineHookContext", "IExternalSystem",
+                "IMessageBuilder`1", "IMessageReceivedHookContext", "INetworkSerializer", "IPacketBuilder`1", "IServiceConnection", "IUserConnectionHookContext",
                 "MessageReceivedEvent", "NodeRole", "ProtobufNetworkSerializer", "SendMessageResult",
                 "UserDeliveryResult", "UserIdentity", "UserInfo"
             ],

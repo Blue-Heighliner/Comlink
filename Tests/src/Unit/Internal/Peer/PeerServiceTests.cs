@@ -466,6 +466,71 @@ public sealed class PeerServiceTests
         peer.Verify(p => p.DisposeAsync(), Times.Once);
     }
 
+    /// <summary>The first connection identified as a user raises UserConnected once, and GetConnectedUsers lists them.</summary>
+    [Fact]
+    public async Task Reach_FirstConnectionForUser_RaisesUserConnectedAndListsThem()
+    {
+        Mock<IPeerTransport> peer = BuildPeerMock();
+        PeerService svc = BuildService(peer, BuildUserDirectory());
+        List<string> connected = [];
+        svc.UserConnected += name => { connected.Add(name); return Task.CompletedTask; };
+
+        Reach(peer, "DEST");
+
+        await WaitUntil(() => connected.Count > 0, TimeSpan.FromSeconds(2));
+        Assert.Equal(["DEST"], connected);
+        Assert.Equal(["DEST"], svc.GetConnectedUsers());
+    }
+
+    /// <summary>A second connection for the same already-online user does not raise UserConnected again.</summary>
+    [Fact]
+    public async Task Reach_SecondConnectionForSameUser_DoesNotRaiseUserConnectedAgain()
+    {
+        Mock<IPeerTransport> peer = BuildPeerMock();
+        PeerService svc = BuildService(peer, BuildUserDirectory());
+        List<string> connected = [];
+        svc.UserConnected += name => { connected.Add(name); return Task.CompletedTask; };
+
+        Reach(peer, "DEST");
+        await WaitUntil(() => connected.Count > 0, TimeSpan.FromSeconds(2));
+        Reach(peer, "DEST", inbound: true);
+        await Task.Delay(50);
+
+        Assert.Single(connected);
+    }
+
+    /// <summary>Losing a user's only connection raises UserDisconnected and removes them from GetConnectedUsers; losing one of several does not.</summary>
+    [Fact]
+    public async Task Lose_LastConnectionForUser_RaisesUserDisconnected()
+    {
+        Mock<IPeerTransport> peer = BuildPeerMock();
+        PeerService svc = BuildService(peer, BuildUserDirectory());
+        List<string> disconnected = [];
+        svc.UserDisconnected += name => { disconnected.Add(name); return Task.CompletedTask; };
+        PeerConnection first = Reach(peer, "DEST");
+        PeerConnection second = Reach(peer, "DEST", inbound: true);
+
+        Lose(peer, first);
+        await Task.Delay(50);
+        Assert.Empty(disconnected);
+        Assert.Equal(["DEST"], svc.GetConnectedUsers());
+
+        Lose(peer, second);
+        await WaitUntil(() => disconnected.Count > 0, TimeSpan.FromSeconds(2));
+        Assert.Equal(["DEST"], disconnected);
+        Assert.Empty(svc.GetConnectedUsers());
+    }
+
+    /// <summary>GetConnectedUsers starts empty with no connections identified.</summary>
+    [Fact]
+    public void GetConnectedUsers_NoConnections_ReturnsEmpty()
+    {
+        Mock<IPeerTransport> peer = BuildPeerMock();
+        PeerService svc = BuildService(peer, BuildUserDirectory());
+
+        Assert.Empty(svc.GetConnectedUsers());
+    }
+
     private static async Task WaitUntil(Func<bool> condition, TimeSpan timeout)
     {
         DateTime deadline = DateTime.UtcNow + timeout;

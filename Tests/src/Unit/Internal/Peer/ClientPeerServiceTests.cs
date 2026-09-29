@@ -437,6 +437,58 @@ public sealed class ClientPeerServiceTests
         await startTask;
     }
 
+    /// <summary>Once the server connection is up, UserConnected fires with its identity and GetConnectedUsers lists it.</summary>
+    [Fact]
+    public async Task Come_ServerConnects_RaisesUserConnectedAndListsThem()
+    {
+        Fixture fx = Build(point: new ConnectionPoint { SerialPort = "SL0" }, reachable: false, serverName: "SL0");
+        List<string> connected = [];
+        fx.Service.UserConnected += name => { connected.Add(name); return Task.CompletedTask; };
+        using CancellationTokenSource cts = new();
+        Task startTask = fx.Service.Start(cts.Token);
+        await Task.Delay(20);
+
+        fx.Come();
+
+        await WaitUntil(() => connected.Count > 0, TimeSpan.FromSeconds(2));
+        Assert.Equal(["SL0"], connected);
+        Assert.Equal(["SL0"], fx.Service.GetConnectedUsers());
+
+        cts.Cancel();
+        await startTask;
+    }
+
+    /// <summary>Losing the server connection fires UserDisconnected and empties GetConnectedUsers.</summary>
+    [Fact]
+    public async Task Drop_ServerDisconnects_RaisesUserDisconnectedAndEmptiesConnectedUsers()
+    {
+        Fixture fx = Build(point: new ConnectionPoint { SerialPort = "SL0" }, reachable: false, serverName: "SL0");
+        List<string> disconnected = [];
+        fx.Service.UserDisconnected += name => { disconnected.Add(name); return Task.CompletedTask; };
+        using CancellationTokenSource cts = new();
+        Task startTask = fx.Service.Start(cts.Token);
+        await Task.Delay(20);
+        fx.Come();
+
+        fx.Drop();
+
+        await WaitUntil(() => disconnected.Count > 0, TimeSpan.FromSeconds(2));
+        Assert.Equal(["SL0"], disconnected);
+        Assert.Empty(fx.Service.GetConnectedUsers());
+
+        cts.Cancel();
+        await startTask;
+    }
+
+    /// <summary>Before any connection ever comes up, GetConnectedUsers is empty.</summary>
+    [Fact]
+    public void GetConnectedUsers_BeforeConnecting_ReturnsEmpty()
+    {
+        Fixture fx = Build(reachable: false);
+
+        Assert.Empty(fx.Service.GetConnectedUsers());
+    }
+
     /// <summary>
     /// Even with no real message ever sent by the caller, the background connection monitor proactively
     /// connects to the server and sends an empty heartbeat over the connection, and GetStatuses reports it

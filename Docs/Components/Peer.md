@@ -119,12 +119,33 @@ Beyond MSMT's own delivery status, the engine tracks one more step per recipient
 
 An alert is an ordinary message with `IEngineController.GetIsAlert` set to `true` — nothing about its wire format, routing, or storage differs from a non-alert message. The only difference is client-side: a Client-mode UI that receives an alert message alarms (a red box in the title bar, plus a looping sound) until the user reads it, via the same Read Confirmation flow described above. See `Docs/Components/ViewModels.md` for `AlertViewModel` and the `IEngineController` members that drive this.
 
+## Connection & Message Hooks
+
+Every `IPeerService` implementation also raises `UserConnected`/`UserDisconnected` - once when a user goes from
+unreachable to reachable over at least one live connection, and once when the last such connection is lost - and
+exposes `GetConnectedUsers()`/`IsUserConnected(userName)`, a live view of who that currently includes. What counts
+as "a live connection" matches each role's own connection tracking described above: `PeerService` tracks arbitrary
+identified connections via `IUserConnections`; `ClientPeerService` has exactly one possible entry, its server;
+`ServerRoutingService` tracks every configured child client and cluster server by name. `SendPacket(userName, packet, cancellation)`
+sends a raw, already-built packet (serialized via `IEngineController.PacketSerializer`) directly to one user's
+connection, the same way `Send` does for a message but bypassing the normal packetization/reassembly a full
+message goes through, and carrying no delivery-status tracking of its own.
+
+`EngineHooksService` (started by `EngineHost` alongside the peer and interface listeners, in both Client and
+Headless mode, a no-op if the host configured no hooks at all) subscribes to `UserConnected`/`UserDisconnected`/
+`MessageDelivered`, and runs the host's own hooks (`IEngineBuilder.OnUserConnected`/`OnUserDisconnected`/`OnMessageReceived`,
+see [Configuration.md](Configuration.md#connection--message-hooks)) for each - every hook for one firing handed the
+same freshly-built `IUserConnectionHookContext`/`IMessageReceivedHookContext`, so `SendMessage`/`SendPacket` route
+through `IMessageRoutingService.RouteMessage`/`IPeerService.SendPacket` respectively on that context's behalf. A
+failing hook is logged and never stops the rest, of that event or a later one, from running.
+
 ## Events
 
 | Event | Raised by | Consumed by |
 |-------|-----------|-------------|
-| `PeerService.MessageDelivered` | PeerService | DirectServiceConnection |
+| `PeerService.MessageDelivered` | PeerService | DirectServiceConnection, EngineHooksService |
 | `PeerService.ConfirmationReceived` | PeerService | MessageRoutingService |
 | `PeerService.DeliveryStatusChanged` | PeerService | MessageRoutingService |
+| `PeerService.UserConnected` / `UserDisconnected` | PeerService, ClientPeerService, ServerRoutingService | EngineHooksService |
 | `MessageRoutingService.DeliveryStatusChanged` | MessageRoutingService | DirectServiceConnection → IServiceConnection consumers |
 | `EntryService.MessageRead` | EntryService | AlertViewModel |

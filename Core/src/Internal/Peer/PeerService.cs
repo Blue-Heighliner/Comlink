@@ -13,10 +13,25 @@ internal interface IPeerService
     event Func<string, string, Task>? ConfirmationReceived;
     /// <summary>Raised whenever the delivery status of a message sent to a specific user changes.</summary>
     event Func<string, string, DestinationStatus, Task>? DeliveryStatusChanged;
+    /// <summary>Raised when a user goes from having no live connection to having at least one.</summary>
+    event Func<string, Task>? UserConnected;
+    /// <summary>Raised when a user goes from having at least one live connection to having none.</summary>
+    event Func<string, Task>? UserDisconnected;
+    /// <summary>Returns the names of every user currently reachable over at least one live connection.</summary>
+    IReadOnlyList<string> GetConnectedUsers();
+    /// <summary>Whether <paramref name="userName"/> is currently reachable over at least one live connection, without allocating the full list <see cref="GetConnectedUsers"/> would.</summary>
+    bool IsUserConnected(string userName);
     /// <summary>Starts the inbound peer listener and blocks until <paramref name="cancellation"/> is cancelled.</summary>
     Task Start(CancellationToken cancellation);
     /// <summary>Sends <paramref name="message"/> (an instance of <see cref="IEngineController.MessageType"/>) to the peer identified by <paramref name="userName"/>.</summary>
     Task<bool> Send(string userName, object message, CancellationToken cancellation = default);
+    /// <summary>
+    /// Sends <paramref name="packet"/> (an instance of <see cref="IEngineController.PacketType"/>) directly to the
+    /// peer identified by <paramref name="userName"/>, serialized via <see cref="IEngineController.PacketSerializer"/>
+    /// instead of <see cref="IEngineController.NetworkSerializer"/> - bypassing the normal packetization/reassembly a
+    /// full message goes through, and carrying no delivery-status tracking of its own.
+    /// </summary>
+    Task<bool> SendPacket(string userName, object packet, CancellationToken cancellation = default);
     /// <summary>Raises <see cref="MessageDelivered"/> directly with <paramref name="payload"/>, without a network round-trip. Used when a user sends a message to itself.</summary>
     Task DeliverLocal(object payload);
 }
@@ -67,6 +82,16 @@ internal sealed class PeerService : IPeerService, IAsyncDisposable
     public event Func<string, string, Task>? ConfirmationReceived;
     /// <inheritdoc />
     public event Func<string, string, DestinationStatus, Task>? DeliveryStatusChanged;
+    /// <inheritdoc />
+    public event Func<string, Task>? UserConnected;
+    /// <inheritdoc />
+    public event Func<string, Task>? UserDisconnected;
+
+    /// <inheritdoc />
+    public IReadOnlyList<string> GetConnectedUsers() => connections.GetUsers();
+
+    /// <inheritdoc />
+    public bool IsUserConnected(string userName) => connections.Has(userName);
 
     /// <inheritdoc />
     public async Task Start(CancellationToken cancellation)
@@ -115,6 +140,22 @@ internal sealed class PeerService : IPeerService, IAsyncDisposable
     }
 
     /// <inheritdoc />
+    public async Task<bool> SendPacket(string userName, object packet, CancellationToken cancellation = default)
+    {
+        if (transport is null || connections.Get(userName) is not { } connection) { return false; }
+
+        try
+        {
+            using IMemoryOwner<byte> buf = engineController.PacketSerializer!.Serialize(packet);
+            return await transport.Request(connection, buf.Memory, new PeerSendOptions { Priority = 0 }, cancellation);
+        }
+        catch
+        {
+            return false;
+        }
+    }
+
+    /// <inheritdoc />
     public async Task DeliverLocal(object payload)
     {
         logger.LogInformation("{MessageId} delivered locally from {FromUser}", engineController.GetMessageId(payload), engineController.GetFromUser(payload));
@@ -125,8 +166,21 @@ internal sealed class PeerService : IPeerService, IAsyncDisposable
     {
         transport = newTransport;
         newTransport.Received.Listen(OnReceived);
-        newTransport.Connected.Listen(args => connections.Add(args.Connection));
-        newTransport.Disconnected.Listen(args => connections.Remove(args.Connection));
+        newTransport.Connected.Listen(args => OnConnected(args.Connection));
+        newTransport.Disconnected.Listen(args => OnDisconnected(args.Connection));
+    }
+
+    private void OnConnected(PeerConnection connection)
+    {
+        if (connection.User is not { } user) { return; }
+
+        if (connections.AddNewlyOnline(connection)) { PeerConnectionNotifier.Raise(UserConnected, user.Name, "connecting", logger); }
+    }
+
+    private void OnDisconnected(PeerConnection connection)
+    {
+        (string? userName, bool nowOffline) = connections.RemoveNowOffline(connection);
+        if (nowOffline && userName is not null) { PeerConnectionNotifier.Raise(UserDisconnected, userName, "disconnecting", logger); }
     }
 
     private void OnReceived(PeerReceivedEventArgs args)
@@ -144,6 +198,7 @@ internal sealed class PeerService : IPeerService, IAsyncDisposable
             catch (Exception ex) { logger.LogError(ex, "Failed to handle the delivery status of {MessageId} to {UserName}", tag.MessageId, tag.UserName); }
         });
     }
+
 
     /// <inheritdoc />
     public ValueTask DisposeAsync()

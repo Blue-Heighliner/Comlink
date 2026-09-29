@@ -173,4 +173,25 @@ public interface IEngineBuilder
 
     /// <summary>Designates an external system as the exclusive upstream hub every outgoing message is sent to instead of the peer network. It is added like <see cref="ExternalSystem"/> when it is not already.</summary>
     IEngineBuilder ExternalServer(IExternalSystem system);
+
+    /// <summary>
+    /// Adds a hook run when a user goes from having no live peer connection to having at least one. Handed an
+    /// <see cref="IUserConnectionHookContext"/> whose <see cref="IUserConnectionHookContext.TargetUser"/> names
+    /// the user that connected. Adding more than one hook runs every one of them, in the order added.
+    /// </summary>
+    IEngineBuilder OnUserConnected(Action<IUserConnectionHookContext> hook);
+
+    /// <summary>
+    /// Adds a hook run when a user goes from having at least one live peer connection to having none. Handed an
+    /// <see cref="IUserConnectionHookContext"/> whose <see cref="IUserConnectionHookContext.TargetUser"/> names
+    /// the user that disconnected. Adding more than one hook runs every one of them, in the order added.
+    /// </summary>
+    IEngineBuilder OnUserDisconnected(Action<IUserConnectionHookContext> hook);
+
+    /// <summary>
+    /// Adds a hook run whenever this instance receives a new (non-confirmation) message from a peer. Handed an
+    /// <see cref="IMessageReceivedHookContext"/> whose <see cref="IMessageReceivedHookContext.Message"/> carries
+    /// the received message. Adding more than one hook runs every one of them, in the order added.
+    /// </summary>
+    IEngineBuilder OnMessageReceived(Action<IMessageReceivedHookContext> hook);
 }

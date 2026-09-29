@@ -69,6 +69,16 @@ internal sealed class ServerRoutingService : IPeerService, IConnectionStatusServ
 #pragma warning restore CS0067
     /// <inheritdoc />
     public event Action? StatusesChanged;
+    /// <inheritdoc />
+    public event Func<string, Task>? UserConnected;
+    /// <inheritdoc />
+    public event Func<string, Task>? UserDisconnected;
+
+    /// <inheritdoc />
+    public IReadOnlyList<string> GetConnectedUsers() => [.. childConnected.Keys, .. serverConnected.Keys];
+
+    /// <inheritdoc />
+    public bool IsUserConnected(string userName) => childConnected.ContainsKey(userName) || serverConnected.ContainsKey(userName);
 
     /// <inheritdoc />
     public async Task Start(CancellationToken cancellation)
@@ -131,6 +141,7 @@ internal sealed class ServerRoutingService : IPeerService, IConnectionStatusServ
         if (connected) { logger.LogInformation("Connected to child client {ClientName}", childName); }
         else { logger.LogWarning("Child client {ClientName} unreachable", childName); }
         StatusesChanged?.Invoke();
+        PeerConnectionNotifier.Raise(connected ? UserConnected : UserDisconnected, childName, connected ? "connecting" : "disconnecting", logger);
     }
 
     private void UpdateServerStatus(string serverName, bool connected)
@@ -154,6 +165,7 @@ internal sealed class ServerRoutingService : IPeerService, IConnectionStatusServ
         if (connected) { logger.LogInformation("Connected to server {ServerName}", serverName); }
         else { logger.LogWarning("Server {ServerName} unreachable", serverName); }
         StatusesChanged?.Invoke();
+        PeerConnectionNotifier.Raise(connected ? UserConnected : UserDisconnected, serverName, connected ? "connecting" : "disconnecting", logger);
     }
 
     private void OnConnected(PeerConnectionEventArgs args)
@@ -339,6 +351,22 @@ internal sealed class ServerRoutingService : IPeerService, IConnectionStatusServ
 
         try { await transport.Request(connection, data, new PeerSendOptions { Priority = priority }, CancellationToken.None); }
         catch { }
+    }
+
+    /// <inheritdoc />
+    public async Task<bool> SendPacket(string userName, object packet, CancellationToken cancellation = default)
+    {
+        if (transport is null || closedNames.ContainsKey(userName) || connections.Get(userName) is not { } connection) { return false; }
+
+        try
+        {
+            using IMemoryOwner<byte> buf = engineController.PacketSerializer!.Serialize(packet);
+            return await transport.Request(connection, buf.Memory, new PeerSendOptions { Priority = 0 }, cancellation);
+        }
+        catch
+        {
+            return false;
+        }
     }
 
     /// <inheritdoc />
