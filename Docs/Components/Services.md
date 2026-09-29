@@ -100,17 +100,17 @@ Both `StoreIncomingMessage` and `StoreSentMessage` take the message's logical fi
 
 | Method | Description |
 |--------|-------------|
-| `StoreIncomingMessage(messageId, fromUser, subject, body, addresses, sentAt, isAlert = false, priority = 0, tag = "")` | Creates a `MessageEntity` in the Inbox folder (`IsOutbound = false`, `ReadStatus = Received`), fires `MessageInserted` |
-| `StoreSentMessage(messageId, subject, body, addresses, sentAt, userResults, isAlert = false, priority = 0, tag = "")` | Creates a `MessageEntity` in the Outbox (`IsOutbound = true`) with per-user delivery statuses seeded from the routing result — `Confirmed` when `Success` is `true` (a successful send already implies full MSMT delivery, see `Docs/Components/Peer.md`), otherwise `Failed` |
+| `StoreIncomingMessage(messageId, fromUser, subject, body, addresses, sentAt, isAlert = false, priority = 0, tag = "", securityLevel = "")` | Creates a `MessageEntity` in the Inbox folder (`IsOutbound = false`, `ReadStatus = Received`), fires `MessageInserted` |
+| `StoreSentMessage(messageId, subject, body, addresses, sentAt, userResults, isAlert = false, priority = 0, tag = "", securityLevel = "")` | Creates a `MessageEntity` in the Outbox (`IsOutbound = true`) with per-user delivery statuses seeded from the routing result — `Confirmed` when `Success` is `true` (a successful send already implies full MSMT delivery, see `Docs/Components/Peer.md`), otherwise `Failed` |
 | `UpdateDeliveryStatus(messageId, userName, status)` | Updates per-user delivery status on the Outbox record for `messageId` - always scoped to the outbound record, since a self-addressed message also has an Inbox record sharing the same `messageId`. The user name matches case-insensitively, and a status only ever moves forward (Sending, then Sent, then Confirmed or Failed, then Read): status events for different stages can arrive out of order, so a late earlier one is ignored rather than undoing a later one |
 | `MarkMessageRead(messageId)` | Transitions the Inbox record's `ReadStatus` from `Received` to `Read` and fires `MessageRead`. A no-op (returns `null`) if the record is missing or already `Read` — see [Peer.md](Peer.md#read-confirmation) |
 | `CreateDraft()` | Creates a blank draft in the Drafts folder, fires `DraftInserted` |
 | `CreateNote()` | Creates a blank note in the Notes folder, fires `NoteInserted` |
 | `SaveDraft(entity)` | Persists draft changes, fires `DraftUpdated` if not yet sent |
 | `SaveNote(entity)` | Persists note changes, fires `NoteUpdated` |
-| `GetMessages(folderId, page)` | Paginated messages, ordered by `ReceivedAt` descending |
-| `GetDrafts(folderId, page, alphabetical)` | Paginated drafts |
-| `GetNotes(folderId, page, alphabetical)` | Paginated notes |
+| `GetMessages(folderId, page, filter = null)` | Paginated messages, ordered by `ReceivedAt` descending. A non-empty `EntryFilter` loads the whole folder to filter in memory instead of paginating the LiteDB query directly, since a message's fields live inside the host's own opaque message type: `Search` matches case-insensitively against subject, sender, destinations, tag, priority label, or security level name; `DateFrom`/`DateTo` bound `ReceivedAt` as exact instants (a caller wanting a whole calendar day combines the date with its start/end of day itself - `EntryBarViewModel` does this by default); `SecurityLevel`/`Priority`/`AlertOnly` match the decoded message exactly |
+| `GetDrafts(folderId, page, alphabetical, filter = null)` | Paginated drafts, same in-memory filtering approach. `Search` matches subject or tag; `DateFrom`/`DateTo` bound `ModifiedAt` the same exact-instant way; `SecurityLevel`/`Priority`/`AlertOnly` match directly against `DraftEntity`'s own fields |
+| `GetNotes(folderId, page, alphabetical, filter = null)` | Paginated notes, same in-memory filtering approach. `Search` matches body text; `DateFrom`/`DateTo` bound `ModifiedAt` the same exact-instant way; `SecurityLevel`/`Priority`/`AlertOnly` are ignored - `NoteEntity` has none of those fields |
 | `GetActivityLogs(page)` | Paginated activity log entries, newest first |
 | `DeleteEntry(id, entryType, isOutboundMessage = false)` | Permanently deletes an entry; `isOutboundMessage` disambiguates the Inbox vs. Outbox record for a self-addressed message |
 | `MoveEntry(entryId, entryType, targetFolderId, isOutboundMessage = false)` | Moves an entry to another folder; same disambiguation as `DeleteEntry` |

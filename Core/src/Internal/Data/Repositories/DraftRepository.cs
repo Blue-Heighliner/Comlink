@@ -7,6 +7,8 @@ internal interface IDraftRepository
     Task<List<DraftEntity>> GetPage(string folderId, int page, bool alphabetical);
     /// <summary>Returns the count of unsent drafts in the specified folder.</summary>
     Task<int> Count(string folderId);
+    /// <summary>Returns every unsent draft in the specified folder, unpaged, ordered the same way as <see cref="GetPage"/>. Used for in-memory search filtering.</summary>
+    Task<List<DraftEntity>> GetAllInFolder(string folderId, bool alphabetical);
     /// <summary>Returns every draft document in the database, sent or unsent, across all folders.</summary>
     Task<List<DraftEntity>> GetAll();
     /// <summary>Returns the draft with the given identifier, or <c>null</c> if not found.</summary>
@@ -47,6 +49,17 @@ internal sealed class DraftRepository : IDraftRepository
     /// <inheritdoc />
     public Task<int> Count(string folderId)
         => Task.Run(() => ctx.Drafts.Count(d => d.FolderId == folderId && !d.IsSent));
+
+    /// <inheritdoc />
+    public Task<List<DraftEntity>> GetAllInFolder(string folderId, bool alphabetical)
+        => Task.Run(() =>
+        {
+            ILiteQueryable<DraftEntity> query = ctx.Drafts.Query().Where(d => d.FolderId == folderId && !d.IsSent);
+            return (alphabetical
+                ? query.OrderBy(d => d.Subject)
+                : query.OrderByDescending(d => d.ModifiedAt))
+                .ToList();
+        });
 
     /// <inheritdoc />
     public Task<List<DraftEntity>> GetAll()

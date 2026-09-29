@@ -43,6 +43,123 @@
       </Grid>
     </Border>
 
+    <!-- Search and filters (hidden for Activity, which has no free-text fields worth searching) -->
+    <Border DockPanel.Dock="Top"
+            IsVisible="{Binding ShowSearch}"
+            BorderBrush="#3E3E42"
+            BorderThickness="0,0,0,1"
+            Padding="8,4">
+      <StackPanel Spacing="6">
+        <!-- Filters toggle header - collapsed by default; collapsing only hides the controls below, it never
+             clears them, so search keeps running against whatever this section last filtered to. -->
+        <Button Command="{Binding ToggleFiltersCommand}"
+                Background="Transparent"
+                BorderThickness="0"
+                Padding="0"
+                HorizontalAlignment="Stretch"
+                HorizontalContentAlignment="Stretch"
+                Cursor="Hand">
+          <Grid ColumnDefinitions="*,Auto,16">
+            <TextBlock Grid.Column="0"
+                       Text="FILTERS"
+                       FontSize="11"
+                       Foreground="#5A5A5A"
+                       FontWeight="SemiBold"
+                       LetterSpacing="1"
+                       VerticalAlignment="Center" />
+            <TextBlock Grid.Column="1"
+                       Text="{Binding ActiveFilterCount, StringFormat='{}{0} active'}"
+                       FontSize="11"
+                       FontWeight="SemiBold"
+                       Foreground="#98C379"
+                       VerticalAlignment="Center"
+                       Margin="8,0"
+                       IsVisible="{Binding HasActiveFilters}" />
+            <TextBlock Grid.Column="2"
+                       Text="{Binding FiltersExpandIndicator}"
+                       FontSize="10"
+                       Foreground="#5A5A5A"
+                       VerticalAlignment="Center"
+                       HorizontalAlignment="Right" />
+          </Grid>
+        </Button>
+
+        <!-- Search, date range, security level, priority and alert-only (shown when the section above is
+             expanded). Each control gets its own full-width row rather than sharing one, since a
+             DatePicker/TimePicker's segmented layout does not shrink to fit and gets cut off when squeezed into
+             a narrower column. -->
+        <StackPanel IsVisible="{Binding IsFiltersExpanded}" Spacing="10">
+          <TextBox Text="{Binding SearchText}"
+                   Watermark="Search..."
+                   Background="#3C3C3C"
+                   BorderThickness="0"
+                   FontSize="13"
+                   Height="28" />
+          <StackPanel Spacing="3">
+            <TextBlock Text="FROM" FontSize="10" Foreground="#5A5A5A" FontWeight="SemiBold" LetterSpacing="1" />
+            <DatePicker SelectedDate="{Binding DateFrom}" FontSize="12" HorizontalAlignment="Stretch" />
+            <TimePicker SelectedTime="{Binding TimeFrom}" FontSize="12" HorizontalAlignment="Stretch" />
+          </StackPanel>
+          <StackPanel Spacing="3">
+            <TextBlock Text="TO" FontSize="10" Foreground="#5A5A5A" FontWeight="SemiBold" LetterSpacing="1" />
+            <DatePicker SelectedDate="{Binding DateTo}" FontSize="12" HorizontalAlignment="Stretch" />
+            <TimePicker SelectedTime="{Binding TimeTo}" FontSize="12" HorizontalAlignment="Stretch" />
+          </StackPanel>
+
+          <StackPanel Spacing="3" IsVisible="{Binding ShowSecurityLevelFilter}">
+            <TextBlock Text="SECURITY LEVEL" FontSize="10" Foreground="#5A5A5A" FontWeight="SemiBold" LetterSpacing="1" />
+            <ComboBox ItemsSource="{Binding AvailableSecurityLevelFilters}"
+                      SelectedItem="{Binding SelectedSecurityLevelFilter}"
+                      Background="#3C3C3C"
+                      BorderThickness="0"
+                      FontSize="12"
+                      Height="26"
+                      HorizontalAlignment="Stretch">
+              <ComboBox.ItemTemplate>
+                <DataTemplate>
+                  <TextBlock Text="{Binding Label}" />
+                </DataTemplate>
+              </ComboBox.ItemTemplate>
+            </ComboBox>
+          </StackPanel>
+
+          <StackPanel Spacing="3" IsVisible="{Binding ShowPriorityFilter}">
+            <TextBlock Text="PRIORITY" FontSize="10" Foreground="#5A5A5A" FontWeight="SemiBold" LetterSpacing="1" />
+            <ComboBox ItemsSource="{Binding AvailablePriorityFilters}"
+                      SelectedItem="{Binding SelectedPriorityFilter}"
+                      Background="#3C3C3C"
+                      BorderThickness="0"
+                      FontSize="12"
+                      Height="26"
+                      HorizontalAlignment="Stretch">
+              <ComboBox.ItemTemplate>
+                <DataTemplate>
+                  <TextBlock Text="{Binding Label}" />
+                </DataTemplate>
+              </ComboBox.ItemTemplate>
+            </ComboBox>
+          </StackPanel>
+
+          <CheckBox Content="Alert only"
+                    IsChecked="{Binding AlertOnlyFilter}"
+                    IsVisible="{Binding ShowAlertFilter}"
+                    Foreground="#CCCCCC"
+                    FontSize="12" />
+
+          <Button Content="RESET FILTERS"
+                  Command="{Binding ResetFiltersCommand}"
+                  HorizontalAlignment="Stretch"
+                  HorizontalContentAlignment="Center"
+                  Background="#3C3C3C"
+                  Foreground="#CCCCCC"
+                  BorderThickness="0"
+                  FontSize="11"
+                  FontWeight="SemiBold"
+                  Padding="0,6" />
+        </StackPanel>
+      </StackPanel>
+    </Border>
+
     <!-- Sort toggle header (Drafts/Notes only) -->
     <Border DockPanel.Dock="Top"
             IsVisible="{Binding ShowSortToggle}"
@@ -90,11 +207,12 @@
                 <TextBlock Text="{Binding Title}"
                            FontSize="13"
                            TextTrimming="CharacterEllipsis"
+                           Foreground="{Binding TitleColorHex, Converter={x:Static vm:ColorHexToBrushConverter.Instance}}"
                            ToolTip.Tip="{Binding Title}" />
                 <TextBlock Text="{Binding SecondaryText}"
                            FontSize="12"
                            TextTrimming="CharacterEllipsis"
-                           Foreground="#CCCCCC"
+                           Foreground="{Binding SecondaryTextColorHex, Converter={x:Static vm:ColorHexToBrushConverter.Instance}}"
                            IsVisible="{Binding SecondaryText, Converter={x:Static StringConverters.IsNotNullOrEmpty}}" />
                 <StackPanel Orientation="Horizontal"
                             Spacing="6"

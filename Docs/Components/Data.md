@@ -157,6 +157,7 @@ All repositories take `LiteDbContext` by constructor. All public methods are `Ta
 | `Update(entity)` | Update |
 | `Delete(messageId, outbound)` | Delete by `MessageId` and direction, same disambiguation as `Get` |
 | `GetAll()` | Every message document, both Inbox and Outbox, across all folders — unpaginated; used by `ExportService` for a full export |
+| `GetAllInFolder(folderId)` | Every message in one folder, unpaginated, same ordering as `GetPage`; used by `EntryService` to search a folder's entries, since a message's searchable fields live inside the host's own opaque `Message` type and cannot be queried in LiteDB directly |
 
 ### `DraftRepository` — page size 50
 
@@ -167,10 +168,11 @@ All repositories take `LiteDbContext` by constructor. All public methods are `Ta
 | `Get(id)` | |
 | `Insert / Update / Delete` | |
 | `GetAll()` | Every draft document, sent or unsent, across all folders — unpaginated; used by `ExportService` |
+| `GetAllInFolder(folderId, alphabetical)` | Every unsent draft in one folder, unpaginated, same ordering as `GetPage`; used by `EntryService` to search a folder's entries |
 
 ### `NoteRepository` — page size 50
 
-Same interface shape as `DraftRepository`, including `GetAll()`.
+Same interface shape as `DraftRepository`, including `GetAll()` and `GetAllInFolder(folderId, alphabetical)`.
 
 ### `ActivityLogRepository` — page size 50
 

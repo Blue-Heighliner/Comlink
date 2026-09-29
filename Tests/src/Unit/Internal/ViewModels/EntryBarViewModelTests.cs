@@ -8,7 +8,7 @@ public sealed class EntryBarViewModelTests
     private static FolderItemViewModel MakeFolder(string id, FolderType type)
         => new(id, type.ToString(), type, null);
 
-    private static MessageEntity MakeMessage(string id = "MSG1", string fromUser = "ALPHA", string subject = "Hello", int priority = 0, string tag = "", string securityLevel = "")
+    private static MessageEntity MakeMessage(string id = "MSG1", string fromUser = "ALPHA", string subject = "Hello", int priority = 0, string tag = "", string securityLevel = "", bool isAlert = false)
     {
         object message = format.CreateMessage();
         format.SetMessageId(message, id);
@@ -18,6 +18,7 @@ public sealed class EntryBarViewModelTests
         format.SetPriority(message, priority);
         format.SetTag(message, tag);
         format.SetSecurityLevel(message, securityLevel);
+        format.SetIsAlert(message, isAlert);
         return new MessageEntity
         {
             MessageId = id,
@@ -27,7 +28,7 @@ public sealed class EntryBarViewModelTests
         };
     }
 
-    private static DraftEntity MakeDraft(string subject = "Draft subject")
+    private static DraftEntity MakeDraft(string subject = "Draft subject", bool isAlert = false)
         => new()
         {
             Id = new ObjectId(),
@@ -35,7 +36,8 @@ public sealed class EntryBarViewModelTests
             Body = "",
             FolderId = "root-drafts",
             ModifiedAt = DateTime.UtcNow,
-            Addresses = []
+            Addresses = [],
+            IsAlert = isAlert
         };
 
     private static NoteEntity MakeNote(string body = "Note text")
@@ -94,6 +96,377 @@ public sealed class EntryBarViewModelTests
         await vm.LoadFolder(MakeFolder("root-notes", FolderType.Notes));
 
         Assert.Equal("Line one", vm.Entries[0].Title);
+    }
+
+    /// <summary>ShowSearch is true for Inbox, Outbox, Drafts and Notes, and false for Activity, which has no free-text fields worth searching.</summary>
+    [Theory]
+    [InlineData(FolderType.Inbox, true)]
+    [InlineData(FolderType.Outbox, true)]
+    [InlineData(FolderType.Drafts, true)]
+    [InlineData(FolderType.Notes, true)]
+    [InlineData(FolderType.Activity, false)]
+    public async Task LoadFolder_SetsShowSearchByFolderType(FolderType folderType, bool expected)
+    {
+        Mock<IEntryService> svc = new();
+        svc.Setup(s => s.GetMessages(It.IsAny<string>(), It.IsAny<int>(), It.IsAny<EntryFilter>()))
+           .ReturnsAsync((Items: new List<MessageEntity>(), Total: 0));
+        svc.Setup(s => s.GetDrafts(It.IsAny<string>(), It.IsAny<int>(), It.IsAny<bool>(), It.IsAny<EntryFilter>()))
+           .ReturnsAsync((Items: new List<DraftEntity>(), Total: 0));
+        svc.Setup(s => s.GetNotes(It.IsAny<string>(), It.IsAny<int>(), It.IsAny<bool>(), It.IsAny<EntryFilter>()))
+           .ReturnsAsync((Items: new List<NoteEntity>(), Total: 0));
+        svc.Setup(s => s.GetActivityLogs(It.IsAny<int>()))
+           .ReturnsAsync((Items: new List<ActivityLogEntity>(), Total: 0));
+        EntryBarViewModel vm = new(svc.Object, format);
+
+        await vm.LoadFolder(MakeFolder("root", folderType));
+
+        Assert.Equal(expected, vm.ShowSearch);
+    }
+
+    /// <summary>LoadFolder resets any search text left over from a previously viewed folder.</summary>
+    [Fact]
+    public async Task LoadFolder_ResetsSearchTextFromPreviousFolder()
+    {
+        Mock<IEntryService> svc = new();
+        svc.Setup(s => s.GetMessages(It.IsAny<string>(), It.IsAny<int>(), It.IsAny<EntryFilter>()))
+           .ReturnsAsync((Items: new List<MessageEntity>(), Total: 0));
+        EntryBarViewModel vm = new(svc.Object, format);
+        await vm.LoadFolder(MakeFolder("root-inbox", FolderType.Inbox));
+        vm.SearchText = "leftover";
+
+        await vm.LoadFolder(MakeFolder("root-inbox", FolderType.Inbox));
+
+        Assert.Equal(string.Empty, vm.SearchText);
+    }
+
+    /// <summary>Setting SearchText resets to the first page and reloads with the search term passed through to the entry service.</summary>
+    [Fact]
+    public async Task SearchText_Set_ResetsPageAndPassesSearchToService()
+    {
+        Mock<IEntryService> svc = new();
+        MessageEntity match = MakeMessage(subject: "Quarterly Report");
+        svc.SetupSequence(s => s.GetMessages(It.IsAny<string>(), It.IsAny<int>(), It.IsAny<EntryFilter>()))
+           .ReturnsAsync((Items: new List<MessageEntity> { MakeMessage() }, Total: 1))
+           .ReturnsAsync((Items: new List<MessageEntity> { match }, Total: 1));
+        EntryBarViewModel vm = new(svc.Object, format);
+        await vm.LoadFolder(MakeFolder("root-inbox", FolderType.Inbox));
+        vm.CurrentPage = 2;
+
+        vm.SearchText = "report";
+
+        Assert.Equal(1, vm.CurrentPage);
+        svc.Verify(s => s.GetMessages("root-inbox", 1, new EntryFilter { Search = "report" }), Times.Once);
+    }
+
+    /// <summary>An empty or whitespace-only SearchText is passed to the entry service as null, matching the unfiltered default rather than an empty search.</summary>
+    [Fact]
+    public async Task SearchText_Whitespace_PassesNullToService()
+    {
+        Mock<IEntryService> svc = new();
+        svc.Setup(s => s.GetMessages(It.IsAny<string>(), It.IsAny<int>(), It.IsAny<EntryFilter>()))
+           .ReturnsAsync((Items: new List<MessageEntity>(), Total: 0));
+        EntryBarViewModel vm = new(svc.Object, format);
+        await vm.LoadFolder(MakeFolder("root-inbox", FolderType.Inbox));
+
+        vm.SearchText = "   ";
+
+        svc.Verify(s => s.GetMessages("root-inbox", 1, null), Times.AtLeastOnce);
+    }
+
+    /// <summary>AvailableSecurityLevelFilters is a leading "Any" option followed by every configured security level.</summary>
+    [Fact]
+    public void AvailableSecurityLevelFilters_IsAnyFollowedByEveryConfiguredLevel()
+    {
+        Mock<TestEngineController> controller = new() { CallBase = true };
+        controller.Setup(c => c.SecurityLevels).Returns([new SecurityLevel { Name = "PUBLIC", Color = "#2E7D32" }, new SecurityLevel { Name = "RESTRICTED", Color = "#C62828" }]);
+        EntryBarViewModel vm = new(new Mock<IEntryService>().Object, controller.Object);
+
+        Assert.Equal(["Any", "PUBLIC", "RESTRICTED"], vm.AvailableSecurityLevelFilters.Select(f => f.Label));
+        Assert.Equal([null, "PUBLIC", "RESTRICTED"], vm.AvailableSecurityLevelFilters.Select(f => f.Name));
+        Assert.Same(vm.AvailableSecurityLevelFilters[0], vm.SelectedSecurityLevelFilter);
+    }
+
+    /// <summary>AvailablePriorityFilters is a leading "Any" option followed by every configured priority.</summary>
+    [Fact]
+    public void AvailablePriorityFilters_IsAnyFollowedByEveryConfiguredPriority()
+    {
+        EntryBarViewModel vm = new(new Mock<IEntryService>().Object, format);
+
+        Assert.Equal(["Any", "Normal"], vm.AvailablePriorityFilters.Select(f => f.Label));
+        Assert.Equal([null, 0], vm.AvailablePriorityFilters.Select(f => f.Value));
+        Assert.Same(vm.AvailablePriorityFilters[0], vm.SelectedPriorityFilter);
+    }
+
+    /// <summary>ShowSecurityLevelFilter is true only for Inbox, Outbox and Drafts, and only when at least one security level is configured.</summary>
+    [Theory]
+    [InlineData(FolderType.Inbox, true)]
+    [InlineData(FolderType.Outbox, true)]
+    [InlineData(FolderType.Drafts, true)]
+    [InlineData(FolderType.Notes, false)]
+    [InlineData(FolderType.Activity, false)]
+    public async Task LoadFolder_SetsShowSecurityLevelFilterWhenLevelsConfigured(FolderType folderType, bool expected)
+    {
+        Mock<TestEngineController> controller = new() { CallBase = true };
+        controller.Setup(c => c.SecurityLevels).Returns([new SecurityLevel { Name = "PUBLIC", Color = "#2E7D32" }]);
+        Mock<IEntryService> svc = new();
+        svc.Setup(s => s.GetMessages(It.IsAny<string>(), It.IsAny<int>(), It.IsAny<EntryFilter>())).ReturnsAsync((Items: new List<MessageEntity>(), Total: 0));
+        svc.Setup(s => s.GetDrafts(It.IsAny<string>(), It.IsAny<int>(), It.IsAny<bool>(), It.IsAny<EntryFilter>())).ReturnsAsync((Items: new List<DraftEntity>(), Total: 0));
+        svc.Setup(s => s.GetNotes(It.IsAny<string>(), It.IsAny<int>(), It.IsAny<bool>(), It.IsAny<EntryFilter>())).ReturnsAsync((Items: new List<NoteEntity>(), Total: 0));
+        svc.Setup(s => s.GetActivityLogs(It.IsAny<int>())).ReturnsAsync((Items: new List<ActivityLogEntity>(), Total: 0));
+        EntryBarViewModel vm = new(svc.Object, controller.Object);
+
+        await vm.LoadFolder(MakeFolder("root", folderType));
+
+        Assert.Equal(expected, vm.ShowSecurityLevelFilter);
+    }
+
+    /// <summary>ShowSecurityLevelFilter is false for a message folder when no security levels are configured, even though ShowPriorityFilter and ShowAlertFilter still apply.</summary>
+    [Fact]
+    public async Task LoadFolder_NoSecurityLevelsConfigured_HidesSecurityLevelFilterOnly()
+    {
+        Mock<IEntryService> svc = new();
+        svc.Setup(s => s.GetMessages(It.IsAny<string>(), It.IsAny<int>(), It.IsAny<EntryFilter>())).ReturnsAsync((Items: new List<MessageEntity>(), Total: 0));
+        EntryBarViewModel vm = new(svc.Object, format);
+
+        await vm.LoadFolder(MakeFolder("root-inbox", FolderType.Inbox));
+
+        Assert.False(vm.ShowSecurityLevelFilter);
+        Assert.True(vm.ShowPriorityFilter);
+        Assert.True(vm.ShowAlertFilter);
+    }
+
+    /// <summary>Setting any of the explicit filter controls resets to the first page and passes the built filter through to the entry service.</summary>
+    [Fact]
+    public async Task SelectedPriorityFilter_Set_ResetsPageAndPassesFilterToService()
+    {
+        Mock<IEntryService> svc = new();
+        svc.Setup(s => s.GetMessages(It.IsAny<string>(), It.IsAny<int>(), It.IsAny<EntryFilter>())).ReturnsAsync((Items: new List<MessageEntity>(), Total: 0));
+        EntryBarViewModel vm = new(svc.Object, format);
+        await vm.LoadFolder(MakeFolder("root-inbox", FolderType.Inbox));
+        vm.CurrentPage = 2;
+
+        vm.SelectedPriorityFilter = vm.AvailablePriorityFilters.Single(f => f.Label == "Normal");
+
+        Assert.Equal(1, vm.CurrentPage);
+        svc.Verify(s => s.GetMessages("root-inbox", 1, new EntryFilter { Priority = 0 }), Times.Once);
+    }
+
+    /// <summary>Setting AlertOnlyFilter passes an EntryFilter with AlertOnly true through to the entry service.</summary>
+    [Fact]
+    public async Task AlertOnlyFilter_SetTrue_PassesAlertOnlyFilterToService()
+    {
+        Mock<IEntryService> svc = new();
+        svc.Setup(s => s.GetMessages(It.IsAny<string>(), It.IsAny<int>(), It.IsAny<EntryFilter>())).ReturnsAsync((Items: new List<MessageEntity>(), Total: 0));
+        EntryBarViewModel vm = new(svc.Object, format);
+        await vm.LoadFolder(MakeFolder("root-inbox", FolderType.Inbox));
+
+        vm.AlertOnlyFilter = true;
+
+        svc.Verify(s => s.GetMessages("root-inbox", 1, new EntryFilter { AlertOnly = true }), Times.Once);
+    }
+
+    /// <summary>LoadFolder resets every filter control left over from a previously viewed folder, not just the search text.</summary>
+    [Fact]
+    public async Task LoadFolder_ResetsAllFiltersFromPreviousFolder()
+    {
+        Mock<IEntryService> svc = new();
+        svc.Setup(s => s.GetMessages(It.IsAny<string>(), It.IsAny<int>(), It.IsAny<EntryFilter>())).ReturnsAsync((Items: new List<MessageEntity>(), Total: 0));
+        EntryBarViewModel vm = new(svc.Object, format);
+        await vm.LoadFolder(MakeFolder("root-inbox", FolderType.Inbox));
+        vm.SelectedPriorityFilter = vm.AvailablePriorityFilters.Single(f => f.Label == "Normal");
+        vm.AlertOnlyFilter = true;
+        vm.DateFrom = DateTimeOffset.Now;
+        vm.DateTo = DateTimeOffset.Now;
+
+        await vm.LoadFolder(MakeFolder("root-inbox", FolderType.Inbox));
+
+        Assert.Same(vm.AvailablePriorityFilters[0], vm.SelectedPriorityFilter);
+        Assert.False(vm.AlertOnlyFilter);
+        Assert.Null(vm.DateFrom);
+        Assert.Null(vm.DateTo);
+    }
+
+    /// <summary>The filter section is collapsed by default.</summary>
+    [Fact]
+    public void IsFiltersExpanded_DefaultsToFalse()
+    {
+        EntryBarViewModel vm = new(new Mock<IEntryService>().Object, format);
+
+        Assert.False(vm.IsFiltersExpanded);
+        Assert.Equal("▼", vm.FiltersExpandIndicator);
+    }
+
+    /// <summary>ToggleFiltersCommand flips IsFiltersExpanded and updates the expand indicator.</summary>
+    [Fact]
+    public void ToggleFiltersCommand_FlipsIsFiltersExpanded()
+    {
+        EntryBarViewModel vm = new(new Mock<IEntryService>().Object, format);
+
+        vm.ToggleFiltersCommand.Execute(null);
+        Assert.True(vm.IsFiltersExpanded);
+        Assert.Equal("▲", vm.FiltersExpandIndicator);
+
+        vm.ToggleFiltersCommand.Execute(null);
+        Assert.False(vm.IsFiltersExpanded);
+        Assert.Equal("▼", vm.FiltersExpandIndicator);
+    }
+
+    /// <summary>Collapsing the filter section does not clear or disable any filter already set - only its visibility changes.</summary>
+    [Fact]
+    public async Task ToggleFiltersCommand_CollapsingDoesNotClearActiveFilters()
+    {
+        Mock<IEntryService> svc = new();
+        svc.Setup(s => s.GetMessages(It.IsAny<string>(), It.IsAny<int>(), It.IsAny<EntryFilter>())).ReturnsAsync((Items: new List<MessageEntity>(), Total: 0));
+        EntryBarViewModel vm = new(svc.Object, format);
+        await vm.LoadFolder(MakeFolder("root-inbox", FolderType.Inbox));
+        vm.ToggleFiltersCommand.Execute(null);
+        vm.AlertOnlyFilter = true;
+
+        vm.ToggleFiltersCommand.Execute(null);
+
+        Assert.False(vm.IsFiltersExpanded);
+        Assert.True(vm.AlertOnlyFilter);
+        svc.Verify(s => s.GetMessages("root-inbox", 1, new EntryFilter { AlertOnly = true }), Times.AtLeastOnce);
+    }
+
+    /// <summary>ActiveFilterCount and HasActiveFilters reflect exactly the filter section's own criteria, not SearchText.</summary>
+    [Fact]
+    public async Task ActiveFilterCount_ReflectsOnlySetFilterCriteria()
+    {
+        Mock<IEntryService> svc = new();
+        svc.Setup(s => s.GetMessages(It.IsAny<string>(), It.IsAny<int>(), It.IsAny<EntryFilter>())).ReturnsAsync((Items: new List<MessageEntity>(), Total: 0));
+        EntryBarViewModel vm = new(svc.Object, format);
+        await vm.LoadFolder(MakeFolder("root-inbox", FolderType.Inbox));
+
+        Assert.Equal(0, vm.ActiveFilterCount);
+        Assert.False(vm.HasActiveFilters);
+
+        vm.SearchText = "ignored for this count";
+        Assert.Equal(0, vm.ActiveFilterCount);
+
+        vm.AlertOnlyFilter = true;
+        vm.DateFrom = DateTimeOffset.Now;
+
+        Assert.Equal(2, vm.ActiveFilterCount);
+        Assert.True(vm.HasActiveFilters);
+    }
+
+    /// <summary>Search combines with an active filter criterion: a matching entry must satisfy both, not either - the filter panel narrows exactly what search can return, it is never bypassed by search.</summary>
+    [Fact]
+    public async Task SearchAndFilter_CombineWithAnd_NeitherBypassesTheOther()
+    {
+        Mock<IEntryService> svc = new();
+        svc.Setup(s => s.GetMessages(It.IsAny<string>(), It.IsAny<int>(), It.IsAny<EntryFilter>())).ReturnsAsync((Items: new List<MessageEntity>(), Total: 0));
+        EntryBarViewModel vm = new(svc.Object, format);
+        await vm.LoadFolder(MakeFolder("root-inbox", FolderType.Inbox));
+        vm.AlertOnlyFilter = true;
+
+        vm.SearchText = "report";
+
+        svc.Verify(s => s.GetMessages("root-inbox", 1, new EntryFilter { Search = "report", AlertOnly = true }), Times.Once);
+    }
+
+    /// <summary>Inbox, Outbox and Draft entries carry IsAlert through from the stored message/draft, driving the entry's title color.</summary>
+    [Theory]
+    [InlineData(FolderType.Inbox)]
+    [InlineData(FolderType.Outbox)]
+    public async Task LoadFolder_MessageFolder_SetsIsAlertOnEntry(FolderType folderType)
+    {
+        Mock<IEntryService> svc = new();
+        svc.Setup(s => s.GetMessages(It.IsAny<string>(), It.IsAny<int>(), It.IsAny<EntryFilter>()))
+           .ReturnsAsync((Items: new List<MessageEntity> { MakeMessage(isAlert: true) }, Total: 1));
+        EntryBarViewModel vm = new(svc.Object, format);
+
+        await vm.LoadFolder(MakeFolder("root", folderType));
+
+        Assert.True(Assert.Single(vm.Entries).IsAlert);
+    }
+
+    /// <summary>Draft entries carry IsAlert through from DraftEntity.IsAlert.</summary>
+    [Fact]
+    public async Task LoadFolder_Drafts_SetsIsAlertOnEntry()
+    {
+        Mock<IEntryService> svc = new();
+        svc.Setup(s => s.GetDrafts(It.IsAny<string>(), It.IsAny<int>(), It.IsAny<bool>(), It.IsAny<EntryFilter>()))
+           .ReturnsAsync((Items: new List<DraftEntity> { MakeDraft(isAlert: true) }, Total: 1));
+        EntryBarViewModel vm = new(svc.Object, format);
+
+        await vm.LoadFolder(MakeFolder("root-drafts", FolderType.Drafts));
+
+        Assert.True(Assert.Single(vm.Entries).IsAlert);
+    }
+
+    /// <summary>Picking only a DateFrom/DateTo date, with no time, still covers the whole day - midnight through the day's last instant.</summary>
+    [Fact]
+    public async Task DateFilters_DateOnlyNoTime_CoverWholeDay()
+    {
+        DateTimeOffset day = new(2026, 6, 15, 0, 0, 0, TimeSpan.Zero);
+        Mock<IEntryService> svc = new();
+        svc.Setup(s => s.GetMessages(It.IsAny<string>(), It.IsAny<int>(), It.IsAny<EntryFilter>())).ReturnsAsync((Items: new List<MessageEntity>(), Total: 0));
+        EntryBarViewModel vm = new(svc.Object, format);
+        await vm.LoadFolder(MakeFolder("root-inbox", FolderType.Inbox));
+
+        vm.DateFrom = day;
+        vm.DateTo = day;
+
+        svc.Verify(s => s.GetMessages("root-inbox", 1, new EntryFilter
+        {
+            DateFrom = day.Date,
+            DateTo = day.Date + new TimeSpan(0, 23, 59, 59, 999)
+        }), Times.Once);
+    }
+
+    /// <summary>An explicit TimeFrom/TimeTo narrows the date bounds to that exact time of day instead of the whole day.</summary>
+    [Fact]
+    public async Task DateFilters_WithExplicitTime_NarrowsToThatInstant()
+    {
+        DateTimeOffset day = new(2026, 6, 15, 0, 0, 0, TimeSpan.Zero);
+        Mock<IEntryService> svc = new();
+        svc.Setup(s => s.GetMessages(It.IsAny<string>(), It.IsAny<int>(), It.IsAny<EntryFilter>())).ReturnsAsync((Items: new List<MessageEntity>(), Total: 0));
+        EntryBarViewModel vm = new(svc.Object, format);
+        await vm.LoadFolder(MakeFolder("root-inbox", FolderType.Inbox));
+        vm.DateFrom = day;
+        vm.DateTo = day;
+
+        vm.TimeFrom = new TimeSpan(9, 0, 0);
+        vm.TimeTo = new TimeSpan(17, 0, 0);
+
+        svc.Verify(s => s.GetMessages("root-inbox", 1, new EntryFilter
+        {
+            DateFrom = day.Date + new TimeSpan(9, 0, 0),
+            DateTo = day.Date + new TimeSpan(17, 0, 0)
+        }), Times.Once);
+    }
+
+    /// <summary>ResetFiltersCommand clears every filter section criterion back to its default, resets to the first page, and reloads unfiltered - SearchText is untouched.</summary>
+    [Fact]
+    public async Task ResetFiltersCommand_ClearsEveryFilterCriterionButNotSearch()
+    {
+        Mock<IEntryService> svc = new();
+        svc.Setup(s => s.GetMessages(It.IsAny<string>(), It.IsAny<int>(), It.IsAny<EntryFilter>())).ReturnsAsync((Items: new List<MessageEntity>(), Total: 0));
+        EntryBarViewModel vm = new(svc.Object, format);
+        await vm.LoadFolder(MakeFolder("root-inbox", FolderType.Inbox));
+        vm.SearchText = "keep me";
+        vm.DateFrom = DateTimeOffset.Now;
+        vm.TimeFrom = new TimeSpan(9, 0, 0);
+        vm.DateTo = DateTimeOffset.Now;
+        vm.TimeTo = new TimeSpan(17, 0, 0);
+        vm.AlertOnlyFilter = true;
+        vm.CurrentPage = 2;
+
+        vm.ResetFiltersCommand.Execute(null);
+
+        Assert.Equal("keep me", vm.SearchText);
+        Assert.Null(vm.DateFrom);
+        Assert.Null(vm.TimeFrom);
+        Assert.Null(vm.DateTo);
+        Assert.Null(vm.TimeTo);
+        Assert.False(vm.AlertOnlyFilter);
+        Assert.Same(vm.AvailableSecurityLevelFilters[0], vm.SelectedSecurityLevelFilter);
+        Assert.Same(vm.AvailablePriorityFilters[0], vm.SelectedPriorityFilter);
+        Assert.Equal(1, vm.CurrentPage);
+        Assert.Equal(0, vm.ActiveFilterCount);
+        svc.Verify(s => s.GetMessages("root-inbox", 1, new EntryFilter { Search = "keep me" }), Times.AtLeastOnce);
     }
 
     /// <summary>SelectEntry fires EntriesSelected with a single-item list and updates SelectedEntry.</summary>

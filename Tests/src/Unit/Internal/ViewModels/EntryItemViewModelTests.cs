@@ -54,7 +54,7 @@ public sealed class EntryItemViewModelTests
     {
         DateTime sortDate = new(2025, 7, 4, 12, 0, 0, DateTimeKind.Utc);
         EntryItemViewModel vm = new("msg123", "Hello", EntryType.Draft, sortDate,
-            secondaryText: "from ALPHA", timeText: "12:00", fixedStatusText: "DRAFT", securityLevelColorHex: "#C62828");
+            secondaryText: "from ALPHA", timeText: "12:00", fixedStatusText: "DRAFT", securityLevelColorHex: "#C62828", isAlert: true);
 
         Assert.Equal("msg123", vm.Id);
         Assert.Equal("Hello", vm.Title);
@@ -64,8 +64,45 @@ public sealed class EntryItemViewModelTests
         Assert.Equal("12:00", vm.TimeText);
         Assert.Equal("DRAFT", vm.FixedStatusText);
         Assert.Equal("#C62828", vm.SecurityLevelColorHex);
+        Assert.True(vm.IsAlert);
         Assert.False(vm.IsSelected);
         Assert.Null(vm.OverallStatus);
+    }
+
+    /// <summary>TitleColorHex is red when IsAlert and there is no SecondaryText (Title itself is the subject line).</summary>
+    [Theory]
+    [InlineData(true, "#E06C75")]
+    [InlineData(false, "#CCCCCC")]
+    public void TitleColorHex_NoSecondaryText_ReflectsIsAlert(bool isAlert, string expected)
+    {
+        EntryItemViewModel vm = new("x", "T", EntryType.Message, DateTime.UtcNow, isAlert: isAlert);
+        Assert.Equal(expected, vm.TitleColorHex);
+    }
+
+    /// <summary>TitleColorHex stays the default gray when IsAlert but SecondaryText is set (Title is the sender, not the subject).</summary>
+    [Fact]
+    public void TitleColorHex_WithSecondaryText_StaysDefaultEvenWhenAlert()
+    {
+        EntryItemViewModel vm = new("x", "T", EntryType.Message, DateTime.UtcNow, secondaryText: "Subject", isAlert: true);
+        Assert.Equal("#CCCCCC", vm.TitleColorHex);
+    }
+
+    /// <summary>SecondaryTextColorHex is red when IsAlert and SecondaryText is set (SecondaryText is the subject line).</summary>
+    [Theory]
+    [InlineData(true, "#E06C75")]
+    [InlineData(false, "#CCCCCC")]
+    public void SecondaryTextColorHex_WithSecondaryText_ReflectsIsAlert(bool isAlert, string expected)
+    {
+        EntryItemViewModel vm = new("x", "T", EntryType.Message, DateTime.UtcNow, secondaryText: "Subject", isAlert: isAlert);
+        Assert.Equal(expected, vm.SecondaryTextColorHex);
+    }
+
+    /// <summary>SecondaryTextColorHex stays the default gray when there is no SecondaryText, even when IsAlert.</summary>
+    [Fact]
+    public void SecondaryTextColorHex_NoSecondaryText_StaysDefaultEvenWhenAlert()
+    {
+        EntryItemViewModel vm = new("x", "T", EntryType.Message, DateTime.UtcNow, isAlert: true);
+        Assert.Equal("#CCCCCC", vm.SecondaryTextColorHex);
     }
 
     /// <summary>SecurityLevelColorHex defaults to null when not given.</summary>

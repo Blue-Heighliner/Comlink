@@ -15,8 +15,9 @@ internal sealed partial class EntryItemViewModel : ObservableObject
     /// <param name="fixedStatusText">Optional static status string that takes precedence when no overall status is set.</param>
     /// <param name="isOutboundMessage">For Message entries, whether this row represents the Outbox (sent) record rather than the Inbox (received) record.</param>
     /// <param name="securityLevelColorHex">For Message entries, the hex color of the message's security level, or <see langword="null"/> when it has none recognized.</param>
+    /// <param name="isAlert">Whether this entry is flagged as an alert; the title renders in red when <see langword="true"/>. Messages and drafts only.</param>
     public EntryItemViewModel(string id, string title, EntryType entryType, DateTime sortDate,
-        string? secondaryText = null, string? priorityText = null, string? tagText = null, string? timeText = null, string? fixedStatusText = null, bool isOutboundMessage = false, string? securityLevelColorHex = null)
+        string? secondaryText = null, string? priorityText = null, string? tagText = null, string? timeText = null, string? fixedStatusText = null, bool isOutboundMessage = false, string? securityLevelColorHex = null, bool isAlert = false)
     {
         Id = id;
         Title = title;
@@ -29,6 +30,7 @@ internal sealed partial class EntryItemViewModel : ObservableObject
         FixedStatusText = fixedStatusText;
         IsOutboundMessage = isOutboundMessage;
         SecurityLevelColorHex = securityLevelColorHex;
+        IsAlert = isAlert;
     }
 
     [ObservableProperty] private bool isSelected;
@@ -70,6 +72,30 @@ internal sealed partial class EntryItemViewModel : ObservableObject
     /// no security levels configured, or a level name no longer among them. Renders as a colored banner atop the row.
     /// </summary>
     public string? SecurityLevelColorHex { get; }
+
+    /// <summary>
+    /// Gets a value indicating whether this entry is flagged as an alert (see <see cref="Control.IEngineController.GetIsAlert"/>
+    /// for messages, or <see cref="Data.Entities.DraftEntity.IsAlert"/> for drafts). <see langword="false"/> for notes
+    /// and activity log entries, which have no alert flag. Drives <see cref="TitleColorHex"/> and
+    /// <see cref="SecondaryTextColorHex"/>.
+    /// </summary>
+    public bool IsAlert { get; }
+
+    /// <summary>
+    /// Gets the hex color for <see cref="Title"/>: the default light gray, except red when <see cref="IsAlert"/>
+    /// and there is no <see cref="SecondaryText"/> - for entry types with no secondary line (drafts, notes),
+    /// <see cref="Title"/> itself is the subject line, so it takes the alert coloring that would otherwise go
+    /// to <see cref="SecondaryTextColorHex"/>. For messages, where <see cref="Title"/> is the sender/destination
+    /// rather than the subject, it never turns red.
+    /// </summary>
+    public string TitleColorHex => IsAlert && string.IsNullOrEmpty(SecondaryText) ? "#E06C75" : "#CCCCCC";
+
+    /// <summary>
+    /// Gets the hex color for <see cref="SecondaryText"/>: the default light gray, except red when
+    /// <see cref="IsAlert"/> and <see cref="SecondaryText"/> is set - for messages, <see cref="SecondaryText"/>
+    /// is the subject line, so only it takes the alert coloring rather than the sender/destination in <see cref="Title"/>.
+    /// </summary>
+    public string SecondaryTextColorHex => IsAlert && !string.IsNullOrEmpty(SecondaryText) ? "#E06C75" : "#CCCCCC";
 
     /// <summary>Gets the status text to display, derived from the overall delivery status or the fixed status text.</summary>
     public string? StatusText => OverallStatus?.ToString().ToUpperInvariant() ?? FixedStatusText;

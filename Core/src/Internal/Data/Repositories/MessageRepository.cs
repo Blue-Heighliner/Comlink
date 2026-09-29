@@ -7,6 +7,8 @@ internal interface IMessageRepository
     Task<List<MessageEntity>> GetPage(string folderId, int page);
     /// <summary>Returns the count of messages in the specified folder.</summary>
     Task<int> Count(string folderId);
+    /// <summary>Returns every message in the specified folder, unpaged, ordered by received date descending. Used for in-memory search filtering, which cannot be expressed as a LiteDB query since a message's searchable fields live inside the host's own opaque <see cref="MessageEntity.Message"/> type.</summary>
+    Task<List<MessageEntity>> GetAllInFolder(string folderId);
     /// <summary>Returns every message document in the database, both Inbox and Outbox, across all folders.</summary>
     Task<List<MessageEntity>> GetAll();
     /// <summary>
@@ -48,6 +50,14 @@ internal sealed class MessageRepository : IMessageRepository
     /// <inheritdoc />
     public Task<int> Count(string folderId)
         => Task.Run(() => ctx.Messages.Count(m => m.FolderId == folderId));
+
+    /// <inheritdoc />
+    public Task<List<MessageEntity>> GetAllInFolder(string folderId)
+        => Task.Run(() => ctx.Messages
+            .Query()
+            .Where(m => m.FolderId == folderId)
+            .OrderByDescending(m => m.ReceivedAt)
+            .ToList());
 
     /// <inheritdoc />
     public Task<List<MessageEntity>> GetAll()

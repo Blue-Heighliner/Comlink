@@ -35,12 +35,29 @@ internal interface IEntryService
     Task SaveDraft(DraftEntity entity);
     /// <summary>Persists changes to an existing note and raises <see cref="NoteUpdated"/>.</summary>
     Task SaveNote(NoteEntity entity);
-    /// <summary>Returns a page of messages from the specified folder together with the total message count.</summary>
-    Task<(List<MessageEntity> Items, int Total)> GetMessages(string folderId, int page);
-    /// <summary>Returns a page of drafts from the specified folder together with the total draft count.</summary>
-    Task<(List<DraftEntity> Items, int Total)> GetDrafts(string folderId, int page, bool alphabetical);
-    /// <summary>Returns a page of notes from the specified folder together with the total note count.</summary>
-    Task<(List<NoteEntity> Items, int Total)> GetNotes(string folderId, int page, bool alphabetical);
+    /// <summary>
+    /// Returns a page of messages from the specified folder together with the total message count. A non-empty
+    /// <paramref name="filter"/> matches <see cref="EntryFilter.Search"/> case-insensitively against the message's
+    /// subject, sender, destinations, tag, priority label and security level name; <see cref="EntryFilter.DateFrom"/>/<see cref="EntryFilter.DateTo"/>
+    /// bound its received date; <see cref="EntryFilter.SecurityLevel"/>/<see cref="EntryFilter.Priority"/>/<see cref="EntryFilter.AlertOnly"/>
+    /// match exactly. Filtering loads the whole folder rather than paginating the LiteDB query directly, since a
+    /// message's fields live inside the host's own opaque message type and cannot be queried in the database.
+    /// </summary>
+    Task<(List<MessageEntity> Items, int Total)> GetMessages(string folderId, int page, EntryFilter? filter = null);
+    /// <summary>
+    /// Returns a page of drafts from the specified folder together with the total draft count. A non-empty
+    /// <paramref name="filter"/> matches <see cref="EntryFilter.Search"/> against subject or tag;
+    /// <see cref="EntryFilter.DateFrom"/>/<see cref="EntryFilter.DateTo"/> bound the last-modified date;
+    /// <see cref="EntryFilter.SecurityLevel"/>/<see cref="EntryFilter.Priority"/>/<see cref="EntryFilter.AlertOnly"/> match exactly.
+    /// </summary>
+    Task<(List<DraftEntity> Items, int Total)> GetDrafts(string folderId, int page, bool alphabetical, EntryFilter? filter = null);
+    /// <summary>
+    /// Returns a page of notes from the specified folder together with the total note count. A non-empty
+    /// <paramref name="filter"/> matches <see cref="EntryFilter.Search"/> against the note's body text, and
+    /// <see cref="EntryFilter.DateFrom"/>/<see cref="EntryFilter.DateTo"/> bound the last-modified date; every
+    /// other criterion is ignored, since notes have no security level, priority, or alert flag.
+    /// </summary>
+    Task<(List<NoteEntity> Items, int Total)> GetNotes(string folderId, int page, bool alphabetical, EntryFilter? filter = null);
     /// <summary>
     /// Permanently deletes the entry with the given <paramref name="id"/> and <paramref name="entryType"/>.
     /// <paramref name="isOutboundMessage"/> disambiguates which document to delete when <paramref name="entryType"/>
@@ -63,6 +80,8 @@ internal interface IEntryService
 /// <summary>Provides CRUD operations for messages, drafts, notes, and activity log entries stored in the local database.</summary>
 internal sealed class EntryService : IEntryService
 {
+    private const int PageSize = 50;
+
     /// <summary>Initializes a new <see cref="EntryService"/> with the required repositories and providers.</summary>
     public EntryService(
         IMessageRepository messages,
@@ -274,29 +293,90 @@ internal sealed class EntryService : IEntryService
         await NoteUpdated.InvokeAll(entity);
     }
 
-    /// <summary>Returns a page of messages from the specified folder together with the total message count.</summary>
-    public async Task<(List<MessageEntity> Items, int Total)> GetMessages(string folderId, int page)
+    /// <inheritdoc />
+    public async Task<(List<MessageEntity> Items, int Total)> GetMessages(string folderId, int page, EntryFilter? filter = null)
     {
-        List<MessageEntity> items = await messages.GetPage(folderId, page);
-        int total = await messages.Count(folderId);
-        return (items, total);
+        if (filter is null || filter.IsEmpty)
+        {
+            List<MessageEntity> items = await messages.GetPage(folderId, page);
+            int total = await messages.Count(folderId);
+            return (items, total);
+        }
+
+        List<MessageEntity> matched = [.. (await messages.GetAllInFolder(folderId)).Where(m => MatchesMessage(m, filter))];
+        return Paginate(matched, page);
     }
 
-    /// <summary>Returns a page of drafts from the specified folder together with the total draft count.</summary>
-    public async Task<(List<DraftEntity> Items, int Total)> GetDrafts(string folderId, int page, bool alphabetical)
+    /// <inheritdoc />
+    public async Task<(List<DraftEntity> Items, int Total)> GetDrafts(string folderId, int page, bool alphabetical, EntryFilter? filter = null)
     {
-        List<DraftEntity> items = await drafts.GetPage(folderId, page, alphabetical);
-        int total = await drafts.Count(folderId);
-        return (items, total);
+        if (filter is null || filter.IsEmpty)
+        {
+            List<DraftEntity> items = await drafts.GetPage(folderId, page, alphabetical);
+            int total = await drafts.Count(folderId);
+            return (items, total);
+        }
+
+        List<DraftEntity> matched = [.. (await drafts.GetAllInFolder(folderId, alphabetical)).Where(d => MatchesDraft(d, filter))];
+        return Paginate(matched, page);
     }
 
-    /// <summary>Returns a page of notes from the specified folder together with the total note count.</summary>
-    public async Task<(List<NoteEntity> Items, int Total)> GetNotes(string folderId, int page, bool alphabetical)
+    /// <inheritdoc />
+    public async Task<(List<NoteEntity> Items, int Total)> GetNotes(string folderId, int page, bool alphabetical, EntryFilter? filter = null)
     {
-        List<NoteEntity> items = await notes.GetPage(folderId, page, alphabetical);
-        int total = await notes.Count(folderId);
-        return (items, total);
+        if (filter is null || filter.IsEmpty)
+        {
+            List<NoteEntity> items = await notes.GetPage(folderId, page, alphabetical);
+            int total = await notes.Count(folderId);
+            return (items, total);
+        }
+
+        List<NoteEntity> matched = [.. (await notes.GetAllInFolder(folderId, alphabetical)).Where(n => MatchesNote(n, filter))];
+        return Paginate(matched, page);
     }
+
+    private bool MatchesMessage(MessageEntity entity, EntryFilter filter)
+    {
+        object message = entity.Message;
+        if (filter.DateFrom is { } from && entity.ReceivedAt < from) { return false; }
+        if (filter.DateTo is { } to && entity.ReceivedAt > to) { return false; }
+        if (filter.Priority is { } priority && engineController.GetPriority(message) != priority) { return false; }
+        if (filter.AlertOnly is true && !engineController.GetIsAlert(message)) { return false; }
+        if (filter.SecurityLevel is { } level && !string.Equals(engineController.GetSecurityLevel(message), level, StringComparison.OrdinalIgnoreCase)) { return false; }
+        if (string.IsNullOrWhiteSpace(filter.Search)) { return true; }
+        string search = filter.Search;
+
+        string destinations = string.Join(" ", engineController.GetAddresses(message).Select(a => a.UserName));
+        string priorityLabel = engineController.Priorities.GetLabel(engineController.GetPriority(message));
+        return Contains(engineController.GetSubject(message), search)
+            || Contains(engineController.GetFromUser(message), search)
+            || Contains(destinations, search)
+            || Contains(engineController.GetTag(message), search)
+            || Contains(priorityLabel, search)
+            || Contains(engineController.GetSecurityLevel(message), search);
+    }
+
+    private static bool MatchesDraft(DraftEntity entity, EntryFilter filter)
+    {
+        if (filter.DateFrom is { } from && entity.ModifiedAt < from) { return false; }
+        if (filter.DateTo is { } to && entity.ModifiedAt > to) { return false; }
+        if (filter.Priority is { } priority && entity.Priority != priority) { return false; }
+        if (filter.AlertOnly is true && !entity.IsAlert) { return false; }
+        if (filter.SecurityLevel is { } level && !string.Equals(entity.SecurityLevel, level, StringComparison.OrdinalIgnoreCase)) { return false; }
+        return string.IsNullOrWhiteSpace(filter.Search) || Contains(entity.Subject, filter.Search) || Contains(entity.Tag, filter.Search);
+    }
+
+    private static bool MatchesNote(NoteEntity entity, EntryFilter filter)
+    {
+        if (filter.DateFrom is { } from && entity.ModifiedAt < from) { return false; }
+        if (filter.DateTo is { } to && entity.ModifiedAt > to) { return false; }
+        return string.IsNullOrWhiteSpace(filter.Search) || Contains(entity.Body, filter.Search);
+    }
+
+    private static bool Contains(string? value, string search) => !string.IsNullOrEmpty(value) && value.Contains(search, StringComparison.OrdinalIgnoreCase);
+
+    private static (List<T> Items, int Total) Paginate<T>(List<T> matched, int page)
+        => ([.. matched.Skip((page - 1) * PageSize).Take(PageSize)], matched.Count);
 
     /// <inheritdoc />
     public async Task DeleteEntry(string id, EntryType entryType, bool isOutboundMessage = false)

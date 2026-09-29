@@ -333,7 +333,7 @@ internal sealed partial class MainViewModel : ObservableObject, IMainViewModel
                 string? tagText = engineController.TagsEnabled && !string.IsNullOrEmpty(evt.Tag) ? evt.Tag : null;
                 string? securityLevelColor = engineController.SecurityLevels.IsRecognized(evt.SecurityLevel) ? engineController.SecurityLevels.GetColor(evt.SecurityLevel) : null;
                 EntryItemViewModel item = new(entity.MessageId, evt.FromUser, EntryType.Message, entity.ReceivedAt,
-                    secondaryText: evt.Subject, priorityText: priorityText, tagText: tagText, timeText: timeText, securityLevelColorHex: securityLevelColor);
+                    secondaryText: evt.Subject, priorityText: priorityText, tagText: tagText, timeText: timeText, securityLevelColorHex: securityLevelColor, isAlert: evt.IsAlert);
                 item.OverallStatus = entity.ReadStatus;
                 await entryBar.PrependEntry(item);
             }

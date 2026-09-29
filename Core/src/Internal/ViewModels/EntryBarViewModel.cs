@@ -26,6 +26,51 @@ internal interface IEntryBarViewModel
     bool ShowSortToggle { get; set; }
     /// <summary>Gets or sets a value indicating whether entries in the current folder can be deleted, per <see cref="IEngineController.CanDelete"/>.</summary>
     bool CanDeleteEntries { get; set; }
+    /// <summary>
+    /// Gets or sets the search text filtering the current folder's entries, matched case-insensitively against
+    /// fields specific to each entry type (see <see cref="Services.IEntryService.GetMessages"/>). Setting it resets
+    /// to the first page and reloads. Empty (the default) shows every entry, unfiltered.
+    /// </summary>
+    string SearchText { get; set; }
+    /// <summary>Gets or sets a value indicating whether the search box is shown for the current folder; <see langword="false"/> for Activity, which has no free-text fields worth searching.</summary>
+    bool ShowSearch { get; set; }
+    /// <summary>Gets or sets the date of the inclusive lower bound on the entry's own timestamp (received for messages, last modified for drafts and notes). Setting it resets to the first page and reloads.</summary>
+    DateTimeOffset? DateFrom { get; set; }
+    /// <summary>Gets or sets the time of day paired with <see cref="DateFrom"/>; midnight (the start of the day) when unset. Setting it resets to the first page and reloads.</summary>
+    TimeSpan? TimeFrom { get; set; }
+    /// <summary>Gets or sets the date of the inclusive upper bound on the entry's own timestamp. Setting it resets to the first page and reloads.</summary>
+    DateTimeOffset? DateTo { get; set; }
+    /// <summary>Gets or sets the time of day paired with <see cref="DateTo"/>; the last instant of the day (23:59:59.999) when unset, so picking only a date still covers that whole day. Setting it resets to the first page and reloads.</summary>
+    TimeSpan? TimeTo { get; set; }
+    /// <summary>Gets the selectable security level filters, a leading "Any" (no filter) option followed by every configured <see cref="IEngineController.SecurityLevels"/> entry.</summary>
+    IReadOnlyList<SecurityLevelFilterOption> AvailableSecurityLevelFilters { get; }
+    /// <summary>Gets or sets the selected security level filter. Setting it resets to the first page and reloads.</summary>
+    SecurityLevelFilterOption SelectedSecurityLevelFilter { get; set; }
+    /// <summary>Gets the selectable priority filters, a leading "Any" (no filter) option followed by every <see cref="IEngineController.Priorities"/> entry.</summary>
+    IReadOnlyList<PriorityFilterOption> AvailablePriorityFilters { get; }
+    /// <summary>Gets or sets the selected priority filter. Setting it resets to the first page and reloads.</summary>
+    PriorityFilterOption SelectedPriorityFilter { get; set; }
+    /// <summary>Gets or sets a value indicating whether only entries flagged as an alert are shown. Setting it resets to the first page and reloads.</summary>
+    bool AlertOnlyFilter { get; set; }
+    /// <summary>Gets or sets a value indicating whether the security level filter picker is shown for the current folder; Inbox, Outbox and Drafts only, and only when at least one security level is configured.</summary>
+    bool ShowSecurityLevelFilter { get; set; }
+    /// <summary>Gets or sets a value indicating whether the priority filter picker is shown for the current folder; Inbox, Outbox and Drafts only.</summary>
+    bool ShowPriorityFilter { get; set; }
+    /// <summary>Gets or sets a value indicating whether the alert-only filter checkbox is shown for the current folder; Inbox, Outbox and Drafts only.</summary>
+    bool ShowAlertFilter { get; set; }
+    /// <summary>
+    /// Gets or sets a value indicating whether the collapsible filter section (date range, security level, priority,
+    /// alert-only) is expanded. Collapsed by default. Collapsing only hides the controls - it never clears or disables
+    /// the filters themselves, so search continues to run against the same already-filtered set either way; see
+    /// <see cref="Services.EntryFilter"/>.
+    /// </summary>
+    bool IsFiltersExpanded { get; set; }
+    /// <summary>Gets the expand/collapse indicator glyph for the filter section.</summary>
+    string FiltersExpandIndicator { get; }
+    /// <summary>Gets the number of filter section criteria currently set, shown next to the collapsed header so an active filter is never silently forgotten.</summary>
+    int ActiveFilterCount { get; }
+    /// <summary>Gets a value indicating whether <see cref="ActiveFilterCount"/> is non-zero.</summary>
+    bool HasActiveFilters { get; }
 
     /// <summary>Loads the first page of entries for the given folder and resets pagination.</summary>
     Task LoadFolder(FolderItemViewModel folder);
@@ -67,6 +112,10 @@ internal sealed partial class EntryBarViewModel : ObservableObject, IEntryBarVie
     {
         this.entryService = entryService;
         this.engineController = engineController;
+        AvailableSecurityLevelFilters = [new SecurityLevelFilterOption { Label = "Any", Name = null }, .. engineController.SecurityLevels.Select(l => new SecurityLevelFilterOption { Label = l.Name, Name = l.Name })];
+        AvailablePriorityFilters = [new PriorityFilterOption { Label = "Any", Value = null }, .. engineController.Priorities.Select(p => new PriorityFilterOption { Label = p.Name, Value = p.Value })];
+        selectedSecurityLevelFilter = AvailableSecurityLevelFilters[0];
+        selectedPriorityFilter = AvailablePriorityFilters[0];
     }
 
     private readonly IEntryService entryService;
@@ -80,13 +129,115 @@ internal sealed partial class EntryBarViewModel : ObservableObject, IEntryBarVie
     [ObservableProperty] private bool canGoPrev;
     [ObservableProperty] private bool showSortToggle;
     [ObservableProperty] private bool canDeleteEntries;
+    [ObservableProperty] private string searchText = string.Empty;
+    [ObservableProperty] private bool showSearch;
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(ActiveFilterCount))]
+    [NotifyPropertyChangedFor(nameof(HasActiveFilters))]
+    private DateTimeOffset? dateFrom;
+    [ObservableProperty] private TimeSpan? timeFrom;
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(ActiveFilterCount))]
+    [NotifyPropertyChangedFor(nameof(HasActiveFilters))]
+    private DateTimeOffset? dateTo;
+    [ObservableProperty] private TimeSpan? timeTo;
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(ActiveFilterCount))]
+    [NotifyPropertyChangedFor(nameof(HasActiveFilters))]
+    private SecurityLevelFilterOption selectedSecurityLevelFilter;
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(ActiveFilterCount))]
+    [NotifyPropertyChangedFor(nameof(HasActiveFilters))]
+    private PriorityFilterOption selectedPriorityFilter;
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(ActiveFilterCount))]
+    [NotifyPropertyChangedFor(nameof(HasActiveFilters))]
+    private bool alertOnlyFilter;
+    [ObservableProperty] private bool showSecurityLevelFilter;
+    [ObservableProperty] private bool showPriorityFilter;
+    [ObservableProperty] private bool showAlertFilter;
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(FiltersExpandIndicator))]
+    private bool isFiltersExpanded;
 
     private FolderItemViewModel? currentFolder;
     private string? pendingSelectId;
     private int refreshGeneration;
+    private bool suppressFilterRefresh;
+    /// <summary>The last instant of a day (23:59:59.999), paired with an unset <see cref="TimeTo"/> so picking only a date still covers that whole day.</summary>
+    private readonly TimeSpan endOfDay = new(0, 23, 59, 59, 999);
+
+    /// <summary>The search text normalized for <see cref="Services.IEntryService"/> calls: <see langword="null"/> (no filtering) rather than empty or whitespace-only.</summary>
+    private string? Search => string.IsNullOrWhiteSpace(SearchText) ? null : SearchText;
+
+    /// <summary><see cref="DateFrom"/> combined with <see cref="TimeFrom"/> (defaulting to midnight) into one instant, or <see langword="null"/> when no date is set.</summary>
+    private DateTime? CombinedDateFrom => DateFrom?.Date + (TimeFrom ?? TimeSpan.Zero);
+
+    /// <summary><see cref="DateTo"/> combined with <see cref="TimeTo"/> (defaulting to the last instant of the day) into one instant, or <see langword="null"/> when no date is set.</summary>
+    private DateTime? CombinedDateTo => DateTo?.Date + (TimeTo ?? endOfDay);
+
+    /// <summary>The current filter state as an <see cref="EntryFilter"/>, or <see langword="null"/> when every criterion is unset.</summary>
+    private EntryFilter? Filter
+    {
+        get
+        {
+            EntryFilter filter = new()
+            {
+                Search = Search,
+                DateFrom = CombinedDateFrom,
+                DateTo = CombinedDateTo,
+                SecurityLevel = SelectedSecurityLevelFilter.Name,
+                Priority = SelectedPriorityFilter.Value,
+                AlertOnly = AlertOnlyFilter ? true : null
+            };
+            return filter.IsEmpty ? null : filter;
+        }
+    }
+
+    private void ResetPageAndRefresh()
+    {
+        if (suppressFilterRefresh) { return; }
+        CurrentPage = 1;
+        _ = Refresh();
+    }
+
+    private void ResetFilterCriteria()
+    {
+        DateFrom = null;
+        TimeFrom = null;
+        DateTo = null;
+        TimeTo = null;
+        SelectedSecurityLevelFilter = AvailableSecurityLevelFilters[0];
+        SelectedPriorityFilter = AvailablePriorityFilters[0];
+        AlertOnlyFilter = false;
+    }
+
+    partial void OnSearchTextChanged(string value) => ResetPageAndRefresh();
+    partial void OnDateFromChanged(DateTimeOffset? value) => ResetPageAndRefresh();
+    partial void OnTimeFromChanged(TimeSpan? value) => ResetPageAndRefresh();
+    partial void OnDateToChanged(DateTimeOffset? value) => ResetPageAndRefresh();
+    partial void OnTimeToChanged(TimeSpan? value) => ResetPageAndRefresh();
+    partial void OnSelectedSecurityLevelFilterChanged(SecurityLevelFilterOption value) => ResetPageAndRefresh();
+    partial void OnSelectedPriorityFilterChanged(PriorityFilterOption value) => ResetPageAndRefresh();
+    partial void OnAlertOnlyFilterChanged(bool value) => ResetPageAndRefresh();
 
     /// <summary>Gets the current page of entry items displayed in the list.</summary>
     public ObservableCollection<EntryItemViewModel> Entries { get; } = [];
+    /// <inheritdoc />
+    public IReadOnlyList<SecurityLevelFilterOption> AvailableSecurityLevelFilters { get; }
+    /// <inheritdoc />
+    public IReadOnlyList<PriorityFilterOption> AvailablePriorityFilters { get; }
+    /// <inheritdoc />
+    public string FiltersExpandIndicator => IsFiltersExpanded ? "▲" : "▼";
+    /// <inheritdoc />
+    public int ActiveFilterCount
+        => (DateFrom is not null ? 1 : 0)
+         + (DateTo is not null ? 1 : 0)
+         + (SelectedSecurityLevelFilter.Name is not null ? 1 : 0)
+         + (SelectedPriorityFilter.Value is not null ? 1 : 0)
+         + (AlertOnlyFilter ? 1 : 0);
+    /// <inheritdoc />
+    public bool HasActiveFilters => ActiveFilterCount > 0;
     /// <inheritdoc />
     public event Action<IReadOnlyList<EntryItemViewModel>>? EntriesSelected;
     /// <inheritdoc />
@@ -110,11 +261,26 @@ internal sealed partial class EntryBarViewModel : ObservableObject, IEntryBarVie
     /// <summary>Loads the first page of entries for the given folder and resets pagination.</summary>
     public async Task LoadFolder(FolderItemViewModel folder)
     {
-        currentFolder = folder;
-        CurrentPage = 1;
-        ShowSortToggle = folder.RootType is FolderType.Drafts or FolderType.Notes;
-        CanDeleteEntries = engineController.CanDelete(folder.RootType);
-        DeselectEntry();
+        suppressFilterRefresh = true;
+        try
+        {
+            currentFolder = folder;
+            CurrentPage = 1;
+            ShowSortToggle = folder.RootType is FolderType.Drafts or FolderType.Notes;
+            ShowSearch = folder.RootType is FolderType.Inbox or FolderType.Outbox or FolderType.Drafts or FolderType.Notes;
+            bool isMessageOrDraftFolder = folder.RootType is FolderType.Inbox or FolderType.Outbox or FolderType.Drafts;
+            ShowSecurityLevelFilter = isMessageOrDraftFolder && engineController.SecurityLevels.Count > 0;
+            ShowPriorityFilter = isMessageOrDraftFolder;
+            ShowAlertFilter = isMessageOrDraftFolder;
+            CanDeleteEntries = engineController.CanDelete(folder.RootType);
+            SearchText = string.Empty;
+            ResetFilterCriteria();
+            DeselectEntry();
+        }
+        finally
+        {
+            suppressFilterRefresh = false;
+        }
         await Refresh();
     }
 
@@ -156,6 +322,27 @@ internal sealed partial class EntryBarViewModel : ObservableObject, IEntryBarVie
         await Refresh();
     }
 
+    /// <summary>Toggles the filter section between expanded and collapsed. Purely a display concern - the filters themselves stay in effect either way.</summary>
+    [RelayCommand]
+    private void ToggleFilters() => IsFiltersExpanded = !IsFiltersExpanded;
+
+    /// <summary>Clears every filter section criterion back to "Any"/unset (search text is untouched), resets to the first page, and reloads.</summary>
+    [RelayCommand]
+    private async Task ResetFilters()
+    {
+        suppressFilterRefresh = true;
+        try
+        {
+            ResetFilterCriteria();
+        }
+        finally
+        {
+            suppressFilterRefresh = false;
+        }
+        CurrentPage = 1;
+        await Refresh();
+    }
+
     /// <summary>Reloads the current page of entries from the service for the active folder.</summary>
     public async Task Refresh()
     {
@@ -184,13 +371,13 @@ internal sealed partial class EntryBarViewModel : ObservableObject, IEntryBarVie
         {
             case FolderType.Inbox:
                 {
-                    (List<MessageEntity> messages, int total) = await entryService.GetMessages(folder.Id, CurrentPage);
+                    (List<MessageEntity> messages, int total) = await entryService.GetMessages(folder.Id, CurrentPage, Filter);
                     foreach (MessageEntity m in messages)
                     {
                         string timeText = m.ReceivedAt.ToString("dd-MMM-yyyy HH:mm").ToUpperInvariant();
                         EntryItemViewModel item = new(m.MessageId, engineController.GetFromUser(m.Message), EntryType.Message, m.ReceivedAt,
                             secondaryText: engineController.GetSubject(m.Message), priorityText: GetPriorityLabel(m.Message), tagText: GetTagLabel(m.Message), timeText: timeText,
-                            securityLevelColorHex: GetSecurityLevelColor(m.Message));
+                            securityLevelColorHex: GetSecurityLevelColor(m.Message), isAlert: engineController.GetIsAlert(m.Message));
                         item.OverallStatus = m.ReadStatus;
                         items.Add(item);
                     }
@@ -199,14 +386,14 @@ internal sealed partial class EntryBarViewModel : ObservableObject, IEntryBarVie
 
             case FolderType.Outbox:
                 {
-                    (List<MessageEntity> messages, int total) = await entryService.GetMessages(folder.Id, CurrentPage);
+                    (List<MessageEntity> messages, int total) = await entryService.GetMessages(folder.Id, CurrentPage, Filter);
                     foreach (MessageEntity m in messages)
                     {
                         string destinations = string.Join(", ", engineController.GetAddresses(m.Message).Select(a => a.UserName).Distinct());
                         string timeText = m.ReceivedAt.ToString("dd-MMM-yyyy HH:mm").ToUpperInvariant();
                         EntryItemViewModel item = new(m.MessageId, destinations, EntryType.Message, m.ReceivedAt,
                             secondaryText: engineController.GetSubject(m.Message), priorityText: GetPriorityLabel(m.Message), tagText: GetTagLabel(m.Message), timeText: timeText, isOutboundMessage: true,
-                            securityLevelColorHex: GetSecurityLevelColor(m.Message));
+                            securityLevelColorHex: GetSecurityLevelColor(m.Message), isAlert: engineController.GetIsAlert(m.Message));
                         item.OverallStatus = m.OverallStatus;
                         items.Add(item);
                     }
@@ -215,19 +402,19 @@ internal sealed partial class EntryBarViewModel : ObservableObject, IEntryBarVie
 
             case FolderType.Drafts:
                 {
-                    (List<DraftEntity> drafts, int total) = await entryService.GetDrafts(folder.Id, CurrentPage, IsAlphabeticalSort);
+                    (List<DraftEntity> drafts, int total) = await entryService.GetDrafts(folder.Id, CurrentPage, IsAlphabeticalSort, Filter);
                     foreach (DraftEntity d in drafts)
                     {
                         string subject = string.IsNullOrEmpty(d.Subject) ? "(No subject)" : d.Subject;
                         string timeText = d.ModifiedAt.ToString("dd-MMM-yyyy HH:mm").ToUpperInvariant();
-                        items.Add(new EntryItemViewModel(d.Id.ToString(), subject, EntryType.Draft, d.ModifiedAt, timeText: timeText));
+                        items.Add(new EntryItemViewModel(d.Id.ToString(), subject, EntryType.Draft, d.ModifiedAt, timeText: timeText, isAlert: d.IsAlert));
                     }
                     return (items, total);
                 }
 
             case FolderType.Notes:
                 {
-                    (List<NoteEntity> notes, int total) = await entryService.GetNotes(folder.Id, CurrentPage, IsAlphabeticalSort);
+                    (List<NoteEntity> notes, int total) = await entryService.GetNotes(folder.Id, CurrentPage, IsAlphabeticalSort, Filter);
                     foreach (NoteEntity n in notes)
                     {
                         string? title = (n.Body ?? string.Empty).Split('\n').FirstOrDefault()?.Trim();
@@ -292,7 +479,10 @@ internal sealed partial class EntryBarViewModel : ObservableObject, IEntryBarVie
             return;
         }
 
-        if (CurrentPage == 1)
+        // While any filter is active, whether the new entry matches it can only be answered by IEntryService
+        // (its match rules read fields this ViewModel does not itself decode), so it is left out of the visible
+        // page rather than risked as a false positive; RefreshPaginationCounts below still reflects it if it does match.
+        if (CurrentPage == 1 && Filter is null)
         {
             Entries.Insert(0, entry);
             if (Entries.Count > PageSize)
@@ -309,9 +499,9 @@ internal sealed partial class EntryBarViewModel : ObservableObject, IEntryBarVie
         if (currentFolder is null) { return; }
         int total = currentFolder.RootType switch
         {
-            FolderType.Inbox or FolderType.Outbox => (await entryService.GetMessages(currentFolder.Id, 1)).Total,
-            FolderType.Drafts => (await entryService.GetDrafts(currentFolder.Id, 1, IsAlphabeticalSort)).Total,
-            FolderType.Notes => (await entryService.GetNotes(currentFolder.Id, 1, IsAlphabeticalSort)).Total,
+            FolderType.Inbox or FolderType.Outbox => (await entryService.GetMessages(currentFolder.Id, 1, Filter)).Total,
+            FolderType.Drafts => (await entryService.GetDrafts(currentFolder.Id, 1, IsAlphabeticalSort, Filter)).Total,
+            FolderType.Notes => (await entryService.GetNotes(currentFolder.Id, 1, IsAlphabeticalSort, Filter)).Total,
             FolderType.Activity => (await entryService.GetActivityLogs(1)).Total,
             _ => 0
         };

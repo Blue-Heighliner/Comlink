@@ -7,6 +7,8 @@ internal interface INoteRepository
     Task<List<NoteEntity>> GetPage(string folderId, int page, bool alphabetical);
     /// <summary>Returns the count of notes in the specified folder.</summary>
     Task<int> Count(string folderId);
+    /// <summary>Returns every note in the specified folder, unpaged, ordered the same way as <see cref="GetPage"/>. Used for in-memory search filtering.</summary>
+    Task<List<NoteEntity>> GetAllInFolder(string folderId, bool alphabetical);
     /// <summary>Returns every note document in the database, across all folders.</summary>
     Task<List<NoteEntity>> GetAll();
     /// <summary>Returns the note with the given identifier, or <c>null</c> if not found.</summary>
@@ -47,6 +49,17 @@ internal sealed class NoteRepository : INoteRepository
     /// <inheritdoc />
     public Task<int> Count(string folderId)
         => Task.Run(() => ctx.Notes.Count(n => n.FolderId == folderId));
+
+    /// <inheritdoc />
+    public Task<List<NoteEntity>> GetAllInFolder(string folderId, bool alphabetical)
+        => Task.Run(() =>
+        {
+            ILiteQueryable<NoteEntity> query = ctx.Notes.Query().Where(n => n.FolderId == folderId);
+            return (alphabetical
+                ? query.OrderBy(n => n.Body)
+                : query.OrderByDescending(n => n.ModifiedAt))
+                .ToList();
+        });
 
     /// <inheritdoc />
     public Task<List<NoteEntity>> GetAll()
