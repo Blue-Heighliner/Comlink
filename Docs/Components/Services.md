@@ -159,11 +159,11 @@ int written = await exportService.Export(refs, "/media/usb/backup" + IExportServ
 
 ## ImportService
 
-Lists export packages on a drive and restores their entries into the local database. Backs the import feature described in `Docs/Components/ViewModels.md` (`IImportViewModel`). Operates directly on the repositories, the same way `ExportService` does — it is a bulk data-restore operation, not a "live" business event, so it does not raise `IEntryService`'s insert/update events (no retroactive alerting for an imported alert message, no auto-navigation to Drafts/Notes; the imported data is visible as soon as the user browses to the relevant folder, since `EntryBarViewModel.Refresh()` always re-queries the database). Every entry is read back as JSON regardless of its file extension, so only a package written with the built-in JSON format (`ExportService.Export`'s `format: null`) round-trips through import; a package written with a custom format (see [Configuration.md](Configuration.md#export-formats)) is for external consumption only.
+Lists files on a drive and restores their entries into the local database, in the built-in package format or a host-configured custom one. Backs the import feature described in `Docs/Components/ViewModels.md` (`IImportViewModel`). Operates directly on the repositories, the same way `ExportService` does — it is a bulk data-restore operation, not a "live" business event, so it does not raise `IEntryService`'s insert/update events (no retroactive alerting for an imported alert message, no auto-navigation to Drafts/Notes; the imported data is visible as soon as the user browses to the relevant folder, since `EntryBarViewModel.Refresh()` always re-queries the database). Every built-in-package entry is read back as JSON regardless of its file extension, so only a package written with the built-in JSON export format (`ExportService.Export`'s `format: null`) round-trips through the built-in import format; a package written with a custom export format (see [Configuration.md](Configuration.md#export-formats)) is for external consumption only, not for import at all.
 
 **Key responsibilities**:
-- `GetPackages(driveRootPath)` — returns every `IExportService.PackageExtension` file directly under the drive root as an `ImportPackageInfo` (`FileName`, `FullPath`), ordered by file name. Returns an empty list (never throws) if the path is inaccessible.
-- `Import(packagePath, resolveConflict)` — opens the package and, for each JSON entry (its `EntryType` is parsed from the `{index}_{EntryType}_{id}.json` file name), applies per-type conflict resolution:
+- `GetPackages(driveRootPath, format)` — when `format` is `null`, returns every `IExportService.PackageExtension` file directly under the drive root as an `ImportPackageInfo` (`FileName`, `FullPath`); otherwise returns every file whose extension matches `format`'s own name-derived `FileExtension` (see [Configuration.md](Configuration.md#import-formats)). Ordered by file name; returns an empty list (never throws) if the path is inaccessible.
+- `Import(packagePath, resolveConflict, format, cancellation)` — when `format` is `null`, opens the package and, for each JSON entry (its `EntryType` is parsed from the `{index}_{EntryType}_{id}.json` file name), applies per-type conflict resolution:
   | Entry type | Match key | On conflict |
   |---|---|---|
   | Message | `MessageId` + direction (`IsOutbound`), and the same calendar date (`ReceivedAt.Date`) | Skipped — no prompt |
@@ -171,9 +171,9 @@ Lists export packages on a drive and restores their entries into the local datab
   | Note | First line of `Body`, trimmed (same rule `EntryBarViewModel` uses for a note's display title) | Invokes `resolveConflict` (unless a prior conflict in this call chose `OverwriteAll`) |
   | Activity log | `Date` | Always merged (see below) — no prompt |
 
-  For a draft/note conflict, `resolveConflict` is awaited once and the returned `DraftNoteConflictResolution` applied: `KeepExisting` skips the imported entry; `Overwrite` replaces the existing entry's content fields (keeping its `Id` and `FolderId`); `OverwriteAll` overwrites this entry and is remembered for the rest of this `Import` call, so every subsequent draft/note conflict overwrites without asking again. New (non-conflicting) drafts/notes/messages are inserted into the corresponding root folder (`root-drafts`/`root-notes`/`root-inbox`/`root-outbox`); imported folder IDs are not preserved, since they are opaque to the source installation.
+  For a draft/note conflict, `resolveConflict` is awaited once and the returned `DraftNoteConflictResolution` applied: `KeepExisting` skips the imported entry; `Overwrite` replaces the existing entry's content fields (keeping its `Id` and `FolderId`); `OverwriteAll` overwrites this entry and is remembered for the rest of this `Import` call, so every subsequent draft/note conflict overwrites without asking again. New (non-conflicting) drafts/notes/messages are inserted into the corresponding root folder (`root-drafts`/`root-notes`/`root-inbox`/`root-outbox`); imported folder IDs are not preserved, since they are opaque to the source installation. Otherwise (`format` given), opens `packagePath` as a plain stream and calls `format.Read(stream, context, cancellation)`, handing it an `ImportFormatContext` - the internal `IImportFormatContext` implementation - that applies these exact same message/draft/note rules to whatever the reader adds through it, and separately collects whatever it adds via `AddStagedSend` (never subject to conflict resolution, since nothing is written to the database until the user sends it from the staged send screen).
 - Activity log merge: when an existing log exists for the imported log's `Date`, each imported `ActivityLogEventEntry` is checked against the existing entries — an exact match (`At` and `Message` both equal) is skipped, otherwise the line is inserted into the existing (already chronologically ordered) list at the position where its `At` timestamp keeps the list sorted. When no log exists for that date, the imported log is inserted as-is.
-- Returns an `ImportSummary` (`Imported`, `Skipped`, `Overwritten` counts) once every entry in the package has been processed.
+- Returns an `ImportSummary` (`Imported`, `Skipped`, `Overwritten` counts, plus any `StagedSends` a custom format's reader added) once every entry in the package, or the custom format's `read` call, has completed.
 
 ```csharp
 IReadOnlyList<ImportPackageInfo> packages = importService.GetPackages("/media/usb");
@@ -210,11 +210,15 @@ DTOs used across the service layer:
 
 ## ImportModels
 
-DTOs used by `ImportService` (`Core/src/Internal/Services/ImportModels.cs`):
+Internal DTOs used by `ImportService` (`Core/src/Internal/Services/ImportModels.cs`):
 
 | Type | Fields |
 |------|--------|
-| `ImportPackageInfo` | `FileName`, `FullPath` — an export package found on a drive |
+| `ImportPackageInfo` | `FileName`, `FullPath` — a file found on a drive, matching either the built-in package extension or a custom format's own |
 | `ImportConflict` | `EntryType` (always `Draft` or `Note`), `Name` (the conflicting subject or note first line) |
 | `DraftNoteConflictResolution` (enum) | `KeepExisting`, `Overwrite`, `OverwriteAll` |
-| `ImportSummary` | `Imported`, `Skipped`, `Overwritten` (counts) |
+| `ImportSummary` | `Imported`, `Skipped`, `Overwritten` (counts), `StagedSends` (a custom format's reader's `AddStagedSend` additions; always empty for the built-in package format) |
+
+The public `StagedSendData` type a custom import format's reader builds for `AddStagedSend` - subject, body,
+addresses, and the same `IsAlert`/`Priority`/`Tag`/`SecurityLevel` fields a send normally carries - is in
+`Core/src/Public/Models/ImportModels.cs`; see [Configuration.md](Configuration.md#import-formats).

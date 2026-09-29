@@ -391,4 +391,108 @@ public sealed class ImportServiceTests : IDisposable
         DraftEntity imported = Assert.Single(await destDrafts.GetAll());
         Assert.Equal(segments, imported.BodySegmentsJson);
     }
+
+    /// <summary>GetPackages, given a custom format, finds only files with that format's name-derived extension.</summary>
+    [Fact]
+    public async Task GetPackages_CustomFormat_FindsOnlyFilesWithFormatExtension()
+    {
+        await File.WriteAllTextAsync(Path.Combine(packageDir, "contacts.csv"), "Subject,Body");
+        await File.WriteAllTextAsync(Path.Combine(packageDir, "notes.txt"), "hello");
+        await BuildPackage();
+        ImportFormatDefinition format = new() { Name = "CSV", Read = (_, _, _) => Task.CompletedTask };
+
+        IReadOnlyList<ImportPackageInfo> found = import.GetPackages(packageDir, format);
+
+        ImportPackageInfo file = Assert.Single(found);
+        Assert.Equal("contacts.csv", file.FileName);
+    }
+
+    /// <summary>A custom format's reader adds a message, draft, note, and staged send, all applied the same way the built-in package format applies them.</summary>
+    [Fact]
+    public async Task Import_CustomFormat_ReaderAddsEveryKindThroughContext()
+    {
+        string path = Path.Combine(packageDir, "batch.csv");
+        await File.WriteAllTextAsync(path, "irrelevant");
+        ImportFormatDefinition format = new()
+        {
+            Name = "CSV",
+            Read = async (stream, context, cancellation) =>
+            {
+                await context.AddMessage(new MessageExportData
+                {
+                    MessageId = "M1",
+                    IsOutbound = false,
+                    FromUser = "Alice",
+                    Subject = "Hello",
+                    Body = "Body",
+                    Addresses = [],
+                    SentAt = DateTime.UtcNow,
+                    IsAlert = false,
+                    Priority = 0,
+                    Tag = string.Empty,
+                    ReceivedAt = DateTime.UtcNow,
+                    DeliveryStatuses = []
+                });
+                await context.AddDraft(new DraftExportData
+                {
+                    Id = string.Empty,
+                    Subject = "New Draft",
+                    Body = "Draft body",
+                    Addresses = [],
+                    IsSent = false,
+                    IsAlert = false,
+                    Priority = 0,
+                    Tag = string.Empty,
+                    CreatedAt = DateTime.UtcNow,
+                    ModifiedAt = DateTime.UtcNow
+                });
+                await context.AddNote(new NoteExportData { Id = string.Empty, Body = "New note", CreatedAt = DateTime.UtcNow, ModifiedAt = DateTime.UtcNow });
+                context.AddStagedSend(new StagedSendData { Subject = "Staged", Body = "Staged body", Addresses = [new AddressRequest { UserName = "Bob" }] });
+            }
+        };
+
+        ImportSummary summary = await import.Import(path, NeverAsked, format);
+
+        Assert.Equal(3, summary.Imported);
+        Assert.Equal(0, summary.Skipped);
+        Assert.Equal(0, summary.Overwritten);
+        StagedSendData staged = Assert.Single(summary.StagedSends);
+        Assert.Equal("Staged", staged.Subject);
+        Assert.NotNull(await destMessages.Get("M1", outbound: false));
+        Assert.Contains(await destDrafts.GetAll(), d => d.Subject == "New Draft");
+        Assert.Contains(await destNotes.GetAll(), n => n.Body == "New note");
+    }
+
+    /// <summary>A draft added through a custom format's context that matches an existing subject still prompts resolveConflict.</summary>
+    [Fact]
+    public async Task Import_CustomFormat_DraftConflict_InvokesResolveConflict()
+    {
+        await destDrafts.Insert(new DraftEntity { Subject = "Plan", Body = "Old", FolderId = "root-drafts" });
+        string path = Path.Combine(packageDir, "batch.csv");
+        await File.WriteAllTextAsync(path, "irrelevant");
+        ImportFormatDefinition format = new()
+        {
+            Name = "CSV",
+            Read = (stream, context, cancellation) => context.AddDraft(new DraftExportData
+            {
+                Id = string.Empty,
+                Subject = "Plan",
+                Body = "New",
+                Addresses = [],
+                IsSent = false,
+                IsAlert = false,
+                Priority = 0,
+                Tag = string.Empty,
+                CreatedAt = DateTime.UtcNow,
+                ModifiedAt = DateTime.UtcNow
+            })
+        };
+
+        ImportConflict? seen = null;
+        ImportSummary summary = await import.Import(path, c => { seen = c; return Task.FromResult(DraftNoteConflictResolution.Overwrite); }, format);
+
+        Assert.NotNull(seen);
+        Assert.Equal("Plan", seen.Name);
+        Assert.Equal(1, summary.Overwritten);
+    }
 }

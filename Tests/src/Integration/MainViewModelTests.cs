@@ -24,6 +24,7 @@ public sealed class MainViewModelTests
         public Mock<IAlertViewModel> Alert { get; } = new();
         public Mock<IExportViewModel> Export { get; } = new();
         public Mock<IImportViewModel> Import { get; } = new();
+        public Mock<IStagedSendViewModel> StagedSend { get; } = new();
         public Mock<IPrintManagerViewModel> PrintManager { get; } = new();
         public Mock<IHelpViewModel> Help { get; } = new();
         public Mock<IConnectionStatusViewModel> ConnectionStatus { get; } = new();
@@ -54,6 +55,7 @@ public sealed class MainViewModelTests
                 Alert.Object,
                 Export.Object,
                 Import.Object,
+                StagedSend.Object,
                 PrintManager.Object,
                 Help.Object,
                 ConnectionStatus.Object,
@@ -78,6 +80,7 @@ public sealed class MainViewModelTests
         Assert.Same(s.Alert.Object, vm.Alert);
         Assert.Same(s.Export.Object, vm.Export);
         Assert.Same(s.Import.Object, vm.Import);
+        Assert.Same(s.StagedSend.Object, vm.StagedSend);
         Assert.Same(s.Help.Object, vm.Help);
     }
 
@@ -485,6 +488,43 @@ public sealed class MainViewModelTests
 
         s.FolderBar.Verify(f => f.DeselectFolder(), Times.Once);
         s.EntryBar.Verify(e => e.DeselectEntry(), Times.Once);
+    }
+
+    /// <summary>ShowStagedSendCommand displays the staged send ViewModel in the content area.</summary>
+    [Fact]
+    public void ShowStagedSendCommand_ShowsStagedSendView()
+    {
+        Setup s = new();
+        MainViewModel vm = s.BuildVm();
+
+        vm.ShowStagedSendCommand.Execute(null);
+
+        s.ContentArea.Verify(c => c.ShowEntry((object)s.StagedSend.Object), Times.Once);
+    }
+
+    /// <summary>ShowStagedSendCommand deselects the currently selected folder and entry.</summary>
+    [Fact]
+    public void ShowStagedSendCommand_DeselectsFolderAndEntry()
+    {
+        Setup s = new();
+        MainViewModel vm = s.BuildVm();
+
+        vm.ShowStagedSendCommand.Execute(null);
+
+        s.FolderBar.Verify(f => f.DeselectFolder(), Times.Once);
+        s.EntryBar.Verify(e => e.DeselectEntry(), Times.Once);
+    }
+
+    /// <summary>A successful import that adds staged sends raises StagedSendsReady, which switches the content area to the staged send screen.</summary>
+    [Fact]
+    public void ImportStagedSendsReady_SwitchesToStagedSendView()
+    {
+        Setup s = new();
+        MainViewModel vm = s.BuildVm();
+
+        s.Import.Raise(i => i.StagedSendsReady += null!);
+
+        s.ContentArea.Verify(c => c.ShowEntry((object)s.StagedSend.Object), Times.Once);
     }
 
     /// <summary>ShowPrintManagerCommand displays the print manager ViewModel in the content area.</summary>

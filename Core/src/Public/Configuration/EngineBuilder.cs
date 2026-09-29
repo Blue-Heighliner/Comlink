@@ -209,4 +209,22 @@ public interface IEngineBuilder
     /// <param name="serialize">Writes one entry to a stream.</param>
     /// <param name="entryTypes">Restricts which root folder types this format accepts, or <see langword="null"/> (the default) to accept every type.</param>
     IEngineBuilder ExportFormat(string name, Func<object, Stream, CancellationToken, Task> serialize, Func<FolderType, bool>? entryTypes = null);
+
+    /// <summary>
+    /// Adds a custom import format, shown as an option alongside the built-in package format in the client's
+    /// import screen. <paramref name="read"/> reads one whole file the user chose - found on the source drive by
+    /// this format's own name-derived extension, the same way an <see cref="ExportFormat"/> entry's file
+    /// extension is derived - and, through the handed <see cref="IImportFormatContext"/>, turns what it reads
+    /// into new messages, drafts, notes, and staged sends; unlike the built-in format, this is the reader's own
+    /// file layout, not a zip archive of typed entries. <paramref name="stagedSendMode"/> and
+    /// <paramref name="stagedSendDelay"/> state how the staged send screen sends everything this format ever adds
+    /// via <see cref="IImportFormatContext.AddStagedSend"/>, once the user presses its final send button. Calling
+    /// this again with the same <paramref name="name"/> (case-insensitive) replaces the earlier format of that
+    /// name in place; a new name adds another format alongside it.
+    /// </summary>
+    /// <param name="name">Display name shown for this format in the import screen.</param>
+    /// <param name="read">Reads one file's stream, adding what it finds through the handed context.</param>
+    /// <param name="stagedSendMode">Whether this format's staged sends are all sent at once, or one at a time. Defaults to <see cref="Control.StagedSendMode.Sequential"/>.</param>
+    /// <param name="stagedSendDelay">While <paramref name="stagedSendMode"/> is <see cref="Control.StagedSendMode.Sequential"/>, an optional pause between each send. <see langword="null"/> (the default) sends the next immediately.</param>
+    IEngineBuilder ImportFormat(string name, Func<Stream, IImportFormatContext, CancellationToken, Task> read, StagedSendMode stagedSendMode = StagedSendMode.Sequential, TimeSpan? stagedSendDelay = null);
 }

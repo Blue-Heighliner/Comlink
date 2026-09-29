@@ -41,6 +41,10 @@ internal partial class TitleBar : UserControl
     public static readonly StyledProperty<ICommand?> ShowImportCommandProperty =
         AvaloniaProperty.Register<TitleBar, ICommand?>(nameof(ShowImportCommand));
 
+    /// <summary>Identifies the <see cref="ShowStagedSendCommand"/> styled property.</summary>
+    public static readonly StyledProperty<ICommand?> ShowStagedSendCommandProperty =
+        AvaloniaProperty.Register<TitleBar, ICommand?>(nameof(ShowStagedSendCommand));
+
     /// <summary>Identifies the <see cref="ShowPrintManagerCommand"/> styled property.</summary>
     public static readonly StyledProperty<ICommand?> ShowPrintManagerCommandProperty =
         AvaloniaProperty.Register<TitleBar, ICommand?>(nameof(ShowPrintManagerCommand));
@@ -143,6 +147,13 @@ internal partial class TitleBar : UserControl
     {
         get => GetValue(ShowImportCommandProperty);
         set => SetValue(ShowImportCommandProperty, value);
+    }
+
+    /// <summary>Gets or sets the command invoked when the user clicks the Send Queue button.</summary>
+    public ICommand? ShowStagedSendCommand
+    {
+        get => GetValue(ShowStagedSendCommandProperty);
+        set => SetValue(ShowStagedSendCommandProperty, value);
     }
 
     /// <summary>Gets or sets the command invoked when the user clicks the Prints button.</summary>
@@ -301,6 +312,9 @@ internal partial class TitleBar : UserControl
 
     private void OnImportClick(object? sender, Avalonia.Interactivity.RoutedEventArgs e)
         => ShowImportCommand?.Execute(null);
+
+    private void OnStagedSendClick(object? sender, Avalonia.Interactivity.RoutedEventArgs e)
+        => ShowStagedSendCommand?.Execute(null);
 
     private void OnPrintManagerClick(object? sender, Avalonia.Interactivity.RoutedEventArgs e)
         => ShowPrintManagerCommand?.Execute(null);

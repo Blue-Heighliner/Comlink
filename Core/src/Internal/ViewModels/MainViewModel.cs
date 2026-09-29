@@ -64,6 +64,8 @@ internal interface IMainViewModel
     IExportViewModel Export { get; }
     /// <summary>Gets the import ViewModel driving the import screen.</summary>
     IImportViewModel Import { get; }
+    /// <summary>Gets the staged send ViewModel driving the staged send screen.</summary>
+    IStagedSendViewModel StagedSend { get; }
     /// <summary>Gets the print manager ViewModel driving the print queue screen.</summary>
     IPrintManagerViewModel PrintManager { get; }
     /// <summary>Creates a new draft and displays it in the content area.</summary>
@@ -74,6 +76,8 @@ internal interface IMainViewModel
     IRelayCommand ShowExportCommand { get; }
     /// <summary>Displays the import screen in the content area, refreshing the available drive list first.</summary>
     IRelayCommand ShowImportCommand { get; }
+    /// <summary>Displays the staged send screen in the content area.</summary>
+    IRelayCommand ShowStagedSendCommand { get; }
     /// <summary>Displays the print manager screen in the content area.</summary>
     IRelayCommand ShowPrintManagerCommand { get; }
     /// <summary>Restores the content area to its default (home) state, without disturbing any other ViewModel's state.</summary>
@@ -102,6 +106,7 @@ internal sealed partial class MainViewModel : ObservableObject, IMainViewModel
     /// <param name="alert">Alert ViewModel driving the title bar's alarm box and sound.</param>
     /// <param name="export">Export ViewModel driving the export screen.</param>
     /// <param name="import">Import ViewModel driving the import screen.</param>
+    /// <param name="stagedSend">Staged send ViewModel driving the staged send screen.</param>
     /// <param name="printManager">Print manager ViewModel driving the print queue screen.</param>
     /// <param name="help">Help ViewModel driving the help window opened from the title bar.</param>
     /// <param name="connectionStatus">Connection status ViewModel driving <see cref="IsServerMode"/>'s connections table and <see cref="IsClientMode"/>'s connection row.</param>
@@ -120,6 +125,7 @@ internal sealed partial class MainViewModel : ObservableObject, IMainViewModel
         IAlertViewModel alert,
         IExportViewModel export,
         IImportViewModel import,
+        IStagedSendViewModel stagedSend,
         IPrintManagerViewModel printManager,
         IHelpViewModel help,
         IConnectionStatusViewModel connectionStatus,
@@ -138,6 +144,7 @@ internal sealed partial class MainViewModel : ObservableObject, IMainViewModel
         this.alert = alert;
         this.export = export;
         this.import = import;
+        this.stagedSend = stagedSend;
         this.printManager = printManager;
         Help = help;
         this.connectionStatus = connectionStatus;
@@ -165,6 +172,7 @@ internal sealed partial class MainViewModel : ObservableObject, IMainViewModel
     private readonly IAlertViewModel alert;
     private readonly IExportViewModel export;
     private readonly IImportViewModel import;
+    private readonly IStagedSendViewModel stagedSend;
     private readonly IPrintManagerViewModel printManager;
     private readonly IConnectionStatusViewModel connectionStatus;
     private readonly ICurrentUserProvider currentUserProvider;
@@ -215,6 +223,8 @@ internal sealed partial class MainViewModel : ObservableObject, IMainViewModel
     public IExportViewModel Export => export;
     /// <inheritdoc />
     public IImportViewModel Import => import;
+    /// <inheritdoc />
+    public IStagedSendViewModel StagedSend => stagedSend;
     /// <inheritdoc />
     public IPrintManagerViewModel PrintManager => printManager;
     /// <inheritdoc />
@@ -280,6 +290,12 @@ internal sealed partial class MainViewModel : ObservableObject, IMainViewModel
 
         contentArea.DraftSent += HandleDraftSent;
         contentArea.EntryDeleted += HandleEntryDeleted;
+
+        import.StagedSendsReady += () =>
+        {
+            ShowStagedSendCommand.Execute(null);
+            return Task.CompletedTask;
+        };
 
         connection.DeliveryStatusChanged += evt => UiThread.Run(() => entryBar.UpdateEntryStatus(evt.MessageId, evt.OverallStatus));
 
@@ -442,6 +458,13 @@ internal sealed partial class MainViewModel : ObservableObject, IMainViewModel
         DeselectFolderAndEntry();
         import.RefreshDrivesCommand.Execute(null);
         contentArea.ShowEntry(import);
+    }
+
+    [RelayCommand]
+    private void ShowStagedSend()
+    {
+        DeselectFolderAndEntry();
+        contentArea.ShowEntry(stagedSend);
     }
 
     [RelayCommand]

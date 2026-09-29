@@ -237,6 +237,9 @@ internal interface IEngineController
     /// <summary>Every custom export format added via <see cref="IEngineBuilder.ExportFormat"/>, in the order added; empty if none.</summary>
     IReadOnlyList<ExportFormatDefinition> ExportFormats { get; }
 
+    /// <summary>Every custom import format added via <see cref="IEngineBuilder.ImportFormat"/>, in the order added; empty if none.</summary>
+    IReadOnlyList<ImportFormatDefinition> ImportFormats { get; }
+
     /// <summary>Creates a new, empty instance of <see cref="MessageType"/>.</summary>
     object CreateMessage();
     /// <summary>Gets the application-level message identifier from <paramref name="message"/>.</summary>
@@ -524,6 +527,8 @@ internal class EngineController(EngineBuilder builder, ICurrentUserProvider curr
     public virtual IReadOnlyList<Action<IMessageReceivedHookContext>> MessageReceivedHooks => builder.MessageReceivedHooks;
     /// <inheritdoc />
     public virtual IReadOnlyList<ExportFormatDefinition> ExportFormats => builder.ExportFormats;
+    /// <inheritdoc />
+    public virtual IReadOnlyList<ImportFormatDefinition> ImportFormats => builder.ImportFormats;
 
     /// <inheritdoc />
     public virtual string TrustedAuthorityCertificateName => builder.TrustedAuthorityValue ?? "COMLINK-ROOT";

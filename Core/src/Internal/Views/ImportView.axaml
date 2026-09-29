@@ -78,14 +78,31 @@
           </Grid>
         </StackPanel>
 
+        <!-- Format -->
+        <StackPanel Spacing="6">
+          <TextBlock Text="FORMAT" FontSize="11" FontWeight="SemiBold" Foreground="#858585" LetterSpacing="1" />
+          <ComboBox ItemsSource="{Binding AvailableFormats}"
+                    SelectedItem="{Binding SelectedFormat}"
+                    Background="#3C3C3C"
+                    BorderThickness="0"
+                    FontSize="13"
+                    HorizontalAlignment="Stretch">
+            <ComboBox.ItemTemplate>
+              <DataTemplate>
+                <TextBlock Text="{Binding Label}" />
+              </DataTemplate>
+            </ComboBox.ItemTemplate>
+          </ComboBox>
+        </StackPanel>
+
       </StackPanel>
 
       <!-- Packages on the selected drive -->
       <StackPanel IsVisible="{Binding SelectedDrive, Converter={x:Static ObjectConverters.IsNotNull}}"
                   IsEnabled="{Binding !IsImporting}"
                   Spacing="6">
-        <TextBlock Text="PACKAGES" FontSize="11" FontWeight="SemiBold" Foreground="#858585" LetterSpacing="1" />
-        <TextBlock Text="No export packages found on this drive"
+        <TextBlock Text="FILES" FontSize="11" FontWeight="SemiBold" Foreground="#858585" LetterSpacing="1" />
+        <TextBlock Text="No files found on this drive for the selected format"
                    IsVisible="{Binding !AvailablePackages.Count}"
                    FontSize="12"
                    Foreground="#858585" />

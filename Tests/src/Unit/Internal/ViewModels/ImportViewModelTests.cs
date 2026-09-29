@@ -11,8 +11,12 @@ public sealed class ImportViewModelTests
     {
         public Mock<IExternalDriveProvider> DriveProvider { get; } = new();
         public Mock<IImportService> ImportService { get; } = new();
+        public Mock<IStagedSendViewModel> StagedSend { get; } = new();
+        public Mock<IEngineController> EngineController { get; } = new();
 
-        public ImportViewModel Build() => new(DriveProvider.Object, ImportService.Object);
+        public Setup() => EngineController.Setup(e => e.ImportFormats).Returns([]);
+
+        public ImportViewModel Build() => new(DriveProvider.Object, ImportService.Object, StagedSend.Object, EngineController.Object);
     }
 
     /// <summary>A freshly constructed ViewModel has no drives, packages, or pending state.</summary>
@@ -23,10 +27,43 @@ public sealed class ImportViewModelTests
 
         Assert.Empty(vm.AvailableDrives);
         Assert.Null(vm.SelectedDrive);
+        Assert.Equal("Package", vm.SelectedFormat.Label);
         Assert.Empty(vm.AvailablePackages);
         Assert.False(vm.IsImporting);
         Assert.Null(vm.StatusMessage);
         Assert.Null(vm.PendingConflict);
+    }
+
+    /// <summary>AvailableFormats lists the built-in package option first, then each configured import format by name.</summary>
+    [Fact]
+    public void Ctor_WithConfiguredImportFormats_ListsPackageFirstThenEachByName()
+    {
+        ImportFormatDefinition csv = new() { Name = "CSV", Read = (_, _, _) => Task.CompletedTask };
+        Setup s = new();
+        s.EngineController.Setup(e => e.ImportFormats).Returns([csv]);
+
+        ImportViewModel vm = s.Build();
+
+        Assert.Equal(["Package", "CSV"], vm.AvailableFormats.Select(f => f.Label));
+        Assert.Same(csv, vm.AvailableFormats[1].Format);
+        Assert.Null(vm.AvailableFormats[0].Format);
+    }
+
+    /// <summary>Changing SelectedFormat re-queries AvailablePackages with the newly selected format.</summary>
+    [Fact]
+    public void SelectedFormat_Changed_RefreshesAvailablePackagesWithNewFormat()
+    {
+        ImportFormatDefinition csv = new() { Name = "CSV", Read = (_, _, _) => Task.CompletedTask };
+        ImportPackageInfo csvFile = new() { FileName = "a.csv", FullPath = "/media/a/a.csv" };
+        Setup s = new();
+        s.EngineController.Setup(e => e.ImportFormats).Returns([csv]);
+        s.ImportService.Setup(i => i.GetPackages(driveA.RootPath, csv)).Returns([csvFile]);
+        ImportViewModel vm = s.Build();
+        vm.SelectedDrive = driveA;
+
+        vm.SelectedFormat = vm.AvailableFormats[1];
+
+        Assert.Equal([csvFile], vm.AvailablePackages);
     }
 
     /// <summary>RefreshDrivesCommand populates AvailableDrives from the provider.</summary>
@@ -167,8 +204,8 @@ public sealed class ImportViewModelTests
         Setup s = new();
         ImportConflict conflict = new() { EntryType = EntryType.Draft, Name = "Plan" };
         s.ImportService
-            .Setup(i => i.Import(packageA.FullPath, It.IsAny<Func<ImportConflict, Task<DraftNoteConflictResolution>>>()))
-            .Returns(async (string _, Func<ImportConflict, Task<DraftNoteConflictResolution>> resolve) =>
+            .Setup(i => i.Import(packageA.FullPath, It.IsAny<Func<ImportConflict, Task<DraftNoteConflictResolution>>>(), null, default))
+            .Returns(async (string _, Func<ImportConflict, Task<DraftNoteConflictResolution>> resolve, ImportFormatDefinition? _, CancellationToken _) =>
             {
                 DraftNoteConflictResolution resolution = await resolve(conflict);
                 return new ImportSummary { Imported = 0, Skipped = resolution == DraftNoteConflictResolution.KeepExisting ? 1 : 0, Overwritten = resolution == DraftNoteConflictResolution.KeepExisting ? 0 : 1 };
@@ -185,6 +222,51 @@ public sealed class ImportViewModelTests
 
         Assert.Null(vm.PendingConflict);
         Assert.Equal("Imported 0, overwrote 1, skipped 0", vm.StatusMessage);
+    }
+
+    /// <summary>A successful custom-format import that produced staged sends enqueues them with the format's mode/delay and raises StagedSendsReady.</summary>
+    [Fact]
+    public async Task StartImportCommand_CustomFormatWithStagedSends_EnqueuesAndRaisesStagedSendsReady()
+    {
+        ImportFormatDefinition csv = new() { Name = "CSV", Read = (_, _, _) => Task.CompletedTask, StagedSendMode = StagedSendMode.Simultaneous, StagedSendDelay = TimeSpan.FromSeconds(2) };
+        List<StagedSendData> staged = [new StagedSendData { Subject = "S", Body = "B", Addresses = [] }];
+        ImportPackageInfo csvFile = new() { FileName = "a.csv", FullPath = "/media/a/a.csv" };
+        Setup s = new();
+        s.EngineController.Setup(e => e.ImportFormats).Returns([csv]);
+        s.ImportService
+            .Setup(i => i.Import(csvFile.FullPath, It.IsAny<Func<ImportConflict, Task<DraftNoteConflictResolution>>>(), csv, default))
+            .ReturnsAsync(new ImportSummary { Imported = 1, Skipped = 0, Overwritten = 0, StagedSends = staged });
+        ImportViewModel vm = s.Build();
+        vm.SelectedFormat = vm.AvailableFormats[1];
+        bool raised = false;
+        vm.StagedSendsReady += () => { raised = true; return Task.CompletedTask; };
+
+        await vm.StartImportCommand.ExecuteAsync(csvFile);
+
+        s.StagedSend.Verify(v => v.Enqueue(staged, StagedSendMode.Simultaneous, TimeSpan.FromSeconds(2)), Times.Once);
+        Assert.True(raised);
+    }
+
+    /// <summary>A successful custom-format import that produced no staged sends does not touch the staged send ViewModel or raise the event.</summary>
+    [Fact]
+    public async Task StartImportCommand_CustomFormatNoStagedSends_DoesNotEnqueueOrRaiseEvent()
+    {
+        ImportFormatDefinition csv = new() { Name = "CSV", Read = (_, _, _) => Task.CompletedTask };
+        ImportPackageInfo csvFile = new() { FileName = "a.csv", FullPath = "/media/a/a.csv" };
+        Setup s = new();
+        s.EngineController.Setup(e => e.ImportFormats).Returns([csv]);
+        s.ImportService
+            .Setup(i => i.Import(csvFile.FullPath, It.IsAny<Func<ImportConflict, Task<DraftNoteConflictResolution>>>(), csv, default))
+            .ReturnsAsync(new ImportSummary { Imported = 1, Skipped = 0, Overwritten = 0 });
+        ImportViewModel vm = s.Build();
+        vm.SelectedFormat = vm.AvailableFormats[1];
+        bool raised = false;
+        vm.StagedSendsReady += () => { raised = true; return Task.CompletedTask; };
+
+        await vm.StartImportCommand.ExecuteAsync(csvFile);
+
+        s.StagedSend.Verify(v => v.Enqueue(It.IsAny<IReadOnlyList<StagedSendData>>(), It.IsAny<StagedSendMode>(), It.IsAny<TimeSpan?>()), Times.Never);
+        Assert.False(raised);
     }
 
     private static async Task WaitUntil(Func<bool> condition)

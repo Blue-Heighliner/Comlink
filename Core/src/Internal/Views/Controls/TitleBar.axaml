@@ -6,7 +6,7 @@
 
   <Grid ColumnDefinitions="Auto,*,Auto,Auto,Auto,Auto">
 
-    <!-- Left: Action buttons — never shown in Server mode, which has no drafts/notes/export/import/print UI -->
+    <!-- Left: Action buttons — never shown in Server mode, which has no drafts/notes/export/import/staged-send/print UI -->
     <StackPanel x:Name="ActionButtonsPanel"
                 Grid.Column="0"
                 Orientation="Horizontal"
@@ -32,6 +32,11 @@
               Content="IMPORT"
               Foreground="#CCCCCC"
               Click="OnImportClick" />
+      <Button x:Name="StagedSendButton"
+              Classes="titlebar-action"
+              Content="SEND QUEUE"
+              Foreground="#CCCCCC"
+              Click="OnStagedSendClick" />
       <Button x:Name="PrintManagerButton"
               Classes="titlebar-action"
               Content="PRINTS"

@@ -3,11 +3,17 @@ namespace BlueHeighliner.Comlink.Services;
 /// <summary>Lists export packages on a drive and restores their entries into the local database.</summary>
 internal interface IImportService
 {
-    /// <summary>Returns every <see cref="IExportService.PackageExtension"/> package found directly under <paramref name="driveRootPath"/>, ordered by file name.</summary>
-    IReadOnlyList<ImportPackageInfo> GetPackages(string driveRootPath);
+    /// <summary>
+    /// Returns every file directly under <paramref name="driveRootPath"/> available to import as an
+    /// <see cref="ImportPackageInfo"/>, ordered by file name: every <see cref="IExportService.PackageExtension"/>
+    /// package when <paramref name="format"/> is <see langword="null"/>, or every file whose extension matches
+    /// <paramref name="format"/>'s own <see cref="ImportFormatDefinition.FileExtension"/> otherwise.
+    /// </summary>
+    IReadOnlyList<ImportPackageInfo> GetPackages(string driveRootPath, ImportFormatDefinition? format = null);
 
     /// <summary>
-    /// Restores every entry in the package at <paramref name="packagePath"/>:
+    /// Restores the file at <paramref name="packagePath"/> into the local database. When <paramref name="format"/>
+    /// is <see langword="null"/>, restores every entry in the built-in package:
     /// <list type="bullet">
     /// <item>A message matching an existing message's ID, direction, and date is skipped.</item>
     /// <item>
@@ -18,10 +24,15 @@ internal interface IImportService
     /// </item>
     /// <item>An activity log matching an existing log's date is merged into it line by line, skipping any imported line that exactly matches an existing one and inserting the rest in timestamp order.</item>
     /// </list>
+    /// Otherwise, opens the file as a stream and calls <paramref name="format"/>'s own reader, handing it an
+    /// <see cref="IImportFormatContext"/> that applies the same message/draft/note rules above to whatever the
+    /// reader adds through it, and collects whatever staged sends it adds into the returned summary.
     /// </summary>
-    /// <param name="packagePath">Absolute path of the package to import.</param>
+    /// <param name="packagePath">Absolute path of the file to import.</param>
     /// <param name="resolveConflict">Invoked once per unresolved draft/note name conflict to obtain the user's choice.</param>
-    Task<ImportSummary> Import(string packagePath, Func<ImportConflict, Task<DraftNoteConflictResolution>> resolveConflict);
+    /// <param name="format">The custom format to read with, or <see langword="null"/> for the built-in package format.</param>
+    /// <param name="cancellation">Token used to cancel a custom format's read mid-way.</param>
+    Task<ImportSummary> Import(string packagePath, Func<ImportConflict, Task<DraftNoteConflictResolution>> resolveConflict, ImportFormatDefinition? format = null, CancellationToken cancellation = default);
 }
 
 /// <summary>Lists export packages on a drive and restores their entries into the local database.</summary>
@@ -69,11 +80,12 @@ internal sealed class ImportService : IImportService
     private readonly IEngineController engineController;
 
     /// <inheritdoc />
-    public IReadOnlyList<ImportPackageInfo> GetPackages(string driveRootPath)
+    public IReadOnlyList<ImportPackageInfo> GetPackages(string driveRootPath, ImportFormatDefinition? format = null)
     {
         try
         {
-            return Directory.GetFiles(driveRootPath, $"*{IExportService.PackageExtension}")
+            string extension = format is null ? IExportService.PackageExtension : $".{format.FileExtension}";
+            return Directory.GetFiles(driveRootPath, $"*{extension}")
                 .Select(path => new ImportPackageInfo { FileName = Path.GetFileName(path), FullPath = path })
                 .OrderBy(p => p.FileName, StringComparer.OrdinalIgnoreCase)
                 .ToList();
@@ -85,8 +97,16 @@ internal sealed class ImportService : IImportService
     }
 
     /// <inheritdoc />
-    public async Task<ImportSummary> Import(string packagePath, Func<ImportConflict, Task<DraftNoteConflictResolution>> resolveConflict)
+    public async Task<ImportSummary> Import(string packagePath, Func<ImportConflict, Task<DraftNoteConflictResolution>> resolveConflict, ImportFormatDefinition? format = null, CancellationToken cancellation = default)
     {
+        if (format is not null)
+        {
+            await using Stream stream = File.OpenRead(packagePath);
+            ImportFormatContext context = new(ApplyMessage, ApplyDraft, ApplyNote, resolveConflict);
+            await format.Read(stream, context, cancellation);
+            return context.BuildSummary();
+        }
+
         int imported = 0;
         int skipped = 0;
         int overwritten = 0;
@@ -102,13 +122,16 @@ internal sealed class ImportService : IImportService
             {
                 case EntryType.Message:
                     {
-                        if (await ImportMessage(zipEntry)) { imported++; }
+                        MessageExportData? data = await ReadEntry<MessageExportData>(zipEntry);
+                        if (data is not null && await ApplyMessage(data)) { imported++; }
                         else { skipped++; }
                         break;
                     }
                 case EntryType.Draft:
                     {
-                        (bool wasImported, bool wasOverwritten) = await ImportDraft(zipEntry, resolveConflict, () => overwriteAll, v => overwriteAll = v);
+                        DraftExportData? data = await ReadEntry<DraftExportData>(zipEntry);
+                        if (data is null) { skipped++; break; }
+                        (bool wasImported, bool wasOverwritten) = await ApplyDraft(data, resolveConflict, () => overwriteAll, v => overwriteAll = v);
                         if (wasOverwritten) { overwritten++; }
                         else if (wasImported) { imported++; }
                         else { skipped++; }
@@ -116,7 +139,9 @@ internal sealed class ImportService : IImportService
                     }
                 case EntryType.Note:
                     {
-                        (bool wasImported, bool wasOverwritten) = await ImportNote(zipEntry, resolveConflict, () => overwriteAll, v => overwriteAll = v);
+                        NoteExportData? data = await ReadEntry<NoteExportData>(zipEntry);
+                        if (data is null) { skipped++; break; }
+                        (bool wasImported, bool wasOverwritten) = await ApplyNote(data, resolveConflict, () => overwriteAll, v => overwriteAll = v);
                         if (wasOverwritten) { overwritten++; }
                         else if (wasImported) { imported++; }
                         else { skipped++; }
@@ -134,11 +159,8 @@ internal sealed class ImportService : IImportService
         return new ImportSummary { Imported = imported, Skipped = skipped, Overwritten = overwritten };
     }
 
-    private async Task<bool> ImportMessage(ZipArchiveEntry zipEntry)
+    private async Task<bool> ApplyMessage(MessageExportData data)
     {
-        MessageExportData? data = await ReadEntry<MessageExportData>(zipEntry);
-        if (data is null) { return false; }
-
         MessageEntity? existing = await messages.Get(data.MessageId, data.IsOutbound);
         if (existing is not null && existing.ReceivedAt.Date == data.ReceivedAt.Date)
         {
@@ -172,15 +194,12 @@ internal sealed class ImportService : IImportService
         return true;
     }
 
-    private async Task<(bool Imported, bool Overwritten)> ImportDraft(
-        ZipArchiveEntry zipEntry,
+    private async Task<(bool Imported, bool Overwritten)> ApplyDraft(
+        DraftExportData data,
         Func<ImportConflict, Task<DraftNoteConflictResolution>> resolveConflict,
         Func<bool> getOverwriteAll,
         Action<bool> setOverwriteAll)
     {
-        DraftExportData? data = await ReadEntry<DraftExportData>(zipEntry);
-        if (data is null) { return (false, false); }
-
         string subject = data.Subject.Trim();
         DraftEntity? existing = (await drafts.GetAll()).FirstOrDefault(d => d.Subject.Trim() == subject);
         if (existing is null)
@@ -230,15 +249,12 @@ internal sealed class ImportService : IImportService
         return (false, true);
     }
 
-    private async Task<(bool Imported, bool Overwritten)> ImportNote(
-        ZipArchiveEntry zipEntry,
+    private async Task<(bool Imported, bool Overwritten)> ApplyNote(
+        NoteExportData data,
         Func<ImportConflict, Task<DraftNoteConflictResolution>> resolveConflict,
         Func<bool> getOverwriteAll,
         Action<bool> setOverwriteAll)
     {
-        NoteExportData? data = await ReadEntry<NoteExportData>(zipEntry);
-        if (data is null) { return (false, false); }
-
         string firstLine = FirstLine(data.Body);
         NoteEntity? existing = (await notes.GetAll()).FirstOrDefault(n => FirstLine(n.Body) == firstLine);
         if (existing is null)

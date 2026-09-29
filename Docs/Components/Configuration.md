@@ -298,6 +298,60 @@ format instead.
 
 ---
 
+### Import Formats
+
+```csharp
+engine.ImportFormat(
+    "CSV",
+    async (stream, context, cancellation) =>
+    {
+        using StreamReader reader = new(stream, leaveOpen: true);
+        string? line;
+        while ((line = await reader.ReadLineAsync(cancellation)) is not null)
+        {
+            string[] parts = line.Split(',', 3);
+            if (parts.Length < 3) { continue; }
+            context.AddStagedSend(new StagedSendData { Subject = parts[0], Body = parts[2], Addresses = [new AddressRequest { UserName = parts[1] }] });
+        }
+    },
+    stagedSendMode: StagedSendMode.Sequential,
+    stagedSendDelay: TimeSpan.FromSeconds(1));
+```
+
+Adds a custom import format, shown as an option in the import screen's format picker alongside the built-in
+package format (see `Docs/Components/ViewModels.md`, `IImportViewModel`). Selecting it changes which files the
+screen finds on the source drive - not `IExportService.PackageExtension` packages, but files whose extension
+matches this format's own name-derived extension (the same derivation an `ExportFormat` entry's file extension
+uses - `"CSV"` above becomes `.csv`). Choosing one of those files and importing it opens it as a plain stream and
+hands `read` the stream plus an `IImportFormatContext`, unlike the built-in format's zip archive of typed entries.
+
+The context turns whatever the reader finds into real changes:
+
+- `AddMessage(MessageExportData)`, `AddDraft(DraftExportData)`, `AddNote(NoteExportData)` - insert a new entry
+  using the exact same public DTOs a custom export format's serializer receives (see above), applying the same
+  rules the built-in package format already applies to its own entries: a message matching an existing one (same
+  ID, direction, and date) is skipped, and a draft/note matching an existing entry's name prompts the user through
+  the same Keep Existing / Overwrite / Overwrite All dialog - a reader only builds the DTO, never reimplements
+  matching or conflict prompting.
+- `AddStagedSend(StagedSendData)` - adds a prepared message (`Subject`, `Body`, `Addresses`, and the same
+  `IsAlert`/`Priority`/`Tag`/`SecurityLevel` fields a send normally carries) to the staged send screen instead of
+  writing anything to the database directly; nothing is sent until the user reviews the batch there and presses
+  its own send button.
+
+`stagedSendMode` and `stagedSendDelay` state how that later send-all processes everything this format ever adds
+through `AddStagedSend`: `StagedSendMode.Sequential` (the default) sends one at a time, in the order added,
+pausing `stagedSendDelay` between each when it is stated; `StagedSendMode.Simultaneous` sends every one at once.
+Calling `ImportFormat` again with the same name (case-insensitive) replaces that format; a new name adds another.
+
+**Default:** no custom formats; the import screen offers only the built-in package format.
+
+**Config file:** none; formats are behavior, not settings.
+
+**Sample:** a `"CSV"` format reading `Subject,User,Body` lines and staging one send per line, sent one at a time
+a second apart (`StagedSendMode.Sequential`, `stagedSendDelay: TimeSpan.FromSeconds(1)`).
+
+---
+
 ### MSMT Certificates
 
 ```csharp

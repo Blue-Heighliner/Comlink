@@ -1,18 +1,25 @@
 namespace BlueHeighliner.Comlink.ViewModels;
 
 /// <summary>
-/// ViewModel for the import screen: choosing a source drive, then an export package on that drive to restore.
-/// Registered as a DI singleton (see <see cref="MainViewModel.Import"/>) so its state — including an
-/// in-progress import, and any pending draft/note conflict prompt — survives navigating the content area
-/// away to other views and back.
+/// ViewModel for the import screen: choosing a source drive, a format, then a file found on that drive by the
+/// selected format to restore. Registered as a DI singleton (see <see cref="MainViewModel.Import"/>) so its
+/// state — including an in-progress import, and any pending draft/note conflict prompt — survives navigating the
+/// content area away to other views and back.
 /// </summary>
 internal interface IImportViewModel
 {
+    /// <summary>Raised after a successful import adds one or more staged sends to <see cref="IStagedSendViewModel"/>, so <see cref="MainViewModel"/> can switch to the staged send screen.</summary>
+    event Func<Task>? StagedSendsReady;
+
     /// <summary>Gets the external drives currently available as an import source.</summary>
     IReadOnlyList<ExternalDriveInfo> AvailableDrives { get; }
     /// <summary>Gets or sets the drive selected as the import source. Setting this refreshes <see cref="AvailablePackages"/>.</summary>
     ExternalDriveInfo? SelectedDrive { get; set; }
-    /// <summary>Gets the export packages found on <see cref="SelectedDrive"/>.</summary>
+    /// <summary>Gets the built-in package format plus every custom format added via <see cref="IEngineBuilder.ImportFormat"/>.</summary>
+    IReadOnlyList<ImportFormatOption> AvailableFormats { get; }
+    /// <summary>Gets or sets the format to import with; defaults to the built-in package format. Setting this refreshes <see cref="AvailablePackages"/>.</summary>
+    ImportFormatOption SelectedFormat { get; set; }
+    /// <summary>Gets the files found on <see cref="SelectedDrive"/> matching <see cref="SelectedFormat"/>.</summary>
     IReadOnlyList<ImportPackageInfo> AvailablePackages { get; }
     /// <summary>Gets a value indicating whether an import is currently running.</summary>
     bool IsImporting { get; }
@@ -22,7 +29,7 @@ internal interface IImportViewModel
     ImportConflict? PendingConflict { get; }
     /// <summary>Re-scans for available external drives, preserving <see cref="SelectedDrive"/> if it is still present.</summary>
     IRelayCommand RefreshDrivesCommand { get; }
-    /// <summary>Imports the given package, entering the loading state until it completes or fails.</summary>
+    /// <summary>Imports the given package with <see cref="SelectedFormat"/>, entering the loading state until it completes or fails.</summary>
     IAsyncRelayCommand<ImportPackageInfo> StartImportCommand { get; }
     /// <summary>Resolves the current <see cref="PendingConflict"/> with the given choice.</summary>
     IRelayCommand<DraftNoteConflictResolution> ResolveConflictCommand { get; }
@@ -34,21 +41,32 @@ internal sealed partial class ImportViewModel : ObservableObject, IImportViewMod
     [ObservableProperty] private string? statusMessage;
     [ObservableProperty] private ImportConflict? pendingConflict;
 
-    /// <summary>Initializes a new <see cref="ImportViewModel"/> with the drive provider and import service.</summary>
+    /// <summary>Initializes a new <see cref="ImportViewModel"/> with the drive provider, import service, staged send ViewModel, and every configured import format.</summary>
     /// <param name="driveProvider">Enumerates available external drives.</param>
-    /// <param name="importService">Lists export packages on a drive and restores their entries.</param>
-    public ImportViewModel(IExternalDriveProvider driveProvider, IImportService importService)
+    /// <param name="importService">Lists files on a drive and restores their entries.</param>
+    /// <param name="stagedSend">Receives the staged sends a custom format's reader adds.</param>
+    /// <param name="engineController">Supplies the custom import formats added via <see cref="IEngineBuilder.ImportFormat"/>.</param>
+    public ImportViewModel(IExternalDriveProvider driveProvider, IImportService importService, IStagedSendViewModel stagedSend, IEngineController engineController)
     {
         this.driveProvider = driveProvider;
         this.importService = importService;
+        this.stagedSend = stagedSend;
+        availableFormats = [new ImportFormatOption { Label = "Package" }, .. engineController.ImportFormats.Select(f => new ImportFormatOption { Label = f.Name, Format = f })];
+        selectedFormat = availableFormats[0];
     }
 
     private readonly IExternalDriveProvider driveProvider;
     private readonly IImportService importService;
+    private readonly IStagedSendViewModel stagedSend;
     private TaskCompletionSource<DraftNoteConflictResolution>? pendingResolution;
+
+    /// <inheritdoc />
+    public event Func<Task>? StagedSendsReady;
 
     [ObservableProperty] private IReadOnlyList<ExternalDriveInfo> availableDrives = [];
     [ObservableProperty] private ExternalDriveInfo? selectedDrive;
+    [ObservableProperty] private IReadOnlyList<ImportFormatOption> availableFormats;
+    [ObservableProperty] private ImportFormatOption selectedFormat;
     [ObservableProperty] private IReadOnlyList<ImportPackageInfo> availablePackages = [];
 
     [ObservableProperty]
@@ -56,6 +74,8 @@ internal sealed partial class ImportViewModel : ObservableObject, IImportViewMod
     private bool isImporting;
 
     partial void OnSelectedDriveChanged(ExternalDriveInfo? value) => RefreshPackages();
+
+    partial void OnSelectedFormatChanged(ImportFormatOption value) => RefreshPackages();
 
     [RelayCommand]
     private void RefreshDrives()
@@ -69,19 +89,26 @@ internal sealed partial class ImportViewModel : ObservableObject, IImportViewMod
     }
 
     private void RefreshPackages()
-        => AvailablePackages = SelectedDrive is null ? [] : importService.GetPackages(SelectedDrive.RootPath);
+        => AvailablePackages = SelectedDrive is null ? [] : importService.GetPackages(SelectedDrive.RootPath, SelectedFormat.Format);
 
     [RelayCommand(CanExecute = nameof(CanStartImport))]
     private async Task StartImport(ImportPackageInfo? package)
     {
         if (package is null) { return; }
 
+        ImportFormatDefinition? format = SelectedFormat.Format;
         IsImporting = true;
         StatusMessage = null;
         try
         {
-            ImportSummary summary = await importService.Import(package.FullPath, AwaitConflictResolution);
+            ImportSummary summary = await importService.Import(package.FullPath, AwaitConflictResolution, format);
             StatusMessage = $"Imported {summary.Imported}, overwrote {summary.Overwritten}, skipped {summary.Skipped}";
+
+            if (format is not null && summary.StagedSends.Count > 0)
+            {
+                stagedSend.Enqueue(summary.StagedSends, format.StagedSendMode, format.StagedSendDelay);
+                if (StagedSendsReady is not null) { await StagedSendsReady(); }
+            }
         }
         catch (Exception ex)
         {

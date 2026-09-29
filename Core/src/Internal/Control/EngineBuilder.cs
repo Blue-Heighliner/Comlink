@@ -22,6 +22,7 @@ internal sealed class EngineBuilder : IEngineBuilder, IAsyncDisposable
     private readonly List<Action<IUserConnectionHookContext>> userDisconnectedHooks = [];
     private readonly List<Action<IMessageReceivedHookContext>> messageReceivedHooks = [];
     private readonly List<ExportFormatDefinition> exportFormats = [];
+    private readonly List<ImportFormatDefinition> importFormats = [];
     private ServiceProvider? bootstrap;
 
     /// <summary>The message mapping, or <see langword="null"/> until <see cref="Message{TMessage}"/> is called.</summary>
@@ -124,6 +125,8 @@ internal sealed class EngineBuilder : IEngineBuilder, IAsyncDisposable
     public IReadOnlyList<Action<IMessageReceivedHookContext>> MessageReceivedHooks => messageReceivedHooks;
     /// <summary>The custom export formats, in the order added.</summary>
     public IReadOnlyList<ExportFormatDefinition> ExportFormats => exportFormats;
+    /// <summary>The custom import formats, in the order added.</summary>
+    public IReadOnlyList<ImportFormatDefinition> ImportFormats => importFormats;
 
     /// <summary>
     /// Constructs <typeparamref name="TConfiguration"/> from a bootstrap container, so it can take dependencies, then
@@ -509,6 +512,16 @@ internal sealed class EngineBuilder : IEngineBuilder, IAsyncDisposable
         int existingIndex = exportFormats.FindIndex(f => string.Equals(f.Name, name, StringComparison.OrdinalIgnoreCase));
         if (existingIndex >= 0) { exportFormats[existingIndex] = definition; }
         else { exportFormats.Add(definition); }
+        return this;
+    }
+
+    /// <inheritdoc />
+    public IEngineBuilder ImportFormat(string name, Func<Stream, IImportFormatContext, CancellationToken, Task> read, StagedSendMode stagedSendMode = StagedSendMode.Sequential, TimeSpan? stagedSendDelay = null)
+    {
+        ImportFormatDefinition definition = new() { Name = name, Read = read, StagedSendMode = stagedSendMode, StagedSendDelay = stagedSendDelay };
+        int existingIndex = importFormats.FindIndex(f => string.Equals(f.Name, name, StringComparison.OrdinalIgnoreCase));
+        if (existingIndex >= 0) { importFormats[existingIndex] = definition; }
+        else { importFormats.Add(definition); }
         return this;
     }
 

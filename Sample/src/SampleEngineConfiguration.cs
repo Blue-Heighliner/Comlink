@@ -19,6 +19,7 @@ namespace BlueHeighliner.Comlink.Sample;
 /// <item><description>security levels - three placeholder levels (<c>PUBLIC</c>, <c>INTERNAL</c>, <c>RESTRICTED</c>); the <c>Peer</c> scenario's sites run at <c>PUBLIC</c>, the <c>ClientServer</c>/<c>ServerCluster</c> scenarios' clients at <c>INTERNAL</c>, and their servers at <c>RESTRICTED</c>.</description></item>
 /// <item><description>connection and message hooks - a newly connected user is welcomed with who else is currently online (<see cref="IEngineHookContext.ConnectedUsers"/>), everyone still online is told when someone disconnects, and any received message tagged <c>PING</c> gets an automatic <c>PONG</c> reply (all via <see cref="IEngineHookContext.SendMessage"/>).</description></item>
 /// <item><description>export formats - a plain-text alternative to the built-in JSON export, restricted to messages, drafts, and notes (an activity log's structured entries don't read naturally as prose).</description></item>
+/// <item><description>import formats - a CSV reader that stages one send per <c>Subject,User,Body</c> line for the user to review and send from the staged send screen, one at a time a second apart.</description></item>
 /// </list>
 /// Actual alarm sound playback and printer discovery and driving are real platform behavior always provided by the
 /// engine itself, not something Sample states here.
@@ -121,5 +122,20 @@ public sealed class SampleEngineConfiguration : IEngineConfiguration
                     await using StreamWriter writer = new(stream, leaveOpen: true);
                     await writer.WriteAsync(text);
                 },
-                entryTypes: folder => folder is FolderType.Inbox or FolderType.Outbox or FolderType.Drafts or FolderType.Notes);
+                entryTypes: folder => folder is FolderType.Inbox or FolderType.Outbox or FolderType.Drafts or FolderType.Notes)
+            .ImportFormat(
+                "CSV",
+                async (stream, context, cancellation) =>
+                {
+                    using StreamReader reader = new(stream, leaveOpen: true);
+                    string? line;
+                    while ((line = await reader.ReadLineAsync(cancellation)) is not null)
+                    {
+                        string[] parts = line.Split(',', 3);
+                        if (parts.Length < 3) { continue; }
+                        context.AddStagedSend(new StagedSendData { Subject = parts[0], Body = parts[2], Addresses = [new AddressRequest { UserName = parts[1] }] });
+                    }
+                },
+                stagedSendMode: StagedSendMode.Sequential,
+                stagedSendDelay: TimeSpan.FromSeconds(1));
 }
