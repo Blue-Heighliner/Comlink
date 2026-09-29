@@ -10,8 +10,11 @@ public sealed class ExportViewModelTests
     {
         public Mock<IExternalDriveProvider> DriveProvider { get; } = new();
         public Mock<IExportService> ExportService { get; } = new();
+        public Mock<IEngineController> EngineController { get; } = new();
 
-        public ExportViewModel Build() => new(DriveProvider.Object, ExportService.Object);
+        public Setup() => EngineController.Setup(e => e.ExportFormats).Returns((IReadOnlyList<ExportFormatDefinition>)[]);
+
+        public ExportViewModel Build() => new(DriveProvider.Object, ExportService.Object, EngineController.Object);
     }
 
     private static EntryItemViewModel MakeEntry(string id, EntryType type = EntryType.Message, bool outbound = false)
@@ -30,6 +33,26 @@ public sealed class ExportViewModelTests
         Assert.False(vm.IsExporting);
         Assert.Empty(vm.SelectedEntries);
         Assert.False(vm.IsCollectingEntries);
+        Assert.Equal("JSON", Assert.Single(vm.AvailableFormats).Label);
+        Assert.Null(vm.SelectedFormat.Format);
+    }
+
+    /// <summary>AvailableFormats lists the built-in JSON option first, followed by every configured export format in order.</summary>
+    [Fact]
+    public void Ctor_WithConfiguredExportFormats_ListsJsonFirstThenEachByName()
+    {
+        Setup s = new();
+        ExportFormatDefinition csv = new() { Name = "CSV", Serialize = (_, _, _) => Task.CompletedTask };
+        ExportFormatDefinition xml = new() { Name = "XML", Serialize = (_, _, _) => Task.CompletedTask };
+        s.EngineController.Setup(e => e.ExportFormats).Returns((IReadOnlyList<ExportFormatDefinition>)[csv, xml]);
+
+        ExportViewModel vm = s.Build();
+
+        Assert.Equal(["JSON", "CSV", "XML"], vm.AvailableFormats.Select(f => f.Label));
+        Assert.Null(vm.AvailableFormats[0].Format);
+        Assert.Same(csv, vm.AvailableFormats[1].Format);
+        Assert.Same(xml, vm.AvailableFormats[2].Format);
+        Assert.Equal("JSON", vm.SelectedFormat.Label);
     }
 
     /// <summary>RefreshDrivesCommand populates AvailableDrives from the provider.</summary>
@@ -196,11 +219,12 @@ public sealed class ExportViewModelTests
         TaskCompletionSource exportStarted = new();
         s.ExportService.Setup(e => e.GetAllEntryRefs()).ReturnsAsync([]);
         s.ExportService
-            .Setup(e => e.Export(It.IsAny<IReadOnlyList<ExportEntryRef>>(), It.IsAny<string>(), It.IsAny<CancellationToken>()))
-            .Returns(async (IReadOnlyList<ExportEntryRef> _, string _, CancellationToken token) =>
+            .Setup(e => e.Export(It.IsAny<IReadOnlyList<ExportEntryRef>>(), It.IsAny<string>(), It.IsAny<ExportFormatDefinition>(), It.IsAny<CancellationToken>()))
+            .Returns(async (IReadOnlyList<ExportEntryRef> _, string _, ExportFormatDefinition? _, CancellationToken token) =>
             {
                 exportStarted.SetResult();
                 await Task.Delay(Timeout.Infinite, token);
+                return 0;
             });
         ExportViewModel vm = s.Build();
         vm.SelectedDrive = driveA;
@@ -224,7 +248,7 @@ public sealed class ExportViewModelTests
         await vm.StartExportCommand.ExecuteAsync(null);
 
         Assert.Equal("Select a drive", vm.StatusMessage);
-        s.ExportService.Verify(e => e.Export(It.IsAny<IReadOnlyList<ExportEntryRef>>(), It.IsAny<string>(), It.IsAny<CancellationToken>()), Times.Never);
+        s.ExportService.Verify(e => e.Export(It.IsAny<IReadOnlyList<ExportEntryRef>>(), It.IsAny<string>(), It.IsAny<ExportFormatDefinition>(), It.IsAny<CancellationToken>()), Times.Never);
     }
 
     /// <summary>StartExportCommand with a blank file name sets a status message and does not export.</summary>
@@ -239,7 +263,7 @@ public sealed class ExportViewModelTests
         await vm.StartExportCommand.ExecuteAsync(null);
 
         Assert.Equal("Enter a file name", vm.StatusMessage);
-        s.ExportService.Verify(e => e.Export(It.IsAny<IReadOnlyList<ExportEntryRef>>(), It.IsAny<string>(), It.IsAny<CancellationToken>()), Times.Never);
+        s.ExportService.Verify(e => e.Export(It.IsAny<IReadOnlyList<ExportEntryRef>>(), It.IsAny<string>(), It.IsAny<ExportFormatDefinition>(), It.IsAny<CancellationToken>()), Times.Never);
     }
 
     /// <summary>StartExportCommand with Some scope and no collected entries sets a status message and does not export.</summary>
@@ -254,7 +278,7 @@ public sealed class ExportViewModelTests
         await vm.StartExportCommand.ExecuteAsync(null);
 
         Assert.Equal("Select at least one entry to export", vm.StatusMessage);
-        s.ExportService.Verify(e => e.Export(It.IsAny<IReadOnlyList<ExportEntryRef>>(), It.IsAny<string>(), It.IsAny<CancellationToken>()), Times.Never);
+        s.ExportService.Verify(e => e.Export(It.IsAny<IReadOnlyList<ExportEntryRef>>(), It.IsAny<string>(), It.IsAny<ExportFormatDefinition>(), It.IsAny<CancellationToken>()), Times.Never);
     }
 
     /// <summary>StartExportCommand with All scope fetches every entry ref and exports to the selected drive.</summary>
@@ -264,17 +288,38 @@ public sealed class ExportViewModelTests
         Setup s = new();
         List<ExportEntryRef> allRefs = [new ExportEntryRef { Id = "M1", EntryType = EntryType.Message }];
         s.ExportService.Setup(e => e.GetAllEntryRefs()).ReturnsAsync(allRefs);
-        s.ExportService.Setup(e => e.Export(It.IsAny<IReadOnlyList<ExportEntryRef>>(), It.IsAny<string>(), It.IsAny<CancellationToken>()))
-            .Returns(Task.CompletedTask);
+        s.ExportService.Setup(e => e.Export(It.IsAny<IReadOnlyList<ExportEntryRef>>(), It.IsAny<string>(), It.IsAny<ExportFormatDefinition>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(1);
         ExportViewModel vm = s.Build();
         vm.SelectedDrive = driveA;
         vm.FileName = "backup";
 
         await vm.StartExportCommand.ExecuteAsync(null);
 
-        s.ExportService.Verify(e => e.Export(allRefs, Path.Combine(driveA.RootPath, "backup" + IExportService.PackageExtension), It.IsAny<CancellationToken>()), Times.Once);
+        s.ExportService.Verify(e => e.Export(allRefs, Path.Combine(driveA.RootPath, "backup" + IExportService.PackageExtension), null, It.IsAny<CancellationToken>()), Times.Once);
         Assert.False(vm.IsExporting);
         Assert.Contains("Exported", vm.StatusMessage);
+    }
+
+    /// <summary>StartExportCommand passes the selected custom format through to the export service, and reports the actual written count rather than the requested one.</summary>
+    [Fact]
+    public async Task StartExportCommand_CustomFormatSelected_PassesFormatAndReportsWrittenCount()
+    {
+        Setup s = new();
+        ExportFormatDefinition csv = new() { Name = "CSV", Serialize = (_, _, _) => Task.CompletedTask };
+        s.EngineController.Setup(e => e.ExportFormats).Returns((IReadOnlyList<ExportFormatDefinition>)[csv]);
+        List<ExportEntryRef> allRefs = [new ExportEntryRef { Id = "M1", EntryType = EntryType.Message }, new ExportEntryRef { Id = "M2", EntryType = EntryType.Message }];
+        s.ExportService.Setup(e => e.GetAllEntryRefs()).ReturnsAsync(allRefs);
+        s.ExportService.Setup(e => e.Export(It.IsAny<IReadOnlyList<ExportEntryRef>>(), It.IsAny<string>(), csv, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(1);
+        ExportViewModel vm = s.Build();
+        vm.SelectedDrive = driveA;
+        vm.SelectedFormat = vm.AvailableFormats.Single(f => f.Label == "CSV");
+
+        await vm.StartExportCommand.ExecuteAsync(null);
+
+        s.ExportService.Verify(e => e.Export(allRefs, It.IsAny<string>(), csv, It.IsAny<CancellationToken>()), Times.Once);
+        Assert.Contains("Exported 1 entry", vm.StatusMessage);
     }
 
     /// <summary>StartExportCommand with Some scope exports exactly the collected entries and clears the list on success.</summary>
@@ -282,8 +327,8 @@ public sealed class ExportViewModelTests
     public async Task StartExportCommand_SomeScope_ExportsCollectedEntriesAndClearsList()
     {
         Setup s = new();
-        s.ExportService.Setup(e => e.Export(It.IsAny<IReadOnlyList<ExportEntryRef>>(), It.IsAny<string>(), It.IsAny<CancellationToken>()))
-            .Returns(Task.CompletedTask);
+        s.ExportService.Setup(e => e.Export(It.IsAny<IReadOnlyList<ExportEntryRef>>(), It.IsAny<string>(), It.IsAny<ExportFormatDefinition>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(2);
         ExportViewModel vm = s.Build();
         vm.SelectedDrive = driveA;
         vm.Scope = ExportScope.Some;
@@ -294,7 +339,7 @@ public sealed class ExportViewModelTests
 
         s.ExportService.Verify(e => e.Export(
             It.Is<IReadOnlyList<ExportEntryRef>>(refs => refs.Count == 2 && refs.Any(r => r.Id == "E1") && refs.Any(r => r.Id == "E2")),
-            It.IsAny<string>(), It.IsAny<CancellationToken>()), Times.Once);
+            It.IsAny<string>(), It.IsAny<ExportFormatDefinition>(), It.IsAny<CancellationToken>()), Times.Once);
         Assert.Empty(vm.SelectedEntries);
         s.ExportService.Verify(e => e.GetAllEntryRefs(), Times.Never);
     }
@@ -305,8 +350,8 @@ public sealed class ExportViewModelTests
     {
         Setup s = new();
         s.ExportService.Setup(e => e.GetAllEntryRefs()).ReturnsAsync([]);
-        s.ExportService.Setup(e => e.Export(It.IsAny<IReadOnlyList<ExportEntryRef>>(), It.IsAny<string>(), It.IsAny<CancellationToken>()))
-            .Returns(Task.CompletedTask);
+        s.ExportService.Setup(e => e.Export(It.IsAny<IReadOnlyList<ExportEntryRef>>(), It.IsAny<string>(), It.IsAny<ExportFormatDefinition>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(0);
         ExportViewModel vm = s.Build();
         vm.SelectedDrive = driveA;
         vm.FileName = "a/b";
@@ -316,7 +361,7 @@ public sealed class ExportViewModelTests
         s.ExportService.Verify(e => e.Export(
             It.IsAny<IReadOnlyList<ExportEntryRef>>(),
             Path.Combine(driveA.RootPath, "a_b" + IExportService.PackageExtension),
-            It.IsAny<CancellationToken>()), Times.Once);
+            It.IsAny<ExportFormatDefinition>(), It.IsAny<CancellationToken>()), Times.Once);
     }
 
     /// <summary>A cancelled export sets an appropriate status message, leaves IsExporting false, and preserves the collected entries.</summary>
@@ -324,7 +369,7 @@ public sealed class ExportViewModelTests
     public async Task StartExportCommand_Cancelled_SetsStatusMessageAndPreservesEntries()
     {
         Setup s = new();
-        s.ExportService.Setup(e => e.Export(It.IsAny<IReadOnlyList<ExportEntryRef>>(), It.IsAny<string>(), It.IsAny<CancellationToken>()))
+        s.ExportService.Setup(e => e.Export(It.IsAny<IReadOnlyList<ExportEntryRef>>(), It.IsAny<string>(), It.IsAny<ExportFormatDefinition>(), It.IsAny<CancellationToken>()))
             .ThrowsAsync(new OperationCanceledException());
         ExportViewModel vm = s.Build();
         vm.SelectedDrive = driveA;
@@ -344,7 +389,7 @@ public sealed class ExportViewModelTests
     {
         Setup s = new();
         s.ExportService.Setup(e => e.GetAllEntryRefs()).ReturnsAsync([]);
-        s.ExportService.Setup(e => e.Export(It.IsAny<IReadOnlyList<ExportEntryRef>>(), It.IsAny<string>(), It.IsAny<CancellationToken>()))
+        s.ExportService.Setup(e => e.Export(It.IsAny<IReadOnlyList<ExportEntryRef>>(), It.IsAny<string>(), It.IsAny<ExportFormatDefinition>(), It.IsAny<CancellationToken>()))
             .ThrowsAsync(new IOException("disk full"));
         ExportViewModel vm = s.Build();
         vm.SelectedDrive = driveA;
@@ -373,12 +418,13 @@ public sealed class ExportViewModelTests
         CancellationToken? capturedToken = null;
         s.ExportService.Setup(e => e.GetAllEntryRefs()).ReturnsAsync([]);
         s.ExportService
-            .Setup(e => e.Export(It.IsAny<IReadOnlyList<ExportEntryRef>>(), It.IsAny<string>(), It.IsAny<CancellationToken>()))
-            .Returns((IReadOnlyList<ExportEntryRef> _, string _, CancellationToken token) =>
+            .Setup(e => e.Export(It.IsAny<IReadOnlyList<ExportEntryRef>>(), It.IsAny<string>(), It.IsAny<ExportFormatDefinition>(), It.IsAny<CancellationToken>()))
+            .Returns(async (IReadOnlyList<ExportEntryRef> _, string _, ExportFormatDefinition? _, CancellationToken token) =>
             {
                 capturedToken = token;
                 exportStarted.SetResult();
-                return Task.Delay(Timeout.Infinite, token);
+                await Task.Delay(Timeout.Infinite, token);
+                return 0;
             });
         ExportViewModel vm = s.Build();
         vm.SelectedDrive = driveA;

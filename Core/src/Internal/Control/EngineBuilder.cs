@@ -21,6 +21,7 @@ internal sealed class EngineBuilder : IEngineBuilder, IAsyncDisposable
     private readonly List<Action<IUserConnectionHookContext>> userConnectedHooks = [];
     private readonly List<Action<IUserConnectionHookContext>> userDisconnectedHooks = [];
     private readonly List<Action<IMessageReceivedHookContext>> messageReceivedHooks = [];
+    private readonly List<ExportFormatDefinition> exportFormats = [];
     private ServiceProvider? bootstrap;
 
     /// <summary>The message mapping, or <see langword="null"/> until <see cref="Message{TMessage}"/> is called.</summary>
@@ -121,6 +122,8 @@ internal sealed class EngineBuilder : IEngineBuilder, IAsyncDisposable
     public IReadOnlyList<Action<IUserConnectionHookContext>> UserDisconnectedHooks => userDisconnectedHooks;
     /// <summary>The hooks run when a message is received.</summary>
     public IReadOnlyList<Action<IMessageReceivedHookContext>> MessageReceivedHooks => messageReceivedHooks;
+    /// <summary>The custom export formats, in the order added.</summary>
+    public IReadOnlyList<ExportFormatDefinition> ExportFormats => exportFormats;
 
     /// <summary>
     /// Constructs <typeparamref name="TConfiguration"/> from a bootstrap container, so it can take dependencies, then
@@ -496,6 +499,16 @@ internal sealed class EngineBuilder : IEngineBuilder, IAsyncDisposable
     public IEngineBuilder OnMessageReceived(Action<IMessageReceivedHookContext> hook)
     {
         messageReceivedHooks.Add(hook);
+        return this;
+    }
+
+    /// <inheritdoc />
+    public IEngineBuilder ExportFormat(string name, Func<object, Stream, CancellationToken, Task> serialize, Func<FolderType, bool>? entryTypes = null)
+    {
+        ExportFormatDefinition definition = new() { Name = name, Serialize = serialize, AllowedTypes = entryTypes };
+        int existingIndex = exportFormats.FindIndex(f => string.Equals(f.Name, name, StringComparison.OrdinalIgnoreCase));
+        if (existingIndex >= 0) { exportFormats[existingIndex] = definition; }
+        else { exportFormats.Add(definition); }
         return this;
     }
 

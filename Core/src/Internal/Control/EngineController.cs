@@ -234,6 +234,9 @@ internal interface IEngineController
     /// <summary>Every hook run whenever this instance receives a new (non-confirmation) message from a peer.</summary>
     IReadOnlyList<Action<IMessageReceivedHookContext>> MessageReceivedHooks { get; }
 
+    /// <summary>Every custom export format added via <see cref="IEngineBuilder.ExportFormat"/>, in the order added; empty if none.</summary>
+    IReadOnlyList<ExportFormatDefinition> ExportFormats { get; }
+
     /// <summary>Creates a new, empty instance of <see cref="MessageType"/>.</summary>
     object CreateMessage();
     /// <summary>Gets the application-level message identifier from <paramref name="message"/>.</summary>
@@ -519,6 +522,8 @@ internal class EngineController(EngineBuilder builder, ICurrentUserProvider curr
     public virtual IReadOnlyList<Action<IUserConnectionHookContext>> UserDisconnectedHooks => builder.UserDisconnectedHooks;
     /// <inheritdoc />
     public virtual IReadOnlyList<Action<IMessageReceivedHookContext>> MessageReceivedHooks => builder.MessageReceivedHooks;
+    /// <inheritdoc />
+    public virtual IReadOnlyList<ExportFormatDefinition> ExportFormats => builder.ExportFormats;
 
     /// <inheritdoc />
     public virtual string TrustedAuthorityCertificateName => builder.TrustedAuthorityValue ?? "COMLINK-ROOT";

@@ -14,10 +14,11 @@ public sealed class PublicApiTests
 
         Assert.Equal(
             [
-                "AddressRequest", "AddressType", "ConnectionInfo", "ConnectionPoint", "DeliveryStatusChangedEvent", "DestinationStatus",
+                "ActivityLogEventEntry", "ActivityLogExportData", "AddressRequest", "AddressType", "ConnectionInfo", "ConnectionPoint",
+                "DeliveryStatusChangedEvent", "DestinationStatus", "DraftExportData",
                 "Engine", "ExternalSystemBase`1", "FolderType", "IEngineBuilder", "IEngineConfiguration", "IEngineHookContext", "IExternalSystem",
                 "IMessageBuilder`1", "IMessageReceivedHookContext", "INetworkSerializer", "IPacketBuilder`1", "IServiceConnection", "IUserConnectionHookContext",
-                "MessageReceivedEvent", "NodeRole", "ProtobufNetworkSerializer", "SendMessageResult",
+                "MessageDeliveryStatus", "MessageExportData", "MessageReceivedEvent", "NodeRole", "NoteExportData", "ProtobufNetworkSerializer", "SendMessageResult",
                 "UserDeliveryResult", "UserIdentity", "UserInfo"
             ],
             exported);

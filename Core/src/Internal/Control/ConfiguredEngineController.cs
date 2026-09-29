@@ -263,6 +263,8 @@ internal sealed class ConfiguredEngineController : IEngineController
     public IReadOnlyList<Action<IUserConnectionHookContext>> UserDisconnectedHooks => fallback.UserDisconnectedHooks;
     /// <inheritdoc />
     public IReadOnlyList<Action<IMessageReceivedHookContext>> MessageReceivedHooks => fallback.MessageReceivedHooks;
+    /// <inheritdoc />
+    public IReadOnlyList<ExportFormatDefinition> ExportFormats => fallback.ExportFormats;
 
     /// <inheritdoc />
     public UserInfo? ResolveCode(string userCode) => fallback.ResolveCode(userCode);

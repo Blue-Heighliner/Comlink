@@ -1,6 +1,6 @@
 namespace BlueHeighliner.Comlink.Services;
 
-/// <summary>Builds the reference list for a full export and writes selected entries to a zip archive as JSON files.</summary>
+/// <summary>Builds the reference list for a full export and writes selected entries to a zip archive, in the built-in JSON format or a custom one (see <see cref="Control.IEngineController.ExportFormats"/>).</summary>
 internal interface IExportService
 {
     /// <summary>
@@ -12,17 +12,22 @@ internal interface IExportService
     /// <summary>Returns a reference to every message, draft, note, and activity log entry in the database.</summary>
     Task<IReadOnlyList<ExportEntryRef>> GetAllEntryRefs();
     /// <summary>
-    /// Writes each referenced entry to <paramref name="zipPath"/> as one JSON file per entry inside a new zip
-    /// archive. If <paramref name="cancellation"/> is triggered, or the write otherwise fails, the partially
-    /// written zip file at <paramref name="zipPath"/> is deleted before the exception propagates.
+    /// Writes each referenced entry to <paramref name="zipPath"/> as one file per entry inside a new zip archive,
+    /// using <paramref name="format"/>'s serializer, or the engine's own built-in JSON serializer when
+    /// <paramref name="format"/> is <see langword="null"/>. An entry whose root folder type <paramref name="format"/>
+    /// does not accept (see <see cref="Control.ExportFormatDefinition.AllowedTypes"/>) is left out, the same as one
+    /// whose entity no longer exists. If <paramref name="cancellation"/> is triggered, or the write otherwise
+    /// fails, the partially written zip file at <paramref name="zipPath"/> is deleted before the exception propagates.
     /// </summary>
     /// <param name="entries">The entries to export.</param>
     /// <param name="zipPath">Absolute path of the zip file to create.</param>
+    /// <param name="format">The custom format to write with, or <see langword="null"/> for the built-in JSON format.</param>
     /// <param name="cancellation">Token used to cancel the export mid-write.</param>
-    Task Export(IReadOnlyList<ExportEntryRef> entries, string zipPath, CancellationToken cancellation = default);
+    /// <returns>How many entries were actually written - may be fewer than <paramref name="entries"/>.Count, per the rules above.</returns>
+    Task<int> Export(IReadOnlyList<ExportEntryRef> entries, string zipPath, ExportFormatDefinition? format = null, CancellationToken cancellation = default);
 }
 
-/// <summary>Builds the reference list for a full export and writes selected entries to a zip archive as JSON files.</summary>
+/// <inheritdoc cref="IExportService" />
 internal sealed class ExportService : IExportService
 {
     private static DraftExportData BuildDraftExportData(DraftEntity entity) => new()
@@ -31,7 +36,7 @@ internal sealed class ExportService : IExportService
         Subject = entity.Subject,
         Body = entity.Body,
         BodySegmentsJson = entity.BodySegmentsJson,
-        Addresses = entity.Addresses,
+        Addresses = [.. entity.Addresses.Select(a => new AddressRequest { UserName = a.UserName, Type = a.Type, Information = a.Information })],
         IsSent = entity.IsSent,
         IsAlert = entity.IsAlert,
         Priority = entity.Priority,
@@ -53,11 +58,27 @@ internal sealed class ExportService : IExportService
     {
         Id = entity.Id.ToString(),
         Date = entity.Date,
-        EventEntries = entity.EventEntries
+        EventEntries = [.. entity.EventEntries.Select(e => new ActivityLogEventEntry { At = e.At, Message = e.Message })]
     };
 
-    private static string BuildEntryFileName(int index, ExportEntryRef entryRef)
-        => $"{index:0000}_{entryRef.EntryType}_{SanitizeForFileName(entryRef.Id)}.json";
+    private static FolderType ToFolderType(ExportEntryRef entryRef) => entryRef.EntryType switch
+    {
+        EntryType.Message => entryRef.IsOutboundMessage ? FolderType.Outbox : FolderType.Inbox,
+        EntryType.Draft => FolderType.Drafts,
+        EntryType.Note => FolderType.Notes,
+        _ => FolderType.Activity
+    };
+
+    private static string BuildEntryFileName(int index, ExportEntryRef entryRef, ExportFormatDefinition? format)
+        => $"{index:0000}_{entryRef.EntryType}_{SanitizeForFileName(entryRef.Id)}.{FileExtension(format)}";
+
+    private static string FileExtension(ExportFormatDefinition? format)
+    {
+        if (format is null) { return "json"; }
+
+        string sanitized = new([.. format.Name.Where(char.IsLetterOrDigit)]);
+        return sanitized.Length > 0 ? sanitized.ToLowerInvariant() : "dat";
+    }
 
     private static string SanitizeForFileName(string value)
     {
@@ -127,13 +148,14 @@ internal sealed class ExportService : IExportService
     }
 
     /// <inheritdoc />
-    public async Task Export(IReadOnlyList<ExportEntryRef> entries, string zipPath, CancellationToken cancellation = default)
+    public async Task<int> Export(IReadOnlyList<ExportEntryRef> entries, string zipPath, ExportFormatDefinition? format = null, CancellationToken cancellation = default)
     {
         // Written beside the target and moved into place only once complete, so a cancelled or failed export never
         // destroys an existing package of the same name.
         string tempPath = zipPath + ".partial";
         try
         {
+            int written = 0;
             await using (FileStream fs = new(tempPath, FileMode.Create, FileAccess.Write))
             await using (ZipArchive archive = new(fs, ZipArchiveMode.Create))
             {
@@ -142,18 +164,27 @@ internal sealed class ExportService : IExportService
                 {
                     cancellation.ThrowIfCancellationRequested();
 
+                    if (format?.AllowedTypes is { } allowed && !allowed(ToFolderType(entryRef)))
+                    {
+                        index++;
+                        continue;
+                    }
+
                     object? data = await LoadExportData(entryRef);
                     if (data is not null)
                     {
-                        ZipArchiveEntry zipEntry = archive.CreateEntry(BuildEntryFileName(index, entryRef), CompressionLevel.Optimal);
+                        ZipArchiveEntry zipEntry = archive.CreateEntry(BuildEntryFileName(index, entryRef, format), CompressionLevel.Optimal);
                         await using Stream entryStream = await zipEntry.OpenAsync(cancellation);
-                        await JsonSerializer.SerializeAsync(entryStream, data, data.GetType(), cancellationToken: cancellation);
+                        if (format is null) { await JsonSerializer.SerializeAsync(entryStream, data, data.GetType(), cancellationToken: cancellation); }
+                        else { await format.Serialize(data, entryStream, cancellation); }
+                        written++;
                     }
                     index++;
                 }
             }
 
             File.Move(tempPath, zipPath, overwrite: true);
+            return written;
         }
         catch
         {
@@ -198,7 +229,7 @@ internal sealed class ExportService : IExportService
         Subject = engineController.GetSubject(entity.Message),
         Body = engineController.GetBody(entity.Message),
         Addresses = engineController.GetAddresses(entity.Message)
-            .Select(a => new AddressData { UserName = a.UserName, Type = a.Type.ToString(), Information = a.Information })
+            .Select(a => new AddressRequest { UserName = a.UserName, Type = a.Type.ToString(), Information = a.Information })
             .ToList(),
         SentAt = engineController.GetSentAt(entity.Message),
         IsAlert = engineController.GetIsAlert(entity.Message),
@@ -206,6 +237,6 @@ internal sealed class ExportService : IExportService
         Tag = engineController.GetTag(entity.Message),
         ReceivedAt = entity.ReceivedAt,
         ReadStatus = entity.ReadStatus,
-        DeliveryStatuses = entity.DeliveryStatuses
+        DeliveryStatuses = [.. entity.DeliveryStatuses.Select(d => new MessageDeliveryStatus { UserName = d.UserName, Status = d.Status, AddressedVia = d.AddressedVia })]
     };
 }

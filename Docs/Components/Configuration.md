@@ -257,6 +257,47 @@ Whether the user can delete entries in a given root folder type (`FolderType.Inb
 
 ---
 
+### Export Formats
+
+```csharp
+engine.ExportFormat(
+    "CSV",
+    async (entry, stream, cancellation) =>
+    {
+        if (entry is MessageExportData message)
+        {
+            await using StreamWriter writer = new(stream, leaveOpen: true);
+            await writer.WriteLineAsync($"{message.SentAt:O},{message.FromUser},{message.Subject}");
+        }
+    },
+    entryTypes: type => type is FolderType.Inbox or FolderType.Outbox);
+```
+
+Adds a custom export format, shown as an option in the export screen's format picker alongside the built-in JSON
+format (see `Docs/Components/ViewModels.md`, `IExportViewModel`). The serializer is handed one entry - a
+`MessageExportData`, `DraftExportData`, `NoteExportData`, or `ActivityLogExportData` depending on which root
+folder type it came from, the exact same public DTOs the engine's own built-in JSON export writes - and a stream
+to write it to; a host that only handles some entry types checks the runtime type (as above) or narrows what it
+ever receives at all with `entryTypes`. `entryTypes`, when stated, also determines which entries `ExportService.Export`
+leaves out of the archive entirely for this format, so an excluded entry's data is never touched, not merely
+unwritten. Each entry's file inside the export zip gets an extension derived from the format's own name (lowercased,
+stripped to letters and digits - `"CSV"` above becomes `.csv`), so files stay recognizable to whatever tool a host
+exports for. Calling this again with the same name (case-insensitive) replaces that format; a new name adds another.
+
+A package written with a custom format is one-way: only a package written with the built-in JSON format can be
+read back in by the import screen (see `Docs/Components/Services.md`, `ImportService`) - a custom format is for
+producing something a tool outside Comlink consumes, not for round-tripping through this app.
+
+**Default:** no custom formats; the export screen offers only the built-in JSON format.
+
+**Config file:** none; formats are behavior, not settings.
+
+**Sample:** a `"Text"` format writing each message, draft, or note as readable plain text, restricted (via
+`entryTypes`) to Inbox, Outbox, Drafts, and Notes - Activity's structured entries are left to the built-in JSON
+format instead.
+
+---
+
 ### MSMT Certificates
 
 ```csharp

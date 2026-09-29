@@ -94,8 +94,9 @@ public sealed class ExportServiceTests : IDisposable
             new ExportEntryRef { Id = draft.Id.ToString(), EntryType = EntryType.Draft }
         ];
 
-        await service.Export(refs, zipPath);
+        int written = await service.Export(refs, zipPath);
 
+        Assert.Equal(2, written);
         Assert.True(File.Exists(zipPath));
         using ZipArchive archive = ZipFile.OpenRead(zipPath);
         Assert.Equal(2, archive.Entries.Count);
@@ -124,10 +125,75 @@ public sealed class ExportServiceTests : IDisposable
         string zipPath = ZipPath();
         List<ExportEntryRef> refs = [new ExportEntryRef { Id = "does-not-exist", EntryType = EntryType.Message, IsOutboundMessage = false }];
 
-        await service.Export(refs, zipPath);
+        int written = await service.Export(refs, zipPath);
 
+        Assert.Equal(0, written);
         using ZipArchive archive = ZipFile.OpenRead(zipPath);
         Assert.Empty(archive.Entries);
+    }
+
+    /// <summary>Export with a custom format calls its serializer instead of the built-in JSON serializer, and names each entry's file with an extension derived from the format's name.</summary>
+    [Fact]
+    public async Task Export_CustomFormat_UsesItsSerializerAndFileExtension()
+    {
+        await InsertMessage("M1", "Hello", isOutbound: false);
+        string zipPath = ZipPath();
+        List<ExportEntryRef> refs = [new ExportEntryRef { Id = "M1", EntryType = EntryType.Message, IsOutboundMessage = false }];
+        List<object> serialized = [];
+        ExportFormatDefinition format = new()
+        {
+            Name = "CSV",
+            Serialize = async (entry, stream, cancellation) =>
+            {
+                serialized.Add(entry);
+                await using StreamWriter writer = new(stream, leaveOpen: true);
+                await writer.WriteAsync("custom output");
+            }
+        };
+
+        int written = await service.Export(refs, zipPath, format);
+
+        Assert.Equal(1, written);
+        Assert.Single(serialized);
+        Assert.IsType<MessageExportData>(Assert.Single(serialized));
+        using ZipArchive archive = ZipFile.OpenRead(zipPath);
+        ZipArchiveEntry entry = Assert.Single(archive.Entries);
+        Assert.EndsWith(".csv", entry.Name);
+        using StreamReader reader = new(entry.Open());
+        Assert.Equal("custom output", await reader.ReadToEndAsync());
+    }
+
+    /// <summary>Export with a custom format restricted to certain root folder types leaves out an entry of a type it does not accept, without calling its serializer for it, and reports the reduced written count.</summary>
+    [Fact]
+    public async Task Export_CustomFormatWithEntryTypeFilter_SkipsDisallowedTypes()
+    {
+        await InsertMessage("M1", "Hello", isOutbound: false);
+        DraftEntity draft = await drafts.Insert(new DraftEntity { Subject = "D", FolderId = "root-drafts" });
+        string zipPath = ZipPath();
+        List<ExportEntryRef> refs =
+        [
+            new ExportEntryRef { Id = "M1", EntryType = EntryType.Message, IsOutboundMessage = false },
+            new ExportEntryRef { Id = draft.Id.ToString(), EntryType = EntryType.Draft }
+        ];
+        int serializeCalls = 0;
+        ExportFormatDefinition format = new()
+        {
+            Name = "MessagesOnly",
+            Serialize = async (entry, stream, cancellation) =>
+            {
+                serializeCalls++;
+                await JsonSerializer.SerializeAsync(stream, entry, entry.GetType(), cancellationToken: cancellation);
+            },
+            AllowedTypes = type => type is FolderType.Inbox or FolderType.Outbox
+        };
+
+        int written = await service.Export(refs, zipPath, format);
+
+        Assert.Equal(1, written);
+        Assert.Equal(1, serializeCalls);
+        using ZipArchive archive = ZipFile.OpenRead(zipPath);
+        ZipArchiveEntry entry = Assert.Single(archive.Entries);
+        Assert.Contains("Message", entry.Name);
     }
 
     /// <summary>Export with an empty reference list still creates a valid (empty) zip file.</summary>
@@ -154,7 +220,7 @@ public sealed class ExportServiceTests : IDisposable
         using CancellationTokenSource cts = new();
         cts.Cancel();
 
-        await Assert.ThrowsAsync<OperationCanceledException>(() => service.Export(refs, zipPath, cts.Token));
+        await Assert.ThrowsAsync<OperationCanceledException>(() => service.Export(refs, zipPath, cancellation: cts.Token));
 
         Assert.False(File.Exists(zipPath));
     }
@@ -170,7 +236,7 @@ public sealed class ExportServiceTests : IDisposable
         using CancellationTokenSource cts = new();
         cts.Cancel();
 
-        await Assert.ThrowsAnyAsync<OperationCanceledException>(() => service.Export(refs, ZipPath(), cts.Token));
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(() => service.Export(refs, ZipPath(), cancellation: cts.Token));
 
         Assert.Equal(original, await File.ReadAllBytesAsync(ZipPath()));
         Assert.Equal([ZipPath()], Directory.GetFiles(exportDir));

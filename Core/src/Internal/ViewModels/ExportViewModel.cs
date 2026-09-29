@@ -1,10 +1,10 @@
 namespace BlueHeighliner.Comlink.ViewModels;
 
 /// <summary>
-/// ViewModel for the export screen: choosing a destination drive, a package file name, and either all entries
-/// or an explicitly built list of entries, then writing them out as JSON files inside a zip archive named with
-/// the <see cref="IExportService.PackageExtension"/> extension so <see cref="IImportViewModel"/> can find it.
-/// Registered as a DI singleton (see <see cref="MainViewModel.Export"/>) so its state — including an
+/// ViewModel for the export screen: choosing a destination drive, a package file name, a format, and either all
+/// entries or an explicitly built list of entries, then writing them out as one file per entry inside a zip
+/// archive named with the <see cref="IExportService.PackageExtension"/> extension so <see cref="IImportViewModel"/>
+/// can find it. Registered as a DI singleton (see <see cref="MainViewModel.Export"/>) so its state — including an
 /// in-progress export — survives navigating the content area away to other views and back.
 /// </summary>
 internal interface IExportViewModel
@@ -13,6 +13,10 @@ internal interface IExportViewModel
     IReadOnlyList<ExternalDriveInfo> AvailableDrives { get; }
     /// <summary>Gets or sets the drive selected as the export destination.</summary>
     ExternalDriveInfo? SelectedDrive { get; set; }
+    /// <summary>Gets the built-in JSON format plus every custom format added via <see cref="IEngineBuilder.ExportFormat(string, Func{object, Stream, CancellationToken, Task}, Func{FolderType, bool})"/>.</summary>
+    IReadOnlyList<ExportFormatOption> AvailableFormats { get; }
+    /// <summary>Gets or sets the format to export with; defaults to the built-in JSON format.</summary>
+    ExportFormatOption SelectedFormat { get; set; }
     /// <summary>Gets or sets the name (without extension) of the export package to create.</summary>
     string FileName { get; set; }
     /// <summary>Gets or sets whether to export every entry or only <see cref="SelectedEntries"/>.</summary>
@@ -61,13 +65,16 @@ internal sealed partial class ExportViewModel : ObservableObject, IExportViewMod
         return trimmed;
     }
 
-    /// <summary>Initializes a new <see cref="ExportViewModel"/> with the drive provider and export service.</summary>
+    /// <summary>Initializes a new <see cref="ExportViewModel"/> with the drive provider, export service, and every configured export format.</summary>
     /// <param name="driveProvider">Enumerates available external drives.</param>
     /// <param name="exportService">Builds the full entry list and writes the zip archive.</param>
-    public ExportViewModel(IExternalDriveProvider driveProvider, IExportService exportService)
+    /// <param name="engineController">Supplies the custom export formats added via <see cref="IEngineBuilder.ExportFormat(string, Func{object, Stream, CancellationToken, Task}, Func{FolderType, bool})"/>.</param>
+    public ExportViewModel(IExternalDriveProvider driveProvider, IExportService exportService, IEngineController engineController)
     {
         this.driveProvider = driveProvider;
         this.exportService = exportService;
+        availableFormats = [new ExportFormatOption { Label = "JSON" }, .. engineController.ExportFormats.Select(f => new ExportFormatOption { Label = f.Name, Format = f })];
+        selectedFormat = availableFormats[0];
     }
 
     private readonly IExternalDriveProvider driveProvider;
@@ -76,6 +83,8 @@ internal sealed partial class ExportViewModel : ObservableObject, IExportViewMod
 
     [ObservableProperty] private IReadOnlyList<ExternalDriveInfo> availableDrives = [];
     [ObservableProperty] private ExternalDriveInfo? selectedDrive;
+    [ObservableProperty] private IReadOnlyList<ExportFormatOption> availableFormats;
+    [ObservableProperty] private ExportFormatOption selectedFormat;
     [ObservableProperty] private string fileName = "export";
 
     [ObservableProperty]
@@ -176,9 +185,9 @@ internal sealed partial class ExportViewModel : ObservableObject, IExportViewMod
                     .Select(e => new ExportEntryRef { Id = e.Id, EntryType = e.EntryType, IsOutboundMessage = e.IsOutboundMessage })
                     .ToList();
 
-            await exportService.Export(refs, zipPath, cancellation.Token);
+            int written = await exportService.Export(refs, zipPath, SelectedFormat.Format, cancellation.Token);
 
-            StatusMessage = $"Exported {refs.Count} {(refs.Count == 1 ? "entry" : "entries")} to {drive.DisplayName}";
+            StatusMessage = $"Exported {written} {(written == 1 ? "entry" : "entries")} to {drive.DisplayName}";
             SelectedEntries.Clear();
         }
         catch (OperationCanceledException)

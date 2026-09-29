@@ -139,11 +139,11 @@ Hosts the local interface listener described in [Interface.md](Interface.md). Al
 
 ## ExportService
 
-Builds the entry-reference list for a full export and writes selected entries to a zip archive as one JSON file per entry. Backs the export feature described in `Docs/Components/ViewModels.md` (`IExportViewModel`).
+Builds the entry-reference list for a full export and writes selected entries to a zip archive as one file per entry, in the engine's own built-in JSON format or a host-configured custom one. Backs the export feature described in `Docs/Components/ViewModels.md` (`IExportViewModel`).
 
 **Key responsibilities**:
 - `GetAllEntryRefs()` — returns an `ExportEntryRef` (`Id`, `EntryType`, `IsOutboundMessage`) for every message (both Inbox and Outbox, across every folder), draft, note, and activity log document in the database, via each repository's `GetAll()`
-- `Export(entries, zipPath, cancellation)` - for each reference, loads the full entity from the appropriate repository, maps it to a clean JSON DTO (`MessageExportData`/`DraftExportData`/`NoteExportData`/`ActivityLogExportData` in `ExportModels.cs`) via `IEngineController` for messages, and writes it as `{index}_{EntryType}_{id}.json` inside a new `ZipArchive`. The archive is written to `zipPath + ".partial"` and only moved over `zipPath` once complete, so a cancelled or failed export (e.g. a full or removed drive) never leaves a truncated package, or destroys an existing one of the same name. A reference whose entity has since been deleted is silently skipped.
+- `Export(entries, zipPath, format, cancellation)` - for each reference whose root folder type `format?.AllowedTypes` accepts (every type, when `format` is `null` or states no filter), loads the full entity from the appropriate repository, maps it to a public export DTO (`MessageExportData`/`DraftExportData`/`NoteExportData`/`ActivityLogExportData`, see [Configuration.md](Configuration.md#export-formats)) via `IEngineController` for messages, and writes it as `{index}_{EntryType}_{id}.{extension}` inside a new `ZipArchive` - the engine's own `JsonSerializer` when `format` is `null` (extension `json`), otherwise `format.Serialize` (extension derived from the format's `Name`, lowercased and stripped to letters/digits, falling back to `dat` if that leaves nothing). The archive is written to `zipPath + ".partial"` and only moved over `zipPath` once complete, so a cancelled or failed export (e.g. a full or removed drive) never leaves a truncated package, or destroys an existing one of the same name. A reference whose entity has since been deleted, or whose type `format` does not accept, is left out without failing the export. Returns how many entries were actually written, which callers use instead of `entries.Count` to report an accurate count.
 - On cancellation (or any other failure) mid-write, the partially written zip file at `zipPath` is deleted before the exception propagates — the `try`/`catch` wraps the entire archive-writing block, so this holds regardless of how many entries had already been written.
 
 Message content is read through `IEngineController`, matching every other message read path in Engine — `ExportService` has no knowledge of the host's concrete message type.
@@ -152,14 +152,14 @@ Message content is read through `IEngineController`, matching every other messag
 
 ```csharp
 IReadOnlyList<ExportEntryRef> refs = await exportService.GetAllEntryRefs();
-await exportService.Export(refs, "/media/usb/backup" + IExportService.PackageExtension, cancellation);
+int written = await exportService.Export(refs, "/media/usb/backup" + IExportService.PackageExtension, format: null, cancellation);
 ```
 
 ---
 
 ## ImportService
 
-Lists export packages on a drive and restores their entries into the local database. Backs the import feature described in `Docs/Components/ViewModels.md` (`IImportViewModel`). Operates directly on the repositories, the same way `ExportService` does — it is a bulk data-restore operation, not a "live" business event, so it does not raise `IEntryService`'s insert/update events (no retroactive alerting for an imported alert message, no auto-navigation to Drafts/Notes; the imported data is visible as soon as the user browses to the relevant folder, since `EntryBarViewModel.Refresh()` always re-queries the database).
+Lists export packages on a drive and restores their entries into the local database. Backs the import feature described in `Docs/Components/ViewModels.md` (`IImportViewModel`). Operates directly on the repositories, the same way `ExportService` does — it is a bulk data-restore operation, not a "live" business event, so it does not raise `IEntryService`'s insert/update events (no retroactive alerting for an imported alert message, no auto-navigation to Drafts/Notes; the imported data is visible as soon as the user browses to the relevant folder, since `EntryBarViewModel.Refresh()` always re-queries the database). Every entry is read back as JSON regardless of its file extension, so only a package written with the built-in JSON format (`ExportService.Export`'s `format: null`) round-trips through import; a package written with a custom format (see [Configuration.md](Configuration.md#export-formats)) is for external consumption only.
 
 **Key responsibilities**:
 - `GetPackages(driveRootPath)` — returns every `IExportService.PackageExtension` file directly under the drive root as an `ImportPackageInfo` (`FileName`, `FullPath`), ordered by file name. Returns an empty list (never throws) if the path is inaccessible.
@@ -172,7 +172,7 @@ Lists export packages on a drive and restores their entries into the local datab
   | Activity log | `Date` | Always merged (see below) — no prompt |
 
   For a draft/note conflict, `resolveConflict` is awaited once and the returned `DraftNoteConflictResolution` applied: `KeepExisting` skips the imported entry; `Overwrite` replaces the existing entry's content fields (keeping its `Id` and `FolderId`); `OverwriteAll` overwrites this entry and is remembered for the rest of this `Import` call, so every subsequent draft/note conflict overwrites without asking again. New (non-conflicting) drafts/notes/messages are inserted into the corresponding root folder (`root-drafts`/`root-notes`/`root-inbox`/`root-outbox`); imported folder IDs are not preserved, since they are opaque to the source installation.
-- Activity log merge: when an existing log exists for the imported log's `Date`, each imported `ActivityLogEntry` is checked against the existing entries — an exact match (`At` and `Message` both equal) is skipped, otherwise the line is inserted into the existing (already chronologically ordered) list at the position where its `At` timestamp keeps the list sorted. When no log exists for that date, the imported log is inserted as-is.
+- Activity log merge: when an existing log exists for the imported log's `Date`, each imported `ActivityLogEventEntry` is checked against the existing entries — an exact match (`At` and `Message` both equal) is skipped, otherwise the line is inserted into the existing (already chronologically ordered) list at the position where its `At` timestamp keeps the list sorted. When no log exists for that date, the imported log is inserted as-is.
 - Returns an `ImportSummary` (`Imported`, `Skipped`, `Overwritten` counts) once every entry in the package has been processed.
 
 ```csharp
@@ -204,15 +204,7 @@ DTOs used across the service layer:
 
 ## ExportModels
 
-DTOs used by `ExportService` (`Core/src/Internal/Services/ExportModels.cs`):
-
-| Type | Fields |
-|------|--------|
-| `ExportEntryRef` | `Id`, `EntryType`, `IsOutboundMessage` — identifies one entry to export |
-| `MessageExportData` | `MessageId`, `IsOutbound`, `FromUser`, `Subject`, `Body`, `Addresses[]`, `SentAt`, `IsAlert`, `Priority`, `Tag`, `ReceivedAt`, `ReadStatus`, `DeliveryStatuses[]` |
-| `DraftExportData` | `Id`, `Subject`, `Body`, `BodySegmentsJson`, `Addresses[]`, `IsSent`, `IsAlert`, `Priority`, `Tag`, `SentAt`, `CreatedAt`, `ModifiedAt` |
-| `NoteExportData` | `Id`, `Body`, `CreatedAt`, `ModifiedAt` |
-| `ActivityLogExportData` | `Id`, `Date`, `EventEntries[]` |
+`ExportEntryRef` (`Id`, `EntryType`, `IsOutboundMessage` - identifies one entry to export) is internal, in `Core/src/Internal/Services/ExportModels.cs`. The DTOs a custom export format's serializer actually receives - `MessageExportData`, `DraftExportData`, `NoteExportData`, `ActivityLogExportData`, plus `MessageDeliveryStatus` and `ActivityLogEventEntry` nested within them - are public, in `Core/src/Public/Models/ExportModels.cs`, and documented in full (every field) via their own XML doc comments rather than restated here; see [Configuration.md](Configuration.md#export-formats).
 
 ---
 

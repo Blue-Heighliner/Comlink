@@ -105,6 +105,23 @@
         </Grid>
       </StackPanel>
 
+      <!-- Format -->
+      <StackPanel Spacing="6">
+        <TextBlock Text="FORMAT" FontSize="11" FontWeight="SemiBold" Foreground="#858585" LetterSpacing="1" />
+        <ComboBox ItemsSource="{Binding AvailableFormats}"
+                  SelectedItem="{Binding SelectedFormat}"
+                  Background="#3C3C3C"
+                  BorderThickness="0"
+                  FontSize="13"
+                  HorizontalAlignment="Stretch">
+          <ComboBox.ItemTemplate>
+            <DataTemplate>
+              <TextBlock Text="{Binding Label}" />
+            </DataTemplate>
+          </ComboBox.ItemTemplate>
+        </ComboBox>
+      </StackPanel>
+
       <!-- Scope -->
       <StackPanel Spacing="6">
         <TextBlock Text="ENTRIES TO EXPORT" FontSize="11" FontWeight="SemiBold" Foreground="#858585" LetterSpacing="1" />

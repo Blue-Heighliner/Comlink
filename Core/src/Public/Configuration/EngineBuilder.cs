@@ -194,4 +194,19 @@ public interface IEngineBuilder
     /// the received message. Adding more than one hook runs every one of them, in the order added.
     /// </summary>
     IEngineBuilder OnMessageReceived(Action<IMessageReceivedHookContext> hook);
+
+    /// <summary>
+    /// Adds a custom export format, shown as an option alongside the built-in JSON format in the client's export
+    /// screen. <paramref name="serialize"/> writes one entry - a <see cref="MessageExportData"/>,
+    /// <see cref="DraftExportData"/>, <see cref="NoteExportData"/>, or <see cref="ActivityLogExportData"/>,
+    /// depending on which root folder type it came from - to a stream. <paramref name="entryTypes"/>, when given,
+    /// restricts which root folder types this format accepts; an entry outside them is left out of an export
+    /// using this format instead of being passed to <paramref name="serialize"/>. Calling this again with the
+    /// same <paramref name="name"/> (case-insensitive) replaces the earlier format of that name in place; a new
+    /// name adds another format alongside it.
+    /// </summary>
+    /// <param name="name">Display name shown for this format in the export screen.</param>
+    /// <param name="serialize">Writes one entry to a stream.</param>
+    /// <param name="entryTypes">Restricts which root folder types this format accepts, or <see langword="null"/> (the default) to accept every type.</param>
+    IEngineBuilder ExportFormat(string name, Func<object, Stream, CancellationToken, Task> serialize, Func<FolderType, bool>? entryTypes = null);
 }

@@ -29,6 +29,9 @@ internal sealed class ImportService : IImportService
 {
     private static string FirstLine(string? body) => (body ?? string.Empty).Split('\n').FirstOrDefault()?.Trim() ?? string.Empty;
 
+    private static List<AddressData> ToAddressData(List<AddressRequest> addresses)
+        => [.. addresses.Select(a => new AddressData { UserName = a.UserName, Type = a.Type, Information = a.Information })];
+
     private static EntryType? ParseEntryType(string fileName)
     {
         string[] parts = fileName.Split('_', 3);
@@ -159,7 +162,7 @@ internal sealed class ImportService : IImportService
         {
             MessageId = data.MessageId,
             Message = message,
-            DeliveryStatuses = data.DeliveryStatuses,
+            DeliveryStatuses = [.. data.DeliveryStatuses.Select(d => new DeliveryStatus { UserName = d.UserName, Status = d.Status, AddressedVia = d.AddressedVia })],
             ReceivedAt = data.ReceivedAt,
             FolderId = await folders.GetRootId(data.IsOutbound ? FolderType.Outbox : FolderType.Inbox),
             IsOutbound = data.IsOutbound,
@@ -187,7 +190,7 @@ internal sealed class ImportService : IImportService
                 Subject = data.Subject,
                 Body = data.Body,
                 BodySegmentsJson = data.BodySegmentsJson ?? string.Empty,
-                Addresses = data.Addresses,
+                Addresses = ToAddressData(data.Addresses),
                 IsSent = data.IsSent,
                 IsAlert = data.IsAlert,
                 Priority = data.Priority,
@@ -216,7 +219,7 @@ internal sealed class ImportService : IImportService
         existing.Subject = data.Subject;
         existing.Body = data.Body;
         existing.BodySegmentsJson = data.BodySegmentsJson ?? string.Empty;
-        existing.Addresses = data.Addresses;
+        existing.Addresses = ToAddressData(data.Addresses);
         existing.IsSent = data.IsSent;
         existing.IsAlert = data.IsAlert;
         existing.Priority = data.Priority;
@@ -273,26 +276,27 @@ internal sealed class ImportService : IImportService
         ActivityLogEntity? existing = (await activityLogs.GetAll()).FirstOrDefault(a => a.Date == data.Date);
         if (existing is null)
         {
-            ActivityLogEntity entity = new() { Date = data.Date, EventEntries = data.EventEntries };
+            ActivityLogEntity entity = new() { Date = data.Date, EventEntries = [.. data.EventEntries.Select(e => new ActivityLogEntry { At = e.At, Message = e.Message })] };
             await activityLogs.Insert(entity);
             return;
         }
 
-        foreach (ActivityLogEntry entry in data.EventEntries)
+        foreach (ActivityLogEventEntry entry in data.EventEntries)
         {
             if (existing.EventEntries.Any(e => e.At == entry.At && e.Message == entry.Message))
             {
                 continue;
             }
 
+            ActivityLogEntry converted = new() { At = entry.At, Message = entry.Message };
             int insertIndex = existing.EventEntries.FindIndex(e => e.At > entry.At);
             if (insertIndex < 0)
             {
-                existing.EventEntries.Add(entry);
+                existing.EventEntries.Add(converted);
             }
             else
             {
-                existing.EventEntries.Insert(insertIndex, entry);
+                existing.EventEntries.Insert(insertIndex, converted);
             }
         }
         await activityLogs.Update(existing);
