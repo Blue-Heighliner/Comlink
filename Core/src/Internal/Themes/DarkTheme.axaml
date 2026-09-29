@@ -86,6 +86,21 @@
     <Setter Property="Background" Value="{StaticResource WindowControlHoverBrush}" />
   </Style>
 
+  <!-- TitleBar Info Text: the user name/version display, styled to match titlebar-action buttons -->
+  <Style Selector="TextBlock.titlebar-info">
+    <Setter Property="FontSize" Value="13" />
+    <Setter Property="FontWeight" Value="SemiBold" />
+    <Setter Property="Foreground" Value="#CCCCCC" />
+    <Setter Property="Padding" Value="12,0" />
+  </Style>
+
+  <!-- TitleBar Separator: a thin vertical rule between adjacent titlebar-action buttons -->
+  <Style Selector="Border.titlebar-separator">
+    <Setter Property="Width" Value="1" />
+    <Setter Property="Margin" Value="0,8" />
+    <Setter Property="Background" Value="#3E3E42" />
+  </Style>
+
   <!-- Window Control Buttons -->
   <Style Selector="Button.winctrl">
     <Setter Property="Width" Value="46" />

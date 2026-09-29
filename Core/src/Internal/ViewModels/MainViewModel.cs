@@ -64,7 +64,12 @@ internal interface IMainViewModel
     IExportViewModel Export { get; }
     /// <summary>Gets the import ViewModel driving the import screen.</summary>
     IImportViewModel Import { get; }
-    /// <summary>Gets the staged send ViewModel driving the staged send screen.</summary>
+    /// <summary>
+    /// Gets the staged send ViewModel driving the staged send screen. Unlike <see cref="Export"/>/<see cref="Import"/>/
+    /// <see cref="AutoForward"/>, there is no command to navigate here directly - the screen only ever appears
+    /// automatically, shown by an import whose format added staged sends, and is discarded the moment the user
+    /// navigates elsewhere.
+    /// </summary>
     IStagedSendViewModel StagedSend { get; }
     /// <summary>Gets the auto forward ViewModel driving the auto forward screen.</summary>
     IAutoForwardViewModel AutoForward { get; }
@@ -80,8 +85,6 @@ internal interface IMainViewModel
     IRelayCommand ShowExportCommand { get; }
     /// <summary>Displays the import screen in the content area, refreshing the available drive list first.</summary>
     IRelayCommand ShowImportCommand { get; }
-    /// <summary>Displays the staged send screen in the content area.</summary>
-    IRelayCommand ShowStagedSendCommand { get; }
     /// <summary>Displays the auto forward screen in the content area, refreshing which controllers the current user has access to first.</summary>
     IRelayCommand ShowAutoForwardCommand { get; }
     /// <summary>Displays the print manager screen in the content area.</summary>
@@ -306,7 +309,7 @@ internal sealed partial class MainViewModel : ObservableObject, IMainViewModel
 
         import.StagedSendsReady += () =>
         {
-            ShowStagedSendCommand.Execute(null);
+            ShowStagedSend();
             return Task.CompletedTask;
         };
 
@@ -474,7 +477,6 @@ internal sealed partial class MainViewModel : ObservableObject, IMainViewModel
         contentArea.ShowEntry(import);
     }
 
-    [RelayCommand]
     private void ShowStagedSend()
     {
         DeselectFolderAndEntry();

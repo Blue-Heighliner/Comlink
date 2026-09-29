@@ -31,7 +31,6 @@
                        CreateNoteCommand="{Binding CreateNoteCommand}"
                        ShowExportCommand="{Binding ShowExportCommand}"
                        ShowImportCommand="{Binding ShowImportCommand}"
-                       ShowStagedSendCommand="{Binding ShowStagedSendCommand}"
                        ShowAutoForwardCommand="{Binding ShowAutoForwardCommand}"
                        HasAutoForwardAccess="{Binding HasAutoForwardAccess}"
                        ShowPrintManagerCommand="{Binding ShowPrintManagerCommand}"

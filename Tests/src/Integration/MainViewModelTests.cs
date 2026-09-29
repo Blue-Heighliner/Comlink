@@ -531,31 +531,6 @@ public sealed class MainViewModelTests
         s.EntryBar.Verify(e => e.DeselectEntry(), Times.Once);
     }
 
-    /// <summary>ShowStagedSendCommand displays the staged send ViewModel in the content area.</summary>
-    [Fact]
-    public void ShowStagedSendCommand_ShowsStagedSendView()
-    {
-        Setup s = new();
-        MainViewModel vm = s.BuildVm();
-
-        vm.ShowStagedSendCommand.Execute(null);
-
-        s.ContentArea.Verify(c => c.ShowEntry((object)s.StagedSend.Object), Times.Once);
-    }
-
-    /// <summary>ShowStagedSendCommand deselects the currently selected folder and entry.</summary>
-    [Fact]
-    public void ShowStagedSendCommand_DeselectsFolderAndEntry()
-    {
-        Setup s = new();
-        MainViewModel vm = s.BuildVm();
-
-        vm.ShowStagedSendCommand.Execute(null);
-
-        s.FolderBar.Verify(f => f.DeselectFolder(), Times.Once);
-        s.EntryBar.Verify(e => e.DeselectEntry(), Times.Once);
-    }
-
     /// <summary>A successful import that adds staged sends raises StagedSendsReady, which switches the content area to the staged send screen.</summary>
     [Fact]
     public void ImportStagedSendsReady_SwitchesToStagedSendView()

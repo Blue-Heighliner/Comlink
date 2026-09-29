@@ -41,10 +41,6 @@ internal partial class TitleBar : UserControl
     public static readonly StyledProperty<ICommand?> ShowImportCommandProperty =
         AvaloniaProperty.Register<TitleBar, ICommand?>(nameof(ShowImportCommand));
 
-    /// <summary>Identifies the <see cref="ShowStagedSendCommand"/> styled property.</summary>
-    public static readonly StyledProperty<ICommand?> ShowStagedSendCommandProperty =
-        AvaloniaProperty.Register<TitleBar, ICommand?>(nameof(ShowStagedSendCommand));
-
     /// <summary>Identifies the <see cref="ShowAutoForwardCommand"/> styled property.</summary>
     public static readonly StyledProperty<ICommand?> ShowAutoForwardCommandProperty =
         AvaloniaProperty.Register<TitleBar, ICommand?>(nameof(ShowAutoForwardCommand));
@@ -157,13 +153,6 @@ internal partial class TitleBar : UserControl
         set => SetValue(ShowImportCommandProperty, value);
     }
 
-    /// <summary>Gets or sets the command invoked when the user clicks the Send Queue button.</summary>
-    public ICommand? ShowStagedSendCommand
-    {
-        get => GetValue(ShowStagedSendCommandProperty);
-        set => SetValue(ShowStagedSendCommandProperty, value);
-    }
-
     /// <summary>Gets or sets the command invoked when the user clicks the Auto Forward button.</summary>
     public ICommand? ShowAutoForwardCommand
     {
@@ -267,6 +256,8 @@ internal partial class TitleBar : UserControl
         {
             Button? autoForwardButton = this.FindControl<Button>("AutoForwardButton");
             if (autoForwardButton is not null) { autoForwardButton.IsVisible = HasAutoForwardAccess; }
+            Border? autoForwardLeadingSeparator = this.FindControl<Border>("AutoForwardLeadingSeparator");
+            if (autoForwardLeadingSeparator is not null) { autoForwardLeadingSeparator.IsVisible = HasAutoForwardAccess; }
         }
         if (change.Property == IsKioskModeProperty)
         {
@@ -294,9 +285,18 @@ internal partial class TitleBar : UserControl
 
     private void UpdateUserInfo()
     {
-        TextBlock? tb = this.FindControl<TextBlock>("UserInfoText");
-        if (tb is null) { return; }
-        tb.Text = string.IsNullOrEmpty(AppVersion) ? UserName : $"{UserName} v{AppVersion}";
+        TextBlock? userNameText = this.FindControl<TextBlock>("UserNameText");
+        if (userNameText is not null) { userNameText.Text = UserName; }
+
+        bool hasVersion = !string.IsNullOrEmpty(AppVersion);
+        Border? separator = this.FindControl<Border>("UserInfoSeparator");
+        if (separator is not null) { separator.IsVisible = hasVersion; }
+        TextBlock? versionText = this.FindControl<TextBlock>("VersionText");
+        if (versionText is not null)
+        {
+            versionText.IsVisible = hasVersion;
+            versionText.Text = hasVersion ? $"v{AppVersion}" : string.Empty;
+        }
     }
 
     private void OnInfoClick(object? sender, Avalonia.Interactivity.RoutedEventArgs e)
@@ -339,9 +339,6 @@ internal partial class TitleBar : UserControl
 
     private void OnImportClick(object? sender, Avalonia.Interactivity.RoutedEventArgs e)
         => ShowImportCommand?.Execute(null);
-
-    private void OnStagedSendClick(object? sender, Avalonia.Interactivity.RoutedEventArgs e)
-        => ShowStagedSendCommand?.Execute(null);
 
     private void OnAutoForwardClick(object? sender, Avalonia.Interactivity.RoutedEventArgs e)
         => ShowAutoForwardCommand?.Execute(null);

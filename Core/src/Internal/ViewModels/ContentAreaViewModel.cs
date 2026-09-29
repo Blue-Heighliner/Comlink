@@ -15,11 +15,11 @@ internal interface IContentAreaViewModel
     /// <summary>Gets the welcome text supplied by the host's home content provider.</summary>
     string HomeText { get; }
 
-    /// <summary>Resets the content area to the home screen.</summary>
+    /// <summary>Resets the content area to the home screen. Discards the staged send queue if it was showing (see <see cref="StagedSendViewModel"/>).</summary>
     void ShowHome();
-    /// <summary>Loads and displays the full entry ViewModel for the given entry item.</summary>
+    /// <summary>Loads and displays the full entry ViewModel for the given entry item. Discards the staged send queue if it was showing (see <see cref="StagedSendViewModel"/>).</summary>
     Task ShowEntry(EntryItemViewModel entry);
-    /// <summary>Displays an already-constructed entry ViewModel directly.</summary>
+    /// <summary>Displays an already-constructed entry ViewModel directly. Discards the staged send queue if it was showing (see <see cref="StagedSendViewModel"/>).</summary>
     void ShowEntry(object entryVm);
 }
 
@@ -42,6 +42,7 @@ internal sealed partial class ContentAreaViewModel : ObservableObject, IContentA
     /// <param name="activityLogs">Repository for loading activity log entries.</param>
     /// <param name="loggerFactory">Factory for creating named loggers.</param>
     /// <param name="currentUserProvider">Tracks the current user's name, read to resolve their own security level for a newly opened draft.</param>
+    /// <param name="stagedSend">The staged send ViewModel; its queue is discarded whenever the content area navigates away from it.</param>
     /// <param name="bodyDocumentFactory">Factory for the body document of a draft opened from the list; must match the one used for new drafts, or the draft editor cannot bind it. Defaults to plain string documents when <see langword="null"/>.</param>
     public ContentAreaViewModel(
         IEngineController engineController,
@@ -53,6 +54,7 @@ internal sealed partial class ContentAreaViewModel : ObservableObject, IContentA
         IActivityLogRepository activityLogs,
         ILoggerFactory loggerFactory,
         ICurrentUserProvider currentUserProvider,
+        IStagedSendViewModel stagedSend,
         IBodyDocumentFactory? bodyDocumentFactory = null)
     {
         this.bodyDocumentFactory = bodyDocumentFactory;
@@ -65,6 +67,7 @@ internal sealed partial class ContentAreaViewModel : ObservableObject, IContentA
         this.engineController = engineController;
         this.loggerFactory = loggerFactory;
         this.currentUserProvider = currentUserProvider;
+        this.stagedSend = stagedSend;
         HomeText = engineController.HomeText;
         connection.DeliveryStatusChanged += evt => UiThread.Run(() => OnDeliveryStatusChanged(evt));
     }
@@ -78,6 +81,7 @@ internal sealed partial class ContentAreaViewModel : ObservableObject, IContentA
     private readonly IEngineController engineController;
     private readonly ILoggerFactory loggerFactory;
     private readonly ICurrentUserProvider currentUserProvider;
+    private readonly IStagedSendViewModel stagedSend;
     private readonly IBodyDocumentFactory? bodyDocumentFactory;
 
     [ObservableProperty] private object? activeContent;
@@ -114,6 +118,7 @@ internal sealed partial class ContentAreaViewModel : ObservableObject, IContentA
     /// <summary>Resets the content area to the home screen.</summary>
     public void ShowHome()
     {
+        DiscardStagedSendIfLeaving();
         showGeneration++;
         ActiveContent = null;
         IsHomeVisible = true;
@@ -127,15 +132,32 @@ internal sealed partial class ContentAreaViewModel : ObservableObject, IContentA
         int generation = ++showGeneration;
         IsHomeVisible = false;
         object? content = await BuildEntryViewModel(entry);
-        if (generation == showGeneration) { ActiveContent = content; }
+        if (generation == showGeneration)
+        {
+            DiscardStagedSendIfLeaving();
+            ActiveContent = content;
+        }
     }
 
     /// <summary>Displays an already-constructed entry ViewModel directly.</summary>
     public void ShowEntry(object entryVm)
     {
+        DiscardStagedSendIfLeaving();
         showGeneration++;
         IsHomeVisible = false;
         ActiveContent = entryVm;
+    }
+
+    // The staged send screen only ever exists as the automatic result of an import - there is no way to navigate
+    // to it, so navigating anywhere else (a folder, an entry, another screen, or home) is the only way to leave
+    // it, and always means the user is done with it - discard whatever it was still holding rather than leaving
+    // it to reappear stale next time an import triggers it.
+    private void DiscardStagedSendIfLeaving()
+    {
+        if (ReferenceEquals(ActiveContent, stagedSend))
+        {
+            stagedSend.ClearCommand.Execute(null);
+        }
     }
 
     private async Task<object?> BuildEntryViewModel(EntryItemViewModel item)

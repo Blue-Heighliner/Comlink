@@ -6,7 +6,7 @@
 
   <Grid ColumnDefinitions="Auto,*,Auto,Auto,Auto,Auto">
 
-    <!-- Left: Action buttons — never shown in Server mode, which has no drafts/notes/export/import/staged-send/print UI -->
+    <!-- Left: Action buttons — never shown in Server mode, which has no drafts/notes/export/import/print UI -->
     <StackPanel x:Name="ActionButtonsPanel"
                 Grid.Column="0"
                 Orientation="Horizontal"
@@ -17,32 +17,34 @@
               Content="NEW DRAFT"
               Foreground="#CCCCCC"
               Click="OnDraftClick" />
+      <Border Classes="titlebar-separator" />
       <Button x:Name="NoteButton"
               Classes="titlebar-action"
               Content="NEW NOTE"
               Foreground="#CCCCCC"
               Click="OnNoteClick" />
+      <Border Classes="titlebar-separator" />
       <Button x:Name="ExportButton"
               Classes="titlebar-action"
               Content="EXPORT"
               Foreground="#CCCCCC"
               Click="OnExportClick" />
+      <Border Classes="titlebar-separator" />
       <Button x:Name="ImportButton"
               Classes="titlebar-action"
               Content="IMPORT"
               Foreground="#CCCCCC"
               Click="OnImportClick" />
-      <Button x:Name="StagedSendButton"
-              Classes="titlebar-action"
-              Content="SEND QUEUE"
-              Foreground="#CCCCCC"
-              Click="OnStagedSendClick" />
+      <Border x:Name="AutoForwardLeadingSeparator"
+              Classes="titlebar-separator"
+              IsVisible="False" />
       <Button x:Name="AutoForwardButton"
               Classes="titlebar-action"
               Content="AUTO FORWARD"
               Foreground="#CCCCCC"
               IsVisible="False"
               Click="OnAutoForwardClick" />
+      <Border Classes="titlebar-separator" />
       <Button x:Name="PrintManagerButton"
               Classes="titlebar-action"
               Content="PRINTS"
@@ -63,6 +65,7 @@
               Content="CONNECTIONS"
               Foreground="#CCCCCC"
               Click="OnShowConnectionsClick" />
+      <Border Classes="titlebar-separator" />
       <Button x:Name="ActivityButton"
               Classes="titlebar-action"
               Content="ACTIVITY"
@@ -92,13 +95,21 @@
                  Foreground="White" />
     </Border>
 
-    <!-- Right side: user name + version -->
-    <TextBlock x:Name="UserInfoText"
-               Grid.Column="3"
-               FontSize="12"
-               Foreground="#AAAAAA"
-               VerticalAlignment="Center"
-               Margin="0,0,8,0" />
+    <!-- Right side: user name + version, styled like the left-side action buttons -->
+    <StackPanel Grid.Column="3"
+                Orientation="Horizontal"
+                Margin="0,0,8,0">
+      <TextBlock x:Name="UserNameText"
+                 Classes="titlebar-info"
+                 VerticalAlignment="Center" />
+      <Border x:Name="UserInfoSeparator"
+              Classes="titlebar-separator"
+              IsVisible="False" />
+      <TextBlock x:Name="VersionText"
+                 Classes="titlebar-info"
+                 VerticalAlignment="Center"
+                 IsVisible="False" />
+    </StackPanel>
 
     <!-- Info and help: always available, immediately left of the window controls -->
     <StackPanel Grid.Column="4"
