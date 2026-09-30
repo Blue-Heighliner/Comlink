@@ -191,9 +191,13 @@ internal sealed class ConnectionPointConfig
     public int Port { get; init; }
     /// <summary>Name of the local MicroGate serial port cabled to the remote node; when set, this point is reached over serial instead of IP.</summary>
     public string? SerialPort { get; init; }
-    /// <summary>HDLC station address for the serial link. Defaults to 255 (0xFF). Both ends of the cable must use the same value.</summary>
+    /// <summary>HDLC station address of this node on the serial link. Defaults to 255 (0xFF). Must differ from <see cref="RemoteSerialAddress"/>; the other end of the cable uses the two values the other way round.</summary>
     public byte SerialAddress { get; init; } = 0xFF;
+    /// <summary>HDLC station address of the node at the other end of the serial link. Defaults to 254 (0xFE). Must differ from <see cref="SerialAddress"/>.</summary>
+    public byte RemoteSerialAddress { get; init; } = 0xFE;
+    /// <summary>For a serial point, the user at the other end of the cable. <see langword="null"/> names the user after the port.</summary>
+    public string? User { get; init; }
 
     /// <summary>Converts this entry to the engine's connection point model.</summary>
-    public ConnectionPoint ToPoint() => new() { IpAddress = IpAddress, Port = Port, SerialPort = SerialPort, SerialAddress = SerialAddress };
+    public ConnectionPoint ToPoint() => new() { IpAddress = IpAddress, Port = Port, SerialPort = SerialPort, SerialAddress = SerialAddress, RemoteSerialAddress = RemoteSerialAddress, User = User };
 }

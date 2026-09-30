@@ -113,9 +113,11 @@ The points the node connects out to and keeps connected. A `"Client"` uses the f
 | `IpAddress` | `string` | IPv4 or IPv6 address of the remote node |
 | `Port` | `int` | TCP port the remote node listens on |
 | `SerialPort` | `string` | Name of the local MicroGate serial port cabled to the remote node. When set, `IpAddress` and `Port` are ignored and the point is reached over serial. List the port on both nodes that share the cable |
-| `SerialAddress` | `int` | HDLC station address for the serial link (0-255, default 255). Must match on both ends of the cable |
+| `SerialAddress` | `int` | This node's HDLC station address on the serial link (0-255, default 255). Must differ from `RemoteSerialAddress` |
+| `RemoteSerialAddress` | `int` | HDLC station address of the node at the other end of the cable (0-255, default 254). The other end lists the two addresses the other way round |
+| `User` | `string` | For a serial point, the user at the other end of the cable, which the connection is identified as |
 
-A serial link carries no certificate, so by default its user is named after the port; override `IdentifyConnection` or configure a connection message to give it a real name.
+A serial link carries no certificate, so unless the point names its `User`, its user is named after the port; override `IdentifyConnection` or configure a connection message for anything more elaborate.
 
 ### `ChildClients`
 

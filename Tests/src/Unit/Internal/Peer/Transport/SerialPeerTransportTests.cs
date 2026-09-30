@@ -168,7 +168,7 @@ public sealed class SerialPeerTransportTests
         Assert.Null(connection.Info.CertificateSubject);
     }
 
-    /// <summary>Every serial link starts its peer with the configured options and the point's address as both this station's and the remote station's.</summary>
+    /// <summary>Every serial link starts its peer with the configured options and the point's own and remote station addresses.</summary>
     [Fact]
     public async Task Connect_StartsPeersWithTheConfiguredOptionsAndPointAddress()
     {
@@ -176,7 +176,7 @@ public sealed class SerialPeerTransportTests
         MicroGatePeerOptions options = new() { MaxInfoField = 512 };
         await using SerialPeerTransport a = new(cable.EndA, logger, TimeSpan.FromMilliseconds(20), options: options);
         await using SerialPeerTransport b = new(cable.EndB, logger, TimeSpan.FromMilliseconds(20), options: options);
-        ConnectionPoint addressed = new() { SerialPort = "SL0", SerialAddress = 7 };
+        ConnectionPoint addressed = new() { SerialPort = "SL0", SerialAddress = 7, RemoteSerialAddress = 9 };
         Open(a, addressed);
         Open(b, addressed);
 
@@ -184,7 +184,7 @@ public sealed class SerialPeerTransportTests
 
         Assert.All(cable.Starts, start =>
         {
-            Assert.Equal((7, 7), (start.Address, start.RemoteAddress));
+            Assert.Equal((7, 9), (start.Address, start.RemoteAddress));
             Assert.Same(options, start.Options);
         });
     }

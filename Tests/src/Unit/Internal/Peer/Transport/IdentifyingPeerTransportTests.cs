@@ -174,6 +174,24 @@ public sealed class IdentifyingPeerTransportTests
         Assert.Equal("CONSOLE-3", custom.User!.Name);
     }
 
+    /// <summary>A serial point that names its user identifies the connection as that user, matching on port and address; a point that does not, or one with another address, falls back to the port name.</summary>
+    [Fact]
+    public async Task Connect_SerialPointNamingItsUser_IdentifiesAsThatUser()
+    {
+        Mock<TestEngineController> named = Controller();
+        named.SetupGet(c => c.OutgoingPoints).Returns([new ConnectionPoint { SerialPort = "sl0", User = "SERVER" }, new ConnectionPoint { SerialPort = "SL0", SerialAddress = 5, User = "OTHER" }]);
+        (End namedA, _) = Pair(named.Object, Controller().Object, serial: true);
+
+        PeerConnection connection = await namedA.Transport.Connect(serialPoint);
+
+        Assert.Equal("SERVER", connection.User!.Name);
+
+        Mock<TestEngineController> unnamed = Controller();
+        unnamed.SetupGet(c => c.OutgoingPoints).Returns([new ConnectionPoint { SerialPort = "SL0", SerialAddress = 5, User = "OTHER" }]);
+        (End unnamedA, _) = Pair(unnamed.Object, Controller().Object, serial: true);
+        Assert.Equal("SL0", (await unnamedA.Transport.Connect(serialPoint)).User!.Name);
+    }
+
     /// <summary>Connected is published only once identification has finished, with the user already set, and Disconnected only for a connection that was published.</summary>
     [Fact]
     public async Task Events_ConnectedCarriesUser_DisconnectedOnlyAfterConnected()

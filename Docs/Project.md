@@ -20,7 +20,7 @@ between `sh` and `cmd.exe`.
 - `Scripts/Scenarios/Build.cs` - builds `Sample` once, shared by every scenario so concurrently
   launched roles never race each other rebuilding the same output.
 - `Scripts/Scenarios/<Scenario>/<Role>.cs` - runs one role of a manual multi-node test scenario
-  against `Sample` with `--no-build` (`ClientServer`: `Server`/`Client1`/`Client2`; `Peer`:
+  against `Sample` with `--no-build` (`ClientServer`: `Server`/`Client1`/`Client2`; `ClientServerSerial`: `Server`/`Client1`/`Client2`, Client1 joined to the server by two physically cabled local MicroGate ports and Client2 over MSMT/IP; `Peer`:
   `Peer1`/`Peer2`; `ServerCluster`: `Server1`/`Server2`/`Client1`/`Client2`), passing the scenario's
   own `Config.json` (the network configuration describing every user of that scenario) as `--config` and
   naming the role's user with `--user`. Each role simulates one installation talking to the

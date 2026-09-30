@@ -368,9 +368,14 @@ internal sealed class IdentifyingPeerTransport : IPeerTransport
         UserIdentity? identity = engineController.IdentifyConnection(info);
         if (identity is not null) { return identity; }
 
-        string? name = info.IsSerial ? info.SerialPort : MatchCertificate(info.CertificateNames);
+        string? name = info.IsSerial ? SerialUser(info) : MatchCertificate(info.CertificateNames);
         return name is null ? null : new UserIdentity { Name = name, Data = engineController.GetUserData(name) };
     }
+
+    private string? SerialUser(ConnectionInfo info)
+        => engineController.OutgoingPoints.FirstOrDefault(point => point.IsSerial && point.User is not null
+            && string.Equals(point.SerialPort, info.SerialPort, StringComparison.OrdinalIgnoreCase) && point.SerialAddress == info.SerialAddress)?.User
+            ?? info.SerialPort;
 
     private string? MatchCertificate(IReadOnlyList<string> certificateNames)
     {

@@ -110,6 +110,7 @@ public sealed class NetworkConfigTests : IDisposable
         Assert.Equal("4", info.Data["desk"]);
         Assert.Equal(["OPS"], info.Groups);
         Assert.Equal(("alice.pfx", "@ALICE", true, "HEY", 5.5), (node.CertificateFile, node.DataFolder, node.Headless, node.AlertText, node.AlarmSoundSeconds));
+        Assert.Equal("SERVER", ((ConnectionPointConfig)new ConnectionPointConfig { SerialPort = "SL0", User = "SERVER" }).ToPoint().User);
         Assert.Equal((false, false, false, "Kind", true), (node.QuickConfirmationEnabled, node.ComposeAlertsEnabled, node.MessageTagsEnabled, node.MessageTagLabel, node.PrintReceivedEnabled));
     }
 

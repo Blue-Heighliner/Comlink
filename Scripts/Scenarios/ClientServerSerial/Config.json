@@ -1,0 +1,31 @@
+{
+  "TrustedAuthorityCertificateFile": "../Root.cer",
+  "Users": {
+    "SERVER": {
+      "Role": "Server",
+      "PeerPort": 50321,
+      "InterfacePort": 50320,
+      "OutgoingPoints": [ { "SerialPort": "ttyUSB1", "SerialAddress": 1, "RemoteSerialAddress": 2, "User": "CLIENT1" } ],
+      "ChildClients": [ "CLIENT1", "CLIENT2" ],
+      "SecurityLevel": "RESTRICTED",
+      "CertificateFile": "../ClientServer/Server.pfx",
+      "DataFolder": "@SERIAL-SERVER"
+    },
+    "CLIENT1": {
+      "Role": "Client",
+      "InterfacePort": 50322,
+      "OutgoingPoints": [ { "SerialPort": "ttyUSB0", "SerialAddress": 2, "RemoteSerialAddress": 1, "User": "SERVER" } ],
+      "SecurityLevel": "INTERNAL",
+      "CertificateFile": "../ClientServer/Client1.pfx",
+      "DataFolder": "@SERIAL-CLIENT1"
+    },
+    "CLIENT2": {
+      "Role": "Client",
+      "InterfacePort": 50324,
+      "OutgoingPoints": [ { "IpAddress": "127.0.0.1", "Port": 50321 } ],
+      "SecurityLevel": "INTERNAL",
+      "CertificateFile": "../ClientServer/Client2.pfx",
+      "DataFolder": "@SERIAL-CLIENT2"
+    }
+  }
+}
