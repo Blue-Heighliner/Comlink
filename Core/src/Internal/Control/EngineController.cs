@@ -8,7 +8,7 @@ namespace BlueHeighliner.Comlink.Control;
 /// message composition, the automatic print policy, MSMT peer certificate naming and peer options, network
 /// topology, the points this node connects out to, how the user on the other end of a connection is identified
 /// (optionally after a connection message exchange), the external systems this instance communicates with, the
-/// hooks run on connection and message activity, and whether <c>config.json</c> is read at all. External drive discovery and printer discovery/driving are real
+/// hooks run on connection and message activity, and whether command-line arguments may override the network configuration file and user. External drive discovery and printer discovery/driving are real
 /// OS-level behavior, not configuration or rules, so they live on <see cref="Devices.IExternalDriveProvider"/>
 /// and <see cref="Devices.IPrintDriver"/> instead. See <c>Docs/Components/Configuration.md</c>.
 /// </summary>
@@ -142,7 +142,7 @@ internal interface IEngineController
     IReadOnlyList<SecurityLevel> SecurityLevels { get; }
 
     /// <summary>
-    /// Returns the security level name the given user runs at; see <see cref="IEngineBuilder.UserSecurityLevel(string,string)"/>.
+    /// Returns the security level name the given user runs at; see <see cref="UserInfo.SecurityLevel"/>.
     /// Defaults to the lowest configured level for a user with no assignment, or an empty string when no security
     /// levels are configured at all.
     /// </summary>
@@ -159,27 +159,27 @@ internal interface IEngineController
     /// <summary>The peer options - including TLS identity certificate and trusted certificate authorities - used for both inbound and outbound MSMT session peer connections.</summary>
     MsmtSessionPeerOptions ConnectionOptions { get; }
 
-    /// <summary>Applies the host's adjustment of the MSMT options (see <see cref="IEngineBuilder.MsmtConnectionOptions"/>) to <paramref name="options"/>, returning them unchanged if none was stated.</summary>
+    /// <summary>Applies the host's adjustment of the MSMT options (see <see cref="IEngineBuilder.MsmtOptions"/>) to <paramref name="options"/>, returning them unchanged if none was stated.</summary>
     MsmtSessionPeerOptions ConfigureConnectionOptions(MsmtSessionPeerOptions options);
 
-    /// <summary>The options used for every MicroGate serial connection, after the host's adjustment (see <see cref="IEngineBuilder.MicroGateConnectionOptions"/>).</summary>
+    /// <summary>The options used for every MicroGate serial connection, after the host's adjustment (see <see cref="IEngineBuilder.MicroGateOptions"/>).</summary>
     MicroGatePeerOptions MicroGateOptions { get; }
 
     /// <summary>The configured role for this instance.</summary>
-    NodeRole Role { get; }
+    UserRole Role { get; }
     /// <summary>
     /// The points this node connects out to, and keeps connected: IP hosts and ports of other nodes to dial, and
     /// serial ports to open. A node configures only where it connects and listens (see <see cref="PeerPort"/>),
     /// never which users it expects there: who is on the other end of a connection is worked out when it forms, by
     /// <see cref="IdentifyConnection"/>. A serial cable joins two nodes and is opened from both ends, so a serial
-    /// port is listed here on each. A <see cref="NodeRole.Client"/> connects to the first point only.
+    /// port is listed here on each. A <see cref="UserRole.Client"/> connects to the first point only.
     /// </summary>
     IReadOnlyList<ConnectionPoint> OutgoingPoints { get; }
     /// <summary>
-    /// The server topology a <see cref="NodeRole.Server"/> instance routes with, keyed by server user name
+    /// The server topology a <see cref="UserRole.Server"/> instance routes with, keyed by server user name
     /// (case-insensitive): every server in the cluster, not just the local one, and the child clients each owns. It
     /// says who belongs where, not how to reach them, so a connection is matched to a server or child by the identity
-    /// <see cref="IdentifyConnection"/> gives it. Unused outside <see cref="NodeRole.Server"/>.
+    /// <see cref="IdentifyConnection"/> gives it. Unused outside <see cref="UserRole.Server"/>.
     /// </summary>
     IReadOnlyDictionary<string, ServerUserConfig> Servers { get; }
 
@@ -202,8 +202,8 @@ internal interface IEngineController
     /// the message and response types.
     /// </summary>
     INetworkSerializer? ConnectionSerializer { get; }
-    /// <summary>When <see langword="true"/>, a <c>--config</c> argument is read; when <see langword="false"/> (the default), it is ignored and <see cref="EngineConfigFile"/> always uses its defaults.</summary>
-    bool ConfigFileEnabled { get; }
+    /// <summary>When <see langword="true"/>, the <c>--config</c> and <c>--user</c> command-line arguments override where the network configuration file and the running user come from (see <see cref="IEngineBuilder.CommandLineOverrides"/>); when <see langword="false"/> (the default) they are ignored and only <c>Config.json</c> and <c>User.json</c> in the working directory are used.</summary>
+    bool CommandLineOverridesAllowed { get; }
 
     /// <summary>
     /// The external systems this instance communicates with — each a conduit relaying messages to and
@@ -246,7 +246,7 @@ internal interface IEngineController
     /// <summary>Every custom import format added via <see cref="IEngineBuilder.ImportFormat"/>, in the order added; empty if none.</summary>
     IReadOnlyList<ImportFormatDefinition> ImportFormats { get; }
 
-    /// <summary>The server users, from <see cref="Servers"/>, that keep a copy of every message they route and answer retrieval requests; see <see cref="IEngineBuilder.ServerStorage"/>. Empty if none.</summary>
+    /// <summary>The server users, from <see cref="Servers"/>, that keep a copy of every message they route and answer retrieval requests; see <see cref="UserInfo.StoresMessages"/>. Empty if none.</summary>
     IReadOnlyList<string> StorageServers { get; }
 
     /// <summary>Every custom auto forward controller added via <see cref="IEngineBuilder.AutoForwardController{TMessage}"/>, in the order added; empty if none.</summary>
@@ -349,9 +349,16 @@ internal interface IEngineController
     /// <summary>Sets the slice of the payload <paramref name="packet"/> carries; the value is only valid for the duration of the call, so a packet that stores it must copy it.</summary>
     void SetPacketData(object packet, ReadOnlyMemory<byte> value);
 
-    /// <summary>Resolves <paramref name="userCode"/> to its <see cref="UserInfo"/>, or <see langword="null"/> if the code is unrecognized.</summary>
+    /// <summary>Resolves <paramref name="userCode"/> to the name of the user it installs, or <see langword="null"/> if the code is unrecognized. Unless the host states its own scheme (<see cref="IEngineBuilder.UserCodes"/>), a code is the name of a user of the network.</summary>
     /// <param name="userCode">The user installation code to resolve.</param>
-    UserInfo? ResolveCode(string userCode);
+    string? ResolveUserName(string userCode);
+    /// <summary>
+    /// Returns what is known about <paramref name="userName"/>: what the network configuration file states (see <see cref="IEngineBuilder.CommandLineOverrides"/>), or a user with just
+    /// that name when it states none. For the current user this is where <see cref="Role"/>, <see cref="PeerPort"/>, <see cref="InterfacePort"/>,
+    /// <see cref="OutgoingPoints"/> and <see cref="Servers"/> come from.
+    /// </summary>
+    /// <param name="userName">The user to describe.</param>
+    UserInfo GetUserInfo(string userName);
     /// <summary>
     /// Returns the app-specific information attached to <paramref name="userName"/>, an empty map when there is none. The
     /// engine does not interpret it: it travels with the user's <see cref="UserIdentity"/>, so a host can attach whatever
@@ -422,18 +429,18 @@ internal interface IEngineController
 /// <summary>
 /// Implements <see cref="IEngineController"/> from what a host stated on an <see cref="EngineBuilder"/>, with a
 /// default for every setting the host left alone. The message and packet members work through the maps the host's
-/// mappings were turned into. <c>config.json</c> is applied on top by <see cref="ConfiguredEngineController"/>. Not
+/// mappings were turned into. the network file's node settings are applied on top by <see cref="ConfiguredEngineController"/>. Not
 /// sealed and every member is virtual so tests can replace a single behavior.
 /// </summary>
 /// <param name="builder">What the host stated.</param>
 /// <param name="currentUserProvider">Tracks the user name of the currently running instance, read for <see cref="ConnectionOptions"/>.</param>
-internal class EngineController(EngineBuilder builder, ICurrentUserProvider currentUserProvider) : IEngineController
+/// <param name="networkConfig">The network configuration file describing every user of the network; empty when none is loaded.</param>
+internal class EngineController(EngineBuilder builder, ICurrentUserProvider currentUserProvider, NetworkConfig? networkConfig = null) : IEngineController
 {
     private readonly MessageMap message = builder.MessageMap ?? throw new InvalidOperationException("The engine configuration must state its message type with Message<TMessage>(...).");
     private readonly PacketMap? packet = builder.PacketMap;
     private readonly IReadOnlyList<MessagePriorityOption> defaultPriorities = [new MessagePriorityOption { Name = "Normal", Value = 0 }];
     private readonly IReadOnlyList<AddressType> addressTypeOrder = [AddressType.To, AddressType.Cc, AddressType.External];
-    private readonly Dictionary<string, string> noData = [];
     private INetworkSerializer? connectionSerializer;
 
     /// <inheritdoc />
@@ -459,20 +466,43 @@ internal class EngineController(EngineBuilder builder, ICurrentUserProvider curr
     public virtual bool IsKioskMode => builder.IsKioskMode;
     /// <inheritdoc />
     public virtual string HomeText => builder.HomeTextValue ?? "HOME";
+    private readonly NetworkConfig network = networkConfig ?? new();
+
+    private UserInfo? CurrentUserInfo => currentUserProvider.UserName is { Length: > 0 } name ? GetUserInfo(name) : null;
+
     /// <inheritdoc />
     public virtual Uri? WindowIconUri => builder.WindowIconValue;
 
     /// <inheritdoc />
     public virtual string? DebugUserName => builder.DebugUserValue;
     /// <inheritdoc />
-    public virtual IReadOnlyList<string> Users => builder.UserNames;
+    public virtual IReadOnlyList<string> Users
+    {
+        get
+        {
+            List<string> names = [.. builder.UserNames];
+            foreach (string name in network.Users.Keys.Concat(UserGroups.Keys))
+            {
+                if (!names.Contains(name, StringComparer.OrdinalIgnoreCase)) { names.Add(name); }
+            }
+            return names;
+        }
+    }
     /// <inheritdoc />
-    public virtual IReadOnlyDictionary<string, IReadOnlyList<string>> UserGroups => builder.UserGroups;
+    public virtual IReadOnlyDictionary<string, IReadOnlyList<string>> UserGroups
+    {
+        get
+        {
+            Dictionary<string, IReadOnlyList<string>> merged = new(builder.UserGroups, StringComparer.OrdinalIgnoreCase);
+            foreach ((string name, List<string> members) in network.UserGroups) { merged[name] = members; }
+            return merged;
+        }
+    }
 
     /// <inheritdoc />
-    public virtual int PeerPort => builder.PeerPortValue ?? 50021;
+    public virtual int PeerPort => CurrentUserInfo?.PeerPort ?? 50021;
     /// <inheritdoc />
-    public virtual int InterfacePort => builder.InterfacePortValue ?? 50020;
+    public virtual int InterfacePort => CurrentUserInfo?.InterfacePort ?? 50020;
 
     /// <inheritdoc />
     public virtual string AlertLabel => builder.AlertLabelValue ?? "ALERT";
@@ -500,9 +530,7 @@ internal class EngineController(EngineBuilder builder, ICurrentUserProvider curr
     /// <inheritdoc />
     public virtual string GetUserSecurityLevel(string userName)
     {
-        if (builder.UserSecurityLevelsByName.TryGetValue(userName, out string? stated)) { return stated; }
-        string? looked = builder.UserSecurityLevelLookup?.Invoke(userName);
-        if (looked is not null) { return looked; }
+        if (GetUserInfo(userName).SecurityLevel is { } stated) { return stated; }
         return builder.SecurityLevelValues.Count > 0 ? builder.SecurityLevelValues[0].Name : string.Empty;
     }
 
@@ -514,17 +542,29 @@ internal class EngineController(EngineBuilder builder, ICurrentUserProvider curr
         ?? MsmtCertificateLookup.BuildPeerOptions(currentUserProvider.UserName, GetCertificateName, TrustedAuthorityCertificateName));
 
     /// <inheritdoc />
-    public virtual MsmtSessionPeerOptions ConfigureConnectionOptions(MsmtSessionPeerOptions options) => builder.MsmtConnectionOptionsValue?.Invoke(options) ?? options;
+    public virtual MsmtSessionPeerOptions ConfigureConnectionOptions(MsmtSessionPeerOptions options) => builder.MsmtOptionsValue?.Invoke(options) ?? options;
 
     /// <inheritdoc />
-    public virtual MicroGatePeerOptions MicroGateOptions => builder.MicroGateConnectionOptionsValue?.Invoke(new()) ?? new();
+    public virtual MicroGatePeerOptions MicroGateOptions => builder.MicroGateOptionsValue?.Invoke(new()) ?? new();
 
     /// <inheritdoc />
-    public virtual NodeRole Role => builder.RoleValue ?? NodeRole.Peer;
+    public virtual UserRole Role => CurrentUserInfo?.Role ?? UserRole.Peer;
     /// <inheritdoc />
-    public virtual IReadOnlyList<ConnectionPoint> OutgoingPoints => builder.OutgoingPoints;
+    public virtual IReadOnlyList<ConnectionPoint> OutgoingPoints => CurrentUserInfo?.OutgoingPoints ?? [];
     /// <inheritdoc />
-    public virtual IReadOnlyDictionary<string, ServerUserConfig> Servers => builder.ServerTopology;
+    public virtual IReadOnlyDictionary<string, ServerUserConfig> Servers
+    {
+        get
+        {
+            Dictionary<string, ServerUserConfig> servers = new(StringComparer.OrdinalIgnoreCase);
+            foreach (string name in Users)
+            {
+                if (GetUserInfo(name) is { Role: UserRole.Server } info) { servers[name] = new ServerUserConfig { ChildClients = info.ChildClients }; }
+            }
+            if (CurrentUserInfo is { Role: UserRole.Server } current) { servers[current.Name] = new ServerUserConfig { ChildClients = current.ChildClients }; }
+            return servers;
+        }
+    }
 
     /// <inheritdoc />
     public virtual Type? ConnectionMessageType => builder.ConnectionMessageType;
@@ -536,7 +576,7 @@ internal class EngineController(EngineBuilder builder, ICurrentUserProvider curr
         : builder.ConnectionSerializerValue ?? (connectionSerializer ??= new ProtobufNetworkSerializer([.. new[] { ConnectionMessageType, ConnectionResponseType }.OfType<Type>()]));
 
     /// <inheritdoc />
-    public virtual bool ConfigFileEnabled => builder.IsConfigFileEnabled;
+    public virtual bool CommandLineOverridesAllowed => builder.AreCommandLineOverridesAllowed;
 
     /// <inheritdoc />
     public virtual IReadOnlyList<IExternalSystem> ExternalSystems => builder.ExternalSystems;
@@ -554,12 +594,12 @@ internal class EngineController(EngineBuilder builder, ICurrentUserProvider curr
     /// <inheritdoc />
     public virtual IReadOnlyList<ImportFormatDefinition> ImportFormats => builder.ImportFormats;
     /// <inheritdoc />
-    public virtual IReadOnlyList<string> StorageServers => builder.StorageServerNames;
+    public virtual IReadOnlyList<string> StorageServers => [.. Servers.Keys.Where(name => GetUserInfo(name).StoresMessages)];
     /// <inheritdoc />
     public virtual IReadOnlyList<AutoForwardControllerDefinition> AutoForwardControllers => builder.AutoForwardControllers;
 
     /// <inheritdoc />
-    public virtual string TrustedAuthorityCertificateName => builder.TrustedAuthorityValue ?? "COMLINK-ROOT";
+    public virtual string TrustedAuthorityCertificateName => network.TrustedAuthorityCertificateName ?? builder.TrustedAuthorityValue ?? "COMLINK-ROOT";
 
     /// <inheritdoc />
     public virtual object CreateMessage() => message.Create();
@@ -653,23 +693,19 @@ internal class EngineController(EngineBuilder builder, ICurrentUserProvider curr
     public virtual void SetPacketData(object value, ReadOnlyMemory<byte> data) => Packet.SetData(value, data);
 
     /// <inheritdoc />
-    public virtual UserInfo? ResolveCode(string userCode)
-        => builder.UserCodeResolver is { } resolve
-            ? resolve(userCode)
-            : userCode.Equals("CODE", StringComparison.OrdinalIgnoreCase)
-                ? new UserInfo { Name = "TEST", Code = "CODE" }
-                : null;
+    public virtual string? ResolveUserName(string userCode)
+    {
+        if (builder.UserCodeResolver is { } resolve) { return resolve(userCode); }
+
+        string? user = builder.UserNames.Concat(network.Users.Keys).FirstOrDefault(name => string.Equals(name, userCode, StringComparison.OrdinalIgnoreCase));
+        return user ?? (userCode.Equals("CODE", StringComparison.OrdinalIgnoreCase) ? "TEST" : null);
+    }
 
     /// <inheritdoc />
-    public virtual IReadOnlyDictionary<string, string> GetUserData(string userName)
-    {
-        IReadOnlyDictionary<string, string>? looked = builder.UserDataLookup?.Invoke(userName);
-        if (!builder.UserDataByName.TryGetValue(userName, out Dictionary<string, string>? stated)) { return looked ?? noData; }
+    public virtual UserInfo GetUserInfo(string userName) => network.GetUserInfo(userName) ?? new UserInfo { Name = userName };
 
-        Dictionary<string, string> merged = looked is null ? [] : new Dictionary<string, string>(looked);
-        foreach ((string key, string value) in stated) { merged[key] = value; }
-        return merged;
-    }
+    /// <inheritdoc />
+    public virtual IReadOnlyDictionary<string, string> GetUserData(string userName) => GetUserInfo(userName).Data;
 
     /// <inheritdoc />
     public virtual UserIdentity? IdentifyConnection(ConnectionInfo connection) => builder.IdentifyValue?.Invoke(connection);
@@ -685,7 +721,7 @@ internal class EngineController(EngineBuilder builder, ICurrentUserProvider curr
     public virtual bool CanDelete(FolderType folderType) => builder.CanDeleteValue?.Invoke(folderType) ?? true;
 
     /// <inheritdoc />
-    public virtual string GetCertificateName(string userName) => builder.CertificateNameValue?.Invoke(userName) ?? userName;
+    public virtual string GetCertificateName(string userName) => GetUserInfo(userName).CertificateName ?? userName;
 
     private PacketMap Packet => packet ?? throw new NotSupportedException("This engine has no packet type; state one with Packets<TPacket>(...) to enable packetization.");
 }

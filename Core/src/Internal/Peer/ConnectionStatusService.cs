@@ -28,8 +28,8 @@ internal sealed record PeerConnectionStatus
 
 /// <summary>
 /// Exposes live connection status for <see cref="ViewModels.IConnectionStatusViewModel"/> — registered only
-/// for <see cref="NodeRole.Client"/> (the single connection to its server) and <see cref="NodeRole.Server"/>
-/// (one entry per own child client, plus one entry per other server in the cluster); <see cref="NodeRole.Peer"/>
+/// for <see cref="UserRole.Client"/> (the single connection to its server) and <see cref="UserRole.Server"/>
+/// (one entry per own child client, plus one entry per other server in the cluster); <see cref="UserRole.Peer"/>
 /// registers <see cref="NullConnectionStatusService"/> instead, since peer-to-peer connections are not
 /// configured, long-term links. Implemented directly by <see cref="ClientPeerService"/>/<see cref="ServerRoutingService"/>
 /// rather than a separate tracking component, since they already own the connection state this reports on.
@@ -57,7 +57,7 @@ internal interface IConnectionStatusService
     void Refresh(PeerConnectionKind kind, string userName);
 }
 
-/// <summary>Default <see cref="IConnectionStatusService"/> for <see cref="NodeRole.Peer"/>, where no configured connections are tracked.</summary>
+/// <summary>Default <see cref="IConnectionStatusService"/> for <see cref="UserRole.Peer"/>, where no configured connections are tracked.</summary>
 internal sealed class NullConnectionStatusService : IConnectionStatusService
 {
     /// <inheritdoc />

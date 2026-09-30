@@ -48,21 +48,15 @@ public interface IEngineBuilder
     /// <summary>Sets a user name for development and testing, which skips the installed user lookup.</summary>
     IEngineBuilder DebugUser(string userName);
 
-    /// <summary>Sets how an installation code entered by the user resolves to a user. Defaults to accepting the code <c>CODE</c> for a user named <c>TEST</c>.</summary>
-    /// <param name="resolve">Returns the user for a code, or <see langword="null"/> when the code is not recognized.</param>
-    IEngineBuilder UserCodes(Func<string, UserInfo?> resolve);
+    /// <summary>Sets how an installation code entered by the user resolves to a user name. Defaults to accepting the code <c>CODE</c> for a user named <c>TEST</c>.</summary>
+    /// <param name="resolve">Returns the user name for a code, or <see langword="null"/> when the code is not recognized.</param>
+    IEngineBuilder UserCodes(Func<string, string?> resolve);
 
-    /// <summary>Adds user names to the directory used for address auto-complete and for connection identification.</summary>
+    /// <summary>Adds user names to the directory used for address auto-complete and for connection identification. What is known about each is stated in the network configuration file.</summary>
     IEngineBuilder Users(params string[] names);
 
     /// <summary>Defines a group of users, whose members may be user names or other group names.</summary>
     IEngineBuilder Group(string name, params string[] members);
-
-    /// <summary>Attaches app-specific data to a user, merged with anything already attached to that user. The engine does not interpret it; it travels with the user's <see cref="UserIdentity"/>.</summary>
-    IEngineBuilder UserData(string userName, IReadOnlyDictionary<string, string> data);
-
-    /// <summary>Sets how the data attached to any user is looked up, in place of the per-user calls.</summary>
-    IEngineBuilder UserData(Func<string, IReadOnlyDictionary<string, string>> lookup);
 
     /// <summary>
     /// Defines the ordered set of security levels a message may be sent at, from lowest to highest: each level
@@ -71,21 +65,6 @@ public interface IEngineBuilder
     /// security level and no destination is ever blocked for lacking one.
     /// </summary>
     IEngineBuilder SecurityLevels(params (string Name, string Color)[] levels);
-
-    /// <summary>
-    /// Assigns a user to run at a security level by name (see <see cref="SecurityLevels"/>), merged with anything
-    /// already assigned. A user with no assignment runs at the lowest configured level.
-    /// </summary>
-    IEngineBuilder UserSecurityLevel(string userName, string levelName);
-
-    /// <summary>Sets how the security level for any user name is looked up, in place of the per-user calls.</summary>
-    IEngineBuilder UserSecurityLevel(Func<string, string> lookup);
-
-    /// <summary>Sets the TCP port this node listens on for IP connections from other nodes. Defaults to 50021.</summary>
-    IEngineBuilder PeerPort(int port);
-
-    /// <summary>Sets the loopback TCP port the local interface listener uses. Defaults to 50020.</summary>
-    IEngineBuilder InterfacePort(int port);
 
     /// <summary>Sets the text shown in the title bar's alert box while alarming, and the draft editor's alert checkbox label. Defaults to <c>ALERT</c>.</summary>
     IEngineBuilder AlertLabel(string label);
@@ -124,9 +103,6 @@ public interface IEngineBuilder
     /// <summary>Sets which root folders let the user delete entries. Defaults to all of them.</summary>
     IEngineBuilder CanDelete(Func<FolderType, bool> allowed);
 
-    /// <summary>Sets the certificate subject name that belongs to a user, for the local user the identity certificate to look up and for others the name their certificate is expected to carry. Defaults to the user name itself.</summary>
-    IEngineBuilder CertificateName(Func<string, string> name);
-
     /// <summary>Sets the subject name of the certificate authority trusted to sign every peer's certificate. Defaults to <c>COMLINK-ROOT</c>.</summary>
     IEngineBuilder TrustedAuthority(string certificateName);
 
@@ -139,7 +115,7 @@ public interface IEngineBuilder
     /// certificate and trusted authorities already in place, and returns the options to use, typically by <c>with</c>
     /// expression. It runs each time connections are set up, after <see cref="ConnectionOptions"/>. Defaults to leaving them as they are.
     /// </summary>
-    IEngineBuilder MsmtConnectionOptions(Func<MsmtSessionPeerOptions, MsmtSessionPeerOptions> configure);
+    IEngineBuilder MsmtOptions(Func<MsmtSessionPeerOptions, MsmtSessionPeerOptions> configure);
 
     /// <summary>
     /// Adjusts the MicroGate options used for every serial connection: line encoding, CRC, clocking, frame size, windowing and
@@ -147,27 +123,7 @@ public interface IEngineBuilder
     /// the options to use, typically by <c>with</c> expression. The HDLC address is not an option; it comes from each serial
     /// connection point. Defaults to the MicroGate defaults.
     /// </summary>
-    IEngineBuilder MicroGateConnectionOptions(Func<MicroGatePeerOptions, MicroGatePeerOptions> configure);
-
-    /// <summary>Sets the networking role. Defaults to <see cref="NodeRole.Peer"/>.</summary>
-    IEngineBuilder Role(NodeRole role);
-
-    /// <summary>Adds a point this node connects out to and keeps connected. A client connects to the first only.</summary>
-    IEngineBuilder OutgoingPoint(ConnectionPoint point);
-
-    /// <summary>Defines a server in the topology a <see cref="NodeRole.Server"/> routes with, and the child clients it owns.</summary>
-    IEngineBuilder Server(string name, params string[] childClients);
-
-    /// <summary>
-    /// Enables message storage on the named <see cref="NodeRole.Server"/> users (each one given to <see cref="Server"/>):
-    /// such a server keeps a copy of every message it routes, and answers a client's retrieval request (the client's
-    /// RETRIEVE screen) by sending back a copy of each stored message that fits the request's criteria,
-    /// whoever sent or received it. Every node on a network must be configured alike, since a client learns which
-    /// servers store from this same configuration. Calling this again adds to the set already stated. Requires the
-    /// message mapping's <see cref="IMessageBuilder{TMessage}.Retrieval"/> fields, which every message mapping must state.
-    /// </summary>
-    /// <param name="serverNames">The server users that store the messages they route.</param>
-    IEngineBuilder ServerStorage(params string[] serverNames);
+    IEngineBuilder MicroGateOptions(Func<MicroGatePeerOptions, MicroGatePeerOptions> configure);
 
     /// <summary>Sets who is on the other end of a connection that has just formed. Return <see langword="null"/> to leave it to the engine, which names an IP connection after the user whose certificate name it carries and a serial connection after its port.</summary>
     IEngineBuilder Identify(Func<ConnectionInfo, UserIdentity?> identify);
@@ -192,8 +148,14 @@ public interface IEngineBuilder
     /// <summary>Replaces the serializer for the connection message and response. The default builds only those two types with protobuf-net.</summary>
     IEngineBuilder ConnectionSerializer(INetworkSerializer serializer);
 
-    /// <summary>Allows the <c>--config</c> command-line argument to be read. Off by default, in which case the argument is ignored.</summary>
-    IEngineBuilder ConfigFile(bool enabled = true);
+    /// <summary>
+    /// Sets whether command-line arguments may override where the network configuration file (the file that describes every user
+    /// of the network) and the running user come from: <c>--config</c> names the file to read instead of <c>Config.json</c> in the
+    /// current working directory, and <c>--user</c> names the user the process runs as instead of <c>User.json</c> in that directory.
+    /// The files in the working directory are always read; only the arguments are ignored when this is disallowed.
+    /// </summary>
+    /// <param name="allowed"><see langword="true"/> to honor <c>--config</c> and <c>--user</c>, <see langword="false"/> to ignore them. Disallowed unless this is called.</param>
+    IEngineBuilder CommandLineOverrides(bool allowed);
 
     /// <summary>Adds an external system, a conduit relaying messages to and from a system outside Comlink.</summary>
     IEngineBuilder ExternalSystem(IExternalSystem system);

@@ -2,12 +2,15 @@ namespace BlueHeighliner.Comlink.Tests.Unit.Internal.Control;
 
 /// <summary>
 /// Unit tests for <see cref="EngineController"/> (via the <see cref="TestEngineController"/> test double) and its corresponding <see cref="ConfiguredEngineController"/>
-/// engine-level <see cref="EngineConfigFile"/> decorator.
+/// node settings decorator over the network configuration file.
 /// </summary>
 public sealed class ControlProviderTests
 {
     private static string SystemAppData => Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData);
     private static ICurrentUserProvider NoCurrentUser => new CurrentUserProvider();
+    private static ICurrentUserProvider Me => new CurrentUserProvider { UserName = "ME" };
+
+    private static NetworkConfig Node(NetworkUserConfig me, string? user = null) => new() { User = user, Users = { ["ME"] = me } };
 
     /// <summary>The default implementation derives AppDataPath from AppName via virtual dispatch, and returns hardcoded defaults for everything else.</summary>
     [Fact]
@@ -140,7 +143,7 @@ public sealed class ControlProviderTests
     {
         Mock<IEngineController> fallback = new();
         fallback.Setup(f => f.AppDataPath).Returns("/base/path");
-        ConfiguredEngineController controller = new(fallback.Object, new EngineConfigFile(), NoCurrentUser);
+        ConfiguredEngineController controller = new(fallback.Object, new NetworkConfig(), NoCurrentUser);
 
         Assert.Equal("/base/path", controller.AppDataPath);
     }
@@ -151,7 +154,7 @@ public sealed class ControlProviderTests
     {
         Mock<IEngineController> fallback = new();
         fallback.Setup(f => f.AppDataPath).Returns("/base/path");
-        ConfiguredEngineController controller = new(fallback.Object, new EngineConfigFile { DataFolder = "@test/sub" }, NoCurrentUser);
+        ConfiguredEngineController controller = new(fallback.Object, Node(new NetworkUserConfig { DataFolder = "@test/sub" }, "ME"), NoCurrentUser);
 
         Assert.Equal(Path.Combine("/base/path", "test", "sub"), controller.AppDataPath);
     }
@@ -162,12 +165,12 @@ public sealed class ControlProviderTests
     {
         Mock<IEngineController> fallback = new();
         string absolute = "/tmp/custom-data";
-        ConfiguredEngineController controller = new(fallback.Object, new EngineConfigFile { DataFolder = absolute }, NoCurrentUser);
+        ConfiguredEngineController controller = new(fallback.Object, Node(new NetworkUserConfig { DataFolder = absolute }, "ME"), NoCurrentUser);
 
         Assert.Equal(absolute, controller.AppDataPath);
     }
 
-    /// <summary>AppName, IsKioskMode, and HomeText are left entirely to the fallback, since none has a config.json field.</summary>
+    /// <summary>AppName, IsKioskMode, and HomeText are left entirely to the fallback, since none has a network file field.</summary>
     [Fact]
     public void ConfiguredEngineController_NonConfigAppSettingsMembers_AlwaysDelegateToFallback()
     {
@@ -176,7 +179,7 @@ public sealed class ControlProviderTests
         fallback.Setup(f => f.AppVersion).Returns("9.8.7");
         fallback.Setup(f => f.IsKioskMode).Returns(true);
         fallback.Setup(f => f.HomeText).Returns("FALLBACK-HOME");
-        ConfiguredEngineController controller = new(fallback.Object, new EngineConfigFile(), NoCurrentUser);
+        ConfiguredEngineController controller = new(fallback.Object, new NetworkConfig(), NoCurrentUser);
 
         Assert.Equal("FallbackApp", controller.AppName);
         Assert.Equal("9.8.7", controller.AppVersion);
@@ -191,18 +194,15 @@ public sealed class ControlProviderTests
         TestEngineController controller = new();
         Assert.Null(controller.DebugUserName);
 
-        UserInfo? result = controller.ResolveCode("CODE");
-        Assert.NotNull(result);
-        Assert.Equal("TEST", result.Name);
-
-        Assert.Null(controller.ResolveCode("UNKNOWN"));
+        Assert.Equal("TEST", controller.ResolveUserName("CODE"));
+        Assert.Null(controller.ResolveUserName("UNKNOWN"));
     }
 
     /// <summary>DebugUserName returns the value from config.</summary>
     [Fact]
     public void ConfiguredEngineController_ReturnsDebugUserNameFromConfig()
     {
-        ConfiguredEngineController controller = new(new TestEngineController(), new EngineConfigFile { UserName = "ALPHA" }, NoCurrentUser);
+        ConfiguredEngineController controller = new(new TestEngineController(), new NetworkConfig { User = "ALPHA" }, NoCurrentUser);
         Assert.Equal("ALPHA", controller.DebugUserName);
     }
 
@@ -212,21 +212,23 @@ public sealed class ControlProviderTests
     {
         Mock<IEngineController> fallback = new();
         fallback.Setup(f => f.DebugUserName).Returns("FALLBACK");
-        ConfiguredEngineController controller = new(fallback.Object, new EngineConfigFile(), NoCurrentUser);
+        ConfiguredEngineController controller = new(fallback.Object, new NetworkConfig(), NoCurrentUser);
 
         Assert.Equal("FALLBACK", controller.DebugUserName);
     }
 
-    /// <summary>ResolveCode is left entirely to the wrapped provider, since there is no corresponding config.json field.</summary>
+    /// <summary>Code and user info resolution are left entirely to the wrapped provider, since there is no corresponding network file field.</summary>
     [Fact]
-    public void ConfiguredEngineController_ResolveCode_AlwaysDelegatesToFallback()
+    public void ConfiguredEngineController_UserResolution_AlwaysDelegatesToFallback()
     {
-        UserInfo fallbackInfo = new() { Name = "X", Code = "Y" };
+        UserInfo fallbackInfo = new() { Name = "X" };
         Mock<IEngineController> fallback = new();
-        fallback.Setup(f => f.ResolveCode("ANY")).Returns(fallbackInfo);
-        ConfiguredEngineController controller = new(fallback.Object, new EngineConfigFile(), NoCurrentUser);
+        fallback.Setup(f => f.ResolveUserName("ANY")).Returns("X");
+        fallback.Setup(f => f.GetUserInfo("X")).Returns(fallbackInfo);
+        ConfiguredEngineController controller = new(fallback.Object, new NetworkConfig(), NoCurrentUser);
 
-        Assert.Same(fallbackInfo, controller.ResolveCode("ANY"));
+        Assert.Equal("X", controller.ResolveUserName("ANY"));
+        Assert.Same(fallbackInfo, controller.GetUserInfo("X"));
     }
 
     /// <summary>The default implementation offers a single "Normal" priority level, tags enabled with label "Tag", and no blocked combinations.</summary>
@@ -262,7 +264,7 @@ public sealed class ControlProviderTests
         fallback.Setup(f => f.Priorities).Returns(priorities);
         IReadOnlyList<TagPriorityBlock> blocks = [new TagPriorityBlock { Tag = "SPAM" }];
         fallback.Setup(f => f.BlockedCombinations).Returns(blocks);
-        ConfiguredEngineController controller = new(fallback.Object, new EngineConfigFile(), NoCurrentUser);
+        ConfiguredEngineController controller = new(fallback.Object, new NetworkConfig(), NoCurrentUser);
 
         Assert.False(controller.TagsEnabled);
         Assert.Equal("Category", controller.TagLabel);
@@ -274,7 +276,7 @@ public sealed class ControlProviderTests
     [Fact]
     public void ConfiguredEngineController_ReturnsFalseWhenTagsDisabledInConfig()
     {
-        ConfiguredEngineController controller = new(new TestEngineController(), new EngineConfigFile { MessageTagsEnabled = false }, NoCurrentUser);
+        ConfiguredEngineController controller = new(new TestEngineController(), Node(new NetworkUserConfig { MessageTagsEnabled = false }), Me);
         Assert.False(controller.TagsEnabled);
     }
 
@@ -282,7 +284,7 @@ public sealed class ControlProviderTests
     [Fact]
     public void ConfiguredEngineController_TagLabel_ReturnsConfiguredValue()
     {
-        ConfiguredEngineController controller = new(new TestEngineController(), new EngineConfigFile { MessageTagLabel = "Category" }, NoCurrentUser);
+        ConfiguredEngineController controller = new(new TestEngineController(), Node(new NetworkUserConfig { MessageTagLabel = "Category" }), Me);
         Assert.Equal("Category", controller.TagLabel);
     }
 
@@ -377,7 +379,7 @@ public sealed class ControlProviderTests
         fallback.Setup(f => f.AlarmSoundDuration).Returns(TimeSpan.FromSeconds(12));
         fallback.Setup(f => f.QuickConfirmationEnabled).Returns(false);
         fallback.Setup(f => f.ComposeAlertsEnabled).Returns(false);
-        ConfiguredEngineController controller = new(fallback.Object, new EngineConfigFile(), NoCurrentUser);
+        ConfiguredEngineController controller = new(fallback.Object, new NetworkConfig(), NoCurrentUser);
 
         Assert.Equal("FALLBACK", controller.AlertLabel);
         Assert.Equal(TimeSpan.FromSeconds(12), controller.AlarmSoundDuration);
@@ -389,13 +391,13 @@ public sealed class ControlProviderTests
     [Fact]
     public void ConfiguredEngineController_OverridesAlertSettingsFromConfig()
     {
-        ConfiguredEngineController controller = new(new TestEngineController(), new EngineConfigFile
+        ConfiguredEngineController controller = new(new TestEngineController(), Node(new NetworkUserConfig
         {
             AlertText = "URGENT",
             AlarmSoundSeconds = 5,
             QuickConfirmationEnabled = false,
             ComposeAlertsEnabled = false
-        }, NoCurrentUser);
+        }), Me);
 
         Assert.Equal("URGENT", controller.AlertLabel);
         Assert.Equal(TimeSpan.FromSeconds(5), controller.AlarmSoundDuration);
@@ -418,7 +420,7 @@ public sealed class ControlProviderTests
     {
         Mock<IEngineController> fallback = new();
         fallback.Setup(f => f.PrintReceivedDefaultEnabled).Returns(true);
-        ConfiguredEngineController controller = new(fallback.Object, new EngineConfigFile(), NoCurrentUser);
+        ConfiguredEngineController controller = new(fallback.Object, new NetworkConfig(), NoCurrentUser);
 
         Assert.True(controller.PrintReceivedDefaultEnabled);
     }
@@ -427,17 +429,17 @@ public sealed class ControlProviderTests
     [Fact]
     public void ConfiguredEngineController_ReturnsTruePrintPolicyWhenEnabledInConfig()
     {
-        ConfiguredEngineController controller = new(new TestEngineController(), new EngineConfigFile { PrintReceivedEnabled = true }, NoCurrentUser);
+        ConfiguredEngineController controller = new(new TestEngineController(), Node(new NetworkUserConfig { PrintReceivedEnabled = true }), Me);
         Assert.True(controller.PrintReceivedDefaultEnabled);
     }
 
-    /// <summary>GetPrintCount always delegates to the wrapped provider, since there is no corresponding config.json field.</summary>
+    /// <summary>GetPrintCount always delegates to the wrapped provider, since there is no corresponding network file field.</summary>
     [Fact]
     public void ConfiguredEngineController_GetPrintCount_AlwaysDelegatesToFallback()
     {
         Mock<IEngineController> fallback = new();
         fallback.Setup(f => f.GetPrintCount(It.IsAny<object>())).Returns(5);
-        ConfiguredEngineController controller = new(fallback.Object, new EngineConfigFile(), NoCurrentUser);
+        ConfiguredEngineController controller = new(fallback.Object, new NetworkConfig(), NoCurrentUser);
 
         Assert.Equal(5, controller.GetPrintCount(new object()));
     }
@@ -453,13 +455,13 @@ public sealed class ControlProviderTests
         }
     }
 
-    /// <summary>CanDelete always delegates to the wrapped provider, since there is no corresponding config.json field.</summary>
+    /// <summary>CanDelete always delegates to the wrapped provider, since there is no corresponding network file field.</summary>
     [Fact]
     public void ConfiguredEngineController_CanDelete_AlwaysDelegatesToFallback()
     {
         Mock<IEngineController> fallback = new();
         fallback.Setup(f => f.CanDelete(FolderType.Drafts)).Returns(false);
-        ConfiguredEngineController controller = new(fallback.Object, new EngineConfigFile(), NoCurrentUser);
+        ConfiguredEngineController controller = new(fallback.Object, new NetworkConfig(), NoCurrentUser);
 
         Assert.False(controller.CanDelete(FolderType.Drafts));
     }
@@ -478,20 +480,9 @@ public sealed class ControlProviderTests
     {
         Mock<IEngineController> fallback = new();
         fallback.Setup(f => f.GetCertificateName("ALPHA")).Returns("FALLBACK-NAME");
-        ConfiguredEngineController controller = new(fallback.Object, new EngineConfigFile(), NoCurrentUser);
+        ConfiguredEngineController controller = new(fallback.Object, new NetworkConfig(), NoCurrentUser);
 
         Assert.Equal("FALLBACK-NAME", controller.GetCertificateName("ALPHA"));
-    }
-
-    /// <summary>An explicit name names this node's own certificate, so it applies to the current user only; every other user keeps the wrapped provider's name, which is what a Server matches connecting certificates against.</summary>
-    [Fact]
-    public void ConfiguredEngineController_ExplicitPeerCertificateNameConfig_AppliesToCurrentUserOnly()
-    {
-        CurrentUserProvider currentUser = new() { UserName = "alpha" };
-        ConfiguredEngineController controller = new(new TestEngineController(), new EngineConfigFile { PeerCertificateName = "MY-CERT" }, currentUser);
-
-        Assert.Equal("MY-CERT", controller.GetCertificateName("ALPHA"));
-        Assert.Equal("BETA", controller.GetCertificateName("BETA"));
     }
 
     /// <summary>ConnectionOptions throws when no current user is installed, since MSMT peer authentication is mandatory and there is no user to resolve an identity certificate for.</summary>
@@ -517,17 +508,9 @@ public sealed class ControlProviderTests
     {
         Mock<IEngineController> fallback = new();
         fallback.Setup(f => f.TrustedAuthorityCertificateName).Returns("FALLBACK-ROOT");
-        ConfiguredEngineController controller = new(fallback.Object, new EngineConfigFile(), NoCurrentUser);
+        ConfiguredEngineController controller = new(fallback.Object, new NetworkConfig(), NoCurrentUser);
 
         Assert.Equal("FALLBACK-ROOT", controller.TrustedAuthorityCertificateName);
-    }
-
-    /// <summary>Explicit name → that name, regardless of the wrapped provider.</summary>
-    [Fact]
-    public void ConfiguredEngineController_ExplicitTrustedAuthorityCertificateNameConfig_ReturnsExactName()
-    {
-        ConfiguredEngineController controller = new(new TestEngineController(), new EngineConfigFile { TrustedAuthorityCertificateName = "MY-ROOT" }, NoCurrentUser);
-        Assert.Equal("MY-ROOT", controller.TrustedAuthorityCertificateName);
     }
 
     /// <summary>When both certificate file fields are set, ConnectionOptions loads the identity and trusted authority directly from disk instead of the system store.</summary>
@@ -546,8 +529,8 @@ public sealed class ControlProviderTests
 
             ConfiguredEngineController controller = new(
                 new TestEngineController(),
-                new EngineConfigFile { PeerCertificateFile = peerFile, TrustedAuthorityCertificateFile = authorityFile },
-                NoCurrentUser);
+                new NetworkConfig { TrustedAuthorityCertificateFile = authorityFile, Users = { ["ME"] = new NetworkUserConfig { CertificateFile = peerFile } } },
+                Me);
 
             MsmtSessionPeerOptions options = controller.ConnectionOptions;
 
@@ -561,19 +544,19 @@ public sealed class ControlProviderTests
         }
     }
 
-    /// <summary>Setting only PeerCertificateFile without TrustedAuthorityCertificateFile throws, since the two must be set together.</summary>
+    /// <summary>Setting only the current user's CertificateFile without the network's TrustedAuthorityCertificateFile throws, since the two must be set together.</summary>
     [Fact]
     public void ConfiguredEngineController_OnlyPeerCertificateFileSet_Throws()
     {
-        ConfiguredEngineController controller = new(new TestEngineController(), new EngineConfigFile { PeerCertificateFile = "/tmp/identity.pfx" }, NoCurrentUser);
+        ConfiguredEngineController controller = new(new TestEngineController(), Node(new NetworkUserConfig { CertificateFile = "/tmp/identity.pfx" }), Me);
         Assert.Throws<InvalidOperationException>(() => controller.ConnectionOptions);
     }
 
-    /// <summary>Setting only TrustedAuthorityCertificateFile without PeerCertificateFile throws, since the two must be set together.</summary>
+    /// <summary>Setting only the network's TrustedAuthorityCertificateFile without the current user's CertificateFile throws, since the two must be set together.</summary>
     [Fact]
     public void ConfiguredEngineController_OnlyTrustedAuthorityCertificateFileSet_Throws()
     {
-        ConfiguredEngineController controller = new(new TestEngineController(), new EngineConfigFile { TrustedAuthorityCertificateFile = "/tmp/authority.cer" }, NoCurrentUser);
+        ConfiguredEngineController controller = new(new TestEngineController(), new NetworkConfig { TrustedAuthorityCertificateFile = "/tmp/authority.cer", Users = { ["ME"] = new NetworkUserConfig() } }, Me);
         Assert.Throws<InvalidOperationException>(() => controller.ConnectionOptions);
     }
 
@@ -583,8 +566,8 @@ public sealed class ControlProviderTests
     {
         ConfiguredEngineController controller = new(
             new TestEngineController(),
-            new EngineConfigFile { PeerCertificateFile = "/nonexistent/identity.pfx", TrustedAuthorityCertificateFile = "/nonexistent/authority.cer" },
-            NoCurrentUser);
+            new NetworkConfig { TrustedAuthorityCertificateFile = "/nonexistent/authority.cer", Users = { ["ME"] = new NetworkUserConfig { CertificateFile = "/nonexistent/identity.pfx" } } },
+            Me);
 
         Assert.Throws<InvalidOperationException>(() => controller.ConnectionOptions);
     }
@@ -605,19 +588,10 @@ public sealed class ControlProviderTests
         Mock<IEngineController> fallback = new();
         fallback.Setup(f => f.PeerPort).Returns(11111);
         fallback.Setup(f => f.InterfacePort).Returns(22222);
-        ConfiguredEngineController controller = new(fallback.Object, new EngineConfigFile(), NoCurrentUser);
+        ConfiguredEngineController controller = new(fallback.Object, new NetworkConfig(), NoCurrentUser);
 
         Assert.Equal(11111, controller.PeerPort);
         Assert.Equal(22222, controller.InterfacePort);
-    }
-
-    /// <summary>Configured ports override the fallback.</summary>
-    [Fact]
-    public void ConfiguredEngineController_ConfiguredPorts_OverrideFallback()
-    {
-        ConfiguredEngineController controller = new(new TestEngineController(), new EngineConfigFile { PeerPort = 9001, InterfacePort = 9002 }, NoCurrentUser);
-        Assert.Equal(9001, controller.PeerPort);
-        Assert.Equal(9002, controller.InterfacePort);
     }
 
     /// <summary>The default implementation never knows about any user, group, or name.</summary>
@@ -630,200 +604,14 @@ public sealed class ControlProviderTests
         Assert.Empty(controller.Users);
     }
 
-    /// <summary>A configured user's data is returned for that user.</summary>
-    [Fact]
-    public void ConfiguredEngineController_KnownUser_ReturnsConfiguredData()
-    {
-        EngineConfigFile config = new()
-        {
-            Users = new Dictionary<string, UserConfig>
-            {
-                ["ALPHA"] = new UserConfig { Data = new Dictionary<string, string> { ["role"] = "clerk" } }
-            }
-        };
-        ConfiguredEngineController controller = new(new TestEngineController(), config, NoCurrentUser);
-
-        IReadOnlyDictionary<string, string> result = controller.GetUserData("alpha");
-
-        Assert.Equal("clerk", result["role"]);
-    }
-
-    /// <summary>Configured data is merged over the wrapped provider's own data for the same user, config winning on conflicts.</summary>
-    [Fact]
-    public void ConfiguredEngineController_UserData_MergesConfigOverFallback()
-    {
-        Mock<IEngineController> fallback = new();
-        fallback.Setup(f => f.GetUserData("ALPHA")).Returns(new Dictionary<string, string> { ["role"] = "fallback", ["desk"] = "4" });
-        EngineConfigFile config = new()
-        {
-            Users = new Dictionary<string, UserConfig> { ["ALPHA"] = new UserConfig { Data = new Dictionary<string, string> { ["role"] = "config" } } }
-        };
-        ConfiguredEngineController controller = new(fallback.Object, config, NoCurrentUser);
-
-        IReadOnlyDictionary<string, string> result = controller.GetUserData("ALPHA");
-
-        Assert.Equal("config", result["role"]);
-        Assert.Equal("4", result["desk"]);
-    }
-
-    /// <summary>Falls back to the wrapped provider's data for an unconfigured user.</summary>
-    [Fact]
-    public void ConfiguredEngineController_UnknownUser_FallsBackToFallbackData()
-    {
-        IReadOnlyDictionary<string, string> fallbackData = new Dictionary<string, string> { ["k"] = "v" };
-        Mock<IEngineController> fallback = new();
-        fallback.Setup(f => f.GetUserData("UNKNOWN")).Returns(fallbackData);
-        ConfiguredEngineController controller = new(fallback.Object, new EngineConfigFile(), NoCurrentUser);
-
-        Assert.Same(fallbackData, controller.GetUserData("UNKNOWN"));
-    }
-
-    /// <summary>Config groups are merged over the fallback's own groups, config winning on key conflicts.</summary>
-    [Fact]
-    public void ConfiguredEngineController_MergesGroupsConfigOverFallback()
-    {
-        Mock<IEngineController> fallback = new();
-        fallback.Setup(f => f.UserGroups).Returns(
-            new Dictionary<string, IReadOnlyList<string>> { ["OPS"] = ["FALLBACK-USER"], ["ONLY-FALLBACK"] = ["X"] });
-
-        EngineConfigFile config = new()
-        {
-            UserGroups = new Dictionary<string, List<string>> { ["OPS"] = ["ALPHA", "BETA"] }
-        };
-        ConfiguredEngineController controller = new(fallback.Object, config, NoCurrentUser);
-
-        IReadOnlyDictionary<string, IReadOnlyList<string>> groups = controller.UserGroups;
-
-        Assert.Equal(["ALPHA", "BETA"], groups["OPS"]);
-        Assert.Equal(["X"], groups["ONLY-FALLBACK"]);
-    }
-
-    /// <summary>Combines the fallback's names with configured user and group names, deduplicates, and sorts alphabetically.</summary>
-    [Fact]
-    public void ConfiguredEngineController_CombinesFallbackUsersAndGroupNames()
-    {
-        Mock<IEngineController> fallback = new();
-        fallback.Setup(f => f.Users).Returns((IReadOnlyList<string>)["DELTA"]);
-
-        EngineConfigFile config = new()
-        {
-            Users = new Dictionary<string, UserConfig>
-            {
-                ["CHARLIE"] = new UserConfig(),
-                ["ALPHA"] = new UserConfig()
-            },
-            UserGroups = new Dictionary<string, List<string>>
-            {
-                ["BRAVO"] = ["ALPHA"]
-            }
-        };
-        ConfiguredEngineController controller = new(fallback.Object, config, NoCurrentUser);
-
-        IReadOnlyList<string> names = controller.Users;
-
-        Assert.Equal(["ALPHA", "BRAVO", "CHARLIE", "DELTA"], names);
-    }
-
-    /// <summary>Empty config produces just the fallback's names.</summary>
-    [Fact]
-    public void ConfiguredEngineController_EmptyConfig_ReturnsFallbackUserNamesOnly()
-    {
-        ConfiguredEngineController controller = new(new TestEngineController(), new EngineConfigFile(), NoCurrentUser);
-        Assert.Empty(controller.Users);
-    }
-
     /// <summary>The default implementation is always Peer with no outgoing points or server users configured.</summary>
     [Fact]
     public void EngineController_PeerWithNothingConfigured()
     {
         TestEngineController controller = new();
-        Assert.Equal(NodeRole.Peer, controller.Role);
+        Assert.Equal(UserRole.Peer, controller.Role);
         Assert.Empty(controller.OutgoingPoints);
         Assert.Empty(controller.Servers);
-    }
-
-    /// <summary>Falls back to the wrapped provider when config does not set a role.</summary>
-    [Fact]
-    public void ConfiguredEngineController_FallsBackWhenRoleNotConfigured()
-    {
-        Mock<IEngineController> fallback = new();
-        fallback.Setup(f => f.Role).Returns(NodeRole.Server);
-        ConfiguredEngineController controller = new(fallback.Object, new EngineConfigFile(), NoCurrentUser);
-
-        Assert.Equal(NodeRole.Server, controller.Role);
-    }
-
-    /// <summary>An unrecognized config role string falls back to the wrapped provider.</summary>
-    [Fact]
-    public void ConfiguredEngineController_UnrecognizedRole_FallsBack()
-    {
-        Mock<IEngineController> fallback = new();
-        fallback.Setup(f => f.Role).Returns(NodeRole.Client);
-        ConfiguredEngineController controller = new(fallback.Object, new EngineConfigFile { NodeRole = "Bogus" }, NoCurrentUser);
-
-        Assert.Equal(NodeRole.Client, controller.Role);
-    }
-
-    /// <summary>A recognized config role overrides the fallback.</summary>
-    [Fact]
-    public void ConfiguredEngineController_RecognizedRole_Overrides()
-    {
-        ConfiguredEngineController controller = new(new TestEngineController(), new EngineConfigFile { NodeRole = "Server" }, NoCurrentUser);
-        Assert.Equal(NodeRole.Server, controller.Role);
-    }
-
-    /// <summary>Falls back to the wrapped provider when config lists no outgoing points.</summary>
-    [Fact]
-    public void ConfiguredEngineController_FallsBackWhenOutgoingPointsNotConfigured()
-    {
-        IReadOnlyList<ConnectionPoint> fallbackPoints = [new ConnectionPoint { IpAddress = "10.0.0.1", Port = 1 }];
-        Mock<IEngineController> fallback = new();
-        fallback.Setup(f => f.OutgoingPoints).Returns(fallbackPoints);
-        ConfiguredEngineController controller = new(fallback.Object, new EngineConfigFile(), NoCurrentUser);
-
-        Assert.Same(fallbackPoints, controller.OutgoingPoints);
-    }
-
-    /// <summary>Configured outgoing points replace the fallback's.</summary>
-    [Fact]
-    public void ConfiguredEngineController_OutgoingPointsOverrideFromConfig()
-    {
-        Mock<IEngineController> fallback = new();
-        fallback.Setup(f => f.OutgoingPoints).Returns([new ConnectionPoint { IpAddress = "10.0.0.1", Port = 1 }]);
-        EngineConfigFile config = new() { OutgoingPoints = [new ConnectionPointConfig { IpAddress = "10.0.0.5", Port = 9000 }] };
-        ConfiguredEngineController controller = new(fallback.Object, config, NoCurrentUser);
-
-        ConnectionPoint point = Assert.Single(controller.OutgoingPoints);
-
-        Assert.Equal("10.0.0.5", point.IpAddress);
-        Assert.Equal(9000, point.Port);
-    }
-
-    /// <summary>Config server users are merged over the fallback's own, config winning on key conflicts.</summary>
-    [Fact]
-    public void ConfiguredEngineController_MergesServerUsersConfigOverFallback()
-    {
-        Mock<IEngineController> fallback = new();
-        fallback.Setup(f => f.Servers).Returns(
-            new Dictionary<string, ServerUserConfig>
-            {
-                ["SERVER-A"] = new ServerUserConfig { ChildClients = ["FALLBACK-CHILD"] },
-                ["ONLY-FALLBACK"] = new ServerUserConfig { ChildClients = ["OTHER"] }
-            });
-
-        EngineConfigFile config = new()
-        {
-            ServerUsers = new Dictionary<string, ServerUserConfigEntry>
-            {
-                ["SERVER-A"] = new ServerUserConfigEntry { ChildClients = ["CONFIG-CHILD"] }
-            }
-        };
-        ConfiguredEngineController controller = new(fallback.Object, config, NoCurrentUser);
-
-        IReadOnlyDictionary<string, ServerUserConfig> servers = controller.Servers;
-
-        Assert.Equal(["CONFIG-CHILD"], servers["SERVER-A"].ChildClients);
-        Assert.Equal(["OTHER"], servers["ONLY-FALLBACK"].ChildClients);
     }
 
     /// <summary>By default no connection is identified by the controller (the engine decides), and no connection message is configured.</summary>
@@ -859,7 +647,7 @@ public sealed class ControlProviderTests
         Assert.Null(serializer.Deserialize(foreign.Memory));
     }
 
-    /// <summary>The connection hooks and types are not configurable from config.json and delegate to the wrapped provider.</summary>
+    /// <summary>The connection hooks and types are not configurable from the network file and delegate to the wrapped provider.</summary>
     [Fact]
     public void ConfiguredEngineController_ConnectionHooks_DelegateToFallback()
     {
@@ -870,7 +658,7 @@ public sealed class ControlProviderTests
         fallback.Setup(f => f.IdentifyConnection(connection)).Returns(identity);
         fallback.Setup(f => f.CreateConnectionMessage(connection)).Returns(message);
         fallback.Setup(f => f.ConnectionMessageType).Returns(typeof(TestHello));
-        ConfiguredEngineController controller = new(fallback.Object, new EngineConfigFile(), NoCurrentUser);
+        ConfiguredEngineController controller = new(fallback.Object, new NetworkConfig(), NoCurrentUser);
 
         Assert.Same(identity, controller.IdentifyConnection(connection));
         Assert.Same(message, controller.CreateConnectionMessage(connection));
@@ -882,26 +670,26 @@ public sealed class ControlProviderTests
     public void EngineController_ConfigFileDisabledByDefault()
     {
         TestEngineController controller = new();
-        Assert.False(controller.ConfigFileEnabled);
+        Assert.False(controller.CommandLineOverridesAllowed);
     }
 
-    /// <summary>ConfigFileEnabled has no config.json field and always delegates to the wrapped provider.</summary>
+    /// <summary>CommandLineOverridesAllowed has no network file field and always delegates to the wrapped provider.</summary>
     [Fact]
-    public void ConfiguredEngineController_ConfigFileEnabled_AlwaysDelegatesToFallback()
+    public void ConfiguredEngineController_CommandLineOverridesAllowed_AlwaysDelegatesToFallback()
     {
         Mock<IEngineController> fallback = new();
-        fallback.Setup(f => f.ConfigFileEnabled).Returns(false);
-        ConfiguredEngineController controller = new(fallback.Object, new EngineConfigFile(), NoCurrentUser);
+        fallback.Setup(f => f.CommandLineOverridesAllowed).Returns(false);
+        ConfiguredEngineController controller = new(fallback.Object, new NetworkConfig(), NoCurrentUser);
 
-        Assert.False(controller.ConfigFileEnabled);
+        Assert.False(controller.CommandLineOverridesAllowed);
     }
 
-    /// <summary>The packet type, serializer and field members have no config.json field and delegate straight to the wrapped controller.</summary>
+    /// <summary>The packet type, serializer and field members have no network file field and delegate straight to the wrapped controller.</summary>
     [Fact]
     public void ConfiguredEngineController_PacketMembers_DelegateToFallback()
     {
         TestPacketEngineController fallback = new();
-        ConfiguredEngineController controller = new(fallback, new EngineConfigFile(), NoCurrentUser);
+        ConfiguredEngineController controller = new(fallback, new NetworkConfig(), NoCurrentUser);
 
         Assert.Equal(typeof(TestPacket), controller.PacketType);
         Assert.Same(fallback.PacketSerializer, controller.PacketSerializer);
@@ -920,12 +708,12 @@ public sealed class ControlProviderTests
         Assert.Equal(new byte[] { 5 }, controller.GetPacketData(packet).ToArray());
     }
 
-    /// <summary>Every message-field member has no config.json field and always delegates straight to the wrapped provider, working through the real TestMessage mapping.</summary>
+    /// <summary>Every message-field member has no network file field and always delegates straight to the wrapped provider, working through the real TestMessage mapping.</summary>
     [Fact]
     public void ConfiguredEngineController_MessageFieldMembers_AlwaysDelegateToFallback()
     {
         TestEngineController fallback = new();
-        ConfiguredEngineController controller = new(fallback, new EngineConfigFile(), NoCurrentUser);
+        ConfiguredEngineController controller = new(fallback, new NetworkConfig(), NoCurrentUser);
 
         Assert.Equal(fallback.MessageType, controller.MessageType);
         Assert.Same(fallback.NetworkSerializer, controller.NetworkSerializer);
@@ -963,19 +751,19 @@ public sealed class ControlProviderTests
         Assert.Equal("URGENT", controller.GetTag(message));
     }
 
-    /// <summary>ExternalSystems has no config.json field and always delegates to the wrapped provider.</summary>
+    /// <summary>ExternalSystems has no network file field and always delegates to the wrapped provider.</summary>
     [Fact]
     public void ConfiguredEngineController_ExternalSystems_AlwaysDelegatesToFallback()
     {
         Mock<IExternalSystem> externalSystem = new();
         Mock<IEngineController> fallback = new();
         fallback.Setup(f => f.ExternalSystems).Returns([externalSystem.Object]);
-        ConfiguredEngineController controller = new(fallback.Object, new EngineConfigFile(), NoCurrentUser);
+        ConfiguredEngineController controller = new(fallback.Object, new NetworkConfig(), NoCurrentUser);
 
         Assert.Same(externalSystem.Object, Assert.Single(controller.ExternalSystems));
     }
 
-    /// <summary>UserConnectedHooks/UserDisconnectedHooks/MessageReceivedHooks have no config.json field and always delegate to the wrapped provider.</summary>
+    /// <summary>UserConnectedHooks/UserDisconnectedHooks/MessageReceivedHooks have no network file field and always delegate to the wrapped provider.</summary>
     [Fact]
     public void ConfiguredEngineController_ConnectionAndMessageHooks_AlwaysDelegateToFallback()
     {
@@ -986,7 +774,7 @@ public sealed class ControlProviderTests
         fallback.Setup(f => f.UserConnectedHooks).Returns([connectedHook]);
         fallback.Setup(f => f.UserDisconnectedHooks).Returns([disconnectedHook]);
         fallback.Setup(f => f.MessageReceivedHooks).Returns([receivedHook]);
-        ConfiguredEngineController controller = new(fallback.Object, new EngineConfigFile(), NoCurrentUser);
+        ConfiguredEngineController controller = new(fallback.Object, new NetworkConfig(), NoCurrentUser);
 
         Assert.Same(connectedHook, Assert.Single(controller.UserConnectedHooks));
         Assert.Same(disconnectedHook, Assert.Single(controller.UserDisconnectedHooks));
@@ -997,7 +785,7 @@ public sealed class ControlProviderTests
     [Fact]
     public void ConfiguredEngineController_NoCertificateFilesConfigured_FallsBackToStoreLookup()
     {
-        ConfiguredEngineController controller = new(new TestEngineController(), new EngineConfigFile(), NoCurrentUser);
+        ConfiguredEngineController controller = new(new TestEngineController(), new NetworkConfig(), NoCurrentUser);
 
         Assert.Throws<InvalidOperationException>(() => controller.ConnectionOptions);
     }

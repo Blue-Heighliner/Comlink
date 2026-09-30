@@ -1,33 +1,34 @@
 namespace BlueHeighliner.Comlink.Control;
 
 /// <summary>
-/// Engine-level decorator applying every <c>config.json</c> field over whichever <see cref="IEngineController"/>
-/// is built from the host's <see cref="IEngineConfiguration"/> (an <see cref="EngineController"/>) — field by field,
-/// for just the members that have a corresponding <c>config.json</c> field; every other member, including the
-/// entire message-format surface, delegates straight to the wrapped provider. Registered by
-/// <see cref="EngineExtensions.UseEngine"/>.
-/// <see cref="ConnectionOptions"/> has no <c>config.json</c> field of its own but is reimplemented (rather than
-/// delegated) so it consumes this decorator's own, potentially config-overridden, <see cref="GetCertificateName"/>
-/// and <see cref="TrustedAuthorityCertificateName"/> instead of the wrapped provider's raw ones.
+/// Engine-level decorator applying the network configuration file's node settings for the user this process runs as, over
+/// whichever <see cref="IEngineController"/> is built from the host's <see cref="IEngineConfiguration"/> (an
+/// <see cref="EngineController"/>): the data folder, the identity certificate file, and the alert, tag and print
+/// settings, field by field; every other member, including the entire message-format surface and everything
+/// about users (which the wrapped <see cref="EngineController"/> reads from the same file), delegates straight to the wrapped provider.
+/// Registered by <see cref="EngineExtensions.UseEngine"/>. The user is the one named on the command line, or else the installed
+/// user; only the one named on the command line decides <see cref="AppDataPath"/>, since an installed user is not known
+/// until that path has been read.
 /// </summary>
 internal sealed class ConfiguredEngineController : IEngineController
 {
     /// <summary>Initializes a new instance wrapping <paramref name="fallback"/> with config overrides.</summary>
     /// <param name="fallback">The registered control-interface implementation to fall back to when config does not override.</param>
-    /// <param name="config">Engine configuration providing the optional overrides.</param>
+    /// <param name="config">The network configuration providing the node settings.</param>
     /// <param name="currentUserProvider">Tracks the user name of the currently running instance, needed by <see cref="ConnectionOptions"/>.</param>
-    public ConfiguredEngineController(IEngineController fallback, EngineConfigFile config, ICurrentUserProvider currentUserProvider)
+    public ConfiguredEngineController(IEngineController fallback, NetworkConfig config, ICurrentUserProvider currentUserProvider)
     {
         this.fallback = fallback;
         this.config = config;
         this.currentUserProvider = currentUserProvider;
-        userData = config.GetUserData();
     }
 
     private readonly IEngineController fallback;
-    private readonly EngineConfigFile config;
+    private readonly NetworkConfig config;
     private readonly ICurrentUserProvider currentUserProvider;
-    private readonly IReadOnlyDictionary<string, IReadOnlyDictionary<string, string>> userData;
+
+    private NetworkUserConfig? Launched => config.Find(DebugUserName);
+    private NetworkUserConfig? Current => config.Find(DebugUserName ?? currentUserProvider.UserName);
 
     /// <inheritdoc />
     public Type MessageType => fallback.MessageType;
@@ -121,11 +122,11 @@ internal sealed class ConfiguredEngineController : IEngineController
     /// <inheritdoc />
     public string AppVersion => fallback.AppVersion;
     /// <inheritdoc />
-    public string AppDataPath => config.DataFolder switch
+    public string AppDataPath => Launched?.DataFolder switch
     {
         null => fallback.AppDataPath,
-        ['@', ..] => Path.Combine(fallback.AppDataPath, config.DataFolder[1..].TrimStart(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar)),
-        _ => config.DataFolder
+        ['@', ..] folder => Path.Combine(fallback.AppDataPath, folder[1..].TrimStart(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar)),
+        string folder => folder
     };
     /// <inheritdoc />
     public bool IsKioskMode => fallback.IsKioskMode;
@@ -135,58 +136,45 @@ internal sealed class ConfiguredEngineController : IEngineController
     public Uri? WindowIconUri => fallback.WindowIconUri;
 
     /// <inheritdoc />
-    public string? DebugUserName => config.UserName ?? fallback.DebugUserName;
+    public string? DebugUserName => config.User ?? fallback.DebugUserName;
     /// <inheritdoc />
-    public IReadOnlyList<string> Users
-    {
-        get
-        {
-            HashSet<string> names = new(fallback.Users, StringComparer.OrdinalIgnoreCase);
-            foreach (string user in config.Users.Keys)
-            {
-                names.Add(user.ToUpperInvariant());
-            }
-            foreach (string group in config.UserGroups.Keys)
-            {
-                names.Add(group.ToUpperInvariant());
-            }
-            return [.. names.OrderBy(n => n)];
-        }
-    }
+    public IReadOnlyList<string> Users => fallback.Users;
     /// <inheritdoc />
-    public IReadOnlyDictionary<string, IReadOnlyList<string>> UserGroups
-    {
-        get
-        {
-            Dictionary<string, IReadOnlyList<string>> merged = new(fallback.UserGroups, StringComparer.OrdinalIgnoreCase);
-            foreach ((string groupName, List<string> members) in config.UserGroups)
-            {
-                merged[groupName] = members.AsReadOnly();
-            }
-            return merged;
-        }
-    }
+    public IReadOnlyDictionary<string, IReadOnlyList<string>> UserGroups => fallback.UserGroups;
 
     /// <inheritdoc />
-    public int PeerPort => config.PeerPort ?? fallback.PeerPort;
+    public UserRole Role => fallback.Role;
     /// <inheritdoc />
-    public int InterfacePort => config.InterfacePort ?? fallback.InterfacePort;
+    public IReadOnlyList<ConnectionPoint> OutgoingPoints => fallback.OutgoingPoints;
+    /// <inheritdoc />
+    public IReadOnlyDictionary<string, ServerUserConfig> Servers => fallback.Servers;
+    /// <inheritdoc />
+    public IReadOnlyDictionary<string, string> GetUserData(string userName) => fallback.GetUserData(userName);
+    /// <inheritdoc />
+    public string GetCertificateName(string userName) => fallback.GetCertificateName(userName);
+    /// <inheritdoc />
+    public string TrustedAuthorityCertificateName => fallback.TrustedAuthorityCertificateName;
 
     /// <inheritdoc />
-    public string AlertLabel => string.IsNullOrEmpty(config.AlertText) ? fallback.AlertLabel : config.AlertText;
+    public int PeerPort => fallback.PeerPort;
     /// <inheritdoc />
-    public TimeSpan AlarmSoundDuration => config.AlarmSoundSeconds is { } seconds ? TimeSpan.FromSeconds(seconds) : fallback.AlarmSoundDuration;
+    public int InterfacePort => fallback.InterfacePort;
+
     /// <inheritdoc />
-    public bool QuickConfirmationEnabled => config.QuickConfirmationEnabled ?? fallback.QuickConfirmationEnabled;
+    public string AlertLabel => Current?.AlertText is { Length: > 0 } text ? text : fallback.AlertLabel;
     /// <inheritdoc />
-    public bool ComposeAlertsEnabled => config.ComposeAlertsEnabled ?? fallback.ComposeAlertsEnabled;
+    public TimeSpan AlarmSoundDuration => Current?.AlarmSoundSeconds is { } seconds ? TimeSpan.FromSeconds(seconds) : fallback.AlarmSoundDuration;
+    /// <inheritdoc />
+    public bool QuickConfirmationEnabled => Current?.QuickConfirmationEnabled ?? fallback.QuickConfirmationEnabled;
+    /// <inheritdoc />
+    public bool ComposeAlertsEnabled => Current?.ComposeAlertsEnabled ?? fallback.ComposeAlertsEnabled;
 
     /// <inheritdoc />
     public IReadOnlyList<MessagePriorityOption> Priorities => fallback.Priorities;
     /// <inheritdoc />
-    public bool TagsEnabled => config.MessageTagsEnabled ?? fallback.TagsEnabled;
+    public bool TagsEnabled => Current?.MessageTagsEnabled ?? fallback.TagsEnabled;
     /// <inheritdoc />
-    public string TagLabel => string.IsNullOrEmpty(config.MessageTagLabel) ? fallback.TagLabel : config.MessageTagLabel;
+    public string TagLabel => Current?.MessageTagLabel is { Length: > 0 } label ? label : fallback.TagLabel;
     /// <inheritdoc />
     public IReadOnlyList<TagPriorityBlock> BlockedCombinations => fallback.BlockedCombinations;
     /// <inheritdoc />
@@ -197,7 +185,7 @@ internal sealed class ConfiguredEngineController : IEngineController
     public string GetUserSecurityLevel(string userName) => fallback.GetUserSecurityLevel(userName);
 
     /// <inheritdoc />
-    public bool PrintReceivedDefaultEnabled => config.PrintReceivedEnabled ?? fallback.PrintReceivedDefaultEnabled;
+    public bool PrintReceivedDefaultEnabled => Current?.PrintReceivedEnabled ?? fallback.PrintReceivedDefaultEnabled;
     /// <inheritdoc />
     public int GetPrintCount(object message) => fallback.GetPrintCount(message);
 
@@ -205,12 +193,12 @@ internal sealed class ConfiguredEngineController : IEngineController
     public bool CanDelete(FolderType folderType) => fallback.CanDelete(folderType);
 
     /// <inheritdoc />
-    /// <exception cref="InvalidOperationException">Only one of <c>PeerCertificateFile</c>/<c>TrustedAuthorityCertificateFile</c> is set - they must be set together.</exception>
+    /// <exception cref="InvalidOperationException">Only one of the current user's <c>CertificateFile</c> and the network's <c>TrustedAuthorityCertificateFile</c> is set - they must be set together.</exception>
     public MsmtSessionPeerOptions ConnectionOptions
     {
         get
         {
-            string? peerFile = config.GetPeerCertificateFilePath();
+            string? peerFile = Current is { } current ? config.GetCertificateFilePath(current) : null;
             string? authorityFile = config.GetTrustedAuthorityCertificateFilePath();
             if (peerFile is null && authorityFile is null)
             {
@@ -218,7 +206,7 @@ internal sealed class ConfiguredEngineController : IEngineController
             }
             if (peerFile is null || authorityFile is null)
             {
-                throw new InvalidOperationException("PeerCertificateFile and TrustedAuthorityCertificateFile must both be set together.");
+                throw new InvalidOperationException("A user's CertificateFile and the network's TrustedAuthorityCertificateFile must both be set together.");
             }
             return fallback.ConfigureConnectionOptions(MsmtCertificateLookup.BuildPeerOptionsFromFiles(peerFile, authorityFile));
         }
@@ -231,29 +219,6 @@ internal sealed class ConfiguredEngineController : IEngineController
     public MicroGatePeerOptions MicroGateOptions => fallback.MicroGateOptions;
 
     /// <inheritdoc />
-    public NodeRole Role =>
-        config.NodeRole is not null && Enum.TryParse(config.NodeRole, ignoreCase: true, out NodeRole role)
-            ? role
-            : fallback.Role;
-
-    /// <inheritdoc />
-    public IReadOnlyList<ConnectionPoint> OutgoingPoints => config.OutgoingPoints.Count > 0 ? config.GetOutgoingPoints() : fallback.OutgoingPoints;
-
-    /// <inheritdoc />
-    public IReadOnlyDictionary<string, ServerUserConfig> Servers
-    {
-        get
-        {
-            Dictionary<string, ServerUserConfig> merged = new(fallback.Servers, StringComparer.OrdinalIgnoreCase);
-            foreach ((string serverName, ServerUserConfig serverConfig) in config.GetServerUsers())
-            {
-                merged[serverName] = serverConfig;
-            }
-            return merged;
-        }
-    }
-
-    /// <inheritdoc />
     public Type? ConnectionMessageType => fallback.ConnectionMessageType;
     /// <inheritdoc />
     public Type? ConnectionResponseType => fallback.ConnectionResponseType;
@@ -261,7 +226,7 @@ internal sealed class ConfiguredEngineController : IEngineController
     public INetworkSerializer? ConnectionSerializer => fallback.ConnectionSerializer;
 
     /// <inheritdoc />
-    public bool ConfigFileEnabled => fallback.ConfigFileEnabled;
+    public bool CommandLineOverridesAllowed => fallback.CommandLineOverridesAllowed;
 
     /// <inheritdoc />
     public IReadOnlyList<IExternalSystem> ExternalSystems => fallback.ExternalSystems;
@@ -285,30 +250,14 @@ internal sealed class ConfiguredEngineController : IEngineController
     public IReadOnlyList<AutoForwardControllerDefinition> AutoForwardControllers => fallback.AutoForwardControllers;
 
     /// <inheritdoc />
-    public UserInfo? ResolveCode(string userCode) => fallback.ResolveCode(userCode);
-    /// <inheritdoc />
-    public IReadOnlyDictionary<string, string> GetUserData(string userName)
-    {
-        IReadOnlyDictionary<string, string> inherited = fallback.GetUserData(userName);
-        if (!userData.TryGetValue(userName, out IReadOnlyDictionary<string, string>? configured) || configured.Count == 0) { return inherited; }
+    public string? ResolveUserName(string userCode) => fallback.ResolveUserName(userCode);
 
-        Dictionary<string, string> merged = new(inherited);
-        foreach ((string key, string value) in configured) { merged[key] = value; }
-        return merged;
-    }
+    /// <inheritdoc />
+    public UserInfo GetUserInfo(string userName) => fallback.GetUserInfo(userName);
     /// <inheritdoc />
     public UserIdentity? IdentifyConnection(ConnectionInfo connection) => fallback.IdentifyConnection(connection);
     /// <inheritdoc />
     public object? CreateConnectionMessage(ConnectionInfo connection) => fallback.CreateConnectionMessage(connection);
     /// <inheritdoc />
     public object? CreateConnectionResponse(ConnectionInfo connection) => fallback.CreateConnectionResponse(connection);
-    /// <inheritdoc />
-    public string GetCertificateName(string userName)
-        => config.PeerCertificateName is { } ownName && string.Equals(userName, currentUserProvider.UserName, StringComparison.OrdinalIgnoreCase)
-            ? ownName
-            : fallback.GetCertificateName(userName);
-
-    /// <inheritdoc />
-    public string TrustedAuthorityCertificateName
-        => config.TrustedAuthorityCertificateName ?? fallback.TrustedAuthorityCertificateName;
 }

@@ -10,4 +10,4 @@
 
 using Markwardt.ScriptUtilities;
 
-(await Script.Run("dotnet", "run", "--no-build", "--project", "Sample/Sample.csproj", "--", "--config", "Scripts/Scenarios/ServerCluster/Client1.json")).Verify();
+(await Script.Run("dotnet", "run", "--no-build", "--project", "Sample/Sample.csproj", "--", "--config", "Scripts/Scenarios/ServerCluster/Config.json", "--user", "CLIENT1")).Verify();

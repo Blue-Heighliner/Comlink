@@ -50,7 +50,7 @@ public sealed class AutoForwardServiceTests
         Mock<TestEngineController> engineController = new() { CallBase = true };
         engineController.Setup(e => e.AutoForwardControllers).Returns((IReadOnlyList<AutoForwardControllerDefinition>)[]);
         Mock<IUserService> userService = new();
-        userService.Setup(u => u.GetCurrentUserInfo()).Returns(new UserInfo { Name = "ME", Code = "C1" });
+        userService.Setup(u => u.GetCurrentUserInfo()).Returns(new UserInfo { Name = "ME" });
         FakeMessageRoutingService routing = new();
         Mock<IAutoForwardTargetsRepository> targets = new();
         AutoForwardService service = new(peer, engineController.Object, userService.Object, routing, targets.Object, noLogger);

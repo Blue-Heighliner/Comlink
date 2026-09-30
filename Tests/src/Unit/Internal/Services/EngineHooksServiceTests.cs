@@ -70,7 +70,7 @@ public sealed class EngineHooksServiceTests
         engineController.Setup(e => e.Users).Returns((IReadOnlyList<string>)[]);
         engineController.Setup(e => e.UserGroups).Returns(new Dictionary<string, IReadOnlyList<string>>());
         Mock<IUserService> userService = new();
-        userService.Setup(u => u.GetCurrentUserInfo()).Returns(new UserInfo { Name = "ME", Code = "C1" });
+        userService.Setup(u => u.GetCurrentUserInfo()).Returns(new UserInfo { Name = "ME" });
         FakeMessageRoutingService routing = new();
         EngineHooksService service = new(peer, engineController.Object, userService.Object, routing, noLogger);
         return (service, peer, engineController, userService, routing);
@@ -210,7 +210,6 @@ public sealed class EngineHooksServiceTests
         Assert.Equal(2, users.Count);
         UserInfo alice = Assert.Single(users, u => u.Name == "Alice");
         Assert.Equal(["OPS"], alice.Groups);
-        Assert.Equal(string.Empty, alice.Code);
         UserInfo bob = Assert.Single(users, u => u.Name == "Bob");
         Assert.Empty(bob.Groups);
         Assert.True(seen.IsConnected("Alice"));
@@ -317,7 +316,7 @@ public sealed class EngineHooksServiceTests
         engineController.Setup(e => e.UserDisconnectedHooks).Returns((IReadOnlyList<Action<IUserConnectionHookContext>>)[]);
         engineController.Setup(e => e.MessageReceivedHooks).Returns((IReadOnlyList<Action<IMessageReceivedHookContext>>)[]);
         Mock<IUserService> userService = new();
-        userService.Setup(u => u.GetCurrentUserInfo()).Returns(new UserInfo { Name = "ME", Code = "C1" });
+        userService.Setup(u => u.GetCurrentUserInfo()).Returns(new UserInfo { Name = "ME" });
         EngineHooksService service = new(peer, engineController.Object, userService.Object, new FakeMessageRoutingService(), noLogger);
         using CancellationTokenSource cts = new();
         Task startTask = service.Start(cts.Token);
@@ -344,7 +343,7 @@ public sealed class EngineHooksServiceTests
         engineController.Setup(e => e.UserDisconnectedHooks).Returns((IReadOnlyList<Action<IUserConnectionHookContext>>)[]);
         engineController.Setup(e => e.MessageReceivedHooks).Returns((IReadOnlyList<Action<IMessageReceivedHookContext>>)[]);
         Mock<IUserService> userService = new();
-        userService.Setup(u => u.GetCurrentUserInfo()).Returns(new UserInfo { Name = "ME", Code = "C1" });
+        userService.Setup(u => u.GetCurrentUserInfo()).Returns(new UserInfo { Name = "ME" });
         FakeMessageRoutingService routing = new();
         EngineHooksService service = new(peer, engineController.Object, userService.Object, routing, noLogger);
         using CancellationTokenSource cts = new();

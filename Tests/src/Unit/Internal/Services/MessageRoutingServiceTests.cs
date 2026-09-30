@@ -213,14 +213,14 @@ public sealed class MessageRoutingServiceTests
     [Fact]
     public async Task RouteAsync_GroupAddress_ExpandsToMemberUsers()
     {
-        EngineConfigFile config = new()
+        NetworkConfig config = new()
         {
             UserGroups = new Dictionary<string, List<string>>
             {
                 ["OPS"] = ["ALPHA", "BETA"]
             }
         };
-        IEngineController groups = new ConfiguredEngineController(format, config, new CurrentUserProvider());
+        IEngineController groups = new TestEngineController(config);
         FakePeerService fake = new();
         MessageRoutingService service = new(fake, groups, loggerFactory);
 
@@ -244,7 +244,7 @@ public sealed class MessageRoutingServiceTests
     [Fact]
     public async Task RouteAsync_NestedGroupAddress_ExpandsToLeafUsers()
     {
-        EngineConfigFile config = new()
+        NetworkConfig config = new()
         {
             UserGroups = new Dictionary<string, List<string>>
             {
@@ -252,7 +252,7 @@ public sealed class MessageRoutingServiceTests
                 ["OUTER"] = ["INNER", "BETA"]
             }
         };
-        IEngineController groups = new ConfiguredEngineController(format, config, new CurrentUserProvider());
+        IEngineController groups = new TestEngineController(config);
         FakePeerService fake = new();
         MessageRoutingService service = new(fake, groups, loggerFactory);
 

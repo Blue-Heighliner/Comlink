@@ -1,7 +1,7 @@
 namespace BlueHeighliner.Comlink.Services;
 
 /// <summary>
-/// The storage half of a storage server (see <see cref="IEngineBuilder.ServerStorage"/>): keeps a copy of each
+/// The storage half of a storage server (see <see cref="UserInfo.StoresMessages"/>): keeps a copy of each
 /// message the server routes, and answers a retrieval request by finding the stored messages that fit its criteria.
 /// Any user can retrieve any stored message; nothing restricts a request to the requester's own traffic. Sending the found copies is left to the caller, since only the server's peer service
 /// knows how to reach the requester and this service must not depend on it.

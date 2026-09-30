@@ -27,26 +27,21 @@ public sealed class UserServiceTests : IDisposable
     [Fact]
     public async Task InstallAsync_WithValidCode_ReturnsUserInfo()
     {
-        UserInfo expected = new()
-        {
-            Name = "TestUser",
-            Code = "TS01"
-        };
-        engineControllerMock.Setup(r => r.ResolveCode("TS01")).Returns(expected);
+        engineControllerMock.Setup(r => r.ResolveUserName("TS01")).Returns("TestUser");
+        engineControllerMock.Setup(r => r.GetUserInfo("TestUser")).Returns(new UserInfo { Name = "TestUser" });
 
         UserService service = CreateService();
         UserInfo? result = await service.Install("TS01");
 
         Assert.NotNull(result);
         Assert.Equal("TestUser", result.Name);
-        Assert.Equal("TS01", result.Code);
     }
 
     /// <summary>Verifies that Install returns null when the user code is unrecognized.</summary>
     [Fact]
     public async Task InstallAsync_WithInvalidCode_ReturnsNull()
     {
-        engineControllerMock.Setup(r => r.ResolveCode("INVALID")).Returns((UserInfo?)null);
+        engineControllerMock.Setup(r => r.ResolveUserName("INVALID")).Returns((string?)null);
 
         UserService service = CreateService();
         UserInfo? result = await service.Install("INVALID");
@@ -58,12 +53,8 @@ public sealed class UserServiceTests : IDisposable
     [Fact]
     public async Task InstallAsync_WithValidCode_MakesServiceInstalled()
     {
-        UserInfo userInfo = new()
-        {
-            Name = "MyNode",
-            Code = "MN01"
-        };
-        engineControllerMock.Setup(r => r.ResolveCode("MN01")).Returns(userInfo);
+        engineControllerMock.Setup(r => r.ResolveUserName("MN01")).Returns("MyNode");
+        engineControllerMock.Setup(r => r.GetUserInfo("MyNode")).Returns(new UserInfo { Name = "MyNode" });
 
         UserService service = CreateService();
         await service.Install("MN01");
@@ -77,12 +68,8 @@ public sealed class UserServiceTests : IDisposable
     [Fact]
     public async Task LoadAsync_WithExistingStateFile_RestoresState()
     {
-        UserInfo userInfo = new()
-        {
-            Name = "Restored",
-            Code = "RS01"
-        };
-        engineControllerMock.Setup(r => r.ResolveCode("RS01")).Returns(userInfo);
+        engineControllerMock.Setup(r => r.ResolveUserName("RS01")).Returns("Restored");
+        engineControllerMock.Setup(r => r.GetUserInfo("Restored")).Returns(new UserInfo { Name = "Restored" });
 
         UserService service = CreateService();
         await service.Install("RS01");
@@ -107,8 +94,9 @@ public sealed class UserServiceTests : IDisposable
     [Fact]
     public async Task Install_RaisesInstalledOnlyOnSuccess()
     {
-        engineControllerMock.Setup(r => r.ResolveCode("OK01")).Returns(new UserInfo { Name = "Ok", Code = "OK01" });
-        engineControllerMock.Setup(r => r.ResolveCode("BAD")).Returns((UserInfo?)null);
+        engineControllerMock.Setup(r => r.ResolveUserName("OK01")).Returns("Ok");
+        engineControllerMock.Setup(r => r.GetUserInfo("Ok")).Returns(new UserInfo { Name = "Ok" });
+        engineControllerMock.Setup(r => r.ResolveUserName("BAD")).Returns((string?)null);
         UserService service = CreateService();
         List<string?> raised = [];
         service.Installed += () => raised.Add(service.GetCurrentUserInfo()?.Name);

@@ -4,7 +4,7 @@ A host tells the engine how to run by implementing `IEngineConfiguration` and na
 
 ## Concept
 
-Engine never reads environment variables, hardcodes paths, or calls host-specific APIs directly. Instead, every piece of external configuration and rule-based behaviour is either a call on `IEngineBuilder` or a field in the `--config` file. A host states only what differs from the engine's defaults:
+Engine never reads environment variables, hardcodes paths, or calls host-specific APIs directly. Instead, every piece of external configuration and rule-based behaviour is either a call on `IEngineBuilder` or part of the network configuration file, which describes the users of the network. A host states only what differs from the engine's defaults:
 
 ```csharp
 public sealed class MyEngineConfiguration : IEngineConfiguration
@@ -23,15 +23,17 @@ await Engine.Start<MyEngineConfiguration>(args);
 
 `EngineBuilder` (internal) implements `IEngineBuilder` by recording what it is told; nothing is interpreted while configuring. `EngineController` (internal) reads the recorded state through `IEngineController` and supplies the default for every setting the host left alone, which is what every service, ViewModel and repository in the engine depends on. Keeping the recording separate from the reading means a configuration can be checked as a whole (`Engine.Start` throws an `InvalidOperationException` naming a missing message type or unmapped field before any service starts), and that tests can replace a single behavior of the controller.
 
-**A configuration describes non-config-file behavior only. It must never read `EngineConfigFile` itself, and it must never read an environment variable.** Where a setting has a corresponding `config.json` field, that override is applied separately, at the engine level, as a decorator layered on top of the controller built from the configuration (see [Config File Overlay](#config-file-overlay) below). This split keeps "what does this app do out of the box" (the configuration) and "what does `config.json` change about that" (`ConfiguredEngineController`, a decorator the engine owns) as two independent, separately testable concerns, and means a host is never tempted to reimplement `config.json` parsing just to add one small piece of non-config behavior.
+**A configuration describes non-config-file behavior only. It must never read `NetworkConfig` itself, and it must never read an environment variable.** Everything about the network's users, and the settings of the node a user runs, comes from the network configuration file, applied by the engine itself: the users' info is read by `EngineController`, and the node settings (data folder, identity certificate file, alert, tag and print settings) are applied as a decorator layered on top of it (see [Network Configuration File](#network-configuration-file) below). This split keeps "what does this app do out of the box" (the configuration) and "who is on this network and how do they run" (the file) as two independent, separately testable concerns, and means a host is never tempted to reimplement file parsing just to add one small piece of non-file behavior.
 
 **Dependency injection:** `Engine.Start<T>` builds a bootstrap container holding logging (`ILoggerFactory`, `ILogger<T>`) plus whatever the host's `configureServices` argument registers, and constructs `T` from it, so a configuration's constructor can take services. The bootstrap container is deliberately separate from the running engine's: the engine's own logging providers need the engine's configuration (for the log file location), so a configuration built from the running container could not take a logger without a cycle, and it has to be built before the container exists anyway, because it decides whether `--config` is read and so what the container is built from. The same `configureServices` registrations are applied again to the running engine's container, which is also where a host registers anything else it wants running alongside the engine (for example a hosted service that uses `IServiceConnection`); a service registered there therefore exists once in each container. The bootstrap container lives until the engine exits, since a configuration may have handed the builder functions that use what was injected.
 
-## Config File Overlay
+## Network Configuration File
 
-`EngineExtensions.UseEngine` registers `IEngineController` as a `ConfiguredEngineController` wrapping the `EngineController` built from the host's configuration. `ConfiguredEngineController` takes that controller, the loaded `EngineConfigFile`, and `ICurrentUserProvider`, and, member by member, returns the file's value when it is set and the wrapped controller's value otherwise; a member with no corresponding `config.json` field always delegates straight to the wrapped controller. It is registered explicitly, never by convention scanning.
+The engine defines the schema of one network configuration file, shared by every node of a network (see [Config.md](Config.md) for every field). It holds the info for all users of the network, who is in which group, and the trusted certificate authority, so no user, port or connection is stated in code. It is read from the path given by the `--config` command-line argument, otherwise from `Config.json` in the current working directory; a missing default file is an empty network, while a `--config` path that does not exist is an error. The `--user` argument, or else a `User.json` in the working directory, names the user the process runs as, which lets a node skip the install screen and use that user's data folder.
 
-**Bootstrap ordering:** whether the file is read at all is itself a setting (`ConfigFile`), so `Engine.Start` constructs the configuration and builds the `EngineBuilder` first, reads its `IsConfigFileEnabled`, and only then loads `EngineConfigFile` if allowed. There is no `config.json` field for it (that would be circular), and a configuration cannot depend on the file for the same reason. When the file is not allowed, `--config` is ignored entirely and every setting uses what the host stated or its default, as if the argument had never been passed.
+`EngineController` reads the file for everything about users (`GetUserInfo`, `Users`, `UserGroups`, the trusted authority name, and so on, see [User Info](#user-info)). `EngineExtensions.UseEngine` registers `IEngineController` as a `ConfiguredEngineController` wrapping it, which takes the loaded `NetworkConfig` and `ICurrentUserProvider` and applies the node settings of the current user's entry: member by member, the entry's value when it is set and the wrapped controller's value otherwise; every other member delegates straight to the wrapped controller. It is registered explicitly, never by convention scanning. The current user is the one named by `--user`, or else the installed user, except for the data folder and the headless choice, which only the `--user` user decides since an installed user is not known until the data folder has been read.
+
+**Bootstrap ordering:** whether the command-line arguments may override the file and the user is itself a setting (`CommandLineOverrides`), so `Engine.Start` constructs the configuration and builds the `EngineBuilder` first, reads its `AreCommandLineOverridesAllowed`, and only then loads `NetworkConfig`, passing the arguments only if allowed. There is no field in the file for it (that would be circular), and a configuration cannot depend on the file for the same reason. When overrides are not allowed, `--config` and `--user` are ignored entirely, as if the arguments had never been passed, and only `Config.json` and `User.json` in the working directory are read.
 
 ## Settings
 
@@ -56,7 +58,7 @@ Internally the mappings become a `MessageMap` and a `PacketMap`, whose accessors
 
 **Default:** none for the message, since the engine has no message DTO of its own; no packetization.
 
-**Config file:** none; there is no `config.json` field for any message or packet member, since the whole point is that the engine does not know the DTO's shape.
+**Network file:** none; the file has no field for any message or packet member, since the whole point is that the engine does not know the DTO's shape.
 
 **Sample:** `SampleEngineConfiguration` maps every logical field onto `SampleMessage`, a DTO with deliberately differently-named fields (`Id`, `Sender`, `Title`, `Text`, `Recipients`, ...) to demonstrate that the mapping, not any assumed field name or shape, is what the engine relies on, and turns packetization on with `SamplePacket` and the default size and window.
 
@@ -72,7 +74,7 @@ This app's own identity and top-level presentation: the display and data-folder 
 
 **Default:** the name comes from the entry assembly name; the version is the entry assembly's `major.minor.build` version (`1.0.0` if it has none); the data path is `%APPDATA%\{AppName}`, computed from the name so a host stating only `AppName` gets a matching data folder; kiosk mode is off; the home text is `"HOME"`; the icon is the operating system's.
 
-**Config file:** `DataFolder` overrides the data path when set: `null` uses it unchanged; an absolute path is used verbatim; an `@`-prefixed path is relative to it (see [Config.md](Config.md)), which is what lets a host state both `AppName` and a `DataFolder` at once and have them compose correctly. The other settings have no `config.json` field.
+**Network file:** the entry of the user named by `--user` may set `DataFolder`: `null` uses the data path unchanged; an absolute path is used verbatim; an `@`-prefixed path is relative to it (see [Config.md](Config.md)), which is what lets a host state both `AppName` and a `DataFolder` at once and have them compose correctly. The other settings have no field in the file.
 
 **Sample:** `SampleEngineConfiguration` states the home text and the window icon; everything else uses the default. Changing the app data path's default runtime behavior has caused real data loss in this project before, so Sample deliberately never states `DataPath` or `AppName`.
 
@@ -81,34 +83,68 @@ This app's own identity and top-level presentation: the display and data-folder 
 ### User Identity
 
 ```csharp
-engine.DebugUser("TEST1").UserCodes(code => code == "CODE1" ? new UserInfo { ... } : null);
+engine.DebugUser("TEST1").UserCodes(code => code == "CODE1" ? "TEST1" : null);
 ```
 
-How this instance's own local user identity is established: a fixed debug override that bypasses the normal `State.json` lookup, and resolving a user activation code (entered during installation) to a `UserInfo`. See `Services.UserService`.
+How this instance's own local user identity is established: a fixed debug override that bypasses the normal `State.json` lookup, and mapping a user activation code (entered during installation) to the name of the user it installs, nothing more: everything else about that user comes from [User Info](#user-info). See `Services.UserService`.
 
 **Default:** no debug user; the code `"CODE"` resolves to the user `"TEST"`.
 
-**Config file:** `UserName` overrides the debug user when set. See [Config.md](Config.md). Code resolution has no `config.json` field.
+**Network file:** the `--user` argument overrides the debug user when given. See [Config.md](Config.md). Unless the host states its own code scheme, an install code is simply the name of a user of the network (case-insensitive), so `--user` and the install screen agree.
 
-**Sample:** `SampleEngineConfiguration` states one hard-coded install code per site used across `Scripts/Scenarios/` (`CLIENT1`, `CLIENT2`, `SERVER`, `SERVER1`, `SERVER2`, `PEER1`, `PEER2`, each resolving to the like-named user) instead of the default's one; it states no debug user, so `config.json`'s `UserName` applies on its own.
+**Sample:** `SampleEngineConfiguration` states no code scheme and no debug user: an install code is the name of a user in the network file its scenario passes, and each scenario script names its user with `--user`.
 
 ---
 
 ### User Directory
 
 ```csharp
-engine.Users("ALICE", "BOB").Group("OPS", "ALICE", "BOB").UserData("ALICE", new Dictionary<string, string> { ["role"] = "clerk" });
+engine.Users("ALICE", "BOB").Group("OPS", "ALICE", "BOB");
 ```
 
-Everything the engine knows about addressable users and groups: the names used for the destination auto-complete in the draft editor and for [connection identification](Identification.md), group membership for address expansion (members may be user names or other group names, enabling nested hierarchies), and the app-specific data attached to a user. A user is only a name here: nothing says where a user is reached, since that is worked out when a connection forms. `UserData` attaches whatever extra information a host wants to a user (a role, a station, a display name) as string keys and values, either by name (merging with anything already stated for that user) or as a lookup function for every user, with the by-name data winning; the engine does not interpret it, it travels with the user's `UserIdentity` to the host's own hooks.
+The addressable users and groups, stated in code and in the network file: the names used for the destination auto-complete in the draft editor and for [connection identification](Identification.md), and group membership for address expansion (members may be user names or other group names, enabling nested hierarchies). A name is only a name here; what is known about each user, including how a node run by that user connects, is stated through [User Info](#user-info). By convention user names are all uppercase.
 
 When a message is sent to a group, the Engine records which addressed groups each user was reached through. The sent message view shows this context, e.g. `USER-A (OPS)`, so the operator can see which group membership drove delivery.
 
-**Default:** no known users, groups, or data.
+**Default:** no known users or groups.
 
-**Config file:** merges `config.json`'s `UserGroups` over the stated groups (a file entry replaces a same-named group; groups only stated in code still pass through); unions the stated names with the file's `Users` and `UserGroups` keys, deduplicated and sorted; and merges the `Data` of the matching `Users` entry over the stated data (the file winning on a key conflict). See [Config.md](Config.md).
+**Network file:** the file's `UserGroups` merge over the stated groups (a file entry replaces a same-named group; groups only stated in code still pass through), and its user and group names are added to the stated names, deduplicated. A user's info lists the groups it is a member of.
 
 **Sample:** `SampleEngineConfiguration` states three built-in user names matching its codes; the file's names are still unioned in.
+
+---
+
+### User Info
+
+```json
+"Users": {
+  "SERVER1": { "Role": "Server", "PeerPort": 50221, "InterfacePort": 50220,
+    "OutgoingPoints": [ { "IpAddress": "10.0.0.2", "Port": 50223 } ], "ChildClients": [ "CLIENT1" ],
+    "StoresMessages": true, "SecurityLevel": "RESTRICTED" }
+}
+```
+
+Everything about one user is stated on that user's entry in the [network configuration file](#network-configuration-file), which the engine turns into a `UserInfo` and hands out by name (`IEngineController.GetUserInfo`); a user the file does not list is just a name. There is no per-aspect engine method for a user's role, ports, connections, security level and so on, and no user info in code. The fields:
+
+| Field | Meaning | Default |
+|-------|---------|---------|
+| `Role` | The [networking role](Peer.md#user-roles) of a node this user runs: `Peer`, `Client` or `Server` | `Peer` |
+| `PeerPort` | TCP port the node listens on for IP connections from other nodes | `50021` |
+| `InterfacePort` | Loopback TCP port of the local interface listener, always active in every role (see [Interface.md](Interface.md)) | `50020` |
+| `OutgoingPoints` | IP hosts and ports the node dials, and serial ports it opens, each kept connected by a heartbeat; a `Client` connects to the first only | none |
+| `ChildClients` | For a `Server`, the client users that belong to it | none |
+| `StoresMessages` | For a `Server`, whether it stores the messages it routes and answers retrieval requests (see [Server Storage](#server-storage)) | `false` |
+| `SecurityLevel` | The name of the level the user runs at (see [Security Levels](#security-levels)) | the lowest configured level |
+| `CertificateName` | The certificate subject name of the user: the identity certificate to look up for the local user, and the name others' certificates must carry (see [MSMT Certificates](#msmt-certificates)) | the user name |
+| `Data` | App-specific string keys and values; the engine does not interpret them, they travel with the user's `UserIdentity` | none |
+
+The current user's info is what decides how this node behaves, so it is read once a user is installed (or named by `--user`), not when the engine starts: until then the node is a `Peer` with the default ports and nothing connected, showing only the install screen. The topology a `Server` routes with, every server in the cluster and the child clients each owns, is every user in the [directory](#user-directory) whose role is `Server`, with its `ChildClients`. Every node on a network uses the same file, since a node learns about other users, such as which servers store messages, from it.
+
+**Default:** a user with nothing stated is a `Peer` on the default ports that connects nowhere.
+
+**Network file:** this is the file; each field above has the same name in a user's entry (see [Config.md](Config.md)), and the entry also carries the settings of the node that user runs.
+
+**Sample:** each scenario under `Scripts/Scenarios/` (`Peer`, `ClientServer`, `ServerCluster`) has its own `Config.json` describing its whole network: role, ports, outgoing points, child clients, security level, storage, certificate file and data folder for each of its users. Each scenario script passes it with `--config` and names its user with `--user`.
 
 ---
 
@@ -126,28 +162,9 @@ Who is on the other end of a connection, decided as the connection forms. `Ident
 
 **Default:** the hook returns `null` (the engine identifies an IP connection by its certificate name and a serial connection by its port name), and no connection message or response is stated, so no exchange takes place.
 
-**Config file:** none, because these are behavior, not settings.
+**Network file:** none, because these are behavior, not settings.
 
 **Sample:** none.
-
----
-
-### Ports
-
-```csharp
-engine.PeerPort(50021).InterfacePort(50020);
-```
-
-TCP port numbers for the peer listener (the one place a node accepts IP connections) and the local interface listener (always active, in every mode; see [Interface.md](Interface.md)).
-
-| Port | Default |
-|------|---------|
-| `PeerPort` | `50021` |
-| `InterfacePort` | `50020` |
-
-**Config file:** `PeerPort` and `InterfacePort` override what is stated, field by field, when set. See [Config.md](Config.md).
-
-**Sample:** none; the default plus the automatic config file overlay already cover every genuinely useful case.
 
 ---
 
@@ -161,9 +178,9 @@ Configuration for the alert-message feature in Client mode: the title bar's alar
 
 **Default:** `"ALERT"` / 30 seconds / on / on.
 
-**Config file:** `AlertText`, `AlarmSoundSeconds`, `QuickConfirmationEnabled` and `ComposeAlertsEnabled` override what is stated, field by field, when set. See [Config.md](Config.md).
+**Network file:** the current user's entry may set `AlertText`, `AlarmSoundSeconds`, `QuickConfirmationEnabled` and `ComposeAlertsEnabled`, overriding what is stated, field by field. See [Config.md](Config.md).
 
-**Sample:** none; the default plus the automatic config file overlay already cover every genuinely useful case.
+**Sample:** none; the default plus the network file already cover every genuinely useful case.
 
 ---
 
@@ -182,7 +199,7 @@ How messages are composed and displayed: the set of selectable priority levels (
 
 **Default:** a single `"Normal"` (value `0`) priority level; tags on with label `"Tag"`; no blocked combinations. Stating priorities twice replaces the earlier list.
 
-**Config file:** `MessageTagsEnabled` and `MessageTagLabel` override what is stated, field by field, when set. See [Config.md](Config.md). Priorities and blocked combinations have no `config.json` field.
+**Network file:** the current user's entry may set `MessageTagsEnabled` and `MessageTagLabel`, overriding what is stated, field by field. See [Config.md](Config.md). Priorities and blocked combinations have no field in the file.
 
 **Sample:** `SampleEngineConfiguration` states three priority levels (`"Low"`/`"Medium"`/`"High"`, values 0/1/2) instead of the default's one, and demonstrates both blocked-combination kinds: the `"SPAM"` tag is blocked regardless of priority, and `High` priority is blocked regardless of tag. Unlike Sample's other settings, the blocked combinations deliberately change default behavior from the engine's permissive "no blocks" default, since that is the only way to usefully demonstrate that part of the configuration.
 
@@ -198,7 +215,7 @@ Overrides the display label shown for one address type, everywhere it appears in
 
 **Default:** the enum name itself (`"To"`, `"Cc"`, `"External"`).
 
-**Config file:** none; address type labels have no `config.json` field.
+**Network file:** none; address type labels have no field in the file.
 
 **Sample:** `SampleEngineConfiguration` renames `External` to `"OUTSIDE"`, matching the `Kind` vocabulary `SampleRecipient` already uses for it (see [Message Format](#message-format)).
 
@@ -208,20 +225,18 @@ Overrides the display label shown for one address type, everywhere it appears in
 
 ```csharp
 engine
-    .SecurityLevels(("PUBLIC", "#2E7D32"), ("INTERNAL", "#1565C0"), ("RESTRICTED", "#C62828"))
-    .UserSecurityLevel("ALICE", "INTERNAL")
-    .UserSecurityLevel(userName => directory.LevelFor(userName));
+    .SecurityLevels(("PUBLIC", "#2E7D32"), ("INTERNAL", "#1565C0"), ("RESTRICTED", "#C62828"));
 ```
 
-Defines the ordered set of security levels a message may be sent at (`Message<TMessage>.SecurityLevel`, see [Message Format](#message-format)): each a display name paired with the hex color shown for it in the title bar's banner (`SecurityLevelBanner`, replacing the fixed orange "DEBUG" banner every user used to see). Order matters: each level ranks higher than the one stated before it, so the last one given is the most senior. `UserSecurityLevel` assigns individual users to a level by name, or (the `Func<string, string>` overload) replaces the per-user lookup wholesale, the same additive-versus-wholesale pattern as `UserData`; a user with no assignment runs at the lowest configured level.
+Defines the ordered set of security levels a message may be sent at (`Message<TMessage>.SecurityLevel`, see [Message Format](#message-format)): each a display name paired with the hex color shown for it in the title bar's banner (`SecurityLevelBanner`, replacing the fixed orange "DEBUG" banner every user used to see). Order matters: each level ranks higher than the one stated before it, so the last one given is the most senior. A user's level is the `SecurityLevel` on their [user info](#user-info).
 
 A destination user may only receive a message whose security level their own assigned level ranks at or above: `MessageRoutingService.Route` drops any lower-ranked destination before sending, and the draft editor's security level picker only ever offers the sending user's own level and lower, so a message can be deliberately declassified but never sent above the sender's own clearance. Turning the feature off entirely is just leaving `SecurityLevels` empty (the default): every message maps to an empty security level, the picker is hidden, and no destination is ever blocked for lacking one.
 
 **Default:** no security levels; the feature is off.
 
-**Config file:** none; security levels have no `config.json` field.
+**Network file:** the level each user runs at is that user's `SecurityLevel` in the file; the set of levels itself has no field.
 
-**Sample:** `SampleEngineConfiguration` defines three placeholder levels (`PUBLIC`, `INTERNAL`, `RESTRICTED`) and assigns them by site: `Peer1`/`Peer2` run at `PUBLIC`, `Client1`/`Client2` at `INTERNAL`, and the server sites (`Server`, `Server1`, `Server2`) at `RESTRICTED`.
+**Sample:** `SampleEngineConfiguration` defines three placeholder levels (`PUBLIC`, `INTERNAL`, `RESTRICTED`) and states each site's level on its user info: `PEER1`/`PEER2` run at `PUBLIC`, `CLIENT1`/`CLIENT2` at `INTERNAL`, and the server sites (`SERVER`, `SERVER1`, `SERVER2`) at `RESTRICTED`.
 
 ---
 
@@ -235,7 +250,7 @@ The print manager's automatic "print received" behavior: whether its toggle star
 
 **Default:** off / `1` for every message.
 
-**Config file:** `PrintReceivedEnabled` overrides what is stated when set. See [Config.md](Config.md). The print count has no `config.json` field.
+**Network file:** the current user's entry may set `PrintReceivedEnabled`, overriding what is stated. See [Config.md](Config.md). The print count has no field in the file.
 
 **Sample:** `SampleEngineConfiguration` states a print count that prints an alert message twice and every other received message once, demonstrating a rule that inspects the message itself; "print received" uses the default.
 
@@ -251,7 +266,7 @@ Whether the user can delete entries in a given root folder type (`FolderType.Inb
 
 **Default:** allowed for every folder type; deletion is unrestricted unless a host locks down specific folders.
 
-**Config file:** none; a fixed, code-level rule, not a per-deployment setting.
+**Network file:** none; a fixed, code-level rule, not a per-deployment setting.
 
 **Sample:** `SampleEngineConfiguration` allows deletion only in `FolderType.Drafts` and `FolderType.Notes`, protecting Inbox, Outbox, and Activity entries.
 
@@ -290,7 +305,7 @@ producing something a tool outside Comlink consumes, not for round-tripping thro
 
 **Default:** no custom formats; the export screen offers only the built-in JSON format.
 
-**Config file:** none; formats are behavior, not settings.
+**Network file:** none; formats are behavior, not settings.
 
 **Sample:** a `"Text"` format writing each message, draft, or note as readable plain text, restricted (via
 `entryTypes`) to Inbox, Outbox, Drafts, and Notes - Activity's structured entries are left to the built-in JSON
@@ -345,7 +360,7 @@ Calling `ImportFormat` again with the same name (case-insensitive) replaces that
 
 **Default:** no custom formats; the import screen offers only the built-in package format.
 
-**Config file:** none; formats are behavior, not settings.
+**Network file:** none; formats are behavior, not settings.
 
 **Sample:** a `"CSV"` format reading `Subject,User,Body` lines and staging one send per line, sent one at a time
 a second apart (`StagedSendMode.Sequential`, `stagedSendDelay: TimeSpan.FromSeconds(1)`).
@@ -376,7 +391,7 @@ adds themselves to their own target list, avoiding a self-forward loop. Calling 
 **Default:** no controllers; the auto forward screen's title bar button is hidden entirely for every user, since
 no one has access to anything.
 
-**Config file:** none; controllers are behavior, not settings. A target list, once a user sets it up, is
+**Network file:** none; controllers are behavior, not settings. A target list, once a user sets it up, is
 per-installation local data (see `Docs/Components/Data.md`, `AutoForwardTargetsEntity`), not config file state.
 
 **Sample:** an `"Escalation"` controller, open to every Peer/Client scenario site, that matches any received alert
@@ -387,19 +402,16 @@ or `URGENT`-tagged message.
 ### Server Storage
 
 ```csharp
-engine
-    .Server("Server1", "Client1", "Client2")
-    .Server("Server2", "Client3")
-    .ServerStorage("Server1");
+new UserInfo { Name = "SERVER1", Role = UserRole.Server, ChildClients = ["CLIENT1", "CLIENT2"], StoresMessages = true };
 ```
 
-Makes the named server users store messages: each keeps a copy of every message it routes (a message from one of its
+A server user whose [user info](#user-info) sets `StoresMessages` stores messages: each keeps a copy of every message it routes (a message from one of its
 children, or one forwarded to it by another server for its own children - never a confirmation or a retrieval
 request), once per message ID, in its own local database. It also answers a client's *retrieval request*, sent from
-the client's RETRIEVE screen (shown in the title bar only for a `NodeRole.Client` on a network where some server
+the client's RETRIEVE screen (shown in the title bar only for a `UserRole.Client` on a network where some server
 stores; see `Docs/Components/ViewModels.md`, `IRetrieveViewModel`), by sending back a copy of each stored message
-that fits. Every node states the same configuration, since a client learns which servers store from it, and each
-server must be a user given to `Server`. Calling it again adds to the set.
+that fits. Every node states the same user info, since a client learns which servers store from it, and only a user whose
+role is `Server` can store.
 
 A retrieval request is not a special wire format. Like a confirmation, it is a message of the configured message
 type, recognized by reading a field: the message mapping's required `Retrieval` group maps the request as ordinary typed
@@ -424,7 +436,7 @@ and stores nothing.
 
 **Default:** no server stores messages; the RETRIEVE button is never shown.
 
-**Config file:** none; storage is behavior, not a setting.
+**Network file:** none; storage is behavior, not a setting.
 
 **Sample:** `Server` (ClientServer scenario) and `Server1` (ServerCluster scenario) store; `Server2` does not.
 
@@ -433,34 +445,36 @@ and stores nothing.
 ### MicroGate Options
 
 ```csharp
-engine.MicroGateConnectionOptions(options => options with { MaxInfoField = 1024, Link = options.Link with { Crc = MicroGateCrc.Crc32Ccitt } });
+engine.MicroGateOptions(options => options with { MaxInfoField = 1024, Link = options.Link with { Crc = MicroGateCrc.Crc32Ccitt } });
 ```
 
 The options every serial connection starts its MicroGate peer with: line encoding, CRC and clocking (`Link`, which must match the station at the far end of the cable), frame size, transmit window and retransmission timing. The function receives the package defaults and returns the options to use. The HDLC address is not an option; each serial `ConnectionPoint` supplies it, used as both this station's and the remote station's address.
 
 **Default:** the MicroGate package defaults.
 
+**Sample:** caps frames at 1024 bytes and the transmit window at 4 (a smaller frame is always safe with any remote station); see the MSMT section for its timeout adjustment.
+
 ---
 
 ### MSMT Certificates
 
 ```csharp
-engine.CertificateName(user => $"COMLINK-{user}").TrustedAuthority("COMLINK-ROOT").ConnectionOptions(() => options);
+engine.TrustedAuthority("COMLINK-ROOT").ConnectionOptions(() => options);
 ```
 
-MSMT peer authentication is mandatory - there is no unauthenticated mode. `CertificateName` maps a user name to its certificate's subject name (CN): for the current user, the identity certificate to present; for any other user, the name a Server expects that user's certificate to carry (and the name [connection identification](Identification.md) matches against); `TrustedAuthority` names the certificate authority every peer's identity certificate must chain to. Both are looked up in the system certificate store (`CurrentUser` then `LocalMachine`, `StoreName.My`).
+MSMT peer authentication is mandatory - there is no unauthenticated mode. A user's `CertificateName` (on their [user info](#user-info)) is their certificate's subject name (CN): for the current user, the identity certificate to present; for any other user, the name a Server expects that user's certificate to carry (and the name [connection identification](Identification.md) matches against); `TrustedAuthority` names the certificate authority every peer's identity certificate must chain to. Both are looked up in the system certificate store (`CurrentUser` then `LocalMachine`, `StoreName.My`).
 
 The MSMT options (identity certificate plus trusted authorities) used for both inbound and outbound session peer connections are built from those two by default, against the current user name (via `ICurrentUserProvider`). If no current user is registered yet, or either certificate can't be found in the store, building them throws `InvalidOperationException`; callers (`PeerService`, `ClientPeerService`, `ServerRoutingService`, `InterfaceService`) catch this at startup, log it, and simply don't start their listener, retried the next time the host restarts once a user and certificates are in place. `ConnectionOptions` replaces the whole policy, but for most customization needs stating `CertificateName`/`TrustedAuthority` instead is sufficient and does not require touching this security-sensitive logic at all. State `ConnectionOptions` only when you need custom certificate pinning, a non-store certificate source, or a different validation policy.
 
-`MsmtConnectionOptions` adjusts the other MSMT settings (handshake, stall and response timeouts, TCP keep-alive, session lifetimes and keep-alive intervals) for every IP connection, inbound and outbound, including the interface listener. It receives the options as built above and returns the ones to use, typically with a `with` expression, and runs after `ConnectionOptions` and after the config file's certificate file override:
+`MsmtOptions` adjusts the other MSMT settings (handshake, stall and response timeouts, TCP keep-alive, session lifetimes and keep-alive intervals) for every IP connection, inbound and outbound, including the interface listener. It receives the options as built above and returns the ones to use, typically with a `with` expression, and runs after `ConnectionOptions` and after the config file's certificate file override:
 
 ```csharp
-engine.MsmtConnectionOptions(options => options with { HandshakeTimeout = TimeSpan.FromSeconds(20) });
+engine.MsmtOptions(options => options with { HandshakeTimeout = TimeSpan.FromSeconds(20) });
 ```
 
-**Default:** the certificate name is the user name unchanged; the trusted authority is `"COMLINK-ROOT"`; the MSMT options are otherwise left at the package defaults.
+**Default:** the certificate name is the user name unchanged; the trusted authority is `"COMLINK-ROOT"`; the MSMT options are otherwise left at the package defaults. Sample states a 15 second handshake timeout and a 60 second response timeout through `MsmtOptions`.
 
-**Config file:** `PeerCertificateName` overrides the certificate name for the current user only (`null` falls back to what is stated; an explicit name is used as-is). It names this node's own certificate, so every other user still resolves through what is stated, since applying it to them too would make a Server expect every connecting user to present this node's certificate name; `TrustedAuthorityCertificateName` overrides the trusted authority the same way. See [Config.md](Config.md). The options are built by `ConfiguredEngineController` from its own overridden names rather than delegated, so they reflect both overrides even though they have no `config.json` field of their own. Separately, `PeerCertificateFile` and `TrustedAuthorityCertificateFile` bypass the system store entirely, loading the identity and authority certificates directly from disk instead, set together or not at all; see [Config.md](Config.md).
+**Network file:** each user's entry may set `CertificateName` (the name of that user's certificate, defaulting to the user name) and, for the node that user runs, `CertificateFile`; the file's `TrustedAuthorityCertificateName` names the trusted authority. `CertificateFile` and the file's `TrustedAuthorityCertificateFile` bypass the system store entirely, loading the identity and authority certificates directly from disk instead, set together or not at all; see [Config.md](Config.md). The options are built by `ConfiguredEngineController` from the current user's entry, so the files are used even though they are not part of the wrapped controller.
 
 **Sample:** none, deliberately; this is the one area Sample does not state. Replacing `ConnectionOptions` would duplicate ~60 lines of security-sensitive X.509 store-lookup logic, and stating the certificate names instead is sufficient for the vast majority of customization needs. Sample itself provisions no certificates of its own; `Scripts/Scenarios/` demonstrates the `PeerCertificateFile`/`TrustedAuthorityCertificateFile` config fields with certificate files checked in alongside each scenario's config.
 
@@ -468,35 +482,32 @@ engine.MsmtConnectionOptions(options => options with { HandshakeTimeout = TimeSp
 
 ### Network Topology
 
-```csharp
-engine.Role(NodeRole.Server).OutgoingPoint(new ConnectionPoint { IpAddress = "10.0.0.2", Port = 50021 }).Server("SERVER-A", "CLIENT-A1", "CLIENT-A2");
-```
+This instance's place in the peer/client/server networking topology, see [Peer.md](Peer.md#user-roles), is not stated on its own: it comes from the current user's [user info](#user-info) (`Role`, `PeerPort`, `OutgoingPoints`, and for a `Server` its `ChildClients`, with the topology of every server in the cluster built from every `Server` user's info). A node is configured only with where it connects and listens, never which users it expects there; who is on the other end of a connection is worked out when it forms (see [Identification.md](Identification.md)).
 
-This instance's place in the peer/client/server networking topology, see [Peer.md](Peer.md#node-roles). `Role` selects one of `NodeRole.Peer`/`Client`/`Server`; `OutgoingPoint` adds an IP host and port this node dials or a serial port it opens, each kept connected by a heartbeat (a `Client` connects to the first only), while the port it listens on is `PeerPort`; `Server` adds a server to the topology a `Server` routes with, and the child clients it owns, every server in the cluster and not just the local one (unused outside `Server`). A node is configured only with where it connects and listens, never with which users it expects there: the topology names who belongs where but not how to reach them, and a connection is matched to a user by [identification](Identification.md).
+The role selects the `IPeerService` implementation (`PeerService`/`ClientPeerService`/`ServerRoutingService`). `RolePeerService` is the one service the engine depends on; it creates that implementation when networking starts, after a user is installed, and forwards its events.
 
-The role is what selects the `IPeerService` implementation (`PeerService`/`ClientPeerService`/`ServerRoutingService`), when the service is first resolved.
+**Default:** `UserRole.Peer`, no outgoing points, no server users.
 
-**Default:** `NodeRole.Peer`, no outgoing points, no server users.
+**Network file:** none of its own; the role, ports, outgoing points and topology come from the users' entries. See [User Info](#user-info).
 
-**Config file:** `NodeRole` overrides the role when set and recognized (`"Peer"`/`"Client"`/`"Server"`, case-insensitive; an unrecognized value falls back to what is stated rather than forcing `Peer`); `OutgoingPoints` replaces the stated points when it lists any; and `ServerUsers` merges over the stated servers (a file entry replaces a same-named server; servers only stated in code still pass through). See [Config.md](Config.md).
-
-**Sample:** none; the default plus the automatic config file overlay already cover every genuinely useful case.
+**Sample:** the roles, ports and points are on each site's user info; see [User Info](#user-info).
 
 ---
 
-### Config File
+### Command-Line Overrides
 
 ```csharp
-engine.ConfigFile();
+engine.CommandLineOverrides(true);  // honor --config and --user
+engine.CommandLineOverrides(false); // ignore them (the default)
 ```
 
-Determines whether the `--config` command-line argument is honored at all. Resolved once, before anything else, from the recorded configuration (see [Bootstrap ordering](#config-file-overlay) above). Because of this ordering, a configuration must never depend on `EngineConfigFile`. When it is off, `--config` is ignored entirely and every setting uses what the host stated or its default, as if the argument had never been passed.
+Determines whether command-line arguments may override where the [network configuration file](#network-configuration-file) and the running user come from: `--config <path>` names the file instead of `Config.json` in the working directory, and `--user <name>` names the user instead of `User.json` in the working directory. The files in the working directory are always read; only the arguments are affected. Resolved once, before anything else, from the recorded configuration (see [Bootstrap ordering](#network-configuration-file) above). Because of this ordering, a configuration must never depend on `NetworkConfig`.
 
-**Default:** off.
+**Default:** disallowed.
 
-**Config file:** none possible; there is no `config.json` field for whether `config.json` is read (that would be circular).
+**Network file:** none possible; there is no field for whether the arguments are honored (that would be circular).
 
-**Sample:** `SampleEngineConfiguration` turns it on, so Sample honors a `--config` argument. A host that wants `--config` ignored (e.g. to lock down a deployment) simply does not call it.
+**Sample:** `SampleEngineConfiguration` allows them, so its scenario scripts can pass `--config` and `--user`. A host that wants them ignored (e.g. to lock down a deployment) simply does not call it, or passes `false`.
 
 ---
 
@@ -512,9 +523,9 @@ Each external system is constructed directly by the configuration, not resolved 
 
 **Default:** no external systems; no gateway behavior.
 
-**Config file:** none; a system-specific connection endpoint, credential, etc. belongs to each `IExternalSystem` implementation's own constructor, not a generic config schema, and which one is the exclusive upstream hub is likewise a host-code decision, not something a deployment config toggles.
+**Network file:** none; a system-specific connection endpoint, credential, etc. belongs to each `IExternalSystem` implementation's own constructor, not a generic config schema, and which one is the exclusive upstream hub is likewise a host-code decision, not something a deployment config toggles.
 
-**Sample:** `SampleEngineConfiguration` adds a single `SampleExternalSystem`, demonstrating the conduit pattern with a self-contained simulated connection (see `Docs/Components/ExternalSystems.md`); it does not designate an `ExternalServer`, since a single-external-system setup has nothing else to designate it as exclusive relative to.
+**Sample:** none; `SampleEngineConfiguration` states no external system.
 
 ---
 
@@ -540,7 +551,7 @@ engine
 Runs host code in reaction to peer activity, independent of any UI: `OnUserConnected`/`OnUserDisconnected` fire once
 each time a user goes from unreachable to reachable over at least one live peer connection, or the other way
 around (see [Peer.md](Peer.md#connection--message-hooks) for exactly what counts as "a live connection" for each
-`NodeRole`), handed an `IUserConnectionHookContext` whose `TargetUser` names that user; `OnMessageReceived` fires
+`UserRole`), handed an `IUserConnectionHookContext` whose `TargetUser` names that user; `OnMessageReceived` fires
 for every new (non-confirmation) message this instance receives, handed an `IMessageReceivedHookContext` whose
 `Message` is that message, as an instance of the configured message type - the same as anywhere else a host's own
 message type crosses the engine boundary, a hook never sees an internal representation of it. Both context types
@@ -565,7 +576,7 @@ never stops the rest, of that firing or a later one, from running.
 
 **Default:** no hooks of any kind; `EngineHooksService` (which runs them) does nothing when none are configured.
 
-**Config file:** none; hooks are behavior, not settings.
+**Network file:** none; hooks are behavior, not settings.
 
 **Sample:** `SampleEngineConfiguration` sends a newly connected user a welcome message naming who else is currently online (`ConnectedUsers`), tells everyone still online when someone disconnects, and auto-replies `PONG` to any received message tagged `PING` - all via `SendMessage`, so every hook's effect shows up as an ordinary message in the recipient's Inbox rather than a log line only visible from the host process's own console.
 
@@ -596,7 +607,7 @@ Task PageFeed(string printerName, CancellationToken cancellation = default);
 
 `GetAvailablePrinters`/`GetDefaultPrinter` enumerate the printers available on this computer for the print manager to target (see `Docs/Components/ViewModels.md`, `IPrintManagerViewModel`): `GetAvailablePrinters` populates the printer picker, `GetDefaultPrinter` selects the initial `SelectedPrinter` automatically. `PrintLine`/`PageFeed` drive the selected printer for the print queue: prints one line at a time, and the returned task from `PrintLine` completing is treated as confirmation that the line finished printing - the queue will not print the next line, or check whether a higher-priority job should interrupt the current one, until it completes. `PageFeed` is called after the last line of an entry and also when a job is interrupted partway through.
 
-Unlike the settings above, this is real OS-level behavior, not configuration or rules, so it is not part of the engine configuration and a host cannot replace it: it lives in `Core/src/Internal/Devices/`, and Engine always provides real behavior for it directly, the same way it always provides real behavior for alarm sound playback (see `IAlertSoundPlayer`, above) rather than leaving either to a host. Printer discovery is a genuine operating-system resource (like external drives, above), not app-specific configuration, and driving a printer line-by-line with real completion confirmation only makes sense against the operating system's own print spooler, not a bundled library. None of the four members has a `config.json` field.
+Unlike the settings above, this is real OS-level behavior, not configuration or rules, so it is not part of the engine configuration and a host cannot replace it: it lives in `Core/src/Internal/Devices/`, and Engine always provides real behavior for it directly, the same way it always provides real behavior for alarm sound playback (see `IAlertSoundPlayer`, above) rather than leaving either to a host. Printer discovery is a genuine operating-system resource (like external drives, above), not app-specific configuration, and driving a printer line-by-line with real completion confirmation only makes sense against the operating system's own print spooler, not a bundled library. None of the four members has a the network file field.
 
 **Engine implementation:** `PrintDriver` (`Core/src/Internal/Devices/PrintDriver.cs`), backed by a `file`-scoped `PrintOperations` helper class (marked `[ExcludeFromCodeCoverage]`), OS-branched via `OperatingSystem.IsWindows()`/`IsLinux()`:
 - **Windows:** printer discovery shells out to PowerShell, querying WMI's `Win32_Printer` class (`Get-CimInstance -ClassName Win32_Printer`) for the printer list and the entry with `Default = true` for the default printer - no extra module dependency (unlike `Get-Printer`, which requires the PrintManagement module). Line printing uses the Windows Print Spooler (WinSpool) directly via P/Invoke (`OpenPrinter`/`StartDocPrinter`/`StartPagePrinter`/`WritePrinter`/`EndPagePrinter`/`EndDocPrinter`): each line (and each page feed, sent as a form-feed byte `\f`) is submitted as its own raw print job, and `PrintLine`/`PageFeed` don't return until polling `GetJob` reports the job has reached a terminal status (`JOB_STATUS_PRINTED`, `JOB_STATUS_COMPLETE`, `JOB_STATUS_DELETED`, or `JOB_STATUS_ERROR`) - a genuine OS-confirmed completion, not just "the app handed the bytes off."

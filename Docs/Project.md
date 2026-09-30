@@ -21,8 +21,9 @@ between `sh` and `cmd.exe`.
   launched roles never race each other rebuilding the same output.
 - `Scripts/Scenarios/<Scenario>/<Role>.cs` - runs one role of a manual multi-node test scenario
   against `Sample` with `--no-build` (`ClientServer`: `Server`/`Client1`/`Client2`; `Peer`:
-  `Peer1`/`Peer2`; `ServerCluster`: `Server1`/`Server2`/`Client1`/`Client2`), passing the matching
-  `<Role>.json` in the same folder as `--config`. Each role simulates one installation talking to the
+  `Peer1`/`Peer2`; `ServerCluster`: `Server1`/`Server2`/`Client1`/`Client2`), passing the scenario's
+  own `Config.json` (the network configuration describing every user of that scenario) as `--config` and
+  naming the role's user with `--user`. Each role simulates one installation talking to the
   others over loopback; `Scripts/Scenarios/Root.cer` is the shared certificate authority signing
   every role's `.pfx` identity in every scenario.
 - `Scripts/Scenarios/<Scenario>/Run.task` - runs `Build.cs`, then every role `.cs` script of that

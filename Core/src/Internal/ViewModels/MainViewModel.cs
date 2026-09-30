@@ -20,7 +20,7 @@ internal interface IMainViewModel
     /// <summary>Gets the help ViewModel driving the help window opened from the title bar.</summary>
     IHelpViewModel Help { get; }
     /// <summary>
-    /// Gets a value indicating whether this instance is running as a <see cref="NodeRole.Server"/> — a
+    /// Gets a value indicating whether this instance is running as a <see cref="UserRole.Server"/> — a
     /// routing-only node with no inbox/outbox/notes/drafts UI of its own. When <see langword="true"/>, the
     /// main window shows either <see cref="ConnectionStatus"/>'s connections table (see
     /// <see cref="ShowConnectionsTable"/>) or the activity log view (see <see cref="ShowServerActivityView"/>),
@@ -28,7 +28,7 @@ internal interface IMainViewModel
     /// </summary>
     bool IsServerMode { get; }
     /// <summary>
-    /// Gets a value indicating whether this instance is running as a <see cref="NodeRole.Client"/>. When
+    /// Gets a value indicating whether this instance is running as a <see cref="UserRole.Client"/>. When
     /// <see langword="true"/>, the main window additionally shows a single connection-status row, from
     /// <see cref="ConnectionStatus"/>, pinned to the bottom of the window.
     /// </summary>
@@ -73,7 +73,7 @@ internal interface IMainViewModel
     IStagedSendViewModel StagedSend { get; }
     /// <summary>Gets the retrieve ViewModel driving the retrieve screen.</summary>
     IRetrieveViewModel Retrieve { get; }
-    /// <summary>Gets a value indicating whether the title bar's RETRIEVE button is shown: only for a <see cref="NodeRole.Client"/> on a network where at least one server stores messages (see <see cref="IEngineBuilder.ServerStorage"/>).</summary>
+    /// <summary>Gets a value indicating whether the title bar's RETRIEVE button is shown: only for a <see cref="UserRole.Client"/> on a network where at least one server stores messages (see <see cref="UserInfo.StoresMessages"/>).</summary>
     bool CanRetrieve { get; }
     /// <summary>Gets the auto forward ViewModel driving the auto forward screen.</summary>
     IAutoForwardViewModel AutoForward { get; }
@@ -178,9 +178,7 @@ internal sealed partial class MainViewModel : ObservableObject, IMainViewModel
 
         isKioskMode = engineController.IsKioskMode;
         appVersion = engineController.AppVersion;
-        IsServerMode = engineController.Role == NodeRole.Server;
-        IsClientMode = engineController.Role == NodeRole.Client;
-        CanRetrieve = IsClientMode && engineController.StorageServers.Count > 0;
+        ApplyRole();
         WireEvents();
     }
 
@@ -212,6 +210,13 @@ internal sealed partial class MainViewModel : ObservableObject, IMainViewModel
     [NotifyPropertyChangedFor(nameof(ShowServerActivityView))]
     private bool isInstallScreenVisible;
     [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(ShowMainLayout))]
+    [NotifyPropertyChangedFor(nameof(ShowConnectionsTable))]
+    [NotifyPropertyChangedFor(nameof(ShowServerActivityView))]
+    private bool isServerMode;
+    [ObservableProperty] private bool isClientMode;
+    [ObservableProperty] private bool canRetrieve;
+    [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(ShowConnectionsTable))]
     [NotifyPropertyChangedFor(nameof(ShowServerActivityView))]
     private bool isServerActivityViewActive;
@@ -222,10 +227,6 @@ internal sealed partial class MainViewModel : ObservableObject, IMainViewModel
     [ObservableProperty] private string appVersion;
     [ObservableProperty] private bool hasAutoForwardAccess;
 
-    /// <inheritdoc />
-    public bool IsServerMode { get; }
-    /// <inheritdoc />
-    public bool IsClientMode { get; }
     /// <inheritdoc />
     public IConnectionStatusViewModel ConnectionStatus => connectionStatus;
     /// <inheritdoc />
@@ -253,7 +254,6 @@ internal sealed partial class MainViewModel : ObservableObject, IMainViewModel
     /// <inheritdoc />
     public IRetrieveViewModel Retrieve => retrieve;
     /// <inheritdoc />
-    public bool CanRetrieve { get; }
     /// <inheritdoc />
     public IAutoForwardViewModel AutoForward => autoForward;
     /// <inheritdoc />
@@ -422,9 +422,17 @@ internal sealed partial class MainViewModel : ObservableObject, IMainViewModel
         await folderBar.Load();
     }
 
+    private void ApplyRole()
+    {
+        IsServerMode = engineController.Role == UserRole.Server;
+        IsClientMode = engineController.Role == UserRole.Client;
+        CanRetrieve = IsClientMode && engineController.StorageServers.Count > 0;
+    }
+
     private Task ApplyUserInfo(UserInfo info)
     {
         UserName = info.Name;
+        ApplyRole();
         string level = engineController.GetUserSecurityLevel(info.Name);
         SecurityLevelName = level;
         SecurityLevelColor = engineController.SecurityLevels.GetColor(level);

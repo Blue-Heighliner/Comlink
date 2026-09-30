@@ -78,32 +78,4 @@ public sealed class ConnectionPointTests
         Assert.Equal("10.1.1.1", point.IpAddress);
         Assert.Equal(8, point.Port);
     }
-
-    /// <summary>Outgoing points in a config file can each name a serial port instead of an IP address, and server topology entries only name child clients.</summary>
-    [Fact]
-    public void EngineConfig_SerialEntries_ParseIntoSerialPoints()
-    {
-        string path = Path.Combine(Path.GetTempPath(), $"comlink-serial-{Guid.NewGuid():N}.json");
-        File.WriteAllText(path, """
-            {
-              "OutgoingPoints": [ { "SerialPort": "SL0", "SerialAddress": 5 }, { "IpAddress": "10.0.0.9", "Port": 7 } ],
-              "ServerUsers": { "S1": { "ChildClients": [ "C1" ] }, "S2": { "ChildClients": [] } }
-            }
-            """);
-        try
-        {
-            EngineConfigFile config = EngineConfigFile.Load(["--config", path]);
-
-            IReadOnlyList<ConnectionPoint> points = config.GetOutgoingPoints();
-            Assert.Equal(new ConnectionPoint { SerialPort = "SL0", SerialAddress = 5 }, points[0]);
-            Assert.Equal(new ConnectionPoint { IpAddress = "10.0.0.9", Port = 7 }, points[1]);
-            IReadOnlyDictionary<string, ServerUserConfig> servers = config.GetServerUsers();
-            Assert.Equal(["C1"], servers["S1"].ChildClients);
-            Assert.Empty(servers["S2"].ChildClients);
-        }
-        finally
-        {
-            File.Delete(path);
-        }
-    }
 }

@@ -6,6 +6,5 @@ global using System.Reflection;
 global using BlueHeighliner.Comlink;
 global using BlueHeighliner.Comlink.Control;
 global using BlueHeighliner.Comlink.Data;
-global using BlueHeighliner.Comlink.ExternalSystems;
 global using BlueHeighliner.Comlink.Models;
 global using BlueHeighliner.Comlink.Services;

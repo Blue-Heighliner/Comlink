@@ -11,29 +11,24 @@ internal static class EngineExtensions
     /// <param name="builder">The host builder to configure.</param>
     /// <param name="mode">Whether to run as a GUI client or headless peer client.</param>
     /// <param name="engine">What the host stated in its <see cref="IEngineConfiguration"/>.</param>
-    /// <param name="configFile">The loaded configuration file, applied over what the host stated.</param>
-    public static IHostBuilder UseEngine(this IHostBuilder builder, EngineMode mode, EngineBuilder engine, EngineConfigFile configFile)
+    /// <param name="network">The loaded network configuration: the users of the network and the node settings for this process.</param>
+    public static IHostBuilder UseEngine(this IHostBuilder builder, EngineMode mode, EngineBuilder engine, NetworkConfig network)
     {
         return builder.ConfigureServices((_, services) =>
         {
             services.AddSingleton(typeof(EngineMode), mode);
             services.AddSingleton(engine);
-            services.AddSingleton(configFile);
+            services.AddSingleton(network);
             services.AddSingleton<ICurrentUserProvider, CurrentUserProvider>();
             services.AddSingleton<IEngineController>(sp =>
             {
                 ICurrentUserProvider currentUser = sp.GetRequiredService<ICurrentUserProvider>();
-                return new ConfiguredEngineController(new EngineController(engine, currentUser), configFile, currentUser);
+                return new ConfiguredEngineController(new EngineController(engine, currentUser, network), network, currentUser);
             });
 
-            services.AddSingleton<IPeerService>(sp => sp.GetRequiredService<IEngineController>().Role switch
-            {
-                NodeRole.Client => ActivatorUtilities.CreateInstance<ClientPeerService>(sp),
-                NodeRole.Server => ActivatorUtilities.CreateInstance<ServerRoutingService>(sp),
-                _ => ActivatorUtilities.CreateInstance<PeerService>(sp)
-            });
-            services.AddSingleton<IConnectionStatusService>(sp =>
-                sp.GetRequiredService<IPeerService>() as IConnectionStatusService ?? new NullConnectionStatusService());
+            services.AddSingleton<RolePeerService>();
+            services.AddSingleton<IPeerService>(sp => sp.GetRequiredService<RolePeerService>());
+            services.AddSingleton<IConnectionStatusService>(sp => sp.GetRequiredService<RolePeerService>());
 
             services.AddConventionSingletons();
             services.AddMsmt();

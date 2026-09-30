@@ -24,7 +24,7 @@ public sealed class PeerNetworkTests
         private readonly CancellationTokenSource cts = new();
         private readonly Task run;
 
-        public Node(string user, X509Certificate2 identity, X509Certificate2Collection authorities, NodeRole role, int peerPort, IReadOnlyList<ConnectionPoint> outgoing, IReadOnlyDictionary<string, ServerUserConfig>? servers = null, IMessageStorageService? storage = null)
+        public Node(string user, X509Certificate2 identity, X509Certificate2Collection authorities, UserRole role, int peerPort, IReadOnlyList<ConnectionPoint> outgoing, IReadOnlyDictionary<string, ServerUserConfig>? servers = null, IMessageStorageService? storage = null)
         {
             Mock<TestEngineController> controller = new() { CallBase = true };
             controller.Setup(c => c.Role).Returns(role);
@@ -42,8 +42,8 @@ public sealed class PeerNetworkTests
 
             (Service, Status) = role switch
             {
-                NodeRole.Server => Both(new ServerRoutingService(factory, controller.Object, currentUser.Object, storage ?? Mock.Of<IMessageStorageService>(), noLogger)),
-                NodeRole.Client => Both(new ClientPeerService(factory, controller.Object, noLogger)),
+                UserRole.Server => Both(new ServerRoutingService(factory, controller.Object, currentUser.Object, storage ?? Mock.Of<IMessageStorageService>(), noLogger)),
+                UserRole.Client => Both(new ClientPeerService(factory, controller.Object, noLogger)),
                 _ => (new PeerService(factory, controller.Object, noLogger), null)
             };
             Service.MessageDelivered += message => { Delivered.Enqueue((TestMessage)message); return Task.CompletedTask; };
@@ -99,9 +99,9 @@ public sealed class PeerNetworkTests
     {
         (Dictionary<string, X509Certificate2> certificates, X509Certificate2Collection authorities) = TestMsmtCertificates.CreateNamed("Server", "Client1", "Client2");
         int serverPort = FreePort();
-        await using Node server = new("Server", certificates["Server"], authorities, NodeRole.Server, serverPort, [], OneServer("Client1", "Client2"));
-        await using Node client1 = new("Client1", certificates["Client1"], authorities, NodeRole.Client, 0, [Local(serverPort)]);
-        await using Node client2 = new("Client2", certificates["Client2"], authorities, NodeRole.Client, 0, [Local(serverPort)]);
+        await using Node server = new("Server", certificates["Server"], authorities, UserRole.Server, serverPort, [], OneServer("Client1", "Client2"));
+        await using Node client1 = new("Client1", certificates["Client1"], authorities, UserRole.Client, 0, [Local(serverPort)]);
+        await using Node client2 = new("Client2", certificates["Client2"], authorities, UserRole.Client, 0, [Local(serverPort)]);
 
         await WaitUntil(() => server.IsUp("Client1") && server.IsUp("Client2") && client1.IsUp("Server") && client2.IsUp("Server"), "every client to connect and be identified");
         bool sent = await client1.Service.Send("Client2", MessageTo("Client1", "Client2"));
@@ -135,9 +135,9 @@ public sealed class PeerNetworkTests
 
             (Dictionary<string, X509Certificate2> certificates, X509Certificate2Collection authorities) = TestMsmtCertificates.CreateNamed("Server", "Client1", "Client2");
             int serverPort = FreePort();
-            await using Node server = new("Server", certificates["Server"], authorities, NodeRole.Server, serverPort, [], OneServer("Client1", "Client2"), storage);
-            await using Node client1 = new("Client1", certificates["Client1"], authorities, NodeRole.Client, 0, [Local(serverPort)]);
-            await using Node client2 = new("Client2", certificates["Client2"], authorities, NodeRole.Client, 0, [Local(serverPort)]);
+            await using Node server = new("Server", certificates["Server"], authorities, UserRole.Server, serverPort, [], OneServer("Client1", "Client2"), storage);
+            await using Node client1 = new("Client1", certificates["Client1"], authorities, UserRole.Client, 0, [Local(serverPort)]);
+            await using Node client2 = new("Client2", certificates["Client2"], authorities, UserRole.Client, 0, [Local(serverPort)]);
             await WaitUntil(() => server.IsUp("Client1") && server.IsUp("Client2") && client1.IsUp("Server") && client2.IsUp("Server"), "every client to connect");
             Assert.True(await client1.Service.Send("Client2", MessageTo("Client1", "Client2")));
             await WaitUntil(() => !client2.Delivered.IsEmpty, "the original to reach Client2");
@@ -174,9 +174,9 @@ public sealed class PeerNetworkTests
     {
         (Dictionary<string, X509Certificate2> certificates, X509Certificate2Collection authorities) = TestMsmtCertificates.CreateNamed("Server", "Client1", "Stranger");
         int serverPort = FreePort();
-        await using Node server = new("Server", certificates["Server"], authorities, NodeRole.Server, serverPort, [], OneServer("Client1"));
-        await using Node stranger = new("Stranger", certificates["Stranger"], authorities, NodeRole.Client, 0, [Local(serverPort)]);
-        await using Node client1 = new("Client1", certificates["Client1"], authorities, NodeRole.Client, 0, [Local(serverPort)]);
+        await using Node server = new("Server", certificates["Server"], authorities, UserRole.Server, serverPort, [], OneServer("Client1"));
+        await using Node stranger = new("Stranger", certificates["Stranger"], authorities, UserRole.Client, 0, [Local(serverPort)]);
+        await using Node client1 = new("Client1", certificates["Client1"], authorities, UserRole.Client, 0, [Local(serverPort)]);
 
         await WaitUntil(() => server.IsUp("Client1") && client1.IsUp("Server"), "the known client to connect");
         await Task.Delay(500);
@@ -192,8 +192,8 @@ public sealed class PeerNetworkTests
     {
         (Dictionary<string, X509Certificate2> certificates, X509Certificate2Collection authorities) = TestMsmtCertificates.CreateNamed("Server", "Client1");
         int serverPort = FreePort();
-        await using Node server = new("Server", certificates["Server"], authorities, NodeRole.Server, serverPort, [], OneServer("Client1"));
-        await using Node client1 = new("Client1", certificates["Client1"], authorities, NodeRole.Client, 0, [Local(serverPort)]);
+        await using Node server = new("Server", certificates["Server"], authorities, UserRole.Server, serverPort, [], OneServer("Client1"));
+        await using Node client1 = new("Client1", certificates["Client1"], authorities, UserRole.Client, 0, [Local(serverPort)]);
         await WaitUntil(() => server.IsUp("Client1") && client1.IsUp("Server"), "the client to connect");
 
         server.Status!.SetClosed(PeerConnectionKind.Client, "Client1", true);
@@ -219,10 +219,10 @@ public sealed class PeerNetworkTests
             ["Server1"] = new ServerUserConfig { ChildClients = ["Client1"] },
             ["Server2"] = new ServerUserConfig { ChildClients = ["Client2"] }
         };
-        await using Node server2 = new("Server2", certificates["Server2"], authorities, NodeRole.Server, port2, [], topology);
-        await using Node server1 = new("Server1", certificates["Server1"], authorities, NodeRole.Server, port1, [Local(port2)], topology);
-        await using Node client1 = new("Client1", certificates["Client1"], authorities, NodeRole.Client, 0, [Local(port1)]);
-        await using Node client2 = new("Client2", certificates["Client2"], authorities, NodeRole.Client, 0, [Local(port2)]);
+        await using Node server2 = new("Server2", certificates["Server2"], authorities, UserRole.Server, port2, [], topology);
+        await using Node server1 = new("Server1", certificates["Server1"], authorities, UserRole.Server, port1, [Local(port2)], topology);
+        await using Node client1 = new("Client1", certificates["Client1"], authorities, UserRole.Client, 0, [Local(port1)]);
+        await using Node client2 = new("Client2", certificates["Client2"], authorities, UserRole.Client, 0, [Local(port2)]);
         await WaitUntil(() => server1.IsUp("Server2") && server2.IsUp("Server1") && client1.IsUp("Server1") && client2.IsUp("Server2"), "the whole cluster to connect");
 
         Assert.True(await client1.Service.Send("Client2", MessageTo("Client1", "Client2", "FROM-1")));
@@ -239,8 +239,8 @@ public sealed class PeerNetworkTests
     {
         (Dictionary<string, X509Certificate2> certificates, X509Certificate2Collection authorities) = TestMsmtCertificates.CreateNamed("Alice", "Bob");
         int bobPort = FreePort();
-        await using Node bob = new("Bob", certificates["Bob"], authorities, NodeRole.Peer, bobPort, []);
-        await using Node alice = new("Alice", certificates["Alice"], authorities, NodeRole.Peer, 0, [Local(bobPort)]);
+        await using Node bob = new("Bob", certificates["Bob"], authorities, UserRole.Peer, bobPort, []);
+        await using Node alice = new("Alice", certificates["Alice"], authorities, UserRole.Peer, 0, [Local(bobPort)]);
 
         await WaitUntil(() => alice.Service.Send("Bob", MessageTo("Alice", "Bob", "TO-BOB")), "Alice to reach Bob");
         await WaitUntil(() => bob.Service.Send("Alice", MessageTo("Bob", "Alice", "TO-ALICE")), "Bob to reach Alice over the connection Alice opened");
@@ -255,7 +255,7 @@ public sealed class PeerNetworkTests
     public async Task Peers_SendToUserWithNoConnection_Fails()
     {
         (Dictionary<string, X509Certificate2> certificates, X509Certificate2Collection authorities) = TestMsmtCertificates.CreateNamed("Alice");
-        await using Node alice = new("Alice", certificates["Alice"], authorities, NodeRole.Peer, 0, []);
+        await using Node alice = new("Alice", certificates["Alice"], authorities, UserRole.Peer, 0, []);
 
         Assert.False(await alice.Service.Send("Nobody", MessageTo("Alice", "Nobody")));
     }

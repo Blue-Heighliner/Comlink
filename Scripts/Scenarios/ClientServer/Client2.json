@@ -1,9 +1,0 @@
-{
-  "UserName": "Client2",
-  "InterfacePort": 50124,
-  "DataFolder": "@Client2",
-  "PeerCertificateFile": "Client2.pfx",
-  "TrustedAuthorityCertificateFile": "../Root.cer",
-  "NodeRole": "Client",
-  "OutgoingPoints": [ { "IpAddress": "127.0.0.1", "Port": 50121 } ]
-}

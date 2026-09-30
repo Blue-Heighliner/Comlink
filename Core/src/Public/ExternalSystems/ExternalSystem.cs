@@ -59,7 +59,7 @@ public interface IExternalSystem
 /// one at a time, in enqueue order, for the lifetime of <see cref="Start"/>. Two further optional virtual
 /// methods, <see cref="FilterSent"/> and <see cref="FilterReceived"/>, let a derived class drop specific
 /// messages in either direction (e.g. by tag, priority, or sender) without touching the connection lifecycle
-/// itself. See <c>Docs/Components/ExternalSystems.md</c> and <c>Sample/src/SampleExternalSystem.cs</c> for a worked example.
+/// itself. See <c>Docs/Components/ExternalSystems.md</c>.
 /// </summary>
 /// <typeparam name="TMessage">The host's concrete message type — the same type argument supplied to <see cref="IEngineBuilder.Message{TMessage}"/>.</typeparam>
 /// <param name="name">A short, human-readable name identifying this external system.</param>

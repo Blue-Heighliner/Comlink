@@ -9,12 +9,16 @@ public sealed class UserInfoTests
     {
         UserInfo info = new()
         {
-            Name = "TestNode",
-            Code = "TN01"
+            Name = "TestNode"
         };
 
         Assert.Equal("TestNode", info.Name);
-        Assert.Equal("TN01", info.Code);
+        Assert.Null(info.Role);
+        Assert.Null(info.SecurityLevel);
+        Assert.False(info.StoresMessages);
+        Assert.Empty(info.OutgoingPoints);
+        Assert.Empty(info.ChildClients);
+        Assert.Empty(info.Data);
     }
 
     /// <summary>Verifies that a new <see cref="Folder"/> has an empty children collection by default.</summary>

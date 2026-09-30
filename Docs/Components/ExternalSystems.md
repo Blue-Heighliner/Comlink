@@ -158,12 +158,7 @@ property only designates *which* one, if any, is treated as the exclusive hub fo
 
 ## Sample
 
-`Sample/src/SampleExternalSystem.cs` provides `SampleExternalSystem`, a self-contained demo — not a real
-network integration — that "connects" after a short delay, stays connected indefinitely, and periodically
-synthesizes an inbound demo message, so the receive path (mirroring to every other external system, and
-normal processing as a received message) is visible without needing an actual external system to connect
-to. It never loses its simulated connection, so it leaves `PollIsConnected` at its default rather than
-overriding it. `SampleEngineConfiguration` adds a single instance of it. A real host
-implementation replaces `TryConnect`, `Disconnect`, and `Send` with genuine connection logic for its own
-external system, and either overrides `PollIsConnected` or calls `ReportDisconnected` (or both), depending
-on how its own external system reports connection loss.
+`Sample` states no external system. A host implementation replaces `TryConnect`, `Disconnect`, and `Send` of
+`ExternalSystemBase<TMessage>` with genuine connection logic for its own external system, and either overrides
+`PollIsConnected` or calls `ReportDisconnected` (or both), depending on how its own external system reports
+connection loss.

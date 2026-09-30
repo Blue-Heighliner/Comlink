@@ -6,6 +6,6 @@ public sealed record UserIdentity
     /// <summary>Gets the user name the connection is with. Messages for this user are sent over the connection.</summary>
     public required string Name { get; init; }
 
-    /// <summary>Gets the app-specific information attached to the user; see <see cref="IEngineBuilder.UserData(string, IReadOnlyDictionary{string, string})"/>.</summary>
+    /// <summary>Gets the app-specific information attached to the user; see <see cref="UserInfo.Data"/>.</summary>
     public IReadOnlyDictionary<string, string> Data { get; init; } = new Dictionary<string, string>();
 }

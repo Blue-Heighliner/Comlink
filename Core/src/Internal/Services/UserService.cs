@@ -47,11 +47,7 @@ internal sealed class UserService : IUserService
     public UserInfo? GetCurrentUserInfo()
     {
         if (!state.IsInstalled) { return null; }
-        return new UserInfo
-        {
-            Name = state.UserName!,
-            Code = state.UserCode!
-        };
+        return engineController.GetUserInfo(state.UserName!);
     }
 
     /// <summary>Loads the persisted user state from disk, or applies a debug override if one is registered.</summary>
@@ -92,13 +88,14 @@ internal sealed class UserService : IUserService
         await lockObject.WaitAsync(cancellation);
         try
         {
-            userInfo = engineController.ResolveCode(userCode);
-            if (userInfo is null) { return null; }
+            string? userName = engineController.ResolveUserName(userCode);
+            if (userName is null) { return null; }
 
+            userInfo = engineController.GetUserInfo(userName);
             state = new UserState
             {
                 UserName = userInfo.Name,
-                UserCode = userInfo.Code
+                UserCode = userCode
             };
 
             currentUserProvider.UserName = userInfo.Name;

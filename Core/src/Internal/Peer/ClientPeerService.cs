@@ -1,7 +1,7 @@
 namespace BlueHeighliner.Comlink.Peer;
 
 /// <summary>
-/// Implements <see cref="IPeerService"/> for <see cref="NodeRole.Client"/>: sends every outbound message
+/// Implements <see cref="IPeerService"/> for <see cref="UserRole.Client"/>: sends every outbound message
 /// over its one long-term connection to the server (the first of <see cref="IEngineController.OutgoingPoints"/>),
 /// regardless of addressee - the server performs the actual user-to-connection routing. Connections are
 /// bidirectional, so the server delivers messages back down the same connection and the client never listens.

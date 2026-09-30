@@ -57,6 +57,18 @@ public sealed class TestAddressEntry
 /// <see cref="TestMessage"/>, with the engine's defaults for everything else. Not <see langword="sealed"/> because tests
 /// override single members, and Moq subclasses it with <c>CallBase = true</c>.
 /// </summary>
-internal class TestEngineController() : EngineController(EngineBuilder.Build(new TestEngineConfiguration()), new CurrentUserProvider())
+internal class TestEngineController : EngineController
 {
+    /// <summary>Creates a controller over the default test configuration and an empty network.</summary>
+    public TestEngineController()
+        : this(null)
+    {
+    }
+
+    /// <summary>Creates a controller over the default test configuration and <paramref name="network"/>.</summary>
+    /// <param name="network">The network configuration describing the users, or <see langword="null"/> for an empty one.</param>
+    public TestEngineController(NetworkConfig? network)
+        : base(EngineBuilder.Build(new TestEngineConfiguration()), new CurrentUserProvider(), network)
+    {
+    }
 }

@@ -47,7 +47,6 @@ internal abstract class EngineHookContextBase : IEngineHookContext
     public IEnumerable<UserInfo> Users => userNames.Select(name => new UserInfo
     {
         Name = name,
-        Code = string.Empty,
         Groups = [.. userGroups.Where(group => group.Value.Contains(name, StringComparer.OrdinalIgnoreCase)).Select(group => group.Key)]
     });
 

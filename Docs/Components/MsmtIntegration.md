@@ -23,19 +23,20 @@ MSMT peer authentication is mandatory - there is no way to run without it. Every
 - **An identity certificate**.
 - **A trusted certificate authority** that every peer's identity certificate must chain to.
 
-Two independent sources are supported, chosen per `config.json`:
+Two independent sources are supported, chosen per user in the network configuration file:
 
-- **System certificate store** (the default): looked up by subject name via the configuration's `CertificateName`
-  (default: the user name itself, unprefixed) and `TrustedAuthority` (default: `COMLINK-ROOT`).
+- **System certificate store** (the default): looked up by subject name via the user's `CertificateName` in
+  the network configuration file (default: the user name itself, unprefixed) and the trusted authority name
+  (`TrustedAuthority` or the file's `TrustedAuthorityCertificateName`, default: `COMLINK-ROOT`).
   Resolved once a current user is registered; before that (a fresh install with no installed user yet),
   building the MSMT options throws and the peer/interface listeners simply don't start, retried
   the next time the host restarts after a user is installed. A real deployment provisions its own
   certificates under these subject names through whatever process manages its certificate store.
-- **Certificate files**: `config.json`'s `PeerCertificateFile`/`TrustedAuthorityCertificateFile` fields load
+- **Certificate files**: a user's `CertificateFile` and the file's `TrustedAuthorityCertificateFile` load
   a PKCS#12 identity file and a public authority file directly from disk instead, resolved relative to the
-  config file's own directory. See `Scripts/Scenarios/` for a working example: each scenario's config points
-  at a `.pfx` identity file in the same directory, all signed by one shared `Scripts/Scenarios/Root.cer`
-  authority. See [Config.md](Config.md) for both fields.
+  network configuration file's own directory. See `Scripts/Scenarios/` for a working example: each scenario's
+  `Config.json` points every user at a `.pfx` identity file in the same directory, all signed by one shared
+  `Scripts/Scenarios/Root.cer` authority. See [Config.md](Config.md) for both fields.
 
 ## Session Peer
 
@@ -92,13 +93,13 @@ back out to a connected interface client over the connection it opened in; see [
 
 | Component | Role |
 |-----------|------|
-| `PeerService` (`Core/src/Internal/Peer/PeerService.cs`) | Wraps a single `IPeerTransport` (IP through `MsmtPeerTransport`, which wraps the `IMsmtSessionPeer`, and serial through `SerialPeerTransport`) for `NodeRole.Peer`; keeps a connection to each outgoing point and sends to a user over the connection identified as them, serializes/deserializes instances of `IEngineController.MessageType` (see [Configuration.md](Configuration.md#message-format)), and dispatches `MessageDelivered`/`DeliveryStatusChanged` events derived directly from the transport's `Request` outcome and its `Transmitted` progress callback. |
-| `ClientPeerService` (`Core/src/Internal/Peer/ClientPeerService.cs`) | Implements `NodeRole.Client`: sends every outbound message over its one connection to the server, which delivers back down that same connection. Proactively maintains the connection via `PeerConnectionMonitor`. |
-| `ServerRoutingService` (`Core/src/Internal/Peer/ServerRoutingService.cs`) | Implements `NodeRole.Server`: accepts connections from child clients and other servers, keeps a connection to each outgoing point, and delivers to any recipient (a child or another server) over the connection identified as them. Proactively maintains each outgoing point via `PeerConnectionMonitor`. |
+| `PeerService` (`Core/src/Internal/Peer/PeerService.cs`) | Wraps a single `IPeerTransport` (IP through `MsmtPeerTransport`, which wraps the `IMsmtSessionPeer`, and serial through `SerialPeerTransport`) for `UserRole.Peer`; keeps a connection to each outgoing point and sends to a user over the connection identified as them, serializes/deserializes instances of `IEngineController.MessageType` (see [Configuration.md](Configuration.md#message-format)), and dispatches `MessageDelivered`/`DeliveryStatusChanged` events derived directly from the transport's `Request` outcome and its `Transmitted` progress callback. |
+| `ClientPeerService` (`Core/src/Internal/Peer/ClientPeerService.cs`) | Implements `UserRole.Client`: sends every outbound message over its one connection to the server, which delivers back down that same connection. Proactively maintains the connection via `PeerConnectionMonitor`. |
+| `ServerRoutingService` (`Core/src/Internal/Peer/ServerRoutingService.cs`) | Implements `UserRole.Server`: accepts connections from child clients and other servers, keeps a connection to each outgoing point, and delivers to any recipient (a child or another server) over the connection identified as them. Proactively maintains each outgoing point via `PeerConnectionMonitor`. |
 | `PeerConnectionMonitor` (`Core/src/Internal/Peer/PeerConnectionMonitor.cs`) | Connects to an outgoing point and sends a periodic empty heartbeat over the connection so it opens and stays open without needing a real message. See [Session Peer](#session-peer). |
 | `MsmtPeerTransport` (`Core/src/Internal/Peer/Transport/MsmtPeerTransport.cs`) | Adapts an `IMsmtSessionPeer` to the peer transport used by `PeerService`, `ClientPeerService`, and `ServerRoutingService`, caching one outbound connection per point and sending over inbound ones as well. MSMT itself remains IP only; serial goes through `SerialPeerTransport`. |
 | `InterfaceService` (`Core/src/Internal/Peer/InterfaceService.cs`, always active) | Uses its own `IMsmtSessionPeer` to host the local interface listener described in [Interface.md](Interface.md). |
-| `ConnectionOptions` (`IEngineController`) | Builds the `MsmtSessionPeerOptions` (identity certificate, trusted authority, then the host's `MsmtConnectionOptions` adjustment: timeouts, keep-alive, session lifetimes) used for both inbound and outbound MSMT session peer connections. See [Configuration.md](Configuration.md#msmt-certificates). |
+| `ConnectionOptions` (`IEngineController`) | Builds the `MsmtSessionPeerOptions` (identity certificate, trusted authority, then the host's `MsmtOptions` adjustment: timeouts, keep-alive, session lifetimes) used for both inbound and outbound MSMT session peer connections. See [Configuration.md](Configuration.md#msmt-certificates). |
 | `CertificateName`/`TrustedAuthority` (`IEngineBuilder`) | Map the local user name, and the trusted certificate authority, to certificate subject names to look up in the system store. See [Configuration.md](Configuration.md#msmt-certificates). |
 
 `EngineExtensions.UseEngine` calls the package's `AddMsmt()` to register `IMsmtSessionPeer.IFactory` (and

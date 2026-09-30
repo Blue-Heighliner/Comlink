@@ -3,7 +3,7 @@ namespace BlueHeighliner.Comlink.Tests.Unit.Internal.ViewModels;
 /// <summary>Unit tests for <see cref="HelpViewModel"/>, whose tabs reflect the configured role and compose settings.</summary>
 public sealed class HelpViewModelTests
 {
-    private static HelpViewModel Build(NodeRole role = NodeRole.Peer, bool tags = true, bool alerts = true)
+    private static HelpViewModel Build(UserRole role = UserRole.Peer, bool tags = true, bool alerts = true)
     {
         Mock<TestEngineController> controller = new() { CallBase = true };
         controller.Setup(c => c.Role).Returns(role);
@@ -27,14 +27,14 @@ public sealed class HelpViewModelTests
     {
         Assert.Equal(
             ["Getting started", "Sending a message", "Receiving messages", "Notes and drafts", "Folders and entries", "Backup and restore", "Printing"],
-            Titles(Build(NodeRole.Peer)));
+            Titles(Build(UserRole.Peer)));
     }
 
     /// <summary>A client has the messaging guide plus a tab about its connection to the server.</summary>
     [Fact]
     public void Client_AddsConnectionTab()
     {
-        HelpViewModel vm = Build(NodeRole.Client);
+        HelpViewModel vm = Build(UserRole.Client);
 
         Assert.Equal("Connection", vm.Tabs[^1].Title);
         Assert.Contains("Getting started", Titles(vm));
@@ -44,17 +44,17 @@ public sealed class HelpViewModelTests
     [Fact]
     public void Server_HasOnlyServerTabs()
     {
-        HelpViewModel vm = Build(NodeRole.Server);
+        HelpViewModel vm = Build(UserRole.Server);
 
         Assert.Equal(["Overview", "Connections", "Activity"], Titles(vm));
     }
 
     /// <summary>Every tab has content, and every section has a heading and text.</summary>
     [Theory]
-    [InlineData(NodeRole.Peer)]
-    [InlineData(NodeRole.Client)]
-    [InlineData(NodeRole.Server)]
-    public void EveryTab_HasNonEmptySections(NodeRole role)
+    [InlineData(UserRole.Peer)]
+    [InlineData(UserRole.Client)]
+    [InlineData(UserRole.Server)]
+    public void EveryTab_HasNonEmptySections(UserRole role)
     {
         foreach (HelpTab tab in Build(role).Tabs)
         {
@@ -69,10 +69,10 @@ public sealed class HelpViewModelTests
 
     /// <summary>Tab titles are unique so the tab strip is unambiguous.</summary>
     [Theory]
-    [InlineData(NodeRole.Peer)]
-    [InlineData(NodeRole.Client)]
-    [InlineData(NodeRole.Server)]
-    public void TabTitles_AreUnique(NodeRole role)
+    [InlineData(UserRole.Peer)]
+    [InlineData(UserRole.Client)]
+    [InlineData(UserRole.Server)]
+    public void TabTitles_AreUnique(UserRole role)
         => Assert.Equal(Titles(Build(role)).Count(), Titles(Build(role)).Distinct().Count());
 
     /// <summary>The tag section appears, named with the host's own label, only when tags are enabled.</summary>

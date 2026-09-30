@@ -1,6 +1,6 @@
 # Connection Identification
 
-A node is configured with the places it connects and listens, not with the users it expects there. `PeerPort` is where it listens for IP connections and the `OutgoingPoint`s it is given are the IP hosts and ports it dials and the serial ports it opens. Nothing ties a user name to a point, so the same node can be reached by a different user from a different point tomorrow without any node's configuration changing. Who is on the other end of a connection is instead worked out at the moment the connection forms, and a message for a user goes over whichever connection is then identified as them.
+A node is configured with the places it connects and listens, not with the users it expects there. The user it runs states, on its user info, the `PeerPort` it listens on for IP connections and the `OutgoingPoints` it dials: the IP hosts and ports and the serial ports it opens. Nothing ties a user name to a point, so the same node can be reached by a different user from a different point tomorrow without any node's configuration changing. Who is on the other end of a connection is instead worked out at the moment the connection forms, and a message for a user goes over whichever connection is then identified as them.
 
 ## Where it happens
 
@@ -21,7 +21,7 @@ The hook returns a `UserIdentity`, a name plus app-specific data, or `null` to l
 - **IP**: the first user (from `Users`, and every server and child client in `Servers`) whose `CertificateName` matches one of the certificate's common names. The certificate authority already vouched for the certificate, so when none matches the connection is still accepted, as a user named after the first common name. A certificate with no common name cannot be identified.
 - **Serial**: a user named after the port. A cable carries no certificate, so a host that needs real names overrides the hook, for example with a table from port and address to user, or reads the name out of a connection message.
 
-An identity's `Data` defaults to the data stated with `UserData` for the name, which is where a host attaches whatever it wants to a user (`config.json`'s `Users` entries can carry a `Data` map too, merged over the controller's own). The engine never interprets it; it travels with the identity for the host's own hooks. A hook that throws drops the connection.
+An identity's `Data` defaults to the `Data` on the name's user info, which is where a host attaches whatever it wants to a user (the `Data` map of a user's entry in the network configuration file). The engine never interprets it; it travels with the identity for the host's own hooks. A hook that throws drops the connection.
 
 Identity establishes who a connection is for routing and status only. It is not authentication beyond what the medium gives (the certificate authority for IP, the physical cable for serial), and the `FromUser` inside a message is still whatever the sender wrote.
 

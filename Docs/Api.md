@@ -30,12 +30,14 @@ await Engine.Start<MyEngineConfiguration>(args, services => services.AddSingleto
    `InvalidOperationException` if the configuration cannot be constructed, the message type is missing, or a logical field
    is unmapped. The bootstrap container stays alive for the life of the engine, since the configuration may have handed the
    builder functions that use what was injected.
-2. If the configuration allowed it (`ConfigFile`, off by default), `EngineConfigFile.Load(args)` reads `--config`;
-   otherwise every setting uses what the host stated or its default and `--config` is ignored.
-3. If `EngineConfigFile.HeadlessMode` is set, `Engine` builds and runs an `IHost` with no UI. Otherwise
+2. `NetworkConfig.Load` reads the network configuration from `Config.json` in the working directory and the running user from
+   `User.json` there; when the configuration allowed command-line overrides (`CommandLineOverrides`, off by default), `--config`
+   and `--user` take precedence, and otherwise they are ignored.
+3. If the `--user` user's entry sets `Headless`, `Engine` builds and runs an `IHost` with no UI. Otherwise
    it builds and shows the Avalonia desktop application.
 4. In both cases the engine's services are registered from what the host stated, with a decorator layering
-   `EngineConfigFile` on top of every setting that has a corresponding `config.json` field, and the host's
+   the network file's node settings for the current user on top of the settings that have a corresponding
+   field, and the host's
    `configureServices` registrations run again against the engine's own container, so a service the configuration used
    and a service the running engine uses are separate instances.
 5. Once started, a host interacts with the running engine through `IServiceConnection`, sending
@@ -44,17 +46,17 @@ await Engine.Start<MyEngineConfiguration>(args, services => services.AddSingleto
 
 ## Modes
 
-`EngineConfigFile.HeadlessMode` selects between `Client` (desktop UI) and `Headless` (no UI) at
+The `--user` user's `Headless` setting selects between `Client` (desktop UI) and `Headless` (no UI) at
 startup. Both modes run the same peer listener, local interface listener, and persistence layer;
 Headless mode does not remove any dependency from the build, it only skips showing a window.
 
 ## Configuration
 
 Every piece of host-specific behavior is a call on `IEngineBuilder`, never an environment
-variable and never a hardcoded path. Settings with a corresponding `config.json` field are
-overridden by a config-driven decorator layered on top of what the host stated; a configuration
-never reads `config.json` itself. Whether `config.json` is read at all is itself a setting, resolved before
-`EngineConfigFile` exists, so it can never have a `config.json` field of its own.
+variable and never a hardcoded path. Everything about the network's users comes from the network
+configuration file, and the node settings that have a corresponding field are applied by a decorator layered
+on top of what the host stated; a configuration never reads the file itself. Whether the file is read at all
+is itself a setting, resolved before `NetworkConfig` exists, so it can never have a field of its own.
 
 ## Package layout
 

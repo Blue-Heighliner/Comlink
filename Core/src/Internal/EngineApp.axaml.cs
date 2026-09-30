@@ -16,7 +16,7 @@ internal partial class EngineApp : Application
     public override void OnFrameworkInitializationCompleted()
     {
         host = Host.CreateDefaultBuilder()
-            .UseEngine(EngineMode.Client, Engine.Builder, Engine.ConfigFile)
+            .UseEngine(EngineMode.Client, Engine.Builder, Engine.Network)
             .UseEngineUi()
             .ConfigureServices((_, services) => Engine.ConfigureServices?.Invoke(services))
             .ConfigureLogging(logging => logging.SetMinimumLevel(LogLevel.Information))

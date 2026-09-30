@@ -2,9 +2,9 @@ namespace BlueHeighliner.Comlink.ViewModels;
 
 /// <summary>
 /// ViewModel interface for the connection status display: two tables — one for connections to other
-/// servers, one for connections from own child clients — in <see cref="NodeRole.Server"/> mode (see
+/// servers, one for connections from own child clients — in <see cref="UserRole.Server"/> mode (see
 /// <c>ConnectionsTable</c>), or the single row tracking the connection to the configured server in
-/// <see cref="NodeRole.Client"/> mode (see <c>ConnectionRow</c> pinned to the bottom of the window).
+/// <see cref="UserRole.Client"/> mode (see <c>ConnectionRow</c> pinned to the bottom of the window).
 /// Registered as a DI singleton so it reflects live connection status regardless of whether it is
 /// currently shown.
 /// </summary>
@@ -14,9 +14,9 @@ internal interface IConnectionStatusViewModel
     bool HasServerRows { get; }
     /// <summary>Gets a value indicating whether <see cref="ClientRows"/> has any rows — the client connections table is hidden while this is <see langword="false"/>.</summary>
     bool HasClientRows { get; }
-    /// <summary>Gets the current connections-to-other-servers rows: one entry in <see cref="NodeRole.Client"/> mode (the connection to its server), one per other server in the cluster in <see cref="NodeRole.Server"/> mode.</summary>
+    /// <summary>Gets the current connections-to-other-servers rows: one entry in <see cref="UserRole.Client"/> mode (the connection to its server), one per other server in the cluster in <see cref="UserRole.Server"/> mode.</summary>
     ObservableCollection<ConnectionRowViewModel> ServerRows { get; }
-    /// <summary>Gets the current connections-from-child-clients rows — one per own child client in <see cref="NodeRole.Server"/> mode; always empty in <see cref="NodeRole.Client"/> mode.</summary>
+    /// <summary>Gets the current connections-from-child-clients rows — one per own child client in <see cref="UserRole.Server"/> mode; always empty in <see cref="UserRole.Client"/> mode.</summary>
     ObservableCollection<ConnectionRowViewModel> ClientRows { get; }
 }
 
@@ -24,7 +24,7 @@ internal interface IConnectionStatusViewModel
 internal sealed partial class ConnectionStatusViewModel : ObservableObject, IConnectionStatusViewModel
 {
     /// <summary>Initializes a new <see cref="ConnectionStatusViewModel"/> and subscribes to live status updates.</summary>
-    /// <param name="statusService">Source of live connection status; a no-op source in <see cref="NodeRole.Peer"/> mode.</param>
+    /// <param name="statusService">Source of live connection status; a no-op source in <see cref="UserRole.Peer"/> mode.</param>
     public ConnectionStatusViewModel(IConnectionStatusService statusService)
     {
         this.statusService = statusService;

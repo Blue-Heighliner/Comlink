@@ -65,7 +65,7 @@ public interface IMessageBuilder<TMessage> where TMessage : class, new()
 
     /// <summary>
     /// Maps the fields of a retrieval request: whether the message is one, and the date range, authors, destinations and
-    /// message identifiers it asks a storage server (see <see cref="IEngineBuilder.ServerStorage"/>) for. Each is its
+    /// message identifiers it asks a storage server (see <see cref="UserInfo.StoresMessages"/>) for. Each is its
     /// own property of the host's message type, mapped through <see cref="IRetrievalBuilder{TMessage}"/>; every one must
     /// be mapped.
     /// </summary>
@@ -92,7 +92,7 @@ public interface IMessageBuilder<TMessage> where TMessage : class, new()
     /// <summary>
     /// Maps the security level this message was sent at, one of the names given to <see cref="IEngineBuilder.SecurityLevels"/>,
     /// or an empty string when no security levels are configured. A destination user whose own assigned level
-    /// (see <see cref="IEngineBuilder.UserSecurityLevel(string,string)"/>) ranks lower is never sent this message.
+    /// (see <see cref="UserInfo.SecurityLevel"/>) ranks lower is never sent this message.
     /// </summary>
     IMessageBuilder<TMessage> SecurityLevel(Func<TMessage, string> get, Action<TMessage, string> set);
 

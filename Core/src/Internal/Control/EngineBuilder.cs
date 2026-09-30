@@ -8,15 +8,11 @@ namespace BlueHeighliner.Comlink.Control;
 internal sealed class EngineBuilder : IEngineBuilder, IAsyncDisposable
 {
     private readonly Dictionary<string, IReadOnlyList<string>> groups = new(StringComparer.OrdinalIgnoreCase);
-    private readonly Dictionary<string, Dictionary<string, string>> userData = new(StringComparer.OrdinalIgnoreCase);
     private readonly List<SecurityLevel> securityLevels = [];
-    private readonly Dictionary<string, string> userSecurityLevels = new(StringComparer.OrdinalIgnoreCase);
-    private readonly Dictionary<string, ServerUserConfig> servers = new(StringComparer.OrdinalIgnoreCase);
     private readonly List<string> users = [];
     private readonly List<MessagePriorityOption> priorities = [];
     private readonly List<TagPriorityBlock> blocked = [];
     private readonly Dictionary<AddressType, string> addressTypeLabels = [];
-    private readonly List<ConnectionPoint> outgoingPoints = [];
     private readonly List<IExternalSystem> externalSystems = [];
     private readonly List<Action<IUserConnectionHookContext>> userConnectedHooks = [];
     private readonly List<Action<IUserConnectionHookContext>> userDisconnectedHooks = [];
@@ -24,7 +20,6 @@ internal sealed class EngineBuilder : IEngineBuilder, IAsyncDisposable
     private readonly List<ExportFormatDefinition> exportFormats = [];
     private readonly List<ImportFormatDefinition> importFormats = [];
     private readonly List<AutoForwardControllerDefinition> autoForwardControllers = [];
-    private readonly List<string> storageServers = [];
     private ServiceProvider? bootstrap;
 
     /// <summary>The message mapping, or <see langword="null"/> until <see cref="Message{TMessage}"/> is called.</summary>
@@ -46,25 +41,13 @@ internal sealed class EngineBuilder : IEngineBuilder, IAsyncDisposable
     /// <summary>The debug user name, if stated.</summary>
     public string? DebugUserValue { get; private set; }
     /// <summary>How installation codes resolve, if stated.</summary>
-    public Func<string, UserInfo?>? UserCodeResolver { get; private set; }
+    public Func<string, string?>? UserCodeResolver { get; private set; }
     /// <summary>The user names added to the directory.</summary>
     public IReadOnlyList<string> UserNames => users;
     /// <summary>The user groups.</summary>
     public IReadOnlyDictionary<string, IReadOnlyList<string>> UserGroups => groups;
-    /// <summary>The data attached to users by name.</summary>
-    public IReadOnlyDictionary<string, Dictionary<string, string>> UserDataByName => userData;
-    /// <summary>How the data attached to any user is looked up, if stated.</summary>
-    public Func<string, IReadOnlyDictionary<string, string>>? UserDataLookup { get; private set; }
     /// <summary>The configured security levels, in ascending order; empty when none were stated.</summary>
     public IReadOnlyList<SecurityLevel> SecurityLevelValues => securityLevels;
-    /// <summary>The security levels assigned to users by name.</summary>
-    public IReadOnlyDictionary<string, string> UserSecurityLevelsByName => userSecurityLevels;
-    /// <summary>How the security level for any user name is looked up, if stated.</summary>
-    public Func<string, string>? UserSecurityLevelLookup { get; private set; }
-    /// <summary>The peer listener port, if stated.</summary>
-    public int? PeerPortValue { get; private set; }
-    /// <summary>The interface listener port, if stated.</summary>
-    public int? InterfacePortValue { get; private set; }
     /// <summary>The alert label, if stated.</summary>
     public string? AlertLabelValue { get; private set; }
     /// <summary>The alarm duration, if stated.</summary>
@@ -89,22 +72,14 @@ internal sealed class EngineBuilder : IEngineBuilder, IAsyncDisposable
     public Func<object, int>? PrintCountValue { get; private set; }
     /// <summary>Which folders allow deleting, if stated.</summary>
     public Func<FolderType, bool>? CanDeleteValue { get; private set; }
-    /// <summary>How a user name maps to a certificate name, if stated.</summary>
-    public Func<string, string>? CertificateNameValue { get; private set; }
     /// <summary>The trusted authority certificate name, if stated.</summary>
     public string? TrustedAuthorityValue { get; private set; }
     /// <summary>How the MSMT peer options are built, if stated.</summary>
     public Func<MsmtSessionPeerOptions>? ConnectionOptionsValue { get; private set; }
     /// <summary>How the MSMT peer options are adjusted, if stated.</summary>
-    public Func<MsmtSessionPeerOptions, MsmtSessionPeerOptions>? MsmtConnectionOptionsValue { get; private set; }
+    public Func<MsmtSessionPeerOptions, MsmtSessionPeerOptions>? MsmtOptionsValue { get; private set; }
     /// <summary>How the MicroGate peer options are adjusted, if stated.</summary>
-    public Func<MicroGatePeerOptions, MicroGatePeerOptions>? MicroGateConnectionOptionsValue { get; private set; }
-    /// <summary>The networking role, if stated.</summary>
-    public NodeRole? RoleValue { get; private set; }
-    /// <summary>The points this node connects out to.</summary>
-    public IReadOnlyList<ConnectionPoint> OutgoingPoints => outgoingPoints;
-    /// <summary>The server topology.</summary>
-    public IReadOnlyDictionary<string, ServerUserConfig> ServerTopology => servers;
+    public Func<MicroGatePeerOptions, MicroGatePeerOptions>? MicroGateOptionsValue { get; private set; }
     /// <summary>How connections are identified, if stated.</summary>
     public Func<ConnectionInfo, UserIdentity?>? IdentifyValue { get; private set; }
     /// <summary>The connection message type, if stated.</summary>
@@ -117,8 +92,8 @@ internal sealed class EngineBuilder : IEngineBuilder, IAsyncDisposable
     public Func<ConnectionInfo, object?>? ConnectionResponseFactory { get; private set; }
     /// <summary>The connection message serializer, if stated.</summary>
     public INetworkSerializer? ConnectionSerializerValue { get; private set; }
-    /// <summary>Whether the config file is read.</summary>
-    public bool IsConfigFileEnabled { get; private set; }
+    /// <summary>Whether the <c>--config</c> and <c>--user</c> arguments are honored.</summary>
+    public bool AreCommandLineOverridesAllowed { get; private set; }
     /// <summary>The external systems.</summary>
     public IReadOnlyList<IExternalSystem> ExternalSystems => externalSystems;
     /// <summary>The designated upstream hub, if any.</summary>
@@ -133,8 +108,6 @@ internal sealed class EngineBuilder : IEngineBuilder, IAsyncDisposable
     public IReadOnlyList<ExportFormatDefinition> ExportFormats => exportFormats;
     /// <summary>The custom import formats, in the order added.</summary>
     public IReadOnlyList<ImportFormatDefinition> ImportFormats => importFormats;
-    /// <summary>The server users that store the messages they route.</summary>
-    public IReadOnlyList<string> StorageServerNames => storageServers;
     /// <summary>The custom auto forward controllers, in the order added.</summary>
     public IReadOnlyList<AutoForwardControllerDefinition> AutoForwardControllers => autoForwardControllers;
 
@@ -245,7 +218,7 @@ internal sealed class EngineBuilder : IEngineBuilder, IAsyncDisposable
     }
 
     /// <inheritdoc />
-    public IEngineBuilder UserCodes(Func<string, UserInfo?> resolve)
+    public IEngineBuilder UserCodes(Func<string, string?> resolve)
     {
         UserCodeResolver = resolve;
         return this;
@@ -266,58 +239,10 @@ internal sealed class EngineBuilder : IEngineBuilder, IAsyncDisposable
     }
 
     /// <inheritdoc />
-    public IEngineBuilder UserData(string userName, IReadOnlyDictionary<string, string> data)
-    {
-        if (!userData.TryGetValue(userName, out Dictionary<string, string>? existing))
-        {
-            existing = [];
-            userData[userName] = existing;
-        }
-
-        foreach ((string key, string value) in data) { existing[key] = value; }
-        return this;
-    }
-
-    /// <inheritdoc />
-    public IEngineBuilder UserData(Func<string, IReadOnlyDictionary<string, string>> lookup)
-    {
-        UserDataLookup = lookup;
-        return this;
-    }
-
-    /// <inheritdoc />
     public IEngineBuilder SecurityLevels(params (string Name, string Color)[] levels)
     {
         securityLevels.Clear();
         securityLevels.AddRange(levels.Select(level => new SecurityLevel { Name = level.Name, Color = level.Color }));
-        return this;
-    }
-
-    /// <inheritdoc />
-    public IEngineBuilder UserSecurityLevel(string userName, string levelName)
-    {
-        userSecurityLevels[userName] = levelName;
-        return this;
-    }
-
-    /// <inheritdoc />
-    public IEngineBuilder UserSecurityLevel(Func<string, string> lookup)
-    {
-        UserSecurityLevelLookup = lookup;
-        return this;
-    }
-
-    /// <inheritdoc />
-    public IEngineBuilder PeerPort(int port)
-    {
-        PeerPortValue = port;
-        return this;
-    }
-
-    /// <inheritdoc />
-    public IEngineBuilder InterfacePort(int port)
-    {
-        InterfacePortValue = port;
         return this;
     }
 
@@ -401,13 +326,6 @@ internal sealed class EngineBuilder : IEngineBuilder, IAsyncDisposable
     }
 
     /// <inheritdoc />
-    public IEngineBuilder CertificateName(Func<string, string> name)
-    {
-        CertificateNameValue = name;
-        return this;
-    }
-
-    /// <inheritdoc />
     public IEngineBuilder TrustedAuthority(string certificateName)
     {
         TrustedAuthorityValue = certificateName;
@@ -422,47 +340,16 @@ internal sealed class EngineBuilder : IEngineBuilder, IAsyncDisposable
     }
 
     /// <inheritdoc />
-    public IEngineBuilder MsmtConnectionOptions(Func<MsmtSessionPeerOptions, MsmtSessionPeerOptions> configure)
+    public IEngineBuilder MsmtOptions(Func<MsmtSessionPeerOptions, MsmtSessionPeerOptions> configure)
     {
-        MsmtConnectionOptionsValue = configure;
+        MsmtOptionsValue = configure;
         return this;
     }
 
     /// <inheritdoc />
-    public IEngineBuilder MicroGateConnectionOptions(Func<MicroGatePeerOptions, MicroGatePeerOptions> configure)
+    public IEngineBuilder MicroGateOptions(Func<MicroGatePeerOptions, MicroGatePeerOptions> configure)
     {
-        MicroGateConnectionOptionsValue = configure;
-        return this;
-    }
-
-    /// <inheritdoc />
-    public IEngineBuilder Role(NodeRole role)
-    {
-        RoleValue = role;
-        return this;
-    }
-
-    /// <inheritdoc />
-    public IEngineBuilder OutgoingPoint(ConnectionPoint point)
-    {
-        outgoingPoints.Add(point);
-        return this;
-    }
-
-    /// <inheritdoc />
-    public IEngineBuilder Server(string name, params string[] childClients)
-    {
-        servers[name] = new ServerUserConfig { ChildClients = childClients };
-        return this;
-    }
-
-    /// <inheritdoc />
-    public IEngineBuilder ServerStorage(params string[] serverNames)
-    {
-        foreach (string name in serverNames)
-        {
-            if (!storageServers.Contains(name, StringComparer.OrdinalIgnoreCase)) { storageServers.Add(name); }
-        }
+        MicroGateOptionsValue = configure;
         return this;
     }
 
@@ -497,9 +384,9 @@ internal sealed class EngineBuilder : IEngineBuilder, IAsyncDisposable
     }
 
     /// <inheritdoc />
-    public IEngineBuilder ConfigFile(bool enabled = true)
+    public IEngineBuilder CommandLineOverrides(bool allowed)
     {
-        IsConfigFileEnabled = enabled;
+        AreCommandLineOverridesAllowed = allowed;
         return this;
     }
 

@@ -5,8 +5,7 @@ public sealed class InstallViewModelTests
 {
     private static UserInfo MakeUserInfo(string name) => new()
     {
-        Name = name,
-        Code = "CODE1"
+        Name = name
     };
 
     /// <summary>Empty UserCode sets ErrorMessage without calling the service.</summary>

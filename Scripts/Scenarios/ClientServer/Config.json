@@ -1,0 +1,31 @@
+{
+  "TrustedAuthorityCertificateFile": "../Root.cer",
+  "Users": {
+    "SERVER": {
+      "Role": "Server",
+      "PeerPort": 50121,
+      "InterfacePort": 50120,
+      "ChildClients": [ "CLIENT1", "CLIENT2" ],
+      "StoresMessages": true,
+      "SecurityLevel": "RESTRICTED",
+      "CertificateFile": "Server.pfx",
+      "DataFolder": "@SERVER"
+    },
+    "CLIENT1": {
+      "Role": "Client",
+      "InterfacePort": 50122,
+      "OutgoingPoints": [ { "IpAddress": "127.0.0.1", "Port": 50121 } ],
+      "SecurityLevel": "INTERNAL",
+      "CertificateFile": "Client1.pfx",
+      "DataFolder": "@CLIENT1"
+    },
+    "CLIENT2": {
+      "Role": "Client",
+      "InterfacePort": 50124,
+      "OutgoingPoints": [ { "IpAddress": "127.0.0.1", "Port": 50121 } ],
+      "SecurityLevel": "INTERNAL",
+      "CertificateFile": "Client2.pfx",
+      "DataFolder": "@CLIENT2"
+    }
+  }
+}

@@ -6,8 +6,8 @@ public static class Engine
 {
     /// <summary>What the host stated in its <see cref="IEngineConfiguration"/>.</summary>
     internal static EngineBuilder Builder { get; private set; } = new();
-    /// <summary>The configuration file loaded from the command-line arguments, when the host allows one.</summary>
-    internal static EngineConfigFile ConfigFile { get; private set; } = new();
+    /// <summary>The network configuration loaded from the command-line arguments and working directory, when the host allows one.</summary>
+    internal static NetworkConfig Network { get; private set; } = new();
     /// <summary>Registers the host's own services, applied to the running engine's container as well as the one its configuration is built in.</summary>
     internal static Action<IServiceCollection>? ConfigureServices { get; private set; }
 
@@ -31,9 +31,9 @@ public static class Engine
         Builder = EngineBuilder.Build<TConfiguration>(configureServices);
         await using (Builder)
         {
-            ConfigFile = Builder.IsConfigFileEnabled ? EngineConfigFile.Load(args) : new EngineConfigFile();
+            Network = NetworkConfig.Load(Builder.AreCommandLineOverridesAllowed ? args : []);
 
-            if (ConfigFile.HeadlessMode)
+            if (Network.Find(Network.User)?.Headless == true)
             {
                 await RunHeadless();
             }
@@ -46,7 +46,7 @@ public static class Engine
 
     private static async Task RunHeadless()
         => await Host.CreateDefaultBuilder()
-            .UseEngine(EngineMode.Headless, Builder, ConfigFile)
+            .UseEngine(EngineMode.Headless, Builder, Network)
             .ConfigureServices((_, services) => ConfigureServices?.Invoke(services))
             .ConfigureLogging(logging => logging.SetMinimumLevel(LogLevel.Information))
             .Build()

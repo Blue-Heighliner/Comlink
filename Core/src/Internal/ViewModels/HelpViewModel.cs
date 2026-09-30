@@ -5,7 +5,7 @@ internal interface IHelpViewModel
 {
     /// <summary>Gets the application name shown in the help window's title.</summary>
     string AppName { get; }
-    /// <summary>Gets the tabs of the guide, each covering one way of using the application. Which tabs exist depends on the configured <see cref="NodeRole"/> and message composition settings.</summary>
+    /// <summary>Gets the tabs of the guide, each covering one way of using the application. Which tabs exist depends on the configured <see cref="UserRole"/> and message composition settings.</summary>
     IReadOnlyList<HelpTab> Tabs { get; }
 }
 
@@ -16,15 +16,17 @@ internal sealed class HelpViewModel : IHelpViewModel
     /// <param name="engineController">Provides the application name, node role, and which optional compose features are enabled.</param>
     public HelpViewModel(IEngineController engineController)
     {
+        this.engineController = engineController;
         AppName = engineController.AppName;
-        Tabs = engineController.Role == NodeRole.Server ? BuildServerTabs() : BuildMessagingTabs(engineController);
     }
+
+    private readonly IEngineController engineController;
 
     /// <inheritdoc />
     public string AppName { get; }
 
     /// <inheritdoc />
-    public IReadOnlyList<HelpTab> Tabs { get; }
+    public IReadOnlyList<HelpTab> Tabs => engineController.Role == UserRole.Server ? BuildServerTabs() : BuildMessagingTabs(engineController);
 
     private static List<HelpTab> BuildServerTabs() =>
     [
@@ -89,7 +91,7 @@ internal sealed class HelpViewModel : IHelpViewModel
             ])
         ];
 
-        if (engineController.Role == NodeRole.Client)
+        if (engineController.Role == UserRole.Client)
         {
             tabs.Add(new HelpTab("Connection",
             [

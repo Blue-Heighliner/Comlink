@@ -1,7 +1,7 @@
 namespace BlueHeighliner.Comlink;
 
 /// <summary>
-/// Maps the fields of a retrieval request (see <see cref="IEngineBuilder.ServerStorage"/>) onto the host's own message
+/// Maps the fields of a retrieval request (see <see cref="UserInfo.StoresMessages"/>) onto the host's own message
 /// type <typeparamref name="TMessage"/>, given to <see cref="IMessageBuilder{TMessage}.Retrieval"/>. A client asks a
 /// storage server for stored messages by sending an ordinary message of the host's type with these fields set, so
 /// each is a real property of the host's message, read and written with the mapped getter and setter like any other

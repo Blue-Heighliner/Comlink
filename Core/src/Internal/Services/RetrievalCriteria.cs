@@ -1,7 +1,7 @@
 namespace BlueHeighliner.Comlink.Services;
 
 /// <summary>
-/// What a retrieval request asks a storage server for (see <see cref="IEngineBuilder.ServerStorage"/>). It is read from
+/// What a retrieval request asks a storage server for (see <see cref="UserInfo.StoresMessages"/>). It is read from
 /// and written to the message's mapped retrieval fields (see <see cref="IRetrievalBuilder{TMessage}"/>). A stored message
 /// fits when it satisfies every criterion that is set; each list criterion is satisfied by matching any one of its
 /// entries, compared case-insensitively and exactly.

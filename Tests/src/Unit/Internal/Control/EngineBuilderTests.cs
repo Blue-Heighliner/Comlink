@@ -8,11 +8,14 @@ public sealed class EngineBuilderTests
         public IEngineBuilder Configure(IEngineBuilder engine) => configure(new TestEngineConfiguration().Configure(engine));
     }
 
-    private static (EngineBuilder Builder, EngineController Controller) Build(Func<IEngineBuilder, IEngineBuilder> configure)
+    private static (EngineBuilder Builder, EngineController Controller) Build(Func<IEngineBuilder, IEngineBuilder> configure, string? currentUser = null, NetworkConfig? network = null)
     {
         EngineBuilder builder = EngineBuilder.Build(new Configuration(configure));
-        return (builder, new EngineController(builder, new CurrentUserProvider()));
+        return (builder, new EngineController(builder, new CurrentUserProvider { UserName = currentUser }, network));
     }
+
+    private static NetworkConfig Network(params (string Name, NetworkUserConfig User)[] users)
+        => new() { Users = users.ToDictionary(user => user.Name, user => user.User) };
 
     /// <summary>A configuration that never states a message type cannot start the engine.</summary>
     [Fact]
@@ -63,9 +66,9 @@ public sealed class EngineBuilderTests
         Assert.Equal("Tag", controller.TagLabel);
         Assert.True(controller.TagsEnabled);
         Assert.False(controller.PrintReceivedDefaultEnabled);
-        Assert.Equal(NodeRole.Peer, controller.Role);
+        Assert.Equal(UserRole.Peer, controller.Role);
         Assert.Equal("COMLINK-ROOT", controller.TrustedAuthorityCertificateName);
-        Assert.False(controller.ConfigFileEnabled);
+        Assert.False(controller.CommandLineOverridesAllowed);
         Assert.Empty(controller.OutgoingPoints);
         Assert.Empty(controller.Servers);
         Assert.Empty(controller.ExternalSystems);
@@ -90,7 +93,7 @@ public sealed class EngineBuilderTests
         Uri icon = new("avares://Host/icon.png");
         (_, EngineController controller) = Build(engine => engine
             .AppName("MyApp").AppVersion("2.3.4").DataPath("/data/app").KioskMode().HomeText("Welcome").WindowIcon(icon)
-            .DebugUser("DEBUG").PeerPort(1234).InterfacePort(5678).ConfigFile());
+            .DebugUser("DEBUG").CommandLineOverrides(true));
 
         Assert.Equal("MyApp", controller.AppName);
         Assert.Equal("2.3.4", controller.AppVersion);
@@ -99,9 +102,7 @@ public sealed class EngineBuilderTests
         Assert.Equal("Welcome", controller.HomeText);
         Assert.Equal(icon, controller.WindowIconUri);
         Assert.Equal("DEBUG", controller.DebugUserName);
-        Assert.Equal(1234, controller.PeerPort);
-        Assert.Equal(5678, controller.InterfacePort);
-        Assert.True(controller.ConfigFileEnabled);
+        Assert.True(controller.CommandLineOverridesAllowed);
     }
 
     /// <summary>Without a stated data path the default follows the application name.</summary>
@@ -170,26 +171,26 @@ public sealed class EngineBuilderTests
         Assert.Equal("B", Assert.Single(controller.Priorities).Name);
     }
 
-    /// <summary>Users, groups and the data attached to users are reported, with data stated by name merged and winning over a lookup.</summary>
+    /// <summary>Users and groups from the host and the network file are merged, with the file winning for a group of the same name, and the data attached to a user comes from their entry.</summary>
     [Fact]
     public void Stated_UsersGroupsAndData_AreReported()
     {
         (_, EngineController controller) = Build(engine => engine
             .Users("ALICE", "BOB").Users("CAROL")
-            .Group("OPS", "ALICE", "BOB").Group("ALL", "OPS", "CAROL")
-            .UserData(name => new Dictionary<string, string> { ["from"] = "lookup", ["only-lookup"] = name })
-            .UserData("ALICE", new Dictionary<string, string> { ["from"] = "stated", ["role"] = "clerk" })
-            .UserData("ALICE", new Dictionary<string, string> { ["desk"] = "4" }));
+            .Group("OPS", "ALICE", "BOB").Group("ALL", "OPS", "CAROL"),
+            network: new NetworkConfig
+            {
+                Users = { ["alice"] = new NetworkUserConfig { Data = new Dictionary<string, string> { ["desk"] = "4" } }, ["DAVE"] = new NetworkUserConfig() },
+                UserGroups = { ["OPS"] = ["ALICE", "BOB", "DAVE"], ["EXTRA"] = ["DAVE"] }
+            });
 
-        Assert.Equal(["ALICE", "BOB", "CAROL"], controller.Users);
-        Assert.Equal(["ALICE", "BOB"], controller.UserGroups["ops"]);
+        Assert.Equal(["ALICE", "BOB", "CAROL", "DAVE", "OPS", "ALL", "EXTRA"], controller.Users);
+        Assert.Equal(["ALICE", "BOB", "DAVE"], controller.UserGroups["ops"]);
         Assert.Equal(["OPS", "CAROL"], controller.UserGroups["ALL"]);
-        IReadOnlyDictionary<string, string> alice = controller.GetUserData("alice");
-        Assert.Equal("stated", alice["from"]);
-        Assert.Equal("clerk", alice["role"]);
-        Assert.Equal("4", alice["desk"]);
-        Assert.Equal("alice", alice["only-lookup"]);
-        Assert.Equal("lookup", controller.GetUserData("BOB")["from"]);
+        Assert.Equal(["DAVE"], controller.UserGroups["extra"]);
+        Assert.Equal("4", controller.GetUserData("ALICE")["desk"]);
+        Assert.Empty(controller.GetUserData("BOB"));
+        Assert.Equal(["OPS", "EXTRA"], controller.GetUserInfo("DAVE").Groups);
     }
 
     /// <summary>A user with nothing stated has no data.</summary>
@@ -201,17 +202,62 @@ public sealed class EngineBuilderTests
         Assert.Empty(controller.GetUserData("ANYONE"));
     }
 
-    /// <summary>Installation codes resolve through the stated resolver, and by default only the code CODE is recognized.</summary>
+    /// <summary>Installation codes resolve to a user name through the stated resolver; by default a code is the name of a user of the network, and otherwise only the code CODE is recognized.</summary>
     [Fact]
     public void UserCodes_StatedResolverReplacesTheDefault()
     {
-        (_, EngineController stated) = Build(engine => engine.UserCodes(code => code == "X" ? new UserInfo { Name = "XUSER", Code = "X" } : null));
+        (_, EngineController stated) = Build(engine => engine.UserCodes(code => code == "X" ? "XUSER" : null));
         (_, EngineController fallback) = Build(engine => engine);
 
-        Assert.Equal("XUSER", stated.ResolveCode("X")!.Name);
-        Assert.Null(stated.ResolveCode("CODE"));
-        Assert.Equal("TEST", fallback.ResolveCode("code")!.Name);
-        Assert.Null(fallback.ResolveCode("X"));
+        Assert.Equal("XUSER", stated.ResolveUserName("X"));
+        Assert.Null(stated.ResolveUserName("CODE"));
+        Assert.Equal("TEST", fallback.ResolveUserName("code"));
+        Assert.Null(fallback.ResolveUserName("X"));
+
+        (_, EngineController networked) = Build(engine => engine.Users("ALICE"), network: Network(("BOB", new NetworkUserConfig())));
+        Assert.Equal("ALICE", networked.ResolveUserName("alice"));
+        Assert.Equal("BOB", networked.ResolveUserName("Bob"));
+        Assert.Equal("TEST", networked.ResolveUserName("CODE"));
+        Assert.Null(networked.ResolveUserName("NOBODY"));
+    }
+
+    /// <summary>A user the network does not list is just a name; a listed user's details are what the file says.</summary>
+    [Fact]
+    public void GetUserInfo_ReturnsTheNetworksDetailsOrJustTheName()
+    {
+        (_, EngineController controller) = Build(engine => engine, network: Network(("ALICE", new NetworkUserConfig { SecurityLevel = "HIGH" })));
+
+        Assert.Equal("HIGH", controller.GetUserInfo("alice").SecurityLevel);
+        UserInfo other = controller.GetUserInfo("BOB");
+        Assert.Equal("BOB", other.Name);
+        Assert.Null(other.Role);
+    }
+
+    /// <summary>The current user's role, ports, outgoing points and child clients come from that user's entry, with defaults before a user exists or when none is listed.</summary>
+    [Fact]
+    public void CurrentUserInfo_DecidesRolePortsAndConnections()
+    {
+        NetworkConfig network = Network(("SERVER", new NetworkUserConfig
+        {
+            Role = "Server",
+            PeerPort = 1234,
+            InterfacePort = 5678,
+            ChildClients = ["C1"],
+            OutgoingPoints = [new ConnectionPointConfig { IpAddress = "10.0.0.1", Port = 1 }]
+        }));
+        (_, EngineController server) = Build(engine => engine, "SERVER", network);
+        (_, EngineController noInfo) = Build(engine => engine, "OTHER", network);
+        (_, EngineController noUser) = Build(engine => engine, network: network);
+
+        Assert.Equal((UserRole.Server, 1234, 5678), (server.Role, server.PeerPort, server.InterfacePort));
+        Assert.Equal([new ConnectionPoint { IpAddress = "10.0.0.1", Port = 1 }], server.OutgoingPoints);
+        Assert.Equal(["C1"], server.Servers["server"].ChildClients);
+        Assert.All([noInfo, noUser], controller =>
+        {
+            Assert.Equal((UserRole.Peer, 50021, 50020), (controller.Role, controller.PeerPort, controller.InterfacePort));
+            Assert.Empty(controller.OutgoingPoints);
+            Assert.Single(controller.Servers);
+        });
     }
 
     /// <summary>Certificate settings a host states are used, including for the MSMT options when it supplies its own.</summary>
@@ -219,21 +265,25 @@ public sealed class EngineBuilderTests
     public void Stated_CertificateSettings_AreUsed()
     {
         MsmtSessionPeerOptions options = new() { Credentials = new MsmtCredentials { Identity = TestMsmtCertificates.Create().Server, TrustedAuthorities = [] } };
-        (_, EngineController controller) = Build(engine => engine
-            .CertificateName(user => $"cert-{user}").TrustedAuthority("MY-ROOT").ConnectionOptions(() => options));
+        (_, EngineController controller) = Build(
+            engine => engine.TrustedAuthority("MY-ROOT").ConnectionOptions(() => options),
+            network: Network(("BOB", new NetworkUserConfig { CertificateName = "cert-BOB" })));
+        (_, EngineController fromFile) = Build(engine => engine.TrustedAuthority("MY-ROOT"), network: new NetworkConfig { TrustedAuthorityCertificateName = "FILE-ROOT" });
 
         Assert.Equal("cert-BOB", controller.GetCertificateName("BOB"));
+        Assert.Equal("CAROL", controller.GetCertificateName("CAROL"));
         Assert.Equal("MY-ROOT", controller.TrustedAuthorityCertificateName);
+        Assert.Equal("FILE-ROOT", fromFile.TrustedAuthorityCertificateName);
         Assert.Same(options, controller.ConnectionOptions);
     }
 
     /// <summary>The MSMT adjustment is applied on top of the stated or built options, and left out when none is stated.</summary>
     [Fact]
-    public void Stated_MsmtConnectionOptions_AdjustTheOptionsUsedForEveryConnection()
+    public void Stated_MsmtOptions_AdjustTheOptionsUsedForEveryConnection()
     {
         MsmtSessionPeerOptions options = new() { Credentials = new MsmtCredentials { Identity = TestMsmtCertificates.Create().Server, TrustedAuthorities = [] } };
         (_, EngineController adjusted) = Build(engine => engine
-            .ConnectionOptions(() => options).MsmtConnectionOptions(o => o with { HandshakeTimeout = TimeSpan.FromSeconds(7) }));
+            .ConnectionOptions(() => options).MsmtOptions(o => o with { HandshakeTimeout = TimeSpan.FromSeconds(7) }));
         (_, EngineController plain) = Build(engine => engine.ConnectionOptions(() => options));
 
         Assert.Equal(TimeSpan.FromSeconds(7), adjusted.ConnectionOptions.HandshakeTimeout);
@@ -243,31 +293,15 @@ public sealed class EngineBuilderTests
 
     /// <summary>The MicroGate adjustment starts from the defaults and defaults to them when none is stated.</summary>
     [Fact]
-    public void Stated_MicroGateConnectionOptions_AdjustTheDefaults()
+    public void Stated_MicroGateOptions_AdjustTheDefaults()
     {
         (_, EngineController adjusted) = Build(engine => engine
-            .MicroGateConnectionOptions(o => o with { MaxInfoField = 512, Link = o.Link with { Crc = MicroGateCrc.Crc32Ccitt } }));
+            .MicroGateOptions(o => o with { MaxInfoField = 512, Link = o.Link with { Crc = MicroGateCrc.Crc32Ccitt } }));
         (_, EngineController plain) = Build(engine => engine);
 
         Assert.Equal(512, adjusted.MicroGateOptions.MaxInfoField);
         Assert.Equal(MicroGateCrc.Crc32Ccitt, adjusted.MicroGateOptions.Link.Crc);
         Assert.Equal(new MicroGatePeerOptions(), plain.MicroGateOptions);
-    }
-
-    /// <summary>The network role, the points this node connects to, and the server topology are reported.</summary>
-    [Fact]
-    public void Stated_NetworkSettings_AreReported()
-    {
-        ConnectionPoint first = new() { IpAddress = "10.0.0.1", Port = 1 };
-        ConnectionPoint second = new() { SerialPort = "SL0" };
-        (_, EngineController controller) = Build(engine => engine
-            .Role(NodeRole.Server).OutgoingPoint(first).OutgoingPoint(second)
-            .Server("Server1", "Client1", "Client2").Server("Server2", "Client3"));
-
-        Assert.Equal(NodeRole.Server, controller.Role);
-        Assert.Equal([first, second], controller.OutgoingPoints);
-        Assert.Equal(["Client1", "Client2"], controller.Servers["server1"].ChildClients);
-        Assert.Equal(["Client3"], controller.Servers["Server2"].ChildClients);
     }
 
     /// <summary>The identification hook and the connection message, response and serializer are reported and used.</summary>
@@ -420,7 +454,7 @@ public sealed class EngineBuilderTests
     {
         EngineBuilder builder = new();
 
-        Assert.Same(builder, builder.AppName("a").AppVersion("1").DataPath("/d").KioskMode().HomeText("h").PeerPort(1).InterfacePort(2).ConfigFile());
+        Assert.Same(builder, builder.AppName("a").AppVersion("1").DataPath("/d").KioskMode().HomeText("h").CommandLineOverrides(false));
     }
 
     /// <summary>No server stores messages unless the configuration says so.</summary>
@@ -432,12 +466,28 @@ public sealed class EngineBuilderTests
         Assert.Empty(controller.StorageServers);
     }
 
-    /// <summary>ServerStorage names the storing servers; calling it again adds to them without duplicating a name (case-insensitive).</summary>
+    /// <summary>Only server users whose entry says they store messages are storage servers.</summary>
     [Fact]
-    public void ServerStorage_AccumulatesDistinctServerNames()
+    public void StorageServers_AreTheServerUsersThatStoreMessages()
     {
-        (_, EngineController controller) = Build(engine => engine.ServerStorage("Server1", "Server2").ServerStorage("SERVER1", "Server3"));
+        (_, EngineController controller) = Build(engine => engine, network: Network(
+            ("Server1", new NetworkUserConfig { Role = "Server", StoresMessages = true }),
+            ("Server2", new NetworkUserConfig { Role = "Server" }),
+            ("Server3", new NetworkUserConfig { Role = "Server", StoresMessages = true }),
+            ("Client1", new NetworkUserConfig { Role = "Client", StoresMessages = true })));
 
-        Assert.Equal(["Server1", "Server2", "Server3"], controller.StorageServers);
+        Assert.Equal(["Server1", "Server3"], controller.StorageServers);
+    }
+
+    /// <summary>A user's security level is the one on their entry, or the lowest configured level when none is stated.</summary>
+    [Fact]
+    public void GetUserSecurityLevel_UsesTheEntryElseTheLowestLevel()
+    {
+        (_, EngineController controller) = Build(
+            engine => engine.SecurityLevels(("LOW", "#111111"), ("HIGH", "#222222")),
+            network: Network(("ALICE", new NetworkUserConfig { SecurityLevel = "HIGH" })));
+
+        Assert.Equal("HIGH", controller.GetUserSecurityLevel("ALICE"));
+        Assert.Equal("LOW", controller.GetUserSecurityLevel("BOB"));
     }
 }

@@ -204,7 +204,7 @@ internal partial class TitleBar : UserControl
     }
 
     /// <summary>
-    /// Gets or sets a value indicating whether this instance is running as a <see cref="NodeRole.Server"/>,
+    /// Gets or sets a value indicating whether this instance is running as a <see cref="UserRole.Server"/>,
     /// which hides the left-side action buttons and shows the CONNECTIONS/ACTIVITY view-switching buttons instead.
     /// </summary>
     public bool IsServerMode

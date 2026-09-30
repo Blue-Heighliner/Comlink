@@ -7,8 +7,7 @@ public sealed class MainViewModelTests
 
     private static UserInfo MakeUserInfo(string name = "ALPHA") => new()
     {
-        Name = name,
-        Code = "CODE1"
+        Name = name
     };
 
     /// <summary>Helper that assembles all mocks and builds a <see cref="MainViewModel"/>.</summary>
@@ -562,11 +561,11 @@ public sealed class MainViewModelTests
 
     /// <summary>CanRetrieve is true only for a Client on a network where a server stores messages.</summary>
     [Theory]
-    [InlineData(NodeRole.Client, true, true)]
-    [InlineData(NodeRole.Client, false, false)]
-    [InlineData(NodeRole.Peer, true, false)]
-    [InlineData(NodeRole.Server, true, false)]
-    public void CanRetrieve_RequiresClientRoleAndAStorageServer(NodeRole role, bool hasStorageServer, bool expected)
+    [InlineData(UserRole.Client, true, true)]
+    [InlineData(UserRole.Client, false, false)]
+    [InlineData(UserRole.Peer, true, false)]
+    [InlineData(UserRole.Server, true, false)]
+    public void CanRetrieve_RequiresClientRoleAndAStorageServer(UserRole role, bool hasStorageServer, bool expected)
     {
         Setup s = new();
         s.EngineController.Setup(e => e.Role).Returns(role);
@@ -693,7 +692,7 @@ public sealed class MainViewModelTests
     public void ServerMode_Initially_ShowsConnectionsTableNotActivityView()
     {
         Setup s = new();
-        s.EngineController.Setup(e => e.Role).Returns(NodeRole.Server);
+        s.EngineController.Setup(e => e.Role).Returns(UserRole.Server);
         MainViewModel vm = s.BuildVm();
 
         Assert.True(vm.ShowConnectionsTable);
@@ -705,7 +704,7 @@ public sealed class MainViewModelTests
     public async Task ShowActivityCommand_ActivityFolderNotSelected_SwitchesViewAndSelectsFolder()
     {
         Setup s = new();
-        s.EngineController.Setup(e => e.Role).Returns(NodeRole.Server);
+        s.EngineController.Setup(e => e.Role).Returns(UserRole.Server);
         s.FolderBar.Setup(f => f.SelectedFolder).Returns((FolderItemViewModel?)null);
         MainViewModel vm = s.BuildVm();
 
@@ -722,7 +721,7 @@ public sealed class MainViewModelTests
     public async Task ShowActivityCommand_ActivityFolderAlreadySelected_RefreshesInsteadOfReselecting()
     {
         Setup s = new();
-        s.EngineController.Setup(e => e.Role).Returns(NodeRole.Server);
+        s.EngineController.Setup(e => e.Role).Returns(UserRole.Server);
         FolderItemViewModel activityFolder = new("f1", "Activity", FolderType.Activity, null);
         s.FolderBar.Setup(f => f.SelectedFolder).Returns(activityFolder);
         s.EntryBar.Setup(e => e.Refresh()).Returns(Task.CompletedTask);
@@ -739,7 +738,7 @@ public sealed class MainViewModelTests
     public async Task ShowConnectionsCommand_SwitchesBackToConnectionsTable()
     {
         Setup s = new();
-        s.EngineController.Setup(e => e.Role).Returns(NodeRole.Server);
+        s.EngineController.Setup(e => e.Role).Returns(UserRole.Server);
         s.FolderBar.Setup(f => f.SelectedFolder).Returns((FolderItemViewModel?)null);
         MainViewModel vm = s.BuildVm();
         await vm.ShowActivityCommand.ExecuteAsync(null);

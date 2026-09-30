@@ -2,25 +2,24 @@ namespace BlueHeighliner.Comlink.Sample;
 
 /// <summary>
 /// Sample <see cref="IEngineConfiguration"/>: maps the engine's logical message fields onto <see cref="SampleMessage"/> and
-/// the packet fields onto <see cref="SamplePacket"/>, and states every other setting Sample has distinct, non-config-file
-/// behavior worth showing. Everything left unstated uses the engine's default, with <c>config.json</c> applied on top
+/// the packet fields onto <see cref="SamplePacket"/>, and states every other setting Sample has distinct, non-network-file
+/// behavior worth showing. Everything left unstated uses the engine's default, with the network configuration file applied on top
 /// automatically (see <c>Docs/Components/Configuration.md</c>):
 /// <list type="bullet">
 /// <item><description>home text - a product-appropriate home screen welcome text.</description></item>
 /// <item><description>window icon - Sample's own envelope icon instead of the operating system's.</description></item>
-/// <item><description>user codes and users - one hard-coded install code per site used across <c>Scripts/Scenarios/</c> (Client1, Client2, Server, Server1, Server2, Peer1, Peer2), so every scenario's <c>UserName</c> is a recognized user without needing its own code.</description></item>
+/// <item><description>users - none stated here: every user of the network, with their role, ports, connections, security level and node settings, comes from the network configuration file (<c>--config</c>, or <c>Config.json</c> in the working directory), which each of the <c>Scripts/Scenarios/</c> scenarios supplies for its own network, and an install code is just the name of a user in it.</description></item>
 /// <item><description>priorities and blocked tags - three priority levels and both blocked-combination kinds.</description></item>
 /// <item><description>print count - prints an alert message twice and every other received message once.</description></item>
 /// <item><description>deleting - only drafts and notes can be deleted; Inbox, Outbox, and Activity are protected.</description></item>
-/// <item><description>config file - enabled, so Sample honors a <c>--config</c> argument, unlike the engine default.</description></item>
-/// <item><description>external systems - a single demo <see cref="SampleExternalSystem"/>, showing the external-system conduit pattern.</description></item>
+/// <item><description>command-line overrides - allowed, so Sample honors <c>--config</c> and <c>--user</c> (which its scenario scripts pass), unlike the engine default.</description></item>
 /// <item><description>packetization - enabled with <see cref="SamplePacket"/>, using the default packet size, window and serializer.</description></item>
 /// <item><description>address type labels - renames the <see cref="AddressType.External"/> label to <c>OUTSIDE</c>, matching the <c>Kind</c> vocabulary <see cref="SampleRecipient"/> already uses for it.</description></item>
-/// <item><description>security levels - three placeholder levels (<c>PUBLIC</c>, <c>INTERNAL</c>, <c>RESTRICTED</c>); the <c>Peer</c> scenario's sites run at <c>PUBLIC</c>, the <c>ClientServer</c>/<c>ServerCluster</c> scenarios' clients at <c>INTERNAL</c>, and their servers at <c>RESTRICTED</c>.</description></item>
+/// <item><description>security levels - three placeholder levels (<c>PUBLIC</c>, <c>INTERNAL</c>, <c>RESTRICTED</c>), assigned to users in each scenario's network configuration; the <c>Peer</c> scenario's sites run at <c>PUBLIC</c>, the <c>ClientServer</c>/<c>ServerCluster</c> scenarios' clients at <c>INTERNAL</c>, and their servers at <c>RESTRICTED</c>.</description></item>
 /// <item><description>connection and message hooks - a newly connected user is welcomed with who else is currently online (<see cref="IEngineHookContext.ConnectedUsers"/>), everyone still online is told when someone disconnects, and any received message tagged <c>PING</c> gets an automatic <c>PONG</c> reply (all via <see cref="IEngineHookContext.SendMessage"/>).</description></item>
 /// <item><description>export formats - a plain-text alternative to the built-in JSON export, restricted to messages, drafts, and notes (an activity log's structured entries don't read naturally as prose).</description></item>
 /// <item><description>import formats - a CSV reader that stages one send per <c>Subject,User,Body</c> line for the user to review and send from the staged send screen, one at a time a second apart.</description></item>
-/// <item><description>server storage - <c>Server</c> (ClientServer scenario) and <c>Server1</c> (ServerCluster scenario) keep a copy of every message they route and answer a client's RETRIEVE request; <c>Server2</c> does not.</description></item>
+/// <item><description>server storage - <c>Server</c> (ClientServer scenario) and <c>Server1</c> (ServerCluster scenario) (<c>StoresMessages</c> in the network configuration) keep a copy of every message they route and answer a client's RETRIEVE request; <c>Server2</c> does not.</description></item>
 /// <item><description>auto forward controllers - an "Escalation" controller, open to every Peer/Client scenario site, that forwards any received alert or <c>URGENT</c>-tagged message to whichever users its target list names.</description></item>
 /// </list>
 /// Actual alarm sound playback and printer discovery and driving are real platform behavior always provided by the
@@ -28,17 +27,6 @@ namespace BlueHeighliner.Comlink.Sample;
 /// </summary>
 public sealed class SampleEngineConfiguration : IEngineConfiguration
 {
-    private readonly Dictionary<string, UserInfo> userCodes = new()
-    {
-        ["CLIENT1"] = new UserInfo { Name = "Client1", Code = "CLIENT1" },
-        ["CLIENT2"] = new UserInfo { Name = "Client2", Code = "CLIENT2" },
-        ["SERVER"] = new UserInfo { Name = "Server", Code = "SERVER" },
-        ["SERVER1"] = new UserInfo { Name = "Server1", Code = "SERVER1" },
-        ["SERVER2"] = new UserInfo { Name = "Server2", Code = "SERVER2" },
-        ["PEER1"] = new UserInfo { Name = "Peer1", Code = "PEER1" },
-        ["PEER2"] = new UserInfo { Name = "Peer2", Code = "PEER2" }
-    };
-
     /// <inheritdoc />
     public IEngineBuilder Configure(IEngineBuilder engine)
         => engine
@@ -65,8 +53,6 @@ public sealed class SampleEngineConfiguration : IEngineConfiguration
                 .Data(p => p.Chunk, (p, value) => p.Chunk = value.ToArray()))
             .HomeText("Select a folder and entry to get started, or create a new draft or note.")
             .WindowIcon(new Uri("avares://BlueHeighliner.Comlink.Sample/Assets/envelope.png"))
-            .UserCodes(code => userCodes.GetValueOrDefault(code.ToUpperInvariant()))
-            .Users("Client1", "Client2", "Server", "Server1", "Server2", "Peer1", "Peer2")
             .Priorities(
                 ("Low", 0),
                 ("Medium", 1),
@@ -78,17 +64,11 @@ public sealed class SampleEngineConfiguration : IEngineConfiguration
                 ("PUBLIC", "#2E7D32"),
                 ("INTERNAL", "#1565C0"),
                 ("RESTRICTED", "#C62828"))
-            .UserSecurityLevel(userName => userName.ToUpperInvariant() switch
-            {
-                "SERVER" or "SERVER1" or "SERVER2" => "RESTRICTED",
-                "CLIENT1" or "CLIENT2" => "INTERNAL",
-                _ => "PUBLIC"
-            })
             .PrintCount<SampleMessage>(message => message.Alert ? 2 : 1)
             .CanDelete(folder => folder is FolderType.Drafts or FolderType.Notes)
-            .ConfigFile()
-            .ServerStorage("Server", "Server1")
-            .ExternalSystem(new SampleExternalSystem())
+            .CommandLineOverrides(true)
+            .MsmtOptions(options => options with { HandshakeTimeout = TimeSpan.FromSeconds(15), ResponseTimeout = TimeSpan.FromSeconds(60) })
+            .MicroGateOptions(options => options with { MaxInfoField = 1024, TransmitWindow = 4 })
             .OnUserConnected(context =>
             {
                 string userName = context.TargetUser;
@@ -144,6 +124,6 @@ public sealed class SampleEngineConfiguration : IEngineConfiguration
                 stagedSendDelay: TimeSpan.FromSeconds(1))
             .AutoForwardController<SampleMessage>(
                 "Escalation",
-                users: ["Peer1", "Peer2", "Client1", "Client2"],
+                users: ["PEER1", "PEER2", "CLIENT1", "CLIENT2"],
                 filter: message => message.Alert || string.Equals(message.Category, "URGENT", StringComparison.OrdinalIgnoreCase));
 }

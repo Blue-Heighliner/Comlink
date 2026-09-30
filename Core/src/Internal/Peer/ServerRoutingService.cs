@@ -1,7 +1,7 @@
 namespace BlueHeighliner.Comlink.Peer;
 
 /// <summary>
-/// Implements <see cref="IPeerService"/> for <see cref="NodeRole.Server"/>: listens on <see cref="IEngineController.PeerPort"/>
+/// Implements <see cref="IPeerService"/> for <see cref="UserRole.Server"/>: listens on <see cref="IEngineController.PeerPort"/>
 /// for connections from its child clients and other servers, keeps a connection open to each of its
 /// <see cref="IEngineController.OutgoingPoints"/>, and relays raw message bytes between them. Nothing is configured
 /// about where a child or another server is: a connection is matched to one by the identity it is given when it forms

@@ -37,7 +37,7 @@ internal interface IPeerService
 }
 
 /// <summary>
-/// Implements <see cref="IPeerService"/> for <see cref="NodeRole.Peer"/> by wrapping an <see cref="IPeerTransport"/>.
+/// Implements <see cref="IPeerService"/> for <see cref="UserRole.Peer"/> by wrapping an <see cref="IPeerTransport"/>.
 /// Traffic carries an instance of <see cref="IEngineController.MessageType"/> directly with no envelope; delivery
 /// confirmation is derived from the transport's own acknowledgement of the send, not from an application-level
 /// reply. The node listens on <see cref="IEngineController.PeerPort"/> and keeps a connection open to each of its

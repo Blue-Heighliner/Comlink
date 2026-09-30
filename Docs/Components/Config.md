@@ -1,210 +1,112 @@
-# Config File Reference
+# Network Configuration File Reference
 
-Engine supports an optional `--config <path>` argument pointing to a JSON configuration file. It works identically in every build configuration; whether it is honored at all is decided solely by the configuration's `ConfigFile` setting, which defaults to off.
+The engine defines the schema of one JSON file that describes a whole network: every user, their role, ports and connections, who is in which group, and the trusted certificate authority. It is shared by every node of the network, so nothing about a user is stated in code or in per-node files. It works identically in every build configuration; `Config.json` in the working directory is always read, and whether the command-line arguments below may override it is decided solely by the host, through `IEngineBuilder.CommandLineOverrides(bool)` (see [Configuration.md](Configuration.md#command-line-overrides)); they are ignored unless the host allows them.
 
 ```sh
-Sample.exe --config path/to/config.json
+Sample.exe --config path/to/Config.json --user CLIENT1
 ```
 
-If `--config` is omitted all fields take their defaults. If `--config` points to a non-existent or unreadable file the process throws at startup. Whether `--config` is honored at all is itself gated by `ConfigFile` — see [Configuration.md](Configuration.md#config-file).
+- `--config <path>` names the file (only when the host allows command-line overrides). When omitted, `Config.json` in the current working directory is used if it exists, and otherwise the network is empty. A `--config` path that does not exist or cannot be read makes the process throw at startup.
+- `--user <name>` (also only when overrides are allowed) names the user this process runs as, so a node starts as that user without the install screen and uses that user's `DataFolder` and `Headless` choice. Without the argument, a `User.json` in the current working directory names the user instead, holding `{ "User": "USER-A" }` (or just the name as a JSON string). Without either the user is the one installed through the install screen (an install code is the name of a user in this file, case-insensitive), which is remembered between runs.
 
-All property names are PascalCase; deserialization is case-insensitive. Unrecognised fields are silently ignored. Missing fields use their defaults. An empty config file (`{}`) behaves identically to omitting `--config`.
+Property names are PascalCase; deserialization is case-insensitive, and so are user names. Unrecognised fields are silently ignored and missing fields use their defaults. An empty file (`{}`) is an empty network. By convention user names are all uppercase.
 
 ## Schema
 
 ```json
 {
-  "HeadlessMode":        false,
-  "UserName":            null,
-  "PeerPort":            50021,
-  "InterfacePort":       50020,
-  "DataFolder":          null,
-  "PeerCertificateName": null,
   "TrustedAuthorityCertificateName": null,
-  "PeerCertificateFile": null,
-  "TrustedAuthorityCertificateFile": null,
-  "AlertText":           null,
-  "AlarmSoundSeconds":   null,
-  "QuickConfirmationEnabled": null,
-  "ComposeAlertsEnabled": null,
-  "MessageTagsEnabled": null,
-  "MessageTagLabel": null,
-  "PrintReceivedEnabled": null,
-  "NodeRole": null,
-  "OutgoingPoints": [],
-  "ServerUsers": {},
-  "Users": {
-    "USER-A": { "Data": { "role": "clerk" } }
-  },
+  "TrustedAuthorityCertificateFile": "../Root.cer",
   "UserGroups": {
-    "OPS": ["USER-A", "USER-B"]
+    "OPS": [ "USER-A", "USER-B" ]
+  },
+  "Users": {
+    "USER-A": {
+      "Role": "Peer",
+      "PeerPort": 50021,
+      "InterfacePort": 50020,
+      "OutgoingPoints": [ { "IpAddress": "10.0.0.1", "Port": 50021 } ],
+      "ChildClients": [],
+      "StoresMessages": false,
+      "SecurityLevel": null,
+      "CertificateName": null,
+      "Data": { "role": "clerk" },
+
+      "CertificateFile": "USER-A.pfx",
+      "DataFolder": "@USER-A",
+      "Headless": false,
+      "AlertText": null,
+      "AlarmSoundSeconds": null,
+      "QuickConfirmationEnabled": null,
+      "ComposeAlertsEnabled": null,
+      "MessageTagsEnabled": null,
+      "MessageTagLabel": null,
+      "PrintReceivedEnabled": null
+    }
   }
 }
 ```
 
-## Fields
-
-### `HeadlessMode`
-
-**Type:** `bool` | **Default:** `false`
-
-Run the process headless — as a normal peer client, with the same local database and `IServiceConnection` as the GUI — instead of launching the desktop GUI. No window is opened. The local interface listener that lets external programs plug into this user's message stream (see [Interface.md](Interface.md)) is active regardless of this setting.
-
----
-
-### `UserName`
-
-**Type:** `string | null` | **Default:** `null`
-
-Debug user name override. When set, `UserService` skips `State.json` entirely and uses this value as the active user name without requiring installation. Intended for development and testing only.
-
----
-
-### `PeerPort`
-
-**Type:** `int | null` | **Default:** `null` (uses Engine default of `50021`)
-
-TCP port on which this node listens for IP connections opened by other nodes: peers dialing this peer, and clients and other servers connecting to a server. A `"Client"`-role instance opens its connection outward and does not listen, so the port is unused there. Must be reachable from every node that has this node as an outgoing point.
-
----
-
-### `InterfacePort`
-
-**Type:** `int | null` | **Default:** `null` (uses Engine default of `50020`)
-
-TCP port on which the interface listener listens. Always active, in both GUI and headless mode. Loopback-only — intended for local programs on the same machine.
-
----
-
-### `DataFolder`
-
-**Type:** `string | null` | **Default:** `null` (`%APPDATA%\{AppName}`)
-
-Root directory for all persistent data (LiteDB database, user state file, daily logs). Three forms are accepted:
-
-| Value | Resolves to |
-|-------|-------------|
-| `null` or absent | `%APPDATA%\{AppName}` |
-| Absolute path (e.g. `C:\Data\myuser`) | That exact path |
-| `@`-prefixed path (e.g. `@test/user`) | `%APPDATA%\{AppName}\test\user` |
-
-The `@` prefix is useful for running multiple instances in isolated sub-directories under the default app data folder.
-
----
-
-### `PeerCertificateName`
-
-**Type:** `string | null` | **Default:** `null` (auto-detect)
-
-Controls which identity certificate is used for MSMT mutual TLS authentication on peer connections. MSMT peer authentication is mandatory — there is no way to disable it. The certificate is looked up by subject name (CN) in the system certificate store (`My` / Personal), checking CurrentUser then LocalMachine. Ignored when `PeerCertificateFile` is set.
-
-| Value | Behaviour |
-|-------|-----------|
-| `null` or absent | Auto-detect: look for a certificate named after the user name itself, unprefixed. Throws at startup if not found. |
-| Any other string | Look for a certificate with that exact subject name. Throws at startup if not found. |
-
----
+## Network
 
 ### `TrustedAuthorityCertificateName`
 
-**Type:** `string | null` | **Default:** `null` (uses Engine default of `"COMLINK-ROOT"`)
+**Type:** `string | null` | **Default:** `null` (uses the host's `TrustedAuthority`, then `COMLINK-ROOT`)
 
-The certificate authority every peer's identity certificate (see `PeerCertificateName`) must chain to, looked up by subject name the same way. Both sides of a connection must present a certificate signed by this same authority, checked directly against it (not the OS's own trust store). Throws at startup if not found. Ignored when `TrustedAuthorityCertificateFile` is set.
-
----
-
-### `PeerCertificateFile`
-
-**Type:** `string | null` | **Default:** `null` (use `PeerCertificateName` against the system store)
-
-Path to a PKCS#12 (`.pfx`) file containing the identity certificate and its private key, used instead of a system certificate store lookup. A relative path is resolved against the directory containing the config file itself, not the process's working directory — so a certificate file can sit right next to its config and be referenced by a bare filename regardless of where the process is launched from. Must be set together with `TrustedAuthorityCertificateFile`; setting only one of the two throws at startup. See `Scripts/Scenarios/` for a working example: each scenario's config points at a `.pfx` file in the same directory, all signed by the shared `Scripts/Scenarios/Root.cer` authority.
-
----
+Subject name of the certificate authority every user's identity certificate must chain to, looked up in the system certificate store. Ignored when `TrustedAuthorityCertificateFile` is set.
 
 ### `TrustedAuthorityCertificateFile`
 
-**Type:** `string | null` | **Default:** `null` (use `TrustedAuthorityCertificateName` against the system store)
+**Type:** `string | null` | **Default:** `null`
 
-Path to a public certificate file (e.g. `.cer`) for the certificate authority trusted to sign every peer's identity certificate, used instead of a system certificate store lookup. Resolved the same way as `PeerCertificateFile`. Must be set together with `PeerCertificateFile`.
+Path to a public certificate file (for example `.cer`) for that authority, used instead of a store lookup. A relative path resolves against the directory of the configuration file. It must be used together with each running user's `CertificateFile`; setting only one of the two throws when connections are set up.
 
----
+### `UserGroups`
 
-### `AlertText`
+**Type:** `object` | **Default:** `{}`
 
-**Type:** `string | null` | **Default:** `null` (uses Engine default of `"ALERT"`)
+Group name to member names. Members may be user names or other group names, enabling nested groups; addressing a group sends to every member (see [Peer.md](Peer.md#user-roles)). A user's info lists the groups it is a member of, and group names appear in the address directory alongside user names.
 
-Text shown in the title bar's alert box while alarming (see `Docs/Components/Peer.md#alert-messages`).
+```json
+"UserGroups": {
+  "INNER": [ "USER-A" ],
+  "OUTER": [ "INNER", "USER-B" ]
+}
+```
 
----
+### `Users`
 
-### `AlarmSoundSeconds`
+**Type:** `object` | **Default:** `{}`
 
-**Type:** `double | null` | **Default:** `null` (uses Engine default of `30`)
+Every user of the network, keyed by user name. The fields of an entry are in two groups: what is known about the user, which becomes their `UserInfo`, and the settings of the node that user runs, which apply only while that user is the current one.
 
-Seconds the alarm sound plays after an alert is received before automatically stopping. Resets to this full duration whenever a new alert is received while already alarming.
+## What is known about a user
 
----
+These become the user's `UserInfo` (see [Configuration.md](Configuration.md#user-info)) for every node on the network.
 
-### `QuickConfirmationEnabled`
+### `Role`
 
-**Type:** `bool | null` | **Default:** `null` (uses Engine default of `true`)
+**Type:** `string | null` | **Default:** `null` (`"Peer"`)
 
-Whether clicking the alert box, or pressing Space/Enter while not focused in a text input, confirms (marks read) the latest unconfirmed alert.
+The networking role of a node this user runs: `"Peer"`, `"Client"` or `"Server"` (case-insensitive). An unrecognized value is `"Peer"`. See [Peer.md](Peer.md#user-roles).
 
----
+### `PeerPort`
 
-### `ComposeAlertsEnabled`
+**Type:** `int | null` | **Default:** `null` (`50021`)
 
-**Type:** `bool | null` | **Default:** `null` (uses Engine default of `true`)
+TCP port on which the node listens for IP connections opened by other nodes: peers dialing this peer, and clients and other servers connecting to a server. A client opens its connection outward and does not listen.
 
-Whether the draft editor's alert checkbox is shown, letting the user mark and send a draft as an alert. Setting this to `false` only affects local origination — the app can still receive and alarm on an alert sent by a peer.
+### `InterfacePort`
 
----
+**Type:** `int | null` | **Default:** `null` (`50020`)
 
-### `MessageTagsEnabled`
-
-**Type:** `bool | null` | **Default:** `null` (uses Engine default of `true`)
-
-Whether message tags are shown anywhere in the UI: the draft editor's tag input, and each message's tag label next to its priority in the entry listing.
-
----
-
-### `MessageTagLabel`
-
-**Type:** `string | null` | **Default:** `null` (uses Engine default of `"Tag"`)
-
-Label used for the tag input's watermark in the draft editor. Lets a host call the concept something other than "Tag" (e.g. `"Category"`, `"Type"`) without changing engine behavior.
-
----
-
-### `PrintReceivedEnabled`
-
-**Type:** `bool | null` | **Default:** `null` (uses Engine default of `false`)
-
-Whether the print manager's "print received" toggle starts enabled, automatically adding every received message to the print queue (subject to the configuration's `PrintCount`). The user can still toggle it off at any time in the print manager.
-
----
-
-### `NodeRole`
-
-**Type:** `string | null` | **Default:** `null` (uses Engine default of `"Peer"`)
-
-Networking topology role: `"Peer"`, `"Client"`, or `"Server"` (case-insensitive). `null` or an unrecognized value uses `"Peer"` — direct peer-to-peer networking, unchanged from prior versions. See [Peer.md](Peer.md#node-roles) for the full description of each role.
-
----
+Loopback TCP port of the local interface listener, always active in every role (see [Interface.md](Interface.md)).
 
 ### `OutgoingPoints`
 
-**Type:** `object[]` | **Default:** `[]` (uses what the host stated with `OutgoingPoint`, none by default)
+**Type:** `object[]` | **Default:** `[]`
 
-The points this node connects out to and keeps connected: IP hosts and ports to dial, and serial ports to open. A `"Client"`-role instance uses the first as its server. Where a node listens is `PeerPort`. Nothing here says which user is at a point; that is worked out when the connection forms (see [Identification.md](Identification.md)), so a node is configured with where it connects and never with who it expects.
-
-```json
-"OutgoingPoints": [
-  { "IpAddress": "10.0.0.1", "Port": 50021 },
-  { "SerialPort": "SL0" }
-]
-```
+The points the node connects out to and keeps connected. A `"Client"` uses the first as its server. Nothing here says which user is at a point; that is worked out when the connection forms (see [Identification.md](Identification.md)).
 
 | Field | Type | Description |
 |-------|------|-------------|
@@ -215,155 +117,154 @@ The points this node connects out to and keeps connected: IP hosts and ports to 
 
 A serial link carries no certificate, so by default its user is named after the port; override `IdentifyConnection` or configure a connection message to give it a real name.
 
----
+### `ChildClients`
 
-### `ServerUsers`
+**Type:** `string[]` | **Default:** `[]`
 
-**Type:** `object` | **Default:** `{}`
+For a `"Server"`, the client users that belong to it. The topology a server routes with, every server of the cluster and the children each owns, is built from every `"Server"` user's entry.
 
-The server topology for a `"Server"`-role instance: a map of server user name → child client list. Describes **every** server in the cluster, not just the local one, and says who belongs where but not how to reach anyone (connections are matched to these names by identity; see [Peer.md](Peer.md#server)). Required (with at least an entry for the local server user) when `NodeRole` is `"Server"`; ignored otherwise.
+### `StoresMessages`
 
-```json
-"ServerUsers": {
-  "SERVER-A": { "ChildClients": ["CLIENT-A1", "CLIENT-A2"] },
-  "SERVER-B": { "ChildClients": ["CLIENT-B1"] }
-}
-```
+**Type:** `bool` | **Default:** `false`
 
-| Field | Type | Description |
-|-------|------|-------------|
-| `ChildClients` | `string[]` | Names of the client users that belong to this server |
+For a `"Server"`, whether it keeps a copy of every message it routes and answers retrieval requests (see [Configuration.md](Configuration.md#server-storage)).
 
----
+### `SecurityLevel`
 
-### `Users`
+**Type:** `string | null` | **Default:** `null` (the lowest configured level)
 
-**Type:** `object` | **Default:** `{}`
+The name of the security level the user runs at (see [Configuration.md](Configuration.md#security-levels)).
 
-A map of user name → user entry. Keys are user names (case-insensitive). An entry adds a user to the directory that address auto-complete and connection identification know about, and can attach app-specific data to it. It says nothing about where the user is reached.
+### `CertificateName`
 
-```json
-"Users": {
-  "USER-A": { "Data": { "role": "clerk", "desk": "4" } },
-  "NEW-USER": {}
-}
-```
+**Type:** `string | null` | **Default:** `null` (the user name)
 
-| Field | Type | Description |
-|-------|------|-------------|
-| `Data` | `object` | App-specific string keys and values attached to the user, merged over the data the host stated with `UserData` for that user (config wins on a key conflict). The engine does not interpret it; it is part of the user's identity for the host's own hooks |
+The user's certificate subject name: the identity certificate to look up for the local user, and the name a connecting user's certificate must carry for others to accept it as this user.
 
----
-
-### `UserGroups`
+### `Data`
 
 **Type:** `object` | **Default:** `{}`
 
-A map of group name → member list. Members may be user names or other group names, enabling nested hierarchies. Groups appear as addressable destinations in the draft editor alongside individual users. When a message is addressed to a group, the Engine expands it recursively and delivers the message to every contained user exactly once.
+App-specific string keys and values attached to the user. The engine does not interpret them; they travel with the user's `UserIdentity` wherever the user is identified.
 
-```json
-"UserGroups": {
-  "OPS": ["USER-A", "USER-B"],
-  "ALL": ["OPS", "NEW-USER"]
-}
-```
+## Settings of the node a user runs
 
-Sending to `ALL` delivers to `USER-A`, `USER-B`, and `NEW-USER`. Cycles are ignored.
+These apply to a node running as this user; the ones marked "launched" only when the user is named with `--user`, since an installed user is not known until the data folder has been read.
+
+### `CertificateFile`
+
+**Type:** `string | null` | **Default:** `null`
+
+Path to a PKCS#12 (`.pfx`) file containing the user's identity certificate and private key, used instead of a system store lookup. A relative path resolves against the directory of the configuration file. Requires `TrustedAuthorityCertificateFile`.
+
+### `DataFolder` (launched)
+
+**Type:** `string | null` | **Default:** `null` (`%APPDATA%\{AppName}`)
+
+Custom app data directory. An absolute path is used verbatim; a path starting with `@` is relative to the default location, so `"@USER-A"` puts this user's data next to the default folder, which lets several users run on one machine.
+
+### `Headless` (launched)
+
+**Type:** `bool` | **Default:** `false`
+
+Run with no GUI, as a normal peer.
+
+### `AlertText`
+
+**Type:** `string | null` | **Default:** `null` (`"ALERT"`)
+
+Text shown in the title bar's alert box while alarming, and the draft editor's alert checkbox label.
+
+### `AlarmSoundSeconds`
+
+**Type:** `number | null` | **Default:** `null` (`30`)
+
+Seconds the alarm sound plays after an alert is received before automatically stopping; resets whenever a new alert arrives.
+
+### `QuickConfirmationEnabled`
+
+**Type:** `bool | null` | **Default:** `null` (`true`)
+
+Whether clicking the alert box, or pressing Space or Enter outside a text input, confirms the latest unconfirmed alert.
+
+### `ComposeAlertsEnabled`
+
+**Type:** `bool | null` | **Default:** `null` (`true`)
+
+Whether the draft editor's alert checkbox is shown. Disabling it never prevents receiving and alarming on alerts.
+
+### `MessageTagsEnabled`
+
+**Type:** `bool | null` | **Default:** `null` (`true`)
+
+Whether message tags are shown anywhere in the UI.
+
+### `MessageTagLabel`
+
+**Type:** `string | null` | **Default:** `null` (`"Tag"`)
+
+Label of the tag input's watermark in the draft editor.
+
+### `PrintReceivedEnabled`
+
+**Type:** `bool | null` | **Default:** `null` (`false`)
+
+Whether the print manager's "print received" toggle starts enabled, automatically adding every received message to the print queue.
 
 ## Examples
 
-### Production (authenticated, GUI)
+### A peer network
+
+Two peers that dial each other, sharing one machine (`Scripts/Scenarios/Peer/Config.json`):
 
 ```json
 {
-  "PeerPort": 50021,
-  "OutgoingPoints": [ { "IpAddress": "192.168.1.11", "Port": 50021 } ],
-  "Users": {
-    "USER-B": {}
-  }
-}
-```
-
-`PeerCertificateName` is absent so authentication uses the user name itself, unprefixed, for auto-detection.
-
-### Development (Headless mode, certificate files)
-
-```json
-{
-  "HeadlessMode": true,
-  "UserName": "TEST1",
-  "PeerPort": 50020,
-  "InterfacePort": 50021,
-  "DataFolder": "@TEST1",
-  "PeerCertificateFile": "TEST1.pfx",
   "TrustedAuthorityCertificateFile": "../Root.cer",
-  "OutgoingPoints": [ { "IpAddress": "127.0.0.1", "Port": 50030 } ],
+  "UserGroups": { "TEST": [ "PEER1", "PEER2" ] },
   "Users": {
-    "TEST2": {}
+    "PEER1": { "PeerPort": 50021, "InterfacePort": 50020, "OutgoingPoints": [ { "IpAddress": "127.0.0.1", "Port": 50023 } ], "SecurityLevel": "PUBLIC", "CertificateFile": "Peer1.pfx", "DataFolder": "@PEER1" },
+    "PEER2": { "PeerPort": 50023, "InterfacePort": 50022, "OutgoingPoints": [ { "IpAddress": "127.0.0.1", "Port": 50021 } ], "SecurityLevel": "PUBLIC", "CertificateFile": "Peer2.pfx", "DataFolder": "@PEER2" }
   }
 }
 ```
 
-`PeerCertificateFile`/`TrustedAuthorityCertificateFile` are resolved relative to this config file's own directory, so `TEST1.pfx` and `Root.cer` are expected to sit alongside it (and one directory up, respectively) rather than in the system certificate store — see `Scripts/Scenarios/` for a full working example of this layout across three multi-node scenarios, all signed by one shared `Scripts/Scenarios/Root.cer` authority.
+```sh
+Sample.exe --config Scripts/Scenarios/Peer/Config.json --user PEER1
+Sample.exe --config Scripts/Scenarios/Peer/Config.json --user PEER2
+```
 
-### Groups with nested membership
+### A client/server hierarchy
+
+One server with two clients that connect to it, the server storing messages (`Scripts/Scenarios/ClientServer/Config.json`):
 
 ```json
 {
+  "TrustedAuthorityCertificateFile": "../Root.cer",
   "Users": {
-    "USER-A": {},
-    "USER-B": {}
-  },
-  "UserGroups": {
-    "WEST": ["USER-A", "USER-B"],
-    "ALL":  ["WEST", "USER-C"]
+    "SERVER":  { "Role": "Server", "PeerPort": 50121, "InterfacePort": 50120, "ChildClients": [ "CLIENT1", "CLIENT2" ], "StoresMessages": true, "SecurityLevel": "RESTRICTED", "CertificateFile": "Server.pfx", "DataFolder": "@SERVER" },
+    "CLIENT1": { "Role": "Client", "InterfacePort": 50122, "OutgoingPoints": [ { "IpAddress": "127.0.0.1", "Port": 50121 } ], "SecurityLevel": "INTERNAL", "CertificateFile": "Client1.pfx", "DataFolder": "@CLIENT1" },
+    "CLIENT2": { "Role": "Client", "InterfacePort": 50124, "OutgoingPoints": [ { "IpAddress": "127.0.0.1", "Port": 50121 } ], "SecurityLevel": "INTERNAL", "CertificateFile": "Client2.pfx", "DataFolder": "@CLIENT2" }
   }
 }
 ```
 
-### Named certificate override
+### Certificates from the system store
+
+Without `CertificateFile` and `TrustedAuthorityCertificateFile`, certificates are looked up in the system store by each user's `CertificateName` (the user name by default) and the trusted authority's name:
 
 ```json
 {
-  "PeerCertificateName": "MY-CUSTOM-CERT",
-  "OutgoingPoints": [ { "IpAddress": "192.168.1.11", "Port": 50021 } ]
+  "TrustedAuthorityCertificateName": "MY-ROOT",
+  "Users": { "USER-A": { "CertificateName": "COMLINK-USER-A" } }
 }
 ```
 
-### Certificate file override
+### Headless
 
 ```json
-{
-  "PeerCertificateFile": "identity.pfx",
-  "TrustedAuthorityCertificateFile": "authority.cer",
-  "OutgoingPoints": [ { "IpAddress": "192.168.1.11", "Port": 50021 } ]
-}
+{ "Users": { "GATEWAY": { "Headless": true, "InterfacePort": 50030 } } }
 ```
 
-`PeerCertificateName`/`TrustedAuthorityCertificateName` are ignored once their file-based counterparts are set.
-
-### Client/Server hierarchy
-
-A client, running as user `CLIENT-A1`, pointed at its server:
-
-```json
-{
-  "UserName": "CLIENT-A1",
-  "NodeRole": "Client",
-  "OutgoingPoints": [ { "IpAddress": "10.0.0.1", "Port": 50021 } ]
-}
-```
-
-The server it connects to, running as user `SERVER-A`, with the full cluster's topology — including the other server, `SERVER-B`, and its own children. It listens on `PeerPort` for its clients, and dials `SERVER-B`; `SERVER-B` needs no point for `SERVER-A`, since the connection carries traffic both ways:
-
-```json
-{
-  "UserName": "SERVER-A",
-  "NodeRole": "Server",
-  "OutgoingPoints": [ { "IpAddress": "10.0.0.2", "Port": 50021 } ],
-  "ServerUsers": {
-    "SERVER-A": { "ChildClients": ["CLIENT-A1", "CLIENT-A2"] },
-    "SERVER-B": { "ChildClients": ["CLIENT-B1"] }
-  }
-}
+```sh
+Sample.exe --config Config.json --user GATEWAY
 ```

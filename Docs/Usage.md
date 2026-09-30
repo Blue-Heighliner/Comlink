@@ -45,7 +45,7 @@ await Engine.Start<MyEngineConfiguration>(args);
 ```
 
 A field whose type already matches is mapped by naming the property (`m => m.Id`), which builds the setter for you; when the type differs (a host's own recipient shape for the addresses, or a packet's data) the getter and setter are given explicitly, as `Addresses` is above. `Addresses` also has an overload taking `(string Name, AddressType Type, string Information)` tuples, for a host whose recipient shape carries custom per-address instructions (e.g. `OMAHA - Deliver to Eastside Office`); `Information` is optional and defaults to an empty string when the two-tuple overload above is used instead. The message type also needs `[ProtoContract]`/`[ProtoMember]` attributes for the default network serializer.
-By default this runs the Avalonia desktop UI, with no `config.json` read (`ConfigFile` is off
+By default this runs the Avalonia desktop UI, with command-line overrides disallowed (`CommandLineOverrides` is off
 unless stated) and no window icon (`WindowIcon` is the operating system's unless stated).
 
 ## Stating a single behavior
@@ -59,66 +59,22 @@ public IEngineBuilder Configure(IEngineBuilder engine) => engine
     .WindowIcon(new Uri("avares://MyApp/Assets/icon.png"));
 ```
 
-## Enabling config.json
+## The network configuration file
 
-Stating `ConfigFile` lets a host be configured via a `config.json` file (see
-`EngineConfigFile` for the full set of fields) without any other code change: every setting with a
-corresponding config field is overridden automatically once enabled.
+A host describes its whole network in one JSON file (see [Config.md](Components/Config.md) for the schema): every user
+with their role, listen ports, outgoing connections, security level and node settings, plus groups and the trusted
+certificate authority. The engine always reads `Config.json` from the working directory, and the user the process runs
+as from `User.json` there; nothing about a user is stated in code. Stating `CommandLineOverrides(true)` additionally
+lets `--config` name another file and `--user` name the user.
 
 ```csharp
 public IEngineBuilder Configure(IEngineBuilder engine) => engine
     .Message<MyMessage>(/* ...required mapping... */)
-    .ConfigFile();
-```
-
-## Injecting services into the configuration
-
-The configuration is constructed through dependency injection, from a container holding logging plus whatever the host
-registers, so its constructor can take services:
-
-```csharp
-public sealed class MyEngineConfiguration(ILogger<MyEngineConfiguration> logger, IUserDirectory directory) : IEngineConfiguration
-{
-    public IEngineBuilder Configure(IEngineBuilder engine)
-    {
-        logger.LogInformation("Configuring the engine");
-        return engine
-            .Message<MyMessage>(/* ...required mapping... */)
-            .Users([.. directory.GetNames()]);
-    }
-}
-
-await Engine.Start<MyEngineConfiguration>(args, services => services.AddSingleton<IUserDirectory, UserDirectory>());
-```
-
-## Interacting with a running engine
-
-Once `Engine.Start` has started the host, `IServiceConnection` is the surface a UI or headless
-consumer uses to send messages and observe delivery. A host reaches it through a service it registers with
-`configureServices`, which is applied to the running engine as well:
-
-```csharp
-await Engine.Start<MyEngineConfiguration>(args, services => services.AddHostedService<Greeter>());
-
-public sealed class Greeter(IServiceConnection connection) : BackgroundService
-{
-    protected override async Task ExecuteAsync(CancellationToken stoppingToken)
-    {
-        await connection.Connect(stoppingToken);
-
-        connection.MessageReceived += async received =>
-        {
-            Console.WriteLine($"Received: {received.Subject}");
-            await Task.CompletedTask;
-        };
-
-        await connection.SendMessage("Hello", "Body text", [new AddressRequest { UserName = "alice", Type = "To" }], cancellation: stoppingToken);
-    }
-}
+    .CommandLineOverrides(true);
 ```
 
 ## Running headless
 
-Set `HeadlessMode` in `config.json` (requires `ConfigFile`), or pass `--config` pointing at
-a file with `"HeadlessMode": true`, to run with no UI. `Engine.Start` is called exactly the same
+Set `Headless` on a user's entry in the network configuration file and run as that
+user (`User.json`, or `--user` when overrides are allowed), to run with no UI. `Engine.Start` is called exactly the same
 way: the same configuration drives both modes.
