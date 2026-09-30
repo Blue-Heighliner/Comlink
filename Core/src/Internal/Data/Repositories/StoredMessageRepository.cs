@@ -24,6 +24,7 @@ internal sealed class StoredMessageRepository : IStoredMessageRepository
         await insertLock.WaitAsync();
         try
         {
+            ctx.Initialize();
             if (ctx.StoredMessages.Exists(m => m.MessageId == entity.MessageId)) { return false; }
             ctx.StoredMessages.Insert(entity);
             return true;
@@ -35,5 +36,9 @@ internal sealed class StoredMessageRepository : IStoredMessageRepository
     }
 
     /// <inheritdoc />
-    public Task<List<StoredMessageEntity>> GetAll() => Task.Run(() => ctx.StoredMessages.FindAll().ToList());
+    public Task<List<StoredMessageEntity>> GetAll() => Task.Run(() =>
+    {
+        ctx.Initialize();
+        return ctx.StoredMessages.FindAll().ToList();
+    });
 }

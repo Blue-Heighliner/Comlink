@@ -35,7 +35,7 @@ internal sealed class UserService : IUserService
     private readonly JsonSerializerOptions jsonOptions = new() { WriteIndented = true };
     private UserState state = new();
     private readonly SemaphoreSlim lockObject = new(1, 1);
-    private string StateFilePath => Path.Combine(engineController.AppDataPath, "State.json");
+    private string StateFilePath => engineController.StatePath;
 
     /// <inheritdoc />
     public event Action? Installed;

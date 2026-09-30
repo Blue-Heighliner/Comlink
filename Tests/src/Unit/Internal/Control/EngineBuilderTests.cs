@@ -92,12 +92,11 @@ public sealed class EngineBuilderTests
     {
         Uri icon = new("avares://Host/icon.png");
         (_, EngineController controller) = Build(engine => engine
-            .AppName("MyApp").AppVersion("2.3.4").DataPath("/data/app").KioskMode().HomeText("Welcome").WindowIcon(icon)
+            .AppName("MyApp").AppVersion("2.3.4").KioskMode().HomeText("Welcome").WindowIcon(icon)
             .DebugUser("DEBUG").CommandLineOverrides(true));
 
         Assert.Equal("MyApp", controller.AppName);
         Assert.Equal("2.3.4", controller.AppVersion);
-        Assert.Equal("/data/app", controller.AppDataPath);
         Assert.True(controller.IsKioskMode);
         Assert.Equal("Welcome", controller.HomeText);
         Assert.Equal(icon, controller.WindowIconUri);
@@ -105,13 +104,18 @@ public sealed class EngineBuilderTests
         Assert.True(controller.CommandLineOverridesAllowed);
     }
 
-    /// <summary>Without a stated data path the default follows the application name.</summary>
+    /// <summary>The data directory is the current user's own folder inside the application's folder under the application data root, and the application's folder itself before a user exists, where the install state always lives.</summary>
     [Fact]
-    public void AppDataPath_DefaultFollowsTheAppName()
+    public void AppDataPath_IsTheCurrentUsersFolder()
     {
-        (_, EngineController controller) = Build(engine => engine.AppName("MyApp"));
+        string root = Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData);
+        (_, EngineController noUser) = Build(engine => engine.AppName("MyApp"));
+        (_, EngineController alice) = Build(engine => engine.AppName("MyApp"), "ALICE");
 
-        Assert.Equal(Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), "MyApp"), controller.AppDataPath);
+        Assert.Equal(root, alice.AppDataRoot);
+        Assert.Equal(Path.Combine(root, "MyApp"), noUser.AppDataPath);
+        Assert.Equal(Path.Combine(root, "MyApp", "ALICE"), alice.AppDataPath);
+        Assert.Equal(Path.Combine(root, "MyApp", "State.json"), alice.StatePath);
     }
 
     /// <summary>Alert, tag, priority and print settings a host states replace the defaults.</summary>
@@ -454,7 +458,7 @@ public sealed class EngineBuilderTests
     {
         EngineBuilder builder = new();
 
-        Assert.Same(builder, builder.AppName("a").AppVersion("1").DataPath("/d").KioskMode().HomeText("h").CommandLineOverrides(false));
+        Assert.Same(builder, builder.AppName("a").AppVersion("1").KioskMode().HomeText("h").CommandLineOverrides(false));
     }
 
     /// <summary>No server stores messages unless the configuration says so.</summary>

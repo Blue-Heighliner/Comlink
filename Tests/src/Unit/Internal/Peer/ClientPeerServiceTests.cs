@@ -136,6 +136,43 @@ public sealed class ClientPeerServiceTests
         await startTask;
     }
 
+    /// <summary>Reconfigure leaves the server connection alone when its point did not change, and moves to the new point, closing the old one, when it did.</summary>
+    [Fact]
+    public async Task Reconfigure_ChangesTheServerPointOnlyWhenItChanged()
+    {
+        ConnectionPoint other = new() { IpAddress = "10.0.0.2", Port = 9000 };
+        IReadOnlyList<ConnectionPoint> outgoing = [serverPoint];
+        Mock<IPeerTransport> transport = new();
+        transport.SetupGet(p => p.Connected).Returns(new TestObservable<PeerConnectionEventArgs>());
+        transport.SetupGet(p => p.Disconnected).Returns(new TestObservable<PeerConnectionEventArgs>());
+        transport.SetupGet(p => p.Received).Returns(new TestObservable<PeerReceivedEventArgs>());
+        transport.Setup(p => p.Connect(It.IsAny<ConnectionPoint>(), It.IsAny<CancellationToken>())).ThrowsAsync(new IOException("refused"));
+        Mock<IPeerTransportFactory> factory = new();
+        factory.Setup(f => f.Create()).Returns(transport.Object);
+        Mock<TestEngineController> engineController = new() { CallBase = true };
+        engineController.Setup(p => p.OutgoingPoints).Returns(() => outgoing);
+        ClientPeerService service = new(factory.Object, engineController.Object, noLogger);
+        int statusChanges = 0;
+        service.StatusesChanged += () => statusChanges++;
+        using CancellationTokenSource cts = new();
+        Task startTask = service.Start(cts.Token);
+        await WaitUntil(() => transport.Invocations.Any(i => i.Method.Name == nameof(IPeerTransport.Connect)), TimeSpan.FromSeconds(2));
+
+        service.Reconfigure();
+        transport.Verify(p => p.SetClosed(It.IsAny<ConnectionPoint>(), It.IsAny<bool>()), Times.Never);
+        Assert.Equal(0, statusChanges);
+
+        outgoing = [other];
+        service.Reconfigure();
+        await WaitUntil(() => transport.Invocations.Any(i => i.Method.Name == nameof(IPeerTransport.Connect) && Equals(i.Arguments[0], other)), TimeSpan.FromSeconds(2));
+
+        transport.Verify(p => p.SetClosed(serverPoint, true), Times.Once);
+        Assert.Equal(1, statusChanges);
+
+        cts.Cancel();
+        await startTask;
+    }
+
     /// <summary>Only the first outgoing point is the server: a client has one long-term connection.</summary>
     [Fact]
     public async Task Start_SeveralPoints_ConnectsToTheFirstOnly()

@@ -27,6 +27,7 @@ internal static class EngineExtensions
             });
 
             services.AddSingleton<RolePeerService>();
+            services.AddSingleton<IRolePeerService>(sp => sp.GetRequiredService<RolePeerService>());
             services.AddSingleton<IPeerService>(sp => sp.GetRequiredService<RolePeerService>());
             services.AddSingleton<IConnectionStatusService>(sp => sp.GetRequiredService<RolePeerService>());
 

@@ -54,6 +54,11 @@ internal sealed class LoopbackPeerTransport : IPeerTransport
     }
 
     /// <inheritdoc />
+    public void StopListener()
+    {
+    }
+
+    /// <inheritdoc />
     public void SetClosed(ConnectionPoint point, bool closed)
     {
         if (closed && outbound.TryRemove(point.Key, out PeerConnection? connection)) { connection.Drop(); }

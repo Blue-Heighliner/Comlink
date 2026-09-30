@@ -43,6 +43,11 @@ internal sealed class SerialPeerTransport : IPeerTransport
     }
 
     /// <inheritdoc />
+    public void StopListener()
+    {
+    }
+
+    /// <inheritdoc />
     public void SetClosed(ConnectionPoint point, bool closed) => GetLink(point, closed).SetClosed(closed);
 
     /// <inheritdoc />

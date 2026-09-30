@@ -1,5 +1,18 @@
 namespace BlueHeighliner.Comlink.Peer;
 
+/// <summary>The one <see cref="IPeerService"/> the engine depends on, whose role-specific implementation can be replaced while it runs.</summary>
+internal interface IRolePeerService : IPeerService
+{
+    /// <summary>
+    /// Drops every connection and listener of the running implementation and brings them back up from the configuration as it is now, choosing the
+    /// implementation for the current role again. Does nothing before <see cref="IPeerService.Start"/>.
+    /// </summary>
+    void Restart();
+
+    /// <summary>Applies the changes in the configuration to the running implementation without restarting it, touching only what changed. Does nothing before <see cref="IPeerService.Start"/>.</summary>
+    void Reconfigure();
+}
+
 /// <summary>
 /// The <see cref="IPeerService"/> the rest of the engine depends on. Which implementation does the work is decided by
 /// <see cref="IEngineController.Role"/>, which comes from the installed user's <see cref="UserInfo"/> and so is not known
@@ -7,10 +20,12 @@ namespace BlueHeighliner.Comlink.Peer;
 /// <see cref="ServerRoutingService"/> when <see cref="Start"/> runs, and forwards its events. Until then no user is
 /// connected and nothing can be sent.
 /// </summary>
-internal sealed class RolePeerService(IServiceProvider services, IEngineController engineController) : IPeerService, IConnectionStatusService, IAsyncDisposable
+internal sealed class RolePeerService(IServiceProvider services, IEngineController engineController) : IRolePeerService, IConnectionStatusService, IAsyncDisposable
 {
     private readonly Lock innerLock = new();
     private IPeerService? inner;
+    private CancellationTokenSource? current;
+    private bool restartRequested;
 
     /// <inheritdoc />
     public event Func<object, Task>? MessageDelivered;
@@ -37,30 +52,46 @@ internal sealed class RolePeerService(IServiceProvider services, IEngineControll
     public bool IsUserConnected(string userName) => inner?.IsUserConnected(userName) ?? false;
 
     /// <inheritdoc />
-    public Task Start(CancellationToken cancellation)
+    public async Task Start(CancellationToken cancellation)
     {
-        IPeerService created;
+        while (true)
+        {
+            using CancellationTokenSource run = CancellationTokenSource.CreateLinkedTokenSource(cancellation);
+            IPeerService created;
+            lock (innerLock)
+            {
+                if (restartRequested) { restartRequested = false; }
+                created = Create();
+                current = run;
+                inner = created;
+            }
+
+            StatusesChanged?.Invoke();
+            try { await created.Start(run.Token); }
+            catch (OperationCanceledException) when (run.IsCancellationRequested) { }
+
+            if (created is IAsyncDisposable disposable) { await disposable.DisposeAsync(); }
+            lock (innerLock)
+            {
+                if (ReferenceEquals(inner, created)) { inner = null; }
+                if (!restartRequested || cancellation.IsCancellationRequested) { return; }
+            }
+        }
+    }
+
+    /// <inheritdoc />
+    public void Reconfigure() => (inner as IReconfigurable)?.Reconfigure();
+
+    /// <inheritdoc />
+    public void Restart()
+    {
         lock (innerLock)
         {
-            if (inner is not null) { throw new InvalidOperationException("The peer service is already started"); }
+            if (current is null) { return; }
 
-            created = engineController.Role switch
-            {
-                UserRole.Client => ActivatorUtilities.CreateInstance<ClientPeerService>(services),
-                UserRole.Server => ActivatorUtilities.CreateInstance<ServerRoutingService>(services),
-                _ => ActivatorUtilities.CreateInstance<PeerService>(services)
-            };
-            created.MessageDelivered += payload => Raise(MessageDelivered, handler => handler(payload));
-            created.ConfirmationReceived += (messageId, userName) => Raise(ConfirmationReceived, handler => handler(messageId, userName));
-            created.DeliveryStatusChanged += (messageId, userName, status) => Raise(DeliveryStatusChanged, handler => handler(messageId, userName, status));
-            created.UserConnected += userName => Raise(UserConnected, handler => handler(userName));
-            created.UserDisconnected += userName => Raise(UserDisconnected, handler => handler(userName));
-            if (created is IConnectionStatusService status) { status.StatusesChanged += () => StatusesChanged?.Invoke(); }
-            inner = created;
+            restartRequested = true;
+            current.Cancel();
         }
-
-        StatusesChanged?.Invoke();
-        return created.Start(cancellation);
     }
 
     /// <inheritdoc />
@@ -85,6 +116,23 @@ internal sealed class RolePeerService(IServiceProvider services, IEngineControll
 
     /// <inheritdoc />
     public ValueTask DisposeAsync() => inner is IAsyncDisposable disposable ? disposable.DisposeAsync() : ValueTask.CompletedTask;
+
+    private IPeerService Create()
+    {
+        IPeerService created = engineController.Role switch
+        {
+            UserRole.Client => ActivatorUtilities.CreateInstance<ClientPeerService>(services),
+            UserRole.Server => ActivatorUtilities.CreateInstance<ServerRoutingService>(services),
+            _ => ActivatorUtilities.CreateInstance<PeerService>(services)
+        };
+        created.MessageDelivered += payload => Raise(MessageDelivered, handler => handler(payload));
+        created.ConfirmationReceived += (messageId, userName) => Raise(ConfirmationReceived, handler => handler(messageId, userName));
+        created.DeliveryStatusChanged += (messageId, userName, status) => Raise(DeliveryStatusChanged, handler => handler(messageId, userName, status));
+        created.UserConnected += userName => Raise(UserConnected, handler => handler(userName));
+        created.UserDisconnected += userName => Raise(UserDisconnected, handler => handler(userName));
+        if (created is IConnectionStatusService status) { status.StatusesChanged += () => StatusesChanged?.Invoke(); }
+        return created;
+    }
 
     private async Task Raise<THandler>(THandler? handlers, Func<THandler, Task> invoke) where THandler : Delegate
     {

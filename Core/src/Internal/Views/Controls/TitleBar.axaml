@@ -110,7 +110,13 @@
                 Margin="0,0,8,0">
       <TextBlock x:Name="UserNameText"
                  Classes="titlebar-info"
-                 VerticalAlignment="Center" />
+                 VerticalAlignment="Center">
+        <TextBlock.ContextMenu>
+          <ContextMenu>
+            <MenuItem Header="Refresh" Click="OnRefreshClick" />
+          </ContextMenu>
+        </TextBlock.ContextMenu>
+      </TextBlock>
       <Border x:Name="UserInfoSeparator"
               Classes="titlebar-separator"
               IsVisible="False" />

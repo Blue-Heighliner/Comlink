@@ -17,7 +17,7 @@ internal interface ILiteDbContext : IDisposable
     ILiteCollection<AutoForwardTargetsEntity> AutoForwardTargets { get; }
     /// <summary>Collection of message copies a storage server keeps.</summary>
     ILiteCollection<StoredMessageEntity> StoredMessages { get; }
-    /// <summary>Opens the database file, binds all collections, and ensures indexes and root folders exist.</summary>
+    /// <summary>Opens the database file in the current user's data folder, binds all collections, and ensures indexes and root folders exist. Does nothing when it is already open on that folder, so it is safe to call from anywhere that needs the database, and reopens when the folder has changed.</summary>
     void Initialize();
 }
 
@@ -33,7 +33,9 @@ internal sealed class LiteDbContext : ILiteDbContext
     private static readonly Lock mapperWarmupLock = new();
 
     private readonly IEngineController engineController;
+    private readonly Lock initializeLock = new();
     private LiteDatabase? db;
+    private string? openedDirectory;
 
     /// <summary>Collection of persisted messages.</summary>
     public ILiteCollection<MessageEntity> Messages { get; private set; } = null!;
@@ -54,13 +56,23 @@ internal sealed class LiteDbContext : ILiteDbContext
     /// <summary>Opens the database file, binds all collections, and ensures indexes and root folders exist.</summary>
     public void Initialize()
     {
-        db?.Dispose();
-        WarmUpMapper();
-        string dataDir = engineController.AppDataPath;
-        Directory.CreateDirectory(dataDir);
-        db = new LiteDatabase(Path.Combine(dataDir, "Data.db"));
+        lock (initializeLock)
+        {
+            string dataDir = engineController.AppDataPath;
+            if (db is not null && openedDirectory == dataDir) { return; }
 
-        Messages = db.GetCollection<MessageEntity>("messages");
+            db?.Dispose();
+            WarmUpMapper();
+            Directory.CreateDirectory(dataDir);
+            db = new LiteDatabase(Path.Combine(dataDir, "Data.db"));
+            openedDirectory = dataDir;
+            Open();
+        }
+    }
+
+    private void Open()
+    {
+        Messages = db!.GetCollection<MessageEntity>("messages");
         Drafts = db.GetCollection<DraftEntity>("drafts");
         Notes = db.GetCollection<NoteEntity>("notes");
         ActivityLogs = db.GetCollection<ActivityLogEntity>("activity_logs");

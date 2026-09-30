@@ -30,8 +30,6 @@ internal sealed class EngineBuilder : IEngineBuilder, IAsyncDisposable
     public string? AppNameValue { get; private set; }
     /// <summary>The application version, if stated.</summary>
     public string? AppVersionValue { get; private set; }
-    /// <summary>The application data path, if stated.</summary>
-    public string? DataPathValue { get; private set; }
     /// <summary>Whether kiosk mode is on.</summary>
     public bool IsKioskMode { get; private set; }
     /// <summary>The home text, if stated.</summary>
@@ -179,13 +177,6 @@ internal sealed class EngineBuilder : IEngineBuilder, IAsyncDisposable
     public IEngineBuilder AppVersion(string version)
     {
         AppVersionValue = version;
-        return this;
-    }
-
-    /// <inheritdoc />
-    public IEngineBuilder DataPath(string path)
-    {
-        DataPathValue = path;
         return this;
     }
 

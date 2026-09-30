@@ -7,16 +7,17 @@ Sample.exe --config path/to/Config.json --user CLIENT1
 ```
 
 - `--config <path>` names the file (only when the host allows command-line overrides). When omitted, `Config.json` in the current working directory is used if it exists, and otherwise the network is empty. A `--config` path that does not exist or cannot be read makes the process throw at startup.
-- `--user <name>` (also only when overrides are allowed) names the user this process runs as, so a node starts as that user without the install screen and uses that user's `DataFolder` and `Headless` choice. Without the argument, a `User.json` in the current working directory names the user instead, holding `{ "User": "USER-A" }` (or just the name as a JSON string). Without either the user is the one installed through the install screen (an install code is the name of a user in this file, case-insensitive), which is remembered between runs.
+- `--user <name>` (also only when overrides are allowed) names the user this process runs as, so a node starts as that user without the install screen and uses that user's `Headless` choice. Without the argument, a `User.json` in the current working directory names the user instead, holding `{ "User": "USER-A" }` (or just the name as a JSON string). Without either the user is the one installed through the install screen (an install code is the name of a user in this file, case-insensitive), which is remembered between runs.
 
-Property names are PascalCase; deserialization is case-insensitive, and so are user names. Unrecognised fields are silently ignored and missing fields use their defaults. An empty file (`{}`) is an empty network. By convention user names are all uppercase.
+The file is read again while the application runs when the user right-clicks their name in the title bar and chooses "Refresh"; see [Configuration.md](Configuration.md#network-configuration-file) for what that applies. Property names are PascalCase; deserialization is case-insensitive, and so are user names. Unrecognised fields are silently ignored and missing fields use their defaults. An empty file (`{}`) is an empty network. By convention user names are all uppercase.
 
 ## Schema
 
 ```json
 {
   "TrustedAuthorityCertificateName": null,
-  "TrustedAuthorityCertificateFile": "../Root.cer",
+  "AuthorityCertificate": "../Root.cer",
+  "CertificateStore": ".",
   "UserGroups": {
     "OPS": [ "USER-A", "USER-B" ]
   },
@@ -32,8 +33,6 @@ Property names are PascalCase; deserialization is case-insensitive, and so are u
       "CertificateName": null,
       "Data": { "role": "clerk" },
 
-      "CertificateFile": "USER-A.pfx",
-      "DataFolder": "@USER-A",
       "Headless": false,
       "AlertText": null,
       "AlarmSoundSeconds": null,
@@ -53,13 +52,19 @@ Property names are PascalCase; deserialization is case-insensitive, and so are u
 
 **Type:** `string | null` | **Default:** `null` (uses the host's `TrustedAuthority`, then `COMLINK-ROOT`)
 
-Subject name of the certificate authority every user's identity certificate must chain to, looked up in the system certificate store. Ignored when `TrustedAuthorityCertificateFile` is set.
+Subject name of the certificate authority every user's identity certificate must chain to, looked up in the system certificate store. Ignored when `AuthorityCertificate` is set.
 
-### `TrustedAuthorityCertificateFile`
+### `AuthorityCertificate`
 
 **Type:** `string | null` | **Default:** `null`
 
-Path to a public certificate file (for example `.cer`) for that authority, used instead of a store lookup. A relative path resolves against the directory of the configuration file. It must be used together with each running user's `CertificateFile`; setting only one of the two throws when connections are set up.
+Path to a public certificate file (for example `.cer`) for that authority, used instead of a store lookup. A relative path resolves against the directory of the configuration file. It must be used together with `CertificateStore`; setting only one of the two throws when connections are set up.
+
+### `CertificateStore`
+
+**Type:** `string | null` | **Default:** `null`
+
+Path to a folder of PKCS#12 (`.pfx`) files, one per user named `{USERNAME}.pfx` (for example `PEER1.pfx`, matching the user name's case on a case-sensitive file system), holding each user's identity certificate and private key. A node loads the running user's own identity from it instead of a system store lookup. A relative path resolves against the directory of the configuration file. It must be used together with `AuthorityCertificate`.
 
 ### `UserGroups`
 
@@ -151,19 +156,7 @@ App-specific string keys and values attached to the user. The engine does not in
 
 ## Settings of the node a user runs
 
-These apply to a node running as this user; the ones marked "launched" only when the user is named with `--user`, since an installed user is not known until the data folder has been read.
-
-### `CertificateFile`
-
-**Type:** `string | null` | **Default:** `null`
-
-Path to a PKCS#12 (`.pfx`) file containing the user's identity certificate and private key, used instead of a system store lookup. A relative path resolves against the directory of the configuration file. Requires `TrustedAuthorityCertificateFile`.
-
-### `DataFolder` (launched)
-
-**Type:** `string | null` | **Default:** `null` (`%APPDATA%\{AppName}`)
-
-Custom app data directory. An absolute path is used verbatim; a path starting with `@` is relative to the default location, so `"@USER-A"` puts this user's data next to the default folder, which lets several users run on one machine.
+These apply to a node running as this user; the one marked "launched" only when the user is named with `--user`, since an installed user is not known until networking starts.
 
 ### `Headless` (launched)
 
@@ -221,11 +214,12 @@ Two peers that dial each other, sharing one machine (`Scripts/Scenarios/Peer/Con
 
 ```json
 {
-  "TrustedAuthorityCertificateFile": "../Root.cer",
+  "AuthorityCertificate": "../Root.cer",
+  "CertificateStore": ".",
   "UserGroups": { "TEST": [ "PEER1", "PEER2" ] },
   "Users": {
-    "PEER1": { "PeerPort": 50021, "InterfacePort": 50020, "OutgoingPoints": [ { "IpAddress": "127.0.0.1", "Port": 50023 } ], "SecurityLevel": "PUBLIC", "CertificateFile": "Peer1.pfx", "DataFolder": "@PEER1" },
-    "PEER2": { "PeerPort": 50023, "InterfacePort": 50022, "OutgoingPoints": [ { "IpAddress": "127.0.0.1", "Port": 50021 } ], "SecurityLevel": "PUBLIC", "CertificateFile": "Peer2.pfx", "DataFolder": "@PEER2" }
+    "PEER1": { "PeerPort": 50021, "InterfacePort": 50020, "OutgoingPoints": [ { "IpAddress": "127.0.0.1", "Port": 50023 } ], "SecurityLevel": "PUBLIC" },
+    "PEER2": { "PeerPort": 50023, "InterfacePort": 50022, "OutgoingPoints": [ { "IpAddress": "127.0.0.1", "Port": 50021 } ], "SecurityLevel": "PUBLIC" }
   }
 }
 ```
@@ -241,18 +235,19 @@ One server with two clients that connect to it, the server storing messages (`Sc
 
 ```json
 {
-  "TrustedAuthorityCertificateFile": "../Root.cer",
+  "AuthorityCertificate": "../Root.cer",
+  "CertificateStore": ".",
   "Users": {
-    "SERVER":  { "Role": "Server", "PeerPort": 50121, "InterfacePort": 50120, "ChildClients": [ "CLIENT1", "CLIENT2" ], "StoresMessages": true, "SecurityLevel": "RESTRICTED", "CertificateFile": "Server.pfx", "DataFolder": "@SERVER" },
-    "CLIENT1": { "Role": "Client", "InterfacePort": 50122, "OutgoingPoints": [ { "IpAddress": "127.0.0.1", "Port": 50121 } ], "SecurityLevel": "INTERNAL", "CertificateFile": "Client1.pfx", "DataFolder": "@CLIENT1" },
-    "CLIENT2": { "Role": "Client", "InterfacePort": 50124, "OutgoingPoints": [ { "IpAddress": "127.0.0.1", "Port": 50121 } ], "SecurityLevel": "INTERNAL", "CertificateFile": "Client2.pfx", "DataFolder": "@CLIENT2" }
+    "SERVER":  { "Role": "Server", "PeerPort": 50121, "InterfacePort": 50120, "ChildClients": [ "CLIENT1", "CLIENT2" ], "StoresMessages": true, "SecurityLevel": "RESTRICTED" },
+    "CLIENT1": { "Role": "Client", "InterfacePort": 50122, "OutgoingPoints": [ { "IpAddress": "127.0.0.1", "Port": 50121 } ], "SecurityLevel": "INTERNAL" },
+    "CLIENT2": { "Role": "Client", "InterfacePort": 50124, "OutgoingPoints": [ { "IpAddress": "127.0.0.1", "Port": 50121 } ], "SecurityLevel": "INTERNAL" }
   }
 }
 ```
 
 ### Certificates from the system store
 
-Without `CertificateFile` and `TrustedAuthorityCertificateFile`, certificates are looked up in the system store by each user's `CertificateName` (the user name by default) and the trusted authority's name:
+Without `CertificateStore` and `AuthorityCertificate`, certificates are looked up in the system store by each user's `CertificateName` (the user name by default) and the trusted authority's name:
 
 ```json
 {

@@ -39,6 +39,9 @@ internal sealed class CompositePeerTransport : IPeerTransport
     public void StartListener(int port) => ip?.StartListener(port);
 
     /// <inheritdoc />
+    public void StopListener() => ip?.StopListener();
+
+    /// <inheritdoc />
     public void SetClosed(ConnectionPoint point, bool closed) => Select(point)?.SetClosed(point, closed);
 
     /// <inheritdoc />

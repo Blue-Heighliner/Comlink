@@ -380,6 +380,59 @@ public sealed class PeerServiceTests
         await startTask;
     }
 
+    /// <summary>Reconfigure restarts only the listener when the port changed, closes points that are no longer defined, opens new ones, and leaves unchanged points, and everything when nothing changed, alone.</summary>
+    [Fact]
+    public async Task Reconfigure_AppliesOnlyWhatChanged()
+    {
+        ConnectionPoint kept = new() { IpAddress = "10.0.0.1", Port = 1 };
+        ConnectionPoint removed = new() { IpAddress = "10.0.0.2", Port = 2 };
+        ConnectionPoint added = new() { IpAddress = "10.0.0.3", Port = 3 };
+        IReadOnlyList<ConnectionPoint> outgoing = [kept, removed];
+        int port = 50021;
+        Mock<IPeerTransport> transport = BuildPeerMock();
+        Mock<IPeerTransportFactory> factory = new();
+        factory.Setup(f => f.Create()).Returns(transport.Object);
+        Mock<TestEngineController> engineController = BuildUserDirectory();
+        engineController.Setup(e => e.PeerPort).Returns(() => port);
+        engineController.Setup(e => e.OutgoingPoints).Returns(() => outgoing);
+        PeerService svc = new(factory.Object, engineController.Object, noLogger);
+        using CancellationTokenSource cts = new();
+        Task startTask = svc.Start(cts.Token);
+        await Task.Delay(50);
+
+        svc.Reconfigure();
+        transport.Verify(t => t.StopListener(), Times.Never);
+        transport.Verify(t => t.SetClosed(It.IsAny<ConnectionPoint>(), It.IsAny<bool>()), Times.Never);
+
+        port = 50022;
+        outgoing = [kept, added];
+        svc.Reconfigure();
+        await Task.Delay(50);
+
+        transport.Verify(t => t.StopListener(), Times.Once);
+        transport.Verify(t => t.StartListener(50022), Times.Once);
+        transport.Verify(t => t.StartListener(50021), Times.Once);
+        transport.Verify(t => t.SetClosed(removed, true), Times.Once);
+        transport.Verify(t => t.SetClosed(kept, It.IsAny<bool>()), Times.Never);
+        transport.Verify(t => t.Connect(added, It.IsAny<CancellationToken>()), Times.AtLeastOnce);
+        transport.Verify(t => t.Connect(kept, It.IsAny<CancellationToken>()), Times.Once);
+
+        cts.Cancel();
+        await startTask;
+    }
+
+    /// <summary>Reconfigure before Start does nothing.</summary>
+    [Fact]
+    public void Reconfigure_BeforeStart_DoesNothing()
+    {
+        Mock<IPeerTransportFactory> factory = new();
+        PeerService svc = new(factory.Object, BuildUserDirectory().Object, noLogger);
+
+        svc.Reconfigure();
+
+        factory.Verify(f => f.Create(), Times.Never);
+    }
+
     /// <summary>Start keeps a connection open to every outgoing point, IP or serial, without being told which users are behind them.</summary>
     [Fact]
     public async Task Start_MaintainsEveryOutgoingPoint()

@@ -27,7 +27,8 @@ public sealed class NetworkConfigTests : IDisposable
         Assert.Empty(config.Users);
         Assert.Empty(config.UserGroups);
         Assert.Null(config.User);
-        Assert.Null(config.TrustedAuthorityCertificateFile);
+        Assert.Null(config.AuthorityCertificate);
+        Assert.Null(config.CertificateStore);
     }
 
     /// <summary>Without --config, Config.json in the working directory is used.</summary>
@@ -71,6 +72,26 @@ public sealed class NetworkConfigTests : IDisposable
         Assert.Null(NetworkConfig.Load([], directory).User);
     }
 
+    /// <summary>Reload reads the file again and replaces the users, groups and certificate settings, keeps the user the process runs as, and leaves everything as it was when the file cannot be read.</summary>
+    [Fact]
+    public void Reload_ReplacesWhatTheFileSays_KeepsTheRunningUser_AndSurvivesABrokenFile()
+    {
+        Write("Config.json", """{ "CertificateStore": "a", "UserGroups": { "G": [ "A" ] }, "Users": { "A": { "PeerPort": 1 } } }""");
+        NetworkConfig config = NetworkConfig.Load(["--user", "A"], directory);
+
+        Write("Config.json", """{ "CertificateStore": "b", "AuthorityCertificate": "root.cer", "UserGroups": { "H": [ "B" ] }, "Users": { "B": { "PeerPort": 2 } } }""");
+        config.Reload();
+
+        Assert.Equal("A", config.User);
+        Assert.Equal(("b", "root.cer"), (config.CertificateStore, config.AuthorityCertificate));
+        Assert.Equal(["H"], config.UserGroups.Keys);
+        Assert.Equal(["B"], config.Users.Keys);
+
+        Write("Config.json", "{ broken");
+        Assert.ThrowsAny<Exception>(() => config.Reload());
+        Assert.Equal(["B"], config.Users.Keys);
+    }
+
     /// <summary>A --config path that does not exist is an error rather than an empty network.</summary>
     [Fact]
     public void Load_MissingConfigArgumentFile_Throws() => Assert.Throws<FileNotFoundException>(() => NetworkConfig.Load(["--config", Path.Combine(directory, "Nope.json")], directory));
@@ -89,7 +110,7 @@ public sealed class NetworkConfigTests : IDisposable
                   "OutgoingPoints": [ { "IpAddress": "10.0.0.1", "Port": 3 }, { "SerialPort": "SL0", "SerialAddress": 5 } ],
                   "ChildClients": [ "BOB" ], "StoresMessages": true, "SecurityLevel": "HIGH", "CertificateName": "CN-ALICE",
                   "Data": { "desk": "4" },
-                  "CertificateFile": "alice.pfx", "DataFolder": "@ALICE", "Headless": true, "AlertText": "HEY", "AlarmSoundSeconds": 5.5,
+                  "Headless": true, "AlertText": "HEY", "AlarmSoundSeconds": 5.5,
                   "QuickConfirmationEnabled": false, "ComposeAlertsEnabled": false, "MessageTagsEnabled": false, "MessageTagLabel": "Kind", "PrintReceivedEnabled": true
                 }
               }
@@ -109,7 +130,7 @@ public sealed class NetworkConfigTests : IDisposable
         Assert.Equal(("HIGH", "CN-ALICE"), (info.SecurityLevel, info.CertificateName));
         Assert.Equal("4", info.Data["desk"]);
         Assert.Equal(["OPS"], info.Groups);
-        Assert.Equal(("alice.pfx", "@ALICE", true, "HEY", 5.5), (node.CertificateFile, node.DataFolder, node.Headless, node.AlertText, node.AlarmSoundSeconds));
+        Assert.Equal((true, "HEY", 5.5), (node.Headless, node.AlertText, node.AlarmSoundSeconds));
         Assert.Equal("SERVER", ((ConnectionPointConfig)new ConnectionPointConfig { SerialPort = "SL0", User = "SERVER" }).ToPoint().User);
         Assert.Equal((false, false, false, "Kind", true), (node.QuickConfirmationEnabled, node.ComposeAlertsEnabled, node.MessageTagsEnabled, node.MessageTagLabel, node.PrintReceivedEnabled));
     }
@@ -125,22 +146,21 @@ public sealed class NetworkConfigTests : IDisposable
         Assert.Null(config.GetUserInfo("NOBODY"));
     }
 
-    /// <summary>Relative certificate paths resolve against the configuration file's directory, absolute ones are used as they are, and with no file there is nothing to resolve.</summary>
+    /// <summary>Relative certificate paths resolve against the configuration file's directory, absolute ones are used as they are, each user's identity is {USERNAME}.pfx in the store, and without a store there is no path.</summary>
     [Fact]
     public void CertificatePaths_ResolveAgainstTheFilesDirectory()
     {
-        string absolute = Path.Combine(directory, "absolute.pfx");
-        string path = Write("Network.json", $$"""
-            { "TrustedAuthorityCertificateFile": "../Root.cer", "Users": { "A": { "CertificateFile": "a.pfx" }, "B": { "CertificateFile": {{System.Text.Json.JsonSerializer.Serialize(absolute)}} }, "C": {} } }
-            """);
+        string absolute = Path.Combine(directory, "absolute-store");
+        string path = Write("Network.json", """{ "AuthorityCertificate": "../Root.cer", "CertificateStore": "certs" }""");
+        string absolutePath = Write("Absolute.json", $$"""{ "CertificateStore": {{System.Text.Json.JsonSerializer.Serialize(absolute)}} }""");
 
         NetworkConfig config = NetworkConfig.Load(["--config", path]);
 
-        Assert.Equal(Path.GetFullPath(Path.Combine(directory, "..", "Root.cer")), config.GetTrustedAuthorityCertificateFilePath());
-        Assert.Equal(Path.Combine(directory, "a.pfx"), config.GetCertificateFilePath(config.Find("A")!));
-        Assert.Equal(absolute, config.GetCertificateFilePath(config.Find("B")!));
-        Assert.Null(config.GetCertificateFilePath(config.Find("C")!));
-        Assert.Equal("a.pfx", new NetworkConfig { Users = { ["A"] = new NetworkUserConfig { CertificateFile = "a.pfx" } } }.GetCertificateFilePath(new NetworkUserConfig { CertificateFile = "a.pfx" }));
+        Assert.Equal(Path.GetFullPath(Path.Combine(directory, "..", "Root.cer")), config.GetAuthorityCertificatePath());
+        Assert.Equal(Path.Combine(directory, "certs", "ALICE.pfx"), config.GetCertificatePath("ALICE"));
+        Assert.Equal(Path.Combine(absolute, "BOB.pfx"), NetworkConfig.Load(["--config", absolutePath]).GetCertificatePath("BOB"));
+        Assert.Null(new NetworkConfig().GetCertificatePath("ALICE"));
+        Assert.Null(new NetworkConfig().GetAuthorityCertificatePath());
     }
 
     /// <summary>A recognized role parses regardless of case; an unset or unrecognized one is not a role.</summary>

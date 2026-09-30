@@ -6,7 +6,7 @@ public sealed class UserServiceTests : IDisposable
     public UserServiceTests()
     {
         string path = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), appName);
-        engineControllerMock.Setup(e => e.AppDataPath).Returns(path);
+        engineControllerMock.Setup(e => e.StatePath).Returns(Path.Combine(path, "State.json"));
     }
 
     private readonly string appName = Guid.NewGuid().ToString();

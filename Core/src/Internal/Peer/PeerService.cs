@@ -45,7 +45,7 @@ internal interface IPeerService
 /// message for a user goes over whichever connection is currently identified as them, in whichever direction it was
 /// opened.
 /// </summary>
-internal sealed class PeerService : IPeerService, IAsyncDisposable
+internal sealed class PeerService : IPeerService, IReconfigurable, IAsyncDisposable
 {
     /// <summary>Initializes a new <see cref="PeerService"/>, deferring its <see cref="IPeerTransport"/> to <see cref="Start"/> once a current user is registered.</summary>
     public PeerService(
@@ -70,10 +70,13 @@ internal sealed class PeerService : IPeerService, IAsyncDisposable
     private readonly IPeerTransportFactory? transportFactory;
     private readonly IEngineController engineController;
     private readonly ILogger logger;
-    private readonly PeerConnectionMonitor connectionMonitor = new();
+    private readonly PointMaintenance points = new(new PeerConnectionMonitor());
+    private readonly Lock reconfigureLock = new();
     private readonly UserConnections connections = new();
 
     private IPeerTransport? transport;
+    private CancellationToken lifetime;
+    private int listenPort;
     private int disposed;
 
     /// <inheritdoc />
@@ -97,14 +100,34 @@ internal sealed class PeerService : IPeerService, IAsyncDisposable
     public async Task Start(CancellationToken cancellation)
     {
         Wire(transportFactory!.Create());
-        transport!.StartListener(engineController.PeerPort);
-        foreach (ConnectionPoint point in engineController.OutgoingPoints)
+        lock (reconfigureLock)
         {
-            connectionMonitor.Maintain(transport, point, cancellation);
+            lifetime = cancellation;
+            listenPort = engineController.PeerPort;
+            transport!.StartListener(listenPort);
+            points.Sync(transport, engineController.OutgoingPoints, lifetime);
         }
 
         try { await Task.Delay(Timeout.Infinite, cancellation); }
         catch (OperationCanceledException) { }
+    }
+
+    /// <inheritdoc />
+    public void Reconfigure()
+    {
+        lock (reconfigureLock)
+        {
+            if (transport is null || lifetime == default) { return; }
+
+            if (engineController.PeerPort != listenPort)
+            {
+                transport.StopListener();
+                listenPort = engineController.PeerPort;
+                transport.StartListener(listenPort);
+            }
+
+            points.Sync(transport, engineController.OutgoingPoints, lifetime);
+        }
     }
 
     /// <inheritdoc />

@@ -35,6 +35,7 @@
                        CanRetrieve="{Binding CanRetrieve}"
                        ShowAutoForwardCommand="{Binding ShowAutoForwardCommand}"
                        HasAutoForwardAccess="{Binding HasAutoForwardAccess}"
+                       RefreshCommand="{Binding RefreshCommand}"
                        ShowPrintManagerCommand="{Binding ShowPrintManagerCommand}"
                        IsInstallScreenVisible="{Binding IsInstallScreenVisible}"
                        IsServerMode="{Binding IsServerMode}"

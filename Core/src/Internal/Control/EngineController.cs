@@ -62,12 +62,22 @@ internal interface IEngineController
     /// </summary>
     int PacketWindow { get; }
 
-    /// <summary>The application name, used as the default data folder name and in log headers.</summary>
+    /// <summary>The application name, used in log headers and as the name of the folder holding the install state.</summary>
     string AppName { get; }
     /// <summary>The application version, shown in the title bar and the info popup.</summary>
     string AppVersion { get; }
-    /// <summary>Absolute path to the application data directory.</summary>
+    /// <summary>Absolute path to the directory every application data directory lives in: <c>%APPDATA%</c>.</summary>
+    string AppDataRoot { get; }
+    /// <summary>
+    /// Absolute path to the current user's data directory, <c>{AppDataRoot}/{AppName}/{USERNAME}</c>, which holds their database and logs. Before a
+    /// user is installed or named there is no user folder yet, so it is <c>{AppDataRoot}/{AppName}</c>.
+    /// </summary>
     string AppDataPath { get; }
+    /// <summary>
+    /// Absolute path to the file remembering which user is installed, <c>{AppDataRoot}/{AppName}/State.json</c>. It lives beside the user
+    /// folders rather than in one, since it is what says whose folder to use.
+    /// </summary>
+    string StatePath { get; }
     /// <summary><see langword="true"/> to enable kiosk mode, which hides window chrome and restricts navigation.</summary>
     bool IsKioskMode { get; }
     /// <summary>The text displayed in the content area when no entry is selected.</summary>
@@ -461,7 +471,11 @@ internal class EngineController(EngineBuilder builder, ICurrentUserProvider curr
     /// <inheritdoc />
     public virtual string AppVersion => builder.AppVersionValue ?? (Assembly.GetEntryAssembly()?.GetName().Version is { } version ? $"{version.Major}.{version.Minor}.{version.Build}" : "1.0.0");
     /// <inheritdoc />
-    public virtual string AppDataPath => builder.DataPathValue ?? Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), AppName);
+    public virtual string AppDataRoot => Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData);
+    /// <inheritdoc />
+    public virtual string AppDataPath => currentUserProvider.UserName is { Length: > 0 } user ? Path.Combine(AppDataRoot, AppName, user) : Path.Combine(AppDataRoot, AppName);
+    /// <inheritdoc />
+    public virtual string StatePath => Path.Combine(AppDataRoot, AppName, "State.json");
     /// <inheritdoc />
     public virtual bool IsKioskMode => builder.IsKioskMode;
     /// <inheritdoc />

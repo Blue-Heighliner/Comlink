@@ -6,7 +6,7 @@ The engine configures two logging providers, both registered in `EngineExtension
 
 Writes all log output to a daily rotating file and to stdout.
 
-**File location**: `{AppDataPath}/Logs/yyyy-MM-dd.log`
+**File location**: `{AppDataPath}/Logs/yyyy-MM-dd.log` (the current user's folder, `%APPDATA%/{AppName}/{USERNAME}`; lines logged before a user is installed or named go to `%APPDATA%/{AppName}/Logs`, and the file follows the user once there is one)
 
 **Log format**:
 ```

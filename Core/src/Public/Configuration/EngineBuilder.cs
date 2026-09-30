@@ -27,14 +27,11 @@ public interface IEngineBuilder
     /// <param name="map">Maps the packet fields and sets the packet size and window.</param>
     IEngineBuilder Packets<TPacket>(Action<IPacketBuilder<TPacket>> map) where TPacket : class, new();
 
-    /// <summary>Sets the application name, used as the default data folder name and in log headers. Defaults to the entry assembly's name.</summary>
+    /// <summary>Sets the application name, used in log headers and as the name of the folder holding the install state. Defaults to the entry assembly's name.</summary>
     IEngineBuilder AppName(string name);
 
     /// <summary>Sets the application version, shown in the title bar and the info popup. Defaults to the entry assembly's version.</summary>
     IEngineBuilder AppVersion(string version);
-
-    /// <summary>Sets the absolute path of the application data directory. Defaults to a folder named after <see cref="AppName"/> in the user's application data.</summary>
-    IEngineBuilder DataPath(string path);
 
     /// <summary>Turns kiosk mode on or off. Kiosk mode hides window chrome and restricts navigation.</summary>
     IEngineBuilder KioskMode(bool enabled = true);

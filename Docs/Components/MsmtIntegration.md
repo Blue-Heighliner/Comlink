@@ -32,11 +32,11 @@ Two independent sources are supported, chosen per user in the network configurat
   building the MSMT options throws and the peer/interface listeners simply don't start, retried
   the next time the host restarts after a user is installed. A real deployment provisions its own
   certificates under these subject names through whatever process manages its certificate store.
-- **Certificate files**: a user's `CertificateFile` and the file's `TrustedAuthorityCertificateFile` load
-  a PKCS#12 identity file and a public authority file directly from disk instead, resolved relative to the
-  network configuration file's own directory. See `Scripts/Scenarios/` for a working example: each scenario's
-  `Config.json` points every user at a `.pfx` identity file in the same directory, all signed by one shared
-  `Scripts/Scenarios/Root.cer` authority. See [Config.md](Config.md) for both fields.
+- **Certificate files**: the network file's `CertificateStore` (a folder holding one `{USERNAME}.pfx` identity per user) and
+  `AuthorityCertificate` load the running user's PKCS#12 identity file and a public authority file directly from disk instead,
+  resolved relative to the network configuration file's own directory. See `Scripts/Scenarios/` for a working example:
+  each scenario's `Config.json` names a store folder containing every user's `.pfx`, all signed by one shared
+  `Scripts/Scenarios/Root.cer` authority. See [Config.md](Config.md) for both keys.
 
 ## Session Peer
 

@@ -10,7 +10,7 @@ namespace BlueHeighliner.Comlink.Peer;
 /// the connection's live state continuously rather than only the moment a message last happened to flow. Who the
 /// server is comes from identifying the connection, the same as for any other. See <c>Docs/Components/Peer.md</c>.
 /// </summary>
-internal sealed class ClientPeerService : IPeerService, IConnectionStatusService, IAsyncDisposable
+internal sealed class ClientPeerService : IPeerService, IConnectionStatusService, IReconfigurable, IAsyncDisposable
 {
     /// <summary>Initializes a new <see cref="ClientPeerService"/>.</summary>
     public ClientPeerService(
@@ -26,7 +26,8 @@ internal sealed class ClientPeerService : IPeerService, IConnectionStatusService
     private readonly IPeerTransportFactory transportFactory;
     private readonly IEngineController engineController;
     private readonly ILogger logger;
-    private readonly PeerConnectionMonitor connectionMonitor = new();
+    private readonly PointMaintenance points = new(new PeerConnectionMonitor());
+    private readonly Lock reconfigureLock = new();
 
     private readonly ConcurrentDictionary<string, Task<bool>> inFlightSends = new();
 
@@ -35,6 +36,7 @@ internal sealed class ClientPeerService : IPeerService, IConnectionStatusService
     private PeerConnection? serverConnection;
     private PeerLinkControl? serverLink;
     private volatile bool isClosed;
+    private CancellationToken lifetime;
     private volatile string serverName = string.Empty;
     private readonly Lock statusLock = new();
     private bool isConnected;
@@ -82,12 +84,17 @@ internal sealed class ClientPeerService : IPeerService, IConnectionStatusService
             return;
         }
 
-        serverPoint = point;
         transport = transportFactory.Create();
         transport.Connected.Listen(OnConnected);
         transport.Disconnected.Listen(OnDisconnected);
         transport.Received.Listen(OnReceived);
-        serverLink = connectionMonitor.Maintain(transport, point, cancellation, OnHeartbeatAcknowledged);
+        lock (reconfigureLock)
+        {
+            lifetime = cancellation;
+            (_, IReadOnlyList<(ConnectionPoint Point, PeerLinkControl Control)> started) = points.Sync(transport, [point], lifetime, OnHeartbeatAcknowledged);
+            serverPoint = started[0].Point;
+            serverLink = started[0].Control;
+        }
 
         try { await Task.Delay(Timeout.Infinite, cancellation); }
         catch (OperationCanceledException) { }
@@ -124,6 +131,38 @@ internal sealed class ClientPeerService : IPeerService, IConnectionStatusService
                 LastDisconnectedAt = lastDisconnectedAt,
                 IsClosed = isClosed
             }];
+        }
+    }
+
+    /// <inheritdoc />
+    public void Reconfigure()
+    {
+        lock (reconfigureLock)
+        {
+            if (transport is null || lifetime == default) { return; }
+
+            ConnectionPoint? wanted = engineController.OutgoingPoints.FirstOrDefault();
+            if (wanted is null) { logger.LogError("Client role requires an outgoing connection point to its server; none is defined any more"); }
+
+            (IReadOnlyList<ConnectionPoint> removed, IReadOnlyList<(ConnectionPoint Point, PeerLinkControl Control)> started) = points.Sync(transport, wanted is null ? [] : [wanted], lifetime, OnHeartbeatAcknowledged);
+            if (removed.Count == 0 && started.Count == 0) { return; }
+
+            if (removed.Count > 0)
+            {
+                serverConnection?.Drop();
+                UpdateConnectionStatus(false);
+                serverPoint = null;
+                serverLink = null;
+                isClosed = false;
+            }
+
+            if (started.Count > 0)
+            {
+                serverPoint = started[0].Point;
+                serverLink = started[0].Control;
+            }
+
+            StatusesChanged?.Invoke();
         }
     }
 

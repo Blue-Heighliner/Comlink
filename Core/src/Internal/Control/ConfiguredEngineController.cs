@@ -3,12 +3,11 @@ namespace BlueHeighliner.Comlink.Control;
 /// <summary>
 /// Engine-level decorator applying the network configuration file's node settings for the user this process runs as, over
 /// whichever <see cref="IEngineController"/> is built from the host's <see cref="IEngineConfiguration"/> (an
-/// <see cref="EngineController"/>): the data folder, the identity certificate file, and the alert, tag and print
+/// <see cref="EngineController"/>): the identity certificate file, and the alert, tag and print
 /// settings, field by field; every other member, including the entire message-format surface and everything
 /// about users (which the wrapped <see cref="EngineController"/> reads from the same file), delegates straight to the wrapped provider.
 /// Registered by <see cref="EngineExtensions.UseEngine"/>. The user is the one named on the command line, or else the installed
-/// user; only the one named on the command line decides <see cref="AppDataPath"/>, since an installed user is not known
-/// until that path has been read.
+/// user, whose folder <see cref="AppDataPath"/> names even before the install state has been read.
 /// </summary>
 internal sealed class ConfiguredEngineController : IEngineController
 {
@@ -27,7 +26,6 @@ internal sealed class ConfiguredEngineController : IEngineController
     private readonly NetworkConfig config;
     private readonly ICurrentUserProvider currentUserProvider;
 
-    private NetworkUserConfig? Launched => config.Find(DebugUserName);
     private NetworkUserConfig? Current => config.Find(DebugUserName ?? currentUserProvider.UserName);
 
     /// <inheritdoc />
@@ -122,12 +120,11 @@ internal sealed class ConfiguredEngineController : IEngineController
     /// <inheritdoc />
     public string AppVersion => fallback.AppVersion;
     /// <inheritdoc />
-    public string AppDataPath => Launched?.DataFolder switch
-    {
-        null => fallback.AppDataPath,
-        ['@', ..] folder => Path.Combine(fallback.AppDataPath, folder[1..].TrimStart(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar)),
-        string folder => folder
-    };
+    public string AppDataRoot => fallback.AppDataRoot;
+    /// <inheritdoc />
+    public string AppDataPath => currentUserProvider.UserName is null && DebugUserName is { } debug ? Path.Combine(fallback.AppDataRoot, fallback.AppName, debug.ToUpperInvariant()) : fallback.AppDataPath;
+    /// <inheritdoc />
+    public string StatePath => fallback.StatePath;
     /// <inheritdoc />
     public bool IsKioskMode => fallback.IsKioskMode;
     /// <inheritdoc />
@@ -193,22 +190,24 @@ internal sealed class ConfiguredEngineController : IEngineController
     public bool CanDelete(FolderType folderType) => fallback.CanDelete(folderType);
 
     /// <inheritdoc />
-    /// <exception cref="InvalidOperationException">Only one of the current user's <c>CertificateFile</c> and the network's <c>TrustedAuthorityCertificateFile</c> is set - they must be set together.</exception>
+    /// <exception cref="InvalidOperationException">Only one of the network's <c>CertificateStore</c> and <c>AuthorityCertificate</c> is set - they must be set together - or there is no current user to load a certificate for.</exception>
     public MsmtSessionPeerOptions ConnectionOptions
     {
         get
         {
-            string? peerFile = Current is { } current ? config.GetCertificateFilePath(current) : null;
-            string? authorityFile = config.GetTrustedAuthorityCertificateFilePath();
-            if (peerFile is null && authorityFile is null)
+            string? store = config.CertificateStore;
+            string? authorityFile = config.GetAuthorityCertificatePath();
+            if (store is null && authorityFile is null)
             {
                 return fallback.ConnectionOptions;
             }
-            if (peerFile is null || authorityFile is null)
+            if (store is null || authorityFile is null)
             {
-                throw new InvalidOperationException("A user's CertificateFile and the network's TrustedAuthorityCertificateFile must both be set together.");
+                throw new InvalidOperationException("The network's CertificateStore and AuthorityCertificate must both be set together.");
             }
-            return fallback.ConfigureConnectionOptions(MsmtCertificateLookup.BuildPeerOptionsFromFiles(peerFile, authorityFile));
+
+            string userName = currentUserProvider.UserName ?? DebugUserName?.ToUpperInvariant() ?? throw new InvalidOperationException("Peer authentication requires a current user to load an identity certificate for.");
+            return fallback.ConfigureConnectionOptions(MsmtCertificateLookup.BuildPeerOptionsFromFiles(config.GetCertificatePath(userName)!, authorityFile));
         }
     }
 

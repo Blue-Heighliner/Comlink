@@ -165,14 +165,15 @@ Steps 2 through 4 (and external systems) only run once a user is installed: a fr
 
 ## Data Storage
 
-All persistent data lives under the configured app data path (default: `%APPDATA%/{AppName}`):
+All persistent data lives under `%APPDATA%/{AppName}`, in a folder per user (`IEngineController.AppDataPath`, always `%APPDATA%/{AppName}/{USERNAME}`, not configurable), beside the install state:
 
 ```
-{AppDataPath}/
-├── Data.db      LiteDB file (messages, drafts, notes, folders, activity)
-├── State.json   Installed user state (name, code, environment)
-└── Logs/
-    └── yyyy-MM-dd.log
+%APPDATA%/{AppName}/
+├── State.json       Installed user state (name, code): says whose folder to use
+└── {USERNAME}/      IEngineController.AppDataPath
+    ├── Data.db      LiteDB file (messages, drafts, notes, folders, activity)
+    └── Logs/
+        └── yyyy-MM-dd.log
 ```
 
 Export packages (`{name}.export.zip`, one JSON file per entry) are written to and read from an external drive selected by the user, not `AppDataPath` — see "Exporting and importing entries" above.

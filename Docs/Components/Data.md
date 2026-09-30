@@ -4,11 +4,11 @@ The data layer is active in `Client` mode only. It uses LiteDB (a single-file em
 
 ## Database File
 
-A single file `Data.db` in `IEngineController.AppDataPath`. The file is created on first `LiteDbContext.Initialize()` call.
+A single file `Data.db` in `IEngineController.AppDataPath`, the current user's own folder `%APPDATA%/{AppName}/{USERNAME}`. The file is created on first `LiteDbContext.Initialize()` call.
 
 ## LiteDbContext
 
-`LiteDbContext` owns the `LiteDatabase` instance and exposes typed collection handles. Call `Initialize()` after the user is known (on install or on startup when an existing user is loaded). Re-calling `Initialize()` is safe — it disposes and reopens the database.
+`LiteDbContext` owns the `LiteDatabase` instance and exposes typed collection handles. Call `Initialize()` after the user is known (on install or on startup when an existing user is loaded). Re-calling `Initialize()` is safe: it does nothing when the database is already open on the current user's folder and reopens it when the folder has changed. A storage server's repository calls it itself, since a server with a named user starts routing before its window has initialized the database.
 
 Collections initialized:
 

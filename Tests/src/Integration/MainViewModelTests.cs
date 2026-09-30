@@ -30,6 +30,7 @@ public sealed class MainViewModelTests
         public Mock<IHelpViewModel> Help { get; } = new();
         public Mock<IConnectionStatusViewModel> ConnectionStatus { get; } = new();
         public Mock<ICurrentUserProvider> UserProvider { get; } = new();
+        public Mock<INetworkReloadService> NetworkReload { get; } = new();
         public Mock<TestEngineController> EngineController { get; } = new() { CallBase = true };
         public Mock<IBodyDocumentFactory> BodyDocumentFactory { get; } = new();
 
@@ -64,6 +65,7 @@ public sealed class MainViewModelTests
                 ConnectionStatus.Object,
                 UserProvider.Object,
                 EngineController.Object,
+                NetworkReload.Object,
                 noLogger,
                 BodyDocumentFactory.Object);
         }
@@ -87,6 +89,41 @@ public sealed class MainViewModelTests
         Assert.Same(s.Retrieve.Object, vm.Retrieve);
         Assert.Same(s.AutoForward.Object, vm.AutoForward);
         Assert.Same(s.Help.Object, vm.Help);
+    }
+
+    /// <summary>The Refresh command asks the network reload service to re-read the file, and a failure is logged rather than thrown.</summary>
+    [Fact]
+    public void RefreshCommand_ReloadsTheNetworkConfiguration_AndSwallowsAFailure()
+    {
+        Setup s = new();
+        MainViewModel vm = s.BuildVm();
+
+        vm.RefreshCommand.Execute(null);
+        s.NetworkReload.Verify(r => r.Reload(), Times.Once);
+
+        s.NetworkReload.Setup(r => r.Reload()).Throws(new IOException("gone"));
+        vm.RefreshCommand.Execute(null);
+        s.NetworkReload.Verify(r => r.Reload(), Times.Exactly(2));
+    }
+
+    /// <summary>Once the file has been reloaded the role-dependent flags are recomputed, so a user whose role changed gets the matching layout.</summary>
+    [Fact]
+    public void NetworkReloaded_RecomputesTheUsersInfo()
+    {
+        Setup s = new();
+        s.EngineController.SetupGet(e => e.Role).Returns(UserRole.Peer);
+        s.EngineController.Setup(e => e.GetUserInfo("ALICE")).Returns(new UserInfo { Name = "ALICE", Role = UserRole.Client });
+        s.EngineController.SetupGet(e => e.SecurityLevels).Returns([]);
+        s.EngineController.SetupGet(e => e.AutoForwardControllers).Returns([]);
+        s.EngineController.Setup(e => e.GetUserSecurityLevel("ALICE")).Returns(string.Empty);
+        MainViewModel vm = s.BuildVm();
+        vm.UserName = "ALICE";
+        Assert.False(vm.IsClientMode);
+
+        s.EngineController.SetupGet(e => e.Role).Returns(UserRole.Client);
+        s.NetworkReload.Raise(r => r.Reloaded += null);
+
+        Assert.True(vm.IsClientMode);
     }
 
     /// <summary>AppName and AppVersion come from IEngineController, for the title bar's info popup.</summary>

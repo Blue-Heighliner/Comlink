@@ -35,7 +35,7 @@ internal static class MsmtCertificateLookup
 
     /// <summary>
     /// Builds peer options directly from certificate files on disk instead of a system store lookup - used
-    /// when the network configuration file's <c>CertificateFile</c>/<c>TrustedAuthorityCertificateFile</c> fields
+    /// when the network configuration file's <c>CertificateStore</c>/<c>AuthorityCertificate</c> keys
     /// are set. <paramref name="peerCertificateFile"/> must be a PKCS#12 file carrying the identity
     /// certificate's private key; <paramref name="trustedAuthorityCertificateFile"/> a public certificate
     /// file for the trusted authority.

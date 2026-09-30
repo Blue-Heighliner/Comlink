@@ -17,6 +17,9 @@ namespace BlueHeighliner.Comlink.Peer;
 /// </remarks>
 internal interface IInterfaceService : IAsyncDisposable
 {
+    /// <summary>Closes the listener and opens it again from the configuration as it is now (its port and certificates). Does nothing before <see cref="Start"/>.</summary>
+    void Restart();
+
     /// <summary>Starts the inbound interface listener and blocks until <paramref name="cancellation"/> is cancelled.</summary>
     Task Start(CancellationToken cancellation);
 }
@@ -45,10 +48,45 @@ internal sealed class InterfaceService : IInterfaceService
     private readonly IUserService userService;
     private readonly ILogger logger;
 
+    private readonly Lock runLock = new();
     private IMsmtSessionPeer? peer;
+    private CancellationTokenSource? current;
+    private bool restartRequested;
 
     /// <inheritdoc />
     public async Task Start(CancellationToken cancellation)
+    {
+        while (true)
+        {
+            using CancellationTokenSource run = CancellationTokenSource.CreateLinkedTokenSource(cancellation);
+            lock (runLock)
+            {
+                restartRequested = false;
+                current = run;
+            }
+
+            await Listen(run.Token);
+
+            lock (runLock)
+            {
+                if (!restartRequested || cancellation.IsCancellationRequested) { return; }
+            }
+        }
+    }
+
+    /// <inheritdoc />
+    public void Restart()
+    {
+        lock (runLock)
+        {
+            if (current is null) { return; }
+
+            restartRequested = true;
+            current.Cancel();
+        }
+    }
+
+    private async Task Listen(CancellationToken cancellation)
     {
         MsmtSessionPeerOptions options;
         try
@@ -58,13 +96,22 @@ internal sealed class InterfaceService : IInterfaceService
         catch (InvalidOperationException ex)
         {
             logger.LogError("Interface listener cannot start: {Message}", ex.Message);
+            await WaitForRestart(cancellation);
             return;
         }
 
-        peer = peerFactory.Create(options);
-        peer.Receiver = OnReceived;
-        peer.StartListener(engineController.InterfacePort, "127.0.0.1");
+        IMsmtSessionPeer listener = peerFactory.Create(options);
+        peer = listener;
+        listener.Receiver = OnReceived;
+        listener.StartListener(engineController.InterfacePort, "127.0.0.1");
 
+        await WaitForRestart(cancellation);
+        await listener.DisposeAsync();
+        if (ReferenceEquals(peer, listener)) { peer = null; }
+    }
+
+    private static async Task WaitForRestart(CancellationToken cancellation)
+    {
         try { await Task.Delay(Timeout.Infinite, cancellation); }
         catch (OperationCanceledException) { }
     }

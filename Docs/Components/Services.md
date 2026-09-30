@@ -38,7 +38,7 @@ Manages user installation and persists user identity to `State.json`.
 - Install a new user by resolving a code (`Install`)
 - Apply a debug override (`IEngineController.DebugUserName`) that bypasses `State.json`
 
-**State file**: `{AppDataPath}/State.json` contains `UserName`, `UserCode`. `IsInstalled` is a computed property: `true` when `UserName` is non-null. The security level shown in the title bar banner (see `MainViewModel`) is not persisted here; it is resolved fresh from `IEngineController.GetUserSecurityLevel(UserName)` each time, so a level a host reassigns to a user takes effect for an already-installed user without reinstalling.
+**State file**: `IEngineController.StatePath` (`%APPDATA%/{AppName}/State.json`, beside the user folders since it says whose folder to use) contains `UserName`, `UserCode`. `IsInstalled` is a computed property: `true` when `UserName` is non-null. The security level shown in the title bar banner (see `MainViewModel`) is not persisted here; it is resolved fresh from `IEngineController.GetUserSecurityLevel(UserName)` each time, so a level a host reassigns to a user takes effect for an already-installed user without reinstalling.
 
 **Thread safety**: `Install` uses a `SemaphoreSlim(1,1)` to prevent concurrent installs.
 
@@ -132,9 +132,13 @@ Implements `IServiceConnection`, registered in both `Client` and `Headless` mode
 
 ---
 
+## NetworkReloadService
+
+Re-reads the network configuration file while the engine runs (`Reload()`, raising `Reloaded` afterwards) and applies what changed, which is what the title bar's right-click "Refresh" on the user name does (`IMainViewModel.RefreshCommand`). `NetworkConfig.Reload()` reads the file again from wherever it was loaded and replaces the trusted authority, certificate store, groups and users; the user the process runs as stays. A reload changes only what the new file makes necessary. The running peer service is told to reconfigure (`IRolePeerService.Reconfigure()`, implemented by `PeerService`, `ClientPeerService` and `ServerRoutingService` through `IReconfigurable`): a changed listen port restarts only the listener (`IPeerTransport.StopListener()` then `StartListener`), and `PointMaintenance` diffs the outgoing points, closing the ones no longer defined (or whose named serial user changed), opening newly defined ones, and leaving the rest, and their connections, untouched; a client moves to its new first point only if that point changed; a server updates its topology in place, disconnecting and forgetting only the children and servers no longer listed. The peer layer is restarted (`IRolePeerService.Restart()`) only when the current user's role changed, since that needs a different implementation, or the certificate settings (certificate store, authority certificate, trusted authority name, the user's certificate name) changed, since those are fixed when it is created; the interface listener is restarted (`IInterfaceService.Restart()`) only when the interface port or those certificate settings changed. Everything else, such as users, groups, security levels and node settings, is read on demand and is current as soon as the file has been read, and a reload that changes nothing touches nothing. `MainViewModel` then recomputes the role, security level and access shown. A file that cannot be read or parsed throws before anything changes, and the view model logs it and leaves the engine running on what it had.
+
 ## InterfaceService
 
-Hosts the local interface listener described in [Interface.md](Interface.md). Always active, in both `Client` and `Headless` mode. Mirrors `PeerService.MessageDelivered` out to every connected interface connection, and routes messages received from an interface via `MessageRoutingService.Route`.
+Hosts the local interface listener described in [Interface.md](Interface.md). Always active, in both `Client` and `Headless` mode. `Restart()` closes the listener and opens it again from the configuration as it is then, and it keeps waiting for a restart when it cannot start (for example before its certificates are in place) instead of ending. Mirrors `PeerService.MessageDelivered` out to every connected interface connection, and routes messages received from an interface via `MessageRoutingService.Route`.
 
 ---
 

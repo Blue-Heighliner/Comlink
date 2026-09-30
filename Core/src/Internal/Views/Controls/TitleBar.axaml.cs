@@ -57,6 +57,10 @@ internal partial class TitleBar : UserControl
     public static readonly StyledProperty<bool> HasAutoForwardAccessProperty =
         AvaloniaProperty.Register<TitleBar, bool>(nameof(HasAutoForwardAccess));
 
+    /// <summary>Identifies the <see cref="RefreshCommand"/> styled property.</summary>
+    public static readonly StyledProperty<ICommand?> RefreshCommandProperty =
+        AvaloniaProperty.Register<TitleBar, ICommand?>(nameof(RefreshCommand));
+
     /// <summary>Identifies the <see cref="ShowPrintManagerCommand"/> styled property.</summary>
     public static readonly StyledProperty<ICommand?> ShowPrintManagerCommandProperty =
         AvaloniaProperty.Register<TitleBar, ICommand?>(nameof(ShowPrintManagerCommand));
@@ -187,6 +191,13 @@ internal partial class TitleBar : UserControl
     {
         get => GetValue(HasAutoForwardAccessProperty);
         set => SetValue(HasAutoForwardAccessProperty, value);
+    }
+
+    /// <summary>Gets or sets the command invoked by the user name label's right-click "Refresh" option, which re-reads the network configuration file.</summary>
+    public ICommand? RefreshCommand
+    {
+        get => GetValue(RefreshCommandProperty);
+        set => SetValue(RefreshCommandProperty, value);
     }
 
     /// <summary>Gets or sets the command invoked when the user clicks the Prints button.</summary>
@@ -374,6 +385,9 @@ internal partial class TitleBar : UserControl
 
     private void OnAutoForwardClick(object? sender, Avalonia.Interactivity.RoutedEventArgs e)
         => ShowAutoForwardCommand?.Execute(null);
+
+    private void OnRefreshClick(object? sender, Avalonia.Interactivity.RoutedEventArgs e)
+        => RefreshCommand?.Execute(null);
 
     private void OnPrintManagerClick(object? sender, Avalonia.Interactivity.RoutedEventArgs e)
         => ShowPrintManagerCommand?.Execute(null);

@@ -12,7 +12,7 @@ public sealed class ControlProviderTests
 
     private static NetworkConfig Node(NetworkUserConfig me, string? user = null) => new() { User = user, Users = { ["ME"] = me } };
 
-    /// <summary>The default implementation derives AppDataPath from AppName via virtual dispatch, and returns hardcoded defaults for everything else.</summary>
+    /// <summary>The default implementation derives AppDataPath from AppName (there is no user) via virtual dispatch, and returns hardcoded defaults for everything else.</summary>
     [Fact]
     public void EngineController_UsesAppNameAndHardcodedDefaults()
     {
@@ -137,37 +137,18 @@ public sealed class ControlProviderTests
         public override string AppName => "CustomApp";
     }
 
-    /// <summary>Null DataFolder falls back to the wrapped provider's own path.</summary>
+    /// <summary>Without a user the wrapped provider's own path is used; with a user named on the command line before anyone is installed, their folder under the data root is; an installed user's folder is the wrapped provider's.</summary>
     [Fact]
-    public void ConfiguredEngineController_NullDataFolder_FallsBack()
+    public void ConfiguredEngineController_AppDataPath_FollowsTheLaunchedUser()
     {
         Mock<IEngineController> fallback = new();
         fallback.Setup(f => f.AppDataPath).Returns("/base/path");
-        ConfiguredEngineController controller = new(fallback.Object, new NetworkConfig(), NoCurrentUser);
+        fallback.Setup(f => f.AppDataRoot).Returns("/base");
+        fallback.Setup(f => f.AppName).Returns("App");
 
-        Assert.Equal("/base/path", controller.AppDataPath);
-    }
-
-    /// <summary>DataFolder starting with '@' is treated as relative to the fallback's own AppDataPath.</summary>
-    [Fact]
-    public void ConfiguredEngineController_AtPrefix_IsRelativeToFallback()
-    {
-        Mock<IEngineController> fallback = new();
-        fallback.Setup(f => f.AppDataPath).Returns("/base/path");
-        ConfiguredEngineController controller = new(fallback.Object, Node(new NetworkUserConfig { DataFolder = "@test/sub" }, "ME"), NoCurrentUser);
-
-        Assert.Equal(Path.Combine("/base/path", "test", "sub"), controller.AppDataPath);
-    }
-
-    /// <summary>An absolute DataFolder path is used verbatim.</summary>
-    [Fact]
-    public void ConfiguredEngineController_AbsolutePath_UsedDirectly()
-    {
-        Mock<IEngineController> fallback = new();
-        string absolute = "/tmp/custom-data";
-        ConfiguredEngineController controller = new(fallback.Object, Node(new NetworkUserConfig { DataFolder = absolute }, "ME"), NoCurrentUser);
-
-        Assert.Equal(absolute, controller.AppDataPath);
+        Assert.Equal("/base/path", new ConfiguredEngineController(fallback.Object, new NetworkConfig(), NoCurrentUser).AppDataPath);
+        Assert.Equal(Path.Combine("/base", "App", "ALICE"), new ConfiguredEngineController(fallback.Object, new NetworkConfig { User = "alice" }, NoCurrentUser).AppDataPath);
+        Assert.Equal("/base/path", new ConfiguredEngineController(fallback.Object, new NetworkConfig { User = "alice" }, Me).AppDataPath);
     }
 
     /// <summary>AppName, IsKioskMode, and HomeText are left entirely to the fallback, since none has a network file field.</summary>
@@ -513,23 +494,22 @@ public sealed class ControlProviderTests
         Assert.Equal("FALLBACK-ROOT", controller.TrustedAuthorityCertificateName);
     }
 
-    /// <summary>When both certificate file fields are set, ConnectionOptions loads the identity and trusted authority directly from disk instead of the system store.</summary>
+    /// <summary>When both the certificate store and the authority certificate are set, ConnectionOptions loads the current user's identity from {USERNAME}.pfx in the store and the authority from its file, instead of the system store.</summary>
     [Fact]
-    public void ConfiguredEngineController_BothCertificateFilesSet_LoadsFromFiles()
+    public void ConfiguredEngineController_StoreAndAuthoritySet_LoadsFromFiles()
     {
         string tempDir = Path.Combine(Path.GetTempPath(), $"comlink-cert-file-tests-{Guid.NewGuid():N}");
         Directory.CreateDirectory(tempDir);
         try
         {
             (X509Certificate2 server, X509Certificate2 client, X509Certificate2Collection trustedAuthorities) = TestMsmtCertificates.Create();
-            string peerFile = Path.Combine(tempDir, "identity.pfx");
             string authorityFile = Path.Combine(tempDir, "authority.cer");
-            File.WriteAllBytes(peerFile, client.Export(X509ContentType.Pfx));
+            File.WriteAllBytes(Path.Combine(tempDir, "ME.pfx"), client.Export(X509ContentType.Pfx));
             File.WriteAllBytes(authorityFile, trustedAuthorities[0].Export(X509ContentType.Cert));
 
             ConfiguredEngineController controller = new(
                 new TestEngineController(),
-                new NetworkConfig { TrustedAuthorityCertificateFile = authorityFile, Users = { ["ME"] = new NetworkUserConfig { CertificateFile = peerFile } } },
+                new NetworkConfig { AuthorityCertificate = authorityFile, CertificateStore = tempDir },
                 Me);
 
             MsmtSessionPeerOptions options = controller.ConnectionOptions;
@@ -544,32 +524,25 @@ public sealed class ControlProviderTests
         }
     }
 
-    /// <summary>Setting only the current user's CertificateFile without the network's TrustedAuthorityCertificateFile throws, since the two must be set together.</summary>
+    /// <summary>Setting only the certificate store without the authority certificate, or the reverse, throws, since the two must be set together.</summary>
     [Fact]
-    public void ConfiguredEngineController_OnlyPeerCertificateFileSet_Throws()
+    public void ConfiguredEngineController_OnlyOneOfStoreAndAuthoritySet_Throws()
     {
-        ConfiguredEngineController controller = new(new TestEngineController(), Node(new NetworkUserConfig { CertificateFile = "/tmp/identity.pfx" }), Me);
-        Assert.Throws<InvalidOperationException>(() => controller.ConnectionOptions);
+        ConfiguredEngineController onlyStore = new(new TestEngineController(), new NetworkConfig { CertificateStore = "/tmp/store" }, Me);
+        ConfiguredEngineController onlyAuthority = new(new TestEngineController(), new NetworkConfig { AuthorityCertificate = "/tmp/authority.cer" }, Me);
+
+        Assert.Throws<InvalidOperationException>(() => onlyStore.ConnectionOptions);
+        Assert.Throws<InvalidOperationException>(() => onlyAuthority.ConnectionOptions);
     }
 
-    /// <summary>Setting only the network's TrustedAuthorityCertificateFile without the current user's CertificateFile throws, since the two must be set together.</summary>
+    /// <summary>An identity certificate file missing from the store throws, and so does having no user to load one for.</summary>
     [Fact]
-    public void ConfiguredEngineController_OnlyTrustedAuthorityCertificateFileSet_Throws()
+    public void ConfiguredEngineController_IdentityFileMissingOrNoUser_Throws()
     {
-        ConfiguredEngineController controller = new(new TestEngineController(), new NetworkConfig { TrustedAuthorityCertificateFile = "/tmp/authority.cer", Users = { ["ME"] = new NetworkUserConfig() } }, Me);
-        Assert.Throws<InvalidOperationException>(() => controller.ConnectionOptions);
-    }
+        NetworkConfig config = new() { AuthorityCertificate = "/nonexistent/authority.cer", CertificateStore = "/nonexistent" };
 
-    /// <summary>A configured identity certificate file that does not exist on disk throws.</summary>
-    [Fact]
-    public void ConfiguredEngineController_PeerCertificateFileMissing_Throws()
-    {
-        ConfiguredEngineController controller = new(
-            new TestEngineController(),
-            new NetworkConfig { TrustedAuthorityCertificateFile = "/nonexistent/authority.cer", Users = { ["ME"] = new NetworkUserConfig { CertificateFile = "/nonexistent/identity.pfx" } } },
-            Me);
-
-        Assert.Throws<InvalidOperationException>(() => controller.ConnectionOptions);
+        Assert.Throws<InvalidOperationException>(() => new ConfiguredEngineController(new TestEngineController(), config, Me).ConnectionOptions);
+        Assert.Throws<InvalidOperationException>(() => new ConfiguredEngineController(new TestEngineController(), config, NoCurrentUser).ConnectionOptions);
     }
 
     /// <summary>The default implementation always returns the well-known default ports.</summary>

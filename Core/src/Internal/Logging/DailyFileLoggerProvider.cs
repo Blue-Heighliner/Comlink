@@ -21,16 +21,20 @@ internal sealed class DailyFileLoggerProvider : ILoggerProvider
     private Mutex? crossProcessMutex;
     private DateOnly currentDate;
     private StreamWriter? writer;
+    private string? writerDirectory;
     private volatile bool fileFailureReported;
 
     private string LogDirectory
     {
         get
         {
-            if (logDirectory is not null) { return logDirectory; }
             string dir = Path.Combine(engineController.AppDataPath, "Logs");
+            if (logDirectory == dir) { return dir; }
+
+            // The folder follows the user: lines logged before one is installed or named go to the application's own folder.
             Directory.CreateDirectory(dir);
             logDirectory = dir;
+            crossProcessMutex = null;
             // Named mutex keyed on log directory for cross-process write serialization.
             // "Local\" scope covers all sessions for the same user on this machine.
             string id = Convert.ToHexString(MD5.HashData(Encoding.UTF8.GetBytes(dir.ToLowerInvariant())));
@@ -70,20 +74,24 @@ internal sealed class DailyFileLoggerProvider : ILoggerProvider
     private void WriteToFile(string line)
     {
         bool mutexAcquired = false;
+        Mutex? mutex = null;
         try
         {
-            try { mutexAcquired = crossProcessMutex?.WaitOne(2000) ?? false; }
+            string directory = LogDirectory;
+            mutex = crossProcessMutex;
+            try { mutexAcquired = mutex?.WaitOne(2000) ?? false; }
             catch (AbandonedMutexException) { mutexAcquired = true; } // other process crashed holding it
 
             lock (writeLock)
             {
                 DateOnly today = DateOnly.FromDateTime(DateTime.Now);
-                if (writer is null || today != currentDate)
+                if (writer is null || today != currentDate || directory != writerDirectory)
                 {
+                    writerDirectory = directory;
                     writer?.Dispose();
                     writer = null;
                     currentDate = today;
-                    string path = Path.Combine(LogDirectory, $"{today:yyyy-MM-dd}.log");
+                    string path = Path.Combine(directory, $"{today:yyyy-MM-dd}.log");
                     FileStream stream = new(path, FileMode.Append, FileAccess.Write, FileShare.ReadWrite);
                     writer = new StreamWriter(stream) { AutoFlush = false };
                 }
@@ -93,7 +101,7 @@ internal sealed class DailyFileLoggerProvider : ILoggerProvider
         }
         finally
         {
-            if (mutexAcquired) { crossProcessMutex!.ReleaseMutex(); }
+            if (mutexAcquired) { mutex!.ReleaseMutex(); }
         }
     }
 

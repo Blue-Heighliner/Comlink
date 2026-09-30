@@ -42,6 +42,9 @@ internal sealed class MsmtPeerTransport : IPeerTransport
     public void StartListener(int port) => peer.StartListener(port);
 
     /// <inheritdoc />
+    public void StopListener() => peer.StopListener();
+
+    /// <inheritdoc />
     public void SetClosed(ConnectionPoint point, bool isClosed)
     {
         if (isClosed)

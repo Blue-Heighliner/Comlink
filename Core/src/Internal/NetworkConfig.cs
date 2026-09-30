@@ -14,31 +14,44 @@ internal sealed class NetworkConfig
 
     /// <summary>
     /// Subject name of the certificate authority trusted to sign every user's identity certificate. <see langword="null"/> uses the
-    /// engine default (<c>COMLINK-ROOT</c>). Ignored when <see cref="TrustedAuthorityCertificateFile"/> is set.
+    /// engine default (<c>COMLINK-ROOT</c>). Ignored when <see cref="AuthorityCertificate"/> is set.
     /// </summary>
-    public string? TrustedAuthorityCertificateName { get; init; }
+    public string? TrustedAuthorityCertificateName { get; set; }
 
     /// <summary>
     /// Path to a public certificate file (for example <c>.cer</c>) for the certificate authority trusted to sign every user's identity
     /// certificate, used instead of a system certificate store lookup. A relative path is resolved against the directory containing
-    /// the configuration file. Used together with each user's <see cref="NetworkUserConfig.CertificateFile"/>.
+    /// the configuration file. Used together with <see cref="CertificateStore"/>.
     /// </summary>
-    public string? TrustedAuthorityCertificateFile { get; init; }
+    public string? AuthorityCertificate { get; set; }
+
+    /// <summary>
+    /// Path to a folder of PKCS#12 (<c>.pfx</c>) identity certificate files, one per user named <c>{USERNAME}.pfx</c>, that a node loads its own
+    /// identity certificate and private key from instead of a system certificate store lookup. A relative path is resolved against
+    /// the directory containing the configuration file. Used together with <see cref="AuthorityCertificate"/>.
+    /// </summary>
+    public string? CertificateStore { get; set; }
 
     /// <summary>
     /// Group definitions. Keys are group names; values are lists of member names, which may be user names or other group names,
     /// enabling nested hierarchies.
     /// </summary>
-    public Dictionary<string, List<string>> UserGroups { get; init; } = [];
+    public Dictionary<string, List<string>> UserGroups { get; set; } = [];
 
     /// <summary>Every user of the network, keyed by user name; names are matched case-insensitively.</summary>
-    public Dictionary<string, NetworkUserConfig> Users { get; init; } = [];
+    public Dictionary<string, NetworkUserConfig> Users { get; set; } = [];
 
     /// <summary>The user the process runs as, from the <c>--user</c> argument or else <c>User.json</c>; <see langword="null"/> when neither names one.</summary>
     public string? User { get; set; }
 
     /// <summary>Absolute directory containing the loaded file, used to resolve relative certificate paths. <see langword="null"/> when no file was loaded.</summary>
     private string? ConfigDirectory { get; set; }
+
+    /// <summary>The arguments this configuration was loaded with, kept so it can be read again.</summary>
+    private string[] arguments = [];
+
+    /// <summary>The directory <c>Config.json</c> and <c>User.json</c> were looked for in, or <see langword="null"/> for the current working directory.</summary>
+    private string? workingDirectory;
 
     /// <summary>
     /// Loads the network configuration: the file named by <c>--config</c>, else <c>Config.json</c> in the current working
@@ -61,8 +74,26 @@ internal sealed class NetworkConfig
         }
 
         int userIndex = Array.IndexOf(args, "--user");
+        config.arguments = args;
+        config.workingDirectory = workingDirectory;
         config.User = userIndex >= 0 && userIndex + 1 < args.Length ? args[userIndex + 1] : ReadUserFile(Path.Combine(workingDirectory ?? Directory.GetCurrentDirectory(), "User.json"));
         return config;
+    }
+
+    /// <summary>
+    /// Reads the file again, from wherever it was loaded from, and replaces the trusted authority, certificate store, groups and users with what
+    /// it now says. The user the process runs as (<see cref="User"/>) is kept, since a running process does not become another user. If the file
+    /// can no longer be read or parsed this throws and leaves the current contents as they were.
+    /// </summary>
+    public void Reload()
+    {
+        NetworkConfig fresh = Load(arguments, workingDirectory);
+        TrustedAuthorityCertificateName = fresh.TrustedAuthorityCertificateName;
+        AuthorityCertificate = fresh.AuthorityCertificate;
+        CertificateStore = fresh.CertificateStore;
+        UserGroups = fresh.UserGroups;
+        Users = fresh.Users;
+        ConfigDirectory = fresh.ConfigDirectory;
     }
 
     private static string? ReadUserFile(string path)
@@ -100,11 +131,11 @@ internal sealed class NetworkConfig
             }
             : null;
 
-    /// <summary>Resolves <see cref="TrustedAuthorityCertificateFile"/> against the directory of the loaded file when it is a relative path.</summary>
-    public string? GetTrustedAuthorityCertificateFilePath() => Resolve(TrustedAuthorityCertificateFile);
+    /// <summary>Resolves <see cref="AuthorityCertificate"/> against the directory of the loaded file when it is a relative path.</summary>
+    public string? GetAuthorityCertificatePath() => Resolve(AuthorityCertificate);
 
-    /// <summary>Resolves <paramref name="user"/>'s <see cref="NetworkUserConfig.CertificateFile"/> against the directory of the loaded file when it is a relative path.</summary>
-    public string? GetCertificateFilePath(NetworkUserConfig user) => Resolve(user.CertificateFile);
+    /// <summary>Returns where <paramref name="userName"/>'s identity certificate file is, <c>{CertificateStore}/{USERNAME}.pfx</c>, or <see langword="null"/> when there is no <see cref="CertificateStore"/>.</summary>
+    public string? GetCertificatePath(string userName) => Resolve(CertificateStore) is { } store ? Path.Combine(store, $"{userName}.pfx") : null;
 
     private string? Resolve(string? path)
         => path is null || ConfigDirectory is null || Path.IsPathRooted(path) ? path : Path.GetFullPath(Path.Combine(ConfigDirectory, path));
@@ -134,27 +165,13 @@ internal sealed class NetworkUserConfig
     /// <summary>The name of the security level this user runs at. <see langword="null"/> is the lowest configured level.</summary>
     public string? SecurityLevel { get; init; }
 
-    /// <summary>Certificate subject name of this user. <see langword="null"/> is the user name itself. Ignored for the local user when <see cref="CertificateFile"/> is set.</summary>
+    /// <summary>Certificate subject name of this user. <see langword="null"/> is the user name itself.</summary>
     public string? CertificateName { get; init; }
-
-    /// <summary>
-    /// Path to a PKCS#12 (<c>.pfx</c>) file holding this user's identity certificate and private key, used instead of a system
-    /// certificate store lookup by a node this user runs. A relative path is resolved against the directory containing the
-    /// configuration file. Requires <see cref="NetworkConfig.TrustedAuthorityCertificateFile"/>.
-    /// </summary>
-    public string? CertificateFile { get; init; }
 
     /// <summary>App-specific string keys and values attached to this user; the engine does not interpret them.</summary>
     public Dictionary<string, string> Data { get; init; } = [];
 
-    /// <summary>
-    /// Custom app data directory for a node run with <c>--user</c> naming this user. <see langword="null"/> uses <c>%APPDATA%\{AppName}</c>. A path
-    /// starting with <c>@</c> is relative to that default location. Only honored when the user is named on the command line, since
-    /// an installed user is not known until the data directory has been read.
-    /// </summary>
-    public string? DataFolder { get; init; }
-
-    /// <summary>Run headless, as a normal peer with no GUI, when this user is named on the command line.</summary>
+    /// <summary>Run headless, as a normal peer with no GUI, when this user is the one the process is launched as (see <see cref="NetworkConfig.User"/>).</summary>
     public bool Headless { get; init; }
 
     /// <summary>Text shown in the title bar's alert box while alarming. <see langword="null"/> uses the engine default (<c>"ALERT"</c>).</summary>

@@ -1,5 +1,6 @@
 {
-  "TrustedAuthorityCertificateFile": "../Root.cer",
+  "AuthorityCertificate": "../Root.cer",
+  "CertificateStore": ".",
   "UserGroups": {
     "TEST": [ "PEER1", "PEER2" ]
   },
@@ -8,17 +9,13 @@
       "PeerPort": 50021,
       "InterfacePort": 50020,
       "OutgoingPoints": [ { "IpAddress": "127.0.0.1", "Port": 50023 } ],
-      "SecurityLevel": "PUBLIC",
-      "CertificateFile": "Peer1.pfx",
-      "DataFolder": "@PEER1"
+      "SecurityLevel": "PUBLIC"
     },
     "PEER2": {
       "PeerPort": 50023,
       "InterfacePort": 50022,
       "OutgoingPoints": [ { "IpAddress": "127.0.0.1", "Port": 50021 } ],
-      "SecurityLevel": "PUBLIC",
-      "CertificateFile": "Peer2.pfx",
-      "DataFolder": "@PEER2"
+      "SecurityLevel": "PUBLIC"
     }
   }
 }

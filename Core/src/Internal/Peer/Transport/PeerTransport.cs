@@ -18,6 +18,9 @@ internal interface IPeerTransport : IAsyncDisposable
     /// <summary>Starts accepting IP connections on <paramref name="port"/>. Has no effect when IP is unavailable, and serial links need no listener.</summary>
     void StartListener(int port);
 
+    /// <summary>Stops accepting IP connections, leaving the connections already formed as they are. Has no effect when no listener is running.</summary>
+    void StopListener();
+
     /// <summary>
     /// Closes or reopens <paramref name="point"/>. While closed, the current connection to it is dropped, no new one is
     /// formed (a serial link stops trying to reconnect), and <see cref="Connect"/> to it fails immediately.

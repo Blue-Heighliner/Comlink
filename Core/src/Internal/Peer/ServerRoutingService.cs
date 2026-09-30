@@ -19,7 +19,7 @@ namespace BlueHeighliner.Comlink.Peer;
 /// real message is actually being routed, so <see cref="GetStatuses"/> reflects each connection's live state
 /// continuously rather than only the moment a message last happened to flow. See <c>Docs/Components/Peer.md</c>.
 /// </summary>
-internal sealed class ServerRoutingService : IPeerService, IConnectionStatusService, IAsyncDisposable
+internal sealed class ServerRoutingService : IPeerService, IConnectionStatusService, IReconfigurable, IAsyncDisposable
 {
     /// <summary>Initializes a new <see cref="ServerRoutingService"/>.</summary>
     public ServerRoutingService(
@@ -41,7 +41,8 @@ internal sealed class ServerRoutingService : IPeerService, IConnectionStatusServ
     private readonly ICurrentUserProvider currentUserProvider;
     private readonly IMessageStorageService storage;
     private readonly ILogger logger;
-    private readonly PeerConnectionMonitor connectionMonitor = new();
+    private readonly PointMaintenance maintenance = new(new PeerConnectionMonitor());
+    private readonly Lock reconfigureLock = new();
 
     private readonly ConcurrentDictionary<string, bool> childConnected = new(StringComparer.OrdinalIgnoreCase);
     private readonly ConcurrentDictionary<string, bool> serverConnected = new(StringComparer.OrdinalIgnoreCase);
@@ -58,6 +59,8 @@ internal sealed class ServerRoutingService : IPeerService, IConnectionStatusServ
     private readonly ConcurrentDictionary<string, string> pointUsers = new();
     private IReadOnlyDictionary<string, ServerUserConfig> userMap = new Dictionary<string, ServerUserConfig>();
     private IPeerTransport? transport;
+    private CancellationToken lifetime;
+    private int listenPort;
     private int disposed;
 
     /// <inheritdoc />
@@ -98,16 +101,88 @@ internal sealed class ServerRoutingService : IPeerService, IConnectionStatusServ
         transport.Connected.Listen(OnConnected);
         transport.Disconnected.Listen(OnDisconnected);
         transport.Received.Listen(OnReceived);
-        transport.StartListener(engineController.PeerPort);
-        foreach (ConnectionPoint point in engineController.OutgoingPoints)
+        lock (reconfigureLock)
         {
-            points[point.Key] = point;
-            pointMonitors[point.Key] = connectionMonitor.Maintain(transport, point, cancellation, OnHeartbeatAcknowledged);
+            lifetime = cancellation;
+            listenPort = engineController.PeerPort;
+            transport.StartListener(listenPort);
+            SyncPoints();
         }
 
         try { await Task.Delay(Timeout.Infinite, cancellation); }
         catch (OperationCanceledException) { }
     }
+
+    /// <inheritdoc />
+    public void Reconfigure()
+    {
+        lock (reconfigureLock)
+        {
+            if (transport is null || lifetime == default) { return; }
+
+            bool changed = ApplyTopology();
+            if (engineController.PeerPort != listenPort)
+            {
+                transport.StopListener();
+                listenPort = engineController.PeerPort;
+                transport.StartListener(listenPort);
+            }
+
+            changed |= SyncPoints();
+            if (changed) { StatusesChanged?.Invoke(); }
+        }
+    }
+
+    private bool SyncPoints()
+    {
+        (IReadOnlyList<ConnectionPoint> removed, IReadOnlyList<(ConnectionPoint Point, PeerLinkControl Control)> started) = maintenance.Sync(transport!, engineController.OutgoingPoints, lifetime, OnHeartbeatAcknowledged);
+        foreach (ConnectionPoint point in removed)
+        {
+            points.TryRemove(point.Key, out _);
+            pointMonitors.TryRemove(point.Key, out _);
+            pointUsers.TryRemove(point.Key, out _);
+        }
+
+        foreach ((ConnectionPoint point, PeerLinkControl control) in started)
+        {
+            points[point.Key] = point;
+            pointMonitors[point.Key] = control;
+        }
+
+        return removed.Count > 0 || started.Count > 0;
+    }
+
+    // Users the topology no longer lists as a child or another server are disconnected and forgotten; everyone else keeps their connection and status.
+    private bool ApplyTopology()
+    {
+        IReadOnlyDictionary<string, ServerUserConfig> latest = engineController.Servers;
+        bool changed = Describe(latest) != Describe(userMap);
+        if (!changed) { return false; }
+
+        userMap = latest;
+        string myName = currentUserProvider.UserName ?? string.Empty;
+        HashSet<string> valid = new(GetChildNames().Concat(latest.Keys.Where(server => !string.Equals(server, myName, StringComparison.OrdinalIgnoreCase))), StringComparer.OrdinalIgnoreCase);
+        foreach (string name in new[] { childConnected, serverConnected }.SelectMany(map => map.Keys).Distinct(StringComparer.OrdinalIgnoreCase).Where(name => !valid.Contains(name)).ToList())
+        {
+            PeerConnection? dropped = null;
+            for (int attempt = 0; attempt < 2 && connections.Get(name) is { } connection && !ReferenceEquals(connection, dropped); attempt++)
+            {
+                connection.Drop();
+                dropped = connection;
+            }
+        }
+
+        foreach (ConcurrentDictionary<string, DateTime> map in new[] { childLastConnectedAt, childLastDisconnectedAt, serverLastConnectedAt, serverLastDisconnectedAt })
+        {
+            foreach (string name in map.Keys.Where(name => !valid.Contains(name)).ToList()) { map.TryRemove(name, out _); }
+        }
+
+        foreach (string name in closedNames.Keys.Where(name => !valid.Contains(name)).ToList()) { closedNames.TryRemove(name, out _); }
+        return true;
+    }
+
+    private static string Describe(IReadOnlyDictionary<string, ServerUserConfig> map)
+        => string.Join(';', map.OrderBy(server => server.Key, StringComparer.OrdinalIgnoreCase).Select(server => $"{server.Key}:{string.Join(',', server.Value.ChildClients.Order(StringComparer.OrdinalIgnoreCase))}"));
 
     private IReadOnlyList<string> GetChildNames()
         => userMap.TryGetValue(currentUserProvider.UserName ?? string.Empty, out ServerUserConfig? myConfig) ? myConfig.ChildClients : [];

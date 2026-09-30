@@ -45,6 +45,9 @@ internal sealed class PacketizingPeerTransport : IPeerTransport
     public void StartListener(int port) => inner.StartListener(port);
 
     /// <inheritdoc />
+    public void StopListener() => inner.StopListener();
+
+    /// <inheritdoc />
     public void SetClosed(ConnectionPoint point, bool closed) => inner.SetClosed(point, closed);
 
     /// <inheritdoc />

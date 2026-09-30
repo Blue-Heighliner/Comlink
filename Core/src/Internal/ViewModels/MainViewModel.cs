@@ -95,6 +95,11 @@ internal interface IMainViewModel
     IRelayCommand ShowAutoForwardCommand { get; }
     /// <summary>Displays the print manager screen in the content area.</summary>
     IRelayCommand ShowPrintManagerCommand { get; }
+    /// <summary>
+    /// Re-reads the network configuration file and applies what changed: connections are brought down or opened as the file now defines them, and the
+    /// role, security level and access shown in the UI are updated. A file that cannot be read is logged and leaves everything as it was.
+    /// </summary>
+    IRelayCommand RefreshCommand { get; }
     /// <summary>Restores the content area to its default (home) state, without disturbing any other ViewModel's state.</summary>
     IRelayCommand ShowHomeCommand { get; }
     /// <summary>Switches <see cref="IsServerMode"/>'s view to the connections table.</summary>
@@ -129,6 +134,7 @@ internal sealed partial class MainViewModel : ObservableObject, IMainViewModel
     /// <param name="connectionStatus">Connection status ViewModel driving <see cref="IsServerMode"/>'s connections table and <see cref="IsClientMode"/>'s connection row.</param>
     /// <param name="currentUserProvider">Provides and accepts the current user name.</param>
     /// <param name="engineController">Provides the application display name, whether the UI should run in kiosk mode, alert settings, message composition settings, and the configured node role.</param>
+    /// <param name="networkReload">Re-reads the network configuration file on request, for <see cref="RefreshCommand"/>.</param>
     /// <param name="loggerFactory">Factory for creating named loggers.</param>
     /// <param name="bodyDocumentFactory">Factory for creating the body document for new drafts.</param>
     public MainViewModel(
@@ -150,9 +156,11 @@ internal sealed partial class MainViewModel : ObservableObject, IMainViewModel
         IConnectionStatusViewModel connectionStatus,
         ICurrentUserProvider currentUserProvider,
         IEngineController engineController,
+        INetworkReloadService networkReload,
         ILoggerFactory loggerFactory,
         IBodyDocumentFactory bodyDocumentFactory)
     {
+        this.networkReload = networkReload;
         this.connection = connection;
         this.db = db;
         this.entryService = entryService;
@@ -179,6 +187,7 @@ internal sealed partial class MainViewModel : ObservableObject, IMainViewModel
         isKioskMode = engineController.IsKioskMode;
         appVersion = engineController.AppVersion;
         ApplyRole();
+        networkReload.Reloaded += OnNetworkReloaded;
         WireEvents();
     }
 
@@ -199,6 +208,7 @@ internal sealed partial class MainViewModel : ObservableObject, IMainViewModel
     private readonly IConnectionStatusViewModel connectionStatus;
     private readonly ICurrentUserProvider currentUserProvider;
     private readonly IEngineController engineController;
+    private readonly INetworkReloadService networkReload;
     private readonly IBodyDocumentFactory bodyDocumentFactory;
     private readonly ILoggerFactory loggerFactory;
     private readonly ILogger logger;
@@ -429,6 +439,11 @@ internal sealed partial class MainViewModel : ObservableObject, IMainViewModel
         CanRetrieve = IsClientMode && engineController.StorageServers.Count > 0;
     }
 
+    private void OnNetworkReloaded()
+    {
+        if (!string.IsNullOrEmpty(UserName)) { _ = ApplyUserInfo(engineController.GetUserInfo(UserName)); }
+    }
+
     private Task ApplyUserInfo(UserInfo info)
     {
         UserName = info.Name;
@@ -507,6 +522,13 @@ internal sealed partial class MainViewModel : ObservableObject, IMainViewModel
     {
         DeselectFolderAndEntry();
         contentArea.ShowEntry(stagedSend);
+    }
+
+    [RelayCommand]
+    private void Refresh()
+    {
+        try { networkReload.Reload(); }
+        catch (Exception ex) { activityLogger.LogError(ex, "The network configuration could not be reloaded: {Message}", ex.Message); }
     }
 
     [RelayCommand]

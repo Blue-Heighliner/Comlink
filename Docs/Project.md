@@ -25,7 +25,7 @@ between `sh` and `cmd.exe`.
   own `Config.json` (the network configuration describing every user of that scenario) as `--config` and
   naming the role's user with `--user`. Each role simulates one installation talking to the
   others over loopback; `Scripts/Scenarios/Root.cer` is the shared certificate authority signing
-  every role's `.pfx` identity in every scenario.
+  every role's `{USERNAME}.pfx` identity in every scenario.
 - `Scripts/Scenarios/<Scenario>/Run.task` - runs `Build.cs`, then every role `.cs` script of that
   scenario concurrently against the shared build, as ordered batches separated by a `-` wait marker
   (AutoDev's `.task` file format — see `TaskFileParser` in `Auto-Dev`).

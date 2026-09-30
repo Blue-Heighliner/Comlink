@@ -86,7 +86,7 @@ public sealed class ServerRoutingServiceTests
         transportFactory.Setup(f => f.Create()).Returns(transport.Object);
 
         Mock<TestEngineController> engineController = new() { CallBase = true };
-        engineController.Setup(p => p.Servers).Returns(userMap);
+        engineController.Setup(p => p.Servers).Returns(() => new Dictionary<string, ServerUserConfig>(userMap, StringComparer.OrdinalIgnoreCase));
         engineController.Setup(p => p.PeerPort).Returns(9001);
         engineController.Setup(p => p.OutgoingPoints).Returns(outgoing ?? []);
 
@@ -252,6 +252,50 @@ public sealed class ServerRoutingServiceTests
         Fixture fx = await BuildStarted();
 
         fx.Transport.Verify(t => t.StartListener(9001), Times.Once);
+        await Stop(fx);
+    }
+
+    /// <summary>Reconfigure with an unchanged topology does nothing: no status change is announced and the listener is left alone.</summary>
+    [Fact]
+    public async Task Reconfigure_NothingChanged_TouchesNothing()
+    {
+        Fixture fx = await BuildStarted();
+        int statusChanges = 0;
+        fx.Service.StatusesChanged += () => statusChanges++;
+
+        fx.Service.Reconfigure();
+
+        Assert.Equal(0, statusChanges);
+        fx.Transport.Verify(t => t.StopListener(), Times.Never);
+        fx.Transport.Verify(t => t.StartListener(It.IsAny<int>()), Times.Once);
+        await Stop(fx);
+    }
+
+    /// <summary>A child the topology no longer lists is disconnected and dropped from the statuses; the other children keep their connections.</summary>
+    [Fact]
+    public async Task Reconfigure_ChildRemoved_DisconnectsOnlyThatChild()
+    {
+        Dictionary<string, ServerUserConfig> userMap = new(StringComparer.OrdinalIgnoreCase)
+        {
+            ["ServerA"] = new ServerUserConfig { ChildClients = ["ClientA1", "ClientA2"] },
+            ["ServerB"] = new ServerUserConfig { ChildClients = ["ClientB1"] }
+        };
+        Fixture fx = await BuildStarted(userMap: userMap);
+        int removedDrops = 0;
+        int keptDrops = 0;
+        fx.Come(Inbound("ClientA1", () => removedDrops++));
+        fx.Come(Inbound("ClientA2", () => keptDrops++));
+        int statusChanges = 0;
+        fx.Service.StatusesChanged += () => statusChanges++;
+        userMap["ServerA"] = new ServerUserConfig { ChildClients = ["ClientA2", "ClientA3"] };
+
+        fx.Service.Reconfigure();
+
+        Assert.Equal((1, 0), (removedDrops, keptDrops));
+        Assert.DoesNotContain(fx.Service.GetStatuses(), s => s.UserName == "ClientA1");
+        Assert.Contains(fx.Service.GetStatuses(), s => s.UserName == "ClientA3" && !s.IsConnected);
+        Assert.Contains(fx.Service.GetStatuses(), s => s.UserName == "ClientA2" && s.IsConnected);
+        Assert.Equal(1, statusChanges);
         await Stop(fx);
     }
 
