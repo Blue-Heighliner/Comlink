@@ -2,6 +2,8 @@ global using ProtoBuf;
 global using ProtoBuf.Meta;
 global using Avalonia;
 global using Avalonia.Controls;
+global using Avalonia.Controls.Primitives;
+global using Avalonia.Layout;
 global using Avalonia.X11;
 global using Avalonia.Controls.ApplicationLifetimes;
 global using Avalonia.Platform;

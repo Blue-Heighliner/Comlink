@@ -34,6 +34,7 @@ internal static class EngineUiExtensions
                 Source = new Uri("avares://AvaloniaEdit/Themes/Fluent/AvaloniaEdit.xaml")
             });
             b.Instance.Styles.Add(new DarkTheme());
+            new PickerFormatting().Apply();
         });
     }
 }

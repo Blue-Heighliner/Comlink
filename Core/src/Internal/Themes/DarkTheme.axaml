@@ -35,7 +35,32 @@
     <SolidColorBrush x:Key="SelectedHoverBg" Color="{StaticResource SelectedHoverBgColor}" />
     <SolidColorBrush x:Key="WindowControlHoverBrush" Color="{StaticResource WindowControlHoverColor}" />
     <SolidColorBrush x:Key="WindowCloseHoverBrush" Color="{StaticResource WindowCloseHoverColor}" />
+    <x:Double x:Key="DatePickerThemeMinWidth">0</x:Double>
+    <x:Double x:Key="TimePickerThemeMinWidth">0</x:Double>
   </Styles.Resources>
+
+  <!-- Date and time pickers: DD MMM YYYY and 24 hour HH mm, shrinkable to a narrow column with centered cells -->
+  <Style Selector="DatePicker">
+    <Setter Property="DayFormat" Value="dd" />
+    <Setter Property="MonthFormat" Value="MMM" />
+    <Setter Property="YearFormat" Value="yyyy" />
+  </Style>
+  <Style Selector="TimePicker">
+    <Setter Property="ClockIdentifier" Value="24HourClock" />
+  </Style>
+  <Style Selector="DatePicker /template/ TextBlock#PART_MonthTextBlock, DatePicker /template/ TextBlock#PART_DayTextBlock, DatePicker /template/ TextBlock#PART_YearTextBlock, TimePicker /template/ TextBlock#PART_HourTextBlock, TimePicker /template/ TextBlock#PART_MinuteTextBlock">
+    <Setter Property="VerticalAlignment" Value="Center" />
+    <Setter Property="Padding" Value="0,10,0,0" />
+  </Style>
+  <Style Selector="DatePicker /template/ TextBlock#PART_MonthTextBlock">
+    <Setter Property="HorizontalAlignment" Value="Center" />
+    <Setter Property="TextAlignment" Value="Center" />
+  </Style>
+  <Style Selector="DatePickerPresenter TextBlock, TimePickerPresenter TextBlock">
+    <Setter Property="VerticalAlignment" Value="Center" />
+    <Setter Property="HorizontalAlignment" Value="Center" />
+    <Setter Property="TextAlignment" Value="Center" />
+  </Style>
 
   <!-- Text -->
   <Style Selector="TextBlock">

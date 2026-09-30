@@ -68,7 +68,7 @@
           <TextBlock Grid.Row="3" Grid.Column="1" Text="{Binding ExternalList}" FontSize="13" Foreground="#CCCCCC" VerticalAlignment="Center" Margin="0,4,0,0" TextWrapping="Wrap"
                      IsVisible="{Binding ExternalList, Converter={x:Static StringConverters.IsNotNullOrEmpty}}" />
           <TextBlock Grid.Row="4" Grid.Column="0" Text="DATE" FontSize="11" Foreground="#5A5A5A" FontWeight="SemiBold" LetterSpacing="1" Width="60" VerticalAlignment="Center" Margin="0,4,0,0" />
-          <TextBlock Grid.Row="4" Grid.Column="1" Text="{Binding ReceivedAt, StringFormat='{}{0:MMM d, yyyy  HH:mm}'}" FontSize="13" Foreground="#858585" VerticalAlignment="Center" Margin="0,4,0,0" />
+          <TextBlock Grid.Row="4" Grid.Column="1" Text="{Binding ReceivedAt, StringFormat='{}{0:dd-MMM-yyyy HH:mm}'}" FontSize="13" Foreground="#858585" VerticalAlignment="Center" Margin="0,4,0,0" />
           <TextBlock Grid.Row="5" Grid.Column="0" Text="STATUS" FontSize="11" Foreground="#5A5A5A" FontWeight="SemiBold" LetterSpacing="1" Width="60" VerticalAlignment="Center" Margin="0,4,0,0"
                      IsVisible="{Binding ReadStatusText, Converter={x:Static StringConverters.IsNotNullOrEmpty}}" />
           <TextBlock Grid.Row="5" Grid.Column="1" Text="{Binding ReadStatusText}" FontSize="13" FontWeight="SemiBold"
