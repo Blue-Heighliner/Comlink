@@ -33,6 +33,9 @@ internal sealed class FakeMicroGateCable
     /// <summary>Number of peers created on either end so far.</summary>
     public int PeersCreated { get; private set; }
 
+    /// <summary>The (local address, remote address, options) every <c>Start</c> on any end was given, in order.</summary>
+    public List<(byte Address, byte RemoteAddress, MicroGatePeerOptions Options)> Starts { get; } = [];
+
     /// <summary>Disconnects both attached peers, as if the cable were pulled.</summary>
     public void Cut()
     {
@@ -86,11 +89,13 @@ internal sealed class FakeMicroGateCable
 
     private sealed class FakeMicroGatePeer(FakeMicroGateCable cable, int end) : IMicroGatePeer
     {
-        private readonly TestSubject<ReadOnlyMemory<byte>> received = new();
+        private readonly TestSubject<Exception> exceptions = new();
         private readonly TestSubject<MicroGatePeerState> stateChanged = new();
         private readonly TaskCompletionSource connected = new(TaskCreationOptions.RunContinuationsAsynchronously);
 
-        public IObservable<ReadOnlyMemory<byte>> Received => received;
+        public Action<IMemoryOwner<byte>>? Receiver { get; set; }
+
+        public IObservable<Exception> Exceptions => exceptions;
 
         public IObservable<MicroGatePeerState> StateChanged => stateChanged;
 
@@ -100,8 +105,10 @@ internal sealed class FakeMicroGateCable
 
         public int MaxPayloadSize => cable.MaxPayloadSize;
 
-        public async ValueTask Start(string portName, MicroGatePeerOptions? options = null, CancellationToken cancellation = default)
+        public async ValueTask Start(string portName, byte address, byte remoteAddress, MicroGatePeerOptions? options = null, CancellationToken cancellation = default)
         {
+            lock (cable.gate) { cable.Starts.Add((address, remoteAddress, options ?? new())); }
+
             if (cable.StartFailure is { } failure)
             {
                 Terminate();
@@ -123,7 +130,7 @@ internal sealed class FakeMicroGateCable
             if (!IsConnected) { throw new InvalidOperationException("The peer is not connected."); }
             if (data.Length > MaxPayloadSize) { throw new ArgumentOutOfRangeException(nameof(data)); }
 
-            cable.Other(end)?.received.Publish(data.ToArray());
+            cable.Other(end)?.Receiver?.Invoke(new TestOwner(data.ToArray()));
             return ValueTask.CompletedTask;
         }
 
@@ -146,7 +153,7 @@ internal sealed class FakeMicroGateCable
             SetState(MicroGatePeerState.Disconnected);
             cable.Detach(end, this);
             connected.TrySetException(new IOException("closed before connected"));
-            received.Complete();
+            exceptions.Complete();
             stateChanged.Complete();
             remote?.Terminate();
         }

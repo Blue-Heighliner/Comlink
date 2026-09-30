@@ -227,6 +227,33 @@ public sealed class EngineBuilderTests
         Assert.Same(options, controller.ConnectionOptions);
     }
 
+    /// <summary>The MSMT adjustment is applied on top of the stated or built options, and left out when none is stated.</summary>
+    [Fact]
+    public void Stated_MsmtConnectionOptions_AdjustTheOptionsUsedForEveryConnection()
+    {
+        MsmtSessionPeerOptions options = new() { Credentials = new MsmtCredentials { Identity = TestMsmtCertificates.Create().Server, TrustedAuthorities = [] } };
+        (_, EngineController adjusted) = Build(engine => engine
+            .ConnectionOptions(() => options).MsmtConnectionOptions(o => o with { HandshakeTimeout = TimeSpan.FromSeconds(7) }));
+        (_, EngineController plain) = Build(engine => engine.ConnectionOptions(() => options));
+
+        Assert.Equal(TimeSpan.FromSeconds(7), adjusted.ConnectionOptions.HandshakeTimeout);
+        Assert.Same(options.Credentials, adjusted.ConnectionOptions.Credentials);
+        Assert.Equal(options.HandshakeTimeout, plain.ConnectionOptions.HandshakeTimeout);
+    }
+
+    /// <summary>The MicroGate adjustment starts from the defaults and defaults to them when none is stated.</summary>
+    [Fact]
+    public void Stated_MicroGateConnectionOptions_AdjustTheDefaults()
+    {
+        (_, EngineController adjusted) = Build(engine => engine
+            .MicroGateConnectionOptions(o => o with { MaxInfoField = 512, Link = o.Link with { Crc = MicroGateCrc.Crc32Ccitt } }));
+        (_, EngineController plain) = Build(engine => engine);
+
+        Assert.Equal(512, adjusted.MicroGateOptions.MaxInfoField);
+        Assert.Equal(MicroGateCrc.Crc32Ccitt, adjusted.MicroGateOptions.Link.Crc);
+        Assert.Equal(new MicroGatePeerOptions(), plain.MicroGateOptions);
+    }
+
     /// <summary>The network role, the points this node connects to, and the server topology are reported.</summary>
     [Fact]
     public void Stated_NetworkSettings_AreReported()

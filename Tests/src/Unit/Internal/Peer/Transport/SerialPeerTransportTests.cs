@@ -168,6 +168,27 @@ public sealed class SerialPeerTransportTests
         Assert.Null(connection.Info.CertificateSubject);
     }
 
+    /// <summary>Every serial link starts its peer with the configured options and the point's address as both this station's and the remote station's.</summary>
+    [Fact]
+    public async Task Connect_StartsPeersWithTheConfiguredOptionsAndPointAddress()
+    {
+        FakeMicroGateCable cable = new();
+        MicroGatePeerOptions options = new() { MaxInfoField = 512 };
+        await using SerialPeerTransport a = new(cable.EndA, logger, TimeSpan.FromMilliseconds(20), options: options);
+        await using SerialPeerTransport b = new(cable.EndB, logger, TimeSpan.FromMilliseconds(20), options: options);
+        ConnectionPoint addressed = new() { SerialPort = "SL0", SerialAddress = 7 };
+        Open(a, addressed);
+        Open(b, addressed);
+
+        await WaitUntil(() => cable.Starts.Count == 2);
+
+        Assert.All(cable.Starts, start =>
+        {
+            Assert.Equal((7, 7), (start.Address, start.RemoteAddress));
+            Assert.Same(options, start.Options);
+        });
+    }
+
     /// <summary>Requesting before the link has come up fails immediately instead of waiting.</summary>
     [Fact]
     public async Task Request_NotConnected_ThrowsIOException()
@@ -185,7 +206,7 @@ public sealed class SerialPeerTransportTests
         FakeMicroGateCable cable = new();
         await using SerialPeerTransport transport = new(cable.EndA, logger, TimeSpan.FromMilliseconds(20), TimeSpan.FromMilliseconds(100));
         IMicroGatePeer silent = cable.EndB.Create();
-        _ = silent.Start("SL0").AsTask();
+        _ = silent.Start("SL0", 255, 255).AsTask();
         Open(transport, point);
         TaskCompletionSource up = new();
         transport.Connected.Listen(_ => up.TrySetResult());
@@ -213,7 +234,7 @@ public sealed class SerialPeerTransportTests
         FakeMicroGateCable cable = new();
         await using SerialPeerTransport transport = new(cable.EndA, logger, TimeSpan.FromMilliseconds(20), TimeSpan.FromSeconds(30));
         IMicroGatePeer silent = cable.EndB.Create();
-        _ = silent.Start("SL0").AsTask();
+        _ = silent.Start("SL0", 255, 255).AsTask();
         Open(transport, point);
         TaskCompletionSource up = new();
         transport.Connected.Listen(_ => up.TrySetResult());
@@ -402,7 +423,7 @@ public sealed class SerialPeerTransportTests
         FakeMicroGateCable cable = new();
         await using SerialPeerTransport transport = new(cable.EndA, logger, TimeSpan.FromMilliseconds(20));
         IMicroGatePeer raw = cable.EndB.Create();
-        _ = raw.Start("SL0").AsTask();
+        _ = raw.Start("SL0", 255, 255).AsTask();
         Open(transport, point);
         PeerCollector received = new();
         transport.Received.Listen(args => received.AddPayload(args.Payload.ToArray()));
@@ -423,7 +444,7 @@ public sealed class SerialPeerTransportTests
         FakeMicroGateCable cable = new();
         await using SerialPeerTransport transport = new(cable.EndA, logger, TimeSpan.FromMilliseconds(20));
         IMicroGatePeer raw = cable.EndB.Create();
-        _ = raw.Start("SL0").AsTask();
+        _ = raw.Start("SL0", 255, 255).AsTask();
         Open(transport, point);
         PeerCollector received = new();
         transport.Received.Listen(args => received.AddPayload(args.Payload.ToArray()));

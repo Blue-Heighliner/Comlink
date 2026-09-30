@@ -56,8 +56,11 @@ full mechanism and why `IMsmtReachabilityChecker.Reach` is not used for this.
 
 ```csharp
 IMsmtSessionPeer peer = peerFactory.Create(options);
-peer.Receiver = (connection, payload, isResponseRequested) =>
-    ValueTask.FromResult<MsmtReceiveResult?>(isResponseRequested ? MsmtReceiveResult.Accept() : null);
+peer.Receiver = (connection, payload, responder) =>
+{
+    using (payload) { /* copy out what is needed */ }
+    responder?.Accept(ReadOnlyMemory<byte>.Empty);
+};
 peer.StartListener(port);
 IMsmtConnection connection = peer.Connect(new MsmtNameTarget { Host = host, Port = port, ServerName = host });
 await connection.Wait();
@@ -67,8 +70,9 @@ MsmtResponse response = await connection.Request(payload);
 Peer events are exposed as `IObservable<T>` rather than plain C# events. `IMsmtSessionPeer.Connected`
 publishes only incoming connections - one this peer dials out itself via `Connect` is handed straight back
 instead, never raised there - while `Disconnected` covers both directions. A received message must be
-acknowledged explicitly through the `Receiver` delegate's return value (`MsmtReceiveResult.Accept()`/`Reject()`,
-or `null` when `isResponseRequested` is `false`); nothing is auto-accepted.
+acknowledged explicitly through the `IMsmtResponder` the `Receiver` delegate is given (`Accept`/`Reject`, exactly once,
+`null` when the sender asked for no acknowledgement); nothing is auto-accepted. The delegate also owns the pooled payload
+and must dispose it, so the transport copies the bytes out and disposes it straight away.
 
 ## Bidirectional Connections
 
@@ -94,7 +98,7 @@ back out to a connected interface client over the connection it opened in; see [
 | `PeerConnectionMonitor` (`Core/src/Internal/Peer/PeerConnectionMonitor.cs`) | Connects to an outgoing point and sends a periodic empty heartbeat over the connection so it opens and stays open without needing a real message. See [Session Peer](#session-peer). |
 | `MsmtPeerTransport` (`Core/src/Internal/Peer/Transport/MsmtPeerTransport.cs`) | Adapts an `IMsmtSessionPeer` to the peer transport used by `PeerService`, `ClientPeerService`, and `ServerRoutingService`, caching one outbound connection per point and sending over inbound ones as well. MSMT itself remains IP only; serial goes through `SerialPeerTransport`. |
 | `InterfaceService` (`Core/src/Internal/Peer/InterfaceService.cs`, always active) | Uses its own `IMsmtSessionPeer` to host the local interface listener described in [Interface.md](Interface.md). |
-| `ConnectionOptions` (`IEngineController`) | Builds the `MsmtSessionPeerOptions` (identity certificate, trusted authority) used for both inbound and outbound MSMT session peer connections. See [Configuration.md](Configuration.md#msmt-certificates). |
+| `ConnectionOptions` (`IEngineController`) | Builds the `MsmtSessionPeerOptions` (identity certificate, trusted authority, then the host's `MsmtConnectionOptions` adjustment: timeouts, keep-alive, session lifetimes) used for both inbound and outbound MSMT session peer connections. See [Configuration.md](Configuration.md#msmt-certificates). |
 | `CertificateName`/`TrustedAuthority` (`IEngineBuilder`) | Map the local user name, and the trusted certificate authority, to certificate subject names to look up in the system store. See [Configuration.md](Configuration.md#msmt-certificates). |
 
 `EngineExtensions.UseEngine` calls the package's `AddMsmt()` to register `IMsmtSessionPeer.IFactory` (and

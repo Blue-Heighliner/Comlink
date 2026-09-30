@@ -133,6 +133,22 @@ public interface IEngineBuilder
     /// <summary>Replaces how the MSMT peer options (identity certificate and trusted authorities) are built, for custom certificate pinning or a non-store certificate source.</summary>
     IEngineBuilder ConnectionOptions(Func<MsmtSessionPeerOptions> options);
 
+    /// <summary>
+    /// Adjusts the MSMT options used for every IP connection, inbound and outbound, including the interface listener: timeouts,
+    /// keep-alive and session lifetimes. The function receives the options as they would otherwise be, with the identity
+    /// certificate and trusted authorities already in place, and returns the options to use, typically by <c>with</c>
+    /// expression. It runs each time connections are set up, after <see cref="ConnectionOptions"/>. Defaults to leaving them as they are.
+    /// </summary>
+    IEngineBuilder MsmtConnectionOptions(Func<MsmtSessionPeerOptions, MsmtSessionPeerOptions> configure);
+
+    /// <summary>
+    /// Adjusts the MicroGate options used for every serial connection: line encoding, CRC, clocking, frame size, windowing and
+    /// retransmission, which must match the station at the other end of the cable. The function receives the defaults and returns
+    /// the options to use, typically by <c>with</c> expression. The HDLC address is not an option; it comes from each serial
+    /// connection point. Defaults to the MicroGate defaults.
+    /// </summary>
+    IEngineBuilder MicroGateConnectionOptions(Func<MicroGatePeerOptions, MicroGatePeerOptions> configure);
+
     /// <summary>Sets the networking role. Defaults to <see cref="NodeRole.Peer"/>.</summary>
     IEngineBuilder Role(NodeRole role);
 

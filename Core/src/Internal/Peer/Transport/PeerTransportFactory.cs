@@ -30,7 +30,7 @@ internal sealed class PeerTransportFactory(
             logger.LogWarning("IP connections are unavailable: {Message}", ex.Message);
         }
 
-        IPeerTransport transport = new CompositePeerTransport(ip, new SerialPeerTransport(microGateFactory, logger));
+        IPeerTransport transport = new CompositePeerTransport(ip, new SerialPeerTransport(microGateFactory, logger, options: engineController.MicroGateOptions));
         if (packetizer is not null) { transport = new PacketizingPeerTransport(transport, packetizer, engineController.PacketWindow, logger); }
         return CreateIdentifying(transport, logger);
     }

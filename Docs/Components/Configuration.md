@@ -430,6 +430,18 @@ and stores nothing.
 
 ---
 
+### MicroGate Options
+
+```csharp
+engine.MicroGateConnectionOptions(options => options with { MaxInfoField = 1024, Link = options.Link with { Crc = MicroGateCrc.Crc32Ccitt } });
+```
+
+The options every serial connection starts its MicroGate peer with: line encoding, CRC and clocking (`Link`, which must match the station at the far end of the cable), frame size, transmit window and retransmission timing. The function receives the package defaults and returns the options to use. The HDLC address is not an option; each serial `ConnectionPoint` supplies it, used as both this station's and the remote station's address.
+
+**Default:** the MicroGate package defaults.
+
+---
+
 ### MSMT Certificates
 
 ```csharp
@@ -440,7 +452,13 @@ MSMT peer authentication is mandatory - there is no unauthenticated mode. `Certi
 
 The MSMT options (identity certificate plus trusted authorities) used for both inbound and outbound session peer connections are built from those two by default, against the current user name (via `ICurrentUserProvider`). If no current user is registered yet, or either certificate can't be found in the store, building them throws `InvalidOperationException`; callers (`PeerService`, `ClientPeerService`, `ServerRoutingService`, `InterfaceService`) catch this at startup, log it, and simply don't start their listener, retried the next time the host restarts once a user and certificates are in place. `ConnectionOptions` replaces the whole policy, but for most customization needs stating `CertificateName`/`TrustedAuthority` instead is sufficient and does not require touching this security-sensitive logic at all. State `ConnectionOptions` only when you need custom certificate pinning, a non-store certificate source, or a different validation policy.
 
-**Default:** the certificate name is the user name unchanged; the trusted authority is `"COMLINK-ROOT"`.
+`MsmtConnectionOptions` adjusts the other MSMT settings (handshake, stall and response timeouts, TCP keep-alive, session lifetimes and keep-alive intervals) for every IP connection, inbound and outbound, including the interface listener. It receives the options as built above and returns the ones to use, typically with a `with` expression, and runs after `ConnectionOptions` and after the config file's certificate file override:
+
+```csharp
+engine.MsmtConnectionOptions(options => options with { HandshakeTimeout = TimeSpan.FromSeconds(20) });
+```
+
+**Default:** the certificate name is the user name unchanged; the trusted authority is `"COMLINK-ROOT"`; the MSMT options are otherwise left at the package defaults.
 
 **Config file:** `PeerCertificateName` overrides the certificate name for the current user only (`null` falls back to what is stated; an explicit name is used as-is). It names this node's own certificate, so every other user still resolves through what is stated, since applying it to them too would make a Server expect every connecting user to present this node's certificate name; `TrustedAuthorityCertificateName` overrides the trusted authority the same way. See [Config.md](Config.md). The options are built by `ConfiguredEngineController` from its own overridden names rather than delegated, so they reflect both overrides even though they have no `config.json` field of their own. Separately, `PeerCertificateFile` and `TrustedAuthorityCertificateFile` bypass the system store entirely, loading the identity and authority certificates directly from disk instead, set together or not at all; see [Config.md](Config.md).
 

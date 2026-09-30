@@ -69,11 +69,12 @@ internal sealed class InterfaceService : IInterfaceService
         catch (OperationCanceledException) { }
     }
 
-    private ValueTask<MsmtReceiveResult?> OnReceived(IMsmtConnection connection, ReadOnlyMemory<byte> payload, bool isResponseRequested)
+    private void OnReceived(IMsmtConnection connection, IMemoryOwner<byte> payload, IMsmtResponder? responder)
     {
-        byte[] copy = payload.ToArray();
+        byte[] copy;
+        using (payload) { copy = payload.Memory.ToArray(); }
         _ = Task.Run(() => HandleInterfaceMessage(copy));
-        return ValueTask.FromResult<MsmtReceiveResult?>(isResponseRequested ? MsmtReceiveResult.Accept() : null);
+        responder?.Accept(ReadOnlyMemory<byte>.Empty);
     }
 
     internal async Task HandleInterfaceMessage(ReadOnlyMemory<byte> data)

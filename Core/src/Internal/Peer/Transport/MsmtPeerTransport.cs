@@ -156,10 +156,12 @@ internal sealed class MsmtPeerTransport : IPeerTransport
         }
     }
 
-    private ValueTask<MsmtReceiveResult?> OnReceived(IMsmtConnection connection, ReadOnlyMemory<byte> payload, bool isResponseRequested)
+    private void OnReceived(IMsmtConnection connection, IMemoryOwner<byte> payload, IMsmtResponder? responder)
     {
-        received.Publish(new PeerReceivedEventArgs { Connection = Wrap(connection), Payload = payload.ToArray() });
-        return ValueTask.FromResult<MsmtReceiveResult?>(isResponseRequested ? MsmtReceiveResult.Accept() : null);
+        byte[] copy;
+        using (payload) { copy = payload.Memory.ToArray(); }
+        received.Publish(new PeerReceivedEventArgs { Connection = Wrap(connection), Payload = copy });
+        responder?.Accept(ReadOnlyMemory<byte>.Empty);
     }
 
     private static void OnPackageChanged(MsmtPackageChange args)

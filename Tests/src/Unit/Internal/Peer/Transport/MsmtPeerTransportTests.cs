@@ -283,36 +283,42 @@ public sealed class MsmtPeerTransportTests
         fx.Transport.Received.Listen(args => received = args);
         fx.Connected.Publish(msmt.Object);
 
-        MsmtReceiveResult? result = await fx.Peer.Object.Receiver!(msmt.Object, new byte[] { 7, 8, 9 }, isResponseRequested: true);
+        Mock<IMsmtResponder> responder = new();
+
+        fx.Peer.Object.Receiver!(msmt.Object, new TestOwner([7, 8, 9]), responder.Object);
 
         Assert.NotNull(received);
         Assert.Same(connected, received.Connection);
         Assert.Equal(new byte[] { 7, 8, 9 }, received.Payload.ToArray());
-        Assert.NotNull(result);
-        Assert.True(result.Value.Success);
+        responder.Verify(r => r.Accept(It.IsAny<IMemoryOwner<byte>>()), Times.Once);
+        responder.Verify(r => r.Reject(It.IsAny<IMemoryOwner<byte>>()), Times.Never);
     }
 
-    /// <summary>A received message that requested no acknowledgement is still published, but returns null rather than a decision.</summary>
+    /// <summary>A received message that requested no acknowledgement is still published and its pooled payload is released.</summary>
     [Fact]
-    public async Task Received_NoAcknowledgementRequested_ReturnsNull()
+    public void Received_NoAcknowledgementRequested_PublishesAndReleasesPayload()
     {
         Fixture fx = Build();
         Mock<IMsmtConnection> msmt = InboundConnection("CN=Bob");
+        PeerReceivedEventArgs? received = null;
+        fx.Transport.Received.Listen(args => received = args);
+        TestOwner owner = new([1]);
 
-        MsmtReceiveResult? result = await fx.Peer.Object.Receiver!(msmt.Object, new byte[] { 1 }, isResponseRequested: false);
+        fx.Peer.Object.Receiver!(msmt.Object, owner, null);
 
-        Assert.Null(result);
+        Assert.NotNull(received);
+        Assert.True(owner.IsDisposed);
     }
 
     /// <summary>A message on a connection never seen connected is still published, as inbound.</summary>
     [Fact]
-    public async Task Received_UnknownConnection_PublishedAsInbound()
+    public void Received_UnknownConnection_PublishedAsInbound()
     {
         Fixture fx = Build();
         PeerReceivedEventArgs? received = null;
         fx.Transport.Received.Listen(args => received = args);
 
-        await fx.Peer.Object.Receiver!(InboundConnection("CN=Bob").Object, new byte[] { 1 }, isResponseRequested: false);
+        fx.Peer.Object.Receiver!(InboundConnection("CN=Bob").Object, new TestOwner([1]), null);
 
         Assert.NotNull(received);
         Assert.True(received.Connection.IsInbound);

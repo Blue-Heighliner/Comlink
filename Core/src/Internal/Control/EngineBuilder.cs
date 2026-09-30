@@ -95,6 +95,10 @@ internal sealed class EngineBuilder : IEngineBuilder, IAsyncDisposable
     public string? TrustedAuthorityValue { get; private set; }
     /// <summary>How the MSMT peer options are built, if stated.</summary>
     public Func<MsmtSessionPeerOptions>? ConnectionOptionsValue { get; private set; }
+    /// <summary>How the MSMT peer options are adjusted, if stated.</summary>
+    public Func<MsmtSessionPeerOptions, MsmtSessionPeerOptions>? MsmtConnectionOptionsValue { get; private set; }
+    /// <summary>How the MicroGate peer options are adjusted, if stated.</summary>
+    public Func<MicroGatePeerOptions, MicroGatePeerOptions>? MicroGateConnectionOptionsValue { get; private set; }
     /// <summary>The networking role, if stated.</summary>
     public NodeRole? RoleValue { get; private set; }
     /// <summary>The points this node connects out to.</summary>
@@ -414,6 +418,20 @@ internal sealed class EngineBuilder : IEngineBuilder, IAsyncDisposable
     public IEngineBuilder ConnectionOptions(Func<MsmtSessionPeerOptions> options)
     {
         ConnectionOptionsValue = options;
+        return this;
+    }
+
+    /// <inheritdoc />
+    public IEngineBuilder MsmtConnectionOptions(Func<MsmtSessionPeerOptions, MsmtSessionPeerOptions> configure)
+    {
+        MsmtConnectionOptionsValue = configure;
+        return this;
+    }
+
+    /// <inheritdoc />
+    public IEngineBuilder MicroGateConnectionOptions(Func<MicroGatePeerOptions, MicroGatePeerOptions> configure)
+    {
+        MicroGateConnectionOptionsValue = configure;
         return this;
     }
 

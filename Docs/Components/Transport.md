@@ -17,7 +17,7 @@ The IP half needs an identity certificate for the current user, which is unavail
 
 ## Points and connections
 
-A `ConnectionPoint` with a `SerialPort` is serial; `IpAddress`/`Port` are then ignored. `SerialAddress` is the HDLC station address (default 255) and must match on both ends of a cable. Points compare equal by `Key`: IP by host (case-insensitive) and port, serial by port name (case-insensitive) and address. Two points naming the same port and address share one link.
+A `ConnectionPoint` with a `SerialPort` is serial; `IpAddress`/`Port` are then ignored. `SerialAddress` is the HDLC station address (default 255) and must match on both ends of a cable; it is passed to the MicroGate peer as both this station's and the remote station's address, alongside the options from `IEngineController.MicroGateOptions`. Points compare equal by `Key`: IP by host (case-insensitive) and port, serial by port name (case-insensitive) and address. Two points naming the same port and address share one link.
 
 A `PeerConnection` carries a `ConnectionInfo` (the remote host, port and certificate names for IP; the port and address for serial), whether the remote node opened it, the point this node dialed (none for an inbound one), and, once identified, the `UserIdentity`. Its `Key` is the point's key for one this node opened and unique otherwise, so schedulers and other per-connection state never mix two connections up. Over IP the connection knows its certificate; over serial a cable joins exactly two nodes and is opened from both ends, so a serial connection is always reported as the link this node opened, with no certificate, and its user comes from the port and address or from a connection message.
 

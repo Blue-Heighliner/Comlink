@@ -214,15 +214,21 @@ internal sealed class ConfiguredEngineController : IEngineController
             string? authorityFile = config.GetTrustedAuthorityCertificateFilePath();
             if (peerFile is null && authorityFile is null)
             {
-                return MsmtCertificateLookup.BuildPeerOptions(currentUserProvider.UserName, GetCertificateName, TrustedAuthorityCertificateName);
+                return fallback.ConnectionOptions;
             }
             if (peerFile is null || authorityFile is null)
             {
                 throw new InvalidOperationException("PeerCertificateFile and TrustedAuthorityCertificateFile must both be set together.");
             }
-            return MsmtCertificateLookup.BuildPeerOptionsFromFiles(peerFile, authorityFile);
+            return fallback.ConfigureConnectionOptions(MsmtCertificateLookup.BuildPeerOptionsFromFiles(peerFile, authorityFile));
         }
     }
+
+    /// <inheritdoc />
+    public MsmtSessionPeerOptions ConfigureConnectionOptions(MsmtSessionPeerOptions options) => fallback.ConfigureConnectionOptions(options);
+
+    /// <inheritdoc />
+    public MicroGatePeerOptions MicroGateOptions => fallback.MicroGateOptions;
 
     /// <inheritdoc />
     public NodeRole Role =>

@@ -107,16 +107,16 @@
       },
       "BlueHeighliner.MicroGate": {
         "type": "Transitive",
-        "resolved": "0.1.0",
-        "contentHash": "u36JOgbrLt0OGOj/TIf241okpjp0FwOo38MKxTEadeaOqfRk2BJGRpPHMGi0I40Bcp1QtrMuFCzm85PTFD00eg==",
+        "resolved": "0.2.0",
+        "contentHash": "f6SECsHf4ImRFsS+9zuuf8lpp1o/XLsjDikNurHbYW38SY4hEoAdbA+87BuOYFvJEYuNJVR34jfLDKjxPPti6g==",
         "dependencies": {
           "System.Reactive": "7.0.0"
         }
       },
       "BlueHeighliner.Msmt": {
         "type": "Transitive",
-        "resolved": "0.2.0",
-        "contentHash": "3EOEDf7NuaAKGuP51AX9ZmNoLOlWpVgYHsuJ3766gC6728/Rko7rHFlFQ+uTDs8oE/1S0eppwJRiAgOrSg5EnQ==",
+        "resolved": "0.3.0",
+        "contentHash": "sdFDyY3hQZZ8wqH2l/JpjPAARaOGtK6k9ydn3zPXQosVEPkeHhg2hStGMwOUK9GHUfMAw7ea54Xj7nadpq7mgg==",
         "dependencies": {
           "BouncyCastle.Cryptography": "2.6.2",
           "Microsoft.Extensions.DependencyInjection.Abstractions": "10.0.0"
@@ -520,8 +520,8 @@
           "Avalonia.AvaloniaEdit": "[11.3.0, )",
           "Avalonia.Desktop": "[11.3.0, )",
           "Avalonia.Themes.Fluent": "[11.3.0, )",
-          "BlueHeighliner.MicroGate": "[0.1.0, )",
-          "BlueHeighliner.Msmt": "[0.2.0, )",
+          "BlueHeighliner.MicroGate": "[0.2.0, )",
+          "BlueHeighliner.Msmt": "[0.3.0, )",
           "CommunityToolkit.Mvvm": "[8.4.0, )",
           "LiteDB": "[5.0.21, )",
           "Microsoft.Extensions.Hosting": "[10.0.0, )",

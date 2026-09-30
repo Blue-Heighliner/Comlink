@@ -159,6 +159,12 @@ internal interface IEngineController
     /// <summary>The peer options - including TLS identity certificate and trusted certificate authorities - used for both inbound and outbound MSMT session peer connections.</summary>
     MsmtSessionPeerOptions ConnectionOptions { get; }
 
+    /// <summary>Applies the host's adjustment of the MSMT options (see <see cref="IEngineBuilder.MsmtConnectionOptions"/>) to <paramref name="options"/>, returning them unchanged if none was stated.</summary>
+    MsmtSessionPeerOptions ConfigureConnectionOptions(MsmtSessionPeerOptions options);
+
+    /// <summary>The options used for every MicroGate serial connection, after the host's adjustment (see <see cref="IEngineBuilder.MicroGateConnectionOptions"/>).</summary>
+    MicroGatePeerOptions MicroGateOptions { get; }
+
     /// <summary>The configured role for this instance.</summary>
     NodeRole Role { get; }
     /// <summary>
@@ -504,8 +510,14 @@ internal class EngineController(EngineBuilder builder, ICurrentUserProvider curr
     public virtual bool PrintReceivedDefaultEnabled => builder.PrintReceivedValue ?? false;
 
     /// <inheritdoc />
-    public virtual MsmtSessionPeerOptions ConnectionOptions => builder.ConnectionOptionsValue?.Invoke()
-        ?? MsmtCertificateLookup.BuildPeerOptions(currentUserProvider.UserName, GetCertificateName, TrustedAuthorityCertificateName);
+    public virtual MsmtSessionPeerOptions ConnectionOptions => ConfigureConnectionOptions(builder.ConnectionOptionsValue?.Invoke()
+        ?? MsmtCertificateLookup.BuildPeerOptions(currentUserProvider.UserName, GetCertificateName, TrustedAuthorityCertificateName));
+
+    /// <inheritdoc />
+    public virtual MsmtSessionPeerOptions ConfigureConnectionOptions(MsmtSessionPeerOptions options) => builder.MsmtConnectionOptionsValue?.Invoke(options) ?? options;
+
+    /// <inheritdoc />
+    public virtual MicroGatePeerOptions MicroGateOptions => builder.MicroGateConnectionOptionsValue?.Invoke(new()) ?? new();
 
     /// <inheritdoc />
     public virtual NodeRole Role => builder.RoleValue ?? NodeRole.Peer;

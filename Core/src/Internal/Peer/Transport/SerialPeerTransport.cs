@@ -9,15 +9,17 @@ namespace BlueHeighliner.Comlink.Peer.Transport;
 internal sealed class SerialPeerTransport : IPeerTransport
 {
     /// <summary>Initializes a new <see cref="SerialPeerTransport"/>.</summary>
-    public SerialPeerTransport(IMicroGatePeerFactory peerFactory, ILogger logger, TimeSpan? reconnectDelay = null, TimeSpan? requestTimeout = null)
+    public SerialPeerTransport(IMicroGatePeerFactory peerFactory, ILogger logger, TimeSpan? reconnectDelay = null, TimeSpan? requestTimeout = null, MicroGatePeerOptions? options = null)
     {
         this.peerFactory = peerFactory;
+        this.options = options ?? new();
         this.logger = logger;
         this.reconnectDelay = reconnectDelay;
         this.requestTimeout = requestTimeout;
     }
 
     private readonly IMicroGatePeerFactory peerFactory;
+    private readonly MicroGatePeerOptions options;
     private readonly ILogger logger;
     private readonly TimeSpan? reconnectDelay;
     private readonly TimeSpan? requestTimeout;
@@ -75,6 +77,6 @@ internal sealed class SerialPeerTransport : IPeerTransport
     {
         if (!point.IsSerial) { throw new ArgumentException("Point is not a serial point", nameof(point)); }
 
-        return links.GetOrAdd(point.Key, _ => new Lazy<SerialLink>(() => new SerialLink(point, peerFactory, logger, received, connected, disconnected, reconnectDelay, requestTimeout, startClosed))).Value;
+        return links.GetOrAdd(point.Key, _ => new Lazy<SerialLink>(() => new SerialLink(point, peerFactory, options, logger, received, connected, disconnected, reconnectDelay, requestTimeout, startClosed))).Value;
     }
 }

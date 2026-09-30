@@ -14,6 +14,7 @@ internal sealed class SerialLink : IAsyncDisposable
     public SerialLink(
         ConnectionPoint point,
         IMicroGatePeerFactory peerFactory,
+        MicroGatePeerOptions options,
         ILogger logger,
         PeerEvent<PeerReceivedEventArgs> received,
         PeerEvent<PeerConnectionEventArgs> connected,
@@ -24,6 +25,7 @@ internal sealed class SerialLink : IAsyncDisposable
     {
         this.point = point;
         this.peerFactory = peerFactory;
+        this.options = options;
         this.logger = logger;
         this.received = received;
         this.connected = connected;
@@ -38,6 +40,7 @@ internal sealed class SerialLink : IAsyncDisposable
 
     private readonly ConnectionPoint point;
     private readonly IMicroGatePeerFactory peerFactory;
+    private readonly MicroGatePeerOptions options;
     private readonly ILogger logger;
     private readonly PeerEvent<PeerReceivedEventArgs> received;
     private readonly PeerEvent<PeerConnectionEventArgs> connected;
@@ -203,12 +206,13 @@ internal sealed class SerialLink : IAsyncDisposable
     {
         IMicroGatePeer peer = peerFactory.Create();
         TaskCompletionSource ended = new(TaskCreationOptions.RunContinuationsAsynchronously);
-        peer.Received.Listen(OnFrame);
+        peer.Receiver = OnFrame;
+        peer.Exceptions.Listen(ex => logger.LogWarning("Serial link to {Point} met an error: {Message}", point, ex.Message));
         peer.StateChanged.Listen(state => { if (state == MicroGatePeerState.Disconnected) { ended.TrySetResult(); } }, () => ended.TrySetResult());
 
         try
         {
-            await peer.Start(point.SerialPort!, new MicroGatePeerOptions { Address = point.SerialAddress }, attemptToken);
+            await peer.Start(point.SerialPort!, point.SerialAddress, point.SerialAddress, options, attemptToken);
         }
         catch (OperationCanceledException)
         {
@@ -272,9 +276,10 @@ internal sealed class SerialLink : IAsyncDisposable
         }
     }
 
-    private void OnFrame(ReadOnlyMemory<byte> frame)
+    private void OnFrame(IMemoryOwner<byte> owner)
     {
-        if (!SerialFrame.TryParse(frame, out SerialFrame parsed)) { return; }
+        using IMemoryOwner<byte> frame = owner;
+        if (!SerialFrame.TryParse(frame.Memory, out SerialFrame parsed)) { return; }
 
         if (parsed.Kind == SerialFrameKind.Reply)
         {
