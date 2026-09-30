@@ -42,6 +42,12 @@ internal static class PeerMessageDispatcher
                 return true;
             }
 
+            if (engineController.IsRetrieval(message))
+            {
+                logger.LogWarning("{MessageId} retrieval request from {User} ignored: only a storage server answers one", engineController.GetMessageId(message), engineController.GetFromUser(message));
+                return true;
+            }
+
             logger.LogInformation("{MessageId} received from {FromUser}", engineController.GetMessageId(message), engineController.GetFromUser(message));
             await messageDelivered.InvokeAll(message);
             return true;

@@ -37,6 +37,30 @@ internal sealed class MessageMap
     public required Func<object, string> GetConfirmationId { get; init; }
     /// <summary>Writes the identifier of the message this one confirms.</summary>
     public required Action<object, string> SetConfirmationId { get; init; }
+    /// <summary>Reads whether the message is a retrieval request.</summary>
+    public required Func<object, bool> GetIsRetrieval { get; init; }
+    /// <summary>Writes whether the message is a retrieval request.</summary>
+    public required Action<object, bool> SetIsRetrieval { get; init; }
+    /// <summary>Reads a retrieval request's lower sent-time bound.</summary>
+    public required Func<object, DateTime?> GetRetrievalFrom { get; init; }
+    /// <summary>Writes a retrieval request's lower sent-time bound.</summary>
+    public required Action<object, DateTime?> SetRetrievalFrom { get; init; }
+    /// <summary>Reads a retrieval request's upper sent-time bound.</summary>
+    public required Func<object, DateTime?> GetRetrievalTo { get; init; }
+    /// <summary>Writes a retrieval request's upper sent-time bound.</summary>
+    public required Action<object, DateTime?> SetRetrievalTo { get; init; }
+    /// <summary>Reads a retrieval request's sender names.</summary>
+    public required Func<object, List<string>> GetRetrievalAuthors { get; init; }
+    /// <summary>Writes a retrieval request's sender names.</summary>
+    public required Action<object, List<string>> SetRetrievalAuthors { get; init; }
+    /// <summary>Reads a retrieval request's addressee names.</summary>
+    public required Func<object, List<string>> GetRetrievalDestinations { get; init; }
+    /// <summary>Writes a retrieval request's addressee names.</summary>
+    public required Action<object, List<string>> SetRetrievalDestinations { get; init; }
+    /// <summary>Reads a retrieval request's message identifiers.</summary>
+    public required Func<object, List<string>> GetRetrievalIds { get; init; }
+    /// <summary>Writes a retrieval request's message identifiers.</summary>
+    public required Action<object, List<string>> SetRetrievalIds { get; init; }
     /// <summary>Reads whether the message is an alert.</summary>
     public required Func<object, bool> GetIsAlert { get; init; }
     /// <summary>Writes whether the message is an alert.</summary>

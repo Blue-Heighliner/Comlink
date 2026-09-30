@@ -395,4 +395,22 @@ public sealed class EngineBuilderTests
 
         Assert.Same(builder, builder.AppName("a").AppVersion("1").DataPath("/d").KioskMode().HomeText("h").PeerPort(1).InterfacePort(2).ConfigFile());
     }
+
+    /// <summary>No server stores messages unless the configuration says so.</summary>
+    [Fact]
+    public void StorageServers_Unstated_IsEmpty()
+    {
+        (_, EngineController controller) = Build(engine => engine);
+
+        Assert.Empty(controller.StorageServers);
+    }
+
+    /// <summary>ServerStorage names the storing servers; calling it again adds to them without duplicating a name (case-insensitive).</summary>
+    [Fact]
+    public void ServerStorage_AccumulatesDistinctServerNames()
+    {
+        (_, EngineController controller) = Build(engine => engine.ServerStorage("Server1", "Server2").ServerStorage("SERVER1", "Server3"));
+
+        Assert.Equal(["Server1", "Server2", "Server3"], controller.StorageServers);
+    }
 }

@@ -142,6 +142,17 @@ public interface IEngineBuilder
     /// <summary>Defines a server in the topology a <see cref="NodeRole.Server"/> routes with, and the child clients it owns.</summary>
     IEngineBuilder Server(string name, params string[] childClients);
 
+    /// <summary>
+    /// Enables message storage on the named <see cref="NodeRole.Server"/> users (each one given to <see cref="Server"/>):
+    /// such a server keeps a copy of every message it routes, and answers a client's retrieval request (the client's
+    /// RETRIEVE screen) by sending back a copy of each stored message that fits the request's criteria,
+    /// whoever sent or received it. Every node on a network must be configured alike, since a client learns which
+    /// servers store from this same configuration. Calling this again adds to the set already stated. Requires the
+    /// message mapping's <see cref="IMessageBuilder{TMessage}.Retrieval"/> fields, which every message mapping must state.
+    /// </summary>
+    /// <param name="serverNames">The server users that store the messages they route.</param>
+    IEngineBuilder ServerStorage(params string[] serverNames);
+
     /// <summary>Sets who is on the other end of a connection that has just formed. Return <see langword="null"/> to leave it to the engine, which names an IP connection after the user whose certificate name it carries and a serial connection after its port.</summary>
     IEngineBuilder Identify(Func<ConnectionInfo, UserIdentity?> identify);
 

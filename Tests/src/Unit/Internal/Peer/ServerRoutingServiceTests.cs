@@ -63,7 +63,8 @@ public sealed class ServerRoutingServiceTests
         Action<Mock<IPeerTransport>, TestObservable<PeerConnectionEventArgs>>? configureTransport = null,
         Dictionary<string, ServerUserConfig>? userMap = null,
         IReadOnlyList<ConnectionPoint>? outgoing = null,
-        string self = "ServerA")
+        string self = "ServerA",
+        IMessageStorageService? storage = null)
     {
         userMap ??= new Dictionary<string, ServerUserConfig>(StringComparer.OrdinalIgnoreCase)
         {
@@ -92,7 +93,7 @@ public sealed class ServerRoutingServiceTests
         Mock<ICurrentUserProvider> currentUser = new();
         currentUser.SetupGet(p => p.UserName).Returns(self);
 
-        ServerRoutingService service = new(transportFactory.Object, engineController.Object, currentUser.Object, noLogger);
+        ServerRoutingService service = new(transportFactory.Object, engineController.Object, currentUser.Object, storage ?? Mock.Of<IMessageStorageService>(), noLogger);
 
         configureTransport?.Invoke(transport, connected);
 
@@ -962,6 +963,102 @@ public sealed class ServerRoutingServiceTests
         PeerConnectionStatus status = Assert.Single(fx.Service.GetStatuses(), s => s.UserName == "ServerB");
         Assert.True(status.IsClosed);
         Assert.False(status.IsConnected);
+        await Stop(fx);
+    }
+
+    private static TestMessage RetrievalTo(string server, string from) => new()
+    {
+        MessageId = "REQ1",
+        FromUser = from,
+        IsRetrieval = true,
+        Addresses = [new TestAddressEntry { UserName = server, Type = "To" }]
+    };
+
+    /// <summary>A message routed from a child is handed to storage, whether or not storage keeps it.</summary>
+    [Fact]
+    public async Task FromChild_Message_IsHandedToStorage()
+    {
+        Mock<IMessageStorageService> storage = new();
+        Fixture fx = await BuildStarted(storage: storage.Object);
+        PeerConnection clientA1 = Inbound("ClientA1");
+        fx.Come(clientA1);
+
+        fx.Receive(clientA1, Encode(MessageTo("ClientA2")));
+
+        await WaitUntil(() => storage.Invocations.Count > 0, TimeSpan.FromSeconds(2));
+        storage.Verify(s => s.Store(It.Is<object>(m => ((TestMessage)m).MessageId == "M1")), Times.Once);
+        await Stop(fx);
+    }
+
+    /// <summary>A message routed from another server is handed to storage too, since this server routes it on to its own children.</summary>
+    [Fact]
+    public async Task FromServer_Message_IsHandedToStorage()
+    {
+        Mock<IMessageStorageService> storage = new();
+        Fixture fx = await BuildStarted(storage: storage.Object);
+        PeerConnection serverB = Inbound("ServerB");
+        fx.Come(serverB);
+
+        fx.Receive(serverB, Encode(MessageTo("ClientA1")));
+
+        await WaitUntil(() => storage.Invocations.Count > 0, TimeSpan.FromSeconds(2));
+        storage.Verify(s => s.Store(It.IsAny<object>()), Times.Once);
+        await Stop(fx);
+    }
+
+    /// <summary>A retrieval request addressed to this server is answered: each found copy is routed to the requesting child, and the request itself is never stored or relayed.</summary>
+    [Fact]
+    public async Task FromChild_RetrievalRequestForThisServer_SendsFoundCopiesToRequester()
+    {
+        Mock<IMessageStorageService> storage = new();
+        TestMessage copy = MessageTo("ClientA1");
+        storage.Setup(s => s.Find("ClientA1", It.IsAny<object>())).ReturnsAsync(new List<object> { copy });
+        Fixture fx = await BuildStarted(storage: storage.Object);
+        PeerConnection clientA1 = Inbound("ClientA1");
+        fx.Come(clientA1);
+
+        fx.Receive(clientA1, Encode(RetrievalTo("ServerA", "ClientA1")));
+
+        await WaitUntil(() => SentReal(fx, clientA1), TimeSpan.FromSeconds(2));
+        Assert.Equal(1, Requests(fx, clientA1, real: true));
+        storage.Verify(s => s.Store(It.IsAny<object>()), Times.Never);
+        await Stop(fx);
+    }
+
+    /// <summary>A retrieval request addressed to another server is forwarded to it and not answered here.</summary>
+    [Fact]
+    public async Task FromChild_RetrievalRequestForAnotherServer_IsForwardedNotAnswered()
+    {
+        Mock<IMessageStorageService> storage = new();
+        Fixture fx = await BuildStarted(storage: storage.Object);
+        PeerConnection clientA1 = Inbound("ClientA1");
+        PeerConnection serverB = Inbound("ServerB");
+        fx.Come(clientA1);
+        fx.Come(serverB);
+
+        fx.Receive(clientA1, Encode(RetrievalTo("ServerB", "ClientA1")));
+
+        await WaitUntil(() => SentReal(fx, serverB), TimeSpan.FromSeconds(2));
+        Assert.Equal(1, Requests(fx, serverB, real: true));
+        storage.Verify(s => s.Find(It.IsAny<string>(), It.IsAny<object>()), Times.Never);
+        storage.Verify(s => s.Store(It.IsAny<object>()), Times.Never);
+        await Stop(fx);
+    }
+
+    /// <summary>A retrieval request forwarded from another server is answered for the user named as its sender, and the copies are routed back through that server.</summary>
+    [Fact]
+    public async Task FromServer_RetrievalRequestForThisServer_AnswersForTheSenderAndRoutesBack()
+    {
+        Mock<IMessageStorageService> storage = new();
+        storage.Setup(s => s.Find("ClientB1", It.IsAny<object>())).ReturnsAsync(new List<object> { MessageTo("ClientB1") });
+        Fixture fx = await BuildStarted(storage: storage.Object);
+        PeerConnection serverB = Inbound("ServerB");
+        fx.Come(serverB);
+
+        fx.Receive(serverB, Encode(RetrievalTo("ServerA", "ClientB1")));
+
+        await WaitUntil(() => SentReal(fx, serverB), TimeSpan.FromSeconds(2));
+        Assert.Equal(1, Requests(fx, serverB, real: true));
         await Stop(fx);
     }
 }

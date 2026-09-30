@@ -240,6 +240,9 @@ internal interface IEngineController
     /// <summary>Every custom import format added via <see cref="IEngineBuilder.ImportFormat"/>, in the order added; empty if none.</summary>
     IReadOnlyList<ImportFormatDefinition> ImportFormats { get; }
 
+    /// <summary>The server users, from <see cref="Servers"/>, that keep a copy of every message they route and answer retrieval requests; see <see cref="IEngineBuilder.ServerStorage"/>. Empty if none.</summary>
+    IReadOnlyList<string> StorageServers { get; }
+
     /// <summary>Every custom auto forward controller added via <see cref="IEngineBuilder.AutoForwardController{TMessage}"/>, in the order added; empty if none.</summary>
     IReadOnlyList<AutoForwardControllerDefinition> AutoForwardControllers { get; }
 
@@ -280,6 +283,12 @@ internal interface IEngineController
     string GetConfirmationMessageId(object message);
     /// <summary>Sets the message ID <paramref name="message"/> is a user-read confirmation for.</summary>
     void SetConfirmationMessageId(object message, string value);
+    /// <summary>Gets whether <paramref name="message"/> is a retrieval request; see <see cref="IMessageBuilder{TMessage}.Retrieval"/>.</summary>
+    bool IsRetrieval(object message);
+    /// <summary>Reads the criteria a retrieval request carries from its mapped fields. Meaningful only when <see cref="IsRetrieval"/> is <see langword="true"/>.</summary>
+    RetrievalCriteria GetRetrieval(object message);
+    /// <summary>Writes <paramref name="criteria"/> into <paramref name="message"/>'s mapped retrieval fields and marks it a retrieval request.</summary>
+    void SetRetrieval(object message, RetrievalCriteria criteria);
     /// <summary>
     /// Gets whether <paramref name="message"/> is an alert: an ordinary message that also causes the
     /// receiving Client-mode UI to alarm (visually and audibly) until the user reads it. See
@@ -533,6 +542,8 @@ internal class EngineController(EngineBuilder builder, ICurrentUserProvider curr
     /// <inheritdoc />
     public virtual IReadOnlyList<ImportFormatDefinition> ImportFormats => builder.ImportFormats;
     /// <inheritdoc />
+    public virtual IReadOnlyList<string> StorageServers => builder.StorageServerNames;
+    /// <inheritdoc />
     public virtual IReadOnlyList<AutoForwardControllerDefinition> AutoForwardControllers => builder.AutoForwardControllers;
 
     /// <inheritdoc />
@@ -568,6 +579,27 @@ internal class EngineController(EngineBuilder builder, ICurrentUserProvider curr
     public virtual string GetConfirmationMessageId(object value) => message.GetConfirmationId(value);
     /// <inheritdoc />
     public virtual void SetConfirmationMessageId(object value, string id) => message.SetConfirmationId(value, id);
+    /// <inheritdoc />
+    public virtual bool IsRetrieval(object value) => message.GetIsRetrieval(value);
+    /// <inheritdoc />
+    public virtual RetrievalCriteria GetRetrieval(object value) => new()
+    {
+        From = message.GetRetrievalFrom(value),
+        To = message.GetRetrievalTo(value),
+        Authors = message.GetRetrievalAuthors(value),
+        Destinations = message.GetRetrievalDestinations(value),
+        Ids = message.GetRetrievalIds(value)
+    };
+    /// <inheritdoc />
+    public virtual void SetRetrieval(object value, RetrievalCriteria criteria)
+    {
+        message.SetIsRetrieval(value, true);
+        message.SetRetrievalFrom(value, criteria.From);
+        message.SetRetrievalTo(value, criteria.To);
+        message.SetRetrievalAuthors(value, criteria.Authors);
+        message.SetRetrievalDestinations(value, criteria.Destinations);
+        message.SetRetrievalIds(value, criteria.Ids);
+    }
     /// <inheritdoc />
     public virtual bool GetIsAlert(object value) => message.GetIsAlert(value);
     /// <inheritdoc />

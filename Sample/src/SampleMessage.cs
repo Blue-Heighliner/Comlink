@@ -33,6 +33,18 @@ public sealed class SampleMessage
     [ProtoMember(10)] public string Category { get; set; } = string.Empty;
     /// <summary>Security level name this message was sent at.</summary>
     [ProtoMember(11)] public string Classification { get; set; } = string.Empty;
+    /// <summary>Whether this message is a retrieval request to a storage server.</summary>
+    [ProtoMember(12)] public bool IsRetrieval { get; set; }
+    /// <summary>Retrieval request lower sent-time bound.</summary>
+    [ProtoMember(13)] public DateTime? RetrievalFrom { get; set; }
+    /// <summary>Retrieval request upper sent-time bound.</summary>
+    [ProtoMember(14)] public DateTime? RetrievalTo { get; set; }
+    /// <summary>Retrieval request sender names.</summary>
+    [ProtoMember(15)] public List<string> RetrievalAuthors { get; set; } = [];
+    /// <summary>Retrieval request addressee names.</summary>
+    [ProtoMember(16)] public List<string> RetrievalDestinations { get; set; } = [];
+    /// <summary>Retrieval request message identifiers.</summary>
+    [ProtoMember(17)] public List<string> RetrievalIds { get; set; } = [];
 }
 
 /// <summary>A single recipient entry within a <see cref="SampleMessage"/>.</summary>

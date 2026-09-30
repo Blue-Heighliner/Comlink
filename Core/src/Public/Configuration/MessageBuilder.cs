@@ -63,6 +63,14 @@ public interface IMessageBuilder<TMessage> where TMessage : class, new()
     /// <summary>Maps the same field by the property or field the expression reads, such as <c>x => x.ConfirmationId</c>, building the setter from it. The member must have the same type and be assignable.</summary>
     IMessageBuilder<TMessage> ConfirmationId(Expression<Func<TMessage, string>> property);
 
+    /// <summary>
+    /// Maps the fields of a retrieval request: whether the message is one, and the date range, authors, destinations and
+    /// message identifiers it asks a storage server (see <see cref="IEngineBuilder.ServerStorage"/>) for. Each is its
+    /// own property of the host's message type, mapped through <see cref="IRetrievalBuilder{TMessage}"/>; every one must
+    /// be mapped.
+    /// </summary>
+    IMessageBuilder<TMessage> Retrieval(Action<IRetrievalBuilder<TMessage>> map);
+
     /// <summary>Maps whether the message is an alert, which alarms the receiving user interface until it is read.</summary>
     IMessageBuilder<TMessage> IsAlert(Func<TMessage, bool> get, Action<TMessage, bool> set);
 

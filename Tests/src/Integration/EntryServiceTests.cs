@@ -262,6 +262,18 @@ public sealed class EntryServiceTests : IDisposable
         Assert.Equal("Restricted memo", format.GetSubject(Assert.Single(items).Message));
     }
 
+    /// <summary>IncomingMessageExists reports whether the Inbox holds the ID, and an Outbox-only record does not count.</summary>
+    [Fact]
+    public async Task IncomingMessageExists_ReflectsInboxRecordsOnly()
+    {
+        await service.StoreIncomingMessage("IN1", "S", "Subject", "Body", [], DateTime.UtcNow);
+        await service.StoreSentMessage("OUT1", "Subject", "Body", [], DateTime.UtcNow, []);
+
+        Assert.True(await service.IncomingMessageExists("IN1"));
+        Assert.False(await service.IncomingMessageExists("OUT1"));
+        Assert.False(await service.IncomingMessageExists("NOPE"));
+    }
+
     /// <summary>A message filter's Author matches the sender by case-insensitive substring.</summary>
     [Fact]
     public async Task GetMessagesAsync_FilterAuthor_MatchesSenderSubstring()

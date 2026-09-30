@@ -1,0 +1,115 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:vm="using:BlueHeighliner.Comlink.ViewModels"
+             x:Class="BlueHeighliner.Comlink.Views.RetrieveView"
+             x:DataType="vm:RetrieveViewModel"
+             Background="#1E1E1E">
+
+  <ScrollViewer>
+    <DockPanel Margin="24,20">
+
+      <!-- Toolbar -->
+      <Border DockPanel.Dock="Top"
+              BorderBrush="#3E3E42"
+              BorderThickness="0,0,0,1"
+              Padding="0,0,0,10"
+              Margin="0,0,0,16">
+        <DockPanel>
+          <StackPanel DockPanel.Dock="Right"
+                      Orientation="Horizontal"
+                      Spacing="8"
+                      VerticalAlignment="Center">
+            <TextBlock Text="{Binding StatusMessage}"
+                       FontSize="12"
+                       Foreground="#858585"
+                       VerticalAlignment="Center" />
+            <Button Content="RESET"
+                    Command="{Binding ResetCommand}"
+                    FontSize="12" />
+            <Button Classes="accent"
+                    Content="REQUEST"
+                    Command="{Binding RequestCommand}"
+                    FontSize="12"
+                    FontWeight="SemiBold" />
+            <Button Content="×"
+                    Command="{Binding $parent[Window].DataContext.ShowHomeCommand}"
+                    ToolTip.Tip="Close"
+                    FontSize="16"
+                    Padding="8,0"
+                    Foreground="#858585" />
+          </StackPanel>
+          <TextBlock Text="RETRIEVE"
+                     FontSize="11"
+                     FontWeight="SemiBold"
+                     Foreground="#858585"
+                     LetterSpacing="1"
+                     VerticalAlignment="Center" />
+        </DockPanel>
+      </Border>
+
+      <ProgressBar DockPanel.Dock="Top"
+                   IsIndeterminate="True"
+                   IsVisible="{Binding IsRequesting}"
+                   Height="4"
+                   Margin="0,0,0,16" />
+
+      <StackPanel Spacing="16" IsEnabled="{Binding !IsRequesting}">
+
+        <StackPanel Spacing="6">
+          <TextBlock Text="SERVER" FontSize="11" FontWeight="SemiBold" Foreground="#858585" LetterSpacing="1" />
+          <ComboBox ItemsSource="{Binding AvailableServers}"
+                    SelectedItem="{Binding SelectedServer}"
+                    Background="#3C3C3C"
+                    BorderThickness="0"
+                    FontSize="13"
+                    HorizontalAlignment="Stretch" />
+        </StackPanel>
+
+        <StackPanel Spacing="6">
+          <TextBlock Text="FROM" FontSize="11" FontWeight="SemiBold" Foreground="#858585" LetterSpacing="1" />
+          <DatePicker SelectedDate="{Binding DateFrom}" FontSize="12" HorizontalAlignment="Stretch" />
+          <TimePicker SelectedTime="{Binding TimeFrom}" FontSize="12" HorizontalAlignment="Stretch" />
+        </StackPanel>
+
+        <StackPanel Spacing="6">
+          <TextBlock Text="TO" FontSize="11" FontWeight="SemiBold" Foreground="#858585" LetterSpacing="1" />
+          <DatePicker SelectedDate="{Binding DateTo}" FontSize="12" HorizontalAlignment="Stretch" />
+          <TimePicker SelectedTime="{Binding TimeTo}" FontSize="12" HorizontalAlignment="Stretch" />
+        </StackPanel>
+
+        <StackPanel Spacing="6">
+          <TextBlock Text="AUTHORS" FontSize="11" FontWeight="SemiBold" Foreground="#858585" LetterSpacing="1" />
+          <TextBox Text="{Binding Authors}"
+                   Watermark="Sender names, separated by commas..."
+                   Background="#3C3C3C"
+                   BorderThickness="0"
+                   FontSize="13" />
+        </StackPanel>
+
+        <StackPanel Spacing="6">
+          <TextBlock Text="DESTINATIONS" FontSize="11" FontWeight="SemiBold" Foreground="#858585" LetterSpacing="1" />
+          <TextBox Text="{Binding Destinations}"
+                   Watermark="Recipient names, separated by commas..."
+                   Background="#3C3C3C"
+                   BorderThickness="0"
+                   FontSize="13" />
+        </StackPanel>
+
+        <StackPanel Spacing="6">
+          <TextBlock Text="MESSAGE IDS" FontSize="11" FontWeight="SemiBold" Foreground="#858585" LetterSpacing="1" />
+          <TextBox Text="{Binding Ids}"
+                   Watermark="Message IDs, separated by commas..."
+                   Background="#3C3C3C"
+                   BorderThickness="0"
+                   FontSize="13" />
+        </StackPanel>
+
+        <TextBlock Text="Any stored message that fits is returned, whoever sent or received it. Leave a field empty to match anything."
+                   FontSize="12"
+                   Foreground="#858585"
+                   TextWrapping="Wrap" />
+      </StackPanel>
+
+    </DockPanel>
+  </ScrollViewer>
+</UserControl>

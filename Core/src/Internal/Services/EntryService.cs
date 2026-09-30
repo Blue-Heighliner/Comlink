@@ -21,6 +21,8 @@ internal interface IEntryService
     Task<MessageEntity?> UpdateDeliveryStatus(string messageId, string userName, DestinationStatus status);
     /// <summary>Persists a received message to the Inbox folder with <see cref="MessageEntity.ReadStatus"/> set to <see cref="DestinationStatus.Received"/>, and raises <see cref="MessageInserted"/>.</summary>
     Task<MessageEntity> StoreIncomingMessage(string messageId, string fromUser, string subject, string body, List<AddressData> addresses, DateTime sentAt, bool isAlert = false, int priority = 0, string tag = "", string securityLevel = "");
+    /// <summary>Returns whether the Inbox already holds a record for <paramref name="messageId"/>.</summary>
+    Task<bool> IncomingMessageExists(string messageId);
     /// <summary>
     /// Transitions the Inbox record for <paramref name="messageId"/> from <see cref="DestinationStatus.Received"/>
     /// to <see cref="DestinationStatus.Read"/> and raises <see cref="MessageRead"/>. Returns <see langword="null"/>
@@ -235,6 +237,9 @@ internal sealed class EntryService : IEntryService
 
         return entity;
     }
+
+    /// <inheritdoc />
+    public async Task<bool> IncomingMessageExists(string messageId) => await messages.Get(messageId, outbound: false) is not null;
 
     /// <summary>
     /// Transitions the Inbox record for <paramref name="messageId"/> from <see cref="DestinationStatus.Received"/>

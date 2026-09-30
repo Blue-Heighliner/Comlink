@@ -20,6 +20,7 @@ namespace BlueHeighliner.Comlink.Sample;
 /// <item><description>connection and message hooks - a newly connected user is welcomed with who else is currently online (<see cref="IEngineHookContext.ConnectedUsers"/>), everyone still online is told when someone disconnects, and any received message tagged <c>PING</c> gets an automatic <c>PONG</c> reply (all via <see cref="IEngineHookContext.SendMessage"/>).</description></item>
 /// <item><description>export formats - a plain-text alternative to the built-in JSON export, restricted to messages, drafts, and notes (an activity log's structured entries don't read naturally as prose).</description></item>
 /// <item><description>import formats - a CSV reader that stages one send per <c>Subject,User,Body</c> line for the user to review and send from the staged send screen, one at a time a second apart.</description></item>
+/// <item><description>server storage - <c>Server</c> (ClientServer scenario) and <c>Server1</c> (ServerCluster scenario) keep a copy of every message they route and answer a client's RETRIEVE request; <c>Server2</c> does not.</description></item>
 /// <item><description>auto forward controllers - an "Escalation" controller, open to every Peer/Client scenario site, that forwards any received alert or <c>URGENT</c>-tagged message to whichever users its target list names.</description></item>
 /// </list>
 /// Actual alarm sound playback and printer discovery and driving are real platform behavior always provided by the
@@ -51,6 +52,7 @@ public sealed class SampleEngineConfiguration : IEngineConfiguration
                     (m, value) => m.Recipients = [.. value.Select(a => new SampleRecipient { User = a.Name, Kind = a.Type switch { AddressType.Cc => "CC", AddressType.External => "OUTSIDE", _ => "TO" }, Note = a.Information })])
                 .SentAt(m => m.Timestamp)
                 .ConfirmationId(m => m.ConfirmsId)
+                .Retrieval(r => r.IsRequest(m => m.IsRetrieval).From(m => m.RetrievalFrom).To(m => m.RetrievalTo).Authors(m => m.RetrievalAuthors, (m, v) => m.RetrievalAuthors = [.. v]).Destinations(m => m.RetrievalDestinations, (m, v) => m.RetrievalDestinations = [.. v]).Ids(m => m.RetrievalIds, (m, v) => m.RetrievalIds = [.. v]))
                 .IsAlert(m => m.Alert)
                 .Priority(m => m.Importance)
                 .Tag(m => m.Category)
@@ -85,6 +87,7 @@ public sealed class SampleEngineConfiguration : IEngineConfiguration
             .PrintCount<SampleMessage>(message => message.Alert ? 2 : 1)
             .CanDelete(folder => folder is FolderType.Drafts or FolderType.Notes)
             .ConfigFile()
+            .ServerStorage("Server", "Server1")
             .ExternalSystem(new SampleExternalSystem())
             .OnUserConnected(context =>
             {

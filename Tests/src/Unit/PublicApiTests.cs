@@ -17,7 +17,7 @@ public sealed class PublicApiTests
                 "ActivityLogEventEntry", "ActivityLogExportData", "AddressRequest", "AddressType", "ConnectionInfo", "ConnectionPoint",
                 "DeliveryStatusChangedEvent", "DestinationStatus", "DraftExportData",
                 "Engine", "ExternalSystemBase`1", "FolderType", "IEngineBuilder", "IEngineConfiguration", "IEngineHookContext", "IExternalSystem",
-                "IImportFormatContext", "IMessageBuilder`1", "IMessageReceivedHookContext", "INetworkSerializer", "IPacketBuilder`1", "IServiceConnection", "IUserConnectionHookContext",
+                "IImportFormatContext", "IMessageBuilder`1", "IMessageReceivedHookContext", "INetworkSerializer", "IPacketBuilder`1", "IRetrievalBuilder`1", "IServiceConnection", "IUserConnectionHookContext",
                 "MessageDeliveryStatus", "MessageExportData", "MessageReceivedEvent", "NodeRole", "NoteExportData", "ProtobufNetworkSerializer", "SendMessageResult",
                 "StagedSendData", "StagedSendMode", "UserDeliveryResult", "UserIdentity", "UserInfo"
             ],

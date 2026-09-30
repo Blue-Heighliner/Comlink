@@ -42,13 +42,13 @@ engine
     .Message<MyMessage>(message => message
         .Id(m => m.Id)
         .Sender(...).Subject(...).Body(...).Addresses(...).SentAt(...)
-        .ConfirmationId(...).IsAlert(...).Priority(...).Tag(...))
+        .ConfirmationId(...).Retrieval(...).IsAlert(...).Priority(...).Tag(...))
     .Packets<MyPacket>(packet => packet
         .PayloadId(...).Index(...).Count(...).PayloadLength(...).Data(...)
         .Size(16 * 1024).Window(1));
 ```
 
-`Message` supplies the concrete message type used throughout the engine, on the wire (peer and interface connections) and in the database, and maps the engine's logical fields onto that type's real fields. Each mapping is a getter and a setter, so the engine reads and builds the host's message without ever assuming a field name or shape. Where the host's field has the type the engine wants, naming the property (`.Id(m => m.Id)`) is enough: the builder reads the member access from the expression and compiles a getter and setter from it once, when the configuration runs, so using it costs no more than writing them out (an init-only property works; a member that cannot be assigned, or an expression that is not a plain member access such as `m => m.Id.ToUpper()`, is refused at once with an error naming it). Where the types differ - the addresses, which the host stores in its own recipient shape and converts to and from `(string Name, AddressType Type, string Information)` tuples (the getter returns any sequence of them, the setter receives a list; `Information` is optional custom per-address instructions, e.g. `Deliver to Eastside Office` - a `(string Name, AddressType Type)` overload with no `Information` is also available for a host with no use for it), and a packet's data, which is a `ReadOnlyMemory<byte>` - the getter and setter are given explicitly. Every field must be mapped. The type must be LiteDB-serializable for storage, and must additionally satisfy whatever serializer is used for the wire, which by default is a `ProtobufNetworkSerializer` that builds only the message type (so `[ProtoContract]`/`[ProtoMember]` attributes). `Serializer` on the message builder replaces it, as long as every node this instance talks to (including its own interface connections) uses a matching one: Comlink never negotiates or advertises which format a payload used, so a mismatch deserializes garbage or throws rather than failing cleanly. `INetworkSerializer.Deserialize` is given only the bytes, so a custom serializer must make its format self-describing enough to rebuild the right type itself (the default wraps every payload in an outer envelope naming the type). `Create` replaces `new TMessage()` for building an empty message. The confirmation id and alert flag back the user-read confirmation and alert-message features (see [Peer.md](Peer.md#read-confirmation) and [Peer.md](Peer.md#alert-messages)); the priority backs [Message Composition](#message-composition) and the MSMT send priority, and the tag backs [Message Composition](#message-composition) too.
+`Message` supplies the concrete message type used throughout the engine, on the wire (peer and interface connections) and in the database, and maps the engine's logical fields onto that type's real fields. Each mapping is a getter and a setter, so the engine reads and builds the host's message without ever assuming a field name or shape. Where the host's field has the type the engine wants, naming the property (`.Id(m => m.Id)`) is enough: the builder reads the member access from the expression and compiles a getter and setter from it once, when the configuration runs, so using it costs no more than writing them out (an init-only property works; a member that cannot be assigned, or an expression that is not a plain member access such as `m => m.Id.ToUpper()`, is refused at once with an error naming it). Where the types differ - the addresses, which the host stores in its own recipient shape and converts to and from `(string Name, AddressType Type, string Information)` tuples (the getter returns any sequence of them, the setter receives a list; `Information` is optional custom per-address instructions, e.g. `Deliver to Eastside Office` - a `(string Name, AddressType Type)` overload with no `Information` is also available for a host with no use for it), and a packet's data, which is a `ReadOnlyMemory<byte>` - the getter and setter are given explicitly. Every field must be mapped. The type must be LiteDB-serializable for storage, and must additionally satisfy whatever serializer is used for the wire, which by default is a `ProtobufNetworkSerializer` that builds only the message type (so `[ProtoContract]`/`[ProtoMember]` attributes). `Serializer` on the message builder replaces it, as long as every node this instance talks to (including its own interface connections) uses a matching one: Comlink never negotiates or advertises which format a payload used, so a mismatch deserializes garbage or throws rather than failing cleanly. `INetworkSerializer.Deserialize` is given only the bytes, so a custom serializer must make its format self-describing enough to rebuild the right type itself (the default wraps every payload in an outer envelope naming the type). `Create` replaces `new TMessage()` for building an empty message. The retrieval fields back [Server Storage](#server-storage); the confirmation id and alert flag back the user-read confirmation and alert-message features (see [Peer.md](Peer.md#read-confirmation) and [Peer.md](Peer.md#alert-messages)); the priority backs [Message Composition](#message-composition) and the MSMT send priority, and the tag backs [Message Composition](#message-composition) too.
 
 Packetization is off unless `Packets` is called. With it, payloads are broken into prioritized packets of the host's packet type and reassembled on the other side. The host only says how the five fields the engine needs are stored in its packet (payload id, packet index, packet count, payload length, data); all splitting, reassembly and priority scheduling is the engine's, so a host gets its own packet format and serialization without writing any packetization logic. The packet serializer defaults to a `ProtobufNetworkSerializer` that wraps every packet in an envelope naming its type, a fixed overhead per packet that a leaner custom serializer avoids. `Size` (default 16 KiB) is the largest serialized packet in bytes: the engine measures what the serializer makes of a packet to see how much payload fits, and refuses to start with an error in the log if none does. `Window` (default 1) is how many packets may be in flight over one connection at once, and must be at least 1. Every node must be configured alike, since neither side can tell whether the other packetizes. Interface connections are never packetized.
 
@@ -381,6 +381,52 @@ per-installation local data (see `Docs/Components/Data.md`, `AutoForwardTargetsE
 
 **Sample:** an `"Escalation"` controller, open to every Peer/Client scenario site, that matches any received alert
 or `URGENT`-tagged message.
+
+---
+
+### Server Storage
+
+```csharp
+engine
+    .Server("Server1", "Client1", "Client2")
+    .Server("Server2", "Client3")
+    .ServerStorage("Server1");
+```
+
+Makes the named server users store messages: each keeps a copy of every message it routes (a message from one of its
+children, or one forwarded to it by another server for its own children - never a confirmation or a retrieval
+request), once per message ID, in its own local database. It also answers a client's *retrieval request*, sent from
+the client's RETRIEVE screen (shown in the title bar only for a `NodeRole.Client` on a network where some server
+stores; see `Docs/Components/ViewModels.md`, `IRetrieveViewModel`), by sending back a copy of each stored message
+that fits. Every node states the same configuration, since a client learns which servers store from it, and each
+server must be a user given to `Server`. Calling it again adds to the set.
+
+A retrieval request is not a special wire format. Like a confirmation, it is a message of the configured message
+type, recognized by reading a field: the message mapping's required `Retrieval` group maps the request as ordinary typed
+properties (`IsRequest`, a nullable `From` and `To`, and `Authors`, `Destinations` and `Ids` lists), with
+`IsRequest` false on every ordinary message. Nothing is packed into a string; the host's message type carries each
+criterion in its own field. The request is addressed to the storage server it is for and routed by a
+server like any message (a server hands it on to the addressed server if that is not itself); a node that is not a
+storage server, or a client or peer that receives one, never treats it as a received message. A stored message fits
+when it satisfies every criterion that is set - its original sent time within the range (inclusive, as UTC
+instants), its sender one of the authors, any of its addresses (as written, groups unexpanded) one of the
+destinations, its ID one of the IDs - each list matching any of its entries, exactly and case-insensitively; an
+unset criterion matches anything. Nothing restricts a request to the requester's own traffic: any user can retrieve
+any stored message, whoever sent or received it.
+
+Each found copy keeps the original's ID, sender, sent time, subject, body, priority, tag and security level, but is
+addressed to the requester alone and is never an alert: servers route purely by address list, so the copy has to
+name the requester, and an old alert must not alarm again. It arrives as an ordinary received message, oldest
+first; a client skips any whose ID its Inbox already holds, so retrieving what it already has does nothing. A
+retrieved copy still counts as a received message for anything keyed on receipt (for example, "print received"
+prints it). Storage needs the server's database, which the Client/Server UI opens; a server in Headless mode has none
+and stores nothing.
+
+**Default:** no server stores messages; the RETRIEVE button is never shown.
+
+**Config file:** none; storage is behavior, not a setting.
+
+**Sample:** `Server` (ClientServer scenario) and `Server1` (ServerCluster scenario) store; `Server2` does not.
 
 ---
 

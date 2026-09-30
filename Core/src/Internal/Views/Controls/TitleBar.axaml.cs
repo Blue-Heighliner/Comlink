@@ -41,6 +41,14 @@ internal partial class TitleBar : UserControl
     public static readonly StyledProperty<ICommand?> ShowImportCommandProperty =
         AvaloniaProperty.Register<TitleBar, ICommand?>(nameof(ShowImportCommand));
 
+    /// <summary>Identifies the <see cref="ShowRetrieveCommand"/> styled property.</summary>
+    public static readonly StyledProperty<ICommand?> ShowRetrieveCommandProperty =
+        AvaloniaProperty.Register<TitleBar, ICommand?>(nameof(ShowRetrieveCommand));
+
+    /// <summary>Identifies the <see cref="CanRetrieve"/> styled property.</summary>
+    public static readonly StyledProperty<bool> CanRetrieveProperty =
+        AvaloniaProperty.Register<TitleBar, bool>(nameof(CanRetrieve));
+
     /// <summary>Identifies the <see cref="ShowAutoForwardCommand"/> styled property.</summary>
     public static readonly StyledProperty<ICommand?> ShowAutoForwardCommandProperty =
         AvaloniaProperty.Register<TitleBar, ICommand?>(nameof(ShowAutoForwardCommand));
@@ -153,6 +161,20 @@ internal partial class TitleBar : UserControl
         set => SetValue(ShowImportCommandProperty, value);
     }
 
+    /// <summary>Gets or sets the command invoked when the user clicks the Retrieve button.</summary>
+    public ICommand? ShowRetrieveCommand
+    {
+        get => GetValue(ShowRetrieveCommandProperty);
+        set => SetValue(ShowRetrieveCommandProperty, value);
+    }
+
+    /// <summary>Gets or sets a value indicating whether the Retrieve button is shown.</summary>
+    public bool CanRetrieve
+    {
+        get => GetValue(CanRetrieveProperty);
+        set => SetValue(CanRetrieveProperty, value);
+    }
+
     /// <summary>Gets or sets the command invoked when the user clicks the Auto Forward button.</summary>
     public ICommand? ShowAutoForwardCommand
     {
@@ -252,6 +274,13 @@ internal partial class TitleBar : UserControl
         {
             UpdateActionButtonsVisibility();
         }
+        if (change.Property == CanRetrieveProperty)
+        {
+            Button? retrieveButton = this.FindControl<Button>("RetrieveButton");
+            if (retrieveButton is not null) { retrieveButton.IsVisible = CanRetrieve; }
+            Border? retrieveLeadingSeparator = this.FindControl<Border>("RetrieveLeadingSeparator");
+            if (retrieveLeadingSeparator is not null) { retrieveLeadingSeparator.IsVisible = CanRetrieve; }
+        }
         if (change.Property == HasAutoForwardAccessProperty)
         {
             Button? autoForwardButton = this.FindControl<Button>("AutoForwardButton");
@@ -339,6 +368,9 @@ internal partial class TitleBar : UserControl
 
     private void OnImportClick(object? sender, Avalonia.Interactivity.RoutedEventArgs e)
         => ShowImportCommand?.Execute(null);
+
+    private void OnRetrieveClick(object? sender, Avalonia.Interactivity.RoutedEventArgs e)
+        => ShowRetrieveCommand?.Execute(null);
 
     private void OnAutoForwardClick(object? sender, Avalonia.Interactivity.RoutedEventArgs e)
         => ShowAutoForwardCommand?.Execute(null);

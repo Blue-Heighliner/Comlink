@@ -14,6 +14,7 @@ public sealed class MessageBuilderTests
             .Addresses(m => m.Addresses.Select(a => (a.UserName, a.Type.ParseAddressType(), a.Information)), (m, v) => m.Addresses = [.. v.Select(a => new TestAddressEntry { UserName = a.Name, Type = a.Type.ToString(), Information = a.Information })])
             .SentAt(m => m.SentAt, (m, v) => m.SentAt = v)
             .ConfirmationId(m => m.ConfirmationMessageId, (m, v) => m.ConfirmationMessageId = v)
+            .Retrieval(r => r.IsRequest(m => m.IsRetrieval, (m, v) => m.IsRetrieval = v).From(m => m.RetrievalFrom, (m, v) => m.RetrievalFrom = v).To(m => m.RetrievalTo, (m, v) => m.RetrievalTo = v).Authors(m => m.RetrievalAuthors, (m, v) => m.RetrievalAuthors = [.. v]).Destinations(m => m.RetrievalDestinations, (m, v) => m.RetrievalDestinations = [.. v]).Ids(m => m.RetrievalIds, (m, v) => m.RetrievalIds = [.. v]))
             .IsAlert(m => m.IsAlert, (m, v) => m.IsAlert = v)
             .Priority(m => m.Priority, (m, v) => m.Priority = v)
             .Tag(m => m.Tag, (m, v) => m.Tag = v)
@@ -32,7 +33,7 @@ public sealed class MessageBuilderTests
 
         Assert.Contains("TestMessage", error.Message);
         string[] missing = error.Message[(error.Message.IndexOf(':') + 1)..].Split(',', StringSplitOptions.TrimEntries);
-        Assert.Equal(["Sender", "Subject", "Addresses", "SentAt", "ConfirmationId", "IsAlert", "Priority", "Tag", "SecurityLevel"], missing);
+        Assert.Equal(["Sender", "Subject", "Addresses", "SentAt", "ConfirmationId", "IsAlert", "Priority", "Tag", "SecurityLevel", "Retrieval.IsRequest", "Retrieval.From", "Retrieval.To", "Retrieval.Authors", "Retrieval.Destinations", "Retrieval.Ids"], missing);
     }
 
     /// <summary>The map reads and writes each field of the host's message through the object-typed accessors.</summary>
@@ -50,6 +51,9 @@ public sealed class MessageBuilderTests
         map.SetAddresses(message, [new MessageAddress { UserName = "A", Type = AddressType.Cc }]);
         map.SetSentAt(message, sentAt);
         map.SetConfirmationId(message, "CONFIRMS");
+        map.SetIsRetrieval(message, true);
+        map.SetRetrievalFrom(message, sentAt);
+        map.SetRetrievalAuthors(message, ["ALICE"]);
         map.SetIsAlert(message, true);
         map.SetPriority(message, 7);
         map.SetTag(message, "TAG");
@@ -65,6 +69,10 @@ public sealed class MessageBuilderTests
         Assert.Equal(AddressType.Cc, address.Type);
         Assert.Equal(sentAt, map.GetSentAt(message));
         Assert.Equal("CONFIRMS", map.GetConfirmationId(message));
+        Assert.True(map.GetIsRetrieval(message));
+        Assert.Equal(sentAt, map.GetRetrievalFrom(message));
+        Assert.Equal(["ALICE"], map.GetRetrievalAuthors(message));
+        Assert.Null(map.GetRetrievalTo(message));
         Assert.True(map.GetIsAlert(message));
         Assert.Equal(7, map.GetPriority(message));
         Assert.Equal("TAG", map.GetTag(message));
@@ -116,6 +124,12 @@ public sealed class MessageBuilderTests
         public List<(string Name, AddressType Type, string Information)> Addresses { get; set; } = [];
         public DateTime SentAt { get; set; }
         public string ConfirmationId { get; set; } = "";
+        public bool IsRetrieval { get; set; }
+        public DateTime? RetrievalFrom { get; set; }
+        public DateTime? RetrievalTo { get; set; }
+        public List<string> RetrievalAuthors { get; set; } = [];
+        public List<string> RetrievalDestinations { get; set; } = [];
+        public List<string> RetrievalIds { get; set; } = [];
         public bool IsAlert { get; set; }
         public int Priority { get; set; }
         public string Tag { get; set; } = "";
@@ -129,7 +143,7 @@ public sealed class MessageBuilderTests
         MessageBuilder<Plain> builder = new();
         builder.Id(m => m.Id).Sender(m => m.Sender).Subject(m => m.Subject).Body(m => m.Body)
             .Addresses(m => m.Addresses, (m, v) => m.Addresses = [.. v])
-            .SentAt(m => m.SentAt).ConfirmationId(m => m.ConfirmationId).IsAlert(m => m.IsAlert).Priority(m => m.Priority).Tag(m => m.Tag)
+            .SentAt(m => m.SentAt).ConfirmationId(m => m.ConfirmationId).Retrieval(r => r.IsRequest(m => m.IsRetrieval).From(m => m.RetrievalFrom).To(m => m.RetrievalTo).Authors(m => m.RetrievalAuthors, (m, v) => m.RetrievalAuthors = [.. v]).Destinations(m => m.RetrievalDestinations, (m, v) => m.RetrievalDestinations = [.. v]).Ids(m => m.RetrievalIds, (m, v) => m.RetrievalIds = [.. v])).IsAlert(m => m.IsAlert).Priority(m => m.Priority).Tag(m => m.Tag)
             .SecurityLevel(m => m.SecurityLevel);
         MessageMap map = builder.Build();
         object message = map.Create();
@@ -141,6 +155,9 @@ public sealed class MessageBuilderTests
         map.SetBody(message, "BODY");
         map.SetSentAt(message, sentAt);
         map.SetConfirmationId(message, "CONFIRMS");
+        map.SetIsRetrieval(message, true);
+        map.SetRetrievalFrom(message, sentAt);
+        map.SetRetrievalAuthors(message, ["ALICE"]);
         map.SetIsAlert(message, true);
         map.SetPriority(message, 4);
         map.SetTag(message, "TAG");
@@ -151,6 +168,9 @@ public sealed class MessageBuilderTests
         Assert.Equal(sentAt, typed.SentAt);
         Assert.Equal(("CONFIRMS", true, 4, "TAG"), (typed.ConfirmationId, typed.IsAlert, typed.Priority, typed.Tag));
         Assert.Equal("RESTRICTED", typed.SecurityLevel);
+        Assert.True(typed.IsRetrieval);
+        Assert.Equal(sentAt, typed.RetrievalFrom);
+        Assert.Equal(["ALICE"], typed.RetrievalAuthors);
         Assert.Equal("ID", map.GetId(message));
         Assert.Equal(4, map.GetPriority(message));
         Assert.Equal("RESTRICTED", map.GetSecurityLevel(message));
@@ -192,7 +212,7 @@ public sealed class MessageBuilderTests
             .Addresses(
                 m => m.Addresses.Select(a => (a.UserName, a.Type.ParseAddressType())),
                 (m, v) => m.Addresses = [.. v.Select(a => new TestAddressEntry { UserName = a.Name, Type = a.Type.ToString() })])
-            .SentAt(m => default, (m, v) => { }).ConfirmationId(m => "", (m, v) => { }).IsAlert(m => false, (m, v) => { }).Priority(m => 0, (m, v) => { }).Tag(m => "", (m, v) => { })
+            .SentAt(m => default, (m, v) => { }).ConfirmationId(m => "", (m, v) => { }).Retrieval(r => r.IsRequest(m => false, (m, v) => { }).From(m => null, (m, v) => { }).To(m => null, (m, v) => { }).Authors(m => [], (m, v) => { }).Destinations(m => [], (m, v) => { }).Ids(m => [], (m, v) => { })).IsAlert(m => false, (m, v) => { }).Priority(m => 0, (m, v) => { }).Tag(m => "", (m, v) => { })
             .SecurityLevel(m => "", (m, v) => { });
         MessageMap map = builder.Build();
         object message = map.Create();

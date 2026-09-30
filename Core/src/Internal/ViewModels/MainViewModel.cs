@@ -71,6 +71,10 @@ internal interface IMainViewModel
     /// navigates elsewhere.
     /// </summary>
     IStagedSendViewModel StagedSend { get; }
+    /// <summary>Gets the retrieve ViewModel driving the retrieve screen.</summary>
+    IRetrieveViewModel Retrieve { get; }
+    /// <summary>Gets a value indicating whether the title bar's RETRIEVE button is shown: only for a <see cref="NodeRole.Client"/> on a network where at least one server stores messages (see <see cref="IEngineBuilder.ServerStorage"/>).</summary>
+    bool CanRetrieve { get; }
     /// <summary>Gets the auto forward ViewModel driving the auto forward screen.</summary>
     IAutoForwardViewModel AutoForward { get; }
     /// <summary>Gets a value indicating whether the current user has access to at least one auto forward controller, and so should see the title bar's AUTO FORWARD button at all.</summary>
@@ -85,6 +89,8 @@ internal interface IMainViewModel
     IRelayCommand ShowExportCommand { get; }
     /// <summary>Displays the import screen in the content area, refreshing the available drive list first.</summary>
     IRelayCommand ShowImportCommand { get; }
+    /// <summary>Displays the retrieve screen in the content area.</summary>
+    IRelayCommand ShowRetrieveCommand { get; }
     /// <summary>Displays the auto forward screen in the content area, refreshing which controllers the current user has access to first.</summary>
     IRelayCommand ShowAutoForwardCommand { get; }
     /// <summary>Displays the print manager screen in the content area.</summary>
@@ -116,6 +122,7 @@ internal sealed partial class MainViewModel : ObservableObject, IMainViewModel
     /// <param name="export">Export ViewModel driving the export screen.</param>
     /// <param name="import">Import ViewModel driving the import screen.</param>
     /// <param name="stagedSend">Staged send ViewModel driving the staged send screen.</param>
+    /// <param name="retrieve">Retrieve ViewModel driving the retrieve screen.</param>
     /// <param name="autoForward">Auto forward ViewModel driving the auto forward screen.</param>
     /// <param name="printManager">Print manager ViewModel driving the print queue screen.</param>
     /// <param name="help">Help ViewModel driving the help window opened from the title bar.</param>
@@ -136,6 +143,7 @@ internal sealed partial class MainViewModel : ObservableObject, IMainViewModel
         IExportViewModel export,
         IImportViewModel import,
         IStagedSendViewModel stagedSend,
+        IRetrieveViewModel retrieve,
         IAutoForwardViewModel autoForward,
         IPrintManagerViewModel printManager,
         IHelpViewModel help,
@@ -156,6 +164,7 @@ internal sealed partial class MainViewModel : ObservableObject, IMainViewModel
         this.export = export;
         this.import = import;
         this.stagedSend = stagedSend;
+        this.retrieve = retrieve;
         this.autoForward = autoForward;
         this.printManager = printManager;
         Help = help;
@@ -171,6 +180,7 @@ internal sealed partial class MainViewModel : ObservableObject, IMainViewModel
         appVersion = engineController.AppVersion;
         IsServerMode = engineController.Role == NodeRole.Server;
         IsClientMode = engineController.Role == NodeRole.Client;
+        CanRetrieve = IsClientMode && engineController.StorageServers.Count > 0;
         WireEvents();
     }
 
@@ -185,6 +195,7 @@ internal sealed partial class MainViewModel : ObservableObject, IMainViewModel
     private readonly IExportViewModel export;
     private readonly IImportViewModel import;
     private readonly IStagedSendViewModel stagedSend;
+    private readonly IRetrieveViewModel retrieve;
     private readonly IAutoForwardViewModel autoForward;
     private readonly IPrintManagerViewModel printManager;
     private readonly IConnectionStatusViewModel connectionStatus;
@@ -239,6 +250,10 @@ internal sealed partial class MainViewModel : ObservableObject, IMainViewModel
     public IImportViewModel Import => import;
     /// <inheritdoc />
     public IStagedSendViewModel StagedSend => stagedSend;
+    /// <inheritdoc />
+    public IRetrieveViewModel Retrieve => retrieve;
+    /// <inheritdoc />
+    public bool CanRetrieve { get; }
     /// <inheritdoc />
     public IAutoForwardViewModel AutoForward => autoForward;
     /// <inheritdoc />
@@ -352,6 +367,9 @@ internal sealed partial class MainViewModel : ObservableObject, IMainViewModel
     {
         try
         {
+            // A storage server's answer to a retrieval request can include messages this inbox already holds.
+            if (await entryService.IncomingMessageExists(evt.MessageId)) { return; }
+
             MessageEntity entity = await entryService.StoreIncomingMessage(
                 evt.MessageId, evt.FromUser, evt.Subject, evt.Body,
                 evt.Addresses.Select(a => new Data.Entities.AddressData { UserName = a.UserName, Type = a.Type, Information = a.Information }).ToList(),
@@ -481,6 +499,13 @@ internal sealed partial class MainViewModel : ObservableObject, IMainViewModel
     {
         DeselectFolderAndEntry();
         contentArea.ShowEntry(stagedSend);
+    }
+
+    [RelayCommand]
+    private void ShowRetrieve()
+    {
+        DeselectFolderAndEntry();
+        contentArea.ShowEntry(retrieve);
     }
 
     [RelayCommand]

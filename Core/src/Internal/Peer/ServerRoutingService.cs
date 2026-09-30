@@ -26,17 +26,20 @@ internal sealed class ServerRoutingService : IPeerService, IConnectionStatusServ
         IPeerTransportFactory transportFactory,
         IEngineController engineController,
         ICurrentUserProvider currentUserProvider,
+        IMessageStorageService storage,
         ILoggerFactory loggerFactory)
     {
         this.transportFactory = transportFactory;
         this.engineController = engineController;
         this.currentUserProvider = currentUserProvider;
+        this.storage = storage;
         logger = loggerFactory.CreateLogger("ACTIVITY");
     }
 
     private readonly IPeerTransportFactory transportFactory;
     private readonly IEngineController engineController;
     private readonly ICurrentUserProvider currentUserProvider;
+    private readonly IMessageStorageService storage;
     private readonly ILogger logger;
     private readonly PeerConnectionMonitor connectionMonitor = new();
 
@@ -271,6 +274,24 @@ internal sealed class ServerRoutingService : IPeerService, IConnectionStatusServ
         int priority = engineController.GetPriority(message);
         string myName = currentUserProvider.UserName ?? string.Empty;
 
+        if (!userMap.TryGetValue(myName, out _)) { return; }
+
+        if (engineController.IsRetrieval(message))
+        {
+            await RouteRetrieval(childName, message, data, addressedUsers, priority, forward: true);
+            return;
+        }
+
+        await storage.Store(message);
+        await RouteFromChild(message, data);
+    }
+
+    private async Task RouteFromChild(object message, ReadOnlyMemory<byte> data)
+    {
+        HashSet<string> addressedUsers = GetAddressedUsers(message);
+        int priority = engineController.GetPriority(message);
+        string myName = currentUserProvider.UserName ?? string.Empty;
+
         if (!userMap.TryGetValue(myName, out ServerUserConfig? myConfig)) { return; }
 
         List<Task> sends = [.. addressedUsers
@@ -301,9 +322,49 @@ internal sealed class ServerRoutingService : IPeerService, IConnectionStatusServ
 
         if (!userMap.TryGetValue(myName, out ServerUserConfig? myConfig)) { return; }
 
+        if (engineController.IsRetrieval(message))
+        {
+            await RouteRetrieval(engineController.GetFromUser(message), message, data, addressedUsers, priority, forward: false);
+            return;
+        }
+
+        await storage.Store(message);
+
         await Task.WhenAll(addressedUsers
             .Where(user => myConfig.ChildClients.Contains(user, StringComparer.OrdinalIgnoreCase))
             .Select(user => TrySend(user, data, priority)));
+    }
+
+    // A retrieval request is addressed to a server, not to any child client, so ordinary routing would drop it: this
+    // server answers it if it is addressed (and stores), and, for a request that came from a child, hands it on to
+    // every other addressed server, which answers it the same way.
+    private async Task RouteRetrieval(string requester, object request, ReadOnlyMemory<byte> data, HashSet<string> addressedUsers, int priority, bool forward)
+    {
+        string myName = currentUserProvider.UserName ?? string.Empty;
+        List<Task> work = [];
+
+        if (addressedUsers.Contains(myName))
+        {
+            work.Add(AnswerRetrieval(requester, request));
+        }
+
+        if (forward)
+        {
+            work.AddRange(userMap.Keys
+                .Where(server => !string.Equals(server, myName, StringComparison.OrdinalIgnoreCase) && addressedUsers.Contains(server))
+                .Select(server => TrySend(server, data, priority)));
+        }
+
+        await Task.WhenAll(work);
+    }
+
+    private async Task AnswerRetrieval(string requester, object request)
+    {
+        foreach (object copy in await storage.Find(requester, request))
+        {
+            using IMemoryOwner<byte> buf = engineController.NetworkSerializer.Serialize(copy);
+            await RouteFromChild(copy, buf.Memory);
+        }
     }
 
     private HashSet<string> GetAddressedUsers(object message)

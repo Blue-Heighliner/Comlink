@@ -15,6 +15,8 @@ internal interface ILiteDbContext : IDisposable
     ILiteCollection<FolderEntity> Folders { get; }
     /// <summary>Collection of persisted auto forward controller target lists.</summary>
     ILiteCollection<AutoForwardTargetsEntity> AutoForwardTargets { get; }
+    /// <summary>Collection of message copies a storage server keeps.</summary>
+    ILiteCollection<StoredMessageEntity> StoredMessages { get; }
     /// <summary>Opens the database file, binds all collections, and ensures indexes and root folders exist.</summary>
     void Initialize();
 }
@@ -45,6 +47,8 @@ internal sealed class LiteDbContext : ILiteDbContext
     public ILiteCollection<FolderEntity> Folders { get; private set; } = null!;
     /// <summary>Collection of persisted auto forward controller target lists.</summary>
     public ILiteCollection<AutoForwardTargetsEntity> AutoForwardTargets { get; private set; } = null!;
+    /// <summary>Collection of message copies a storage server keeps.</summary>
+    public ILiteCollection<StoredMessageEntity> StoredMessages { get; private set; } = null!;
 
 
     /// <summary>Opens the database file, binds all collections, and ensures indexes and root folders exist.</summary>
@@ -62,6 +66,7 @@ internal sealed class LiteDbContext : ILiteDbContext
         ActivityLogs = db.GetCollection<ActivityLogEntity>("activity_logs");
         Folders = db.GetCollection<FolderEntity>("folders");
         AutoForwardTargets = db.GetCollection<AutoForwardTargetsEntity>("auto_forward_targets");
+        StoredMessages = db.GetCollection<StoredMessageEntity>("stored_messages");
 
         EnsureIndexes();
         EnsureRootFolders();
@@ -88,6 +93,7 @@ internal sealed class LiteDbContext : ILiteDbContext
             mapper.ToDocument(new NoteEntity());
             mapper.ToDocument(new ActivityLogEntity { Events = [string.Empty], EventEntries = [new ActivityLogEntry()] });
             mapper.ToDocument(new FolderEntity { Id = string.Empty, Name = string.Empty });
+            mapper.ToDocument(new StoredMessageEntity { MessageId = string.Empty, Message = message });
             mapper.ToDocument(new AutoForwardTargetsEntity { Id = string.Empty, Targets = [string.Empty] });
         }
     }
@@ -102,6 +108,7 @@ internal sealed class LiteDbContext : ILiteDbContext
         Notes.EnsureIndex(x => x.ModifiedAt);
         ActivityLogs.EnsureIndex(x => x.Date);
         Folders.EnsureIndex(x => x.ParentId);
+        StoredMessages.EnsureIndex(x => x.MessageId);
     }
 
     private void EnsureRootFolders()

@@ -25,6 +25,7 @@ public sealed class MainViewModelTests
         public Mock<IExportViewModel> Export { get; } = new();
         public Mock<IImportViewModel> Import { get; } = new();
         public Mock<IStagedSendViewModel> StagedSend { get; } = new();
+        public Mock<IRetrieveViewModel> Retrieve { get; } = new();
         public Mock<IAutoForwardViewModel> AutoForward { get; } = new();
         public Mock<IPrintManagerViewModel> PrintManager { get; } = new();
         public Mock<IHelpViewModel> Help { get; } = new();
@@ -57,6 +58,7 @@ public sealed class MainViewModelTests
                 Export.Object,
                 Import.Object,
                 StagedSend.Object,
+                Retrieve.Object,
                 AutoForward.Object,
                 PrintManager.Object,
                 Help.Object,
@@ -83,6 +85,7 @@ public sealed class MainViewModelTests
         Assert.Same(s.Export.Object, vm.Export);
         Assert.Same(s.Import.Object, vm.Import);
         Assert.Same(s.StagedSend.Object, vm.StagedSend);
+        Assert.Same(s.Retrieve.Object, vm.Retrieve);
         Assert.Same(s.AutoForward.Object, vm.AutoForward);
         Assert.Same(s.Help.Object, vm.Help);
     }
@@ -541,6 +544,52 @@ public sealed class MainViewModelTests
         s.Import.Raise(i => i.StagedSendsReady += null!);
 
         s.ContentArea.Verify(c => c.ShowEntry((object)s.StagedSend.Object), Times.Once);
+    }
+
+    /// <summary>ShowRetrieveCommand displays the retrieve ViewModel in the content area and deselects the current folder and entry.</summary>
+    [Fact]
+    public void ShowRetrieveCommand_ShowsRetrieveViewAndDeselects()
+    {
+        Setup s = new();
+        MainViewModel vm = s.BuildVm();
+
+        vm.ShowRetrieveCommand.Execute(null);
+
+        s.ContentArea.Verify(c => c.ShowEntry((object)s.Retrieve.Object), Times.Once);
+        s.FolderBar.Verify(f => f.DeselectFolder(), Times.Once);
+        s.EntryBar.Verify(e => e.DeselectEntry(), Times.Once);
+    }
+
+    /// <summary>CanRetrieve is true only for a Client on a network where a server stores messages.</summary>
+    [Theory]
+    [InlineData(NodeRole.Client, true, true)]
+    [InlineData(NodeRole.Client, false, false)]
+    [InlineData(NodeRole.Peer, true, false)]
+    [InlineData(NodeRole.Server, true, false)]
+    public void CanRetrieve_RequiresClientRoleAndAStorageServer(NodeRole role, bool hasStorageServer, bool expected)
+    {
+        Setup s = new();
+        s.EngineController.Setup(e => e.Role).Returns(role);
+        s.EngineController.Setup(e => e.StorageServers).Returns(hasStorageServer ? ["Server"] : []);
+
+        MainViewModel vm = s.BuildVm();
+
+        Assert.Equal(expected, vm.CanRetrieve);
+    }
+
+    /// <summary>A message the Inbox already holds is not stored or shown a second time.</summary>
+    [Fact]
+    public async Task MessageReceived_AlreadyInInbox_IsNotStoredAgain()
+    {
+        Setup s = new();
+        s.EntryService.Setup(e => e.IncomingMessageExists("M1")).ReturnsAsync(true);
+        MainViewModel vm = s.BuildVm();
+
+        s.Connection.Raise(c => c.MessageReceived += null!, new MessageReceivedEvent { MessageId = "M1", FromUser = "BOB" });
+        await Task.Delay(100);
+
+        s.EntryService.Verify(e => e.StoreIncomingMessage(It.IsAny<string>(), It.IsAny<string>(), It.IsAny<string>(), It.IsAny<string>(), It.IsAny<List<AddressData>>(), It.IsAny<DateTime>(), It.IsAny<bool>(), It.IsAny<int>(), It.IsAny<string>(), It.IsAny<string>()), Times.Never);
+        GC.KeepAlive(vm);
     }
 
     /// <summary>ShowAutoForwardCommand refreshes the auto forward ViewModel's controller access and displays it in the content area.</summary>

@@ -57,6 +57,13 @@ internal sealed class MessageBuilder<TMessage> : IMessageBuilder<TMessage> where
     public IMessageBuilder<TMessage> ConfirmationId(Expression<Func<TMessage, string>> property) => Map(nameof(ConfirmationId), property);
 
     /// <inheritdoc />
+    public IMessageBuilder<TMessage> Retrieval(Action<IRetrievalBuilder<TMessage>> map)
+    {
+        map(new RetrievalBuilder<TMessage>(fields));
+        return this;
+    }
+
+    /// <inheritdoc />
     public IMessageBuilder<TMessage> IsAlert(Func<TMessage, bool> get, Action<TMessage, bool> set) => Map(nameof(IsAlert), get, set);
 
     /// <inheritdoc />
@@ -98,7 +105,7 @@ internal sealed class MessageBuilder<TMessage> : IMessageBuilder<TMessage> where
     /// <exception cref="InvalidOperationException">A logical field has not been mapped.</exception>
     public MessageMap Build()
     {
-        string[] missing = [.. new[] { nameof(Id), nameof(Sender), nameof(Subject), nameof(Body), nameof(Addresses), nameof(SentAt), nameof(ConfirmationId), nameof(IsAlert), nameof(Priority), nameof(Tag), nameof(SecurityLevel) }.Where(name => !fields.ContainsKey(name))];
+        string[] missing = [.. new[] { nameof(Id), nameof(Sender), nameof(Subject), nameof(Body), nameof(Addresses), nameof(SentAt), nameof(ConfirmationId), nameof(IsAlert), nameof(Priority), nameof(Tag), nameof(SecurityLevel) }.Concat(RetrievalBuilder<TMessage>.Names).Where(name => !fields.ContainsKey(name))];
         if (missing.Length > 0) { throw new InvalidOperationException($"The message mapping for {typeof(TMessage).Name} does not map: {string.Join(", ", missing)}"); }
 
         Func<object, T> Getter<T>(string name) => message => ((Func<TMessage, T>)fields[name].Get)((TMessage)message);
@@ -123,6 +130,18 @@ internal sealed class MessageBuilder<TMessage> : IMessageBuilder<TMessage> where
             SetSentAt = Setter<DateTime>(nameof(SentAt)),
             GetConfirmationId = Getter<string>(nameof(ConfirmationId)),
             SetConfirmationId = Setter<string>(nameof(ConfirmationId)),
+            GetIsRetrieval = Getter<bool>(RetrievalBuilder<TMessage>.IsRequestName),
+            SetIsRetrieval = Setter<bool>(RetrievalBuilder<TMessage>.IsRequestName),
+            GetRetrievalFrom = Getter<DateTime?>(RetrievalBuilder<TMessage>.FromName),
+            SetRetrievalFrom = Setter<DateTime?>(RetrievalBuilder<TMessage>.FromName),
+            GetRetrievalTo = Getter<DateTime?>(RetrievalBuilder<TMessage>.ToName),
+            SetRetrievalTo = Setter<DateTime?>(RetrievalBuilder<TMessage>.ToName),
+            GetRetrievalAuthors = Getter<List<string>>(RetrievalBuilder<TMessage>.AuthorsName),
+            SetRetrievalAuthors = Setter<List<string>>(RetrievalBuilder<TMessage>.AuthorsName),
+            GetRetrievalDestinations = Getter<List<string>>(RetrievalBuilder<TMessage>.DestinationsName),
+            SetRetrievalDestinations = Setter<List<string>>(RetrievalBuilder<TMessage>.DestinationsName),
+            GetRetrievalIds = Getter<List<string>>(RetrievalBuilder<TMessage>.IdsName),
+            SetRetrievalIds = Setter<List<string>>(RetrievalBuilder<TMessage>.IdsName),
             GetIsAlert = Getter<bool>(nameof(IsAlert)),
             SetIsAlert = Setter<bool>(nameof(IsAlert)),
             GetPriority = Getter<int>(nameof(Priority)),

@@ -35,6 +35,15 @@
               Content="IMPORT"
               Foreground="#CCCCCC"
               Click="OnImportClick" />
+      <Border x:Name="RetrieveLeadingSeparator"
+              Classes="titlebar-separator"
+              IsVisible="False" />
+      <Button x:Name="RetrieveButton"
+              Classes="titlebar-action"
+              Content="RETRIEVE"
+              Foreground="#CCCCCC"
+              IsVisible="False"
+              Click="OnRetrieveClick" />
       <Border x:Name="AutoForwardLeadingSeparator"
               Classes="titlebar-separator"
               IsVisible="False" />

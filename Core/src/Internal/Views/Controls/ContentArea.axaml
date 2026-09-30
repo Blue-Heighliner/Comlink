@@ -55,6 +55,10 @@
           <views:StagedSendView DataContext="{Binding}" />
         </DataTemplate>
 
+        <DataTemplate DataType="{x:Type vm:RetrieveViewModel}">
+          <views:RetrieveView DataContext="{Binding}" />
+        </DataTemplate>
+
         <DataTemplate DataType="{x:Type vm:AutoForwardViewModel}">
           <views:AutoForwardView DataContext="{Binding}" />
         </DataTemplate>

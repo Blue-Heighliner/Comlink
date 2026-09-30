@@ -32,6 +32,10 @@ public sealed class MyEngineConfiguration : IEngineConfiguration
             .Addresses(m => m.Addresses, (m, value) => m.Addresses = [.. value])
             .SentAt(m => m.SentAt)
             .ConfirmationId(m => m.ConfirmationId)
+            .Retrieval(r => r.IsRequest(m => m.IsRetrieval).From(m => m.RetrievalFrom).To(m => m.RetrievalTo)
+                .Authors(m => m.RetrievalAuthors, (m, v) => m.RetrievalAuthors = [.. v])
+                .Destinations(m => m.RetrievalDestinations, (m, v) => m.RetrievalDestinations = [.. v])
+                .Ids(m => m.RetrievalIds, (m, v) => m.RetrievalIds = [.. v]))
             .IsAlert(m => m.IsAlert)
             .Priority(m => m.Priority)
             .Tag(m => m.Tag));

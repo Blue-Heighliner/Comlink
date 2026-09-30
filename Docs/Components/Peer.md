@@ -157,6 +157,26 @@ instance, matching the same controller's filter again and forwarding forever. A 
 inaccessible one, or a `Filter` that throws, is skipped without affecting any other configured controller - a
 failure is logged the same way a failing hook is.
 
+## Message Storage & Retrieval
+
+A server named in `IEngineBuilder.ServerStorage` (see [Configuration.md](Configuration.md#server-storage)) keeps a copy
+of what it routes. `ServerRoutingService` hands every message it relays - from a child in `HandleFromChild`, from
+another server in `HandleFromServer` - to `IMessageStorageService.Store` before routing it; `Store` does nothing
+unless the current user is a storage server, skips confirmations and retrieval requests, keeps one copy per message
+ID in the `stored_messages` collection (see [Data.md](Data.md#storedmessageentity)), and logs rather than throws so
+storage can never interrupt routing.
+
+A retrieval request is a message whose mapped `Retrieval.IsRequest` field is true. A server detects it after deserializing,
+instead of the ordinary path: if it is addressed to this server, `IMessageStorageService.Find` returns a copy per
+matching stored message (fits the criteria, whoever sent or received it - the requester, whose copies these are, is
+for a request from a child the authenticated connection's user, for one forwarded by another server it is the message's sender field), and
+each copy is routed on its own address list - a copy addressed to the requester reaches a child of this server
+directly, or the sibling server that owns the requester - without being stored again; if it is addressed to another
+server, it is forwarded to that server, which answers the same way. A client or peer that receives a retrieval
+request (`PeerMessageDispatcher`) ignores it. A client sends the request through
+`IMessageRoutingService.RouteMessage` (`IRetrievalService`), which addresses it to the chosen storage server like any
+message, and the answers arrive through the normal `MessageDelivered` path.
+
 ## Events
 
 | Event | Raised by | Consumed by |

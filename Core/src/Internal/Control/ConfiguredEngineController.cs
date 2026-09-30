@@ -72,6 +72,12 @@ internal sealed class ConfiguredEngineController : IEngineController
     /// <inheritdoc />
     public void SetConfirmationMessageId(object message, string value) => fallback.SetConfirmationMessageId(message, value);
     /// <inheritdoc />
+    public bool IsRetrieval(object message) => fallback.IsRetrieval(message);
+    /// <inheritdoc />
+    public RetrievalCriteria GetRetrieval(object message) => fallback.GetRetrieval(message);
+    /// <inheritdoc />
+    public void SetRetrieval(object message, RetrievalCriteria criteria) => fallback.SetRetrieval(message, criteria);
+    /// <inheritdoc />
     public bool GetIsAlert(object message) => fallback.GetIsAlert(message);
     /// <inheritdoc />
     public void SetIsAlert(object message, bool value) => fallback.SetIsAlert(message, value);
@@ -267,6 +273,8 @@ internal sealed class ConfiguredEngineController : IEngineController
     public IReadOnlyList<ExportFormatDefinition> ExportFormats => fallback.ExportFormats;
     /// <inheritdoc />
     public IReadOnlyList<ImportFormatDefinition> ImportFormats => fallback.ImportFormats;
+    /// <inheritdoc />
+    public IReadOnlyList<string> StorageServers => fallback.StorageServers;
     /// <inheritdoc />
     public IReadOnlyList<AutoForwardControllerDefinition> AutoForwardControllers => fallback.AutoForwardControllers;
 

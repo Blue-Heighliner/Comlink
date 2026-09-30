@@ -20,6 +20,7 @@ Collections initialized:
 | `activity_logs` | `ActivityLogEntity` | Daily activity entries |
 | `folders` | `FolderEntity` | Folder hierarchy |
 | `auto_forward_targets` | `AutoForwardTargetsEntity` | Auto forward controller target lists |
+| `stored_messages` | `StoredMessageEntity` | Copies of routed messages a storage server keeps |
 
 On each `Initialize()` call, root folders are auto-created (Inbox, Outbox, Drafts, Notes, Activity) if absent.
 
@@ -141,6 +142,10 @@ One record per day, accumulated throughout the day.
 
 One document per configured auto forward controller, keyed by the controller's own name rather than an auto-generated ID: `Id (string)` is that name verbatim (see `Docs/Components/Configuration.md#auto-forward-controllers`), and `Targets (List<string>)` is the user names it currently forwards a matching received message to - empty until a user with access adds at least one. No document exists for a controller until its target list is saved for the first time.
 
+### `StoredMessageEntity`
+
+A storage server's copy of one routed message (see `Docs/Components/Configuration.md#server-storage`): `Id (ObjectId)`, `MessageId (string)` denormalized from `Message` and indexed so a duplicate is caught cheaply, `Message (object)` as an instance of `IEngineController.MessageType` stored the same way `MessageEntity.Message` is, and `StoredAt (DateTime)`. Written only by a server whose user is in `IEngineController.StorageServers`; a client's database never has any. A stored `DateTime` reads back as local time, so anything comparing a stored message's sent time converts it to UTC first.
+
 ### Embedded Types
 
 **`AddressData`**: `UserName (string)`, `Type (string)` (`"To"`, `"Cc"` or `"External"`), `Information (string)` (free-form instructions for the user, e.g. `Deliver to Eastside Office`)
@@ -199,6 +204,10 @@ Same interface shape as `DraftRepository`, including `GetAll()` and `GetAllInFol
 | `Get(id)` | Single folder |
 | `GetRootId(type)` | ID of the root folder for a given `FolderType` |
 | `GetTree()` | Builds hierarchical `Folder` tree (returns root `Folder` objects with `Children`) |
+
+### `StoredMessageRepository`
+
+`InsertIfNew(entity)` stores a copy unless one with the same `MessageId` exists (serialized by a lock so two concurrent routes of one message keep one), returning whether it stored; `GetAll()` returns every copy, since a message's searchable fields live inside the host's opaque type and cannot be queried in LiteDB.
 
 ### `AutoForwardTargetsRepository`
 

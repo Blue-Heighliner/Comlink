@@ -24,6 +24,7 @@ internal sealed class EngineBuilder : IEngineBuilder, IAsyncDisposable
     private readonly List<ExportFormatDefinition> exportFormats = [];
     private readonly List<ImportFormatDefinition> importFormats = [];
     private readonly List<AutoForwardControllerDefinition> autoForwardControllers = [];
+    private readonly List<string> storageServers = [];
     private ServiceProvider? bootstrap;
 
     /// <summary>The message mapping, or <see langword="null"/> until <see cref="Message{TMessage}"/> is called.</summary>
@@ -128,6 +129,8 @@ internal sealed class EngineBuilder : IEngineBuilder, IAsyncDisposable
     public IReadOnlyList<ExportFormatDefinition> ExportFormats => exportFormats;
     /// <summary>The custom import formats, in the order added.</summary>
     public IReadOnlyList<ImportFormatDefinition> ImportFormats => importFormats;
+    /// <summary>The server users that store the messages they route.</summary>
+    public IReadOnlyList<string> StorageServerNames => storageServers;
     /// <summary>The custom auto forward controllers, in the order added.</summary>
     public IReadOnlyList<AutoForwardControllerDefinition> AutoForwardControllers => autoForwardControllers;
 
@@ -432,6 +435,16 @@ internal sealed class EngineBuilder : IEngineBuilder, IAsyncDisposable
     public IEngineBuilder Server(string name, params string[] childClients)
     {
         servers[name] = new ServerUserConfig { ChildClients = childClients };
+        return this;
+    }
+
+    /// <inheritdoc />
+    public IEngineBuilder ServerStorage(params string[] serverNames)
+    {
+        foreach (string name in serverNames)
+        {
+            if (!storageServers.Contains(name, StringComparer.OrdinalIgnoreCase)) { storageServers.Add(name); }
+        }
         return this;
     }
 

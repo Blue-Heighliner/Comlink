@@ -17,6 +17,7 @@ public sealed class TestEngineConfiguration(bool packets = false) : IEngineConfi
                 (m, value) => m.Addresses = [.. value.Select(a => new TestAddressEntry { UserName = a.Name, Type = a.Type.ToString(), Information = a.Information })])
             .SentAt(m => m.SentAt)
             .ConfirmationId(m => m.ConfirmationMessageId)
+            .Retrieval(r => r.IsRequest(m => m.IsRetrieval).From(m => m.RetrievalFrom).To(m => m.RetrievalTo).Authors(m => m.RetrievalAuthors, (m, v) => m.RetrievalAuthors = [.. v]).Destinations(m => m.RetrievalDestinations, (m, v) => m.RetrievalDestinations = [.. v]).Ids(m => m.RetrievalIds, (m, v) => m.RetrievalIds = [.. v]))
             .IsAlert(m => m.IsAlert)
             .Priority(m => m.Priority)
             .Tag(m => m.Tag)
