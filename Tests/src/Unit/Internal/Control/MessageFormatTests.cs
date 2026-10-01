@@ -2,29 +2,29 @@ namespace BlueHeighliner.Comlink.Tests.Unit.Internal.Control;
 
 /// <summary>
 /// Unit tests for <see cref="EngineController"/>'s delegation of the
-/// <see cref="IEngineController"/> message fields to the mapping stated by the host, using <see cref="TestEngineController"/>/<see cref="TestMessage"/>
+/// <see cref="IEngineController"/> message fields to the mapping stated by the host, using <see cref="TestEngineController"/>/<see cref="TestFrame"/>
 /// as the concrete pair.
 /// </summary>
 public sealed class MessageFormatTests
 {
     private readonly IEngineController format = new TestEngineController();
 
-    /// <summary>MessageType reflects the generic type argument.</summary>
+    /// <summary>FrameType reflects the generic type argument.</summary>
     [Fact]
     public void MessageType_ReflectsGenericArgument()
     {
-        Assert.Equal(typeof(TestMessage), format.MessageType);
+        Assert.Equal(typeof(TestFrame), format.FrameType);
     }
 
-    /// <summary>CreateMessage produces a new, distinct instance of the concrete message type each time.</summary>
+    /// <summary>CreateFrame produces a new, distinct instance of the concrete frame type each time.</summary>
     [Fact]
     public void CreateMessage_ProducesDistinctInstances()
     {
-        object first = format.CreateMessage();
-        object second = format.CreateMessage();
+        object first = format.CreateFrame();
+        object second = format.CreateFrame();
 
-        Assert.IsType<TestMessage>(first);
-        Assert.IsType<TestMessage>(second);
+        Assert.IsType<TestFrame>(first);
+        Assert.IsType<TestFrame>(second);
         Assert.NotSame(first, second);
     }
 
@@ -32,7 +32,7 @@ public sealed class MessageFormatTests
     [Fact]
     public void SettersAndGetters_ThroughObjectSurface_RoundTrip()
     {
-        object message = format.CreateMessage();
+        object message = format.CreateFrame();
         DateTime sentAt = new(2025, 7, 4, 12, 0, 0, DateTimeKind.Utc);
         List<MessageAddress> addresses =
         [
@@ -40,7 +40,7 @@ public sealed class MessageFormatTests
             new MessageAddress { UserName = "GAMMA", Type = AddressType.Cc }
         ];
 
-        format.SetMessageId(message, "MSG1");
+        format.SetFrameId(message, "MSG1");
         format.SetFromUser(message, "ALPHA");
         format.SetSubject(message, "Hello");
         format.SetBody(message, "World");
@@ -50,7 +50,7 @@ public sealed class MessageFormatTests
         format.SetIsAlert(message, true);
         format.SetPriority(message, 3);
 
-        Assert.Equal("MSG1", format.GetMessageId(message));
+        Assert.Equal("MSG1", format.GetFrameId(message));
         Assert.Equal("ALPHA", format.GetFromUser(message));
         Assert.Equal("Hello", format.GetSubject(message));
         Assert.Equal("World", format.GetBody(message));
@@ -67,13 +67,13 @@ public sealed class MessageFormatTests
         Assert.Equal(AddressType.Cc, roundTripped[1].Type);
     }
 
-    /// <summary>Values set directly on the concrete TestMessage are visible through the object-typed IEngineController getters, confirming the explicit interface implementation casts to the same instance rather than a copy.</summary>
+    /// <summary>Values set directly on the concrete TestFrame are visible through the object-typed IEngineController getters, confirming the explicit interface implementation casts to the same instance rather than a copy.</summary>
     [Fact]
     public void ObjectSurface_ReadsBackFieldsSetDirectlyOnConcreteType()
     {
-        TestMessage concrete = new() { MessageId = "DIRECT", FromUser = "DELTA" };
+        TestFrame concrete = new() { MessageId = "DIRECT", FromUser = "DELTA" };
 
-        Assert.Equal("DIRECT", format.GetMessageId(concrete));
+        Assert.Equal("DIRECT", format.GetFrameId(concrete));
         Assert.Equal("DELTA", format.GetFromUser(concrete));
     }
 }

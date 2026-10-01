@@ -29,7 +29,7 @@ public sealed class MessageStorageServiceTests : IDisposable
         if (Directory.Exists(dir)) { Directory.Delete(dir, recursive: true); }
     }
 
-    private static TestMessage Message(string id, string from, DateTime sentAt, params string[] to) => new()
+    private static TestFrame Message(string id, string from, DateTime sentAt, params string[] to) => new()
     {
         MessageId = id,
         FromUser = from,
@@ -42,9 +42,9 @@ public sealed class MessageStorageServiceTests : IDisposable
         Addresses = [.. to.Select(u => new TestAddressEntry { UserName = u, Type = "To" })]
     };
 
-    private static TestMessage Request(RetrievalCriteria criteria)
+    private static TestFrame Request(RetrievalCriteria criteria)
     {
-        TestMessage request = new() { MessageId = "REQ" };
+        TestFrame request = new() { MessageId = "REQ" };
         new TestEngineController().SetRetrieval(request, criteria);
         return request;
     }
@@ -54,7 +54,7 @@ public sealed class MessageStorageServiceTests : IDisposable
     private static readonly DateTime day3 = new(2026, 1, 3, 12, 0, 0, DateTimeKind.Utc);
 
     private async Task<List<string>> Ids(string requester, RetrievalCriteria criteria)
-        => [.. (await service.Find(requester, Request(criteria))).Select(m => ((TestMessage)m).MessageId)];
+        => [.. (await service.Find(requester, Request(criteria))).Select(m => ((TestFrame)m).MessageId)];
 
     /// <summary>Only a user named in StorageServers keeps messages.</summary>
     [Fact]
@@ -68,11 +68,24 @@ public sealed class MessageStorageServiceTests : IDisposable
         Assert.Empty(ctx.StoredMessages.FindAll());
     }
 
+    /// <summary>A frame that is not a message is never kept, though it is otherwise ordinary.</summary>
+    [Fact]
+    public async Task Store_FrameThatIsNotAMessage_IsNotKept()
+    {
+        currentUser.SetupGet(p => p.UserName).Returns(controller.Object.StorageServers.First());
+        TestFrame frame = Message("F1", "ALICE", day1, "BOB");
+        frame.IsHidden = true;
+
+        await service.Store(frame);
+
+        Assert.Empty(ctx.StoredMessages.FindAll());
+    }
+
     /// <summary>A confirmation or a retrieval request is not user content and is never kept.</summary>
     [Fact]
     public async Task Store_ConfirmationOrRetrievalRequest_IsNotKept()
     {
-        await service.Store(new TestMessage { MessageId = "C1", ConfirmationMessageId = "M1" });
+        await service.Store(new TestFrame { MessageId = "C1", ConfirmationMessageId = "M1" });
         await service.Store(Request(new RetrievalCriteria()));
 
         Assert.Empty(ctx.StoredMessages.FindAll());
@@ -131,7 +144,7 @@ public sealed class MessageStorageServiceTests : IDisposable
     {
         await service.Store(Message("M1", "ALICE", day1, "CAROL", "BOB"));
 
-        TestMessage copy = (TestMessage)Assert.Single(await service.Find("CAROL", Request(new RetrievalCriteria())));
+        TestFrame copy = (TestFrame)Assert.Single(await service.Find("CAROL", Request(new RetrievalCriteria())));
 
         Assert.Equal(("M1", "ALICE", "Subject M1", "Body M1"), (copy.MessageId, copy.FromUser, copy.Subject, copy.Body));
         Assert.Equal(day1, copy.SentAt);

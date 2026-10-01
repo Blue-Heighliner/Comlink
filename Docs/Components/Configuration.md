@@ -1,6 +1,6 @@
 # Engine Configuration
 
-A host tells the engine how to run by implementing `IEngineConfiguration` and naming it to `Engine.Start<T>`, which constructs it through dependency injection. The engine calls `Configure` once, before anything else starts, handing it an `IEngineBuilder`; every call on the builder is optional except `Message<TMessage>`, which states the message type and everything typed with it (through `IMessageBuilder<TMessage>`), and each returns the builder so a configuration reads as one fluent expression. `Packets<TPacket>` likewise states the packet type and what is typed with it (through `IPacketBuilder<TPacket>`). The builder is the only public way to change what the engine does; everything it collects is read internally through `IEngineController`, which is not part of the public surface. See each area below for what it covers.
+A host tells the engine how to run by implementing `IEngineConfiguration` and naming it to `Engine.Start<T>`, which constructs it through dependency injection. The engine calls `Configure` once, before anything else starts, handing it an `IEngineBuilder`; every call on the builder is optional except `Frames<TFrame>`, which states the frame type and everything typed with it (through `IFrameBuilder<TFrame>`), and each returns the builder so a configuration reads as one fluent expression. `Packets<TPacket>` likewise states the packet type and what is typed with it (through `IPacketBuilder<TPacket>`). The builder is the only public way to change what the engine does; everything it collects is read internally through `IEngineController`, which is not part of the public surface. See each area below for what it covers.
 
 ## Concept
 
@@ -10,7 +10,7 @@ Engine never reads environment variables, hardcodes paths, or calls host-specifi
 public sealed class MyEngineConfiguration : IEngineConfiguration
 {
     public IEngineBuilder Configure(IEngineBuilder engine) => engine
-        .Message<MyMessage>(message => message
+        .Frames<MyFrame>(frame => frame
             .Id(m => m.Id)
             // ...every other logical field...
             )
@@ -21,7 +21,7 @@ public sealed class MyEngineConfiguration : IEngineConfiguration
 await Engine.Start<MyEngineConfiguration>(args);
 ```
 
-`EngineBuilder` (internal) implements `IEngineBuilder` by recording what it is told; nothing is interpreted while configuring. `EngineController` (internal) reads the recorded state through `IEngineController` and supplies the default for every setting the host left alone, which is what every service, ViewModel and repository in the engine depends on. Keeping the recording separate from the reading means a configuration can be checked as a whole (`Engine.Start` throws an `InvalidOperationException` naming a missing message type or unmapped field before any service starts), and that tests can replace a single behavior of the controller.
+`EngineBuilder` (internal) implements `IEngineBuilder` by recording what it is told; nothing is interpreted while configuring. `EngineController` (internal) reads the recorded state through `IEngineController` and supplies the default for every setting the host left alone, which is what every service, ViewModel and repository in the engine depends on. Keeping the recording separate from the reading means a configuration can be checked as a whole (`Engine.Start` throws an `InvalidOperationException` naming a missing frame type or unmapped field before any service starts), and that tests can replace a single behavior of the controller.
 
 **A configuration describes non-config-file behavior only. It must never read `NetworkConfig` itself, and it must never read an environment variable.** Everything about the network's users, and the settings of the node a user runs, comes from the network configuration file, applied by the engine itself: the users' info is read by `EngineController`, and the node settings (identity certificate file, alert, tag and print settings) are applied as a decorator layered on top of it (see [Network Configuration File](#network-configuration-file) below). This split keeps "what does this app do out of the box" (the configuration) and "who is on this network and how do they run" (the file) as two independent, separately testable concerns, and means a host is never tempted to reimplement file parsing just to add one small piece of non-file behavior.
 
@@ -37,30 +37,32 @@ The engine defines the schema of one network configuration file, shared by every
 
 ## Settings
 
-### Message Format
+### Frame Format
 
 ```csharp
 engine
-    .Message<MyMessage>(message => message
+    .Frames<MyFrame>(frame => frame
         .Id(m => m.Id)
         .Sender(...).Subject(...).Body(...).Addresses(...).SentAt(...)
-        .ConfirmationId(...).Retrieval(...).IsAlert(...).Priority(...).Tag(...))
+        .ConfirmationId(...).IsMessage(...).Retrieval(...).IsAlert(...).Priority(...).Tag(...))
     .Packets<MyPacket>(packet => packet
         .PayloadId(...).Index(...).Count(...).PayloadLength(...).Data(...)
         .Size(16 * 1024).Window(1));
 ```
 
-`Message` supplies the concrete message type used throughout the engine, on the wire (peer and interface connections) and in the database, and maps the engine's logical fields onto that type's real fields. Each mapping is a getter and a setter, so the engine reads and builds the host's message without ever assuming a field name or shape. Where the host's field has the type the engine wants, naming the property (`.Id(m => m.Id)`) is enough: the builder reads the member access from the expression and compiles a getter and setter from it once, when the configuration runs, so using it costs no more than writing them out (an init-only property works; a member that cannot be assigned, or an expression that is not a plain member access such as `m => m.Id.ToUpper()`, is refused at once with an error naming it). Where the types differ - the addresses, which the host stores in its own recipient shape and converts to and from `(string Name, AddressType Type, string Information)` tuples (the getter returns any sequence of them, the setter receives a list; `Information` is optional custom per-address instructions, e.g. `Deliver to Eastside Office` - a `(string Name, AddressType Type)` overload with no `Information` is also available for a host with no use for it), and a packet's data, which is a `ReadOnlyMemory<byte>` - the getter and setter are given explicitly. Every field must be mapped. The type must be LiteDB-serializable for storage, and must additionally satisfy whatever serializer is used for the wire, which by default is a `ProtobufNetworkSerializer` that builds only the message type (so `[ProtoContract]`/`[ProtoMember]` attributes). `Serializer` on the message builder replaces it, as long as every node this instance talks to (including its own interface connections) uses a matching one: Comlink never negotiates or advertises which format a payload used, so a mismatch deserializes garbage or throws rather than failing cleanly. `INetworkSerializer.Deserialize` is given only the bytes, so a custom serializer must make its format self-describing enough to rebuild the right type itself (the default wraps every payload in an outer envelope naming the type). `Create` replaces `new TMessage()` for building an empty message. The retrieval fields back [Server Storage](#server-storage); the confirmation id and alert flag back the user-read confirmation and alert-message features (see [Peer.md](Peer.md#read-confirmation) and [Peer.md](Peer.md#alert-messages)); the priority backs [Message Composition](#message-composition) and the MSMT send priority, and the tag backs [Message Composition](#message-composition) too.
+A **frame** is the data format of all network traffic other than packets: every heartbeat, read confirmation, retrieval request and user message, and any other frame the host's own processors exchange, is an instance of the host's one frame type. A **message** is a kind of frame, the kind the user sees: it is shown in the UI, stored in the Inbox when received and in the Outbox when sent, and is what auto forward, printing, server storage and external systems act on. `IsMessage` maps a boolean on the frame type that says which a given frame is; a frame that is not a message is still routed and handed to the network processor but is never shown or stored. The engine sets it itself on every frame it builds, true for the messages users send and receive, false for heartbeats, confirmations and retrieval requests; a host sets it on a frame it sends through a processor when the recipient should see it (a host may map it inversely, as the tests do with a `IsHidden` flag, so that a default frame is a message).
+
+`Frames` supplies the concrete frame type used throughout the engine, on the wire (peer and interface connections) and in the database, and maps the engine's logical fields onto that type's real fields. Each mapping is a getter and a setter, so the engine reads and builds the host's frame without ever assuming a field name or shape. Where the host's field has the type the engine wants, naming the property (`.Id(m => m.Id)`) is enough: the builder reads the member access from the expression and compiles a getter and setter from it once, when the configuration runs, so using it costs no more than writing them out (an init-only property works; a member that cannot be assigned, or an expression that is not a plain member access such as `m => m.Id.ToUpper()`, is refused at once with an error naming it). Where the types differ - the addresses, which the host stores in its own recipient shape and converts to and from `(string Name, AddressType Type, string Information)` tuples (the getter returns any sequence of them, the setter receives a list; `Information` is optional custom per-address instructions, e.g. `Deliver to Eastside Office` - a `(string Name, AddressType Type)` overload with no `Information` is also available for a host with no use for it), and a packet's data, which is a `ReadOnlyMemory<byte>` - the getter and setter are given explicitly. Every field must be mapped. The type must be LiteDB-serializable for storage, and must additionally satisfy whatever serializer is used for the wire, which by default is a `ProtobufNetworkSerializer` that builds only the frame type (so `[ProtoContract]`/`[ProtoMember]` attributes). `Serializer` on the message builder replaces it, as long as every node this instance talks to (including its own interface connections) uses a matching one: Comlink never negotiates or advertises which format a payload used, so a mismatch deserializes garbage or throws rather than failing cleanly. `INetworkSerializer.Deserialize` is given only the bytes, so a custom serializer must make its format self-describing enough to rebuild the right type itself (the default wraps every payload in an outer envelope naming the type). `Create` replaces `new TFrame()` for building an empty message. The retrieval fields back [Server Storage](#server-storage); the confirmation id and alert flag back the user-read confirmation and alert-message features (see [Peer.md](Peer.md#read-confirmation) and [Peer.md](Peer.md#alert-messages)); the priority backs [Message Composition](#message-composition) and the MSMT send priority, and the tag backs [Message Composition](#message-composition) too.
 
 Packetization is off unless `Packets<TPacket>` is called. With it, payloads are broken into prioritized packets of the host's packet type and reassembled on the other side. The host only says how the five fields the engine needs are stored in its packet (payload id, packet index, packet count, payload length, data); all splitting, reassembly and priority scheduling is the engine's, so a host gets its own packet format and serialization without writing any packetization logic. The packet serializer defaults to a `ProtobufNetworkSerializer` that wraps every packet in an envelope naming its type, a fixed overhead per packet that a leaner custom serializer avoids. `Size` (default 16 KiB) is the largest serialized packet in bytes: the engine measures what the serializer makes of a packet to see how much payload fits, and refuses to start with an error in the log if none does. `Window` (default 1) is how many packets may be in flight over one connection at once, and must be at least 1. Every node must be configured alike, since neither side can tell whether the other packetizes. Interface connections are never packetized.
 
-Internally the mappings become a `MessageMap` and a `PacketMap`, whose accessors take the message or packet as an `object`, since that is the boundary every other layer (LiteDB storage, MSMT wire serialization) operates at. A packet member of an engine that never called `Packets` throws `NotSupportedException`, because nothing calls them.
+Internally the mappings become a `FrameMap` and a `PacketMap`, whose accessors take the frame or packet as an `object`, since that is the boundary every other layer (LiteDB storage, MSMT wire serialization) operates at. A packet member of an engine that never called `Packets` throws `NotSupportedException`, because nothing calls them.
 
-**Default:** none for the message, since the engine has no message DTO of its own; no packetization.
+**Default:** none for the frame, since the engine has no frame DTO of its own; no packetization.
 
-**Network file:** none; the file has no field for any message or packet member, since the whole point is that the engine does not know the DTO's shape.
+**Network file:** none; the file has no field for any frame or packet member, since the whole point is that the engine does not know the DTO's shape.
 
-**Sample:** `SampleEngineConfiguration` maps every logical field onto `SampleMessage`, a DTO with deliberately differently-named fields (`Id`, `Sender`, `Title`, `Text`, `Recipients`, ...) to demonstrate that the mapping, not any assumed field name or shape, is what the engine relies on, and turns packetization on with `SamplePacket` and the default size and window.
+**Sample:** `SampleEngineConfiguration` maps every logical field onto `SampleFrame`, a DTO with deliberately differently-named fields (`Id`, `Sender`, `Title`, `Text`, `Recipients`, ...) to demonstrate that the mapping, not any assumed field name or shape, is what the engine relies on, and turns packetization on with `SamplePacket` and the default size and window.
 
 ---
 
@@ -154,12 +156,12 @@ The current user's info is what decides how this node behaves, so it is read onc
 
 ```csharp
 engine
-    .Message<MyMessage>(message => message.InitialProcessor<MyMessageIntroduction>())
+    .Frames<MyFrame>(frame => frame.InitialProcessor<MyFrameIntroduction>())
     .Packets<MyPacket>(packet => packet.InitialProcessor<MyPacketIntroduction>())
     .Identify(connection => ...);
 ```
 
-Who is on the other end of a connection, decided as the connection forms. All traffic between nodes is a serialized instance of the configured message type, or of the packet type when packets are configured, and nothing else, so the introduction is too: an `IInitialPacketProcessor<TPacket>` (stated on the packet configuration) and an `IInitialMessageProcessor<TMessage>` (stated on the message configuration) each get `OnConnected` on both nodes when a connection forms, `OnInitial` on the accepting node for each item the opener sent and `OnReply` on the opener for each item the accepting node sent, every time with a controller that can send an item, mark the connection fully connected as a user name, or disconnect it. The packet exchange runs beneath the packetizer and first, the message exchange above it, and the name a processor marks the connection connected as wins; otherwise `Identify` is handed an `IConnectionInfo` (an `IIpConnectionInfo` for IP: the remote host, port and certificate names; an `ISerialConnectionInfo` for serial: the port and addresses; and this node's own `LocalUser`) and returns the user name, or `null` to let the engine decide. The exchange, where it sits in the transport stack, and what the engine does by default are described in [Identification.md](Identification.md). Every node on a network must be configured alike, as with packetization. Processors are stated by type and instantiated through the running engine's dependency injection container (the instance the host registered for the type, or else one constructed from the host's services), once and on first use, so a processor's constructor can take services.
+Who is on the other end of a connection, decided as the connection forms. All traffic between nodes is a serialized instance of the configured frame type, or of the packet type when packets are configured, and nothing else, so the introduction is too: an `IInitialPacketProcessor<TPacket>` (stated on the packet configuration) and an `IInitialFrameProcessor<TFrame>` (stated on the message configuration) each get `OnConnected` on both nodes when a connection forms, `OnInitial` on the accepting node for each item the opener sent and `OnReply` on the opener for each item the accepting node sent, every time with a controller that can send an item, mark the connection fully connected as a user name, or disconnect it. The packet exchange runs beneath the packetizer and first, the frame exchange above it, and the name a processor marks the connection connected as wins; otherwise `Identify` is handed an `IConnectionInfo` (an `IIpConnectionInfo` for IP: the remote host, port and certificate names; an `ISerialConnectionInfo` for serial: the port and addresses; and this node's own `LocalUser`) and returns the user name, or `null` to let the engine decide. The exchange, where it sits in the transport stack, and what the engine does by default are described in [Identification.md](Identification.md). Every node on a network must be configured alike, as with packetization. Processors are stated by type and instantiated through the running engine's dependency injection container (the instance the host registered for the type, or else one constructed from the host's services), once and on first use, so a processor's constructor can take services.
 
 **Default:** the hook returns `null` (the engine identifies an IP connection by its certificate name and a serial connection by its port name), and no initial packet or message processor is stated, so no exchange takes place.
 
@@ -212,13 +214,13 @@ How messages are composed and displayed: the set of selectable priority levels (
 engine.AddressTypeLabel(AddressType.External, "OUTSIDE");
 ```
 
-Overrides the display label shown for one address type, everywhere it appears in the UI: the address type picker in the draft editor, the per-address badge next to each recipient, and the message view's section headers. Each call replaces the label for exactly the type given; every other type keeps its own current label (its own override, if stated, or the default). The underlying `AddressType` value itself never changes - overriding a label only changes what the user reads, not how an address is stored, routed, or mapped through `Message<TMessage>.Addresses`.
+Overrides the display label shown for one address type, everywhere it appears in the UI: the address type picker in the draft editor, the per-address badge next to each recipient, and the message view's section headers. Each call replaces the label for exactly the type given; every other type keeps its own current label (its own override, if stated, or the default). The underlying `AddressType` value itself never changes - overriding a label only changes what the user reads, not how an address is stored, routed, or mapped through `Frames<TFrame>.Addresses`.
 
 **Default:** the enum name itself (`"To"`, `"Cc"`, `"External"`).
 
 **Network file:** none; address type labels have no field in the file.
 
-**Sample:** `SampleEngineConfiguration` renames `External` to `"OUTSIDE"`, matching the `Kind` vocabulary `SampleRecipient` already uses for it (see [Message Format](#message-format)).
+**Sample:** `SampleEngineConfiguration` renames `External` to `"OUTSIDE"`, matching the `Kind` vocabulary `SampleRecipient` already uses for it (see [Frame Format](#frame-format)).
 
 ---
 
@@ -229,7 +231,7 @@ engine
     .SecurityLevels(("PUBLIC", "#2E7D32"), ("INTERNAL", "#1565C0"), ("RESTRICTED", "#C62828"));
 ```
 
-Defines the ordered set of security levels a message may be sent at (`IMessageBuilder<TMessage>.SecurityLevel`, see [Message Format](#message-format)): each a display name paired with the hex color shown for it in the title bar's banner (`SecurityLevelBanner`, replacing the fixed orange "DEBUG" banner every user used to see). Order matters: each level ranks higher than the one stated before it, so the last one given is the most senior. A user's level is the `SecurityLevel` on their [user info](#user-info).
+Defines the ordered set of security levels a message may be sent at (`IFrameBuilder<TFrame>.SecurityLevel`, see [Frame Format](#frame-format)): each a display name paired with the hex color shown for it in the title bar's banner (`SecurityLevelBanner`, replacing the fixed orange "DEBUG" banner every user used to see). Order matters: each level ranks higher than the one stated before it, so the last one given is the most senior. A user's level is the `SecurityLevel` on their [user info](#user-info).
 
 A destination user may only receive a message whose security level their own assigned level ranks at or above: `MessageRoutingService.Route` drops any lower-ranked destination before sending, and the draft editor's security level picker only ever offers the sending user's own level and lower, so a message can be deliberately declassified but never sent above the sender's own clearance. Turning the feature off entirely is just leaving `SecurityLevels` empty (the default): every message maps to an empty security level, the picker is hidden, and no destination is ever blocked for lacking one.
 
@@ -246,10 +248,10 @@ A destination user may only receive a message whose security level their own ass
 ```csharp
 engine
     .PrintReceived()
-    .Message<MyMessage>(message => message.PrintCount(m => m.IsAlert ? 2 : 1));
+    .Frames<MyFrame>(frame => frame.PrintCount(m => m.IsAlert ? 2 : 1));
 ```
 
-The print manager's automatic "print received" behavior: whether its toggle starts enabled, automatically adding every received message to the print queue from the moment the app starts (the user can still toggle it at any time), and how many times each received message is added to the print queue while it is (`0` to not print it, `1` once, `2` for two copies, and so on). Consulted once per received message via `IEntryService.MessageInserted`. `PrintCount` is stated on the message configuration, so the rule receives the message typed; the engine casts once on the host's behalf.
+The print manager's automatic "print received" behavior: whether its toggle starts enabled, automatically adding every received message to the print queue from the moment the app starts (the user can still toggle it at any time), and how many times each received message is added to the print queue while it is (`0` to not print it, `1` once, `2` for two copies, and so on). Consulted once per received message via `IEntryService.MessageInserted`. `PrintCount` is stated on the message configuration, so the rule receives the frame typed; the engine casts once on the host's behalf.
 
 **Default:** off / `1` for every message.
 
@@ -384,7 +386,7 @@ a second apart (`StagedSendMode.Sequential`, a one second `StagedSendDelay`).
 ### Auto Forward Controllers
 
 ```csharp
-engine.Message<MyMessage>(message => message.AutoForward(
+engine.Frames<MyFrame>(frame => frame.AutoForward(
     "Escalation",
     users: ["Alice", "Bob"],
     filter: m => m.Priority >= 2));
@@ -395,7 +397,7 @@ Adds a custom auto forward controller, shown as an option in the auto forward sc
 from freely, persisted between restarts (see `Docs/Components/ViewModels.md`, `IAutoForwardViewModel`). Whenever
 this instance receives a message `filter` accepts, it is forwarded automatically, unchanged in subject and body,
 to every user currently on that target list - no action needed from the user beyond having set the target list up
-once. `filter` receives the message typed, since the controller is stated on the message configuration like `PrintCount`; it is never consulted for a user with no access to the controller, or whose target list is
+once. `filter` receives the frame typed, since the controller is stated on the frame configuration like `PrintCount`; it is never consulted for a user with no access to the controller, or whose target list is
 currently empty, so an inaccessible or unconfigured controller costs nothing per received message beyond that one
 check. The controller's own name is never sent as one of the forwarded message's own addresses, even if a user
 adds themselves to their own target list, avoiding a self-forward loop. Calling this again with the same name
@@ -427,9 +429,9 @@ that fits. Every node states the same user info, since a client learns which ser
 role is `Server` can store.
 
 A retrieval request is not a special wire format. Like a confirmation, it is a message of the configured message
-type, recognized by reading a field: the message mapping's required `Retrieval` group maps the request as ordinary typed
+type, recognized by reading a field: the frame mapping's required `Retrieval` group maps the request as ordinary typed
 properties (`IsRequest`, a nullable `From` and `To`, and `Authors`, `Destinations` and `Ids` lists), with
-`IsRequest` false on every ordinary message. Nothing is packed into a string; the host's message type carries each
+`IsRequest` false on every ordinary message. Nothing is packed into a string; the host's frame type carries each
 criterion in its own field. The request is addressed to the storage server it is for and routed by a
 server like any message (a server hands it on to the addressed server if that is not itself); a node that is not a
 storage server, or a client or peer that receives one, never treats it as a received message. A stored message fits
@@ -530,7 +532,7 @@ Determines whether command-line arguments may override where the [network config
 engine.ExternalSystem(new MyExternalSystem()).ExternalServer(hub);
 ```
 
-`ExternalSystem` adds an external system: a conduit to a system outside Comlink (a socket, a message queue, an HTTP long-poll, etc.) this instance communicates with, resolved once at startup by `ExternalSystemsService`. `ExternalServer` designates one of them as the exclusive upstream hub every outbound message is routed through instead of the normal peer network and every other external system (and adds it if it was not already added). See `Docs/Components/ExternalSystems.md` for the full contract and behavior; the shape here is deliberately terse since that doc covers it in depth. `IExternalSystem` is already non-generic, so no cast is involved. `ExternalSystemBase<TMessage>` is available as an optional convenience base class for implementing `IExternalSystem` with less boilerplate (the connect/poll/disconnect lifecycle, filtering, etc.) but is never required; any `IExternalSystem` implementation works.
+`ExternalSystem` adds an external system: a conduit to a system outside Comlink (a socket, a message queue, an HTTP long-poll, etc.) this instance communicates with, resolved once at startup by `ExternalSystemsService`. `ExternalServer` designates one of them as the exclusive upstream hub every outbound message is routed through instead of the normal peer network and every other external system (and adds it if it was not already added). See `Docs/Components/ExternalSystems.md` for the full contract and behavior; the shape here is deliberately terse since that doc covers it in depth. `IExternalSystem` is already non-generic, so no cast is involved. `ExternalSystemBase<TFrame>` is available as an optional convenience base class for implementing `IExternalSystem` with less boilerplate (the connect/poll/disconnect lifecycle, filtering, etc.) but is never required; any `IExternalSystem` implementation works.
 
 Each external system is constructed directly by the configuration, not resolved through DI, so a logger it is given by the configuration comes from the bootstrap container and writes to none of the engine's logs (the engine's logging providers, e.g. `DailyFileLoggerProvider`, need the configuration's output for their log file location). `ExternalSystemsService` instead calls `IExternalSystem.AttachLogger` on each system, using its own `ILoggerFactory` from the running container, before starting it, see `Docs/Components/ExternalSystems.md`.
 
@@ -545,27 +547,27 @@ Each external system is constructed directly by the configuration, not resolved 
 ### Network Processor
 
 ```csharp
-engine.Message<MyMessage>(message => message.Processor<MyNetworkProcessor>());
+engine.Frames<MyFrame>(frame => frame.Processor<MyNetworkProcessor>());
 
-public sealed class MyNetworkProcessor : INetworkProcessor<MyMessage>
+public sealed class MyNetworkProcessor : INetworkProcessor<MyFrame>
 {
-    public Task OnConnected(INetworkConnectedContext<MyMessage> context) { ... }
-    public Task OnDisconnected(INetworkDisconnectedContext<MyMessage> context) { ... }
-    public Task OnReceived(INetworkReceivedContext<MyMessage> context) { ... }
+    public Task OnConnected(INetworkConnectedContext<MyFrame> context) { ... }
+    public Task OnDisconnected(INetworkDisconnectedContext<MyFrame> context) { ... }
+    public Task OnReceived(INetworkReceivedContext<MyFrame> context) { ... }
 }
 ```
 
 Runs host code in reaction to peer activity, independent of any UI: `OnConnected`/`OnDisconnected` fire once
 each time a user goes from unreachable to reachable over at least one live peer connection, or the other way
 around (see [Peer.md](Peer.md#network-processor) for exactly what counts as "a live connection" for each
-`UserRole`), handed an `INetworkConnectedContext<TMessage>` or `INetworkDisconnectedContext<TMessage>` whose `TargetUser` names that user; `OnReceived` fires
-for every new (non-confirmation) message this instance receives, handed an `INetworkReceivedContext<TMessage>` whose
-`Message` is that message, typed as the host's own message type - a processor never sees an internal representation of it. The processor is
-stated on the message configuration (`Message`), so every context is generic over that type. Every processor context, network and initial exchange alike, extends the common `IEngineContext`; the network ones add `Send` through `INetworkContext<TMessage>`: `CurrentUser` (this instance's own installed user), `Users`/`ConnectedUsers`
+`UserRole`), handed an `INetworkConnectedContext<TFrame>` or `INetworkDisconnectedContext<TFrame>` whose `TargetUser` names that user; `OnReceived` fires
+for every new (non-confirmation) frame this instance receives, whether or not it is a message, handed an `INetworkReceivedContext<TFrame>` whose
+`Frame` is that frame, typed as the host's own frame type - a processor never sees an internal representation of it. The processor is
+stated on the frame configuration (`Frames`), so every context is generic over that type. Every processor context, network and initial exchange alike, extends the common `IEngineContext`; the network ones add `Send` through `INetworkContext<TFrame>`: `CurrentUser` (this instance's own installed user), `Users`/`ConnectedUsers`
 (every known user, and the subset of them currently reachable, each as a `UserInfo` carrying its directly-assigned
-group memberships but no real installation code), `IsConnected(userName)`, and `Send(TMessage message)`, which originates a new
-outbound message: its message ID, sender, and sent time are overwritten before it is routed (mirroring
-`IServiceConnection.SendMessage`'s own field handling), so a processor only needs to set the content fields. It is
+group memberships but no real installation code), `IsConnected(userName)`, and `Send(TFrame frame)`, which originates a new
+outbound frame: its frame ID, sender, and sent time are overwritten before it is routed (mirroring
+`IServiceConnection.SendMessage`'s own field handling), so a processor only needs to set the content fields, and `IsMessage` when the recipient should see the frame as a message. It is
 fire-and-forget: a processor does not track or await the send, so it returns nothing, and a failed send is logged rather than
 thrown back. Each processor method runs in the background and is not awaited by the engine;
 an exception it throws is logged and never stops a later event from being handled. Each event gets one freshly-built context, so the
@@ -577,7 +579,7 @@ The processor is stated by type and instantiated through the running engine's de
 
 **Network file:** none; a processor is behavior, not a setting.
 
-**Sample:** `SampleNetworkProcessor` sends a newly connected user a welcome message naming who else is currently online (`ConnectedUsers`), tells everyone still online when someone disconnects, and auto-replies `PONG` to any received message tagged `PING` - all via `Send`, so every reaction shows up as an ordinary message in the recipient's Inbox rather than a log line only visible from the host process's own console.
+**Sample:** `SampleNetworkProcessor` sends a newly connected user a welcome message naming who else is currently online (`ConnectedUsers`), tells everyone still online when someone disconnects, and auto-replies `PONG` to any received message tagged `PING` - all via `Send` with `IsMessage` set, so every reaction shows up as an ordinary message in the recipient's Inbox rather than a log line only visible from the host process's own console.
 
 ---
 

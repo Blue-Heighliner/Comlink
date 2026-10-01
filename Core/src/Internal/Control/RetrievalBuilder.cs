@@ -1,16 +1,16 @@
 namespace BlueHeighliner.Comlink.Control;
 
-/// <summary>Implements <see cref="IRetrievalBuilder{TMessage}"/>, recording each mapping in the owning <see cref="MessageBuilder{TMessage}"/>'s field table under a <c>Retrieval.</c> name.</summary>
-internal sealed class RetrievalBuilder<TMessage>(Dictionary<string, (Delegate Get, Delegate Set)> fields) : IRetrievalBuilder<TMessage> where TMessage : class, new()
+/// <summary>Implements <see cref="IRetrievalBuilder{TFrame}"/>, recording each mapping in the owning <see cref="FrameBuilder{TFrame}"/>'s field table under a <c>Retrieval.</c> name.</summary>
+internal sealed class RetrievalBuilder<TFrame>(Dictionary<string, (Delegate Get, Delegate Set)> fields) : IRetrievalBuilder<TFrame> where TFrame : class, new()
 {
     /// <summary>The field names every retrieval mapping must state, as they appear in the owning builder's field table and in its error message.</summary>
     public static IReadOnlyList<string> Names { get; } = [IsRequestName, FromName, ToName, AuthorsName, DestinationsName, IdsName];
 
-    /// <summary>Field name of <see cref="IsRequest(Func{TMessage, bool}, Action{TMessage, bool})"/>.</summary>
+    /// <summary>Field name of <see cref="IsRequest(Func{TFrame, bool}, Action{TFrame, bool})"/>.</summary>
     public const string IsRequestName = "Retrieval.IsRequest";
-    /// <summary>Field name of <see cref="From(Func{TMessage, DateTime?}, Action{TMessage, DateTime?})"/>.</summary>
+    /// <summary>Field name of <see cref="From(Func{TFrame, DateTime?}, Action{TFrame, DateTime?})"/>.</summary>
     public const string FromName = "Retrieval.From";
-    /// <summary>Field name of <see cref="To(Func{TMessage, DateTime?}, Action{TMessage, DateTime?})"/>.</summary>
+    /// <summary>Field name of <see cref="To(Func{TFrame, DateTime?}, Action{TFrame, DateTime?})"/>.</summary>
     public const string ToName = "Retrieval.To";
     /// <summary>Field name of <see cref="Authors"/>.</summary>
     public const string AuthorsName = "Retrieval.Authors";
@@ -20,44 +20,44 @@ internal sealed class RetrievalBuilder<TMessage>(Dictionary<string, (Delegate Ge
     public const string IdsName = "Retrieval.Ids";
 
     /// <inheritdoc />
-    public IRetrievalBuilder<TMessage> IsRequest(Func<TMessage, bool> get, Action<TMessage, bool> set) => Map(IsRequestName, get, set);
+    public IRetrievalBuilder<TFrame> IsRequest(Func<TFrame, bool> get, Action<TFrame, bool> set) => Map(IsRequestName, get, set);
 
     /// <inheritdoc />
-    public IRetrievalBuilder<TMessage> IsRequest(Expression<Func<TMessage, bool>> property) => Map(IsRequestName, property);
+    public IRetrievalBuilder<TFrame> IsRequest(Expression<Func<TFrame, bool>> property) => Map(IsRequestName, property);
 
     /// <inheritdoc />
-    public IRetrievalBuilder<TMessage> From(Func<TMessage, DateTime?> get, Action<TMessage, DateTime?> set) => Map(FromName, get, set);
+    public IRetrievalBuilder<TFrame> From(Func<TFrame, DateTime?> get, Action<TFrame, DateTime?> set) => Map(FromName, get, set);
 
     /// <inheritdoc />
-    public IRetrievalBuilder<TMessage> From(Expression<Func<TMessage, DateTime?>> property) => Map(FromName, property);
+    public IRetrievalBuilder<TFrame> From(Expression<Func<TFrame, DateTime?>> property) => Map(FromName, property);
 
     /// <inheritdoc />
-    public IRetrievalBuilder<TMessage> To(Func<TMessage, DateTime?> get, Action<TMessage, DateTime?> set) => Map(ToName, get, set);
+    public IRetrievalBuilder<TFrame> To(Func<TFrame, DateTime?> get, Action<TFrame, DateTime?> set) => Map(ToName, get, set);
 
     /// <inheritdoc />
-    public IRetrievalBuilder<TMessage> To(Expression<Func<TMessage, DateTime?>> property) => Map(ToName, property);
+    public IRetrievalBuilder<TFrame> To(Expression<Func<TFrame, DateTime?>> property) => Map(ToName, property);
 
     /// <inheritdoc />
-    public IRetrievalBuilder<TMessage> Authors(Func<TMessage, IEnumerable<string>> get, Action<TMessage, IReadOnlyList<string>> set) => MapList(AuthorsName, get, set);
+    public IRetrievalBuilder<TFrame> Authors(Func<TFrame, IEnumerable<string>> get, Action<TFrame, IReadOnlyList<string>> set) => MapList(AuthorsName, get, set);
 
     /// <inheritdoc />
-    public IRetrievalBuilder<TMessage> Destinations(Func<TMessage, IEnumerable<string>> get, Action<TMessage, IReadOnlyList<string>> set) => MapList(DestinationsName, get, set);
+    public IRetrievalBuilder<TFrame> Destinations(Func<TFrame, IEnumerable<string>> get, Action<TFrame, IReadOnlyList<string>> set) => MapList(DestinationsName, get, set);
 
     /// <inheritdoc />
-    public IRetrievalBuilder<TMessage> Ids(Func<TMessage, IEnumerable<string>> get, Action<TMessage, IReadOnlyList<string>> set) => MapList(IdsName, get, set);
+    public IRetrievalBuilder<TFrame> Ids(Func<TFrame, IEnumerable<string>> get, Action<TFrame, IReadOnlyList<string>> set) => MapList(IdsName, get, set);
 
-    private RetrievalBuilder<TMessage> Map<T>(string name, Expression<Func<TMessage, T>> property)
+    private RetrievalBuilder<TFrame> Map<T>(string name, Expression<Func<TFrame, T>> property)
     {
-        (Func<TMessage, T> get, Action<TMessage, T> set) = PropertyAccessor.Create(property);
+        (Func<TFrame, T> get, Action<TFrame, T> set) = PropertyAccessor.Create(property);
         return Map(name, get, set);
     }
 
-    private RetrievalBuilder<TMessage> Map<T>(string name, Func<TMessage, T> get, Action<TMessage, T> set)
+    private RetrievalBuilder<TFrame> Map<T>(string name, Func<TFrame, T> get, Action<TFrame, T> set)
     {
         fields[name] = (get, set);
         return this;
     }
 
-    private RetrievalBuilder<TMessage> MapList(string name, Func<TMessage, IEnumerable<string>> get, Action<TMessage, IReadOnlyList<string>> set)
+    private RetrievalBuilder<TFrame> MapList(string name, Func<TFrame, IEnumerable<string>> get, Action<TFrame, IReadOnlyList<string>> set)
         => Map<List<string>>(name, message => [.. get(message) ?? []], (message, values) => set(message, values));
 }

@@ -8,9 +8,9 @@ already covered in the source itself.
 ## Shape
 
 A host implements `IEngineConfiguration`, whose single `Configure` method receives an `IEngineBuilder` and states, through
-fluent calls, how the engine should run: the concrete message type and how its fields map onto the engine's logical
+fluent calls, how the engine should run: the concrete frame type and how its fields map onto the engine's logical
 fields, and anything else that should differ from the engine's defaults (see [Configuration.md](Components/Configuration.md)).
-Only the message type is required; Core has no message DTO of its own.
+Only the frame type is required; Core has no frame DTO of its own.
 
 `Engine.Start<TConfiguration>(string[] args, Action<IServiceCollection>? configureServices = null)` is the only entry
 point. The host never builds an engine object: it names the type that describes what it wants, and the engine constructs
@@ -27,7 +27,7 @@ await Engine.Start<MyEngineConfiguration>(args, services => services.AddSingleto
 
 1. `Engine.Start` builds a bootstrap container holding logging plus the host's `configureServices` registrations,
    constructs the configuration from it, runs `Configure` against a new builder, and checks the result, failing with an
-   `InvalidOperationException` if the configuration cannot be constructed, the message type is missing, or a logical field
+   `InvalidOperationException` if the configuration cannot be constructed, the frame type is missing, or a logical field
    is unmapped. The bootstrap container stays alive for the life of the engine, since the configuration may have handed the
    builder functions that use what was injected.
 2. `NetworkConfig.Load` reads the network configuration from `Config.json` in the working directory and the running user from

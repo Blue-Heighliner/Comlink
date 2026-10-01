@@ -167,8 +167,9 @@ internal sealed class ImportService : IImportService
             return false;
         }
 
-        object message = engineController.CreateMessage();
-        engineController.SetMessageId(message, data.MessageId);
+        object message = engineController.CreateFrame();
+        engineController.SetIsMessage(message, true);
+        engineController.SetFrameId(message, data.MessageId);
         engineController.SetFromUser(message, data.FromUser);
         engineController.SetSubject(message, data.Subject);
         engineController.SetBody(message, data.Body);

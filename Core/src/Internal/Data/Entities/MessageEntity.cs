@@ -7,13 +7,13 @@ internal sealed class MessageEntity
     public ObjectId Id { get; set; } = ObjectId.NewObjectId();
     /// <summary>
     /// Application-level message identifier shared with peers. Denormalized from <see cref="Message"/>
-    /// (via <see cref="IEngineController.GetMessageId"/>) so LiteDB can query and index on it directly,
+    /// (via <see cref="IEngineController.GetFrameId"/>) so LiteDB can query and index on it directly,
     /// since <see cref="Message"/>'s concrete shape is chosen by the host and not known to LiteDB's typed API.
     /// </summary>
     public string MessageId { get; set; } = string.Empty;
     /// <summary>
     /// The message content — subject, body, sender, addresses, sent time — as an instance of
-    /// <see cref="IEngineController.MessageType"/>. This is the canonical representation of the message;
+    /// <see cref="IEngineController.FrameType"/>. This is the canonical representation of the message;
     /// read its logical fields via the registered <see cref="IEngineController"/>.
     /// </summary>
     public object Message { get; set; } = default!;

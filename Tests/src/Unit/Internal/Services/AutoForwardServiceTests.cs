@@ -7,7 +7,7 @@ public sealed class AutoForwardServiceTests
 
     private sealed class FakePeerService : IPeerService
     {
-        public event Func<object, Task>? MessageDelivered;
+        public event Func<object, Task>? FrameDelivered;
 #pragma warning disable CS0067
         public event Func<string, string, Task>? ConfirmationReceived;
         public event Func<string, string, DestinationStatus, Task>? DeliveryStatusChanged;
@@ -22,8 +22,8 @@ public sealed class AutoForwardServiceTests
         public bool IsUserConnected(string userName) => false;
         public Task<bool> SendPacket(string userName, object packet, CancellationToken cancellation = default) => Task.FromResult(true);
 
-        public bool HasMessageDeliveredSubscribers => MessageDelivered is not null;
-        public Task FireMessageDelivered(object payload) => MessageDelivered is null ? Task.CompletedTask : MessageDelivered(payload);
+        public bool HasMessageDeliveredSubscribers => FrameDelivered is not null;
+        public Task FireMessageDelivered(object payload) => FrameDelivered is null ? Task.CompletedTask : FrameDelivered(payload);
     }
 
     private sealed class FakeMessageRoutingService : IMessageRoutingService
@@ -37,7 +37,7 @@ public sealed class AutoForwardServiceTests
         public Task<(string MessageId, IReadOnlyList<UserDeliveryResult> UserResults)> Route(string fromUser, SendMessagePayload payload, CancellationToken cancellation)
             => Task.FromResult<(string, IReadOnlyList<UserDeliveryResult>)>(("M", []));
 
-        public Task<(string MessageId, IReadOnlyList<UserDeliveryResult> UserResults)> RouteMessage(string fromUser, object message, CancellationToken cancellation)
+        public Task<(string MessageId, IReadOnlyList<UserDeliveryResult> UserResults)> RouteFrame(string fromUser, object message, CancellationToken cancellation)
         {
             RoutedMessages.Add((fromUser, message));
             return Task.FromResult<(string, IReadOnlyList<UserDeliveryResult>)>(("M", []));
@@ -60,7 +60,7 @@ public sealed class AutoForwardServiceTests
     private static AutoForwardControllerDefinition MakeController(string name, IReadOnlyList<string> users, Func<object, bool>? filter = null)
         => new() { Name = name, Users = users, Filter = filter ?? (_ => true) };
 
-    /// <summary>With no controllers configured at all, Start returns immediately without subscribing to MessageDelivered.</summary>
+    /// <summary>With no controllers configured at all, Start returns immediately without subscribing to FrameDelivered.</summary>
     [Fact]
     public async Task Start_NoControllersConfigured_ReturnsImmediatelyWithoutSubscribing()
     {
@@ -100,15 +100,36 @@ public sealed class AutoForwardServiceTests
         using CancellationTokenSource cts = new();
         Task startTask = service.Start(cts.Token);
         await Task.Delay(20);
-        TestMessage message = new() { MessageId = "M1", FromUser = "SENDER", Subject = "Hi", Body = "Hello" };
+        TestFrame message = new() { MessageId = "M1", FromUser = "SENDER", Subject = "Hi", Body = "Hello" };
 
         await peer.FireMessageDelivered(message);
 
         (string fromUser, object forwarded) = Assert.Single(routing.RoutedMessages);
         Assert.Equal("ME", fromUser);
-        TestMessage sent = Assert.IsType<TestMessage>(forwarded);
+        TestFrame sent = Assert.IsType<TestFrame>(forwarded);
         Assert.Equal("Hi", sent.Subject);
         Assert.Equal("Hello", sent.Body);
+        cts.Cancel();
+        await startTask;
+    }
+
+    /// <summary>A frame that is not a message is never auto-forwarded, and what is forwarded is a message.</summary>
+    [Fact]
+    public async Task FrameDelivered_NotAMessage_IsNotForwarded_AndForwardsAreMessages()
+    {
+        (AutoForwardService service, FakePeerService peer, Mock<TestEngineController> engineController, _, FakeMessageRoutingService routing, Mock<IAutoForwardTargetsRepository> targets) = Build();
+        engineController.Setup(e => e.AutoForwardControllers).Returns((IReadOnlyList<AutoForwardControllerDefinition>)[MakeController("Alerts", ["ME"])]);
+        targets.Setup(t => t.Get("Alerts")).ReturnsAsync(new AutoForwardTargetsEntity { Id = "Alerts", Targets = ["ALICE"] });
+        using CancellationTokenSource cts = new();
+        Task startTask = service.Start(cts.Token);
+        await Task.Delay(20);
+
+        await peer.FireMessageDelivered(new TestFrame { MessageId = "F1", FromUser = "SENDER", Subject = "Hi", IsHidden = true });
+        Assert.Empty(routing.RoutedMessages);
+
+        await peer.FireMessageDelivered(new TestFrame { MessageId = "M1", FromUser = "SENDER", Subject = "Hi" });
+        (_, object forwarded) = Assert.Single(routing.RoutedMessages);
+        Assert.False(Assert.IsType<TestFrame>(forwarded).IsHidden);
         cts.Cancel();
         await startTask;
     }
@@ -124,7 +145,7 @@ public sealed class AutoForwardServiceTests
         Task startTask = service.Start(cts.Token);
         await Task.Delay(20);
 
-        await peer.FireMessageDelivered(new TestMessage { MessageId = "M1" });
+        await peer.FireMessageDelivered(new TestFrame { MessageId = "M1" });
 
         Assert.Empty(routing.RoutedMessages);
         cts.Cancel();
@@ -141,7 +162,7 @@ public sealed class AutoForwardServiceTests
         Task startTask = service.Start(cts.Token);
         await Task.Delay(20);
 
-        await peer.FireMessageDelivered(new TestMessage { MessageId = "M1" });
+        await peer.FireMessageDelivered(new TestFrame { MessageId = "M1" });
 
         Assert.Empty(routing.RoutedMessages);
         targets.Verify(t => t.Get(It.IsAny<string>()), Times.Never);
@@ -160,7 +181,7 @@ public sealed class AutoForwardServiceTests
         Task startTask = service.Start(cts.Token);
         await Task.Delay(20);
 
-        await peer.FireMessageDelivered(new TestMessage { MessageId = "M1" });
+        await peer.FireMessageDelivered(new TestFrame { MessageId = "M1" });
 
         Assert.Empty(routing.RoutedMessages);
         cts.Cancel();
@@ -178,7 +199,7 @@ public sealed class AutoForwardServiceTests
         Task startTask = service.Start(cts.Token);
         await Task.Delay(20);
 
-        await peer.FireMessageDelivered(new TestMessage { MessageId = "M1" });
+        await peer.FireMessageDelivered(new TestFrame { MessageId = "M1" });
 
         (string _, object forwarded) = Assert.Single(routing.RoutedMessages);
         List<MessageAddress> addresses = engineController.Object.GetAddresses(forwarded);
@@ -204,7 +225,7 @@ public sealed class AutoForwardServiceTests
         Task startTask = service.Start(cts.Token);
         await Task.Delay(20);
 
-        await peer.FireMessageDelivered(new TestMessage { MessageId = "M1" });
+        await peer.FireMessageDelivered(new TestFrame { MessageId = "M1" });
 
         Assert.Equal(2, routing.RoutedMessages.Count);
         cts.Cancel();
@@ -226,14 +247,14 @@ public sealed class AutoForwardServiceTests
         Task startTask = service.Start(cts.Token);
         await Task.Delay(20);
 
-        await peer.FireMessageDelivered(new TestMessage { MessageId = "M1" });
+        await peer.FireMessageDelivered(new TestFrame { MessageId = "M1" });
 
         Assert.Single(routing.RoutedMessages);
         cts.Cancel();
         await startTask;
     }
 
-    /// <summary>MessageDelivered firing with no installed user is a no-op, rather than throwing.</summary>
+    /// <summary>FrameDelivered firing with no installed user is a no-op, rather than throwing.</summary>
     [Fact]
     public async Task MessageDelivered_NoInstalledUser_DoesNothing()
     {
@@ -244,7 +265,7 @@ public sealed class AutoForwardServiceTests
         Task startTask = service.Start(cts.Token);
         await Task.Delay(20);
 
-        await peer.FireMessageDelivered(new TestMessage { MessageId = "M1" });
+        await peer.FireMessageDelivered(new TestFrame { MessageId = "M1" });
 
         Assert.Empty(routing.RoutedMessages);
         cts.Cancel();

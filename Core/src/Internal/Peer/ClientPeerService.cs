@@ -46,7 +46,7 @@ internal sealed class ClientPeerService : IPeerService, IConnectionStatusService
     private int disposed;
 
     /// <inheritdoc />
-    public event Func<object, Task>? MessageDelivered;
+    public event Func<object, Task>? FrameDelivered;
 
     /// <inheritdoc />
     public event Func<string, string, Task>? ConfirmationReceived;
@@ -108,7 +108,7 @@ internal sealed class ClientPeerService : IPeerService, IConnectionStatusService
         // address expanding to several users; since every send here goes to the one shared server
         // regardless of userName, in-flight sends are coalesced by message ID to avoid transmitting the
         // same message multiple times.
-        string messageId = engineController.GetMessageId(message);
+        string messageId = engineController.GetFrameId(message);
         return inFlightSends.GetOrAdd(messageId, _ => SendOnceAndCleanup(messageId, message, cancellation));
     }
 
@@ -235,8 +235,8 @@ internal sealed class ClientPeerService : IPeerService, IConnectionStatusService
     /// <inheritdoc />
     public async Task DeliverLocal(object payload)
     {
-        logger.LogInformation("{MessageId} delivered locally from {FromUser}", engineController.GetMessageId(payload), engineController.GetFromUser(payload));
-        await MessageDelivered.InvokeAll(payload);
+        logger.LogInformation("{MessageId} delivered locally from {FromUser}", engineController.GetFrameId(payload), engineController.GetFromUser(payload));
+        await FrameDelivered.InvokeAll(payload);
     }
 
     private void OnConnected(PeerConnectionEventArgs args)
@@ -308,7 +308,7 @@ internal sealed class ClientPeerService : IPeerService, IConnectionStatusService
     }
 
     internal Task<bool> HandleMessage(ReadOnlyMemory<byte> data)
-        => PeerMessageDispatcher.Dispatch(data, engineController, logger, MessageDelivered, ConfirmationReceived);
+        => PeerFrameDispatcher.Dispatch(data, engineController, logger, FrameDelivered, ConfirmationReceived);
 
     /// <inheritdoc />
     public async ValueTask DisposeAsync()

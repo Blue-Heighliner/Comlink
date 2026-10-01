@@ -1,15 +1,15 @@
 namespace BlueHeighliner.Comlink.ExternalSystems;
 
 /// <summary>
-/// A conduit between this system and one external system outside Comlink — not generic over the message
+/// A conduit between this system and one external system outside Comlink — not generic over the frame
 /// type, so <see cref="ExternalSystemsService"/> can hold and drive every configured external system (each
-/// an <see cref="ExternalSystemBase{TMessage}"/> closed over the host's own message type) uniformly. See
+/// an <see cref="ExternalSystemBase{TFrame}"/> closed over the host's own frame type) uniformly. See
 /// <c>Docs/Components/ExternalSystems.md</c>.
 /// </summary>
 public interface IExternalSystem
 {
     /// <summary>
-    /// Raised whenever a message (an instance of the host's message type) is
+    /// Raised whenever a message (an instance of the host's frame type) is
     /// received from the external system while connected.
     /// </summary>
     event Func<object, Task>? MessageReceived;
@@ -26,7 +26,7 @@ public interface IExternalSystem
     /// </summary>
     Task Start(CancellationToken cancellation);
     /// <summary>
-    /// Sends a message (an instance of the host's message type) to the external
+    /// Sends a message (an instance of the host's frame type) to the external
     /// system.
     /// </summary>
     /// <returns><see langword="true"/> if the message was sent successfully; <see langword="false"/> if not currently connected, or the send failed.</returns>
@@ -43,12 +43,12 @@ public interface IExternalSystem
 }
 
 /// <summary>
-/// Base class for an external system integration, generic over the host's concrete message type
-/// <typeparamref name="TMessage"/> — matching the type given to <see cref="IEngineBuilder.Message{TMessage}"/>,
+/// Base class for an external system integration, generic over the host's concrete frame type
+/// <typeparamref name="TFrame"/> — matching the type given to <see cref="IEngineBuilder.Frames{TFrame}"/>,
 /// since <see cref="IEngineBuilder.ExternalSystem"/> adds instances of these. Handles the connect/poll/disconnect lifecycle so a derived class only needs to supply
 /// the real connection behavior for its specific external system, via three abstract methods —
 /// <see cref="TryConnect"/> (attempt to establish a connection), <see cref="Disconnect"/> (release a
-/// connection once it is known to be gone), and <see cref="Send(TMessage)"/> (send one message over an
+/// connection once it is known to be gone), and <see cref="Send(TFrame)"/> (send one message over an
 /// established connection) — plus one optional virtual method, <see cref="PollIsConnected"/> (check whether an
 /// established connection is still alive; the default always reports it is, for an implementation that
 /// instead learns about disconnection through an event or callback and calls <see cref="ReportDisconnected"/>
@@ -61,16 +61,16 @@ public interface IExternalSystem
 /// messages in either direction (e.g. by tag, priority, or sender) without touching the connection lifecycle
 /// itself. See <c>Docs/Components/ExternalSystems.md</c>.
 /// </summary>
-/// <typeparam name="TMessage">The host's concrete message type — the same type argument supplied to <see cref="IEngineBuilder.Message{TMessage}"/>.</typeparam>
+/// <typeparam name="TFrame">The host's concrete frame type — the same type argument supplied to <see cref="IEngineBuilder.Frames{TFrame}"/>.</typeparam>
 /// <param name="name">A short, human-readable name identifying this external system.</param>
 /// <param name="connectRetryInterval">How long to wait between connection attempts while disconnected; defaults to 5 seconds. Overriding this is intended for unit testing.</param>
 /// <param name="pollInterval">How long to wait between connection-status polls while connected; defaults to 5 seconds. Overriding this is intended for unit testing.</param>
-public abstract class ExternalSystemBase<TMessage>(string name, TimeSpan? connectRetryInterval = null, TimeSpan? pollInterval = null) : IExternalSystem where TMessage : class
+public abstract class ExternalSystemBase<TFrame>(string name, TimeSpan? connectRetryInterval = null, TimeSpan? pollInterval = null) : IExternalSystem where TFrame : class
 {
     private ILogger logger = NullLogger.Instance;
     private readonly TimeSpan connectRetryInterval = connectRetryInterval ?? TimeSpan.FromSeconds(5);
     private readonly TimeSpan pollInterval = pollInterval ?? TimeSpan.FromSeconds(5);
-    private readonly Channel<TMessage> receivedMessages = Channel.CreateUnbounded<TMessage>();
+    private readonly Channel<TFrame> receivedMessages = Channel.CreateUnbounded<TFrame>();
     private CancellationTokenSource? disconnectSignal;
 
     /// <inheritdoc />
@@ -159,9 +159,9 @@ public abstract class ExternalSystemBase<TMessage>(string name, TimeSpan? connec
     public async Task<bool> Send(object message)
     {
         if (!IsConnected) { return false; }
-        if (message is not TMessage typed)
+        if (message is not TFrame typed)
         {
-            logger.LogWarning("External system {Name} cannot send a {Type}; it only handles {Expected}", Name, message.GetType().Name, typeof(TMessage).Name);
+            logger.LogWarning("External system {Name} cannot send a {Type}; it only handles {Expected}", Name, message.GetType().Name, typeof(TFrame).Name);
             return false;
         }
 
@@ -189,8 +189,8 @@ public abstract class ExternalSystemBase<TMessage>(string name, TimeSpan? connec
     /// of <see cref="Start"/>. A message enqueued before <see cref="Start"/> has been called, or after it
     /// has returned, is silently dropped, since there is no running delivery loop to hand it to.
     /// </summary>
-    /// <param name="message">The received message, in this instance's own <typeparamref name="TMessage"/>.</param>
-    protected async Task Receive(TMessage message)
+    /// <param name="message">The received message, in this instance's own <typeparamref name="TFrame"/>.</param>
+    protected async Task Receive(TFrame message)
     {
         try
         {
@@ -222,7 +222,7 @@ public abstract class ExternalSystemBase<TMessage>(string name, TimeSpan? connec
 
     private async Task DeliverReceivedMessages()
     {
-        await foreach (TMessage message in receivedMessages.Reader.ReadAllAsync())
+        await foreach (TFrame message in receivedMessages.Reader.ReadAllAsync())
         {
             if (MessageReceived is null) { continue; }
             try { await MessageReceived(message); }
@@ -251,19 +251,19 @@ public abstract class ExternalSystemBase<TMessage>(string name, TimeSpan? connec
     /// <summary>Releases a connection after it is known to be gone, whether detected by <see cref="PollIsConnected"/> or reported via <see cref="ReportDisconnected"/>.</summary>
     protected abstract Task Disconnect();
     /// <summary>Sends a single message over the established connection.</summary>
-    /// <param name="message">The message to send, in this instance's own <typeparamref name="TMessage"/>.</param>
+    /// <param name="message">The message to send, in this instance's own <typeparamref name="TFrame"/>.</param>
     /// <returns><see langword="true"/> if the message was sent successfully.</returns>
-    protected abstract Task<bool> Send(TMessage message);
+    protected abstract Task<bool> Send(TFrame message);
     /// <summary>
     /// Determines whether <paramref name="message"/> should actually be sent to the external system.
     /// Called by <see cref="Send(object)"/> before every send attempt, while connected. Synchronous —
     /// intended for simple, cheap filtering only (e.g. by tag, priority, or sender), not I/O. The default
     /// always returns <see langword="true"/>. A filtered message is treated the same as a failed send:
-    /// <see cref="Send(object)"/> returns <see langword="false"/> without calling <see cref="Send(TMessage)"/>.
+    /// <see cref="Send(object)"/> returns <see langword="false"/> without calling <see cref="Send(TFrame)"/>.
     /// </summary>
-    /// <param name="message">The message that would be sent, in this instance's own <typeparamref name="TMessage"/>.</param>
+    /// <param name="message">The message that would be sent, in this instance's own <typeparamref name="TFrame"/>.</param>
     /// <returns><see langword="true"/> to allow the send; <see langword="false"/> to filter it out.</returns>
-    protected virtual bool FilterSent(TMessage message) => true;
+    protected virtual bool FilterSent(TFrame message) => true;
     /// <summary>
     /// Determines whether a message reported via <see cref="Receive"/> should actually be treated as
     /// received. Called before the message is enqueued for delivery to <see cref="MessageReceived"/>.
@@ -271,7 +271,7 @@ public abstract class ExternalSystemBase<TMessage>(string name, TimeSpan? connec
     /// The default always returns <see langword="true"/>. A filtered message is silently dropped, exactly
     /// as if <see cref="Receive"/> had never been called for it.
     /// </summary>
-    /// <param name="message">The received message, in this instance's own <typeparamref name="TMessage"/>.</param>
+    /// <param name="message">The received message, in this instance's own <typeparamref name="TFrame"/>.</param>
     /// <returns><see langword="true"/> to accept the message; <see langword="false"/> to filter it out.</returns>
-    protected virtual bool FilterReceived(TMessage message) => true;
+    protected virtual bool FilterReceived(TFrame message) => true;
 }

@@ -9,7 +9,7 @@ public sealed class EngineHooksServiceTests
     {
         public List<Action<INetworkUserContext>> Connected { get; } = [];
         public List<Action<INetworkUserContext>> Disconnected { get; } = [];
-        public List<Action<INetworkMessageContext>> Received { get; } = [];
+        public List<Action<INetworkFrameContext>> Received { get; } = [];
 
         public Task OnConnected(INetworkUserContext context)
         {
@@ -23,16 +23,16 @@ public sealed class EngineHooksServiceTests
             return Task.CompletedTask;
         }
 
-        public Task OnReceived(INetworkMessageContext context)
+        public Task OnReceived(INetworkFrameContext context)
         {
-            foreach (Action<INetworkMessageContext> action in Received) { action(context); }
+            foreach (Action<INetworkFrameContext> action in Received) { action(context); }
             return Task.CompletedTask;
         }
     }
 
     private sealed class FakePeerService : IPeerService
     {
-        public event Func<object, Task>? MessageDelivered;
+        public event Func<object, Task>? FrameDelivered;
         public event Func<string, string, Task>? ConfirmationReceived;
 #pragma warning disable CS0067
         public event Func<string, string, DestinationStatus, Task>? DeliveryStatusChanged;
@@ -58,11 +58,11 @@ public sealed class EngineHooksServiceTests
 
         public bool HasUserConnectedSubscribers => UserConnected is not null;
         public bool HasUserDisconnectedSubscribers => UserDisconnected is not null;
-        public bool HasMessageDeliveredSubscribers => MessageDelivered is not null;
+        public bool HasMessageDeliveredSubscribers => FrameDelivered is not null;
 
         public Task FireUserConnected(string userName) => UserConnected is null ? Task.CompletedTask : UserConnected(userName);
         public Task FireUserDisconnected(string userName) => UserDisconnected is null ? Task.CompletedTask : UserDisconnected(userName);
-        public Task FireMessageDelivered(object payload) => MessageDelivered is null ? Task.CompletedTask : MessageDelivered(payload);
+        public Task FireMessageDelivered(object payload) => FrameDelivered is null ? Task.CompletedTask : FrameDelivered(payload);
         public Task FireConfirmationReceived(string messageId, string user) => ConfirmationReceived is null ? Task.CompletedTask : ConfirmationReceived(messageId, user);
     }
 
@@ -78,7 +78,7 @@ public sealed class EngineHooksServiceTests
         public Task<(string MessageId, IReadOnlyList<UserDeliveryResult> UserResults)> Route(string fromUser, SendMessagePayload payload, CancellationToken cancellation)
             => Task.FromResult(Result);
 
-        public Task<(string MessageId, IReadOnlyList<UserDeliveryResult> UserResults)> RouteMessage(string fromUser, object message, CancellationToken cancellation)
+        public Task<(string MessageId, IReadOnlyList<UserDeliveryResult> UserResults)> RouteFrame(string fromUser, object message, CancellationToken cancellation)
         {
             RoutedMessages.Add((fromUser, message));
             return Task.FromResult(Result);
@@ -189,19 +189,37 @@ public sealed class EngineHooksServiceTests
         await startTask;
     }
 
-    /// <summary>MessageDelivered hands every hook a context whose Message is the exact raw payload object.</summary>
+    /// <summary>FrameDelivered hands every hook a context whose Message is the exact raw payload object.</summary>
     [Fact]
     public async Task MessageReceived_RunsEveryHookWithRawMessageObject()
     {
         (EngineHooksService service, FakePeerService peer, Mock<TestEngineController> engineController, _, _) = Build();
         object? received = null;
         Handler(engineController).Received.AddRange([
-            context => received = context.Message
+            context => received = context.Frame
         ]);
         using CancellationTokenSource cts = new();
         Task startTask = service.Start(cts.Token);
         await Task.Delay(20);
-        TestMessage payload = new() { MessageId = "M1", FromUser = "SENDER", Subject = "Hi", Body = "Hello" };
+        TestFrame payload = new() { MessageId = "M1", FromUser = "SENDER", Subject = "Hi", Body = "Hello" };
+
+        await peer.FireMessageDelivered(payload);
+
+        Assert.Same(payload, received);
+        cts.Cancel();
+        await startTask;
+    }
+
+    /// <summary>The network processor is handed every received frame, including one that is not a message.</summary>
+    [Fact]
+    public async Task FrameReceived_NotAMessage_StillReachesTheProcessor()
+    {
+        (EngineHooksService service, FakePeerService peer, Mock<TestEngineController> engineController, _, _) = Build();
+        object? received = null;
+        Handler(engineController).Received.Add(context => received = context.Frame);
+        using CancellationTokenSource cts = new();
+        Task startTask = service.Start(cts.Token);
+        TestFrame payload = new() { MessageId = "F1", FromUser = "SENDER", IsHidden = true };
 
         await peer.FireMessageDelivered(payload);
 
@@ -261,7 +279,7 @@ public sealed class EngineHooksServiceTests
         await startTask;
     }
 
-    /// <summary>Send rejects an object that is not an instance of the configured message type, synchronously, before ever forking a background send.</summary>
+    /// <summary>Send rejects an object that is not an instance of the configured frame type, synchronously, before ever forking a background send.</summary>
     [Fact]
     public async Task Context_Send_WrongType_ThrowsSynchronously()
     {
@@ -285,7 +303,7 @@ public sealed class EngineHooksServiceTests
     public async Task Context_Send_CorrectType_RoutesInBackgroundFromCurrentUser()
     {
         (EngineHooksService service, FakePeerService peer, Mock<TestEngineController> engineController, _, FakeMessageRoutingService routing) = Build();
-        TestMessage message = new() { Subject = "Hi" };
+        TestFrame message = new() { Subject = "Hi" };
         Handler(engineController).Connected.AddRange([
             context => context.Send(message)
         ]);

@@ -21,10 +21,10 @@ public interface IServiceConnection
     /// Sends a message with the given <paramref name="subject"/> and <paramref name="body"/> to the specified
     /// <paramref name="addresses"/>. When <paramref name="isAlert"/> is <see langword="true"/>, recipients'
     /// Client-mode UI alarms until the message is read; see <c>Docs/Components/ViewModels.md</c>. <paramref name="priority"/>
-    /// is used verbatim as the MSMT send priority (see <see cref="IMessageBuilder{TMessage}"/>). <paramref name="tag"/>
-    /// is stored in the message's tag field (see <see cref="IMessageBuilder{TMessage}"/>). <paramref name="securityLevel"/>
+    /// is used verbatim as the MSMT send priority (see <see cref="IFrameBuilder{TFrame}"/>). <paramref name="tag"/>
+    /// is stored in the message's tag field (see <see cref="IFrameBuilder{TFrame}"/>). <paramref name="securityLevel"/>
     /// is the security level name this message is sent at; a destination user whose own assigned level ranks lower
-    /// is never sent the message (see <see cref="IMessageBuilder{TMessage}"/>).
+    /// is never sent the message (see <see cref="IFrameBuilder{TFrame}"/>).
     /// </summary>
     Task<SendMessageResult?> SendMessage(string subject, string body, List<AddressRequest> addresses, bool isAlert = false, int priority = 0, string tag = "", string securityLevel = "", CancellationToken cancellation = default);
     /// <summary>

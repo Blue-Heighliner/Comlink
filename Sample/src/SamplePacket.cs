@@ -2,7 +2,7 @@ namespace BlueHeighliner.Comlink.Sample;
 
 /// <summary>
 /// Demonstrates injecting a custom packet DTO, which enables the engine's standard packetization. As with
-/// <see cref="SampleMessage"/>, the field names are deliberately unlike the engine's own logical ones, so it is
+/// <see cref="SampleFrame"/>, the field names are deliberately unlike the engine's own logical ones, so it is
 /// <see cref="SampleEngineConfiguration"/>'s packet mapping that maps them; the engine does all the splitting
 /// and reassembling itself.
 /// </summary>

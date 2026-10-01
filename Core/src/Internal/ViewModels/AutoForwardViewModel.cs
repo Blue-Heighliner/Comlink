@@ -34,7 +34,7 @@ internal interface IAutoForwardViewModel
 internal sealed partial class AutoForwardViewModel : ObservableObject, IAutoForwardViewModel
 {
     /// <summary>Initializes a new <see cref="AutoForwardViewModel"/> with the configured controllers, current user, target-list storage, and user directory.</summary>
-    /// <param name="engineController">Supplies the auto forward controllers added via <see cref="IMessageBuilder{TMessage}.AutoForward"/>.</param>
+    /// <param name="engineController">Supplies the auto forward controllers added via <see cref="IFrameBuilder{TFrame}.AutoForward"/>.</param>
     /// <param name="currentUserProvider">Determines which controllers the current user has access to.</param>
     /// <param name="targetsRepository">Loads and saves each controller's locally-saved target list.</param>
     /// <param name="connection">Supplies known user names for target auto-complete.</param>

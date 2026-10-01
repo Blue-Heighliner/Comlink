@@ -4,10 +4,10 @@ Runnable examples of `IEngineConfiguration` and `Engine.Start<T>` in different s
 
 ## Minimal host
 
-The smallest possible host: a message DTO, a configuration mapping it, and the entry point.
+The smallest possible host: a frame DTO, a configuration mapping it, and the entry point.
 
 ```csharp
-public sealed class MyMessage
+public sealed class MyFrame
 {
     public string Id { get; set; } = "";
     public string FromUser { get; set; } = "";
@@ -24,7 +24,7 @@ public sealed class MyMessage
 public sealed class MyEngineConfiguration : IEngineConfiguration
 {
     public IEngineBuilder Configure(IEngineBuilder engine) => engine
-        .Message<MyMessage>(message => message
+        .Frames<MyFrame>(frame => frame
             .Id(m => m.Id)
             .Sender(m => m.FromUser)
             .Subject(m => m.Subject)
@@ -44,7 +44,7 @@ public sealed class MyEngineConfiguration : IEngineConfiguration
 await Engine.Start<MyEngineConfiguration>(args);
 ```
 
-A field whose type already matches is mapped by naming the property (`m => m.Id`), which builds the setter for you; when the type differs (a host's own recipient shape for the addresses, or a packet's data) the getter and setter are given explicitly, as `Addresses` is above. `Addresses` also has an overload taking `(string Name, AddressType Type, string Information)` tuples, for a host whose recipient shape carries custom per-address instructions (e.g. `OMAHA - Deliver to Eastside Office`); `Information` is optional and defaults to an empty string when the two-tuple overload above is used instead. The message type also needs `[ProtoContract]`/`[ProtoMember]` attributes for the default network serializer.
+A field whose type already matches is mapped by naming the property (`m => m.Id`), which builds the setter for you; when the type differs (a host's own recipient shape for the addresses, or a packet's data) the getter and setter are given explicitly, as `Addresses` is above. `Addresses` also has an overload taking `(string Name, AddressType Type, string Information)` tuples, for a host whose recipient shape carries custom per-address instructions (e.g. `OMAHA - Deliver to Eastside Office`); `Information` is optional and defaults to an empty string when the two-tuple overload above is used instead. The frame type also needs `[ProtoContract]`/`[ProtoMember]` attributes for the default network serializer.
 By default this runs the Avalonia desktop UI, with command-line overrides disallowed (`CommandLineOverrides` is off
 unless stated) and no window icon (`WindowIcon` is the operating system's unless stated).
 
@@ -54,7 +54,7 @@ A host only states what it needs distinct behavior for; every other setting keep
 
 ```csharp
 public IEngineBuilder Configure(IEngineBuilder engine) => engine
-    .Message<MyMessage>(/* ...required mapping from above... */)
+    .Frames<MyFrame>(/* ...required mapping from above... */)
     .HomeText("Select a folder and entry to get started.")
     .WindowIcon("avares://MyApp/Assets/icon.png");
 ```
@@ -69,7 +69,7 @@ lets `--config` name another file and `--user` name the user.
 
 ```csharp
 public IEngineBuilder Configure(IEngineBuilder engine) => engine
-    .Message<MyMessage>(/* ...required mapping... */)
+    .Frames<MyFrame>(/* ...required mapping... */)
     .CommandLineOverrides(true);
 ```
 

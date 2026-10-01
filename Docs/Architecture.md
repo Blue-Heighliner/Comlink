@@ -76,7 +76,7 @@ sequenceDiagram
     participant RP as Remote IMsmtSessionPeer
     DVM->>SC: SendMessage
     SC->>MRS: Route
-    MRS->>PS: Send (the host's message type, tagged for delivery status)
+    MRS->>PS: Send (the host's frame type, tagged for delivery status)
     PS->>PS: Find the connection identified as the recipient
     PS->>RP: MSMT send over that connection
     RP-->>PS: MSMT Acknowledged
@@ -94,8 +94,8 @@ sequenceDiagram
     participant DSC as DirectServiceConnection
     participant MVM as MainViewModel
     participant ES as EntryService
-    RN->>PS: MSMT send (the host's message type)
-    PS-->>DSC: MessageDelivered event
+    RN->>PS: MSMT send (the host's frame type)
+    PS-->>DSC: FrameDelivered event
     DSC-->>MVM: MessageReceived event
     MVM->>ES: StoreIncomingMessage (ReadStatus=Received)
     MVM->>MVM: Prepend to EntryBar if Inbox active
@@ -105,11 +105,11 @@ When the user opens that Inbox message, `ContentAreaViewModel` calls `IServiceCo
 
 ### Receiving/relaying a message (via an external system)
 1. An external system (the configured external systems) reports an inbound message via `Receive`.
-2. `ExternalSystemsService` calls `IPeerService.DeliverLocal`, which processes it exactly like an ordinary received message (stored, shown in the UI) and raises `MessageDelivered`.
-3. `ExternalSystemsService`'s own `MessageDelivered` subscription relays the message out through every other configured external system, excluding the one it was originally received from. This happens in both Client and Headless mode. See [ExternalSystems.md](Components/ExternalSystems.md).
+2. `ExternalSystemsService` calls `IPeerService.DeliverLocal`, which processes it exactly like an ordinary received message (stored, shown in the UI) and raises `FrameDelivered`.
+3. `ExternalSystemsService`'s own `FrameDelivered` subscription relays the message out through every other configured external system, excluding the one it was originally received from. This happens in both Client and Headless mode. See [ExternalSystems.md](Components/ExternalSystems.md).
 
 ### Sending a message from an interface
-1. An external program sends an instance of the host's message type on its interface connection.
+1. An external program sends an instance of the host's frame type on its interface connection.
 2. `InterfaceService` reads `Subject`/`Body`/`Addresses` from it via `IEngineController` and calls `MessageRoutingService.Route` with this user's own installed name as `fromUser` — exactly as if the user itself had composed the message. This happens in both Client and Headless mode.
 
 ### Exporting and importing entries (Client mode)
@@ -159,7 +159,7 @@ sequenceDiagram
 1. `UserService.Load` - restores installed user from `State.json` (or applies the configured debug user)
 2. `PeerService.Start` — begins accepting peer connections
 3. `InterfaceService.Start` — begins accepting interface connections (always, regardless of mode)
-4. `EngineHooksService.Start` - subscribes to `IPeerService`'s connection and message events on behalf of the host's configured network processor (`IMessageBuilder<TMessage>.Processor`, see [Configuration.md](Components/Configuration.md#network-processor)); a no-op if none is configured
+4. `EngineHooksService.Start` - subscribes to `IPeerService`'s connection and message events on behalf of the host's configured network processor (`IFrameBuilder<TFrame>.Processor`, see [Configuration.md](Components/Configuration.md#network-processor)); a no-op if none is configured
 
 Steps 2 through 4 (and external systems) only run once a user is installed: a fresh installation has no name, so it cannot identify itself to peers, pick its own certificate, or stamp messages it routes. When no user is installed yet, `EngineHost` waits for `UserService.Installed` and starts networking then, without a restart.
 
@@ -180,7 +180,7 @@ Export packages (`{name}.export.zip`, one JSON file per entry) are written to an
 
 ## Dependency Injection
 
-All external configuration and rule-based behavior, including the concrete message type and its logical field mapping, is stated by the host through the fluent `IEngineBuilder` its `IEngineConfiguration` receives (see `Sample/src/SampleEngineConfiguration.cs`, `Sample/src/Program.cs`, and [Api.md](Api.md)). The builder only records what it is told; internally an `IEngineController` (implemented by `EngineController`, in `Core/src/Internal/Control/EngineController.cs`) reads the record and supplies a default for everything left unstated, and is what the rest of the engine depends on. It is registered explicitly rather than by convention scanning, and a host has no way to replace it. A configuration never reads `NetworkConfig` or an environment variable itself; users' info comes from the network configuration file through `EngineController`, and where a node setting has a corresponding field there, `ConfiguredEngineController`, a small decorator the engine owns, layers it on top instead. See [Configuration.md](Components/Configuration.md#network-configuration-file) and [Configuration.md](Components/Configuration.md#message-format).
+All external configuration and rule-based behavior, including the concrete frame type and its logical field mapping, is stated by the host through the fluent `IEngineBuilder` its `IEngineConfiguration` receives (see `Sample/src/SampleEngineConfiguration.cs`, `Sample/src/Program.cs`, and [Api.md](Api.md)). The builder only records what it is told; internally an `IEngineController` (implemented by `EngineController`, in `Core/src/Internal/Control/EngineController.cs`) reads the record and supplies a default for everything left unstated, and is what the rest of the engine depends on. It is registered explicitly rather than by convention scanning, and a host has no way to replace it. A configuration never reads `NetworkConfig` or an environment variable itself; users' info comes from the network configuration file through `EngineController`, and where a node setting has a corresponding field there, `ConfiguredEngineController`, a small decorator the engine owns, layers it on top instead. See [Configuration.md](Components/Configuration.md#network-configuration-file) and [Configuration.md](Components/Configuration.md#frame-format).
 
 `EngineUiExtensions.UseEngineUi` overrides `IBodyDocumentFactory` with `TextDocumentBodyDocumentFactory` so that drafts created in Client mode use a live AvaloniaEdit `TextDocument`. Without this call (e.g., in tests or Headless mode), the `BodyDocumentFactory` default creates `StringBodyDocument` instances.
 

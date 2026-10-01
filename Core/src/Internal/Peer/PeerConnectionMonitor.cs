@@ -3,9 +3,9 @@ namespace BlueHeighliner.Comlink.Peer;
 /// <summary>
 /// Proactively opens, and continuously maintains, the connection to one of this node's outgoing
 /// <see cref="ConnectionPoint"/>s by connecting to it and requesting a heartbeat over the connection,
-/// awaiting its outcome. The heartbeat is an empty instance of the message type, serialized like any message (see
-/// <see cref="EngineControllerExtensions.IsHeartbeat"/>), so nothing but serialized messages and packets ever crosses a connection;
-/// <see cref="PeerMessageDispatcher.Dispatch"/> and <see cref="ServerRoutingService"/> acknowledge it without acting on it, so it never
+/// awaiting its outcome. The heartbeat is an empty instance of the frame type that is not a message, serialized like any frame (see
+/// <see cref="EngineControllerExtensions.IsHeartbeat"/>), so nothing but serialized frames and packets ever crosses a connection;
+/// <see cref="PeerFrameDispatcher.Dispatch"/> and <see cref="ServerRoutingService"/> acknowledge it without acting on it, so it never
 /// reaches the remote peer's application logic. Over IP a heartbeat reuses the
 /// same cached session connection, so the connection genuinely stays open between heartbeats rather than flapping; over
 /// serial the first connect is what creates the link to the port, which then reconnects on its own.
@@ -60,7 +60,7 @@ internal sealed class PeerConnectionMonitor(IEngineController engineController, 
                 {
                     connection = await transport.Connect(target, cancellation);
                     byte[] heartbeat;
-                    using (IMemoryOwner<byte> owner = engineController.NetworkSerializer.Serialize(engineController.CreateMessage())) { heartbeat = owner.Memory.ToArray(); }
+                    using (IMemoryOwner<byte> owner = engineController.NetworkSerializer.Serialize(Heartbeat())) { heartbeat = owner.Memory.ToArray(); }
                     connected = await transport.Request(connection, heartbeat, new PeerSendOptions { Priority = int.MinValue }, cancellation);
                 }
                 catch
@@ -80,5 +80,12 @@ internal sealed class PeerConnectionMonitor(IEngineController engineController, 
             try { await control.Wait(delay, cancellation); }
             catch (OperationCanceledException) { return; }
         }
+    }
+
+    private object Heartbeat()
+    {
+        object frame = engineController.CreateFrame();
+        engineController.SetIsMessage(frame, false);
+        return frame;
     }
 }

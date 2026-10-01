@@ -42,7 +42,7 @@ internal sealed class EngineHooksService : IEngineHooksService
 
         peerService.UserConnected += OnUserConnected;
         peerService.UserDisconnected += OnUserDisconnected;
-        peerService.MessageDelivered += OnMessageDelivered;
+        peerService.FrameDelivered += OnMessageDelivered;
 
         try { await Task.Delay(Timeout.Infinite, cancellation); }
         catch (OperationCanceledException) { }
@@ -50,7 +50,7 @@ internal sealed class EngineHooksService : IEngineHooksService
         {
             peerService.UserConnected -= OnUserConnected;
             peerService.UserDisconnected -= OnUserDisconnected;
-            peerService.MessageDelivered -= OnMessageDelivered;
+            peerService.FrameDelivered -= OnMessageDelivered;
         }
     }
 
@@ -70,8 +70,8 @@ internal sealed class EngineHooksService : IEngineHooksService
 
     private Task OnMessageDelivered(object payload)
     {
-        INetworkMessageContext context = BuildMessageContext(payload);
-        Run(handler => handler.OnReceived(context), "OnReceived", engineController.GetMessageId(payload));
+        INetworkFrameContext context = BuildFrameContext(payload);
+        Run(handler => handler.OnReceived(context), "OnReceived", engineController.GetFrameId(payload));
         return Task.CompletedTask;
     }
 
@@ -91,8 +91,8 @@ internal sealed class EngineHooksService : IEngineHooksService
     private INetworkUserContext BuildConnectionContext(string targetUser)
         => new NetworkUserContext(BuildEngineContext(), targetUser, engineController, messageRouting, logger);
 
-    private INetworkMessageContext BuildMessageContext(object message)
-        => new NetworkMessageContext(BuildEngineContext(), message, engineController, messageRouting, logger);
+    private INetworkFrameContext BuildFrameContext(object frame)
+        => new NetworkFrameContext(BuildEngineContext(), frame, engineController, messageRouting, logger);
 
     private EngineContext BuildEngineContext()
         => new(

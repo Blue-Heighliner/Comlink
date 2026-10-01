@@ -1,7 +1,7 @@
 namespace BlueHeighliner.Comlink.Sample;
 
 /// <summary>
-/// Sample <see cref="IEngineConfiguration"/>: maps the engine's logical message fields onto <see cref="SampleMessage"/> and
+/// Sample <see cref="IEngineConfiguration"/>: maps the engine's logical frame fields onto <see cref="SampleFrame"/> (including whether a frame is a message, which is what the user sees and what is stored) and
 /// the packet fields onto <see cref="SamplePacket"/>, and states every other setting Sample has distinct, non-network-file
 /// behavior worth showing. Everything left unstated uses the engine's default, with the network configuration file applied on top
 /// automatically (see <c>Docs/Components/Configuration.md</c>):
@@ -17,8 +17,8 @@ namespace BlueHeighliner.Comlink.Sample;
 /// <item><description>packetization - enabled with <see cref="SamplePacket"/>, using the default packet size, window and serializer.</description></item>
 /// <item><description>address type labels - renames the <see cref="AddressType.External"/> label to <c>OUTSIDE</c>, matching the <c>Kind</c> vocabulary <see cref="SampleRecipient"/> already uses for it.</description></item>
 /// <item><description>security levels - three placeholder levels (<c>PUBLIC</c>, <c>INTERNAL</c>, <c>RESTRICTED</c>), assigned to users in each scenario's network configuration; the <c>Peer</c> scenario's sites run at <c>PUBLIC</c>, the <c>ClientServer</c>/<c>ServerCluster</c> scenarios' clients at <c>INTERNAL</c>, and their servers at <c>RESTRICTED</c>.</description></item>
-/// <item><description>custom message serialization - <see cref="SampleJsonSerializer"/> sends every <see cref="SampleMessage"/> across the network as JSON instead of the default protobuf-net.</description></item>
-/// <item><description>a <see cref="SampleNetworkProcessor"/> reacting to peer activity - a newly connected user is welcomed with who else is currently online (<see cref="IEngineContext.ConnectedUsers"/>), everyone still online is told when someone disconnects, and any received message tagged <c>PING</c> gets an automatic <c>PONG</c> reply (all via <see cref="INetworkContext{TMessage}.Send"/>).</description></item>
+/// <item><description>custom frame serialization - <see cref="SampleJsonSerializer"/> sends every <see cref="SampleFrame"/> across the network as JSON instead of the default protobuf-net.</description></item>
+/// <item><description>a <see cref="SampleNetworkProcessor"/> reacting to peer activity - a newly connected user is welcomed with who else is currently online (<see cref="IEngineContext.ConnectedUsers"/>), everyone still online is told when someone disconnects, and any received message tagged <c>PING</c> gets an automatic <c>PONG</c> reply (all via <see cref="INetworkContext{TFrame}.Send"/>).</description></item>
 /// <item><description>export formats - a plain-text alternative to the built-in JSON export, restricted to messages, drafts, and notes (an activity log's structured entries don't read naturally as prose).</description></item>
 /// <item><description>import formats - a CSV reader that stages one send per <c>Subject,User,Body</c> line for the user to review and send from the staged send screen, one at a time a second apart.</description></item>
 /// <item><description>server storage - <c>Server</c> (ClientServer scenario) and <c>Server1</c> (ServerCluster scenario) (<c>StoresMessages</c> in the network configuration) keep a copy of every message they route and answer a client's RETRIEVE request; <c>Server2</c> does not.</description></item>
@@ -32,7 +32,7 @@ public sealed class SampleEngineConfiguration : IEngineConfiguration
     /// <inheritdoc />
     public IEngineBuilder Configure(IEngineBuilder engine)
         => engine
-            .Message<SampleMessage>(message => message
+            .Frames<SampleFrame>(frame => frame
                 .Serializer<SampleJsonSerializer>()
                 .Processor<SampleNetworkProcessor>()
                 .Id(m => m.Id)
@@ -44,6 +44,7 @@ public sealed class SampleEngineConfiguration : IEngineConfiguration
                     (m, value) => m.Recipients = [.. value.Select(a => new SampleRecipient { User = a.Name, Kind = a.Type switch { AddressType.Cc => "CC", AddressType.External => "OUTSIDE", _ => "TO" }, Note = a.Information })])
                 .SentAt(m => m.Timestamp)
                 .ConfirmationId(m => m.ConfirmsId)
+                .IsMessage(m => m.IsMessage)
                 .Retrieval(r => r.IsRequest(m => m.IsRetrieval).From(m => m.RetrievalFrom).To(m => m.RetrievalTo).Authors(m => m.RetrievalAuthors, (m, v) => m.RetrievalAuthors = [.. v]).Destinations(m => m.RetrievalDestinations, (m, v) => m.RetrievalDestinations = [.. v]).Ids(m => m.RetrievalIds, (m, v) => m.RetrievalIds = [.. v]))
                 .IsAlert(m => m.Alert)
                 .Priority(m => m.Importance)

@@ -42,13 +42,13 @@ public sealed class PeerServiceTests
 
     private static readonly INetworkSerializer serializer = new ProtobufNetworkSerializer();
 
-    private static ReadOnlyMemory<byte> Encode(TestMessage message)
+    private static ReadOnlyMemory<byte> Encode(TestFrame message)
     {
         using IMemoryOwner<byte> buf = serializer.Serialize(message);
         return buf.Memory.ToArray();
     }
 
-    /// <summary>A valid message fires MessageDelivered with the correct fields.</summary>
+    /// <summary>A valid message fires FrameDelivered with the correct fields.</summary>
     [Fact]
     public async Task HandleMessage_ValidMessage_RaisesMessageDeliveredEvent()
     {
@@ -57,9 +57,9 @@ public sealed class PeerServiceTests
 
         PeerService svc = BuildService(peer, userDirectory);
         object? received = null;
-        svc.MessageDelivered += p => { received = p; return Task.CompletedTask; };
+        svc.FrameDelivered += p => { received = p; return Task.CompletedTask; };
 
-        TestMessage payload = new()
+        TestFrame payload = new()
         {
             MessageId = "MSG1",
             FromUser = "REMOTE",
@@ -70,7 +70,7 @@ public sealed class PeerServiceTests
 
         Assert.True(ok);
         Assert.NotNull(received);
-        TestMessage receivedMessage = Assert.IsType<TestMessage>(received);
+        TestFrame receivedMessage = Assert.IsType<TestFrame>(received);
         Assert.Equal("MSG1", receivedMessage.MessageId);
         Assert.Equal("REMOTE", receivedMessage.FromUser);
     }
@@ -88,7 +88,7 @@ public sealed class PeerServiceTests
         Assert.False(ok);
     }
 
-    /// <summary>A message carrying a non-empty ConfirmationMessageId raises ConfirmationReceived, not MessageDelivered.</summary>
+    /// <summary>A message carrying a non-empty ConfirmationMessageId raises ConfirmationReceived, not FrameDelivered.</summary>
     [Fact]
     public async Task HandleMessage_ConfirmationMessage_RaisesConfirmationReceivedNotMessageDelivered()
     {
@@ -97,11 +97,11 @@ public sealed class PeerServiceTests
 
         PeerService svc = BuildService(peer, userDirectory);
         object? delivered = null;
-        svc.MessageDelivered += p => { delivered = p; return Task.CompletedTask; };
+        svc.FrameDelivered += p => { delivered = p; return Task.CompletedTask; };
         (string MessageId, string ConfirmingUser)? confirmation = null;
         svc.ConfirmationReceived += (messageId, user) => { confirmation = (messageId, user); return Task.CompletedTask; };
 
-        TestMessage payload = new() { FromUser = "REMOTE", ConfirmationMessageId = "ORIGINAL-MSG-1" };
+        TestFrame payload = new() { FromUser = "REMOTE", ConfirmationMessageId = "ORIGINAL-MSG-1" };
         bool ok = await svc.HandleMessage(Encode(payload));
 
         Assert.True(ok);
@@ -111,7 +111,7 @@ public sealed class PeerServiceTests
         Assert.Equal("REMOTE", confirmation.Value.ConfirmingUser);
     }
 
-    /// <summary>An ordinary message (empty ConfirmationMessageId) raises MessageDelivered, not ConfirmationReceived.</summary>
+    /// <summary>An ordinary message (empty ConfirmationMessageId) raises FrameDelivered, not ConfirmationReceived.</summary>
     [Fact]
     public async Task HandleMessage_OrdinaryMessage_RaisesMessageDeliveredNotConfirmationReceived()
     {
@@ -122,7 +122,7 @@ public sealed class PeerServiceTests
         bool confirmationFired = false;
         svc.ConfirmationReceived += (_, _) => { confirmationFired = true; return Task.CompletedTask; };
 
-        TestMessage payload = new() { MessageId = "MSG1", FromUser = "REMOTE" };
+        TestFrame payload = new() { MessageId = "MSG1", FromUser = "REMOTE" };
         bool ok = await svc.HandleMessage(Encode(payload));
 
         Assert.True(ok);
@@ -137,7 +137,7 @@ public sealed class PeerServiceTests
         AutoAcknowledge(peer);
         PeerService svc = BuildService(peer, BuildUserDirectory());
         PeerConnection connection = Reach(peer, "DEST");
-        TestMessage msg = new() { MessageId = "M1", FromUser = "SOURCE" };
+        TestFrame msg = new() { MessageId = "M1", FromUser = "SOURCE" };
 
         bool ok = await svc.Send("DEST", msg);
 
@@ -158,7 +158,7 @@ public sealed class PeerServiceTests
         PeerService svc = BuildService(peer, BuildUserDirectory());
         PeerConnection inbound = Reach(peer, "Dest", inbound: true);
 
-        bool ok = await svc.Send("DEST", new TestMessage { MessageId = "M1", FromUser = "SOURCE" });
+        bool ok = await svc.Send("DEST", new TestFrame { MessageId = "M1", FromUser = "SOURCE" });
 
         Assert.True(ok);
         peer.Verify(p => p.Request(inbound, It.IsAny<ReadOnlyMemory<byte>>(), It.IsAny<PeerSendOptions>(), It.IsAny<CancellationToken>()), Times.Once);
@@ -174,7 +174,7 @@ public sealed class PeerServiceTests
         PeerConnection older = Reach(peer, "DEST");
         PeerConnection newer = Reach(peer, "DEST", inbound: true);
 
-        await svc.Send("DEST", new TestMessage { MessageId = "M1", FromUser = "SOURCE" });
+        await svc.Send("DEST", new TestFrame { MessageId = "M1", FromUser = "SOURCE" });
 
         peer.Verify(p => p.Request(newer, It.IsAny<ReadOnlyMemory<byte>>(), It.IsAny<PeerSendOptions>(), It.IsAny<CancellationToken>()), Times.Once);
         peer.Verify(p => p.Request(older, It.IsAny<ReadOnlyMemory<byte>>(), It.IsAny<PeerSendOptions>(), It.IsAny<CancellationToken>()), Times.Never);
@@ -190,10 +190,10 @@ public sealed class PeerServiceTests
         PeerConnection connection = Reach(peer, "DEST");
         Lose(peer, connection);
 
-        Assert.False(await svc.Send("DEST", new TestMessage { MessageId = "M1", FromUser = "SOURCE" }));
+        Assert.False(await svc.Send("DEST", new TestFrame { MessageId = "M1", FromUser = "SOURCE" }));
 
         Reach(peer, "DEST");
-        Assert.True(await svc.Send("DEST", new TestMessage { MessageId = "M2", FromUser = "SOURCE" }));
+        Assert.True(await svc.Send("DEST", new TestFrame { MessageId = "M2", FromUser = "SOURCE" }));
     }
 
     /// <summary>Send serializes the message through IEngineController.NetworkSerializer rather than a hardcoded format, so a host override is honored.</summary>
@@ -208,7 +208,7 @@ public sealed class PeerServiceTests
         userDirectory.Setup(l => l.NetworkSerializer).Returns(customSerializer.Object);
         PeerService svc = BuildService(peer, userDirectory);
         Reach(peer, "DEST");
-        TestMessage msg = new() { MessageId = "M1", FromUser = "SOURCE" };
+        TestFrame msg = new() { MessageId = "M1", FromUser = "SOURCE" };
 
         bool ok = await svc.Send("DEST", msg);
 
@@ -221,17 +221,17 @@ public sealed class PeerServiceTests
             It.IsAny<CancellationToken>()), Times.Once);
     }
 
-    /// <summary>Delivering locally waits for every subscriber of MessageDelivered, not only the last, so a slow earlier one (storing the message) has finished when it returns.</summary>
+    /// <summary>Delivering locally waits for every subscriber of FrameDelivered, not only the last, so a slow earlier one (storing the message) has finished when it returns.</summary>
     [Fact]
     public async Task DeliverLocal_AwaitsEverySubscriber()
     {
         Mock<IPeerTransport> peer = BuildPeerMock();
         PeerService svc = BuildService(peer, BuildUserDirectory());
         bool firstDone = false;
-        svc.MessageDelivered += async _ => { await Task.Delay(50); firstDone = true; };
-        svc.MessageDelivered += _ => Task.CompletedTask;
+        svc.FrameDelivered += async _ => { await Task.Delay(50); firstDone = true; };
+        svc.FrameDelivered += _ => Task.CompletedTask;
 
-        await svc.DeliverLocal(new TestMessage { MessageId = "M1", FromUser = "SOURCE" });
+        await svc.DeliverLocal(new TestFrame { MessageId = "M1", FromUser = "SOURCE" });
 
         Assert.True(firstDone);
     }
@@ -244,7 +244,7 @@ public sealed class PeerServiceTests
         AutoAcknowledge(peer);
         PeerService svc = BuildService(peer, BuildUserDirectory());
         Reach(peer, "DEST");
-        TestMessage msg = new() { MessageId = "M1", FromUser = "SOURCE", Priority = 3 };
+        TestFrame msg = new() { MessageId = "M1", FromUser = "SOURCE", Priority = 3 };
 
         bool ok = await svc.Send("DEST", msg);
 
@@ -265,7 +265,7 @@ public sealed class PeerServiceTests
         Reach(peer, "SOMEONE-ELSE");
         TaskCompletionSource<DestinationStatus> failed = new();
         svc.DeliveryStatusChanged += (_, _, status) => { failed.TrySetResult(status); return Task.CompletedTask; };
-        TestMessage msg = new() { MessageId = "M1", FromUser = "SOURCE" };
+        TestFrame msg = new() { MessageId = "M1", FromUser = "SOURCE" };
 
         bool ok = await svc.Send("UNKNOWN", msg);
 
@@ -285,7 +285,7 @@ public sealed class PeerServiceTests
 
         PeerService svc = BuildService(peer, userDirectory);
         Reach(peer, "DEST");
-        TestMessage msg = new() { MessageId = "M1", FromUser = "SOURCE" };
+        TestFrame msg = new() { MessageId = "M1", FromUser = "SOURCE" };
 
         bool ok = await svc.Send("DEST", msg);
 
@@ -302,7 +302,7 @@ public sealed class PeerServiceTests
 
         PeerService svc = BuildService(peer, userDirectory);
         Reach(peer, "DEST");
-        TestMessage msg = new() { MessageId = "M1", FromUser = "SOURCE" };
+        TestFrame msg = new() { MessageId = "M1", FromUser = "SOURCE" };
 
         bool ok = await svc.Send("DEST", msg);
 
@@ -323,7 +323,7 @@ public sealed class PeerServiceTests
 
         PeerService svc = BuildService(peer, userDirectory);
         Reach(peer, "DEST");
-        TestMessage msg = new() { MessageId = "M1", FromUser = "SOURCE" };
+        TestFrame msg = new() { MessageId = "M1", FromUser = "SOURCE" };
 
         Task<bool> sendTask = svc.Send("DEST", msg);
         bool ok = await sendTask.WaitAsync(TimeSpan.FromSeconds(30));
@@ -351,7 +351,7 @@ public sealed class PeerServiceTests
             return Task.CompletedTask;
         };
 
-        await svc.Send("DEST", new TestMessage { MessageId = "M1", FromUser = "SOURCE" });
+        await svc.Send("DEST", new TestFrame { MessageId = "M1", FromUser = "SOURCE" });
         await tcs.Task.WaitAsync(TimeSpan.FromSeconds(30));
 
         Assert.Contains(events, e => e.MessageId == "M1" && e.UserName == "DEST" && e.Status == DestinationStatus.Confirmed);
@@ -478,7 +478,7 @@ public sealed class PeerServiceTests
         List<DestinationStatus> statuses = [];
         svc.DeliveryStatusChanged += (_, _, status) => { statuses.Add(status); return Task.CompletedTask; };
 
-        Task<bool> sendTask = svc.Send("DEST", new TestMessage { MessageId = "M1", FromUser = "SOURCE" });
+        Task<bool> sendTask = svc.Send("DEST", new TestFrame { MessageId = "M1", FromUser = "SOURCE" });
         await requestStarted.Task.WaitAsync(TimeSpan.FromSeconds(30));
         await WaitUntil(() => statuses.Contains(DestinationStatus.Sent), TimeSpan.FromSeconds(30));
 
@@ -486,7 +486,7 @@ public sealed class PeerServiceTests
         await sendTask;
     }
 
-    /// <summary>A message received on the transport is deserialized and raised as MessageDelivered.</summary>
+    /// <summary>A message received on the transport is deserialized and raised as FrameDelivered.</summary>
     [Fact]
     public async Task TransportReceived_RaisesMessageDelivered()
     {
@@ -494,15 +494,15 @@ public sealed class PeerServiceTests
         TestObservable<PeerReceivedEventArgs> received = (TestObservable<PeerReceivedEventArgs>)peer.Object.Received;
         PeerService svc = BuildService(peer, BuildUserDirectory());
         TaskCompletionSource<object> delivered = new();
-        svc.MessageDelivered += payload => { delivered.TrySetResult(payload); return Task.CompletedTask; };
+        svc.FrameDelivered += payload => { delivered.TrySetResult(payload); return Task.CompletedTask; };
 
         received.Publish(new PeerReceivedEventArgs
         {
             Connection = new PeerConnection(null, new IpConnectionInfo { IsInbound = true }, () => { }),
-            Payload = Encode(new TestMessage { MessageId = "M1", FromUser = "REMOTE" })
+            Payload = Encode(new TestFrame { MessageId = "M1", FromUser = "REMOTE" })
         });
 
-        TestMessage message = Assert.IsType<TestMessage>(await delivered.Task.WaitAsync(TimeSpan.FromSeconds(30)));
+        TestFrame message = Assert.IsType<TestFrame>(await delivered.Task.WaitAsync(TimeSpan.FromSeconds(30)));
         Assert.Equal("M1", message.MessageId);
     }
 

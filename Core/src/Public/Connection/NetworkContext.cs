@@ -1,15 +1,15 @@
 namespace BlueHeighliner.Comlink.Control;
 
-/// <summary>What every <see cref="INetworkProcessor{TMessage}"/> method is handed: the engine, and a way to originate a new message.</summary>
-/// <typeparam name="TMessage">The host's message type.</typeparam>
-public interface INetworkContext<TMessage> : IEngineContext where TMessage : class
+/// <summary>What every <see cref="INetworkProcessor{TFrame}"/> method is handed: the engine, and a way to originate a new frame.</summary>
+/// <typeparam name="TFrame">The host's frame type.</typeparam>
+public interface INetworkContext<TFrame> : IEngineContext where TFrame : class
 {
     /// <summary>
-    /// Sends a new, already-built message - fire-and-forget: a processor does not track or await the send it makes, so
+    /// Sends a new, already-built frame - fire-and-forget: a processor does not track or await the send it makes, so
     /// this returns nothing and the send proceeds in the background exactly as it would from any other caller (a
-    /// failure is logged, not thrown back). Its message ID, sender, and sent time are overwritten before
-    /// it is routed, so only its content fields (subject, body, addresses, ...) need to be set.
+    /// failure is logged, not thrown back). Its frame ID, sender, and sent time are overwritten before
+    /// it is routed, so only its content fields (subject, body, addresses, ...) need to be set. A frame is shown to the user and stored only when it maps as a message (see <see cref="IFrameBuilder{TFrame}.IsMessage(Func{TFrame, bool}, Action{TFrame, bool})"/>), so set that on a frame meant to be read.
     /// </summary>
-    /// <param name="message">What to send.</param>
-    void Send(TMessage message);
+    /// <param name="frame">What to send.</param>
+    void Send(TFrame frame);
 }

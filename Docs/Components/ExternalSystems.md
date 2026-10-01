@@ -5,7 +5,7 @@ message queue, an HTTP long-poll, or any other integration point a host wants to
 messaging flow. Unlike a peer or an [interface connection](Interface.md), an external system is not
 another Comlink instance and does not speak MSMT; it is entirely defined by the host's own `IExternalSystem`
 implementation, typically (though not necessarily) a subclass of the optional convenience base class
-`ExternalSystemBase<TMessage>`.
+`ExternalSystemBase<TFrame>`.
 
 ## Interfaces
 
@@ -22,32 +22,32 @@ public interface IExternalSystem
     void AttachLogger(ILogger logger);
 }
 
-public abstract class ExternalSystemBase<TMessage> : IExternalSystem where TMessage : class
+public abstract class ExternalSystemBase<TFrame> : IExternalSystem where TFrame : class
 {
     protected abstract Task<bool> TryConnect(CancellationToken cancellation);
     protected virtual Task<bool> PollIsConnected(CancellationToken cancellation);
     protected abstract Task Disconnect();
-    protected abstract Task<bool> Send(TMessage message);
-    protected virtual bool FilterSent(TMessage message);
-    protected Task Receive(TMessage message);
-    protected virtual bool FilterReceived(TMessage message);
+    protected abstract Task<bool> Send(TFrame message);
+    protected virtual bool FilterSent(TFrame message);
+    protected Task Receive(TFrame message);
+    protected virtual bool FilterReceived(TFrame message);
     protected void ReportDisconnected();
 }
 ```
 
-`IExternalSystem` is deliberately not generic over the message type — it is declared `object`-typed on
+`IExternalSystem` is deliberately not generic over the frame type — it is declared `object`-typed on
 `Send`/`MessageReceived` so `ExternalSystemsService` (below) can hold and drive every configured external
 system uniformly, the same reasoning as the engine's message-format members (see
-[Configuration.md](Configuration.md#message-format)). `IEngineBuilder.ExternalSystem`/`ExternalServer` (see
+[Configuration.md](Configuration.md#frame-format)). `IEngineBuilder.ExternalSystem`/`ExternalServer` (see
 [Configuration.md](Configuration.md#external-systems)) take a plain `IExternalSystem` too, so
 a host is free to implement `IExternalSystem` directly if it wants full control. In practice, a host
-instead subclasses the optional convenience base class `ExternalSystemBase<TMessage>`, which implements
-`IExternalSystem` on your behalf and exposes only type-safe `TMessage`-typed members — `protected abstract`
+instead subclasses the optional convenience base class `ExternalSystemBase<TFrame>`, which implements
+`IExternalSystem` on your behalf and exposes only type-safe `TFrame`-typed members — `protected abstract`
 methods for the real connection behavior (plus one `protected virtual` method, `PollIsConnected` — see
-[Lifecycle](#lifecycle) below), and `protected Task Receive(TMessage message)` to report an inbound
-message. `TMessage` should match the host's own message type (the one given to `Message<TMessage>`).
+[Lifecycle](#lifecycle) below), and `protected Task Receive(TFrame message)` to report an inbound
+message. `TFrame` should match the host's own frame type (the one given to `Frames<TFrame>`).
 
-`ExternalSystemBase<TMessage>`'s constructor deliberately does not take an `ILoggerFactory` — each
+`ExternalSystemBase<TFrame>`'s constructor deliberately does not take an `ILoggerFactory` — each
 external system is constructed directly by the host's `IEngineConfiguration`, not resolved from the running
 engine's container; a logger injected into the configuration comes from the container the configuration was built in,
 which writes to none of the engine's logs (the engine's logging providers, e.g. `DailyFileLoggerProvider`, need the
@@ -57,7 +57,7 @@ system logs to a no-op logger for any activity before that point.
 
 ## Lifecycle
 
-`ExternalSystemBase<TMessage>.Start(CancellationToken)` runs a loop for as long as `cancellation` is not
+`ExternalSystemBase<TFrame>.Start(CancellationToken)` runs a loop for as long as `cancellation` is not
 cancelled:
 
 1. While not connected, calls `TryConnect(cancellation)`. On success, `IsConnected` becomes `true`. On
@@ -78,12 +78,12 @@ tells it it has been lost; this interrupts the current poll wait immediately, so
 cycle reacts right away rather than waiting up to the poll interval. `ReportDisconnected` is a no-op if not
 currently connected.
 
-`Send(object message)` returns `false` immediately without calling the abstract `Send(TMessage message)`
-while not connected; while connected, it casts to `TMessage`, calls `FilterSent` (see below), and — if that
-returns `true` — calls `Send(TMessage message)`, catching and logging any exception (from either) as a
+`Send(object message)` returns `false` immediately without calling the abstract `Send(TFrame message)`
+while not connected; while connected, it casts to `TFrame`, calls `FilterSent` (see below), and — if that
+returns `true` — calls `Send(TFrame message)`, catching and logging any exception (from either) as a
 failed send (returning `false`) rather than propagating it.
 
-`Receive(TMessage message)` is called by the implementor (e.g. from its own background read loop,
+`Receive(TFrame message)` is called by the implementor (e.g. from its own background read loop,
 socket callback, or poll) whenever the external system delivers a new message. It first calls
 `FilterReceived` (see below); if that returns `false`, the message is silently dropped. Otherwise it
 enqueues the message onto an internal, per-instance channel and returns — it does not wait for the message
@@ -96,11 +96,11 @@ enqueued, regardless of how many `Receive` calls were in flight at once. A messa
 has been called, or after it has returned, is logged and dropped, since there is no delivery loop running
 to receive it.
 
-`FilterSent(TMessage message)` and `FilterReceived(TMessage message)` are both `protected virtual` and
+`FilterSent(TFrame message)` and `FilterReceived(TFrame message)` are both `protected virtual` and
 synchronous — intended for simple, cheap filtering only (e.g. by tag, priority, or sender), not I/O —
 defaulting to always returning `true` (allow everything). `FilterSent` runs inside `Send(object message)`,
-before the abstract `Send(TMessage message)`; a filtered send is treated exactly like a failed one
-(`Send(object message)` returns `false`). `FilterReceived` runs inside `Receive(TMessage message)`, before
+before the abstract `Send(TFrame message)`; a filtered send is treated exactly like a failed one
+(`Send(object message)` returns `false`). `FilterReceived` runs inside `Receive(TFrame message)`, before
 the message is enqueued; a filtered receive is silently dropped, exactly as if `Receive` had never been
 called for it.
 
@@ -112,14 +112,14 @@ of external systems this instance communicates with, resolved once at startup. `
 by `EngineHost` alongside the peer and interface listeners) reads this list once and then:
 
 - Runs every external system's own `Start` loop concurrently, for the lifetime of the app.
-- Subscribes to `IPeerService.MessageDelivered` — raised for every message this instance receives,
+- Subscribes to `IPeerService.FrameDelivered` — raised for every frame this instance receives (only those that are messages are relayed),
   whether from a genuine peer, or from `DeliverLocal` (used for self-addressed sends and, as below, for
   external-system-received messages) — and relays that message out through `Send` on every external
   system **except** the one it was originally received from, if any.
 - Subscribes to every external system's own `MessageReceived` event. When one fires, the message is
   passed to `IPeerService.DeliverLocal`, which processes it exactly like an ordinary received message
   (stored, shown in the UI, etc. — the same path a self-addressed send already used) and, in turn, raises
-  `MessageDelivered`, triggering the relay-to-other-external-systems step above.
+  `FrameDelivered`, triggering the relay-to-other-external-systems step above.
 
 The "except the one it was originally received from" exclusion uses an `AsyncLocal<IExternalSystem?>` to
 track which external system (if any) is the source of the in-flight `DeliverLocal` call, since a plain
@@ -159,6 +159,6 @@ property only designates *which* one, if any, is treated as the exclusive hub fo
 ## Sample
 
 `Sample` states no external system. A host implementation replaces `TryConnect`, `Disconnect`, and `Send` of
-`ExternalSystemBase<TMessage>` with genuine connection logic for its own external system, and either overrides
+`ExternalSystemBase<TFrame>` with genuine connection logic for its own external system, and either overrides
 `PollIsConnected` or calls `ReportDisconnected` (or both), depending on how its own external system reports
 connection loss.

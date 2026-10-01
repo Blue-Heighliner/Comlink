@@ -7,7 +7,7 @@ internal sealed class StoredMessageEntity
     public ObjectId Id { get; set; } = ObjectId.NewObjectId();
     /// <summary>Application-level message identifier, denormalized from <see cref="Message"/> so LiteDB can query and index on it directly.</summary>
     public string MessageId { get; set; } = string.Empty;
-    /// <summary>The routed message, as an instance of <see cref="IEngineController.MessageType"/>; read its fields through <see cref="IEngineController"/>.</summary>
+    /// <summary>The routed message, as an instance of <see cref="IEngineController.FrameType"/>; read its fields through <see cref="IEngineController"/>.</summary>
     public object Message { get; set; } = default!;
     /// <summary>UTC timestamp when this server stored the copy.</summary>
     public DateTime StoredAt { get; set; } = DateTime.UtcNow;

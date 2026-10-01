@@ -87,12 +87,12 @@ internal sealed class LiteDbContext : ILiteDbContext
     // LiteDB's shared BsonMapper publishes a type's mapper before it has finished building it, so two threads
     // serializing a type for the first time can collide ("Collection was modified"), e.g. a message arriving while a
     // draft is saved. Serializing one fully populated instance of every stored shape here, once, under a lock, builds
-    // every mapper up front, including nested list element types and the host's own message type.
+    // every mapper up front, including nested list element types and the host's own frame type.
     private void WarmUpMapper()
     {
         lock (mapperWarmupLock)
         {
-            object message = engineController.CreateMessage();
+            object message = engineController.CreateFrame();
             engineController.SetAddresses(message, [new MessageAddress { UserName = string.Empty, Type = AddressType.To }]);
             BsonMapper mapper = BsonMapper.Global;
             mapper.ToDocument(new MessageEntity

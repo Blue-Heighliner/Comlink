@@ -10,8 +10,8 @@ public sealed class EntryBarViewModelTests
 
     private static MessageEntity MakeMessage(string id = "MSG1", string fromUser = "ALPHA", string subject = "Hello", int priority = 0, string tag = "", string securityLevel = "", bool isAlert = false)
     {
-        object message = format.CreateMessage();
-        format.SetMessageId(message, id);
+        object message = format.CreateFrame();
+        format.SetFrameId(message, id);
         format.SetFromUser(message, fromUser);
         format.SetSubject(message, subject);
         format.SetBody(message, "body");

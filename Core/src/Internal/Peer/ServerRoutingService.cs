@@ -65,7 +65,7 @@ internal sealed class ServerRoutingService : IPeerService, IConnectionStatusServ
     private int disposed;
 
     /// <inheritdoc />
-    public event Func<object, Task>? MessageDelivered;
+    public event Func<object, Task>? FrameDelivered;
 #pragma warning disable CS0067 // A server relays raw message bytes without deserializing for confirmation-vs-normal classification, so this never fires.
     /// <inheritdoc />
     public event Func<string, string, Task>? ConfirmationReceived;
@@ -463,10 +463,10 @@ internal sealed class ServerRoutingService : IPeerService, IConnectionStatusServ
         try
         {
             // NetworkSerializer determines the type from the data itself, so bytes from an incompatible
-            // sender could describe a type other than this instance's own MessageType; treat that the
+            // sender could describe a type other than this instance's own FrameType; treat that the
             // same as a failed deserialize rather than let a mismatched cast downstream throw.
             object? message = engineController.NetworkSerializer.Deserialize(data);
-            return message?.GetType() == engineController.MessageType ? message : null;
+            return message?.GetType() == engineController.FrameType ? message : null;
         }
         catch
         {
@@ -506,7 +506,7 @@ internal sealed class ServerRoutingService : IPeerService, IConnectionStatusServ
     /// <inheritdoc />
     public Task<bool> Send(string userName, object message, CancellationToken cancellation = default)
     {
-        string messageId = engineController.GetMessageId(message);
+        string messageId = engineController.GetFrameId(message);
         return inFlightSends.GetOrAdd(messageId, _ => SendOnceAndCleanup(messageId, message, cancellation));
     }
 
@@ -617,8 +617,8 @@ internal sealed class ServerRoutingService : IPeerService, IConnectionStatusServ
     /// <inheritdoc />
     public async Task DeliverLocal(object payload)
     {
-        logger.LogInformation("{MessageId} delivered locally from {FromUser}", engineController.GetMessageId(payload), engineController.GetFromUser(payload));
-        await MessageDelivered.InvokeAll(payload);
+        logger.LogInformation("{MessageId} delivered locally from {FromUser}", engineController.GetFrameId(payload), engineController.GetFromUser(payload));
+        await FrameDelivered.InvokeAll(payload);
     }
 
     /// <inheritdoc />

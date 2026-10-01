@@ -1,9 +1,9 @@
 namespace BlueHeighliner.Comlink.Control;
 
-/// <summary>Handed to <see cref="INetworkProcessor{TMessage}.OnReceived"/>.</summary>
-/// <typeparam name="TMessage">The host's message type.</typeparam>
-public interface INetworkReceivedContext<TMessage> : INetworkContext<TMessage> where TMessage : class
+/// <summary>Handed to <see cref="INetworkProcessor{TFrame}.OnReceived"/>.</summary>
+/// <typeparam name="TFrame">The host's frame type.</typeparam>
+public interface INetworkReceivedContext<TFrame> : INetworkContext<TFrame> where TFrame : class
 {
-    /// <summary>Gets the message that was received.</summary>
-    TMessage Message { get; }
+    /// <summary>Gets the frame that was received.</summary>
+    TFrame Frame { get; }
 }

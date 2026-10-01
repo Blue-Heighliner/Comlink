@@ -18,11 +18,11 @@ internal interface IMessageRoutingService
     /// The same as <see cref="Route"/>, except every field this reads (addresses, security level) comes straight from
     /// <paramref name="message"/> itself, via <see cref="Control.IEngineController"/>'s Get accessors, rather than
     /// from a <see cref="SendMessagePayload"/> - so the caller builds the whole message (an instance of
-    /// <see cref="Control.IEngineController.MessageType"/>) itself instead of stating loose fields. Its message ID,
+    /// <see cref="Control.IEngineController.FrameType"/>) itself instead of stating loose fields. Its message ID,
     /// sender, and sent time are still overwritten with a freshly generated ID, <paramref name="fromUser"/>, and the
     /// current UTC time, exactly as <see cref="Route"/> also does, so a caller only needs to set the content fields.
     /// </summary>
-    Task<(string MessageId, IReadOnlyList<UserDeliveryResult> UserResults)> RouteMessage(string fromUser, object message, CancellationToken cancellation);
+    Task<(string MessageId, IReadOnlyList<UserDeliveryResult> UserResults)> RouteFrame(string fromUser, object message, CancellationToken cancellation);
 }
 
 /// <summary>Routes outbound messages to peer users and surfaces their delivery status.</summary>
@@ -47,7 +47,7 @@ internal sealed class MessageRoutingService : IMessageRoutingService
 
     /// <summary>Initializes a new <see cref="MessageRoutingService"/> and subscribes to peer delivery status events.</summary>
     /// <param name="peerService">Peer service for sending and receiving messages.</param>
-    /// <param name="engineController">Provides group definitions for address expansion and maps logical fields onto the engine's message type when building outbound messages.</param>
+    /// <param name="engineController">Provides group definitions for address expansion and maps logical fields onto the engine's frame type when building outbound messages.</param>
     /// <param name="loggerFactory">Factory for creating named loggers.</param>
     public MessageRoutingService(IPeerService peerService, IEngineController engineController, ILoggerFactory loggerFactory)
     {
@@ -83,8 +83,9 @@ internal sealed class MessageRoutingService : IMessageRoutingService
         string messageId = Guid.NewGuid().ToString("N").ToUpperInvariant();
         List<MessageAddress> addresses = [.. payload.Addresses.Select(a => new MessageAddress { UserName = a.UserName, Type = a.Type.ParseAddressType(), Information = a.Information })];
 
-        object message = engineController.CreateMessage();
-        engineController.SetMessageId(message, messageId);
+        object message = engineController.CreateFrame();
+        engineController.SetIsMessage(message, true);
+        engineController.SetFrameId(message, messageId);
         engineController.SetFromUser(message, fromUser);
         engineController.SetSubject(message, payload.Subject);
         engineController.SetBody(message, payload.Body);
@@ -99,10 +100,10 @@ internal sealed class MessageRoutingService : IMessageRoutingService
     }
 
     /// <inheritdoc />
-    public Task<(string MessageId, IReadOnlyList<UserDeliveryResult> UserResults)> RouteMessage(string fromUser, object message, CancellationToken cancellation)
+    public Task<(string MessageId, IReadOnlyList<UserDeliveryResult> UserResults)> RouteFrame(string fromUser, object message, CancellationToken cancellation)
     {
         string messageId = Guid.NewGuid().ToString("N").ToUpperInvariant();
-        engineController.SetMessageId(message, messageId);
+        engineController.SetFrameId(message, messageId);
         engineController.SetFromUser(message, fromUser);
         engineController.SetSentAt(message, DateTime.UtcNow);
 

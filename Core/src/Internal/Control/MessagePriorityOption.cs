@@ -6,7 +6,7 @@ internal sealed record MessagePriorityOption
     /// <summary>Gets the display name shown to the user (e.g. in the draft editor's priority picker).</summary>
     public required string Name { get; init; }
     /// <summary>
-    /// Gets the priority number stored in the message's priority field (see <see cref="IMessageBuilder{TMessage}"/>) and used verbatim as
+    /// Gets the priority number stored in the message's priority field (see <see cref="IFrameBuilder{TFrame}"/>) and used verbatim as
     /// the MSMT send priority (larger values are sent first — see <c>Docs/Components/Peer.md</c>).
     /// </summary>
     public required int Value { get; init; }

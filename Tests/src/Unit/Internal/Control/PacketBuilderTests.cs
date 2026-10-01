@@ -60,7 +60,7 @@ public sealed class PacketBuilderTests
         PacketMap map = Complete().Build();
         INetworkSerializer serializer = map.Serializer.Create(null);
         using IMemoryOwner<byte> own = serializer.Serialize(new TestPacket { Count = 1 });
-        using IMemoryOwner<byte> other = new ProtobufNetworkSerializer().Serialize(new TestMessage());
+        using IMemoryOwner<byte> other = new ProtobufNetworkSerializer().Serialize(new TestFrame());
 
         Assert.Equal(16 * 1024, map.Size);
         Assert.Equal(1, map.Window);

@@ -5,8 +5,8 @@ public sealed class RepositoryTests : IDisposable
 {
     private static MessageEntity MakeMessage(string messageId, string folderId, bool isOutbound)
     {
-        object message = messageFormat.CreateMessage();
-        messageFormat.SetMessageId(message, messageId);
+        object message = messageFormat.CreateFrame();
+        messageFormat.SetFrameId(message, messageId);
         return new MessageEntity { MessageId = messageId, Message = message, FolderId = folderId, IsOutbound = isOutbound };
     }
 

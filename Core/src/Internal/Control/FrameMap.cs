@@ -1,17 +1,17 @@
 namespace BlueHeighliner.Comlink.Control;
 
-/// <summary>The engine-side form of a message mapping: every accessor takes the message as an <see cref="object"/>, since the engine works with the host's message type only through <see cref="IEngineController"/>.</summary>
-internal sealed class MessageMap
+/// <summary>The engine-side form of a frame mapping: every accessor takes the frame as an <see cref="object"/>, since the engine works with the host's frame type only through <see cref="IEngineController"/>.</summary>
+internal sealed class FrameMap
 {
-    /// <summary>The host's message type.</summary>
+    /// <summary>The host's frame type.</summary>
     public required Type Type { get; init; }
-    /// <summary>The serializer for the message type.</summary>
+    /// <summary>The serializer for the frame type.</summary>
     public required ServiceRegistration<INetworkSerializer> Serializer { get; init; }
-    /// <summary>Creates a new, empty message.</summary>
+    /// <summary>Creates a new, empty frame.</summary>
     public required Func<object> Create { get; init; }
-    /// <summary>Reads the message identifier.</summary>
+    /// <summary>Reads the frame identifier.</summary>
     public required Func<object, string> GetId { get; init; }
-    /// <summary>Writes the message identifier.</summary>
+    /// <summary>Writes the frame identifier.</summary>
     public required Action<object, string> SetId { get; init; }
     /// <summary>Reads the sender.</summary>
     public required Func<object, string> GetSender { get; init; }
@@ -33,13 +33,13 @@ internal sealed class MessageMap
     public required Func<object, DateTime> GetSentAt { get; init; }
     /// <summary>Writes the sent time.</summary>
     public required Action<object, DateTime> SetSentAt { get; init; }
-    /// <summary>Reads the identifier of the message this one confirms.</summary>
+    /// <summary>Reads the identifier of the message this frame confirms.</summary>
     public required Func<object, string> GetConfirmationId { get; init; }
-    /// <summary>Writes the identifier of the message this one confirms.</summary>
+    /// <summary>Writes the identifier of the message this frame confirms.</summary>
     public required Action<object, string> SetConfirmationId { get; init; }
-    /// <summary>Reads whether the message is a retrieval request.</summary>
+    /// <summary>Reads whether the frame is a retrieval request.</summary>
     public required Func<object, bool> GetIsRetrieval { get; init; }
-    /// <summary>Writes whether the message is a retrieval request.</summary>
+    /// <summary>Writes whether the frame is a retrieval request.</summary>
     public required Action<object, bool> SetIsRetrieval { get; init; }
     /// <summary>Reads a retrieval request's lower sent-time bound.</summary>
     public required Func<object, DateTime?> GetRetrievalFrom { get; init; }
@@ -61,6 +61,10 @@ internal sealed class MessageMap
     public required Func<object, List<string>> GetRetrievalIds { get; init; }
     /// <summary>Writes a retrieval request's message identifiers.</summary>
     public required Action<object, List<string>> SetRetrievalIds { get; init; }
+    /// <summary>Reads whether the frame is a message.</summary>
+    public required Func<object, bool> GetIsMessage { get; init; }
+    /// <summary>Writes whether the frame is a message.</summary>
+    public required Action<object, bool> SetIsMessage { get; init; }
     /// <summary>Reads whether the message is an alert.</summary>
     public required Func<object, bool> GetIsAlert { get; init; }
     /// <summary>Writes whether the message is an alert.</summary>

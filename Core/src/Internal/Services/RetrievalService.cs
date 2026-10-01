@@ -5,7 +5,7 @@ internal interface IRetrievalService
 {
     /// <summary>
     /// Sends a retrieval request carrying <paramref name="criteria"/> to <paramref name="serverName"/> as an ordinary
-    /// message of the configured message type, from the current user. The server answers by sending copies of the
+    /// message of the configured frame type, from the current user. The server answers by sending copies of the
     /// matching stored messages back, which arrive as received messages; nothing is returned for them here.
     /// Returns whether the request reached the server's side of the network (not whether anything matched).
     /// </summary>
@@ -33,11 +33,12 @@ internal sealed class RetrievalService : IRetrievalService
     {
         string user = currentUserProvider.UserName ?? throw new InvalidOperationException("A retrieval request needs an installed user.");
 
-        object request = engineController.CreateMessage();
+        object request = engineController.CreateFrame();
+        engineController.SetIsMessage(request, false);
         engineController.SetRetrieval(request, criteria);
         engineController.SetAddresses(request, [new MessageAddress { UserName = serverName, Type = AddressType.To }]);
 
-        (_, IReadOnlyList<UserDeliveryResult> results) = await messageRouting.RouteMessage(user, request, cancellation);
+        (_, IReadOnlyList<UserDeliveryResult> results) = await messageRouting.RouteFrame(user, request, cancellation);
         return results.Any(result => result.Success && string.Equals(result.UserName, serverName, StringComparison.OrdinalIgnoreCase));
     }
 }

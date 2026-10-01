@@ -12,12 +12,12 @@ public sealed class ProtobufNetworkSerializerTests
 
     private static readonly INetworkSerializer serializer = new ProtobufNetworkSerializer();
 
-    /// <summary>TestMessage round-trips all fields including nested addresses.</summary>
+    /// <summary>TestFrame round-trips all fields including nested addresses.</summary>
     [Fact]
     public void TestMessage_SerializeDeserialize_RoundTrip()
     {
         DateTime sentAt = new(2025, 7, 4, 12, 0, 0, DateTimeKind.Utc);
-        TestMessage original = new()
+        TestFrame original = new()
         {
             MessageId = "MSG123",
             FromUser = "ALPHA",
@@ -32,7 +32,7 @@ public sealed class ProtobufNetworkSerializerTests
         };
 
         using IMemoryOwner<byte> buf = serializer.Serialize(original);
-        TestMessage? decoded = serializer.Deserialize(buf.Memory) as TestMessage;
+        TestFrame? decoded = serializer.Deserialize(buf.Memory) as TestFrame;
 
         Assert.NotNull(decoded);
         Assert.Equal(original.MessageId, decoded.MessageId);
@@ -45,15 +45,15 @@ public sealed class ProtobufNetworkSerializerTests
         Assert.Equal("Cc", decoded.Addresses[1].Type);
     }
 
-    /// <summary>Different message types serialized by the same serializer each come back as their own type, with no type argument given to Deserialize.</summary>
+    /// <summary>Different frame types serialized by the same serializer each come back as their own type, with no type argument given to Deserialize.</summary>
     [Fact]
     public void DifferentTypes_SerializeDeserialize_EachRoundTripsAsItsOwnType()
     {
         using IMemoryOwner<byte> otherBuf = serializer.Serialize(new OtherDto { Name = "hello", Count = 42 });
-        using IMemoryOwner<byte> testBuf = serializer.Serialize(new TestMessage { MessageId = "M1" });
+        using IMemoryOwner<byte> testBuf = serializer.Serialize(new TestFrame { MessageId = "M1" });
 
         OtherDto? other = Assert.IsType<OtherDto>(serializer.Deserialize(otherBuf.Memory));
-        TestMessage? test = Assert.IsType<TestMessage>(serializer.Deserialize(testBuf.Memory));
+        TestFrame? test = Assert.IsType<TestFrame>(serializer.Deserialize(testBuf.Memory));
 
         Assert.Equal("hello", other.Name);
         Assert.Equal(42, other.Count);
@@ -64,7 +64,7 @@ public sealed class ProtobufNetworkSerializerTests
     [Fact]
     public void Serialize_ProducesNonEmptyBytes()
     {
-        TestMessage msg = new() { MessageId = "x", FromUser = "SOURCE", Subject = "s" };
+        TestFrame msg = new() { MessageId = "x", FromUser = "SOURCE", Subject = "s" };
         using IMemoryOwner<byte> buf = serializer.Serialize(msg);
         Assert.True(buf.Memory.Length > 0);
     }
@@ -73,12 +73,12 @@ public sealed class ProtobufNetworkSerializerTests
     [Fact]
     public void Serialize_WrapsValueInEnvelopeNamingItsType()
     {
-        using IMemoryOwner<byte> buf = serializer.Serialize(new TestMessage { MessageId = "M1" });
+        using IMemoryOwner<byte> buf = serializer.Serialize(new TestFrame { MessageId = "M1" });
 
         ProtobufEnvelope envelope = Serializer.Deserialize<ProtobufEnvelope>((ReadOnlyMemory<byte>)buf.Memory);
 
-        Assert.Equal(typeof(TestMessage).AssemblyQualifiedName, envelope.TypeName);
-        Assert.Equal("M1", Serializer.Deserialize<TestMessage>((ReadOnlyMemory<byte>)envelope.Payload).MessageId);
+        Assert.Equal(typeof(TestFrame).AssemblyQualifiedName, envelope.TypeName);
+        Assert.Equal("M1", Serializer.Deserialize<TestFrame>((ReadOnlyMemory<byte>)envelope.Payload).MessageId);
     }
 
     /// <summary>With no envelope there is nothing to determine a type from, so empty data deserializes to null rather than a default instance.</summary>
@@ -110,12 +110,12 @@ public sealed class ProtobufNetworkSerializerTests
     public void Deserialize_KnownTypes_OnlyBuildsThose()
     {
         using IMemoryOwner<byte> other = serializer.Serialize(new OtherDto { Name = "n" });
-        using IMemoryOwner<byte> message = serializer.Serialize(new TestMessage { MessageId = "M1" });
-        ProtobufNetworkSerializer restricted = new(typeof(TestMessage));
+        using IMemoryOwner<byte> message = serializer.Serialize(new TestFrame { MessageId = "M1" });
+        ProtobufNetworkSerializer restricted = new(typeof(TestFrame));
 
         Assert.Null(restricted.Deserialize(other.Memory));
-        Assert.IsType<TestMessage>(restricted.Deserialize(message.Memory));
-        Assert.IsType<OtherDto>(new ProtobufNetworkSerializer(typeof(OtherDto), typeof(TestMessage)).Deserialize(other.Memory));
+        Assert.IsType<TestFrame>(restricted.Deserialize(message.Memory));
+        Assert.IsType<OtherDto>(new ProtobufNetworkSerializer(typeof(OtherDto), typeof(TestFrame)).Deserialize(other.Memory));
     }
 
     /// <summary>A serializer told nothing still refuses a named type that is not a protobuf contract, rather than loading whatever a sender names.</summary>
@@ -131,12 +131,12 @@ public sealed class ProtobufNetworkSerializerTests
     {
         TestPacketEngineController controller = new();
         using IMemoryOwner<byte> other = serializer.Serialize(new OtherDto { Name = "n" });
-        using IMemoryOwner<byte> message = serializer.Serialize(new TestMessage { MessageId = "M1" });
+        using IMemoryOwner<byte> message = serializer.Serialize(new TestFrame { MessageId = "M1" });
         using IMemoryOwner<byte> packet = serializer.Serialize(new TestPacket { Count = 1 });
 
         Assert.Null(controller.NetworkSerializer.Deserialize(other.Memory));
         Assert.Null(controller.NetworkSerializer.Deserialize(packet.Memory));
-        Assert.IsType<TestMessage>(controller.NetworkSerializer.Deserialize(message.Memory));
+        Assert.IsType<TestFrame>(controller.NetworkSerializer.Deserialize(message.Memory));
         Assert.Null(controller.PacketSerializer!.Deserialize(message.Memory));
         Assert.IsType<TestPacket>(controller.PacketSerializer!.Deserialize(packet.Memory));
     }

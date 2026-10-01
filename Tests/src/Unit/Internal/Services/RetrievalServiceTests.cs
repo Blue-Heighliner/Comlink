@@ -9,7 +9,7 @@ public sealed class RetrievalServiceTests
         currentUser.SetupGet(p => p.UserName).Returns(user);
         Mock<IMessageRoutingService> routing = new();
         List<object> sent = [];
-        routing.Setup(r => r.RouteMessage(It.IsAny<string>(), It.IsAny<object>(), It.IsAny<CancellationToken>()))
+        routing.Setup(r => r.RouteFrame(It.IsAny<string>(), It.IsAny<object>(), It.IsAny<CancellationToken>()))
             .Callback<string, object, CancellationToken>((_, message, _) => sent.Add(message))
             .ReturnsAsync(("ID", (IReadOnlyList<UserDeliveryResult>)[new UserDeliveryResult { UserName = "SERVER", Success = delivered }]));
         return (new RetrievalService(new TestEngineController(), currentUser.Object, routing.Object), routing, sent);
@@ -25,13 +25,13 @@ public sealed class RetrievalServiceTests
         bool ok = await service.Request("SERVER", criteria);
 
         Assert.True(ok);
-        TestMessage request = Assert.IsType<TestMessage>(Assert.Single(sent));
+        TestFrame request = Assert.IsType<TestFrame>(Assert.Single(sent));
         Assert.True(request.IsRetrieval);
         Assert.Equal(["BOB"], request.RetrievalAuthors);
         Assert.Equal(["M1"], request.RetrievalIds);
         TestAddressEntry address = Assert.Single(request.Addresses);
         Assert.Equal(("SERVER", "To"), (address.UserName, address.Type));
-        routing.Verify(r => r.RouteMessage("ALICE", request, It.IsAny<CancellationToken>()), Times.Once);
+        routing.Verify(r => r.RouteFrame("ALICE", request, It.IsAny<CancellationToken>()), Times.Once);
     }
 
     /// <summary>A request the server side never acknowledged reports failure.</summary>

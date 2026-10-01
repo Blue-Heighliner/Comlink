@@ -18,13 +18,13 @@ public sealed class EngineBuilderTests
         ServiceCollection services = new();
         foreach (object processor in processors)
         {
-            foreach (Type type in processor.GetType().GetInterfaces().Where(type => type.IsGenericType && type.Namespace == typeof(IInitialMessageProcessor<>).Namespace && type.Name.EndsWith("Processor`1"))) { services.AddSingleton(type, processor); }
+            foreach (Type type in processor.GetType().GetInterfaces().Where(type => type.IsGenericType && type.Namespace == typeof(IInitialFrameProcessor<>).Namespace && type.Name.EndsWith("Processor`1"))) { services.AddSingleton(type, processor); }
         }
 
         return services.BuildServiceProvider();
     }
 
-    private static (EngineBuilder Builder, EngineController Controller) BuildWith(Action<IMessageBuilder<TestMessage>>? message = null, Action<IPacketBuilder<TestPacket>>? packet = null, IServiceProvider? services = null)
+    private static (EngineBuilder Builder, EngineController Controller) BuildWith(Action<IFrameBuilder<TestFrame>>? message = null, Action<IPacketBuilder<TestPacket>>? packet = null, IServiceProvider? services = null)
     {
         EngineBuilder builder = packet is null ? EngineBuilder.Build(new TestEngineConfiguration(false, message)) : EngineBuilder.Build(new TestEngineConfiguration(false, message, packet));
         return (builder, new EngineController(builder, new CurrentUserProvider(), null, services));
@@ -39,13 +39,13 @@ public sealed class EngineBuilderTests
     private static NetworkConfig Network(params (string Name, NetworkUserConfig User)[] users)
         => new() { Users = users.ToDictionary(user => user.Name, user => user.User) };
 
-    /// <summary>A configuration that never states a message type cannot start the engine.</summary>
+    /// <summary>A configuration that never states a frame type cannot start the engine.</summary>
     [Fact]
     public void Build_WithoutMessageType_Throws()
     {
         InvalidOperationException error = Assert.Throws<InvalidOperationException>(() => EngineBuilder.Build(new EmptyConfiguration()));
 
-        Assert.Contains("Message<TMessage>", error.Message);
+        Assert.Contains("Frames<TFrame>", error.Message);
     }
 
     private sealed class EmptyConfiguration : IEngineConfiguration
@@ -53,7 +53,7 @@ public sealed class EngineBuilderTests
         public IEngineBuilder Configure(IEngineBuilder engine) => engine;
     }
 
-    /// <summary>The engine cannot build a controller from a builder that has no message mapping.</summary>
+    /// <summary>The engine cannot build a controller from a builder that has no frame mapping.</summary>
     [Fact]
     public void Controller_WithoutMessageMapping_Throws()
         => Assert.Throws<InvalidOperationException>(() => new EngineController(new EngineBuilder(), new CurrentUserProvider()));
@@ -101,7 +101,7 @@ public sealed class EngineBuilderTests
         Assert.Equal("Normal", controller.Priorities[0].Name);
         Assert.Equal("USER", controller.GetCertificateName("USER"));
         Assert.True(controller.CanDelete(FolderType.Inbox));
-        Assert.Equal(1, controller.GetPrintCount(new TestMessage()));
+        Assert.Equal(1, controller.GetPrintCount(new TestFrame()));
         Assert.Equal([AddressType.To, AddressType.Cc, AddressType.External], controller.AddressTypes.Select(t => t.Type));
         Assert.Equal(["To", "Cc", "External"], controller.AddressTypes.Select(t => t.Label));
     }
@@ -332,8 +332,8 @@ public sealed class EngineBuilderTests
     {
         (_, EngineController controller) = BuildWith(message => message.PrintCount(m => m.IsAlert ? 2 : 1));
 
-        Assert.Equal(2, controller.GetPrintCount(new TestMessage { IsAlert = true }));
-        Assert.Equal(1, controller.GetPrintCount(new TestMessage()));
+        Assert.Equal(2, controller.GetPrintCount(new TestFrame { IsAlert = true }));
+        Assert.Equal(1, controller.GetPrintCount(new TestFrame()));
     }
 
     /// <summary>The identification hook and the initial message and packet processors are reported and used.</summary>
@@ -341,29 +341,29 @@ public sealed class EngineBuilderTests
     public void Stated_Identification_IsUsed()
     {
         IpConnectionInfo info = new() { Host = "10.0.0.1" };
-        Mock<IInitialMessageProcessor<TestMessage>> messages = new();
+        Mock<IInitialFrameProcessor<TestFrame>> messages = new();
         Mock<IInitialPacketProcessor<TestPacket>> packets = new();
         EngineBuilder builder = EngineBuilder.Build(new TestEngineConfiguration(
             false,
-            message => message.InitialProcessor<IInitialMessageProcessor<TestMessage>>(),
+            message => message.InitialProcessor<IInitialFrameProcessor<TestFrame>>(),
             packet => packet.InitialProcessor<IInitialPacketProcessor<TestPacket>>()));
         builder.Identify(connection => ((IIpConnectionInfo)connection).Host);
         EngineController controller = new(builder, new CurrentUserProvider(), null, Services(messages.Object, packets.Object));
         Mock<IInitialSession> session = new();
-        TestMessage initialMessage = new();
+        TestFrame initialMessage = new();
         TestPacket initialPacket = new();
 
         Assert.Equal("10.0.0.1", controller.IdentifyConnection(info));
-        controller.InitialMessageProcessor!.OnConnected(session.Object);
-        controller.InitialMessageProcessor.OnInitial(session.Object, initialMessage);
-        controller.InitialMessageProcessor.OnReply(session.Object, initialMessage);
+        controller.InitialFrameProcessor!.OnConnected(session.Object);
+        controller.InitialFrameProcessor.OnInitial(session.Object, initialMessage);
+        controller.InitialFrameProcessor.OnReply(session.Object, initialMessage);
         controller.InitialPacketProcessor!.OnInitial(session.Object, initialPacket);
 
-        Assert.Equal(typeof(TestMessage), controller.InitialMessageProcessor.ItemType);
+        Assert.Equal(typeof(TestFrame), controller.InitialFrameProcessor.ItemType);
         Assert.Equal(typeof(TestPacket), controller.InitialPacketProcessor.ItemType);
-        messages.Verify(m => m.OnConnected(It.IsAny<IInitialMessageContext<TestMessage>>()), Times.Once);
-        messages.Verify(m => m.OnInitial(It.IsAny<IInitialMessageContext<TestMessage>>(), initialMessage), Times.Once);
-        messages.Verify(m => m.OnReply(It.IsAny<IInitialMessageContext<TestMessage>>(), initialMessage), Times.Once);
+        messages.Verify(m => m.OnConnected(It.IsAny<IInitialFrameContext<TestFrame>>()), Times.Once);
+        messages.Verify(m => m.OnInitial(It.IsAny<IInitialFrameContext<TestFrame>>(), initialMessage), Times.Once);
+        messages.Verify(m => m.OnReply(It.IsAny<IInitialFrameContext<TestFrame>>(), initialMessage), Times.Once);
         packets.Verify(p => p.OnInitial(It.IsAny<IInitialPacketContext<TestPacket>>(), initialPacket), Times.Once);
     }
 
@@ -380,18 +380,18 @@ public sealed class EngineBuilderTests
         session.Setup(s => s.IsOpener).Returns(true);
         session.Setup(s => s.Connection).Returns(info);
         session.Setup(s => s.Send(It.IsAny<object>())).ReturnsAsync(true);
-        IInitialMessageContext<TestMessage>? seen = null;
-        Mock<IInitialMessageProcessor<TestMessage>> processor = new();
-        processor.Setup(p => p.OnConnected(It.IsAny<IInitialMessageContext<TestMessage>>())).Returns((IInitialMessageContext<TestMessage> context) =>
+        IInitialFrameContext<TestFrame>? seen = null;
+        Mock<IInitialFrameProcessor<TestFrame>> processor = new();
+        processor.Setup(p => p.OnConnected(It.IsAny<IInitialFrameContext<TestFrame>>())).Returns((IInitialFrameContext<TestFrame> context) =>
         {
             seen = context;
             return Task.CompletedTask;
         });
-        EngineBuilder builder = EngineBuilder.Build(new TestEngineConfiguration(false, message => message.InitialProcessor<IInitialMessageProcessor<TestMessage>>()));
+        EngineBuilder builder = EngineBuilder.Build(new TestEngineConfiguration(false, message => message.InitialProcessor<IInitialFrameProcessor<TestFrame>>()));
         EngineController controller = new(builder, new CurrentUserProvider(), null, Services(processor.Object));
-        TestMessage sent = new() { Subject = "HI" };
+        TestFrame sent = new() { Subject = "HI" };
 
-        await controller.InitialMessageProcessor!.OnConnected(session.Object);
+        await controller.InitialFrameProcessor!.OnConnected(session.Object);
 
         Assert.NotNull(seen);
         Assert.True(seen.IsOpener);
@@ -415,7 +415,7 @@ public sealed class EngineBuilderTests
 
         Assert.Null(controller.IdentifyConnection(new IpConnectionInfo()));
         Assert.Null(controller.InitialPacketProcessor);
-        Assert.Null(controller.InitialMessageProcessor);
+        Assert.Null(controller.InitialFrameProcessor);
     }
 
     /// <summary>External systems are reported in the order added, without duplicates, and the upstream hub is added if it was not already.</summary>
@@ -435,27 +435,27 @@ public sealed class EngineBuilderTests
     public async Task NetworkProcessor_IsReported_AndGetsTypedContexts()
     {
         List<string> calls = [];
-        Mock<INetworkProcessor<TestMessage>> processor = new();
-        processor.Setup(p => p.OnConnected(It.IsAny<INetworkConnectedContext<TestMessage>>())).Returns((INetworkConnectedContext<TestMessage> context) =>
+        Mock<INetworkProcessor<TestFrame>> processor = new();
+        processor.Setup(p => p.OnConnected(It.IsAny<INetworkConnectedContext<TestFrame>>())).Returns((INetworkConnectedContext<TestFrame> context) =>
         {
             calls.Add($"connected:{context.TargetUser}");
             return Task.CompletedTask;
         });
-        processor.Setup(p => p.OnDisconnected(It.IsAny<INetworkDisconnectedContext<TestMessage>>())).Returns((INetworkDisconnectedContext<TestMessage> context) =>
+        processor.Setup(p => p.OnDisconnected(It.IsAny<INetworkDisconnectedContext<TestFrame>>())).Returns((INetworkDisconnectedContext<TestFrame> context) =>
         {
             calls.Add($"disconnected:{context.TargetUser}");
             return Task.CompletedTask;
         });
-        processor.Setup(p => p.OnReceived(It.IsAny<INetworkReceivedContext<TestMessage>>())).Returns((INetworkReceivedContext<TestMessage> context) =>
+        processor.Setup(p => p.OnReceived(It.IsAny<INetworkReceivedContext<TestFrame>>())).Returns((INetworkReceivedContext<TestFrame> context) =>
         {
-            calls.Add($"received:{context.Message.Subject}");
+            calls.Add($"received:{context.Frame.Subject}");
             return Task.CompletedTask;
         });
-        (_, EngineController controller) = BuildWith(message => message.Processor<INetworkProcessor<TestMessage>>(), services: Services(processor.Object));
+        (_, EngineController controller) = BuildWith(message => message.Processor<INetworkProcessor<TestFrame>>(), services: Services(processor.Object));
         Mock<INetworkUserContext> connection = new();
         connection.Setup(c => c.TargetUser).Returns("BOB");
-        Mock<INetworkMessageContext> received = new();
-        received.Setup(c => c.Message).Returns(new TestMessage { Subject = "HI" });
+        Mock<INetworkFrameContext> received = new();
+        received.Setup(c => c.Frame).Returns(new TestFrame { Subject = "HI" });
 
         await controller.NetworkHandler!.OnConnected(connection.Object);
         await controller.NetworkHandler.OnDisconnected(connection.Object);
@@ -464,15 +464,15 @@ public sealed class EngineBuilderTests
         Assert.Equal(["connected:BOB", "disconnected:BOB", "received:HI"], calls);
     }
 
-    private sealed class DependentProcessor(Dependency dependency) : INetworkProcessor<TestMessage>
+    private sealed class DependentProcessor(Dependency dependency) : INetworkProcessor<TestFrame>
     {
         public Dependency Dependency { get; } = dependency;
 
-        public Task OnConnected(INetworkConnectedContext<TestMessage> context) => Task.CompletedTask;
+        public Task OnConnected(INetworkConnectedContext<TestFrame> context) => Task.CompletedTask;
 
-        public Task OnDisconnected(INetworkDisconnectedContext<TestMessage> context) => Task.CompletedTask;
+        public Task OnDisconnected(INetworkDisconnectedContext<TestFrame> context) => Task.CompletedTask;
 
-        public Task OnReceived(INetworkReceivedContext<TestMessage> context) => Task.CompletedTask;
+        public Task OnReceived(INetworkReceivedContext<TestFrame> context) => Task.CompletedTask;
     }
 
     /// <summary>A processor type that is not registered is constructed from the container's services, so its constructor can take dependencies.</summary>
@@ -576,7 +576,7 @@ public sealed class EngineBuilderTests
     {
         await using EngineBuilder builder = EngineBuilder.Build<PlainConfiguration>(null);
 
-        Assert.NotNull(builder.MessageMap);
+        Assert.NotNull(builder.FrameMap);
     }
 
     /// <summary>A configuration that turns out incomplete fails the build, after the container it was built in has been disposed.</summary>

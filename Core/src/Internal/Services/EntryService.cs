@@ -43,7 +43,7 @@ internal interface IEntryService
     /// subject, sender, destinations, tag, priority label and security level name; <see cref="EntryFilter.DateFrom"/>/<see cref="EntryFilter.DateTo"/>
     /// bound its received date; <see cref="EntryFilter.Author"/> matches its sender and <see cref="EntryFilter.Destination"/> any addressee (both by substring); <see cref="EntryFilter.SecurityLevel"/>/<see cref="EntryFilter.Priority"/>/<see cref="EntryFilter.AlertOnly"/>
     /// match exactly. Filtering loads the whole folder rather than paginating the LiteDB query directly, since a
-    /// message's fields live inside the host's own opaque message type and cannot be queried in the database.
+    /// message's fields live inside the host's own opaque frame type and cannot be queried in the database.
     /// </summary>
     Task<(List<MessageEntity> Items, int Total)> GetMessages(string folderId, int page, EntryFilter? filter = null);
     /// <summary>
@@ -145,8 +145,9 @@ internal sealed class EntryService : IEntryService
 
     private object BuildMessage(string messageId, string fromUser, string subject, string body, List<AddressData> addresses, DateTime sentAt, bool isAlert, int priority, string tag, string securityLevel)
     {
-        object message = engineController.CreateMessage();
-        engineController.SetMessageId(message, messageId);
+        object message = engineController.CreateFrame();
+        engineController.SetIsMessage(message, true);
+        engineController.SetFrameId(message, messageId);
         engineController.SetFromUser(message, fromUser);
         engineController.SetSubject(message, subject);
         engineController.SetBody(message, body);

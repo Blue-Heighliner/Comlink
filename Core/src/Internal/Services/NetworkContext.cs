@@ -1,12 +1,12 @@
 namespace BlueHeighliner.Comlink.Services;
 
-/// <summary>What every network processor context knows, with messages as plain objects since the engine does not know the host's message type at compile time. The host's processor sees it through <see cref="INetworkContext{TMessage}"/>.</summary>
+/// <summary>What every network processor context knows, with frames as plain objects since the engine does not know the host's frame type at compile time. The host's processor sees it through <see cref="INetworkContext{TFrame}"/>.</summary>
 internal interface INetworkEngineContext : IEngineContext
 {
-    /// <summary>Sends a new, already-built message in the background.</summary>
-    /// <param name="message">An instance of the configured message type.</param>
-    /// <exception cref="ArgumentException"><paramref name="message"/> is not an instance of the configured message type.</exception>
-    void Send(object message);
+    /// <summary>Sends a new, already-built frame in the background.</summary>
+    /// <param name="frame">An instance of the configured frame type.</param>
+    /// <exception cref="ArgumentException"><paramref name="frame"/> is not an instance of the configured frame type.</exception>
+    void Send(object frame);
 }
 
 /// <summary>An <see cref="INetworkEngineContext"/> for a user connecting or disconnecting.</summary>
@@ -17,18 +17,18 @@ internal interface INetworkUserContext : INetworkEngineContext
 }
 
 /// <summary>An <see cref="INetworkEngineContext"/> for a message being received.</summary>
-internal interface INetworkMessageContext : INetworkEngineContext
+internal interface INetworkFrameContext : INetworkEngineContext
 {
-    /// <summary>The message that was received, an instance of the configured message type.</summary>
-    object Message { get; }
+    /// <summary>The frame that was received, an instance of the configured frame type.</summary>
+    object Frame { get; }
 }
 
-/// <summary>Shared <see cref="INetworkEngineContext"/> implementation for <see cref="NetworkUserContext"/> and <see cref="NetworkMessageContext"/>.</summary>
+/// <summary>Shared <see cref="INetworkEngineContext"/> implementation for <see cref="NetworkUserContext"/> and <see cref="NetworkFrameContext"/>.</summary>
 internal abstract class NetworkEngineContext : INetworkEngineContext
 {
     /// <summary>Initializes the shared state of a new network context.</summary>
     /// <param name="engine">The engine snapshot the context exposes.</param>
-    /// <param name="engineController">Validates <see cref="Send"/> against the configured message type.</param>
+    /// <param name="engineController">Validates <see cref="Send"/> against the configured frame type.</param>
     /// <param name="messageRouting">Routes a <see cref="Send"/> call on <see cref="CurrentUser"/>'s behalf.</param>
     /// <param name="logger">Logs a failed <see cref="Send"/>, since it is fire-and-forget and nothing else observes its outcome.</param>
     protected NetworkEngineContext(IEngineContext engine, IEngineController engineController, IMessageRoutingService messageRouting, ILogger logger)
@@ -57,20 +57,20 @@ internal abstract class NetworkEngineContext : INetworkEngineContext
     public bool IsConnected(string userName) => engine.IsConnected(userName);
 
     /// <inheritdoc />
-    public void Send(object message)
+    public void Send(object frame)
     {
-        if (message.GetType() != engineController.MessageType)
+        if (frame.GetType() != engineController.FrameType)
         {
-            throw new ArgumentException($"Must be an instance of the configured message type ({engineController.MessageType}).", nameof(message));
+            throw new ArgumentException($"Must be an instance of the configured frame type ({engineController.FrameType}).", nameof(frame));
         }
 
-        _ = SendInBackground(message);
+        _ = SendInBackground(frame);
     }
 
-    private async Task SendInBackground(object message)
+    private async Task SendInBackground(object frame)
     {
-        try { await messageRouting.RouteMessage(CurrentUser.Name, message, CancellationToken.None); }
-        catch (Exception ex) { logger.LogError(ex, "A processor-originated message send failed"); }
+        try { await messageRouting.RouteFrame(CurrentUser.Name, frame, CancellationToken.None); }
+        catch (Exception ex) { logger.LogError(ex, "A processor-originated frame send failed"); }
     }
 }
 
@@ -80,7 +80,7 @@ internal sealed class NetworkUserContext : NetworkEngineContext, INetworkUserCon
     /// <summary>Initializes a new <see cref="NetworkUserContext"/>.</summary>
     /// <param name="engine">The engine snapshot the context exposes.</param>
     /// <param name="targetUser">The user that connected or disconnected.</param>
-    /// <param name="engineController">Validates <see cref="NetworkEngineContext.Send"/> against the configured message type.</param>
+    /// <param name="engineController">Validates <see cref="NetworkEngineContext.Send"/> against the configured frame type.</param>
     /// <param name="messageRouting">Routes a <see cref="NetworkEngineContext.Send"/> call on the current user's behalf.</param>
     /// <param name="logger">Logs a failed send, since it is fire-and-forget.</param>
     public NetworkUserContext(IEngineContext engine, string targetUser, IEngineController engineController, IMessageRoutingService messageRouting, ILogger logger)
@@ -93,21 +93,21 @@ internal sealed class NetworkUserContext : NetworkEngineContext, INetworkUserCon
     public string TargetUser { get; }
 }
 
-/// <inheritdoc cref="INetworkMessageContext" />
-internal sealed class NetworkMessageContext : NetworkEngineContext, INetworkMessageContext
+/// <inheritdoc cref="INetworkFrameContext" />
+internal sealed class NetworkFrameContext : NetworkEngineContext, INetworkFrameContext
 {
-    /// <summary>Initializes a new <see cref="NetworkMessageContext"/>.</summary>
+    /// <summary>Initializes a new <see cref="NetworkFrameContext"/>.</summary>
     /// <param name="engine">The engine snapshot the context exposes.</param>
-    /// <param name="message">The message that was received (an instance of the configured message type).</param>
-    /// <param name="engineController">Validates <see cref="NetworkEngineContext.Send"/> against the configured message type.</param>
+    /// <param name="frame">The frame that was received (an instance of the configured frame type).</param>
+    /// <param name="engineController">Validates <see cref="NetworkEngineContext.Send"/> against the configured frame type.</param>
     /// <param name="messageRouting">Routes a <see cref="NetworkEngineContext.Send"/> call on the current user's behalf.</param>
     /// <param name="logger">Logs a failed send, since it is fire-and-forget.</param>
-    public NetworkMessageContext(IEngineContext engine, object message, IEngineController engineController, IMessageRoutingService messageRouting, ILogger logger)
+    public NetworkFrameContext(IEngineContext engine, object frame, IEngineController engineController, IMessageRoutingService messageRouting, ILogger logger)
         : base(engine, engineController, messageRouting, logger)
     {
-        Message = message;
+        Frame = frame;
     }
 
     /// <inheritdoc />
-    public object Message { get; }
+    public object Frame { get; }
 }

@@ -1,16 +1,16 @@
 namespace BlueHeighliner.Comlink.Tests.Unit.Public.ExternalSystems;
 
-/// <summary>Unit tests for <see cref="ExternalSystemBase{TMessage}"/>'s connect/poll/disconnect/send/receive lifecycle.</summary>
+/// <summary>Unit tests for <see cref="ExternalSystemBase{TFrame}"/>'s connect/poll/disconnect/send/receive lifecycle.</summary>
 public sealed class ExternalSystemBaseTests
 {
     private sealed class FakeExternalSystem(TimeSpan connectRetryInterval, TimeSpan pollInterval)
-        : ExternalSystemBase<TestMessage>("Fake", connectRetryInterval, pollInterval)
+        : ExternalSystemBase<TestFrame>("Fake", connectRetryInterval, pollInterval)
     {
         public Func<CancellationToken, Task<bool>> TryConnectImpl { get; set; } = _ => Task.FromResult(true);
         public Func<CancellationToken, Task<bool>> PollIsConnectedImpl { get; set; } = _ => Task.FromResult(true);
-        public Func<TestMessage, Task<bool>> SendImpl { get; set; } = _ => Task.FromResult(true);
+        public Func<TestFrame, Task<bool>> SendImpl { get; set; } = _ => Task.FromResult(true);
         public int DisconnectCallCount { get; private set; }
-        public List<TestMessage> SentMessages { get; } = [];
+        public List<TestFrame> SentMessages { get; } = [];
 
         protected override Task<bool> TryConnect(CancellationToken cancellation) => TryConnectImpl(cancellation);
         protected override Task<bool> PollIsConnected(CancellationToken cancellation) => PollIsConnectedImpl(cancellation);
@@ -21,17 +21,17 @@ public sealed class ExternalSystemBaseTests
             return Task.CompletedTask;
         }
 
-        protected override Task<bool> Send(TestMessage message)
+        protected override Task<bool> Send(TestFrame message)
         {
             SentMessages.Add(message);
             return SendImpl(message);
         }
 
-        public Task Deliver(TestMessage message) => Receive(message);
+        public Task Deliver(TestFrame message) => Receive(message);
     }
 
     private sealed class NonPollingFakeExternalSystem(TimeSpan connectRetryInterval, TimeSpan pollInterval)
-        : ExternalSystemBase<TestMessage>("NonPolling", connectRetryInterval, pollInterval)
+        : ExternalSystemBase<TestFrame>("NonPolling", connectRetryInterval, pollInterval)
     {
         public int DisconnectCallCount { get; private set; }
 
@@ -43,7 +43,7 @@ public sealed class ExternalSystemBaseTests
             return Task.CompletedTask;
         }
 
-        protected override Task<bool> Send(TestMessage message) => Task.FromResult(true);
+        protected override Task<bool> Send(TestFrame message) => Task.FromResult(true);
 
         public void SimulateDisconnect() => ReportDisconnected();
     }
@@ -167,7 +167,7 @@ public sealed class ExternalSystemBaseTests
     {
         FakeExternalSystem system = new(TimeSpan.FromSeconds(30), TimeSpan.FromSeconds(30));
 
-        bool result = await ((IExternalSystem)system).Send(new TestMessage { MessageId = "M1" });
+        bool result = await ((IExternalSystem)system).Send(new TestFrame { MessageId = "M1" });
 
         Assert.False(result);
         Assert.Empty(system.SentMessages);
@@ -182,7 +182,7 @@ public sealed class ExternalSystemBaseTests
         Task startTask = system.Start(cts.Token);
         await WaitUntil(() => system.IsConnected, TimeSpan.FromSeconds(30));
 
-        TestMessage message = new() { MessageId = "M1" };
+        TestFrame message = new() { MessageId = "M1" };
         bool result = await ((IExternalSystem)system).Send(message);
 
         Assert.True(result);
@@ -205,7 +205,7 @@ public sealed class ExternalSystemBaseTests
         Task startTask = system.Start(cts.Token);
         await WaitUntil(() => system.IsConnected, TimeSpan.FromSeconds(30));
 
-        bool result = await ((IExternalSystem)system).Send(new TestMessage { MessageId = "M1" });
+        bool result = await ((IExternalSystem)system).Send(new TestFrame { MessageId = "M1" });
 
         Assert.False(result);
 
@@ -224,7 +224,7 @@ public sealed class ExternalSystemBaseTests
         using CancellationTokenSource cts = new();
         Task startTask = system.Start(cts.Token);
 
-        TestMessage sent = new() { MessageId = "M1" };
+        TestFrame sent = new() { MessageId = "M1" };
         await system.Deliver(sent);
 
         await WaitUntil(() => received is not null, TimeSpan.FromSeconds(30));
@@ -242,7 +242,7 @@ public sealed class ExternalSystemBaseTests
         using CancellationTokenSource cts = new();
         Task startTask = system.Start(cts.Token);
 
-        await system.Deliver(new TestMessage { MessageId = "M1" });
+        await system.Deliver(new TestFrame { MessageId = "M1" });
         await Task.Delay(50);
 
         cts.Cancel();
@@ -262,14 +262,14 @@ public sealed class ExternalSystemBaseTests
             int current = Interlocked.Increment(ref concurrentDeliveries);
             InterlockedMax(ref maxObservedConcurrency, current);
             await Task.Delay(20);
-            lock (deliveredIds) { deliveredIds.Add(((TestMessage)message).MessageId); }
+            lock (deliveredIds) { deliveredIds.Add(((TestFrame)message).MessageId); }
             Interlocked.Decrement(ref concurrentDeliveries);
         };
 
         using CancellationTokenSource cts = new();
         Task startTask = system.Start(cts.Token);
 
-        TestMessage[] messages = [.. Enumerable.Range(0, 5).Select(i => new TestMessage { MessageId = $"M{i}" })];
+        TestFrame[] messages = [.. Enumerable.Range(0, 5).Select(i => new TestFrame { MessageId = $"M{i}" })];
         await Task.WhenAll(messages.Select(system.Deliver));
 
         await WaitUntil(() => deliveredIds.Count == messages.Length, TimeSpan.FromSeconds(30));

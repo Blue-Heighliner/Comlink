@@ -392,7 +392,7 @@ public sealed class ControlProviderTests
     {
         TestEngineController controller = new();
         Assert.False(controller.PrintReceivedDefaultEnabled);
-        Assert.Equal(1, controller.GetPrintCount(new TestMessage()));
+        Assert.Equal(1, controller.GetPrintCount(new TestFrame()));
     }
 
     /// <summary>Falls back to the wrapped provider when not configured.</summary>
@@ -595,7 +595,7 @@ public sealed class ControlProviderTests
 
         Assert.Null(controller.IdentifyConnection(new IpConnectionInfo { Host = "10.0.0.1" }));
         Assert.Null(controller.InitialPacketProcessor);
-        Assert.Null(controller.InitialMessageProcessor);
+        Assert.Null(controller.InitialFrameProcessor);
         Assert.Null(controller.NetworkHandler);
     }
 
@@ -627,7 +627,7 @@ public sealed class ControlProviderTests
         ConfiguredEngineController controller = new(fallback.Object, new NetworkConfig(), NoCurrentUser);
 
         Assert.Same(packets, controller.InitialPacketProcessor);
-        Assert.Null(controller.InitialMessageProcessor);
+        Assert.Null(controller.InitialFrameProcessor);
         Assert.Same(network, controller.NetworkHandler);
     }
 
@@ -674,25 +674,25 @@ public sealed class ControlProviderTests
         Assert.Equal(new byte[] { 5 }, controller.GetPacketData(packet).ToArray());
     }
 
-    /// <summary>Every message-field member has no network file field and always delegates straight to the wrapped provider, working through the real TestMessage mapping.</summary>
+    /// <summary>Every message-field member has no network file field and always delegates straight to the wrapped provider, working through the real TestFrame mapping.</summary>
     [Fact]
     public void ConfiguredEngineController_MessageFieldMembers_AlwaysDelegateToFallback()
     {
         TestEngineController fallback = new();
         ConfiguredEngineController controller = new(fallback, new NetworkConfig(), NoCurrentUser);
 
-        Assert.Equal(fallback.MessageType, controller.MessageType);
+        Assert.Equal(fallback.FrameType, controller.FrameType);
         Assert.Same(fallback.NetworkSerializer, controller.NetworkSerializer);
         Assert.Null(controller.PacketType);
         Assert.Null(controller.PacketSerializer);
         Assert.Equal(fallback.PacketSize, controller.PacketSize);
         Assert.Equal(fallback.PacketWindow, controller.PacketWindow);
 
-        object message = controller.CreateMessage();
-        Assert.IsType<TestMessage>(message);
+        object message = controller.CreateFrame();
+        Assert.IsType<TestFrame>(message);
 
-        controller.SetMessageId(message, "M1");
-        Assert.Equal("M1", controller.GetMessageId(message));
+        controller.SetFrameId(message, "M1");
+        Assert.Equal("M1", controller.GetFrameId(message));
         controller.SetFromUser(message, "ALICE");
         Assert.Equal("ALICE", controller.GetFromUser(message));
         controller.SetSubject(message, "Hi");

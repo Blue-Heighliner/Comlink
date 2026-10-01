@@ -39,8 +39,8 @@ public sealed class ExportServiceTests : IDisposable
 
     private async Task<MessageEntity> InsertMessage(string messageId, string subject, bool isOutbound, int priority = 0)
     {
-        object message = messageFormat.CreateMessage();
-        messageFormat.SetMessageId(message, messageId);
+        object message = messageFormat.CreateFrame();
+        messageFormat.SetFrameId(message, messageId);
         messageFormat.SetSubject(message, subject);
         messageFormat.SetPriority(message, priority);
         MessageEntity entity = new() { MessageId = messageId, Message = message, FolderId = "root-inbox", IsOutbound = isOutbound };

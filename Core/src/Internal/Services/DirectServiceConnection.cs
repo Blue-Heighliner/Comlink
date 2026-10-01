@@ -33,14 +33,14 @@ internal sealed class DirectServiceConnection : IServiceConnection
     /// <inheritdoc />
     public Task Connect(CancellationToken cancellation = default)
     {
-        peerService.MessageDelivered += OnMessageDelivered;
+        peerService.FrameDelivered += OnMessageDelivered;
         messageRouting.DeliveryStatusChanged += OnDeliveryStatusChanged;
         return Task.CompletedTask;
     }
 
     private async Task OnMessageDelivered(object payload)
     {
-        if (MessageReceived is null) { return; }
+        if (MessageReceived is null || !engineController.IsMessage(payload)) { return; }
         await MessageReceived.InvokeAll(engineController.ToMessageReceivedEvent(payload));
     }
 
@@ -124,8 +124,9 @@ internal sealed class DirectServiceConnection : IServiceConnection
             return true;
         }
 
-        object confirmation = engineController.CreateMessage();
-        engineController.SetMessageId(confirmation, Guid.NewGuid().ToString("N").ToUpperInvariant());
+        object confirmation = engineController.CreateFrame();
+        engineController.SetIsMessage(confirmation, false);
+        engineController.SetFrameId(confirmation, Guid.NewGuid().ToString("N").ToUpperInvariant());
         engineController.SetFromUser(confirmation, userInfo.Name);
         engineController.SetConfirmationMessageId(confirmation, messageId);
         engineController.SetAddresses(confirmation, [new MessageAddress { UserName = fromUser, Type = AddressType.To }]);

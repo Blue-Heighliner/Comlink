@@ -19,8 +19,8 @@ internal sealed class EngineBuilder : IEngineBuilder, IAsyncDisposable
     private readonly List<AutoForwardControllerDefinition> autoForwardControllers = [];
     private ServiceProvider? bootstrap;
 
-    /// <summary>The message mapping, or <see langword="null"/> until <see cref="Message{TMessage}"/> is called.</summary>
-    public MessageMap? MessageMap { get; private set; }
+    /// <summary>The frame mapping, or <see langword="null"/> until <see cref="Frames{TFrame}"/> is called.</summary>
+    public FrameMap? FrameMap { get; private set; }
     /// <summary>The packet mapping, or <see langword="null"/> while packetization is off.</summary>
     public PacketMap? PacketMap { get; private set; }
     /// <summary>The application name, if stated.</summary>
@@ -80,7 +80,7 @@ internal sealed class EngineBuilder : IEngineBuilder, IAsyncDisposable
     /// <summary>The initial packet processor, if stated.</summary>
     public ServiceRegistration<IInitialProcessor>? InitialPacketProcessor { get; private set; }
     /// <summary>The initial message processor, if stated.</summary>
-    public ServiceRegistration<IInitialProcessor>? InitialMessageProcessor { get; private set; }
+    public ServiceRegistration<IInitialProcessor>? InitialFrameProcessor { get; private set; }
     /// <summary>Whether the <c>--config</c> and <c>--user</c> arguments are honored.</summary>
     public bool AreCommandLineOverridesAllowed { get; private set; }
     /// <summary>The external systems.</summary>
@@ -136,13 +136,13 @@ internal sealed class EngineBuilder : IEngineBuilder, IAsyncDisposable
     }
 
     /// <inheritdoc />
-    public IEngineBuilder Message<TMessage>(Action<IMessageBuilder<TMessage>> map) where TMessage : class, new()
+    public IEngineBuilder Frames<TFrame>(Action<IFrameBuilder<TFrame>> map) where TFrame : class, new()
     {
-        MessageBuilder<TMessage> builder = new();
+        FrameBuilder<TFrame> builder = new();
         map(builder);
-        MessageMap = builder.Build();
+        FrameMap = builder.Build();
         PrintCountValue = builder.PrintCountValue;
-        InitialMessageProcessor = builder.Initial;
+        InitialFrameProcessor = builder.Initial;
         NetworkHandler = builder.NetworkHandler;
         autoForwardControllers.Clear();
         autoForwardControllers.AddRange(builder.AutoForwardControllers);
@@ -378,6 +378,6 @@ internal sealed class EngineBuilder : IEngineBuilder, IAsyncDisposable
 
     private void Validate()
     {
-        if (MessageMap is null) { throw new InvalidOperationException("The engine configuration must state its message type with Message<TMessage>(...)."); }
+        if (FrameMap is null) { throw new InvalidOperationException("The engine configuration must state its frame type with Frames<TFrame>(...)."); }
     }
 }

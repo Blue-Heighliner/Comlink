@@ -4,11 +4,11 @@ namespace BlueHeighliner.Comlink.Peer;
 internal interface IPeerService
 {
     /// <summary>Raised when a remote user delivers a new (non-confirmation) message to this user.</summary>
-    event Func<object, Task>? MessageDelivered;
+    event Func<object, Task>? FrameDelivered;
     /// <summary>
     /// Raised when a remote user delivers a user-read confirmation message instead of an ordinary
     /// message (<see cref="IEngineController.GetConfirmationMessageId"/> is non-empty). Carries the ID of
-    /// the message being confirmed and the confirming user's name; not raised via <see cref="MessageDelivered"/>.
+    /// the message being confirmed and the confirming user's name; not raised via <see cref="FrameDelivered"/>.
     /// </summary>
     event Func<string, string, Task>? ConfirmationReceived;
     /// <summary>Raised whenever the delivery status of a message sent to a specific user changes.</summary>
@@ -23,7 +23,7 @@ internal interface IPeerService
     bool IsUserConnected(string userName);
     /// <summary>Starts the inbound peer listener and blocks until <paramref name="cancellation"/> is cancelled.</summary>
     Task Start(CancellationToken cancellation);
-    /// <summary>Sends <paramref name="message"/> (an instance of <see cref="IEngineController.MessageType"/>) to the peer identified by <paramref name="userName"/>.</summary>
+    /// <summary>Sends <paramref name="message"/> (an instance of <see cref="IEngineController.FrameType"/>) to the peer identified by <paramref name="userName"/>.</summary>
     Task<bool> Send(string userName, object message, CancellationToken cancellation = default);
     /// <summary>
     /// Sends <paramref name="packet"/> (an instance of <see cref="IEngineController.PacketType"/>) directly to the
@@ -32,13 +32,13 @@ internal interface IPeerService
     /// full message goes through, and carrying no delivery-status tracking of its own.
     /// </summary>
     Task<bool> SendPacket(string userName, object packet, CancellationToken cancellation = default);
-    /// <summary>Raises <see cref="MessageDelivered"/> directly with <paramref name="payload"/>, without a network round-trip. Used when a user sends a message to itself.</summary>
+    /// <summary>Raises <see cref="FrameDelivered"/> directly with <paramref name="payload"/>, without a network round-trip. Used when a user sends a message to itself.</summary>
     Task DeliverLocal(object payload);
 }
 
 /// <summary>
 /// Implements <see cref="IPeerService"/> for <see cref="UserRole.Peer"/> by wrapping an <see cref="IPeerTransport"/>.
-/// Traffic carries an instance of <see cref="IEngineController.MessageType"/> directly with no envelope; delivery
+/// Traffic carries an instance of <see cref="IEngineController.FrameType"/> directly with no envelope; delivery
 /// confirmation is derived from the transport's own acknowledgement of the send, not from an application-level
 /// reply. The node listens on <see cref="IEngineController.PeerPort"/> and keeps a connection open to each of its
 /// <see cref="IEngineController.OutgoingPoints"/>; which user is behind a connection is worked out when it forms, and a
@@ -82,7 +82,7 @@ internal sealed class PeerService : IPeerService, IReconfigurable, IAsyncDisposa
     private int disposed;
 
     /// <inheritdoc />
-    public event Func<object, Task>? MessageDelivered;
+    public event Func<object, Task>? FrameDelivered;
     /// <inheritdoc />
     public event Func<string, string, Task>? ConfirmationReceived;
     /// <inheritdoc />
@@ -137,7 +137,7 @@ internal sealed class PeerService : IPeerService, IReconfigurable, IAsyncDisposa
     {
         if (transport is null) { return false; }
 
-        DeliveryTag tag = new(engineController.GetMessageId(message), userName);
+        DeliveryTag tag = new(engineController.GetFrameId(message), userName);
         if (connections.Get(userName) is not { } connection)
         {
             logger.LogWarning("{MessageId} cannot be sent to {User}: no connection is identified as them", tag.MessageId, userName);
@@ -183,8 +183,8 @@ internal sealed class PeerService : IPeerService, IReconfigurable, IAsyncDisposa
     /// <inheritdoc />
     public async Task DeliverLocal(object payload)
     {
-        logger.LogInformation("{MessageId} delivered locally from {FromUser}", engineController.GetMessageId(payload), engineController.GetFromUser(payload));
-        await MessageDelivered.InvokeAll(payload);
+        logger.LogInformation("{MessageId} delivered locally from {FromUser}", engineController.GetFrameId(payload), engineController.GetFromUser(payload));
+        await FrameDelivered.InvokeAll(payload);
     }
 
     private void Wire(IPeerTransport newTransport)
@@ -212,7 +212,7 @@ internal sealed class PeerService : IPeerService, IReconfigurable, IAsyncDisposa
         => _ = Task.Run(() => HandleMessage(args.Payload));
 
     internal Task<bool> HandleMessage(ReadOnlyMemory<byte> data)
-        => PeerMessageDispatcher.Dispatch(data, engineController, logger, MessageDelivered, ConfirmationReceived);
+        => PeerFrameDispatcher.Dispatch(data, engineController, logger, FrameDelivered, ConfirmationReceived);
 
     private void RaiseDeliveryStatusChanged(DeliveryTag tag, DestinationStatus status)
     {

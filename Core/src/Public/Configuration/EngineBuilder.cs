@@ -2,7 +2,7 @@ namespace BlueHeighliner.Comlink;
 
 /// <summary>
 /// The fluent surface a host uses to say how the engine runs, handed to <see cref="IEngineConfiguration.Configure"/>.
-/// Every call returns the builder, and every call is optional except <see cref="Message{TMessage}"/>: anything left
+/// Every call returns the builder, and every call is optional except <see cref="Frames{TFrame}"/>: anything left
 /// unstated takes the engine's default. Where a setting also exists in the <c>--config</c> file, the file's value wins
 /// over what is stated here (see <c>Docs/Components/Config.md</c>). See <c>Docs/Components/Configuration.md</c> for what
 /// each group of settings does.
@@ -10,14 +10,14 @@ namespace BlueHeighliner.Comlink;
 public interface IEngineBuilder
 {
     /// <summary>
-    /// States the host's message type and how the engine's logical message fields map onto it, and what else depends on the message type: the print
-    /// count, auto forward controllers, the network processor and the initial message processor. Required. The type must be LiteDB-serializable for
+    /// States the host's frame type, the data format of all network traffic other than packets, and how the engine's logical fields map onto it, and what else depends on the frame type: the print
+    /// count, auto forward controllers, the network processor and the initial frame processor. Required. The type must be LiteDB-serializable for
     /// storage, and must satisfy whatever serializer is used for the network (by default protobuf-net, so it needs
     /// <c>[ProtoContract]</c>/<c>[ProtoMember]</c> attributes).
     /// </summary>
-    /// <typeparam name="TMessage">The host's message type.</typeparam>
+    /// <typeparam name="TFrame">The host's frame type.</typeparam>
     /// <param name="map">Maps each logical field.</param>
-    IEngineBuilder Message<TMessage>(Action<IMessageBuilder<TMessage>> map) where TMessage : class, new();
+    IEngineBuilder Frames<TFrame>(Action<IFrameBuilder<TFrame>> map) where TFrame : class, new();
 
     /// <summary>
     /// Turns on packetization: payloads are broken into prioritized packets of type <typeparamref name="TPacket"/> and

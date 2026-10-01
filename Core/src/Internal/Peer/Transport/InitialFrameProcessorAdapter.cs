@@ -1,23 +1,23 @@
 namespace BlueHeighliner.Comlink.Peer.Transport;
 
-/// <summary>Presents a host's <see cref="IInitialMessageProcessor{TMessage}"/> as an <see cref="IInitialProcessor"/>.</summary>
-/// <typeparam name="TMessage">The host's message type.</typeparam>
+/// <summary>Presents a host's <see cref="IInitialFrameProcessor{TFrame}"/> as an <see cref="IInitialProcessor"/>.</summary>
+/// <typeparam name="TFrame">The host's frame type.</typeparam>
 /// <param name="processor">The host's processor.</param>
-internal sealed class InitialMessageProcessorAdapter<TMessage>(IInitialMessageProcessor<TMessage> processor) : IInitialProcessor where TMessage : class
+internal sealed class InitialFrameProcessorAdapter<TFrame>(IInitialFrameProcessor<TFrame> processor) : IInitialProcessor where TFrame : class
 {
     /// <inheritdoc />
-    public Type ItemType { get; } = typeof(TMessage);
+    public Type ItemType { get; } = typeof(TFrame);
 
     /// <inheritdoc />
     public Task OnConnected(IInitialSession session) => processor.OnConnected(new Context(session));
 
     /// <inheritdoc />
-    public Task OnInitial(IInitialSession session, object item) => processor.OnInitial(new Context(session), (TMessage)item);
+    public Task OnInitial(IInitialSession session, object item) => processor.OnInitial(new Context(session), (TFrame)item);
 
     /// <inheritdoc />
-    public Task OnReply(IInitialSession session, object item) => processor.OnReply(new Context(session), (TMessage)item);
+    public Task OnReply(IInitialSession session, object item) => processor.OnReply(new Context(session), (TFrame)item);
 
-    private sealed class Context(IInitialSession session) : IInitialMessageContext<TMessage>
+    private sealed class Context(IInitialSession session) : IInitialFrameContext<TFrame>
     {
         public bool IsOpener => session.IsOpener;
 
@@ -35,6 +35,6 @@ internal sealed class InitialMessageProcessorAdapter<TMessage>(IInitialMessagePr
 
         public void Disconnect() => session.Disconnect();
 
-        public Task<bool> Send(TMessage message) => session.Send(message);
+        public Task<bool> Send(TFrame frame) => session.Send(frame);
     }
 }

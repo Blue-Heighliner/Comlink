@@ -15,13 +15,13 @@ public sealed class MessageReceivedEvent
     public List<AddressRequest> Addresses { get; set; } = [];
     /// <summary>UTC timestamp when the message was originally sent.</summary>
     public DateTime SentAt { get; set; }
-    /// <summary>Whether this message is an alert; see <see cref="IMessageBuilder{TMessage}"/>.</summary>
+    /// <summary>Whether this message is an alert; see <see cref="IFrameBuilder{TFrame}"/>.</summary>
     public bool IsAlert { get; set; }
-    /// <summary>Priority number of this message; see <see cref="IMessageBuilder{TMessage}"/>.</summary>
+    /// <summary>Priority number of this message; see <see cref="IFrameBuilder{TFrame}"/>.</summary>
     public int Priority { get; set; }
-    /// <summary>Tag identifying the type of this message; see <see cref="IMessageBuilder{TMessage}"/>.</summary>
+    /// <summary>Tag identifying the type of this message; see <see cref="IFrameBuilder{TFrame}"/>.</summary>
     public string Tag { get; set; } = string.Empty;
-    /// <summary>Security level name this message was sent at, or an empty string when no security levels are configured; see <see cref="IMessageBuilder{TMessage}"/>.</summary>
+    /// <summary>Security level name this message was sent at, or an empty string when no security levels are configured; see <see cref="IFrameBuilder{TFrame}"/>.</summary>
     public string SecurityLevel { get; set; } = string.Empty;
 }
 

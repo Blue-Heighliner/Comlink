@@ -16,7 +16,7 @@ public static class Engine
     /// file if the configuration allows one, then starts the engine in Headless mode or GUI mode.
     /// </summary>
     /// <typeparam name="TConfiguration">
-    /// Says how the engine runs; it must at least state the host's message type. It is built from a container holding
+    /// Says how the engine runs; it must at least state the host's frame type. It is built from a container holding
     /// logging (<see cref="ILoggerFactory"/>, <see cref="ILogger{TCategoryName}"/>) plus whatever <paramref name="configureServices"/>
     /// registers, so its constructor may take any of those. That container is separate from the running engine's, which
     /// receives the same <paramref name="configureServices"/> registrations again, so a service registered there exists once

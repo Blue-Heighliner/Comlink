@@ -110,7 +110,7 @@ public sealed class PacketAssemblerTests
     public void Add_WrongType_Throws()
     {
         using IPacketAssembler assembler = new Packetizer(new TestPacketEngineController()).CreateAssembler();
-        using IMemoryOwner<byte> message = new ProtobufNetworkSerializer().Serialize(new TestMessage { MessageId = "M1" });
+        using IMemoryOwner<byte> message = new ProtobufNetworkSerializer().Serialize(new TestFrame { MessageId = "M1" });
 
         Assert.Throws<InvalidDataException>(() => assembler.Add(message.Memory.ToArray()));
     }

@@ -2,8 +2,8 @@ namespace BlueHeighliner.Comlink.Control;
 
 /// <summary>
 /// Single control interface consolidating every extension point through which a host application
-/// customises Engine behaviour without modifying Engine code: the concrete message type and its logical
-/// field mapping, how that message type is serialized and packetized (and at what packet size and window) for the network, app
+/// customises Engine behaviour without modifying Engine code: the concrete frame type and its logical
+/// field mapping, how that frame type is serialized and packetized (and at what packet size and window) for the network, app
 /// identity/presentation, local user identity, the user/group directory, listener ports, alert settings,
 /// message composition, the automatic print policy, MSMT peer certificate naming and peer options, network
 /// topology, the points this node connects out to, how the user on the other end of a connection is identified
@@ -15,14 +15,14 @@ namespace BlueHeighliner.Comlink.Control;
 internal interface IEngineController
 {
     /// <summary>
-    /// The concrete message type used throughout the engine. Must be a type LiteDB can serialize for
+    /// The concrete frame type used throughout the engine. Must be a type LiteDB can serialize for
     /// storage, and must satisfy whatever <see cref="NetworkSerializer"/> requires for wire transport - the
     /// default <see cref="ProtobufNetworkSerializer"/> requires it to carry <c>[ProtoContract]</c>/<c>[ProtoMember]</c> attributes.
     /// </summary>
-    Type MessageType { get; }
+    Type FrameType { get; }
 
     /// <summary>
-    /// Serializes and deserializes instances of <see cref="MessageType"/> to and from the bytes actually
+    /// Serializes and deserializes instances of <see cref="FrameType"/> to and from the bytes actually
     /// sent across the network. Defaults to <see cref="ProtobufNetworkSerializer"/>; override to use a
     /// different wire format, as long as every node this instance talks to is configured the same way.
     /// </summary>
@@ -195,8 +195,8 @@ internal interface IEngineController
 
     /// <summary>Gets the processor that carries out the initial packet exchange on each new connection (see <see cref="IPacketBuilder{TPacket}.InitialProcessor"/>), or <see langword="null"/> for none. Requires <see cref="PacketType"/>.</summary>
     IInitialProcessor? InitialPacketProcessor { get; }
-    /// <summary>Gets the processor that carries out the initial message exchange on each new connection (see <see cref="IMessageBuilder{TMessage}.InitialProcessor"/>), or <see langword="null"/> for none.</summary>
-    IInitialProcessor? InitialMessageProcessor { get; }
+    /// <summary>Gets the processor that carries out the initial message exchange on each new connection (see <see cref="IFrameBuilder{TFrame}.InitialProcessor"/>), or <see langword="null"/> for none.</summary>
+    IInitialProcessor? InitialFrameProcessor { get; }
     /// <summary>When <see langword="true"/>, the <c>--config</c> and <c>--user</c> command-line arguments override where the network configuration file and the running user come from (see <see cref="IEngineBuilder.CommandLineOverrides"/>); when <see langword="false"/> (the default) they are ignored and only <c>Config.json</c> and <c>User.json</c> in the working directory are used.</summary>
     bool CommandLineOverridesAllowed { get; }
 
@@ -226,7 +226,7 @@ internal interface IEngineController
     /// </summary>
     IExternalSystem? ExternalServer { get; }
 
-    /// <summary>The processor that reacts to a user connecting or disconnecting and to a message being received (see <see cref="IMessageBuilder{TMessage}.Processor"/>), or <see langword="null"/> for none.</summary>
+    /// <summary>The processor that reacts to a user connecting or disconnecting and to a message being received (see <see cref="IFrameBuilder{TFrame}.Processor"/>), or <see langword="null"/> for none.</summary>
     INetworkHandler? NetworkHandler { get; }
 
     /// <summary>Every custom export format added via <see cref="IEngineBuilder.ExportFormat{TFormat}"/>, in the order added; empty if none.</summary>
@@ -238,82 +238,86 @@ internal interface IEngineController
     /// <summary>The server users, from <see cref="Servers"/>, that keep a copy of every message they route and answer retrieval requests; see <see cref="UserInfo.StoresMessages"/>. Empty if none.</summary>
     IReadOnlyList<string> StorageServers { get; }
 
-    /// <summary>Every custom auto forward controller added via <see cref="IMessageBuilder{TMessage}.AutoForward"/>, in the order added; empty if none.</summary>
+    /// <summary>Every custom auto forward controller added via <see cref="IFrameBuilder{TFrame}.AutoForward"/>, in the order added; empty if none.</summary>
     IReadOnlyList<AutoForwardControllerDefinition> AutoForwardControllers { get; }
 
-    /// <summary>Creates a new, empty instance of <see cref="MessageType"/>.</summary>
-    object CreateMessage();
-    /// <summary>Gets the application-level message identifier from <paramref name="message"/>.</summary>
-    string GetMessageId(object message);
-    /// <summary>Sets the application-level message identifier on <paramref name="message"/>.</summary>
-    void SetMessageId(object message, string value);
-    /// <summary>Gets the sender user name from <paramref name="message"/>.</summary>
-    string GetFromUser(object message);
-    /// <summary>Sets the sender user name on <paramref name="message"/>.</summary>
-    void SetFromUser(object message, string value);
-    /// <summary>Gets the subject line from <paramref name="message"/>.</summary>
-    string GetSubject(object message);
-    /// <summary>Sets the subject line on <paramref name="message"/>.</summary>
-    void SetSubject(object message, string value);
-    /// <summary>Gets the body text from <paramref name="message"/>.</summary>
-    string GetBody(object message);
-    /// <summary>Sets the body text on <paramref name="message"/>.</summary>
-    void SetBody(object message, string value);
-    /// <summary>Gets the recipient address list from <paramref name="message"/>.</summary>
-    List<MessageAddress> GetAddresses(object message);
-    /// <summary>Sets the recipient address list on <paramref name="message"/>.</summary>
-    void SetAddresses(object message, List<MessageAddress> value);
-    /// <summary>Gets the UTC sent timestamp from <paramref name="message"/>.</summary>
-    DateTime GetSentAt(object message);
-    /// <summary>Sets the UTC sent timestamp on <paramref name="message"/>.</summary>
-    void SetSentAt(object message, DateTime value);
+    /// <summary>Creates a new, empty instance of <see cref="FrameType"/>.</summary>
+    object CreateFrame();
+    /// <summary>Gets the application-level frame identifier from <paramref name="frame"/>.</summary>
+    string GetFrameId(object frame);
+    /// <summary>Sets the application-level frame identifier on <paramref name="frame"/>.</summary>
+    void SetFrameId(object frame, string value);
+    /// <summary>Gets the sender user name from <paramref name="frame"/>.</summary>
+    string GetFromUser(object frame);
+    /// <summary>Sets the sender user name on <paramref name="frame"/>.</summary>
+    void SetFromUser(object frame, string value);
+    /// <summary>Gets the subject line from <paramref name="frame"/>.</summary>
+    string GetSubject(object frame);
+    /// <summary>Sets the subject line on <paramref name="frame"/>.</summary>
+    void SetSubject(object frame, string value);
+    /// <summary>Gets the body text from <paramref name="frame"/>.</summary>
+    string GetBody(object frame);
+    /// <summary>Sets the body text on <paramref name="frame"/>.</summary>
+    void SetBody(object frame, string value);
+    /// <summary>Gets the recipient address list from <paramref name="frame"/>.</summary>
+    List<MessageAddress> GetAddresses(object frame);
+    /// <summary>Sets the recipient address list on <paramref name="frame"/>.</summary>
+    void SetAddresses(object frame, List<MessageAddress> value);
+    /// <summary>Gets the UTC sent timestamp from <paramref name="frame"/>.</summary>
+    DateTime GetSentAt(object frame);
+    /// <summary>Sets the UTC sent timestamp on <paramref name="frame"/>.</summary>
+    void SetSentAt(object frame, DateTime value);
     /// <summary>
-    /// Gets the message ID this message is a user-read confirmation for, or an empty string if
-    /// <paramref name="message"/> is not a confirmation. A confirmation message carries only this field
-    /// (plus <see cref="GetMessageId"/>/<see cref="GetFromUser"/> for its own transport) — subject, body,
+    /// Gets the message ID this frame is a user-read confirmation for, or an empty string if
+    /// <paramref name="frame"/> is not a confirmation. A confirmation frame carries only this field
+    /// (plus <see cref="GetFrameId"/>/<see cref="GetFromUser"/> for its own transport) — subject, body,
     /// and addresses are left unset — and is sent back to the original sender when the recipient opens the
     /// referenced message, so the sender can advance that message's delivery status to <c>Read</c>. See
     /// <c>Docs/Components/Peer.md</c>.
     /// </summary>
-    string GetConfirmationMessageId(object message);
-    /// <summary>Sets the message ID <paramref name="message"/> is a user-read confirmation for.</summary>
-    void SetConfirmationMessageId(object message, string value);
-    /// <summary>Gets whether <paramref name="message"/> is a retrieval request; see <see cref="IMessageBuilder{TMessage}.Retrieval"/>.</summary>
-    bool IsRetrieval(object message);
+    string GetConfirmationMessageId(object frame);
+    /// <summary>Sets the message ID <paramref name="frame"/> is a user-read confirmation for.</summary>
+    void SetConfirmationMessageId(object frame, string value);
+    /// <summary>Gets whether <paramref name="frame"/> is a retrieval request; see <see cref="IFrameBuilder{TFrame}.Retrieval"/>.</summary>
+    bool IsRetrieval(object frame);
     /// <summary>Reads the criteria a retrieval request carries from its mapped fields. Meaningful only when <see cref="IsRetrieval"/> is <see langword="true"/>.</summary>
-    RetrievalCriteria GetRetrieval(object message);
-    /// <summary>Writes <paramref name="criteria"/> into <paramref name="message"/>'s mapped retrieval fields and marks it a retrieval request.</summary>
-    void SetRetrieval(object message, RetrievalCriteria criteria);
+    RetrievalCriteria GetRetrieval(object frame);
+    /// <summary>Writes <paramref name="criteria"/> into <paramref name="frame"/>'s mapped retrieval fields and marks it a retrieval request.</summary>
+    void SetRetrieval(object frame, RetrievalCriteria criteria);
+    /// <summary>Gets whether <paramref name="frame"/> is a message, one the user reads and that is stored, as opposed to a frame that is only network traffic.</summary>
+    bool IsMessage(object frame);
+    /// <summary>Sets whether <paramref name="frame"/> is a message.</summary>
+    void SetIsMessage(object frame, bool value);
     /// <summary>
-    /// Gets whether <paramref name="message"/> is an alert: an ordinary message that also causes the
+    /// Gets whether <paramref name="frame"/> is an alert: an ordinary message that also causes the
     /// receiving Client-mode UI to alarm (visually and audibly) until the user reads it. See
     /// <c>Docs/Components/ViewModels.md</c>.
     /// </summary>
-    bool GetIsAlert(object message);
-    /// <summary>Sets whether <paramref name="message"/> is an alert.</summary>
-    void SetIsAlert(object message, bool value);
+    bool GetIsAlert(object frame);
+    /// <summary>Sets whether <paramref name="frame"/> is an alert.</summary>
+    void SetIsAlert(object frame, bool value);
     /// <summary>
-    /// Gets the priority number of <paramref name="message"/>. One of the values returned by
+    /// Gets the priority number of <paramref name="frame"/>. One of the values returned by
     /// <see cref="Priorities"/>; used verbatim as the MSMT send priority (larger values are sent first —
-    /// see <c>Docs/Components/Peer.md</c>) whenever this message is sent over an MSMT connection.
+    /// see <c>Docs/Components/Peer.md</c>) whenever this frame is sent over an MSMT connection.
     /// </summary>
-    int GetPriority(object message);
-    /// <summary>Sets the priority number on <paramref name="message"/>.</summary>
-    void SetPriority(object message, int value);
+    int GetPriority(object frame);
+    /// <summary>Sets the priority number on <paramref name="frame"/>.</summary>
+    void SetPriority(object frame, int value);
     /// <summary>
-    /// Gets the short, user-inputted tag identifying the type of message this is, or an empty string if
+    /// Gets the short, user-inputted tag identifying the type of message this frame is, or an empty string if
     /// none was set. See <see cref="BlockedCombinations"/>.
     /// </summary>
-    string GetTag(object message);
-    /// <summary>Sets the tag on <paramref name="message"/>.</summary>
-    void SetTag(object message, string value);
+    string GetTag(object frame);
+    /// <summary>Sets the tag on <paramref name="frame"/>.</summary>
+    void SetTag(object frame, string value);
     /// <summary>
-    /// Gets the security level name <paramref name="message"/> was sent at, one of <see cref="SecurityLevels"/>, or
+    /// Gets the security level name <paramref name="frame"/> was sent at, one of <see cref="SecurityLevels"/>, or
     /// an empty string when no security levels are configured.
     /// </summary>
-    string GetSecurityLevel(object message);
-    /// <summary>Sets the security level name on <paramref name="message"/>.</summary>
-    void SetSecurityLevel(object message, string value);
+    string GetSecurityLevel(object frame);
+    /// <summary>Sets the security level name on <paramref name="frame"/>.</summary>
+    void SetSecurityLevel(object frame, string value);
 
     /// <summary>Creates a new, empty instance of <see cref="PacketType"/>. Only called while <see cref="PacketType"/> is set.</summary>
     object CreatePacket();
@@ -377,7 +381,7 @@ internal interface IEngineController
     /// when it arrives — <c>0</c> to not print it, <c>1</c> to print it once, <c>2</c> to print two copies, and
     /// so on. Only consulted while the print manager's "print received" toggle is enabled.
     /// </summary>
-    /// <param name="message">The received message, in this instance's own <see cref="MessageType"/>.</param>
+    /// <param name="message">The received message, in this instance's own <see cref="FrameType"/>.</param>
     int GetPrintCount(object message);
 
     /// <summary>
@@ -431,9 +435,9 @@ internal class EngineController(EngineBuilder builder, ICurrentUserProvider curr
         return definitions;
     }
 
-    private readonly MessageMap message = builder.MessageMap ?? throw new InvalidOperationException("The engine configuration must state its message type with Message<TMessage>(...).");
+    private readonly FrameMap frame = builder.FrameMap ?? throw new InvalidOperationException("The engine configuration must state its frame type with Frames<TFrame>(...).");
     private readonly PacketMap? packet = builder.PacketMap;
-    private readonly Lazy<INetworkSerializer> networkSerializer = new(() => (builder.MessageMap ?? throw new InvalidOperationException("The engine configuration must state its message type with Message<TMessage>(...).")).Serializer.Create(services));
+    private readonly Lazy<INetworkSerializer> networkSerializer = new(() => (builder.FrameMap ?? throw new InvalidOperationException("The engine configuration must state its frame type with Frames<TFrame>(...).")).Serializer.Create(services));
     private readonly Lazy<INetworkSerializer?> packetSerializer = new(() => builder.PacketMap?.Serializer.Create(services));
     private readonly Lazy<IReadOnlyList<ExportFormatDefinition>> exportFormats = new(() => Replacing(
         builder.ExportFormats.Select(registration => registration.Create(services)),
@@ -444,13 +448,13 @@ internal class EngineController(EngineBuilder builder, ICurrentUserProvider curr
         format => new ImportFormatDefinition { Name = format.Name, Read = format.Import, StagedSendMode = format.StagedSendMode, StagedSendDelay = format.StagedSendDelay },
         definition => definition.Name));
     private readonly Lazy<IInitialProcessor?> initialPacketProcessor = new(() => builder.InitialPacketProcessor?.Create(services));
-    private readonly Lazy<IInitialProcessor?> initialMessageProcessor = new(() => builder.InitialMessageProcessor?.Create(services));
+    private readonly Lazy<IInitialProcessor?> initialMessageProcessor = new(() => builder.InitialFrameProcessor?.Create(services));
     private readonly Lazy<INetworkHandler?> networkHandler = new(() => builder.NetworkHandler?.Create(services));
     private readonly IReadOnlyList<MessagePriorityOption> defaultPriorities = [new MessagePriorityOption { Name = "Normal", Value = 0 }];
     private readonly IReadOnlyList<AddressType> addressTypeOrder = [AddressType.To, AddressType.Cc, AddressType.External];
 
     /// <inheritdoc />
-    public virtual Type MessageType => message.Type;
+    public virtual Type FrameType => frame.Type;
     /// <inheritdoc />
     public virtual INetworkSerializer NetworkSerializer => networkSerializer.Value;
     /// <inheritdoc />
@@ -580,7 +584,7 @@ internal class EngineController(EngineBuilder builder, ICurrentUserProvider curr
     public virtual IInitialProcessor? InitialPacketProcessor => initialPacketProcessor.Value;
 
     /// <inheritdoc />
-    public virtual IInitialProcessor? InitialMessageProcessor => initialMessageProcessor.Value;
+    public virtual IInitialProcessor? InitialFrameProcessor => initialMessageProcessor.Value;
 
     /// <inheritdoc />
     public virtual bool CommandLineOverridesAllowed => builder.AreCommandLineOverridesAllowed;
@@ -605,72 +609,76 @@ internal class EngineController(EngineBuilder builder, ICurrentUserProvider curr
     public virtual string TrustedAuthorityCertificateName => network.TrustedAuthorityCertificateName ?? builder.TrustedAuthorityValue ?? "COMLINK-ROOT";
 
     /// <inheritdoc />
-    public virtual object CreateMessage() => message.Create();
+    public virtual object CreateFrame() => frame.Create();
     /// <inheritdoc />
-    public virtual string GetMessageId(object value) => message.GetId(value);
+    public virtual string GetFrameId(object value) => frame.GetId(value);
     /// <inheritdoc />
-    public virtual void SetMessageId(object value, string id) => message.SetId(value, id);
+    public virtual void SetFrameId(object value, string id) => frame.SetId(value, id);
     /// <inheritdoc />
-    public virtual string GetFromUser(object value) => message.GetSender(value);
+    public virtual string GetFromUser(object value) => frame.GetSender(value);
     /// <inheritdoc />
-    public virtual void SetFromUser(object value, string user) => message.SetSender(value, user);
+    public virtual void SetFromUser(object value, string user) => frame.SetSender(value, user);
     /// <inheritdoc />
-    public virtual string GetSubject(object value) => message.GetSubject(value);
+    public virtual string GetSubject(object value) => frame.GetSubject(value);
     /// <inheritdoc />
-    public virtual void SetSubject(object value, string subject) => message.SetSubject(value, subject);
+    public virtual void SetSubject(object value, string subject) => frame.SetSubject(value, subject);
     /// <inheritdoc />
-    public virtual string GetBody(object value) => message.GetBody(value);
+    public virtual string GetBody(object value) => frame.GetBody(value);
     /// <inheritdoc />
-    public virtual void SetBody(object value, string body) => message.SetBody(value, body);
+    public virtual void SetBody(object value, string body) => frame.SetBody(value, body);
     /// <inheritdoc />
-    public virtual List<MessageAddress> GetAddresses(object value) => message.GetAddresses(value);
+    public virtual List<MessageAddress> GetAddresses(object value) => frame.GetAddresses(value);
     /// <inheritdoc />
-    public virtual void SetAddresses(object value, List<MessageAddress> addresses) => message.SetAddresses(value, addresses);
+    public virtual void SetAddresses(object value, List<MessageAddress> addresses) => frame.SetAddresses(value, addresses);
     /// <inheritdoc />
-    public virtual DateTime GetSentAt(object value) => message.GetSentAt(value);
+    public virtual DateTime GetSentAt(object value) => frame.GetSentAt(value);
     /// <inheritdoc />
-    public virtual void SetSentAt(object value, DateTime sentAt) => message.SetSentAt(value, sentAt);
+    public virtual void SetSentAt(object value, DateTime sentAt) => frame.SetSentAt(value, sentAt);
     /// <inheritdoc />
-    public virtual string GetConfirmationMessageId(object value) => message.GetConfirmationId(value);
+    public virtual string GetConfirmationMessageId(object value) => frame.GetConfirmationId(value);
     /// <inheritdoc />
-    public virtual void SetConfirmationMessageId(object value, string id) => message.SetConfirmationId(value, id);
+    public virtual void SetConfirmationMessageId(object value, string id) => frame.SetConfirmationId(value, id);
     /// <inheritdoc />
-    public virtual bool IsRetrieval(object value) => message.GetIsRetrieval(value);
+    public virtual bool IsRetrieval(object value) => frame.GetIsRetrieval(value);
     /// <inheritdoc />
     public virtual RetrievalCriteria GetRetrieval(object value) => new()
     {
-        From = message.GetRetrievalFrom(value),
-        To = message.GetRetrievalTo(value),
-        Authors = message.GetRetrievalAuthors(value),
-        Destinations = message.GetRetrievalDestinations(value),
-        Ids = message.GetRetrievalIds(value)
+        From = frame.GetRetrievalFrom(value),
+        To = frame.GetRetrievalTo(value),
+        Authors = frame.GetRetrievalAuthors(value),
+        Destinations = frame.GetRetrievalDestinations(value),
+        Ids = frame.GetRetrievalIds(value)
     };
     /// <inheritdoc />
     public virtual void SetRetrieval(object value, RetrievalCriteria criteria)
     {
-        message.SetIsRetrieval(value, true);
-        message.SetRetrievalFrom(value, criteria.From);
-        message.SetRetrievalTo(value, criteria.To);
-        message.SetRetrievalAuthors(value, criteria.Authors);
-        message.SetRetrievalDestinations(value, criteria.Destinations);
-        message.SetRetrievalIds(value, criteria.Ids);
+        frame.SetIsRetrieval(value, true);
+        frame.SetRetrievalFrom(value, criteria.From);
+        frame.SetRetrievalTo(value, criteria.To);
+        frame.SetRetrievalAuthors(value, criteria.Authors);
+        frame.SetRetrievalDestinations(value, criteria.Destinations);
+        frame.SetRetrievalIds(value, criteria.Ids);
     }
     /// <inheritdoc />
-    public virtual bool GetIsAlert(object value) => message.GetIsAlert(value);
+    public virtual bool IsMessage(object value) => frame.GetIsMessage(value);
     /// <inheritdoc />
-    public virtual void SetIsAlert(object value, bool isAlert) => message.SetIsAlert(value, isAlert);
+    public virtual void SetIsMessage(object value, bool isMessage) => frame.SetIsMessage(value, isMessage);
     /// <inheritdoc />
-    public virtual int GetPriority(object value) => message.GetPriority(value);
+    public virtual bool GetIsAlert(object value) => frame.GetIsAlert(value);
     /// <inheritdoc />
-    public virtual void SetPriority(object value, int priority) => message.SetPriority(value, priority);
+    public virtual void SetIsAlert(object value, bool isAlert) => frame.SetIsAlert(value, isAlert);
     /// <inheritdoc />
-    public virtual string GetTag(object value) => message.GetTag(value);
+    public virtual int GetPriority(object value) => frame.GetPriority(value);
     /// <inheritdoc />
-    public virtual void SetTag(object value, string tag) => message.SetTag(value, tag);
+    public virtual void SetPriority(object value, int priority) => frame.SetPriority(value, priority);
     /// <inheritdoc />
-    public virtual string GetSecurityLevel(object value) => message.GetSecurityLevel(value);
+    public virtual string GetTag(object value) => frame.GetTag(value);
     /// <inheritdoc />
-    public virtual void SetSecurityLevel(object value, string level) => message.SetSecurityLevel(value, level);
+    public virtual void SetTag(object value, string tag) => frame.SetTag(value, tag);
+    /// <inheritdoc />
+    public virtual string GetSecurityLevel(object value) => frame.GetSecurityLevel(value);
+    /// <inheritdoc />
+    public virtual void SetSecurityLevel(object value, string level) => frame.SetSecurityLevel(value, level);
 
     /// <inheritdoc />
     public virtual object CreatePacket() => Packet.Create();
@@ -733,25 +741,26 @@ internal static class EngineControllerExtensions
     extension(IEngineController engineController)
     {
         /// <summary>
-        /// The message a node sends to keep a connection verified: an empty instance of <see cref="IEngineController.MessageType"/>, serialized like any
+        /// The message a node sends to keep a connection verified: an empty instance of <see cref="IEngineController.FrameType"/>, serialized like any
         /// message. It is recognized by having no identifier, addresses, confirmation or retrieval, which no message built by the engine ever lacks,
         /// and is acknowledged and otherwise ignored.
         /// </summary>
-        /// <param name="message">A received instance of <see cref="IEngineController.MessageType"/>.</param>
+        /// <param name="message">A received instance of <see cref="IEngineController.FrameType"/>.</param>
         public bool IsHeartbeat(object message)
-            => string.IsNullOrEmpty(engineController.GetMessageId(message))
+            => !engineController.IsMessage(message)
+            && string.IsNullOrEmpty(engineController.GetFrameId(message))
             && engineController.GetAddresses(message).Count == 0
             && string.IsNullOrEmpty(engineController.GetConfirmationMessageId(message))
             && !engineController.IsRetrieval(message);
 
         /// <summary>
-        /// Reads every logical field of <paramref name="payload"/> (an instance of <see cref="IEngineController.MessageType"/>)
+        /// Reads every logical field of <paramref name="payload"/> (an instance of <see cref="IEngineController.FrameType"/>)
         /// into a new <see cref="MessageReceivedEvent"/>. Shared by <see cref="DirectServiceConnection"/> and
         /// <see cref="EngineHooksService"/>, so both surface the exact same fields for an inbound message.
         /// </summary>
         public MessageReceivedEvent ToMessageReceivedEvent(object payload) => new()
         {
-            MessageId = engineController.GetMessageId(payload),
+            MessageId = engineController.GetFrameId(payload),
             FromUser = engineController.GetFromUser(payload),
             Subject = engineController.GetSubject(payload),
             Body = engineController.GetBody(payload),

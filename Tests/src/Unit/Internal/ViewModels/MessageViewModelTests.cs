@@ -17,8 +17,8 @@ public sealed class MessageViewModelTests
         string securityLevel = "")
     {
         string id = messageId ?? Guid.NewGuid().ToString("N").ToUpperInvariant();
-        object message = format.CreateMessage();
-        format.SetMessageId(message, id);
+        object message = format.CreateFrame();
+        format.SetFrameId(message, id);
         format.SetSubject(message, subject);
         format.SetBody(message, body);
         format.SetFromUser(message, fromUser);

@@ -1,11 +1,11 @@
 namespace BlueHeighliner.Comlink.Tests.Unit.Internal.Peer;
 
-/// <summary>Unit tests for <see cref="PeerMessageDispatcher"/>'s classification of received bytes.</summary>
-public sealed class PeerMessageDispatcherTests
+/// <summary>Unit tests for <see cref="PeerFrameDispatcher"/>'s classification of received bytes.</summary>
+public sealed class PeerFrameDispatcherTests
 {
     private static readonly ILogger logger = LoggerFactory.Create(_ => { }).CreateLogger("test");
 
-    private static ReadOnlyMemory<byte> Encode(IEngineController controller, TestMessage message)
+    private static ReadOnlyMemory<byte> Encode(IEngineController controller, TestFrame message)
     {
         using IMemoryOwner<byte> buf = controller.NetworkSerializer.Serialize(message);
         return buf.Memory.ToArray();
@@ -18,7 +18,7 @@ public sealed class PeerMessageDispatcherTests
         TestEngineController controller = new();
         List<object> delivered = [];
 
-        bool ok = await PeerMessageDispatcher.Dispatch(Encode(controller, new TestMessage { MessageId = "M1" }), controller, logger, m => { delivered.Add(m); return Task.CompletedTask; }, null);
+        bool ok = await PeerFrameDispatcher.Dispatch(Encode(controller, new TestFrame { MessageId = "M1" }), controller, logger, m => { delivered.Add(m); return Task.CompletedTask; }, null);
 
         Assert.True(ok);
         Assert.Single(delivered);
@@ -32,7 +32,7 @@ public sealed class PeerMessageDispatcherTests
         List<object> delivered = [];
         int confirmations = 0;
 
-        bool ok = await PeerMessageDispatcher.Dispatch(
+        bool ok = await PeerFrameDispatcher.Dispatch(
             TestHeartbeat.Bytes(), controller, logger,
             m => { delivered.Add(m); return Task.CompletedTask; }, (_, _) => { confirmations++; return Task.CompletedTask; });
 
@@ -47,7 +47,7 @@ public sealed class PeerMessageDispatcherTests
     {
         TestEngineController controller = new();
 
-        Assert.False(await PeerMessageDispatcher.Dispatch(ReadOnlyMemory<byte>.Empty, controller, logger, null, null));
+        Assert.False(await PeerFrameDispatcher.Dispatch(ReadOnlyMemory<byte>.Empty, controller, logger, null, null));
     }
 
     /// <summary>A retrieval request is neither delivered as a message nor treated as a confirmation: only a storage server answers one.</summary>
@@ -58,8 +58,8 @@ public sealed class PeerMessageDispatcherTests
         List<object> delivered = [];
         int confirmations = 0;
 
-        bool ok = await PeerMessageDispatcher.Dispatch(
-            Encode(controller, new TestMessage { MessageId = "R1", IsRetrieval = true }), controller, logger,
+        bool ok = await PeerFrameDispatcher.Dispatch(
+            Encode(controller, new TestFrame { MessageId = "R1", IsRetrieval = true }), controller, logger,
             m => { delivered.Add(m); return Task.CompletedTask; }, (_, _) => { confirmations++; return Task.CompletedTask; });
 
         Assert.True(ok);

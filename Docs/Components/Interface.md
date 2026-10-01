@@ -2,21 +2,21 @@
 
 The engine always exposes a local **interface listener** — in both `Client` and `Headless` mode — that
 lets an external program compose messages through this user's own identity. An interface connection is
-not a request/response control channel — it uses the same transport and message type as a peer connection
-(see [MsmtIntegration.md](MsmtIntegration.md) and [Peer.md](Peer.md#message-format)) and carries nothing
-but instances of the host's message type, with no command discriminator. That type is
+not a request/response control channel — it uses the same transport and frame type as a peer connection
+(see [MsmtIntegration.md](MsmtIntegration.md) and [Peer.md](Peer.md#frame-format)) and carries nothing
+but instances of the host's frame type, with no command discriminator. That type is
 injectable by the host (see [Configuration.md](Configuration.md)), and so is how it is serialized: an external program must
 encode whatever concrete type the running engine is configured with using the engine's
-the message serializer. With the default, `ProtobufNetworkSerializer`, that is a protobuf-net
+the frame serializer. With the default, `ProtobufNetworkSerializer`, that is a protobuf-net
 envelope holding the type's assembly-qualified name and the message's own protobuf-net encoding as nested bytes,
-and only the engine's own message type is accepted. Payloads on an interface connection are never packetized,
+and only the engine's own frame type is accepted. Payloads on an interface connection are never packetized,
 whatever the host's packet type is.
 
 An interface connection represents no user of its own:
 
 - **Interface → outbound**: every message an interface sends is routed out to peers exactly as if this
   user's own installed identity had composed and sent it — `Subject`, `Body`, and `Addresses` are read
-  from the message via the host's message mapping; `MessageId`, `FromUser`, and `SentAt` are ignored and
+  from the message via the host's frame mapping; `MessageId`, `FromUser`, and `SentAt` are ignored and
   re-assigned by `MessageRoutingService.Route`, the same call `DirectServiceConnection.SendMessage`
   makes for a GUI-composed send.
 - **Inbound → interface**: not currently supported. Mirroring a message this user receives from a peer
@@ -55,7 +55,7 @@ IMsmtConnection connection = client.Connect(new MsmtNameTarget { Host = "127.0.0
 await connection.Wait();
 
 // Anything sent here, serialized the way the running engine's NetworkSerializer does it for the message
-// type its host registered (SampleMessage in the Sample host), is routed out to peers as if this user
+// type its host registered (SampleFrame in the Sample host), is routed out to peers as if this user
 // sent it.
 connection.Send(messageBytes);
 ```

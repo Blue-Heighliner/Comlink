@@ -74,8 +74,8 @@ public sealed class ImportServiceTests : IDisposable
 
     private async Task<MessageEntity> InsertSourceMessage(string messageId, string subject, bool isOutbound, DateTime? receivedAt = null, int priority = 0)
     {
-        object message = messageFormat.CreateMessage();
-        messageFormat.SetMessageId(message, messageId);
+        object message = messageFormat.CreateFrame();
+        messageFormat.SetFrameId(message, messageId);
         messageFormat.SetSubject(message, subject);
         messageFormat.SetPriority(message, priority);
         MessageEntity entity = new()
@@ -147,7 +147,7 @@ public sealed class ImportServiceTests : IDisposable
         await destMessages.Insert(new MessageEntity
         {
             MessageId = "M1",
-            Message = messageFormat.CreateMessage(),
+            Message = messageFormat.CreateFrame(),
             FolderId = "root-inbox",
             IsOutbound = false,
             ReceivedAt = receivedAt

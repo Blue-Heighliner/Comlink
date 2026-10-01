@@ -8,7 +8,7 @@ namespace BlueHeighliner.Comlink.Services;
 /// </summary>
 internal interface IAutoForwardService
 {
-    /// <summary>Subscribes to <see cref="IPeerService.MessageDelivered"/> and blocks until <paramref name="cancellation"/> is cancelled.</summary>
+    /// <summary>Subscribes to <see cref="IPeerService.FrameDelivered"/> and blocks until <paramref name="cancellation"/> is cancelled.</summary>
     Task Start(CancellationToken cancellation);
 }
 
@@ -44,14 +44,16 @@ internal sealed class AutoForwardService : IAutoForwardService
     {
         if (engineController.AutoForwardControllers.Count == 0) { return; }
 
-        peerService.MessageDelivered += OnMessageDelivered;
+        peerService.FrameDelivered += OnMessageDelivered;
         try { await Task.Delay(Timeout.Infinite, cancellation); }
         catch (OperationCanceledException) { }
-        finally { peerService.MessageDelivered -= OnMessageDelivered; }
+        finally { peerService.FrameDelivered -= OnMessageDelivered; }
     }
 
     private async Task OnMessageDelivered(object message)
     {
+        if (!engineController.IsMessage(message)) { return; }
+
         UserInfo? currentUser = userService.GetCurrentUserInfo();
         if (currentUser is null) { return; }
 
@@ -63,7 +65,7 @@ internal sealed class AutoForwardService : IAutoForwardService
             try { matches = controller.Filter(message); }
             catch (Exception ex)
             {
-                logger.LogError(ex, "Auto forward controller {Controller} filter failed for {MessageId}", controller.Name, engineController.GetMessageId(message));
+                logger.LogError(ex, "Auto forward controller {Controller} filter failed for {MessageId}", controller.Name, engineController.GetFrameId(message));
                 continue;
             }
             if (!matches) { continue; }
@@ -80,7 +82,8 @@ internal sealed class AutoForwardService : IAutoForwardService
     {
         try
         {
-            object forwarded = engineController.CreateMessage();
+            object forwarded = engineController.CreateFrame();
+            engineController.SetIsMessage(forwarded, true);
             engineController.SetSubject(forwarded, engineController.GetSubject(original));
             engineController.SetBody(forwarded, engineController.GetBody(original));
             engineController.SetIsAlert(forwarded, engineController.GetIsAlert(original));
@@ -89,11 +92,11 @@ internal sealed class AutoForwardService : IAutoForwardService
             engineController.SetSecurityLevel(forwarded, engineController.GetSecurityLevel(original));
             engineController.SetAddresses(forwarded, [.. recipients.Select(name => new MessageAddress { UserName = name, Type = AddressType.To })]);
 
-            await messageRouting.RouteMessage(fromUser, forwarded, CancellationToken.None);
+            await messageRouting.RouteFrame(fromUser, forwarded, CancellationToken.None);
         }
         catch (Exception ex)
         {
-            logger.LogError(ex, "Auto forward controller {Controller} failed to forward {MessageId}", controllerName, engineController.GetMessageId(original));
+            logger.LogError(ex, "Auto forward controller {Controller} failed to forward {MessageId}", controllerName, engineController.GetFrameId(original));
         }
     }
 }

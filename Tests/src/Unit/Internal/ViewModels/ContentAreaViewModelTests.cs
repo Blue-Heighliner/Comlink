@@ -189,7 +189,7 @@ public sealed class ContentAreaViewModelTests
         Mock<INoteRepository> notes = new();
         Mock<IActivityLogRepository> activityLogs = new();
         ILoggerFactory loggerFactory = LoggerFactory.Create(_ => { });
-        MessageEntity outboundEntity = new() { MessageId = "MSG1", Message = new TestMessage(), IsOutbound = true };
+        MessageEntity outboundEntity = new() { MessageId = "MSG1", Message = new TestFrame(), IsOutbound = true };
         messages.Setup(m => m.Get("MSG1", true)).ReturnsAsync(outboundEntity);
         ContentAreaViewModel vm = new(MakeEngineController(), entry.Object, new FakeServiceConnection(), messages.Object,
             drafts.Object, notes.Object, activityLogs.Object, loggerFactory, new CurrentUserProvider(), new Mock<IStagedSendViewModel>().Object);
@@ -211,7 +211,7 @@ public sealed class ContentAreaViewModelTests
         Mock<INoteRepository> notes = new();
         Mock<IActivityLogRepository> activityLogs = new();
         ILoggerFactory loggerFactory = LoggerFactory.Create(_ => { });
-        MessageEntity inboundEntity = new() { MessageId = "MSG1", Message = new TestMessage(), IsOutbound = false };
+        MessageEntity inboundEntity = new() { MessageId = "MSG1", Message = new TestFrame(), IsOutbound = false };
         messages.Setup(m => m.Get("MSG1", false)).ReturnsAsync(inboundEntity);
         ContentAreaViewModel vm = new(MakeEngineController(), entry.Object, new FakeServiceConnection(), messages.Object,
             drafts.Object, notes.Object, activityLogs.Object, loggerFactory, new CurrentUserProvider(), new Mock<IStagedSendViewModel>().Object);
@@ -233,7 +233,7 @@ public sealed class ContentAreaViewModelTests
         Mock<INoteRepository> notes = new();
         Mock<IActivityLogRepository> activityLogs = new();
         ILoggerFactory loggerFactory = LoggerFactory.Create(_ => { });
-        MessageEntity inboundEntity = new() { MessageId = "MSG1", Message = new TestMessage(), IsOutbound = false, ReadStatus = DestinationStatus.Received };
+        MessageEntity inboundEntity = new() { MessageId = "MSG1", Message = new TestFrame(), IsOutbound = false, ReadStatus = DestinationStatus.Received };
         messages.Setup(m => m.Get("MSG1", false)).ReturnsAsync(inboundEntity);
         FakeServiceConnection connection = new();
         ContentAreaViewModel vm = new(MakeEngineController(), entry.Object, connection, messages.Object,
@@ -257,7 +257,7 @@ public sealed class ContentAreaViewModelTests
         Mock<INoteRepository> notes = new();
         Mock<IActivityLogRepository> activityLogs = new();
         ILoggerFactory loggerFactory = LoggerFactory.Create(_ => { });
-        MessageEntity inboundEntity = new() { MessageId = "MSG1", Message = new TestMessage(), IsOutbound = false, ReadStatus = DestinationStatus.Read };
+        MessageEntity inboundEntity = new() { MessageId = "MSG1", Message = new TestFrame(), IsOutbound = false, ReadStatus = DestinationStatus.Read };
         messages.Setup(m => m.Get("MSG1", false)).ReturnsAsync(inboundEntity);
         FakeServiceConnection connection = new();
         ContentAreaViewModel vm = new(MakeEngineController(), entry.Object, connection, messages.Object,
@@ -279,7 +279,7 @@ public sealed class ContentAreaViewModelTests
         Mock<INoteRepository> notes = new();
         Mock<IActivityLogRepository> activityLogs = new();
         ILoggerFactory loggerFactory = LoggerFactory.Create(_ => { });
-        MessageEntity outboundEntity = new() { MessageId = "MSG1", Message = new TestMessage(), IsOutbound = true };
+        MessageEntity outboundEntity = new() { MessageId = "MSG1", Message = new TestFrame(), IsOutbound = true };
         messages.Setup(m => m.Get("MSG1", true)).ReturnsAsync(outboundEntity);
         FakeServiceConnection connection = new();
         ContentAreaViewModel vm = new(MakeEngineController(), entry.Object, connection, messages.Object,
@@ -376,13 +376,13 @@ public sealed class ContentAreaViewModelTests
         Mock<IMessageRepository> messages = new();
         TaskCompletionSource<MessageEntity?> slow = new();
         messages.Setup(m => m.Get("SLOW", false)).Returns(slow.Task);
-        messages.Setup(m => m.Get("FAST", false)).ReturnsAsync(new MessageEntity { MessageId = "FAST", Message = new TestMessage(), ReadStatus = DestinationStatus.Read });
+        messages.Setup(m => m.Get("FAST", false)).ReturnsAsync(new MessageEntity { MessageId = "FAST", Message = new TestFrame(), ReadStatus = DestinationStatus.Read });
         ContentAreaViewModel vm = new(MakeEngineController(), new Mock<IEntryService>().Object, new FakeServiceConnection(), messages.Object,
             new Mock<IDraftRepository>().Object, new Mock<INoteRepository>().Object, new Mock<IActivityLogRepository>().Object, LoggerFactory.Create(_ => { }), new CurrentUserProvider(), new Mock<IStagedSendViewModel>().Object);
 
         Task first = vm.ShowEntry(new EntryItemViewModel("SLOW", "S", EntryType.Message, DateTime.UtcNow));
         await vm.ShowEntry(new EntryItemViewModel("FAST", "F", EntryType.Message, DateTime.UtcNow));
-        slow.SetResult(new MessageEntity { MessageId = "SLOW", Message = new TestMessage(), ReadStatus = DestinationStatus.Read });
+        slow.SetResult(new MessageEntity { MessageId = "SLOW", Message = new TestFrame(), ReadStatus = DestinationStatus.Read });
         await first;
 
         Assert.Equal("FAST", Assert.IsType<MessageViewModel>(vm.ActiveContent).MessageId);
@@ -400,7 +400,7 @@ public sealed class ContentAreaViewModelTests
 
         Task loading = vm.ShowEntry(new EntryItemViewModel("SLOW", "S", EntryType.Message, DateTime.UtcNow));
         vm.ShowHome();
-        slow.SetResult(new MessageEntity { MessageId = "SLOW", Message = new TestMessage(), ReadStatus = DestinationStatus.Read });
+        slow.SetResult(new MessageEntity { MessageId = "SLOW", Message = new TestFrame(), ReadStatus = DestinationStatus.Read });
         await loading;
 
         Assert.Null(vm.ActiveContent);
@@ -454,7 +454,7 @@ public sealed class ContentAreaViewModelTests
         Mock<IRelayCommand> clearCommand = new();
         Mock<IStagedSendViewModel> stagedSend = new();
         stagedSend.Setup(s => s.ClearCommand).Returns(clearCommand.Object);
-        MessageEntity entity = new() { MessageId = "MSG1", Message = new TestMessage(), IsOutbound = true };
+        MessageEntity entity = new() { MessageId = "MSG1", Message = new TestFrame(), IsOutbound = true };
         messages.Setup(m => m.Get("MSG1", true)).ReturnsAsync(entity);
         ContentAreaViewModel vm = new(MakeEngineController(), entry.Object, new FakeServiceConnection(), messages.Object,
             drafts.Object, notes.Object, activityLogs.Object, LoggerFactory.Create(_ => { }), new CurrentUserProvider(), stagedSend.Object);

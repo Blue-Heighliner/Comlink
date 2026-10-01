@@ -1,15 +1,15 @@
 namespace BlueHeighliner.Comlink.Tests;
 
-/// <summary>Test <see cref="IEngineConfiguration"/> mapping the logical message fields onto <see cref="TestMessage"/>, and optionally the packet fields onto <see cref="TestPacket"/>.</summary>
+/// <summary>Test <see cref="IEngineConfiguration"/> mapping the logical message fields onto <see cref="TestFrame"/>, and optionally the packet fields onto <see cref="TestPacket"/>.</summary>
 /// <param name="packets">Whether to turn packetization on with <see cref="TestPacket"/>.</param>
 /// <param name="messageExtra">Further message settings to state after the field mapping, such as the network processor.</param>
 /// <param name="packetExtra">Further packet settings to state after the field mapping, such as the initial packet processor. Turns packetization on.</param>
-public sealed class TestEngineConfiguration(bool packets = false, Action<IMessageBuilder<TestMessage>>? messageExtra = null, Action<IPacketBuilder<TestPacket>>? packetExtra = null) : IEngineConfiguration
+public sealed class TestEngineConfiguration(bool packets = false, Action<IFrameBuilder<TestFrame>>? messageExtra = null, Action<IPacketBuilder<TestPacket>>? packetExtra = null) : IEngineConfiguration
 {
     /// <inheritdoc />
     public IEngineBuilder Configure(IEngineBuilder engine)
     {
-        engine.Message<TestMessage>(message =>
+        engine.Frames<TestFrame>(message =>
         {
             message
                 .Id(m => m.MessageId)
@@ -21,6 +21,7 @@ public sealed class TestEngineConfiguration(bool packets = false, Action<IMessag
                     (m, value) => m.Addresses = [.. value.Select(a => new TestAddressEntry { UserName = a.Name, Type = a.Type.ToString(), Information = a.Information })])
                 .SentAt(m => m.SentAt)
                 .ConfirmationId(m => m.ConfirmationMessageId)
+                .IsMessage(m => !m.IsHidden, (m, value) => m.IsHidden = !value)
                 .Retrieval(r => r.IsRequest(m => m.IsRetrieval).From(m => m.RetrievalFrom).To(m => m.RetrievalTo).Authors(m => m.RetrievalAuthors, (m, v) => m.RetrievalAuthors = [.. v]).Destinations(m => m.RetrievalDestinations, (m, v) => m.RetrievalDestinations = [.. v]).Ids(m => m.RetrievalIds, (m, v) => m.RetrievalIds = [.. v]))
                 .IsAlert(m => m.IsAlert)
                 .Priority(m => m.Priority)

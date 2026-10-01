@@ -29,7 +29,7 @@ internal sealed class ConfiguredEngineController : IEngineController
     private NetworkUserConfig? Current => config.Find(DebugUserName ?? currentUserProvider.UserName);
 
     /// <inheritdoc />
-    public Type MessageType => fallback.MessageType;
+    public Type FrameType => fallback.FrameType;
     /// <inheritdoc />
     public INetworkSerializer NetworkSerializer => fallback.NetworkSerializer;
     /// <inheritdoc />
@@ -41,57 +41,61 @@ internal sealed class ConfiguredEngineController : IEngineController
     /// <inheritdoc />
     public int PacketWindow => fallback.PacketWindow;
     /// <inheritdoc />
-    public object CreateMessage() => fallback.CreateMessage();
+    public object CreateFrame() => fallback.CreateFrame();
     /// <inheritdoc />
-    public string GetMessageId(object message) => fallback.GetMessageId(message);
+    public string GetFrameId(object frame) => fallback.GetFrameId(frame);
     /// <inheritdoc />
-    public void SetMessageId(object message, string value) => fallback.SetMessageId(message, value);
+    public void SetFrameId(object frame, string value) => fallback.SetFrameId(frame, value);
     /// <inheritdoc />
-    public string GetFromUser(object message) => fallback.GetFromUser(message);
+    public string GetFromUser(object frame) => fallback.GetFromUser(frame);
     /// <inheritdoc />
-    public void SetFromUser(object message, string value) => fallback.SetFromUser(message, value);
+    public void SetFromUser(object frame, string value) => fallback.SetFromUser(frame, value);
     /// <inheritdoc />
-    public string GetSubject(object message) => fallback.GetSubject(message);
+    public string GetSubject(object frame) => fallback.GetSubject(frame);
     /// <inheritdoc />
-    public void SetSubject(object message, string value) => fallback.SetSubject(message, value);
+    public void SetSubject(object frame, string value) => fallback.SetSubject(frame, value);
     /// <inheritdoc />
-    public string GetBody(object message) => fallback.GetBody(message);
+    public string GetBody(object frame) => fallback.GetBody(frame);
     /// <inheritdoc />
-    public void SetBody(object message, string value) => fallback.SetBody(message, value);
+    public void SetBody(object frame, string value) => fallback.SetBody(frame, value);
     /// <inheritdoc />
-    public List<MessageAddress> GetAddresses(object message) => fallback.GetAddresses(message);
+    public List<MessageAddress> GetAddresses(object frame) => fallback.GetAddresses(frame);
     /// <inheritdoc />
-    public void SetAddresses(object message, List<MessageAddress> value) => fallback.SetAddresses(message, value);
+    public void SetAddresses(object frame, List<MessageAddress> value) => fallback.SetAddresses(frame, value);
     /// <inheritdoc />
-    public DateTime GetSentAt(object message) => fallback.GetSentAt(message);
+    public DateTime GetSentAt(object frame) => fallback.GetSentAt(frame);
     /// <inheritdoc />
-    public void SetSentAt(object message, DateTime value) => fallback.SetSentAt(message, value);
+    public void SetSentAt(object frame, DateTime value) => fallback.SetSentAt(frame, value);
     /// <inheritdoc />
-    public string GetConfirmationMessageId(object message) => fallback.GetConfirmationMessageId(message);
+    public string GetConfirmationMessageId(object frame) => fallback.GetConfirmationMessageId(frame);
     /// <inheritdoc />
-    public void SetConfirmationMessageId(object message, string value) => fallback.SetConfirmationMessageId(message, value);
+    public void SetConfirmationMessageId(object frame, string value) => fallback.SetConfirmationMessageId(frame, value);
     /// <inheritdoc />
-    public bool IsRetrieval(object message) => fallback.IsRetrieval(message);
+    public bool IsRetrieval(object frame) => fallback.IsRetrieval(frame);
     /// <inheritdoc />
-    public RetrievalCriteria GetRetrieval(object message) => fallback.GetRetrieval(message);
+    public RetrievalCriteria GetRetrieval(object frame) => fallback.GetRetrieval(frame);
     /// <inheritdoc />
-    public void SetRetrieval(object message, RetrievalCriteria criteria) => fallback.SetRetrieval(message, criteria);
+    public void SetRetrieval(object frame, RetrievalCriteria criteria) => fallback.SetRetrieval(frame, criteria);
     /// <inheritdoc />
-    public bool GetIsAlert(object message) => fallback.GetIsAlert(message);
+    public bool IsMessage(object frame) => fallback.IsMessage(frame);
     /// <inheritdoc />
-    public void SetIsAlert(object message, bool value) => fallback.SetIsAlert(message, value);
+    public void SetIsMessage(object frame, bool value) => fallback.SetIsMessage(frame, value);
     /// <inheritdoc />
-    public int GetPriority(object message) => fallback.GetPriority(message);
+    public bool GetIsAlert(object frame) => fallback.GetIsAlert(frame);
     /// <inheritdoc />
-    public void SetPriority(object message, int value) => fallback.SetPriority(message, value);
+    public void SetIsAlert(object frame, bool value) => fallback.SetIsAlert(frame, value);
     /// <inheritdoc />
-    public string GetTag(object message) => fallback.GetTag(message);
+    public int GetPriority(object frame) => fallback.GetPriority(frame);
     /// <inheritdoc />
-    public void SetTag(object message, string value) => fallback.SetTag(message, value);
+    public void SetPriority(object frame, int value) => fallback.SetPriority(frame, value);
     /// <inheritdoc />
-    public string GetSecurityLevel(object message) => fallback.GetSecurityLevel(message);
+    public string GetTag(object frame) => fallback.GetTag(frame);
     /// <inheritdoc />
-    public void SetSecurityLevel(object message, string value) => fallback.SetSecurityLevel(message, value);
+    public void SetTag(object frame, string value) => fallback.SetTag(frame, value);
+    /// <inheritdoc />
+    public string GetSecurityLevel(object frame) => fallback.GetSecurityLevel(frame);
+    /// <inheritdoc />
+    public void SetSecurityLevel(object frame, string value) => fallback.SetSecurityLevel(frame, value);
     /// <inheritdoc />
     public object CreatePacket() => fallback.CreatePacket();
     /// <inheritdoc />
@@ -184,7 +188,7 @@ internal sealed class ConfiguredEngineController : IEngineController
     /// <inheritdoc />
     public bool PrintReceivedDefaultEnabled => Current?.PrintReceivedEnabled ?? fallback.PrintReceivedDefaultEnabled;
     /// <inheritdoc />
-    public int GetPrintCount(object message) => fallback.GetPrintCount(message);
+    public int GetPrintCount(object frame) => fallback.GetPrintCount(frame);
 
     /// <inheritdoc />
     public bool CanDelete(FolderType folderType) => fallback.CanDelete(folderType);
@@ -220,7 +224,7 @@ internal sealed class ConfiguredEngineController : IEngineController
     /// <inheritdoc />
     public IInitialProcessor? InitialPacketProcessor => fallback.InitialPacketProcessor;
     /// <inheritdoc />
-    public IInitialProcessor? InitialMessageProcessor => fallback.InitialMessageProcessor;
+    public IInitialProcessor? InitialFrameProcessor => fallback.InitialFrameProcessor;
 
     /// <inheritdoc />
     public bool CommandLineOverridesAllowed => fallback.CommandLineOverridesAllowed;

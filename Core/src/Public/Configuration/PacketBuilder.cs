@@ -60,7 +60,7 @@ public interface IPacketBuilder<TPacket> where TPacket : class, new()
     /// States how nodes introduce themselves on a new connection, with packets: the processor is told when a connection forms and given each packet that
     /// arrives until it marks the connection connected as a named user (see <see cref="IInitialPacketProcessor{TPacket}"/>). What it sends is a serialized
     /// instance of the packet type sent as it is, beneath the packetizer and before any initial message exchange. Every node on a network must be configured alike.
-    /// Like every other thing sent between nodes it is a serialized instance of the message or packet type and nothing else.
+    /// Like every other thing sent between nodes it is a serialized instance of the frame or packet type and nothing else.
     /// </summary>
     /// <typeparam name="TProcessor">The processor type, instantiated through dependency injection when the engine runs: the instance registered for it in the host's services, or else one constructed from them.</typeparam>
     IPacketBuilder<TPacket> InitialProcessor<TProcessor>() where TProcessor : IInitialPacketProcessor<TPacket>;

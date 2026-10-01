@@ -22,12 +22,14 @@ internal sealed class ExternalSystemsService : IExternalSystemsService
     public ExternalSystemsService(IEngineController engineController, IPeerService peerService, ILoggerFactory loggerFactory)
     {
         this.peerService = peerService;
+        this.engineController = engineController;
         systems = engineController.ExternalSystems;
         externalServer = engineController.ExternalServer;
         logger = loggerFactory.CreateLogger("ACTIVITY");
     }
 
     private readonly IPeerService peerService;
+    private readonly IEngineController engineController;
     private readonly IReadOnlyList<IExternalSystem> systems;
     private readonly IExternalSystem? externalServer;
     private readonly ILogger logger;
@@ -38,7 +40,7 @@ internal sealed class ExternalSystemsService : IExternalSystemsService
     {
         if (systems.Count == 0) { return; }
 
-        peerService.MessageDelivered += RouteToExternalSystems;
+        peerService.FrameDelivered += RouteToExternalSystems;
         foreach (IExternalSystem system in systems)
         {
             system.AttachLogger(logger);
@@ -51,7 +53,7 @@ internal sealed class ExternalSystemsService : IExternalSystemsService
         }
         finally
         {
-            peerService.MessageDelivered -= RouteToExternalSystems;
+            peerService.FrameDelivered -= RouteToExternalSystems;
         }
     }
 
@@ -83,6 +85,8 @@ internal sealed class ExternalSystemsService : IExternalSystemsService
 
     private async Task RouteToExternalSystems(object message)
     {
+        if (!engineController.IsMessage(message)) { return; }
+
         IExternalSystem? source = receivingFrom.Value;
 
         // A message not received from the external server (composed locally by the user, received from a

@@ -22,7 +22,7 @@ public sealed class InterfaceServiceTests
 
         InterfaceService svc = new(peerFactory.Object, format, routing.Object, user.Object, noLogger);
 
-        TestMessage incoming = new()
+        TestFrame incoming = new()
         {
             Subject = "Hi",
             Body = "Body",
@@ -49,7 +49,7 @@ public sealed class InterfaceServiceTests
         Mock<IUserService> user = new();
         user.Setup(s => s.GetCurrentUserInfo()).Returns(MakeUserInfo("LOCAL"));
         InterfaceService svc = new(peerFactory.Object, format, routing.Object, user.Object, noLogger);
-        using IMemoryOwner<byte> buf = serializer.Serialize(new TestMessage { Subject = "Hi" });
+        using IMemoryOwner<byte> buf = serializer.Serialize(new TestFrame { Subject = "Hi" });
 
         await svc.HandleInterfaceMessage(buf.Memory.ToArray());
 
@@ -67,13 +67,13 @@ public sealed class InterfaceServiceTests
 
         InterfaceService svc = new(peerFactory.Object, format, routing.Object, user.Object, noLogger);
 
-        using IMemoryOwner<byte> buf = serializer.Serialize(new TestMessage { Subject = "Hi" });
+        using IMemoryOwner<byte> buf = serializer.Serialize(new TestFrame { Subject = "Hi" });
         await svc.HandleInterfaceMessage(buf.Memory.ToArray());
 
         routing.Verify(r => r.Route(It.IsAny<string>(), It.IsAny<SendMessagePayload>(), It.IsAny<CancellationToken>()), Times.Never);
     }
 
-    /// <summary>A payload that describes a type other than the engine's MessageType is dropped without routing or throwing, since the serializer determines the type from the data itself.</summary>
+    /// <summary>A payload that describes a type other than the engine's FrameType is dropped without routing or throwing, since the serializer determines the type from the data itself.</summary>
     [Fact]
     public async Task HandleInterfaceMessage_ForeignType_IsDroppedWithoutRouting()
     {
@@ -144,7 +144,7 @@ public sealed class InterfaceServiceTests
             RequireFullyQualifiedHostname = false
         });
 
-        TestMessage outgoing = new()
+        TestFrame outgoing = new()
         {
             Subject = "FromInterface",
             Body = "Body",

@@ -13,7 +13,7 @@ public sealed class PrintManagerViewModelTests
             PrintDriver.Setup(p => p.GetAvailablePrinters()).Returns(["PRINTER-A", "PRINTER-B"]);
             PrintDriver.Setup(p => p.GetDefaultPrinter()).Returns("PRINTER-A");
             EngineController.Setup(p => p.PrintReceivedDefaultEnabled).Returns(false);
-            EngineController.Setup(r => r.GetPrintCount(It.IsAny<TestMessage>())).Returns(1);
+            EngineController.Setup(r => r.GetPrintCount(It.IsAny<TestFrame>())).Returns(1);
             PrintDriver.Setup(p => p.PrintLine(It.IsAny<string>(), It.IsAny<string>(), It.IsAny<CancellationToken>()))
                 .Returns<string, string, CancellationToken>(async (printer, line, _) =>
                 {
@@ -52,8 +52,8 @@ public sealed class PrintManagerViewModelTests
 
     private static MessageEntity MakeMessage(string messageId, string subject, string body, int priority)
     {
-        object message = format.CreateMessage();
-        format.SetMessageId(message, messageId);
+        object message = format.CreateFrame();
+        format.SetFrameId(message, messageId);
         format.SetSubject(message, subject);
         format.SetBody(message, body);
         format.SetPriority(message, priority);
@@ -153,7 +153,7 @@ public sealed class PrintManagerViewModelTests
     {
         Setup s = new();
         s.PrintDriver.Setup(p => p.GetDefaultPrinter()).Returns((string?)null);
-        s.EngineController.Setup(r => r.GetPrintCount(It.IsAny<TestMessage>())).Returns(3);
+        s.EngineController.Setup(r => r.GetPrintCount(It.IsAny<TestFrame>())).Returns(3);
         PrintManagerViewModel vm = s.Build();
         vm.PrintReceivedEnabled = true;
 
@@ -170,7 +170,7 @@ public sealed class PrintManagerViewModelTests
     {
         Setup s = new();
         s.PrintDriver.Setup(p => p.GetDefaultPrinter()).Returns((string?)null);
-        s.EngineController.Setup(r => r.GetPrintCount(It.IsAny<TestMessage>())).Returns(0);
+        s.EngineController.Setup(r => r.GetPrintCount(It.IsAny<TestFrame>())).Returns(0);
         PrintManagerViewModel vm = s.Build();
         vm.PrintReceivedEnabled = true;
 

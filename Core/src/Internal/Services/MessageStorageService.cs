@@ -55,16 +55,16 @@ internal sealed class MessageStorageService : IMessageStorageService
     /// <inheritdoc />
     public async Task Store(object message)
     {
-        if (!IsEnabled) { return; }
+        if (!IsEnabled || !engineController.IsMessage(message)) { return; }
         if (!string.IsNullOrEmpty(engineController.GetConfirmationMessageId(message)) || engineController.IsRetrieval(message)) { return; }
 
         try
         {
-            await repository.InsertIfNew(new StoredMessageEntity { MessageId = engineController.GetMessageId(message), Message = message });
+            await repository.InsertIfNew(new StoredMessageEntity { MessageId = engineController.GetFrameId(message), Message = message });
         }
         catch (Exception ex)
         {
-            logger.LogError(ex, "Failed to store a copy of {MessageId}", engineController.GetMessageId(message));
+            logger.LogError(ex, "Failed to store a copy of {MessageId}", engineController.GetFrameId(message));
         }
     }
 
@@ -102,7 +102,7 @@ internal sealed class MessageStorageService : IMessageStorageService
         DateTime sentAt = Utc(engineController.GetSentAt(message));
         if (criteria.From is { } from && sentAt < Utc(from)) { return false; }
         if (criteria.To is { } to && sentAt > Utc(to)) { return false; }
-        if (criteria.Ids.Count > 0 && !criteria.Ids.Contains(engineController.GetMessageId(message), StringComparer.OrdinalIgnoreCase)) { return false; }
+        if (criteria.Ids.Count > 0 && !criteria.Ids.Contains(engineController.GetFrameId(message), StringComparer.OrdinalIgnoreCase)) { return false; }
         if (criteria.Authors.Count > 0 && !criteria.Authors.Contains(engineController.GetFromUser(message), StringComparer.OrdinalIgnoreCase)) { return false; }
         return criteria.Destinations.Count == 0
             || engineController.GetAddresses(message).Any(address => criteria.Destinations.Contains(address.UserName, StringComparer.OrdinalIgnoreCase));
@@ -110,8 +110,9 @@ internal sealed class MessageStorageService : IMessageStorageService
 
     private object CopyFor(object original, string requester)
     {
-        object copy = engineController.CreateMessage();
-        engineController.SetMessageId(copy, engineController.GetMessageId(original));
+        object copy = engineController.CreateFrame();
+        engineController.SetIsMessage(copy, true);
+        engineController.SetFrameId(copy, engineController.GetFrameId(original));
         engineController.SetFromUser(copy, engineController.GetFromUser(original));
         engineController.SetSentAt(copy, Utc(engineController.GetSentAt(original)));
         engineController.SetSubject(copy, engineController.GetSubject(original));

@@ -12,7 +12,7 @@ public sealed class HandshakePeerTransportTests
 
     private sealed class Scripted : IInitialProcessor
     {
-        public Type ItemType { get; init; } = typeof(TestMessage);
+        public Type ItemType { get; init; } = typeof(TestFrame);
         public Func<IInitialSession, Task> Connected { get; init; } = _ => Task.CompletedTask;
         public Func<IInitialSession, object, Task> Initial { get; init; } = (_, _) => Task.CompletedTask;
         public Func<IInitialSession, object, Task> Reply { get; init; } = (_, _) => Task.CompletedTask;
@@ -56,7 +56,7 @@ public sealed class HandshakePeerTransportTests
     private static Mock<TestEngineController> WithProcessor(IInitialProcessor processor)
     {
         Mock<TestEngineController> controller = Controller();
-        controller.Setup(c => c.InitialMessageProcessor).Returns(processor);
+        controller.Setup(c => c.InitialFrameProcessor).Returns(processor);
         return controller;
     }
 
@@ -71,22 +71,22 @@ public sealed class HandshakePeerTransportTests
             Initial = async (session, item) =>
             {
                 await session.Send(Who(me));
-                session.Connected(((TestMessage)item).FromUser);
+                session.Connected(((TestFrame)item).FromUser);
             },
             Reply = (session, item) =>
             {
-                session.Connected(((TestMessage)item).FromUser);
+                session.Connected(((TestFrame)item).FromUser);
                 return Task.CompletedTask;
             }
         };
 
-    private static TestMessage Who(string user) => new() { FromUser = user };
+    private static TestFrame Who(string user) => new() { FromUser = user };
 
     private static (End A, End B) Pair(IEngineController a, IEngineController b, IReadOnlyList<string>? aNames = null, IReadOnlyList<string>? bNames = null, bool serial = false, TimeSpan? handshakeTimeout = null)
     {
         (LoopbackPeerTransport rawA, LoopbackPeerTransport rawB) = LoopbackPeerTransport.CreatePair(aNames, bNames, serial);
-        End endA = new(new HandshakePeerTransport(rawA, a, logger, Handshake.ForMessages(a), identify: true, handshakeTimeout), rawA);
-        End endB = new(new HandshakePeerTransport(rawB, b, logger, Handshake.ForMessages(b), identify: true, handshakeTimeout), rawB);
+        End endA = new(new HandshakePeerTransport(rawA, a, logger, Handshake.ForFrames(a), identify: true, handshakeTimeout), rawA);
+        End endB = new(new HandshakePeerTransport(rawB, b, logger, Handshake.ForFrames(b), identify: true, handshakeTimeout), rawB);
         endA.Watch();
         endB.Watch();
         return (endA, endB);
@@ -396,7 +396,7 @@ public sealed class HandshakePeerTransportTests
         {
             Initial = async (session, item) =>
             {
-                seen.Add(((TestMessage)item).FromUser);
+                seen.Add(((TestFrame)item).FromUser);
                 if (seen.Count < 2) { return; }
 
                 await session.Send(Who("DONE"));
@@ -534,7 +534,7 @@ public sealed class HandshakePeerTransportTests
 
         Assert.Throws<InvalidOperationException>(() => Handshake.ForPackets(controller.Object));
         Assert.Null(Handshake.ForPackets(Controller().Object));
-        Assert.Null(Handshake.ForMessages(Controller().Object));
+        Assert.Null(Handshake.ForFrames(Controller().Object));
     }
 
     /// <summary>The management calls that are not about identity go straight to the wrapped transport.</summary>

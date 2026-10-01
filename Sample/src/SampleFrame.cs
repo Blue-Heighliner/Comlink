@@ -1,15 +1,15 @@
 namespace BlueHeighliner.Comlink.Sample;
 
 /// <summary>
-/// Demonstrates injecting a custom message DTO. Field names are deliberately unlike the engine's own
-/// logical field names (<c>Id</c> vs message id, <c>Sender</c> vs sender user, <c>Title</c> vs subject,
+/// Demonstrates injecting a custom frame DTO. Field names are deliberately unlike the engine's own
+/// logical field names (<c>Id</c> vs frame id, <c>Sender</c> vs sender user, <c>Title</c> vs subject,
 /// <c>Text</c> vs body, <c>Recipients</c> with a <see cref="bool"/> flag vs an address-type enum) to show
-/// that <see cref="SampleEngineConfiguration"/>'s message mapping is what maps the engine's logical
+/// that <see cref="SampleEngineConfiguration"/>'s frame mapping is what maps the engine's logical
 /// fields onto this type's real ones — the engine itself never assumes any particular field name or
-/// shape, and requires a host to state its message type since it has no built-in one of its own.
+/// shape, and requires a host to state its frame type since it has no built-in one of its own.
 /// </summary>
 [ProtoContract]
-public sealed class SampleMessage
+public sealed class SampleFrame
 {
     /// <summary>Application-level message identifier.</summary>
     [ProtoMember(1)] public string Id { get; set; } = string.Empty;
@@ -45,9 +45,11 @@ public sealed class SampleMessage
     [ProtoMember(16)] public List<string> RetrievalDestinations { get; set; } = [];
     /// <summary>Retrieval request message identifiers.</summary>
     [ProtoMember(17)] public List<string> RetrievalIds { get; set; } = [];
+    /// <summary>Whether this frame is a message the user reads and that is stored, rather than only network traffic.</summary>
+    [ProtoMember(18)] public bool IsMessage { get; set; }
 }
 
-/// <summary>A single recipient entry within a <see cref="SampleMessage"/>.</summary>
+/// <summary>A single recipient entry within a <see cref="SampleFrame"/>.</summary>
 [ProtoContract]
 public sealed class SampleRecipient
 {

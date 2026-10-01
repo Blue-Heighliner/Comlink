@@ -1,6 +1,6 @@
 namespace BlueHeighliner.Comlink.Tests;
 
-/// <summary>A test DTO that is deliberately not the configured message type, used where a foreign type must be rejected.</summary>
+/// <summary>A test DTO that is deliberately not the configured frame type, used where a foreign type must be rejected.</summary>
 [ProtoContract]
 public sealed class TestHello
 {

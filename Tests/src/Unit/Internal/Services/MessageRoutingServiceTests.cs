@@ -8,7 +8,7 @@ public sealed class MessageRoutingServiceTests
 
     private sealed class FakePeerService : IPeerService
     {
-        public event Func<object, Task>? MessageDelivered;
+        public event Func<object, Task>? FrameDelivered;
         public event Func<string, string, Task>? ConfirmationReceived;
         public event Func<string, string, DestinationStatus, Task>? DeliveryStatusChanged;
 #pragma warning disable CS0067
@@ -20,22 +20,22 @@ public sealed class MessageRoutingServiceTests
         public bool IsUserConnected(string userName) => false;
         public Task<bool> SendPacket(string userName, object packet, CancellationToken cancellation = default) => Task.FromResult(true);
 
-        public List<(string User, TestMessage Message)> Sent { get; } = [];
-        public List<TestMessage> DeliveredLocally { get; } = [];
+        public List<(string User, TestFrame Message)> Sent { get; } = [];
+        public List<TestFrame> DeliveredLocally { get; } = [];
         public bool ReturnSuccess { get; set; } = true;
 
         public Task Start(CancellationToken cancellation) => Task.CompletedTask;
 
         public Task<bool> Send(string userName, object message, CancellationToken cancellation = default)
         {
-            Sent.Add((userName, (TestMessage)message));
+            Sent.Add((userName, (TestFrame)message));
             return Task.FromResult(ReturnSuccess);
         }
 
         public async Task DeliverLocal(object payload)
         {
-            DeliveredLocally.Add((TestMessage)payload);
-            if (MessageDelivered is not null) { await MessageDelivered(payload); }
+            DeliveredLocally.Add((TestFrame)payload);
+            if (FrameDelivered is not null) { await FrameDelivered(payload); }
         }
 
         public async Task FireDeliveryStatusChanged(string messageId, string user, DestinationStatus status)
@@ -49,15 +49,15 @@ public sealed class MessageRoutingServiceTests
         }
     }
 
-    private sealed class FakeExternalSystem() : ExternalSystemBase<TestMessage>("Fake", TimeSpan.FromMilliseconds(20), TimeSpan.FromSeconds(30))
+    private sealed class FakeExternalSystem() : ExternalSystemBase<TestFrame>("Fake", TimeSpan.FromMilliseconds(20), TimeSpan.FromSeconds(30))
     {
-        public List<TestMessage> SentMessages { get; } = [];
+        public List<TestFrame> SentMessages { get; } = [];
         public bool ReturnSuccess { get; set; } = true;
 
         protected override Task<bool> TryConnect(CancellationToken cancellation) => Task.FromResult(true);
         protected override Task Disconnect() => Task.CompletedTask;
 
-        protected override Task<bool> Send(TestMessage message)
+        protected override Task<bool> Send(TestFrame message)
         {
             SentMessages.Add(message);
             return Task.FromResult(ReturnSuccess);
@@ -168,7 +168,7 @@ public sealed class MessageRoutingServiceTests
         Assert.Equal(["Alpha"], fake.Sent.Select(s => s.User));
         Assert.Equal(["Alpha"], results.Select(r => r.UserName));
         Assert.Empty(fake.DeliveredLocally);
-        TestMessage sent = fake.Sent[0].Message;
+        TestFrame sent = fake.Sent[0].Message;
         TestAddressEntry external = Assert.Single(sent.Addresses, a => a.UserName == "OMAHA");
         Assert.Equal("External", external.Type);
         Assert.Equal("Deliver to Eastside Office", external.Information);
@@ -466,33 +466,33 @@ public sealed class MessageRoutingServiceTests
         await startTask;
     }
 
-    /// <summary>RouteMessage reads its addresses and security level from the message object itself, via IEngineController, rather than from a SendMessagePayload.</summary>
+    /// <summary>RouteFrame reads its addresses and security level from the message object itself, via IEngineController, rather than from a SendMessagePayload.</summary>
     [Fact]
     public async Task RouteMessage_ReadsAddressesFromMessageItself()
     {
         FakePeerService fake = new();
         MessageRoutingService service = new(fake, format, loggerFactory);
-        TestMessage message = new() { Subject = "Hi", Body = "Body" };
+        TestFrame message = new() { Subject = "Hi", Body = "Body" };
         format.SetAddresses(message, [new MessageAddress { UserName = "TargetUser", Type = AddressType.To }]);
 
-        await service.RouteMessage("SourceUser", message, default);
+        await service.RouteFrame("SourceUser", message, default);
 
         Assert.Single(fake.Sent);
         Assert.Equal("TargetUser", fake.Sent[0].User, ignoreCase: true);
         Assert.Same(message, fake.Sent[0].Message);
     }
 
-    /// <summary>RouteMessage overwrites the message's own MessageId/FromUser/SentAt with a freshly generated ID, the given fromUser, and the current time, regardless of what the caller set them to.</summary>
+    /// <summary>RouteFrame overwrites the message's own MessageId/FromUser/SentAt with a freshly generated ID, the given fromUser, and the current time, regardless of what the caller set them to.</summary>
     [Fact]
     public async Task RouteMessage_OverwritesMessageIdFromUserAndSentAt()
     {
         FakePeerService fake = new();
         MessageRoutingService service = new(fake, format, loggerFactory);
-        TestMessage message = new() { MessageId = "STALE-ID", FromUser = "WRONG-USER", SentAt = new DateTime(2000, 1, 1) };
+        TestFrame message = new() { MessageId = "STALE-ID", FromUser = "WRONG-USER", SentAt = new DateTime(2000, 1, 1) };
         format.SetAddresses(message, [new MessageAddress { UserName = "TargetUser", Type = AddressType.To }]);
         DateTime before = DateTime.UtcNow;
 
-        (string messageId, _) = await service.RouteMessage("SourceUser", message, default);
+        (string messageId, _) = await service.RouteFrame("SourceUser", message, default);
 
         Assert.NotEqual("STALE-ID", messageId);
         Assert.True(Guid.TryParseExact(messageId, "N", out _));
@@ -501,7 +501,7 @@ public sealed class MessageRoutingServiceTests
         Assert.InRange(message.SentAt, before, DateTime.UtcNow);
     }
 
-    /// <summary>RouteMessage applies the same security-level filtering as Route, reading the blocking level from the message itself.</summary>
+    /// <summary>RouteFrame applies the same security-level filtering as Route, reading the blocking level from the message itself.</summary>
     [Fact]
     public async Task RouteMessage_BlocksDestinationsBelowTheMessagesSecurityLevel()
     {
@@ -511,10 +511,10 @@ public sealed class MessageRoutingServiceTests
         controller.Setup(c => c.GetUserSecurityLevel("Blocked")).Returns("LOW");
         FakePeerService fake = new();
         MessageRoutingService service = new(fake, controller.Object, loggerFactory);
-        TestMessage message = new() { Subject = "Secret", Body = "Body", SecurityLevel = "HIGH" };
+        TestFrame message = new() { Subject = "Secret", Body = "Body", SecurityLevel = "HIGH" };
         controller.Object.SetAddresses(message, [new MessageAddress { UserName = "Cleared", Type = AddressType.To }, new MessageAddress { UserName = "Blocked", Type = AddressType.To }]);
 
-        (_, IReadOnlyList<UserDeliveryResult> results) = await service.RouteMessage("SourceUser", message, default);
+        (_, IReadOnlyList<UserDeliveryResult> results) = await service.RouteFrame("SourceUser", message, default);
 
         Assert.Contains(fake.Sent, s => s.User.Equals("Cleared", StringComparison.OrdinalIgnoreCase));
         Assert.DoesNotContain(fake.Sent, s => s.User.Equals("Blocked", StringComparison.OrdinalIgnoreCase));

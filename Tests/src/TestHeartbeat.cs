@@ -1,6 +1,6 @@
 namespace BlueHeighliner.Comlink.Tests;
 
-/// <summary>Recognizes and builds the heartbeat a <see cref="PeerConnectionMonitor"/> sends: a serialized empty instance of the test message type.</summary>
+/// <summary>Recognizes and builds the heartbeat a <see cref="PeerConnectionMonitor"/> sends: a serialized empty instance of the test frame type.</summary>
 internal static class TestHeartbeat
 {
     private static readonly TestEngineController controller = new();
@@ -11,7 +11,7 @@ internal static class TestHeartbeat
     {
         lock (gate)
         {
-            using IMemoryOwner<byte> owner = controller.NetworkSerializer.Serialize(controller.CreateMessage());
+            using IMemoryOwner<byte> owner = controller.NetworkSerializer.Serialize(Frame());
             return owner.Memory.ToArray();
         }
     }
@@ -25,5 +25,12 @@ internal static class TestHeartbeat
             try { return controller.NetworkSerializer.Deserialize(payload) is { } message && controller.IsHeartbeat(message); }
             catch (Exception) { return false; }
         }
+    }
+
+    private static object Frame()
+    {
+        object frame = controller.CreateFrame();
+        controller.SetIsMessage(frame, false);
+        return frame;
     }
 }

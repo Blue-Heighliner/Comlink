@@ -56,13 +56,13 @@ public sealed class PeerNetworkTests
                 UserRole.Client => Both(new ClientPeerService(factory, controller.Object, noLogger)),
                 _ => (new PeerService(factory, controller.Object, noLogger), null)
             };
-            Service.MessageDelivered += message => { Delivered.Enqueue((TestMessage)message); return Task.CompletedTask; };
+            Service.FrameDelivered += message => { Delivered.Enqueue((TestFrame)message); return Task.CompletedTask; };
             run = Service.Start(cts.Token);
         }
 
         public IPeerService Service { get; }
         public IConnectionStatusService? Status { get; }
-        public ConcurrentQueue<TestMessage> Delivered { get; } = [];
+        public ConcurrentQueue<TestFrame> Delivered { get; } = [];
 
         public bool IsUp(string user)
             => Status!.GetStatuses().Any(s => string.Equals(s.UserName, user, StringComparison.OrdinalIgnoreCase) && s.IsConnected);
@@ -77,7 +77,7 @@ public sealed class PeerNetworkTests
         private static (IPeerService, IConnectionStatusService) Both<T>(T service) where T : IPeerService, IConnectionStatusService => (service, service);
     }
 
-    private static TestMessage MessageTo(string from, string to, string id = "M1")
+    private static TestFrame MessageTo(string from, string to, string id = "M1")
         => new() { MessageId = id, FromUser = from, Subject = "Hi", Addresses = [new TestAddressEntry { UserName = to, Type = "To" }] };
 
     private static async Task WaitUntil(Func<bool> condition, string what)
@@ -118,7 +118,7 @@ public sealed class PeerNetworkTests
 
         Assert.True(sent);
         await WaitUntil(() => !client2.Delivered.IsEmpty, "the message to reach Client2");
-        Assert.True(client2.Delivered.TryPeek(out TestMessage? message));
+        Assert.True(client2.Delivered.TryPeek(out TestFrame? message));
         Assert.Equal("M1", message.MessageId);
         Assert.Equal("Client1", message.FromUser);
         Assert.Empty(client1.Delivered);
@@ -152,7 +152,7 @@ public sealed class PeerNetworkTests
             Assert.True(await client1.Service.Send("Client2", MessageTo("Client1", "Client2")));
             await WaitUntil(() => !client2.Delivered.IsEmpty, "the original to reach Client2");
 
-            TestMessage request = new()
+            TestFrame request = new()
             {
                 MessageId = "REQ1",
                 FromUser = "Client1",
@@ -163,7 +163,7 @@ public sealed class PeerNetworkTests
             Assert.True(await client1.Service.Send("Server", request));
 
             await WaitUntil(() => !client1.Delivered.IsEmpty, "the stored copy to reach Client1");
-            Assert.True(client1.Delivered.TryPeek(out TestMessage? copy));
+            Assert.True(client1.Delivered.TryPeek(out TestFrame? copy));
             Assert.Equal(("M1", "Client1", "Hi"), (copy.MessageId, copy.FromUser, copy.Subject));
             Assert.Equal("Client1", Assert.Single(copy.Addresses).UserName);
             await Task.Delay(300);

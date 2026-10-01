@@ -19,7 +19,7 @@ public sealed class UserInfo
     public IReadOnlyDictionary<string, string> Data { get; init; } = new Dictionary<string, string>();
     /// <summary>
     /// For a <see cref="UserRole.Server"/> user, whether it keeps a copy of every message it routes and answers a client's retrieval
-    /// request (the client's RETRIEVE screen, see <see cref="IMessageBuilder{TMessage}.Retrieval"/>) with a copy of each stored message that fits.
+    /// request (the client's RETRIEVE screen, see <see cref="IFrameBuilder{TFrame}.Retrieval"/>) with a copy of each stored message that fits.
     /// Every node on a network must describe the server alike, since a client learns which servers store from this same info.
     /// </summary>
     public bool StoresMessages { get; init; }

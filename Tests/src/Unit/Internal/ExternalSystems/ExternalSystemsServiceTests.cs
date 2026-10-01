@@ -5,7 +5,7 @@ public sealed class ExternalSystemsServiceTests
 {
     private sealed class FakePeerService : IPeerService
     {
-        public event Func<object, Task>? MessageDelivered;
+        public event Func<object, Task>? FrameDelivered;
 #pragma warning disable CS0067
         public event Func<string, string, Task>? ConfirmationReceived;
         public event Func<string, string, DestinationStatus, Task>? DeliveryStatusChanged;
@@ -23,12 +23,12 @@ public sealed class ExternalSystemsServiceTests
         public async Task DeliverLocal(object payload)
         {
             DeliveredLocally.Add(payload);
-            if (MessageDelivered is not null) { await MessageDelivered(payload); }
+            if (FrameDelivered is not null) { await FrameDelivered(payload); }
         }
 
         public async Task FireMessageDelivered(object payload)
         {
-            if (MessageDelivered is not null) { await MessageDelivered(payload); }
+            if (FrameDelivered is not null) { await FrameDelivered(payload); }
         }
     }
 
@@ -64,6 +64,7 @@ public sealed class ExternalSystemsServiceTests
     private static IEngineController MakeController(IReadOnlyList<IExternalSystem> systems, IExternalSystem? externalServer = null)
     {
         Mock<IEngineController> controller = new();
+        controller.Setup(c => c.IsMessage(It.IsAny<object>())).Returns(true);
         controller.Setup(c => c.ExternalSystems).Returns(systems);
         controller.Setup(c => c.ExternalServer).Returns(externalServer);
         return controller.Object;
@@ -121,7 +122,7 @@ public sealed class ExternalSystemsServiceTests
         Task startTask = service.Start(cts.Token);
         await Task.Delay(50);
 
-        TestMessage message = new() { MessageId = "M1" };
+        TestFrame message = new() { MessageId = "M1" };
         await peer.FireMessageDelivered(message);
 
         Assert.Single(systemA.SentMessages);
@@ -145,7 +146,7 @@ public sealed class ExternalSystemsServiceTests
         Task startTask = service.Start(cts.Token);
         await Task.Delay(50);
 
-        TestMessage message = new() { MessageId = "M1" };
+        TestFrame message = new() { MessageId = "M1" };
         await systemA.Deliver(message);
 
         Assert.Single(peer.DeliveredLocally);
@@ -169,7 +170,7 @@ public sealed class ExternalSystemsServiceTests
         Task startTask = service.Start(cts.Token);
         await Task.Delay(50);
 
-        TestMessage message = new() { MessageId = "M1" };
+        TestFrame message = new() { MessageId = "M1" };
         await systemA.Deliver(message);
 
         Assert.Empty(systemA.SentMessages);
@@ -195,8 +196,8 @@ public sealed class ExternalSystemsServiceTests
         Task startTask = service.Start(cts.Token);
         await Task.Delay(50);
 
-        TestMessage messageFromA = new() { MessageId = "FromA" };
-        TestMessage messageFromB = new() { MessageId = "FromB" };
+        TestFrame messageFromA = new() { MessageId = "FromA" };
+        TestFrame messageFromB = new() { MessageId = "FromB" };
         await Task.WhenAll(systemA.Deliver(messageFromA), systemB.Deliver(messageFromB));
 
         await WaitUntil(() => systemA.SentMessages.Count >= 1 && systemB.SentMessages.Count >= 1, TimeSpan.FromSeconds(30));
@@ -223,7 +224,7 @@ public sealed class ExternalSystemsServiceTests
         Task startTask = service.Start(cts.Token);
         await Task.Delay(50);
 
-        TestMessage message = new() { MessageId = "M1" };
+        TestFrame message = new() { MessageId = "M1" };
         await peer.FireMessageDelivered(message);
 
         Assert.Single(externalServer.SentMessages);
@@ -248,7 +249,7 @@ public sealed class ExternalSystemsServiceTests
         Task startTask = service.Start(cts.Token);
         await Task.Delay(50);
 
-        TestMessage message = new() { MessageId = "M1" };
+        TestFrame message = new() { MessageId = "M1" };
         await other.Deliver(message);
 
         Assert.Single(externalServer.SentMessages);
@@ -274,7 +275,7 @@ public sealed class ExternalSystemsServiceTests
         Task startTask = service.Start(cts.Token);
         await Task.Delay(50);
 
-        TestMessage message = new() { MessageId = "M1" };
+        TestFrame message = new() { MessageId = "M1" };
         await externalServer.Deliver(message);
 
         Assert.Single(other1.SentMessages);

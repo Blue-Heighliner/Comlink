@@ -12,7 +12,7 @@ graph TD
     DVM[DraftViewModel]
     EBV[EntryBarViewModel]
     CAV[ContentAreaViewModel]
-    PS -->|MessageDelivered event| DSC
+    PS -->|FrameDelivered event| DSC
     PS -->|DeliveryStatusChanged event| MRS
     MRS -->|DeliveryStatusChanged event| DSC
     DSC -->|UpdateDeliveryStatus| ES
@@ -59,7 +59,7 @@ UserInfo? installed = await service.Install("SN01", cancellation);
 Routes outbound messages to peer nodes and surfaces their delivery status. Delivery status comes entirely from `IPeerService`'s own `DestinationStatus` stream, itself derived from MSMT's delivery status (see [Peer.md](Peer.md#delivery-status)); the one application-level status above that — `Read` — comes from the user-read confirmation message flow (see [Peer.md](Peer.md#read-confirmation)).
 
 **Key responsibilities**:
-- Build the outbound message via `IEngineController` (`CreateMessage()` then the `Set*` logical-field setters, including `SetIsAlert`, `SetPriority`, `SetTag`) so it can be sent as whatever concrete type the host has configured (see [Configuration.md](Configuration.md#message-format))
+- Build the outbound message via `IEngineController` (`CreateFrame()` then the `Set*` logical-field setters, including `SetIsAlert`, `SetPriority`, `SetTag`) so it can be sent as whatever concrete type the host has configured (see [Configuration.md](Configuration.md#frame-format))
 - For each recipient in `SendMessagePayload.Addresses`, deliver via `IPeerService.Send`
 - Subscribe to `IPeerService.DeliveryStatusChanged` and forward each `DestinationStatus` unchanged as its own `DeliveryStatusChanged`
 - Subscribe to `IPeerService.ConfirmationReceived` and re-raise it as `DeliveryStatusChanged(messageId, confirmingUser, DestinationStatus.Read)` — reusing the same event as peer-driven status changes
@@ -94,7 +94,7 @@ CRUD for messages, drafts, notes, and activity log reads. Runs in `Client` mode 
 - `NoteInserted` — after `CreateNote`
 - `NoteUpdated` — after `SaveNote`
 
-Both `StoreIncomingMessage` and `StoreSentMessage` take the message's logical fields (subject, body, addresses, etc.) as plain parameters, plus an `isAlert` flag, and build `MessageEntity.Message` from them via `IEngineController` (`CreateMessage()` + `Set*`) before saving — callers never construct the stored message type directly. `MessageEntity.MessageId` is denormalized from the same value passed to `IEngineController.SetMessageId` so it stays queryable/indexable (see [Data.md](Data.md#messageentity)).
+Both `StoreIncomingMessage` and `StoreSentMessage` take the message's logical fields (subject, body, addresses, etc.) as plain parameters, plus an `isAlert` flag, and build `MessageEntity.Message` from them via `IEngineController` (`CreateFrame()` + `Set*`) before saving — callers never construct the stored frame type directly. `MessageEntity.MessageId` is denormalized from the same value passed to `IEngineController.SetFrameId` so it stays queryable/indexable (see [Data.md](Data.md#messageentity)).
 
 **Key methods**:
 
@@ -109,7 +109,7 @@ Both `StoreIncomingMessage` and `StoreSentMessage` take the message's logical fi
 | `CreateNote()` | Creates a blank note in the Notes folder, fires `NoteInserted` |
 | `SaveDraft(entity)` | Persists draft changes, fires `DraftUpdated` if not yet sent |
 | `SaveNote(entity)` | Persists note changes, fires `NoteUpdated` |
-| `GetMessages(folderId, page, filter = null)` | Paginated messages, ordered by `ReceivedAt` descending. A non-empty `EntryFilter` loads the whole folder to filter in memory instead of paginating the LiteDB query directly, since a message's fields live inside the host's own opaque message type: `Search` matches case-insensitively against subject, sender, destinations, tag, priority label, or security level name; `Author` matches the sender and `Destination` any addressee, both by case-insensitive substring; `DateFrom`/`DateTo` bound `ReceivedAt` as exact instants (a caller wanting a whole calendar day combines the date with its start/end of day itself - `EntryBarViewModel` does this by default); `SecurityLevel`/`Priority`/`AlertOnly` match the decoded message exactly |
+| `GetMessages(folderId, page, filter = null)` | Paginated messages, ordered by `ReceivedAt` descending. A non-empty `EntryFilter` loads the whole folder to filter in memory instead of paginating the LiteDB query directly, since a message's fields live inside the host's own opaque frame type: `Search` matches case-insensitively against subject, sender, destinations, tag, priority label, or security level name; `Author` matches the sender and `Destination` any addressee, both by case-insensitive substring; `DateFrom`/`DateTo` bound `ReceivedAt` as exact instants (a caller wanting a whole calendar day combines the date with its start/end of day itself - `EntryBarViewModel` does this by default); `SecurityLevel`/`Priority`/`AlertOnly` match the decoded message exactly |
 | `GetDrafts(folderId, page, alphabetical, filter = null)` | Paginated drafts, same in-memory filtering approach. `Search` matches subject or tag; `Destination` matches any address's user name by case-insensitive substring; `DateFrom`/`DateTo` bound `ModifiedAt` the same exact-instant way; `SecurityLevel`/`Priority`/`AlertOnly` match directly against `DraftEntity`'s own fields |
 | `GetNotes(folderId, page, alphabetical, filter = null)` | Paginated notes, same in-memory filtering approach. `Search` matches body text; `DateFrom`/`DateTo` bound `ModifiedAt` the same exact-instant way; `Author`/`Destination`/`SecurityLevel`/`Priority`/`AlertOnly` are ignored - `NoteEntity` has none of those fields |
 | `GetActivityLogs(page)` | Paginated activity log entries, newest first |
@@ -125,7 +125,7 @@ Implements `IServiceConnection`, registered in both `Client` and `Headless` mode
 
 **Responsibilities**:
 - Forwards `IServiceConnection.SendMessage(subject, body, addresses, isAlert, priority, tag)` → `MessageRoutingService.Route` and returns the result. It does not persist anything itself — in Client mode, `DraftViewModel` calls `EntryService.StoreSentMessage` after a successful send
-- Translates `PeerService.MessageDelivered` → fires `IServiceConnection.MessageReceived`. It does not persist the message itself — in Client mode, `MainViewModel`'s handler for that event calls `EntryService.StoreIncomingMessage`
+- Translates `PeerService.FrameDelivered` → fires `IServiceConnection.MessageReceived` for each frame that is a message (`IEngineController.IsMessage`; any other frame is neither shown nor stored). It does not persist the message itself — in Client mode, `MainViewModel`'s handler for that event calls `EntryService.StoreIncomingMessage`
 - On `MessageRoutingService.DeliveryStatusChanged`, updates the Outbox record via `EntryService.UpdateDeliveryStatus`, then fires `IServiceConnection.DeliveryStatusChanged` with the user's status as stored and the resulting `OverallStatus`, so an ignored late status is not shown either
 - `MarkMessageRead(messageId)`: calls `EntryService.MarkMessageRead`, fires `IServiceConnection.DeliveryStatusChanged` locally (empty `UserName`, status `Read`) so Client-mode UI reflects the read state immediately, then sends a user-read confirmation message to the original sender via `IPeerService.Send` directly — or, for a self-addressed message, calls `EntryService.UpdateDeliveryStatus` directly with no network round-trip. See [Peer.md](Peer.md#read-confirmation)
 - Implements install, user info query, and user names query by delegating to `UserService` / `IEngineController`
@@ -138,7 +138,7 @@ Re-reads the network configuration file while the engine runs (`Reload()`, raisi
 
 ## InterfaceService
 
-Hosts the local interface listener described in [Interface.md](Interface.md). Always active, in both `Client` and `Headless` mode. `Restart()` closes the listener and opens it again from the configuration as it is then, and it keeps waiting for a restart when it cannot start (for example before its certificates are in place) instead of ending. Mirrors `PeerService.MessageDelivered` out to every connected interface connection, and routes messages received from an interface via `MessageRoutingService.Route`.
+Hosts the local interface listener described in [Interface.md](Interface.md). Always active, in both `Client` and `Headless` mode. `Restart()` closes the listener and opens it again from the configuration as it is then, and it keeps waiting for a restart when it cannot start (for example before its certificates are in place) instead of ending. Mirrors `PeerService.FrameDelivered` out to every connected interface connection, and routes messages received from an interface via `MessageRoutingService.Route`.
 
 ---
 
@@ -151,7 +151,7 @@ Builds the entry-reference list for a full export and writes selected entries to
 - `Export(entries, zipPath, format, cancellation)` - for each reference whose root folder type `format?.AllowedTypes` accepts (every type, when `format` is `null` or states no filter), loads the full entity from the appropriate repository, maps it to a public export DTO (`MessageExportData`/`DraftExportData`/`NoteExportData`/`ActivityLogExportData`, see [Configuration.md](Configuration.md#export-formats)) via `IEngineController` for messages, and writes it as `{index}_{EntryType}_{id}.{extension}` inside a new `ZipArchive` - the engine's own `JsonSerializer` when `format` is `null` (extension `json`), otherwise `format.Serialize` (extension derived from the format's `Name`, lowercased and stripped to letters/digits, falling back to `dat` if that leaves nothing). The archive is written to `zipPath + ".partial"` and only moved over `zipPath` once complete, so a cancelled or failed export (e.g. a full or removed drive) never leaves a truncated package, or destroys an existing one of the same name. A reference whose entity has since been deleted, or whose type `format` does not accept, is left out without failing the export. Returns how many entries were actually written, which callers use instead of `entries.Count` to report an accurate count.
 - On cancellation (or any other failure) mid-write, the partially written zip file at `zipPath` is deleted before the exception propagates — the `try`/`catch` wraps the entire archive-writing block, so this holds regardless of how many entries had already been written.
 
-Message content is read through `IEngineController`, matching every other message read path in Engine — `ExportService` has no knowledge of the host's concrete message type.
+Message content is read through `IEngineController`, matching every other message read path in Engine — `ExportService` has no knowledge of the host's concrete frame type.
 
 `IExportService.PackageExtension` (a `const` interface member, `".export.zip"`) is the file extension every export package is written with, distinguishing it from an ordinary zip file so `ImportService.GetPackages` can find it on a drive. `ExportViewModel` appends this to the user-entered file name.
 
@@ -199,7 +199,7 @@ The storage half of a storage server (see [Configuration.md](Configuration.md#se
 
 ## RetrievalService
 
-The client's half: `Request(serverName, criteria)` builds a message of the configured type with `SetRetrieval(criteria)` and a single To address naming the server, routes it from the current user with `IMessageRoutingService.RouteMessage` (which fills in the ID, sender and sent time), and returns whether that server's delivery succeeded - not whether anything matched, since the answer arrives later as ordinary received messages. Throws `InvalidOperationException` with no installed user. `RetrievalCriteria` (`Core/src/Internal/Services/RetrievalCriteria.cs`) holds `From`/`To` (UTC instants), `Authors`, `Destinations` and `Ids`, which the engine controller reads from and writes to the message's mapped retrieval fields.
+The client's half: `Request(serverName, criteria)` builds a message of the configured type with `SetRetrieval(criteria)` and a single To address naming the server, routes it from the current user with `IMessageRoutingService.RouteFrame` (which fills in the ID, sender and sent time), and returns whether that server's delivery succeeded - not whether anything matched, since the answer arrives later as ordinary received messages. Throws `InvalidOperationException` with no installed user. `RetrievalCriteria` (`Core/src/Internal/Services/RetrievalCriteria.cs`) holds `From`/`To` (UTC instants), `Authors`, `Destinations` and `Ids`, which the engine controller reads from and writes to the message's mapped retrieval fields.
 
 ---
 

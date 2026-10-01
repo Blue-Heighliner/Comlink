@@ -76,7 +76,7 @@ public sealed class ClientPeerServiceTests
 
     private static readonly INetworkSerializer serializer = new ProtobufNetworkSerializer();
 
-    private static ReadOnlyMemory<byte> Encode(TestMessage message)
+    private static ReadOnlyMemory<byte> Encode(TestFrame message)
     {
         using IMemoryOwner<byte> buf = serializer.Serialize(message);
         return buf.Memory.ToArray();
@@ -205,7 +205,7 @@ public sealed class ClientPeerServiceTests
     {
         Fixture fx = Build();
 
-        bool ok = await fx.Service.Send("ANY-USER", new TestMessage { MessageId = "M1", FromUser = "SOURCE" });
+        bool ok = await fx.Service.Send("ANY-USER", new TestFrame { MessageId = "M1", FromUser = "SOURCE" });
 
         Assert.False(ok);
     }
@@ -219,7 +219,7 @@ public sealed class ClientPeerServiceTests
         Task startTask = fx.Service.Start(cts.Token);
         await Task.Delay(50);
 
-        bool ok = await fx.Service.Send("DEST", new TestMessage { MessageId = "M1", FromUser = "SOURCE" });
+        bool ok = await fx.Service.Send("DEST", new TestFrame { MessageId = "M1", FromUser = "SOURCE" });
 
         Assert.False(ok);
         fx.Transport.Verify(p => p.Request(It.IsAny<PeerConnection>(), It.Is<ReadOnlyMemory<byte>>(payload => !TestHeartbeat.Is(payload)), It.IsAny<PeerSendOptions>(), It.IsAny<CancellationToken>()), Times.Never);
@@ -234,7 +234,7 @@ public sealed class ClientPeerServiceTests
     {
         (Fixture fx, CancellationTokenSource cts, Task startTask) = await StartConnected();
 
-        bool ok = await fx.Service.Send("DEST", new TestMessage { MessageId = "M1", FromUser = "SOURCE" });
+        bool ok = await fx.Service.Send("DEST", new TestFrame { MessageId = "M1", FromUser = "SOURCE" });
 
         Assert.True(ok);
         fx.Transport.Verify(p => p.Request(
@@ -256,7 +256,7 @@ public sealed class ClientPeerServiceTests
     {
         (Fixture fx, CancellationTokenSource cts, Task startTask) = await StartConnected();
 
-        TestMessage message = new() { MessageId = "M1", FromUser = "SOURCE" };
+        TestFrame message = new() { MessageId = "M1", FromUser = "SOURCE" };
         bool[] results = await Task.WhenAll(
             fx.Service.Send("USER-A", message),
             fx.Service.Send("USER-B", message),
@@ -269,17 +269,17 @@ public sealed class ClientPeerServiceTests
         await startTask;
     }
 
-    /// <summary>A valid message received over the server connection fires MessageDelivered.</summary>
+    /// <summary>A valid message received over the server connection fires FrameDelivered.</summary>
     [Fact]
     public async Task Received_ValidMessage_RaisesMessageDelivered()
     {
         (Fixture fx, CancellationTokenSource cts, Task startTask) = await StartConnected();
         TaskCompletionSource<object> tcs = new();
-        fx.Service.MessageDelivered += message => { tcs.TrySetResult(message); return Task.CompletedTask; };
+        fx.Service.FrameDelivered += message => { tcs.TrySetResult(message); return Task.CompletedTask; };
 
-        fx.Received.Publish(new PeerReceivedEventArgs { Connection = fx.Server, Payload = Encode(new TestMessage { MessageId = "MSG1", FromUser = "REMOTE" }) });
+        fx.Received.Publish(new PeerReceivedEventArgs { Connection = fx.Server, Payload = Encode(new TestFrame { MessageId = "MSG1", FromUser = "REMOTE" }) });
 
-        TestMessage message = Assert.IsType<TestMessage>(await tcs.Task.WaitAsync(TimeSpan.FromSeconds(30)));
+        TestFrame message = Assert.IsType<TestFrame>(await tcs.Task.WaitAsync(TimeSpan.FromSeconds(30)));
         Assert.Equal("MSG1", message.MessageId);
 
         cts.Cancel();
@@ -292,12 +292,12 @@ public sealed class ClientPeerServiceTests
     {
         (Fixture fx, CancellationTokenSource cts, Task startTask) = await StartConnected();
         bool delivered = false;
-        fx.Service.MessageDelivered += _ => { delivered = true; return Task.CompletedTask; };
+        fx.Service.FrameDelivered += _ => { delivered = true; return Task.CompletedTask; };
 
         fx.Received.Publish(new PeerReceivedEventArgs
         {
             Connection = new PeerConnection(null, new IpConnectionInfo { IsInbound = true }, () => { }),
-            Payload = Encode(new TestMessage { MessageId = "MSG1", FromUser = "REMOTE" })
+            Payload = Encode(new TestFrame { MessageId = "MSG1", FromUser = "REMOTE" })
         });
         await Task.Delay(100);
 
@@ -568,7 +568,7 @@ public sealed class ClientPeerServiceTests
         Assert.True(status.IsClosed);
         Assert.False(status.IsConnected);
         Assert.True(raised > 0);
-        Assert.False(await fx.Service.Send("DEST", new TestMessage { MessageId = "M1", FromUser = "SOURCE" }));
+        Assert.False(await fx.Service.Send("DEST", new TestFrame { MessageId = "M1", FromUser = "SOURCE" }));
 
         cts.Cancel();
         await startTask;
@@ -616,7 +616,7 @@ public sealed class ClientPeerServiceTests
         fx.Transport.Verify(t => t.SetClosed(serverPoint, false), Times.Once);
         Assert.False(Assert.Single(fx.Service.GetStatuses()).IsClosed);
         await WaitUntil(() => fx.Service.GetStatuses().Single().IsConnected, TimeSpan.FromSeconds(30));
-        Assert.True(await fx.Service.Send("DEST", new TestMessage { MessageId = "M2", FromUser = "SOURCE" }));
+        Assert.True(await fx.Service.Send("DEST", new TestFrame { MessageId = "M2", FromUser = "SOURCE" }));
 
         cts.Cancel();
         await startTask;

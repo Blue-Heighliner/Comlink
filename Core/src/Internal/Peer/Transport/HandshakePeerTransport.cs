@@ -4,7 +4,7 @@ namespace BlueHeighliner.Comlink.Peer.Transport;
 /// Wraps another <see cref="IPeerTransport"/> so that a connection is only published, and only usable, once its initial exchange has completed and,
 /// optionally, the node on the other end has been identified. The exchange is a <see cref="Handshake"/>: a host's processor is told when the connection
 /// forms and is given each item that arrives, on the accepting node as an initial item and on the opening node (the node at the higher station address
-/// for a serial link) as a reply, until it marks the connection connected as a named user or disconnects it. Each item is an instance of the message or
+/// for a serial link) as a reply, until it marks the connection connected as a named user or disconnects it. Each item is an instance of the frame or
 /// packet type serialized with its own serializer and nothing is added to it, so items are recognized by position: every payload a node receives on a
 /// connection that is still in its exchange is an item, and everything after the connection is marked connected is ordinary data. The exchange has to
 /// complete within a timeout or the connection is dropped. With <c>identify</c>, the user the processor named (here or in the exchange beneath this one),

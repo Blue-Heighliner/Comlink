@@ -117,13 +117,13 @@ public sealed class ServerRoutingServiceTests
 
     private static readonly INetworkSerializer serializer = new ProtobufNetworkSerializer();
 
-    private static ReadOnlyMemory<byte> Encode(TestMessage message)
+    private static ReadOnlyMemory<byte> Encode(TestFrame message)
     {
         using IMemoryOwner<byte> buf = serializer.Serialize(message);
         return buf.Memory.ToArray();
     }
 
-    private static TestMessage MessageTo(params string[] users) => new()
+    private static TestFrame MessageTo(params string[] users) => new()
     {
         MessageId = "M1",
         FromUser = "SOURCE",
@@ -356,7 +356,7 @@ public sealed class ServerRoutingServiceTests
         fx.Come(clientA1);
         fx.Come(clientA2);
         fx.Come(serverB);
-        TestMessage message = new()
+        TestFrame message = new()
         {
             MessageId = "M1",
             FromUser = "SOURCE",
@@ -598,7 +598,7 @@ public sealed class ServerRoutingServiceTests
         Fixture fx = await BuildStarted();
         PeerConnection clientA2 = Inbound("ClientA2");
         fx.Come(clientA2);
-        TestMessage message = MessageTo("ClientA2");
+        TestFrame message = MessageTo("ClientA2");
         message.MessageId = "SELF-M1";
 
         bool ok = await fx.Service.Send("ClientA2", message);
@@ -930,7 +930,7 @@ public sealed class ServerRoutingServiceTests
         fx.Come(clientA1);
         fx.Come(clientA2);
         fx.Come(serverB);
-        TestMessage message = MessageTo("ClientA2", "ClientB1");
+        TestFrame message = MessageTo("ClientA2", "ClientB1");
         message.Priority = 7;
 
         fx.Receive(clientA1, Encode(message));
@@ -1010,7 +1010,7 @@ public sealed class ServerRoutingServiceTests
         await Stop(fx);
     }
 
-    private static TestMessage RetrievalTo(string server, string from) => new()
+    private static TestFrame RetrievalTo(string server, string from) => new()
     {
         MessageId = "REQ1",
         FromUser = from,
@@ -1030,7 +1030,7 @@ public sealed class ServerRoutingServiceTests
         fx.Receive(clientA1, Encode(MessageTo("ClientA2")));
 
         await WaitUntil(() => storage.Invocations.Count > 0, TimeSpan.FromSeconds(30));
-        storage.Verify(s => s.Store(It.Is<object>(m => ((TestMessage)m).MessageId == "M1")), Times.Once);
+        storage.Verify(s => s.Store(It.Is<object>(m => ((TestFrame)m).MessageId == "M1")), Times.Once);
         await Stop(fx);
     }
 
@@ -1055,7 +1055,7 @@ public sealed class ServerRoutingServiceTests
     public async Task FromChild_RetrievalRequestForThisServer_SendsFoundCopiesToRequester()
     {
         Mock<IMessageStorageService> storage = new();
-        TestMessage copy = MessageTo("ClientA1");
+        TestFrame copy = MessageTo("ClientA1");
         storage.Setup(s => s.Find("ClientA1", It.IsAny<object>())).ReturnsAsync(new List<object> { copy });
         Fixture fx = await BuildStarted(storage: storage.Object);
         PeerConnection clientA1 = Inbound("ClientA1");

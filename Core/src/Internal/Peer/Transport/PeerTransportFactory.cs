@@ -34,7 +34,7 @@ internal sealed class PeerTransportFactory(
         IPeerTransport transport = new CompositePeerTransport(ip, new SerialPeerTransport(microGateFactory, logger, options: engineController.MicroGateOptions));
         try
         {
-            // The initial packet travels as a packet of its own, so its exchange happens beneath the packetizer; the initial message is a message like
+            // The initial packet travels as a packet of its own, so its exchange happens beneath the packetizer; the initial frame is a frame like
             // any other, so its exchange, and identification, happen above it.
             if (packetizer is null && engineController.InitialPacketProcessor is not null) { throw new InvalidOperationException("An initial packet needs a packet type, but none is configured"); }
             if (packetizer is not null)
@@ -43,7 +43,7 @@ internal sealed class PeerTransportFactory(
                 transport = new PacketizingPeerTransport(transport, packetizer, engineController.PacketWindow, logger);
             }
 
-            return new HandshakePeerTransport(transport, engineController, logger, Handshake.ForMessages(engineController), identify: true, contexts: contexts);
+            return new HandshakePeerTransport(transport, engineController, logger, Handshake.ForFrames(engineController), identify: true, contexts: contexts);
         }
         catch (Exception ex)
         {

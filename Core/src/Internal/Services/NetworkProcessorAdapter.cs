@@ -1,16 +1,16 @@
 namespace BlueHeighliner.Comlink.Services;
 
-/// <summary>Presents a host's <see cref="INetworkProcessor{TMessage}"/> as an <see cref="INetworkHandler"/>.</summary>
-/// <typeparam name="TMessage">The host's message type.</typeparam>
+/// <summary>Presents a host's <see cref="INetworkProcessor{TFrame}"/> as an <see cref="INetworkHandler"/>.</summary>
+/// <typeparam name="TFrame">The host's frame type.</typeparam>
 /// <param name="processor">The host's processor.</param>
-internal sealed class NetworkProcessorAdapter<TMessage>(INetworkProcessor<TMessage> processor) : INetworkHandler where TMessage : class
+internal sealed class NetworkProcessorAdapter<TFrame>(INetworkProcessor<TFrame> processor) : INetworkHandler where TFrame : class
 {
     /// <inheritdoc />
-    public Task OnConnected(INetworkUserContext context) => processor.OnConnected(new TypedNetworkConnectedContext<TMessage>(context));
+    public Task OnConnected(INetworkUserContext context) => processor.OnConnected(new TypedNetworkConnectedContext<TFrame>(context));
 
     /// <inheritdoc />
-    public Task OnDisconnected(INetworkUserContext context) => processor.OnDisconnected(new TypedNetworkDisconnectedContext<TMessage>(context));
+    public Task OnDisconnected(INetworkUserContext context) => processor.OnDisconnected(new TypedNetworkDisconnectedContext<TFrame>(context));
 
     /// <inheritdoc />
-    public Task OnReceived(INetworkMessageContext context) => processor.OnReceived(new TypedNetworkReceivedContext<TMessage>(context));
+    public Task OnReceived(INetworkFrameContext context) => processor.OnReceived(new TypedNetworkReceivedContext<TFrame>(context));
 }

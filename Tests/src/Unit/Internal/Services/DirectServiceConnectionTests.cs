@@ -6,7 +6,7 @@ public sealed class DirectServiceConnectionTests
 
     private sealed class FakePeerService : IPeerService
     {
-        public event Func<object, Task>? MessageDelivered;
+        public event Func<object, Task>? FrameDelivered;
 #pragma warning disable CS0067
         public event Func<string, string, Task>? ConfirmationReceived;
         public event Func<string, string, DestinationStatus, Task>? DeliveryStatusChanged;
@@ -17,20 +17,20 @@ public sealed class DirectServiceConnectionTests
         public IReadOnlyList<string> GetConnectedUsers() => ConnectedUsers;
         public bool IsUserConnected(string userName) => ConnectedUsers.Contains(userName);
         public Task<bool> SendPacket(string userName, object packet, CancellationToken cancellation = default) => Task.FromResult(true);
-        public List<(string UserName, TestMessage Message)> Sent { get; } = [];
+        public List<(string UserName, TestFrame Message)> Sent { get; } = [];
         public bool ReturnSuccess { get; set; } = true;
 
         public Task Start(CancellationToken cancellation) => Task.CompletedTask;
         public Task<bool> Send(string userName, object message, CancellationToken cancellation = default)
         {
-            Sent.Add((userName, (TestMessage)message));
+            Sent.Add((userName, (TestFrame)message));
             return Task.FromResult(ReturnSuccess);
         }
-        public Task DeliverLocal(object payload) => MessageDelivered is null ? Task.CompletedTask : MessageDelivered(payload);
+        public Task DeliverLocal(object payload) => FrameDelivered is null ? Task.CompletedTask : FrameDelivered(payload);
 
         public async Task FireMessageDelivered(object payload)
         {
-            if (MessageDelivered is not null) { await MessageDelivered(payload); }
+            if (FrameDelivered is not null) { await FrameDelivered(payload); }
         }
     }
 
@@ -49,7 +49,7 @@ public sealed class DirectServiceConnectionTests
             return Task.FromResult(RouteResult.Value);
         }
 
-        public Task<(string MessageId, IReadOnlyList<UserDeliveryResult> UserResults)> RouteMessage(
+        public Task<(string MessageId, IReadOnlyList<UserDeliveryResult> UserResults)> RouteFrame(
             string fromUser, object message, CancellationToken cancellation)
         {
             if (RouteResult is null) { throw new InvalidOperationException("RouteResult not configured"); }
@@ -152,7 +152,21 @@ public sealed class DirectServiceConnectionTests
         Assert.Same(info, result);
     }
 
-    /// <summary>After Connect, a MessageDelivered peer event is converted and re-raised as MessageReceived.</summary>
+    /// <summary>A delivered frame that is not a message is never shown or stored, so no MessageReceived is raised for it.</summary>
+    [Fact]
+    public async Task Connect_ThenNonMessageFrameDelivered_RaisesNothing()
+    {
+        DirectServiceConnection conn = Build(out FakePeerService peer, out _, out _, out _, out _);
+        await conn.Connect();
+        int raised = 0;
+        conn.MessageReceived += _ => { raised++; return Task.CompletedTask; };
+
+        await peer.FireMessageDelivered(new TestFrame { MessageId = "F1", FromUser = "REMOTE", IsHidden = true });
+
+        Assert.Equal(0, raised);
+    }
+
+    /// <summary>After Connect, a FrameDelivered peer event is converted and re-raised as MessageReceived.</summary>
     [Fact]
     public async Task Connect_ThenMessageDelivered_RaisesMessageReceivedEvent()
     {
@@ -162,7 +176,7 @@ public sealed class DirectServiceConnectionTests
         MessageReceivedEvent? received = null;
         conn.MessageReceived += evt => { received = evt; return Task.CompletedTask; };
 
-        TestMessage payload = new()
+        TestFrame payload = new()
         {
             MessageId = "MSG1",
             FromUser = "REMOTE",
@@ -287,7 +301,7 @@ public sealed class DirectServiceConnectionTests
         DirectServiceConnection conn = Build(out FakePeerService peer, out _, out Mock<IUserService> user, out Mock<IEntryService> entry, out _);
         user.Setup(s => s.GetCurrentUserInfo()).Returns(new UserInfo { Name = "LOCAL" });
 
-        TestMessage stored = new() { MessageId = "MSG1", FromUser = "REMOTE" };
+        TestFrame stored = new() { MessageId = "MSG1", FromUser = "REMOTE" };
         MessageEntity entity = new() { MessageId = "MSG1", Message = stored };
         entry.Setup(e => e.MarkMessageRead("MSG1")).ReturnsAsync(entity);
 
@@ -301,7 +315,7 @@ public sealed class DirectServiceConnectionTests
         Assert.Equal("MSG1", evt.MessageId);
         Assert.Equal(DestinationStatus.Read, evt.Status);
 
-        (string userName, TestMessage confirmation) = Assert.Single(peer.Sent);
+        (string userName, TestFrame confirmation) = Assert.Single(peer.Sent);
         Assert.Equal("REMOTE", userName);
         Assert.Equal("MSG1", confirmation.ConfirmationMessageId);
         Assert.Equal("LOCAL", confirmation.FromUser);
@@ -317,7 +331,7 @@ public sealed class DirectServiceConnectionTests
         DirectServiceConnection conn = Build(out FakePeerService peer, out _, out Mock<IUserService> user, out Mock<IEntryService> entry, out _);
         user.Setup(s => s.GetCurrentUserInfo()).Returns(new UserInfo { Name = "LOCAL" });
 
-        TestMessage stored = new() { MessageId = "MSG1", FromUser = "LOCAL" };
+        TestFrame stored = new() { MessageId = "MSG1", FromUser = "LOCAL" };
         MessageEntity entity = new() { MessageId = "MSG1", Message = stored };
         entry.Setup(e => e.MarkMessageRead("MSG1")).ReturnsAsync(entity);
 

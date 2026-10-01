@@ -28,7 +28,7 @@ internal sealed class RolePeerService(IServiceProvider services, IEngineControll
     private bool restartRequested;
 
     /// <inheritdoc />
-    public event Func<object, Task>? MessageDelivered;
+    public event Func<object, Task>? FrameDelivered;
 
     /// <inheritdoc />
     public event Func<string, string, Task>? ConfirmationReceived;
@@ -103,7 +103,7 @@ internal sealed class RolePeerService(IServiceProvider services, IEngineControll
         => inner?.SendPacket(userName, packet, cancellation) ?? Task.FromResult(false);
 
     /// <inheritdoc />
-    public Task DeliverLocal(object payload) => inner?.DeliverLocal(payload) ?? Raise(MessageDelivered, handler => handler(payload));
+    public Task DeliverLocal(object payload) => inner?.DeliverLocal(payload) ?? Raise(FrameDelivered, handler => handler(payload));
 
     /// <inheritdoc />
     public IReadOnlyList<PeerConnectionStatus> GetStatuses() => (inner as IConnectionStatusService)?.GetStatuses() ?? [];
@@ -125,7 +125,7 @@ internal sealed class RolePeerService(IServiceProvider services, IEngineControll
             UserRole.Server => ActivatorUtilities.CreateInstance<ServerRoutingService>(services),
             _ => ActivatorUtilities.CreateInstance<PeerService>(services)
         };
-        created.MessageDelivered += payload => Raise(MessageDelivered, handler => handler(payload));
+        created.FrameDelivered += payload => Raise(FrameDelivered, handler => handler(payload));
         created.ConfirmationReceived += (messageId, userName) => Raise(ConfirmationReceived, handler => handler(messageId, userName));
         created.DeliveryStatusChanged += (messageId, userName, status) => Raise(DeliveryStatusChanged, handler => handler(messageId, userName, status));
         created.UserConnected += userName => Raise(UserConnected, handler => handler(userName));

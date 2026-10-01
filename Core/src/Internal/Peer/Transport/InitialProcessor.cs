@@ -25,7 +25,7 @@ internal interface IInitialSession
     Task<bool> Send(object item);
 }
 
-/// <summary>The engine's view of a host's initial message or packet processor, with items as plain objects.</summary>
+/// <summary>The engine's view of a host's initial frame or packet processor, with items as plain objects.</summary>
 internal interface IInitialProcessor
 {
     /// <summary>Gets the type of item the exchange carries.</summary>

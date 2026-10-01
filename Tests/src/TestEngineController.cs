@@ -1,8 +1,8 @@
 namespace BlueHeighliner.Comlink.Tests;
 
-/// <summary>Test message DTO standing in for a host-supplied <see cref="IEngineController.MessageType"/>.</summary>
+/// <summary>Test frame DTO standing in for a host-supplied <see cref="IEngineController.FrameType"/>.</summary>
 [ProtoContract]
-public sealed class TestMessage
+public sealed class TestFrame
 {
     /// <summary>Application-level message identifier.</summary>
     [ProtoMember(1)] public string MessageId { get; set; } = string.Empty;
@@ -38,9 +38,11 @@ public sealed class TestMessage
     [ProtoMember(16)] public List<string> RetrievalDestinations { get; set; } = [];
     /// <summary>Retrieval request message identifiers.</summary>
     [ProtoMember(17)] public List<string> RetrievalIds { get; set; } = [];
+    /// <summary>Whether this frame is only network traffic rather than a message (stored inversely so an ordinary test frame is a message).</summary>
+    [ProtoMember(18)] public bool IsHidden { get; set; }
 }
 
-/// <summary>A single address entry within a <see cref="TestMessage"/>.</summary>
+/// <summary>A single address entry within a <see cref="TestFrame"/>.</summary>
 [ProtoContract]
 public sealed class TestAddressEntry
 {
@@ -54,7 +56,7 @@ public sealed class TestAddressEntry
 
 /// <summary>
 /// Test <see cref="IEngineController"/> built from <see cref="TestEngineConfiguration"/>, which maps the logical message fields onto
-/// <see cref="TestMessage"/>, with the engine's defaults for everything else. Not <see langword="sealed"/> because tests
+/// <see cref="TestFrame"/>, with the engine's defaults for everything else. Not <see langword="sealed"/> because tests
 /// override single members, and Moq subclasses it with <c>CallBase = true</c>.
 /// </summary>
 internal class TestEngineController : EngineController
