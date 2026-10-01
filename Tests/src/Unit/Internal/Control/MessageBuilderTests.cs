@@ -84,11 +84,12 @@ public sealed class MessageBuilderTests
     public void Defaults_SerializerBuildsOnlyTheMessageType_AndCreateIsNew()
     {
         MessageMap map = Complete().Build();
-        using IMemoryOwner<byte> own = map.Serializer.Serialize(new TestMessage { MessageId = "M" });
+        INetworkSerializer serializer = map.Serializer.Create(null);
+        using IMemoryOwner<byte> own = serializer.Serialize(new TestMessage { MessageId = "M" });
         using IMemoryOwner<byte> other = new ProtobufNetworkSerializer().Serialize(new TestHello { Name = "N" });
 
-        Assert.IsType<TestMessage>(map.Serializer.Deserialize(own.Memory));
-        Assert.Null(map.Serializer.Deserialize(other.Memory));
+        Assert.IsType<TestMessage>(serializer.Deserialize(own.Memory));
+        Assert.Null(serializer.Deserialize(other.Memory));
         Assert.IsType<TestMessage>(map.Create());
     }
 
@@ -99,9 +100,9 @@ public sealed class MessageBuilderTests
         INetworkSerializer serializer = Mock.Of<INetworkSerializer>();
         TestMessage created = new() { MessageId = "CREATED" };
 
-        MessageMap map = Complete().Serializer(serializer).Create(() => created) is MessageBuilder<TestMessage> builder ? builder.Build() : throw new InvalidOperationException();
+        MessageMap map = Complete().Serializer<INetworkSerializer>().Create(() => created) is MessageBuilder<TestMessage> builder ? builder.Build() : throw new InvalidOperationException();
 
-        Assert.Same(serializer, map.Serializer);
+        Assert.Same(serializer, map.Serializer.Create(new ServiceCollection().AddSingleton(serializer).BuildServiceProvider()));
         Assert.Same(created, map.Create());
     }
 

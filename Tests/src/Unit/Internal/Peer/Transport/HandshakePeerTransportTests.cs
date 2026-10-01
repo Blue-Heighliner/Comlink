@@ -424,6 +424,7 @@ public sealed class HandshakePeerTransportTests
         Assert.Equal("BOB", link.User!.Name);
         await WaitUntil(() => endB.Connected.Count == 1);
         Assert.Equal("ALICE", endB.Connected[0].User!.Name);
+        await WaitUntil(() => openersB.Count == 1);
         Assert.Equal([true], openersA);
         Assert.Equal([false], openersB);
     }

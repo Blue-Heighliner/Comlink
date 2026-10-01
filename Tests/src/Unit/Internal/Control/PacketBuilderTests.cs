@@ -58,13 +58,14 @@ public sealed class PacketBuilderTests
     public void Defaults_SizeWindowAndSerializer()
     {
         PacketMap map = Complete().Build();
-        using IMemoryOwner<byte> own = map.Serializer.Serialize(new TestPacket { Count = 1 });
+        INetworkSerializer serializer = map.Serializer.Create(null);
+        using IMemoryOwner<byte> own = serializer.Serialize(new TestPacket { Count = 1 });
         using IMemoryOwner<byte> other = new ProtobufNetworkSerializer().Serialize(new TestMessage());
 
         Assert.Equal(16 * 1024, map.Size);
         Assert.Equal(1, map.Window);
-        Assert.IsType<TestPacket>(map.Serializer.Deserialize(own.Memory));
-        Assert.Null(map.Serializer.Deserialize(other.Memory));
+        Assert.IsType<TestPacket>(serializer.Deserialize(own.Memory));
+        Assert.Null(serializer.Deserialize(other.Memory));
     }
 
     /// <summary>The size, window, serializer and factory a host states replace the defaults.</summary>
@@ -74,13 +75,13 @@ public sealed class PacketBuilderTests
         INetworkSerializer serializer = Mock.Of<INetworkSerializer>();
         TestPacket created = new() { Count = 42 };
         PacketBuilder<TestPacket> builder = Complete();
-        builder.Size(200).Window(3).Serializer(serializer).Create(() => created);
+        builder.Size(200).Window(3).Serializer<INetworkSerializer>().Create(() => created);
 
         PacketMap map = builder.Build();
 
         Assert.Equal(200, map.Size);
         Assert.Equal(3, map.Window);
-        Assert.Same(serializer, map.Serializer);
+        Assert.Same(serializer, map.Serializer.Create(new ServiceCollection().AddSingleton(serializer).BuildServiceProvider()));
         Assert.Same(created, map.Create());
     }
 

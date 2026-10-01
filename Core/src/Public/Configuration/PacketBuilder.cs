@@ -50,7 +50,8 @@ public interface IPacketBuilder<TPacket> where TPacket : class, new()
     IPacketBuilder<TPacket> Window(int packets);
 
     /// <summary>Replaces the serializer that turns packets into bytes. The default is a <see cref="ProtobufNetworkSerializer"/> that builds only <typeparamref name="TPacket"/>.</summary>
-    IPacketBuilder<TPacket> Serializer(INetworkSerializer serializer);
+    /// <typeparam name="TSerializer">The serializer type, instantiated through dependency injection when the engine runs: the instance registered for it in the host's services, or else one constructed from them.</typeparam>
+    IPacketBuilder<TPacket> Serializer<TSerializer>() where TSerializer : INetworkSerializer;
 
     /// <summary>Replaces how a new, empty packet is created. The default is <c>new TPacket()</c>.</summary>
     IPacketBuilder<TPacket> Create(Func<TPacket> create);

@@ -229,10 +229,10 @@ internal interface IEngineController
     /// <summary>The processor that reacts to a user connecting or disconnecting and to a message being received (see <see cref="IMessageBuilder{TMessage}.Processor"/>), or <see langword="null"/> for none.</summary>
     INetworkHandler? NetworkHandler { get; }
 
-    /// <summary>Every custom export format added via <see cref="IEngineBuilder.ExportFormat(string, Func{object, Stream, CancellationToken, Task})"/>, in the order added; empty if none.</summary>
+    /// <summary>Every custom export format added via <see cref="IEngineBuilder.ExportFormat{TFormat}"/>, in the order added; empty if none.</summary>
     IReadOnlyList<ExportFormatDefinition> ExportFormats { get; }
 
-    /// <summary>Every custom import format added via <see cref="IEngineBuilder.ImportFormat(string, StagedSendMode, Nullable{TimeSpan}, Func{Stream, IImportFormatContext, CancellationToken, Task})"/>, in the order added; empty if none.</summary>
+    /// <summary>Every custom import format added via <see cref="IEngineBuilder.ImportFormat{TFormat}"/>, in the order added; empty if none.</summary>
     IReadOnlyList<ImportFormatDefinition> ImportFormats { get; }
 
     /// <summary>The server users, from <see cref="Servers"/>, that keep a copy of every message they route and answer retrieval requests; see <see cref="UserInfo.StoresMessages"/>. Empty if none.</summary>
@@ -418,8 +418,31 @@ internal interface IEngineController
 /// <param name="services">The running engine's container, which instantiates the host's processors; <see langword="null"/> for one with no services.</param>
 internal class EngineController(EngineBuilder builder, ICurrentUserProvider currentUserProvider, NetworkConfig? networkConfig = null, IServiceProvider? services = null) : IEngineController
 {
+    private static IReadOnlyList<TDefinition> Replacing<TFormat, TDefinition>(IEnumerable<TFormat> formats, Func<TFormat, TDefinition> define, Func<TDefinition, string> name)
+    {
+        List<TDefinition> definitions = [];
+        foreach (TDefinition definition in formats.Select(define))
+        {
+            int existing = definitions.FindIndex(other => string.Equals(name(other), name(definition), StringComparison.OrdinalIgnoreCase));
+            if (existing >= 0) { definitions[existing] = definition; }
+            else { definitions.Add(definition); }
+        }
+
+        return definitions;
+    }
+
     private readonly MessageMap message = builder.MessageMap ?? throw new InvalidOperationException("The engine configuration must state its message type with Message<TMessage>(...).");
     private readonly PacketMap? packet = builder.PacketMap;
+    private readonly Lazy<INetworkSerializer> networkSerializer = new(() => (builder.MessageMap ?? throw new InvalidOperationException("The engine configuration must state its message type with Message<TMessage>(...).")).Serializer.Create(services));
+    private readonly Lazy<INetworkSerializer?> packetSerializer = new(() => builder.PacketMap?.Serializer.Create(services));
+    private readonly Lazy<IReadOnlyList<ExportFormatDefinition>> exportFormats = new(() => Replacing(
+        builder.ExportFormats.Select(registration => registration.Create(services)),
+        format => new ExportFormatDefinition { Name = format.Name, Serialize = format.Export, AllowedTypes = format.Accepts },
+        definition => definition.Name));
+    private readonly Lazy<IReadOnlyList<ImportFormatDefinition>> importFormats = new(() => Replacing(
+        builder.ImportFormats.Select(registration => registration.Create(services)),
+        format => new ImportFormatDefinition { Name = format.Name, Read = format.Import, StagedSendMode = format.StagedSendMode, StagedSendDelay = format.StagedSendDelay },
+        definition => definition.Name));
     private readonly Lazy<IInitialProcessor?> initialPacketProcessor = new(() => builder.InitialPacketProcessor?.Create(services));
     private readonly Lazy<IInitialProcessor?> initialMessageProcessor = new(() => builder.InitialMessageProcessor?.Create(services));
     private readonly Lazy<INetworkHandler?> networkHandler = new(() => builder.NetworkHandler?.Create(services));
@@ -429,11 +452,11 @@ internal class EngineController(EngineBuilder builder, ICurrentUserProvider curr
     /// <inheritdoc />
     public virtual Type MessageType => message.Type;
     /// <inheritdoc />
-    public virtual INetworkSerializer NetworkSerializer => message.Serializer;
+    public virtual INetworkSerializer NetworkSerializer => networkSerializer.Value;
     /// <inheritdoc />
     public virtual Type? PacketType => packet?.Type;
     /// <inheritdoc />
-    public virtual INetworkSerializer? PacketSerializer => packet?.Serializer;
+    public virtual INetworkSerializer? PacketSerializer => packetSerializer.Value;
     /// <inheritdoc />
     public virtual int PacketSize => packet?.Size ?? 16 * 1024;
     /// <inheritdoc />
@@ -570,9 +593,9 @@ internal class EngineController(EngineBuilder builder, ICurrentUserProvider curr
     /// <inheritdoc />
     public virtual INetworkHandler? NetworkHandler => networkHandler.Value;
     /// <inheritdoc />
-    public virtual IReadOnlyList<ExportFormatDefinition> ExportFormats => builder.ExportFormats;
+    public virtual IReadOnlyList<ExportFormatDefinition> ExportFormats => exportFormats.Value;
     /// <inheritdoc />
-    public virtual IReadOnlyList<ImportFormatDefinition> ImportFormats => builder.ImportFormats;
+    public virtual IReadOnlyList<ImportFormatDefinition> ImportFormats => importFormats.Value;
     /// <inheritdoc />
     public virtual IReadOnlyList<string> StorageServers => [.. Servers.Keys.Where(name => GetUserInfo(name).StoresMessages)];
     /// <inheritdoc />

@@ -6,7 +6,7 @@ internal sealed class MessageMap
     /// <summary>The host's message type.</summary>
     public required Type Type { get; init; }
     /// <summary>The serializer for the message type.</summary>
-    public required INetworkSerializer Serializer { get; init; }
+    public required ServiceRegistration<INetworkSerializer> Serializer { get; init; }
     /// <summary>Creates a new, empty message.</summary>
     public required Func<object> Create { get; init; }
     /// <summary>Reads the message identifier.</summary>

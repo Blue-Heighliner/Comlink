@@ -17,6 +17,7 @@ namespace BlueHeighliner.Comlink.Sample;
 /// <item><description>packetization - enabled with <see cref="SamplePacket"/>, using the default packet size, window and serializer.</description></item>
 /// <item><description>address type labels - renames the <see cref="AddressType.External"/> label to <c>OUTSIDE</c>, matching the <c>Kind</c> vocabulary <see cref="SampleRecipient"/> already uses for it.</description></item>
 /// <item><description>security levels - three placeholder levels (<c>PUBLIC</c>, <c>INTERNAL</c>, <c>RESTRICTED</c>), assigned to users in each scenario's network configuration; the <c>Peer</c> scenario's sites run at <c>PUBLIC</c>, the <c>ClientServer</c>/<c>ServerCluster</c> scenarios' clients at <c>INTERNAL</c>, and their servers at <c>RESTRICTED</c>.</description></item>
+/// <item><description>custom message serialization - <see cref="SampleJsonSerializer"/> sends every <see cref="SampleMessage"/> across the network as JSON instead of the default protobuf-net.</description></item>
 /// <item><description>a <see cref="SampleNetworkProcessor"/> reacting to peer activity - a newly connected user is welcomed with who else is currently online (<see cref="IEngineContext.ConnectedUsers"/>), everyone still online is told when someone disconnects, and any received message tagged <c>PING</c> gets an automatic <c>PONG</c> reply (all via <see cref="INetworkContext{TMessage}.Send"/>).</description></item>
 /// <item><description>export formats - a plain-text alternative to the built-in JSON export, restricted to messages, drafts, and notes (an activity log's structured entries don't read naturally as prose).</description></item>
 /// <item><description>import formats - a CSV reader that stages one send per <c>Subject,User,Body</c> line for the user to review and send from the staged send screen, one at a time a second apart.</description></item>
@@ -32,6 +33,7 @@ public sealed class SampleEngineConfiguration : IEngineConfiguration
     public IEngineBuilder Configure(IEngineBuilder engine)
         => engine
             .Message<SampleMessage>(message => message
+                .Serializer<SampleJsonSerializer>()
                 .Processor<SampleNetworkProcessor>()
                 .Id(m => m.Id)
                 .Sender(m => m.Sender)
@@ -76,34 +78,6 @@ public sealed class SampleEngineConfiguration : IEngineConfiguration
             .CommandLineOverrides(true)
             .MsmtOptions(options => options with { HandshakeTimeout = TimeSpan.FromSeconds(15), ResponseTimeout = TimeSpan.FromSeconds(60) })
             .MicroGateOptions(options => options with { MaxInfoField = 1024, TransmitWindow = 4 })
-            .ExportFormat(
-                "Text",
-                folder => folder is FolderType.Inbox or FolderType.Outbox or FolderType.Drafts or FolderType.Notes,
-                async (entry, stream, cancellation) =>
-                {
-                    string text = entry switch
-                    {
-                        MessageExportData message => $"{(message.IsOutbound ? "To" : "From")}: {string.Join(", ", message.Addresses.Select(a => a.UserName))}\nSubject: {message.Subject}\n\n{message.Body}\n",
-                        DraftExportData draft => $"Subject: {draft.Subject}\n\n{draft.Body}\n",
-                        NoteExportData note => $"{note.Body}\n",
-                        _ => throw new ArgumentException($"Unsupported entry type '{entry.GetType()}' for the Text export format.", nameof(entry))
-                    };
-                    await using StreamWriter writer = new(stream, leaveOpen: true);
-                    await writer.WriteAsync(text);
-                })
-            .ImportFormat(
-                "CSV",
-                StagedSendMode.Sequential,
-                TimeSpan.FromSeconds(1),
-                async (stream, context, cancellation) =>
-                {
-                    using StreamReader reader = new(stream, leaveOpen: true);
-                    string? line;
-                    while ((line = await reader.ReadLineAsync(cancellation)) is not null)
-                    {
-                        string[] parts = line.Split(',', 3);
-                        if (parts.Length < 3) { continue; }
-                        context.AddStagedSend(new StagedSendData { Subject = parts[0], Body = parts[2], Addresses = [new AddressRequest { UserName = parts[1] }] });
-                    }
-                });
+            .ExportFormat<SampleTextExportFormat>()
+            .ImportFormat<SampleCsvImportFormat>();
 }

@@ -278,29 +278,35 @@ Whether the user can delete entries in a given root folder type (`FolderType.Inb
 ### Export Formats
 
 ```csharp
-engine.ExportFormat(
-    "CSV",
-    type => type is FolderType.Inbox or FolderType.Outbox,
-    async (entry, stream, cancellation) =>
+engine.ExportFormat<MyCsvExportFormat>();
+
+public sealed class MyCsvExportFormat : IExportFormat
+{
+    public string Name => "CSV";
+
+    public bool Accepts(FolderType type) => type is FolderType.Inbox or FolderType.Outbox;
+
+    public async Task Export(object entry, Stream stream, CancellationToken cancellation)
     {
         if (entry is MessageExportData message)
         {
             await using StreamWriter writer = new(stream, leaveOpen: true);
             await writer.WriteLineAsync($"{message.SentAt:O},{message.FromUser},{message.Subject}");
         }
-    });
+    }
+}
 ```
 
-Adds a custom export format, shown as an option in the export screen's format picker alongside the built-in JSON
-format (see `Docs/Components/ViewModels.md`, `IExportViewModel`). The serializer is handed one entry - a
+Adds a custom export format, a type implementing `IExportFormat` that is instantiated through the running engine's dependency injection container (the instance the host registered for it, or else one constructed from the host's services), shown as an option in the export screen's format picker alongside the built-in JSON
+format (see `Docs/Components/ViewModels.md`, `IExportViewModel`). `Export` is handed one entry - a
 `MessageExportData`, `DraftExportData`, `NoteExportData`, or `ActivityLogExportData` depending on which root
 folder type it came from, the exact same public DTOs the engine's own built-in JSON export writes - and a stream
 to write it to; a host that only handles some entry types checks the runtime type (as above) or narrows what it
-ever receives at all with the overload taking `entryTypes`, which comes before the serializer; the serializer and the import reader are always the last argument. `entryTypes`, when stated, also determines which entries `ExportService.Export`
+ever receives at all by overriding `Accepts`. `Accepts` also determines which entries `ExportService.Export`
 leaves out of the archive entirely for this format, so an excluded entry's data is never touched, not merely
 unwritten. Each entry's file inside the export zip gets an extension derived from the format's own name (lowercased,
 stripped to letters and digits - `"CSV"` above becomes `.csv`), so files stay recognizable to whatever tool a host
-exports for. Calling this again with the same name (case-insensitive) replaces that format; a new name adds another.
+exports for. Stating a format whose `Name` matches an earlier one (case-insensitive) replaces it; a new name adds another.
 
 A package written with a custom format is one-way: only a package written with the built-in JSON format can be
 read back in by the import screen (see `Docs/Components/Services.md`, `ImportService`) - a custom format is for
@@ -311,7 +317,7 @@ producing something a tool outside Comlink consumes, not for round-tripping thro
 **Network file:** none; formats are behavior, not settings.
 
 **Sample:** a `"Text"` format writing each message, draft, or note as readable plain text, restricted (via
-`entryTypes`) to Inbox, Outbox, Drafts, and Notes - Activity's structured entries are left to the built-in JSON
+`Accepts`) to Inbox, Outbox, Drafts, and Notes - Activity's structured entries are left to the built-in JSON
 format instead.
 
 ---
@@ -319,11 +325,15 @@ format instead.
 ### Import Formats
 
 ```csharp
-engine.ImportFormat(
-    "CSV",
-    StagedSendMode.Sequential,
-    TimeSpan.FromSeconds(1),
-    async (stream, context, cancellation) =>
+engine.ImportFormat<MyCsvImportFormat>();
+
+public sealed class MyCsvImportFormat : IImportFormat
+{
+    public string Name => "CSV";
+
+    public TimeSpan? StagedSendDelay => TimeSpan.FromSeconds(1);
+
+    public async Task Import(Stream stream, IImportFormatContext context, CancellationToken cancellation)
     {
         using StreamReader reader = new(stream, leaveOpen: true);
         string? line;
@@ -333,15 +343,16 @@ engine.ImportFormat(
             if (parts.Length < 3) { continue; }
             context.AddStagedSend(new StagedSendData { Subject = parts[0], Body = parts[2], Addresses = [new AddressRequest { UserName = parts[1] }] });
         }
-    });
+    }
+}
 ```
 
-Adds a custom import format, shown as an option in the import screen's format picker alongside the built-in
+Adds a custom import format, a type implementing `IImportFormat` that is instantiated through the running engine's dependency injection container, shown as an option in the import screen's format picker alongside the built-in
 package format (see `Docs/Components/ViewModels.md`, `IImportViewModel`). Selecting it changes which files the
 screen finds on the source drive - not `IExportService.PackageExtension` packages, but files whose extension
 matches this format's own name-derived extension (the same derivation an `ExportFormat` entry's file extension
 uses - `"CSV"` above becomes `.csv`). Choosing one of those files and importing it opens it as a plain stream and
-hands `read` the stream plus an `IImportFormatContext`, unlike the built-in format's zip archive of typed entries.
+hands `Import` the stream plus an `IImportFormatContext`, unlike the built-in format's zip archive of typed entries.
 
 The context turns whatever the reader finds into real changes:
 
@@ -356,17 +367,17 @@ The context turns whatever the reader finds into real changes:
   writing anything to the database directly; nothing is sent until the user reviews the batch there and presses
   its own send button.
 
-`stagedSendMode` and `stagedSendDelay` state how that later send-all processes everything this format ever adds
+`StagedSendMode` and `StagedSendDelay` (members of the format, defaulting to sequential with no pause) state how that later send-all processes everything this format ever adds
 through `AddStagedSend`: `StagedSendMode.Sequential` (the default) sends one at a time, in the order added,
-pausing `stagedSendDelay` between each when it is stated; `StagedSendMode.Simultaneous` sends every one at once.
-Calling `ImportFormat` again with the same name (case-insensitive) replaces that format; a new name adds another.
+pausing `StagedSendDelay` between each when it is stated; `StagedSendMode.Simultaneous` sends every one at once.
+Stating a format whose `Name` matches an earlier one (case-insensitive) replaces that format; a new name adds another.
 
 **Default:** no custom formats; the import screen offers only the built-in package format.
 
 **Network file:** none; formats are behavior, not settings.
 
 **Sample:** a `"CSV"` format reading `Subject,User,Body` lines and staging one send per line, sent one at a time
-a second apart (`StagedSendMode.Sequential`, a one second `stagedSendDelay`).
+a second apart (`StagedSendMode.Sequential`, a one second `StagedSendDelay`).
 
 ---
 

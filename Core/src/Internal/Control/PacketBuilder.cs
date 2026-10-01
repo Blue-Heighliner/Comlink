@@ -4,13 +4,13 @@ namespace BlueHeighliner.Comlink.Control;
 internal sealed class PacketBuilder<TPacket> : IPacketBuilder<TPacket> where TPacket : class, new()
 {
     private readonly Dictionary<string, (Delegate Get, Delegate Set)> fields = [];
-    private INetworkSerializer serializer = new ProtobufNetworkSerializer(typeof(TPacket));
+    private ServiceRegistration<INetworkSerializer> serializer = new(_ => new ProtobufNetworkSerializer(typeof(TPacket)));
     private Func<TPacket> create = () => new();
     private int size = 16 * 1024;
     private int window = 1;
 
     /// <summary>The initial packet processor, if stated.</summary>
-    public ProcessorRegistration<IInitialProcessor>? Initial { get; private set; }
+    public ServiceRegistration<IInitialProcessor>? Initial { get; private set; }
 
     /// <inheritdoc />
     public IPacketBuilder<TPacket> PayloadId(Func<TPacket, int> get, Action<TPacket, int> set) => Map(nameof(PayloadId), get, set);
@@ -54,9 +54,9 @@ internal sealed class PacketBuilder<TPacket> : IPacketBuilder<TPacket> where TPa
     }
 
     /// <inheritdoc />
-    public IPacketBuilder<TPacket> Serializer(INetworkSerializer serializer)
+    public IPacketBuilder<TPacket> Serializer<TSerializer>() where TSerializer : INetworkSerializer
     {
-        this.serializer = serializer;
+        serializer = ServiceRegistration<INetworkSerializer>.Of(typeof(TSerializer), instance => (INetworkSerializer)instance);
         return this;
     }
 
@@ -70,7 +70,7 @@ internal sealed class PacketBuilder<TPacket> : IPacketBuilder<TPacket> where TPa
     /// <inheritdoc />
     public IPacketBuilder<TPacket> InitialProcessor<TProcessor>() where TProcessor : IInitialPacketProcessor<TPacket>
     {
-        Initial = new ProcessorRegistration<IInitialProcessor>(typeof(TProcessor), processor => new InitialPacketProcessorAdapter<TPacket>((IInitialPacketProcessor<TPacket>)processor));
+        Initial = ServiceRegistration<IInitialProcessor>.Of(typeof(TProcessor), processor => new InitialPacketProcessorAdapter<TPacket>((IInitialPacketProcessor<TPacket>)processor));
         return this;
     }
 

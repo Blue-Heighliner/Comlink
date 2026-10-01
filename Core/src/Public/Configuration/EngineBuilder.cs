@@ -142,50 +142,14 @@ public interface IEngineBuilder
     IEngineBuilder ExternalServer(IExternalSystem system);
 
     /// <summary>
-    /// Adds a custom export format, shown as an option alongside the built-in JSON format in the client's export
-    /// screen. <paramref name="serialize"/> writes one entry - a <see cref="MessageExportData"/>,
-    /// <see cref="DraftExportData"/>, <see cref="NoteExportData"/>, or <see cref="ActivityLogExportData"/>,
-    /// depending on which root folder type it came from - to a stream. Calling this again with the
-    /// same <paramref name="name"/> (case-insensitive) replaces the earlier format of that name in place; a new
-    /// name adds another format alongside it. Every root folder type is accepted.
+    /// Adds a custom export format, shown as an option alongside the built-in JSON format in the client's export screen (see <see cref="IExportFormat"/>).
     /// </summary>
-    /// <param name="name">Display name shown for this format in the export screen.</param>
-    /// <param name="serialize">Writes one entry to a stream.</param>
-    IEngineBuilder ExportFormat(string name, Func<object, Stream, CancellationToken, Task> serialize);
+    /// <typeparam name="TFormat">The format type, instantiated through dependency injection when the engine runs: the instance registered for it in the host's services, or else one constructed from them.</typeparam>
+    IEngineBuilder ExportFormat<TFormat>() where TFormat : IExportFormat;
 
     /// <summary>
-    /// Adds a custom export format like <see cref="ExportFormat(string, Func{object, Stream, CancellationToken, Task})"/>, restricted to the root folder types
-    /// <paramref name="entryTypes"/> accepts; an entry outside them is left out of an export using this format instead of being passed to <paramref name="serialize"/>.
+    /// Adds a custom import format, shown as an option alongside the built-in package format in the client's import screen (see <see cref="IImportFormat"/>).
     /// </summary>
-    /// <param name="name">Display name shown for this format in the export screen.</param>
-    /// <param name="entryTypes">Restricts which root folder types this format accepts.</param>
-    /// <param name="serialize">Writes one entry to a stream.</param>
-    IEngineBuilder ExportFormat(string name, Func<FolderType, bool> entryTypes, Func<object, Stream, CancellationToken, Task> serialize);
-
-    /// <summary>
-    /// Adds a custom import format, shown as an option alongside the built-in package format in the client's
-    /// import screen. <paramref name="read"/> reads one whole file the user chose - found on the source drive by
-    /// this format's own name-derived extension, the same way an <see cref="ExportFormat(string, Func{object, Stream, CancellationToken, Task})"/> entry's file
-    /// extension is derived - and, through the handed <see cref="IImportFormatContext"/>, turns what it reads
-    /// into new messages, drafts, notes, and staged sends; unlike the built-in format, this is the reader's own
-    /// file layout, not a zip archive of typed entries. Calling
-    /// this again with the same <paramref name="name"/> (case-insensitive) replaces the earlier format of that
-    /// name in place; a new name adds another format alongside it. Staged sends are sent one at a time with no pause.
-    /// </summary>
-    /// <param name="name">Display name shown for this format in the import screen.</param>
-    /// <param name="read">Reads one file's stream, adding what it finds through the handed context.</param>
-    IEngineBuilder ImportFormat(string name, Func<Stream, IImportFormatContext, CancellationToken, Task> read);
-
-    /// <summary>Adds a custom import format like <see cref="ImportFormat(string, Func{Stream, IImportFormatContext, CancellationToken, Task})"/>, stating how its staged sends are sent.</summary>
-    /// <param name="name">Display name shown for this format in the import screen.</param>
-    /// <param name="stagedSendMode">Whether this format's staged sends, added via <see cref="IImportFormatContext.AddStagedSend"/>, are all sent at once, or one at a time, once the user presses the staged send screen's final send button.</param>
-    /// <param name="read">Reads one file's stream, adding what it finds through the handed context.</param>
-    IEngineBuilder ImportFormat(string name, StagedSendMode stagedSendMode, Func<Stream, IImportFormatContext, CancellationToken, Task> read);
-
-    /// <summary>Adds a custom import format like <see cref="ImportFormat(string, StagedSendMode, Func{Stream, IImportFormatContext, CancellationToken, Task})"/>, with a pause between sends.</summary>
-    /// <param name="name">Display name shown for this format in the import screen.</param>
-    /// <param name="stagedSendMode">Whether this format's staged sends are all sent at once, or one at a time.</param>
-    /// <param name="stagedSendDelay">While <paramref name="stagedSendMode"/> is <see cref="Control.StagedSendMode.Sequential"/>, an optional pause between each send. <see langword="null"/> sends the next immediately.</param>
-    /// <param name="read">Reads one file's stream, adding what it finds through the handed context.</param>
-    IEngineBuilder ImportFormat(string name, StagedSendMode stagedSendMode, TimeSpan? stagedSendDelay, Func<Stream, IImportFormatContext, CancellationToken, Task> read);
+    /// <typeparam name="TFormat">The format type, instantiated through dependency injection when the engine runs: the instance registered for it in the host's services, or else one constructed from them.</typeparam>
+    IEngineBuilder ImportFormat<TFormat>() where TFormat : IImportFormat;
 }

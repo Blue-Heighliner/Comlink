@@ -14,8 +14,8 @@ internal sealed class EngineBuilder : IEngineBuilder, IAsyncDisposable
     private readonly List<TagPriorityBlock> blocked = [];
     private readonly Dictionary<AddressType, string> addressTypeLabels = [];
     private readonly List<IExternalSystem> externalSystems = [];
-    private readonly List<ExportFormatDefinition> exportFormats = [];
-    private readonly List<ImportFormatDefinition> importFormats = [];
+    private readonly List<ServiceRegistration<IExportFormat>> exportFormats = [];
+    private readonly List<ServiceRegistration<IImportFormat>> importFormats = [];
     private readonly List<AutoForwardControllerDefinition> autoForwardControllers = [];
     private ServiceProvider? bootstrap;
 
@@ -78,9 +78,9 @@ internal sealed class EngineBuilder : IEngineBuilder, IAsyncDisposable
     /// <summary>How connections are identified, if stated.</summary>
     public Func<IConnectionInfo, string?>? IdentifyValue { get; private set; }
     /// <summary>The initial packet processor, if stated.</summary>
-    public ProcessorRegistration<IInitialProcessor>? InitialPacketProcessor { get; private set; }
+    public ServiceRegistration<IInitialProcessor>? InitialPacketProcessor { get; private set; }
     /// <summary>The initial message processor, if stated.</summary>
-    public ProcessorRegistration<IInitialProcessor>? InitialMessageProcessor { get; private set; }
+    public ServiceRegistration<IInitialProcessor>? InitialMessageProcessor { get; private set; }
     /// <summary>Whether the <c>--config</c> and <c>--user</c> arguments are honored.</summary>
     public bool AreCommandLineOverridesAllowed { get; private set; }
     /// <summary>The external systems.</summary>
@@ -88,11 +88,11 @@ internal sealed class EngineBuilder : IEngineBuilder, IAsyncDisposable
     /// <summary>The designated upstream hub, if any.</summary>
     public IExternalSystem? ExternalServerValue { get; private set; }
     /// <summary>The processor that reacts to peer activity, if stated.</summary>
-    public ProcessorRegistration<INetworkHandler>? NetworkHandler { get; private set; }
+    public ServiceRegistration<INetworkHandler>? NetworkHandler { get; private set; }
     /// <summary>The custom export formats, in the order added.</summary>
-    public IReadOnlyList<ExportFormatDefinition> ExportFormats => exportFormats;
+    public IReadOnlyList<ServiceRegistration<IExportFormat>> ExportFormats => exportFormats;
     /// <summary>The custom import formats, in the order added.</summary>
-    public IReadOnlyList<ImportFormatDefinition> ImportFormats => importFormats;
+    public IReadOnlyList<ServiceRegistration<IImportFormat>> ImportFormats => importFormats;
     /// <summary>The custom auto forward controllers, in the order added.</summary>
     public IReadOnlyList<AutoForwardControllerDefinition> AutoForwardControllers => autoForwardControllers;
 
@@ -360,33 +360,16 @@ internal sealed class EngineBuilder : IEngineBuilder, IAsyncDisposable
     }
 
     /// <inheritdoc />
-    public IEngineBuilder ExportFormat(string name, Func<object, Stream, CancellationToken, Task> serialize) => AddExportFormat(name, null, serialize);
-
-    /// <inheritdoc />
-    public IEngineBuilder ExportFormat(string name, Func<FolderType, bool> entryTypes, Func<object, Stream, CancellationToken, Task> serialize) => AddExportFormat(name, entryTypes, serialize);
-
-    /// <inheritdoc />
-    public IEngineBuilder ImportFormat(string name, Func<Stream, IImportFormatContext, CancellationToken, Task> read) => ImportFormat(name, StagedSendMode.Sequential, null, read);
-
-    /// <inheritdoc />
-    public IEngineBuilder ImportFormat(string name, StagedSendMode stagedSendMode, Func<Stream, IImportFormatContext, CancellationToken, Task> read) => ImportFormat(name, stagedSendMode, null, read);
-
-    /// <inheritdoc />
-    public IEngineBuilder ImportFormat(string name, StagedSendMode stagedSendMode, TimeSpan? stagedSendDelay, Func<Stream, IImportFormatContext, CancellationToken, Task> read)
+    public IEngineBuilder ExportFormat<TFormat>() where TFormat : IExportFormat
     {
-        ImportFormatDefinition definition = new() { Name = name, Read = read, StagedSendMode = stagedSendMode, StagedSendDelay = stagedSendDelay };
-        int existingIndex = importFormats.FindIndex(f => string.Equals(f.Name, name, StringComparison.OrdinalIgnoreCase));
-        if (existingIndex >= 0) { importFormats[existingIndex] = definition; }
-        else { importFormats.Add(definition); }
+        exportFormats.Add(ServiceRegistration<IExportFormat>.Of(typeof(TFormat), instance => (IExportFormat)instance));
         return this;
     }
 
-    private IEngineBuilder AddExportFormat(string name, Func<FolderType, bool>? entryTypes, Func<object, Stream, CancellationToken, Task> serialize)
+    /// <inheritdoc />
+    public IEngineBuilder ImportFormat<TFormat>() where TFormat : IImportFormat
     {
-        ExportFormatDefinition definition = new() { Name = name, Serialize = serialize, AllowedTypes = entryTypes };
-        int existingIndex = exportFormats.FindIndex(f => string.Equals(f.Name, name, StringComparison.OrdinalIgnoreCase));
-        if (existingIndex >= 0) { exportFormats[existingIndex] = definition; }
-        else { exportFormats.Add(definition); }
+        importFormats.Add(ServiceRegistration<IImportFormat>.Of(typeof(TFormat), instance => (IImportFormat)instance));
         return this;
     }
 

@@ -4,7 +4,7 @@ namespace BlueHeighliner.Comlink.Control;
 internal sealed class MessageBuilder<TMessage> : IMessageBuilder<TMessage> where TMessage : class, new()
 {
     private readonly Dictionary<string, (Delegate Get, Delegate Set)> fields = [];
-    private INetworkSerializer serializer = new ProtobufNetworkSerializer(typeof(TMessage));
+    private ServiceRegistration<INetworkSerializer> serializer = new(_ => new ProtobufNetworkSerializer(typeof(TMessage)));
     private readonly List<AutoForwardControllerDefinition> autoForwardControllers = [];
     private Func<TMessage> create = () => new();
 
@@ -12,10 +12,10 @@ internal sealed class MessageBuilder<TMessage> : IMessageBuilder<TMessage> where
     public Func<object, int>? PrintCountValue { get; private set; }
 
     /// <summary>The initial message processor, if stated.</summary>
-    public ProcessorRegistration<IInitialProcessor>? Initial { get; private set; }
+    public ServiceRegistration<IInitialProcessor>? Initial { get; private set; }
 
     /// <summary>The processor that reacts to peer activity, if stated.</summary>
-    public ProcessorRegistration<INetworkHandler>? NetworkHandler { get; private set; }
+    public ServiceRegistration<INetworkHandler>? NetworkHandler { get; private set; }
 
     /// <summary>The custom auto forward controllers.</summary>
     public IReadOnlyList<AutoForwardControllerDefinition> AutoForwardControllers => autoForwardControllers;
@@ -101,9 +101,9 @@ internal sealed class MessageBuilder<TMessage> : IMessageBuilder<TMessage> where
     public IMessageBuilder<TMessage> SecurityLevel(Expression<Func<TMessage, string>> property) => Map(nameof(SecurityLevel), property);
 
     /// <inheritdoc />
-    public IMessageBuilder<TMessage> Serializer(INetworkSerializer serializer)
+    public IMessageBuilder<TMessage> Serializer<TSerializer>() where TSerializer : INetworkSerializer
     {
-        this.serializer = serializer;
+        serializer = ServiceRegistration<INetworkSerializer>.Of(typeof(TSerializer), instance => (INetworkSerializer)instance);
         return this;
     }
 
@@ -134,14 +134,14 @@ internal sealed class MessageBuilder<TMessage> : IMessageBuilder<TMessage> where
     /// <inheritdoc />
     public IMessageBuilder<TMessage> Processor<TProcessor>() where TProcessor : INetworkProcessor<TMessage>
     {
-        NetworkHandler = new ProcessorRegistration<INetworkHandler>(typeof(TProcessor), processor => new NetworkProcessorAdapter<TMessage>((INetworkProcessor<TMessage>)processor));
+        NetworkHandler = ServiceRegistration<INetworkHandler>.Of(typeof(TProcessor), processor => new NetworkProcessorAdapter<TMessage>((INetworkProcessor<TMessage>)processor));
         return this;
     }
 
     /// <inheritdoc />
     public IMessageBuilder<TMessage> InitialProcessor<TProcessor>() where TProcessor : IInitialMessageProcessor<TMessage>
     {
-        Initial = new ProcessorRegistration<IInitialProcessor>(typeof(TProcessor), processor => new InitialMessageProcessorAdapter<TMessage>((IInitialMessageProcessor<TMessage>)processor));
+        Initial = ServiceRegistration<IInitialProcessor>.Of(typeof(TProcessor), processor => new InitialMessageProcessorAdapter<TMessage>((IInitialMessageProcessor<TMessage>)processor));
         return this;
     }
 

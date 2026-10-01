@@ -136,7 +136,7 @@ internal sealed class HandshakePeerTransport : IPeerTransport
             return;
         }
 
-        _ = Task.Run(() => RunExchange(session));
+        RunExchange(session);
     }
 
     private void RunExchange(Session session)
@@ -160,6 +160,7 @@ internal sealed class HandshakePeerTransport : IPeerTransport
     private async Task Chain(Session session, Task previous, Func<Task> work)
     {
         await previous;
+        await Task.Yield();
         if (session.State != SessionState.Handshaking) { return; }
 
         try { await work(); }

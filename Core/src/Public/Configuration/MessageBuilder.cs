@@ -104,7 +104,8 @@ public interface IMessageBuilder<TMessage> where TMessage : class, new()
     /// <see cref="ProtobufNetworkSerializer"/> that builds only <typeparamref name="TMessage"/>, so the message type then
     /// needs <c>[ProtoContract]</c>/<c>[ProtoMember]</c> attributes. Every node on a network must use a matching serializer.
     /// </summary>
-    IMessageBuilder<TMessage> Serializer(INetworkSerializer serializer);
+    /// <typeparam name="TSerializer">The serializer type, instantiated through dependency injection when the engine runs: the instance registered for it in the host's services, or else one constructed from them.</typeparam>
+    IMessageBuilder<TMessage> Serializer<TSerializer>() where TSerializer : INetworkSerializer;
 
     /// <summary>Replaces how a new, empty message is created. The default is <c>new TMessage()</c>.</summary>
     IMessageBuilder<TMessage> Create(Func<TMessage> create);

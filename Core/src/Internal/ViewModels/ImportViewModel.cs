@@ -15,7 +15,7 @@ internal interface IImportViewModel
     IReadOnlyList<ExternalDriveInfo> AvailableDrives { get; }
     /// <summary>Gets or sets the drive selected as the import source. Setting this refreshes <see cref="AvailablePackages"/>.</summary>
     ExternalDriveInfo? SelectedDrive { get; set; }
-    /// <summary>Gets the built-in package format plus every custom format added via <see cref="IEngineBuilder.ImportFormat(string, StagedSendMode, Nullable{TimeSpan}, Func{Stream, IImportFormatContext, CancellationToken, Task})"/>.</summary>
+    /// <summary>Gets the built-in package format plus every custom format added via <see cref="IEngineBuilder.ImportFormat{TFormat}"/>.</summary>
     IReadOnlyList<ImportFormatOption> AvailableFormats { get; }
     /// <summary>Gets or sets the format to import with; defaults to the built-in package format. Setting this refreshes <see cref="AvailablePackages"/>.</summary>
     ImportFormatOption SelectedFormat { get; set; }
@@ -47,7 +47,7 @@ internal sealed partial class ImportViewModel : ObservableObject, IImportViewMod
     /// <param name="driveProvider">Enumerates available external drives.</param>
     /// <param name="importService">Lists files on a drive and restores their entries.</param>
     /// <param name="stagedSend">Receives the staged sends a custom format's reader adds.</param>
-    /// <param name="engineController">Supplies the custom import formats added via <see cref="IEngineBuilder.ImportFormat(string, StagedSendMode, Nullable{TimeSpan}, Func{Stream, IImportFormatContext, CancellationToken, Task})"/>.</param>
+    /// <param name="engineController">Supplies the custom import formats added via <see cref="IEngineBuilder.ImportFormat{TFormat}"/>.</param>
     public ImportViewModel(IExternalDriveProvider driveProvider, IImportService importService, IStagedSendViewModel stagedSend, IEngineController engineController)
     {
         this.driveProvider = driveProvider;

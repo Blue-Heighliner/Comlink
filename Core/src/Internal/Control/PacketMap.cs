@@ -6,7 +6,7 @@ internal sealed class PacketMap
     /// <summary>The host's packet type.</summary>
     public required Type Type { get; init; }
     /// <summary>The serializer for the packet type.</summary>
-    public required INetworkSerializer Serializer { get; init; }
+    public required ServiceRegistration<INetworkSerializer> Serializer { get; init; }
     /// <summary>The largest a serialized packet may be, in bytes.</summary>
     public required int Size { get; init; }
     /// <summary>How many packets may be in flight over one connection at once.</summary>

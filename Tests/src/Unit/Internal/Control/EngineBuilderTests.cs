@@ -487,6 +487,48 @@ public sealed class EngineBuilderTests
         Assert.Same(controller.NetworkHandler, controller.NetworkHandler);
     }
 
+    private sealed class FirstExportFormat : IExportFormat
+    {
+        public string Name => "CSV";
+
+        public Task Export(object entry, Stream stream, CancellationToken cancellation) => Task.CompletedTask;
+    }
+
+    private sealed class ReplacingExportFormat : IExportFormat
+    {
+        public string Name => "csv";
+
+        public bool Accepts(FolderType type) => type == FolderType.Inbox;
+
+        public Task Export(object entry, Stream stream, CancellationToken cancellation) => Task.CompletedTask;
+    }
+
+    private sealed class SlowImportFormat : IImportFormat
+    {
+        public string Name => "Slow";
+
+        public StagedSendMode StagedSendMode => StagedSendMode.Simultaneous;
+
+        public TimeSpan? StagedSendDelay => TimeSpan.FromSeconds(2);
+
+        public Task Import(Stream stream, IImportFormatContext context, CancellationToken cancellation) => Task.CompletedTask;
+    }
+
+    /// <summary>Formats are added by type, a later format of the same name replaces an earlier one in place, and a format's own members become its definition.</summary>
+    [Fact]
+    public void Formats_AreAddedByType_AndSameNameReplaces()
+    {
+        (_, EngineController controller) = Build(engine => engine.ExportFormat<FirstExportFormat>().ExportFormat<ReplacingExportFormat>().ImportFormat<SlowImportFormat>());
+
+        ExportFormatDefinition export = Assert.Single(controller.ExportFormats);
+        Assert.Equal("csv", export.Name);
+        Assert.True(export.AllowedTypes!(FolderType.Inbox));
+        Assert.False(export.AllowedTypes(FolderType.Notes));
+        ImportFormatDefinition import = Assert.Single(controller.ImportFormats);
+        Assert.Equal(StagedSendMode.Simultaneous, import.StagedSendMode);
+        Assert.Equal(TimeSpan.FromSeconds(2), import.StagedSendDelay);
+    }
+
     /// <summary>Without a processor stated there is none.</summary>
     [Fact]
     public void NetworkProcessor_Unstated_IsNull()
