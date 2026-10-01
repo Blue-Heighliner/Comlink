@@ -33,7 +33,8 @@ public sealed class EngineHooksServiceTests
     private sealed class FakePeerService : IPeerService
     {
         public event Func<object, Task>? FrameDelivered;
-        public event Func<string, string, Task>? ConfirmationReceived;
+        public event Func<string, string, Task>? ReadReceiptReceived;
+        public event Func<string, string, Task>? ReceiveReceiptReceived;
 #pragma warning disable CS0067
         public event Func<string, string, DestinationStatus, Task>? DeliveryStatusChanged;
 #pragma warning restore CS0067
@@ -63,7 +64,8 @@ public sealed class EngineHooksServiceTests
         public Task FireUserConnected(string userName) => UserConnected is null ? Task.CompletedTask : UserConnected(userName);
         public Task FireUserDisconnected(string userName) => UserDisconnected is null ? Task.CompletedTask : UserDisconnected(userName);
         public Task FireMessageDelivered(object payload) => FrameDelivered is null ? Task.CompletedTask : FrameDelivered(payload);
-        public Task FireConfirmationReceived(string messageId, string user) => ConfirmationReceived is null ? Task.CompletedTask : ConfirmationReceived(messageId, user);
+        public Task FireReceiveReceiptReceived(string messageId, string user) => ReceiveReceiptReceived is null ? Task.CompletedTask : ReceiveReceiptReceived(messageId, user);
+        public Task FireReadReceiptReceived(string messageId, string user) => ReadReceiptReceived is null ? Task.CompletedTask : ReadReceiptReceived(messageId, user);
     }
 
     private sealed class FakeMessageRoutingService : IMessageRoutingService

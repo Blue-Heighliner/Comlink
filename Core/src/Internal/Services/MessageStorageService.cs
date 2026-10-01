@@ -13,7 +13,7 @@ internal interface IMessageStorageService
 
     /// <summary>
     /// Keeps a copy of <paramref name="message"/> unless one with the same identifier is already stored, or
-    /// storage is not <see cref="IsEnabled"/>, or the message is a confirmation or a retrieval request (neither is
+    /// storage is not <see cref="IsEnabled"/>, or the message is a receipt or a retrieval request (neither is
     /// user content). A failure is logged, never thrown: storage must not interrupt routing.
     /// </summary>
     Task Store(object message);
@@ -56,7 +56,7 @@ internal sealed class MessageStorageService : IMessageStorageService
     public async Task Store(object message)
     {
         if (!IsEnabled || !engineController.IsMessage(message)) { return; }
-        if (!string.IsNullOrEmpty(engineController.GetConfirmationMessageId(message)) || engineController.IsRetrieval(message)) { return; }
+        if (engineController.IsReadReceipt(message) || engineController.IsReceiveReceipt(message) || engineController.IsRetrieval(message)) { return; }
 
         try
         {
@@ -110,17 +110,18 @@ internal sealed class MessageStorageService : IMessageStorageService
 
     private object CopyFor(object original, string requester)
     {
-        object copy = engineController.CreateFrame();
-        engineController.SetIsMessage(copy, true);
+        object copy = engineController.CreateMessage(new MessageCreateContext
+        {
+            Subject = engineController.GetSubject(original),
+            Body = engineController.GetBody(original),
+            IsAlert = false,
+            Priority = engineController.GetPriority(original),
+            Tag = engineController.GetTag(original),
+            SecurityLevel = engineController.GetSecurityLevel(original)
+        });
         engineController.SetFrameId(copy, engineController.GetFrameId(original));
         engineController.SetFromUser(copy, engineController.GetFromUser(original));
         engineController.SetSentAt(copy, Utc(engineController.GetSentAt(original)));
-        engineController.SetSubject(copy, engineController.GetSubject(original));
-        engineController.SetBody(copy, engineController.GetBody(original));
-        engineController.SetPriority(copy, engineController.GetPriority(original));
-        engineController.SetTag(copy, engineController.GetTag(original));
-        engineController.SetSecurityLevel(copy, engineController.GetSecurityLevel(original));
-        engineController.SetIsAlert(copy, false);
         engineController.SetAddresses(copy, [new MessageAddress { UserName = requester, Type = AddressType.To }]);
         return copy;
     }

@@ -44,8 +44,8 @@ public sealed class MessageStorageServiceTests : IDisposable
 
     private static TestFrame Request(RetrievalCriteria criteria)
     {
-        TestFrame request = new() { MessageId = "REQ" };
-        new TestEngineController().SetRetrieval(request, criteria);
+        TestFrame request = (TestFrame)new TestEngineController().CreateRetrieval(criteria);
+        request.MessageId = "REQ";
         return request;
     }
 
@@ -81,11 +81,11 @@ public sealed class MessageStorageServiceTests : IDisposable
         Assert.Empty(ctx.StoredMessages.FindAll());
     }
 
-    /// <summary>A confirmation or a retrieval request is not user content and is never kept.</summary>
+    /// <summary>A receipt or a retrieval request is not user content and is never kept.</summary>
     [Fact]
-    public async Task Store_ConfirmationOrRetrievalRequest_IsNotKept()
+    public async Task Store_ReceiptOrRetrievalRequest_IsNotKept()
     {
-        await service.Store(new TestFrame { MessageId = "C1", ConfirmationMessageId = "M1" });
+        await service.Store(new TestFrame { MessageId = "C1", ReadReceiptMessageId = "M1" });
         await service.Store(Request(new RetrievalCriteria()));
 
         Assert.Empty(ctx.StoredMessages.FindAll());

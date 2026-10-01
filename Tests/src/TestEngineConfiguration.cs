@@ -14,19 +14,15 @@ public sealed class TestEngineConfiguration(bool packets = false, Action<IFrameB
             message
                 .Id(m => m.MessageId)
                 .Sender(m => m.FromUser)
-                .Subject(m => m.Subject)
-                .Body(m => m.Body)
                 .Addresses(
                     m => m.Addresses.Select(a => (a.UserName, a.Type.ParseAddressType(), a.Information)),
                     (m, value) => m.Addresses = [.. value.Select(a => new TestAddressEntry { UserName = a.Name, Type = a.Type.ToString(), Information = a.Information })])
                 .SentAt(m => m.SentAt)
-                .ConfirmationId(m => m.ConfirmationMessageId)
-                .IsMessage(m => !m.IsHidden, (m, value) => m.IsHidden = !value)
-                .Retrieval(r => r.IsRequest(m => m.IsRetrieval).From(m => m.RetrievalFrom).To(m => m.RetrievalTo).Authors(m => m.RetrievalAuthors, (m, v) => m.RetrievalAuthors = [.. v]).Destinations(m => m.RetrievalDestinations, (m, v) => m.RetrievalDestinations = [.. v]).Ids(m => m.RetrievalIds, (m, v) => m.RetrievalIds = [.. v]))
-                .IsAlert(m => m.IsAlert)
-                .Priority(m => m.Priority)
-                .Tag(m => m.Tag)
-                .SecurityLevel(m => m.SecurityLevel);
+                .Message<TestMessageHandler>()
+                .Retrieval<TestRetrievalHandler>()
+                .ReadReceipt<TestReadReceiptHandler>()
+                .ReceiveReceipt<TestReceiveReceiptHandler>();
+
             messageExtra?.Invoke(message);
         });
 

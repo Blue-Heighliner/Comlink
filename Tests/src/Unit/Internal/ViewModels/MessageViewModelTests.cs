@@ -19,12 +19,12 @@ public sealed class MessageViewModelTests
         string id = messageId ?? Guid.NewGuid().ToString("N").ToUpperInvariant();
         object message = format.CreateFrame();
         format.SetFrameId(message, id);
-        format.SetSubject(message, subject);
-        format.SetBody(message, body);
+        ((TestFrame)message).Subject = subject;
+        ((TestFrame)message).Body = body;
         format.SetFromUser(message, fromUser);
-        format.SetPriority(message, priority);
-        format.SetTag(message, tag);
-        format.SetSecurityLevel(message, securityLevel);
+        ((TestFrame)message).Priority = priority;
+        ((TestFrame)message).Tag = tag;
+        ((TestFrame)message).SecurityLevel = securityLevel;
         format.SetAddresses(message, [.. (addresses ?? [new AddressData { UserName = "DEST", Type = "To" }])
             .Select(a => new MessageAddress { UserName = a.UserName, Type = a.Type.ParseAddressType(), Information = a.Information })]);
         return new MessageEntity
@@ -161,9 +161,9 @@ public sealed class MessageViewModelTests
         DeliveryStatus status = new() { UserName = "DEST", Status = DestinationStatus.Sending, AddressedVia = [] };
         MessageViewModel vm = new(MakeEntity(deliveryStatuses: [status]), format);
 
-        vm.UpdateDeliveryStatus("DEST", DestinationStatus.Confirmed);
+        vm.UpdateDeliveryStatus("DEST", DestinationStatus.Received);
 
-        Assert.Equal(DestinationStatus.Confirmed, vm.DeliveryStatuses[0].Status);
+        Assert.Equal(DestinationStatus.Received, vm.DeliveryStatuses[0].Status);
     }
 
     /// <summary>UpdateDeliveryStatus recomputes OverallStatus to Confirmed when all users confirmed.</summary>
@@ -173,13 +173,13 @@ public sealed class MessageViewModelTests
         DeliveryStatus[] statuses =
         [
             new() { UserName = "A", Status = DestinationStatus.Sending, AddressedVia = [] },
-            new() { UserName = "B", Status = DestinationStatus.Confirmed, AddressedVia = [] }
+            new() { UserName = "B", Status = DestinationStatus.Received, AddressedVia = [] }
         ];
         MessageViewModel vm = new(MakeEntity(deliveryStatuses: statuses), format);
 
-        vm.UpdateDeliveryStatus("A", DestinationStatus.Confirmed);
+        vm.UpdateDeliveryStatus("A", DestinationStatus.Received);
 
-        Assert.Equal(DestinationStatus.Confirmed, vm.OverallStatus);
+        Assert.Equal(DestinationStatus.Received, vm.OverallStatus);
     }
 
     /// <summary>Failed takes priority over Confirmed in overall status.</summary>
@@ -188,7 +188,7 @@ public sealed class MessageViewModelTests
     {
         DeliveryStatus[] statuses =
         [
-            new() { UserName = "A", Status = DestinationStatus.Confirmed, AddressedVia = [] },
+            new() { UserName = "A", Status = DestinationStatus.Received, AddressedVia = [] },
             new() { UserName = "B", Status = DestinationStatus.Sending, AddressedVia = [] }
         ];
         MessageViewModel vm = new(MakeEntity(deliveryStatuses: statuses), format);
@@ -216,10 +216,10 @@ public sealed class MessageViewModelTests
     [Fact]
     public void OverallStatusText_ReturnsUppercaseStatusName()
     {
-        DeliveryStatus[] statuses = [new() { UserName = "DEST", Status = DestinationStatus.Confirmed, AddressedVia = [] }];
+        DeliveryStatus[] statuses = [new() { UserName = "DEST", Status = DestinationStatus.Received, AddressedVia = [] }];
         MessageViewModel vm = new(MakeEntity(deliveryStatuses: statuses), format);
 
-        Assert.Equal("CONFIRMED", vm.OverallStatusText);
+        Assert.Equal("RECEIVED", vm.OverallStatusText);
     }
 
     /// <summary>OverallStatusText returns empty string when there are no delivery statuses.</summary>
@@ -238,7 +238,7 @@ public sealed class MessageViewModelTests
         DeliveryStatus[] statuses =
         [
             new() { UserName = "A", Status = DestinationStatus.Read, AddressedVia = [] },
-            new() { UserName = "B", Status = DestinationStatus.Confirmed, AddressedVia = [] }
+            new() { UserName = "B", Status = DestinationStatus.Received, AddressedVia = [] }
         ];
         MessageViewModel vm = new(MakeEntity(deliveryStatuses: statuses), format);
 
@@ -254,13 +254,13 @@ public sealed class MessageViewModelTests
         DeliveryStatus[] statuses =
         [
             new() { UserName = "A", Status = DestinationStatus.Sending, AddressedVia = [] },
-            new() { UserName = "B", Status = DestinationStatus.Confirmed, AddressedVia = [] }
+            new() { UserName = "B", Status = DestinationStatus.Received, AddressedVia = [] }
         ];
         MessageViewModel vm = new(MakeEntity(deliveryStatuses: statuses), format);
 
         vm.UpdateDeliveryStatus("A", DestinationStatus.Read);
 
-        Assert.Equal(DestinationStatus.Confirmed, vm.OverallStatus);
+        Assert.Equal(DestinationStatus.Received, vm.OverallStatus);
     }
 
     /// <summary>ReadStatus and ReadStatusText reflect the entity's own Inbox read status.</summary>
@@ -302,7 +302,7 @@ public sealed class MessageViewModelTests
     public void Ctor_AlertMessage_IsAlertIsTrue()
     {
         MessageEntity entity = MakeEntity();
-        format.SetIsAlert(entity.Message, true);
+        ((TestFrame)entity.Message).IsAlert = true;
 
         MessageViewModel vm = new(entity, format);
 
@@ -356,8 +356,8 @@ public sealed class MessageViewModelTests
         Assert.Equal("SENT", withoutGroups.StatusText);
         Assert.Equal("USER1", withoutGroups.DisplayName);
 
-        DeliveryStatusRow withGroups = new("USER1", DestinationStatus.Confirmed, ["OPS", "ALL"]);
-        Assert.Equal("CONFIRMED", withGroups.StatusText);
+        DeliveryStatusRow withGroups = new("USER1", DestinationStatus.Received, ["OPS", "ALL"]);
+        Assert.Equal("RECEIVED", withGroups.StatusText);
         Assert.Equal("USER1 (OPS, ALL)", withGroups.DisplayName);
     }
 

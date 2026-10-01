@@ -3,14 +3,18 @@ namespace BlueHeighliner.Comlink.Peer;
 /// <summary>Manages inbound and outbound peer connections and exposes Engine-level delivery events.</summary>
 internal interface IPeerService
 {
-    /// <summary>Raised when a remote user delivers a new (non-confirmation) message to this user.</summary>
+    /// <summary>Raised when a remote user delivers a new (non-receipt) frame to this user.</summary>
     event Func<object, Task>? FrameDelivered;
     /// <summary>
-    /// Raised when a remote user delivers a user-read confirmation message instead of an ordinary
-    /// message (<see cref="IEngineController.GetConfirmationMessageId"/> is non-empty). Carries the ID of
-    /// the message being confirmed and the confirming user's name; not raised via <see cref="FrameDelivered"/>.
+    /// Raised when a remote user delivers a read receipt instead of an ordinary frame. Carries the ID of
+    /// the message that was read and the reading user's name; not raised via <see cref="FrameDelivered"/>.
     /// </summary>
-    event Func<string, string, Task>? ConfirmationReceived;
+    event Func<string, string, Task>? ReadReceiptReceived;
+    /// <summary>
+    /// Raised when a remote user delivers a receive receipt instead of an ordinary frame. Carries the ID of
+    /// the message that arrived and the receiving user's name; not raised via <see cref="FrameDelivered"/>.
+    /// </summary>
+    event Func<string, string, Task>? ReceiveReceiptReceived;
     /// <summary>Raised whenever the delivery status of a message sent to a specific user changes.</summary>
     event Func<string, string, DestinationStatus, Task>? DeliveryStatusChanged;
     /// <summary>Raised when a user goes from having no live connection to having at least one.</summary>
@@ -38,9 +42,8 @@ internal interface IPeerService
 
 /// <summary>
 /// Implements <see cref="IPeerService"/> for <see cref="UserRole.Peer"/> by wrapping an <see cref="IPeerTransport"/>.
-/// Traffic carries an instance of <see cref="IEngineController.FrameType"/> directly with no envelope; delivery
-/// confirmation is derived from the transport's own acknowledgement of the send, not from an application-level
-/// reply. The node listens on <see cref="IEngineController.PeerPort"/> and keeps a connection open to each of its
+/// Traffic carries an instance of <see cref="IEngineController.FrameType"/> directly with no envelope; a transport
+/// acknowledgement only marks a send as accepted, while the Received and Read statuses come from receipt frames. The node listens on <see cref="IEngineController.PeerPort"/> and keeps a connection open to each of its
 /// <see cref="IEngineController.OutgoingPoints"/>; which user is behind a connection is worked out when it forms, and a
 /// message for a user goes over whichever connection is currently identified as them, in whichever direction it was
 /// opened.
@@ -84,7 +87,9 @@ internal sealed class PeerService : IPeerService, IReconfigurable, IAsyncDisposa
     /// <inheritdoc />
     public event Func<object, Task>? FrameDelivered;
     /// <inheritdoc />
-    public event Func<string, string, Task>? ConfirmationReceived;
+    public event Func<string, string, Task>? ReadReceiptReceived;
+    /// <inheritdoc />
+    public event Func<string, string, Task>? ReceiveReceiptReceived;
     /// <inheritdoc />
     public event Func<string, string, DestinationStatus, Task>? DeliveryStatusChanged;
     /// <inheritdoc />
@@ -154,7 +159,7 @@ internal sealed class PeerService : IPeerService, IReconfigurable, IAsyncDisposa
                 new PeerSendOptions { Priority = engineController.GetPriority(message), Frame = message, Transmitted = () => RaiseDeliveryStatusChanged(tag, DestinationStatus.Sent) },
                 cancellation);
 
-            RaiseDeliveryStatusChanged(tag, accepted ? DestinationStatus.Confirmed : DestinationStatus.Failed);
+            if (!accepted) { RaiseDeliveryStatusChanged(tag, DestinationStatus.Failed); }
             return accepted;
         }
         catch
@@ -212,7 +217,7 @@ internal sealed class PeerService : IPeerService, IReconfigurable, IAsyncDisposa
         => _ = Task.Run(() => HandleMessage(args.Payload, args.Packet));
 
     internal Task<bool> HandleMessage(ReadOnlyMemory<byte> data, object? packet = null)
-        => PeerFrameDispatcher.Dispatch(data, engineController, logger, FrameDelivered, ConfirmationReceived, packet);
+        => PeerFrameDispatcher.Dispatch(data, engineController, logger, FrameDelivered, ReadReceiptReceived, ReceiveReceiptReceived, packet);
 
     private void RaiseDeliveryStatusChanged(DeliveryTag tag, DestinationStatus status)
     {

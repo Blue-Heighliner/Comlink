@@ -76,8 +76,8 @@ public sealed class ImportServiceTests : IDisposable
     {
         object message = messageFormat.CreateFrame();
         messageFormat.SetFrameId(message, messageId);
-        messageFormat.SetSubject(message, subject);
-        messageFormat.SetPriority(message, priority);
+        ((TestFrame)message).Subject = subject;
+        ((TestFrame)message).Priority = priority;
         MessageEntity entity = new()
         {
             MessageId = messageId,

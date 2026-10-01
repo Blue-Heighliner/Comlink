@@ -29,7 +29,7 @@ public interface IServiceConnection
     Task<SendMessageResult?> SendMessage(string subject, string body, List<AddressRequest> addresses, bool isAlert = false, int priority = 0, string tag = "", string securityLevel = "", CancellationToken cancellation = default);
     /// <summary>
     /// Marks the Inbox record for <paramref name="messageId"/> as read (no-op if already read or not
-    /// found) and sends a user-read confirmation message back to the original sender so it can advance
+    /// found) and sends a read receipt frame back to the original sender so it can advance
     /// that message's Outbox delivery status to <see cref="DestinationStatus.Read"/>. Returns
     /// <see langword="true"/> if the record's read state actually changed.
     /// </summary>

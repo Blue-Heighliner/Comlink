@@ -8,7 +8,8 @@ public sealed class DirectServiceConnectionTests
     {
         public event Func<object, Task>? FrameDelivered;
 #pragma warning disable CS0067
-        public event Func<string, string, Task>? ConfirmationReceived;
+        public event Func<string, string, Task>? ReadReceiptReceived;
+        public event Func<string, string, Task>? ReceiveReceiptReceived;
         public event Func<string, string, DestinationStatus, Task>? DeliveryStatusChanged;
         public event Func<string, Task>? UserConnected;
         public event Func<string, Task>? UserDisconnected;
@@ -166,6 +167,36 @@ public sealed class DirectServiceConnectionTests
         Assert.Equal(0, raised);
     }
 
+    /// <summary>A message from another user is answered with a receive receipt frame addressed back to its sender.</summary>
+    [Fact]
+    public async Task MessageDelivered_FromAnotherUser_SendsReceiveReceiptToSender()
+    {
+        DirectServiceConnection conn = Build(out FakePeerService peer, out _, out Mock<IUserService> user, out _, out _);
+        user.Setup(s => s.GetCurrentUserInfo()).Returns(new UserInfo { Name = "LOCAL" });
+        await conn.Connect();
+
+        await peer.FireMessageDelivered(new TestFrame { MessageId = "MSG1", FromUser = "REMOTE" });
+
+        (string userName, TestFrame receipt) = Assert.Single(peer.Sent);
+        Assert.Equal("REMOTE", userName);
+        Assert.Equal("MSG1", receipt.ReceiveReceiptMessageId);
+        Assert.Equal("LOCAL", receipt.FromUser);
+        Assert.True(receipt.IsHidden);
+    }
+
+    /// <summary>A message the user sent to themselves is not answered with a receipt.</summary>
+    [Fact]
+    public async Task MessageDelivered_FromSelf_SendsNoReceipt()
+    {
+        DirectServiceConnection conn = Build(out FakePeerService peer, out _, out Mock<IUserService> user, out _, out _);
+        user.Setup(s => s.GetCurrentUserInfo()).Returns(new UserInfo { Name = "LOCAL" });
+        await conn.Connect();
+
+        await peer.FireMessageDelivered(new TestFrame { MessageId = "MSG1", FromUser = "LOCAL" });
+
+        Assert.Empty(peer.Sent);
+    }
+
     /// <summary>After Connect, a FrameDelivered peer event is converted and re-raised as MessageReceived.</summary>
     [Fact]
     public async Task Connect_ThenMessageDelivered_RaisesMessageReceivedEvent()
@@ -210,22 +241,22 @@ public sealed class DirectServiceConnectionTests
         MessageEntity fakeEntity = new()
         {
             MessageId = "MSG2",
-            DeliveryStatuses = [new DeliveryStatus { UserName = "DEST", Status = DestinationStatus.Confirmed, AddressedVia = [] }]
+            DeliveryStatuses = [new DeliveryStatus { UserName = "DEST", Status = DestinationStatus.Received, AddressedVia = [] }]
         };
-        entry.Setup(e => e.UpdateDeliveryStatus("MSG2", "DEST", DestinationStatus.Confirmed))
+        entry.Setup(e => e.UpdateDeliveryStatus("MSG2", "DEST", DestinationStatus.Received))
              .ReturnsAsync(fakeEntity);
         await conn.Connect();
 
         DeliveryStatusChangedEvent? evt = null;
         conn.DeliveryStatusChanged += e => { evt = e; return Task.CompletedTask; };
 
-        await routing.FireDeliveryStatusChanged("MSG2", "DEST", DestinationStatus.Confirmed);
+        await routing.FireDeliveryStatusChanged("MSG2", "DEST", DestinationStatus.Received);
 
         Assert.NotNull(evt);
         Assert.Equal("MSG2", evt.MessageId);
         Assert.Equal("DEST", evt.UserName);
-        Assert.Equal(DestinationStatus.Confirmed, evt.Status);
-        entry.Verify(e => e.UpdateDeliveryStatus("MSG2", "DEST", DestinationStatus.Confirmed), Times.Once);
+        Assert.Equal(DestinationStatus.Received, evt.Status);
+        entry.Verify(e => e.UpdateDeliveryStatus("MSG2", "DEST", DestinationStatus.Received), Times.Once);
     }
 
     /// <summary>SendMessage returns null when no user is installed.</summary>
@@ -317,7 +348,7 @@ public sealed class DirectServiceConnectionTests
 
         (string userName, TestFrame confirmation) = Assert.Single(peer.Sent);
         Assert.Equal("REMOTE", userName);
-        Assert.Equal("MSG1", confirmation.ConfirmationMessageId);
+        Assert.Equal("MSG1", confirmation.ReadReceiptMessageId);
         Assert.Equal("LOCAL", confirmation.FromUser);
         Assert.NotEqual("MSG1", confirmation.MessageId);
         TestAddressEntry address = Assert.Single(confirmation.Addresses);
@@ -350,7 +381,7 @@ public sealed class DirectServiceConnectionTests
         MessageEntity stored = new()
         {
             MessageId = "MSG3",
-            DeliveryStatuses = [new DeliveryStatus { UserName = "DEST", Status = DestinationStatus.Confirmed, AddressedVia = [] }]
+            DeliveryStatuses = [new DeliveryStatus { UserName = "DEST", Status = DestinationStatus.Received, AddressedVia = [] }]
         };
         entry.Setup(e => e.UpdateDeliveryStatus("MSG3", "dest", DestinationStatus.Sent)).ReturnsAsync(stored);
         await conn.Connect();
@@ -359,6 +390,6 @@ public sealed class DirectServiceConnectionTests
 
         await routing.FireDeliveryStatusChanged("MSG3", "dest", DestinationStatus.Sent);
 
-        Assert.Equal(DestinationStatus.Confirmed, evt!.Status);
+        Assert.Equal(DestinationStatus.Received, evt!.Status);
     }
 }

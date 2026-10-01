@@ -66,9 +66,11 @@ internal sealed class ServerRoutingService : IPeerService, IConnectionStatusServ
 
     /// <inheritdoc />
     public event Func<object, Task>? FrameDelivered;
-#pragma warning disable CS0067 // A server relays raw message bytes without deserializing for confirmation-vs-normal classification, so this never fires.
+#pragma warning disable CS0067 // A server relays raw message bytes without deserializing for receipt-vs-normal classification, so this never fires.
     /// <inheritdoc />
-    public event Func<string, string, Task>? ConfirmationReceived;
+    public event Func<string, string, Task>? ReadReceiptReceived;
+    /// <inheritdoc />
+    public event Func<string, string, Task>? ReceiveReceiptReceived;
 #pragma warning restore CS0067
 #pragma warning disable CS0067 // No per-message delivery status is tracked across the client/server hierarchy.
     /// <inheritdoc />

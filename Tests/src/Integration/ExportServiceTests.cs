@@ -41,8 +41,8 @@ public sealed class ExportServiceTests : IDisposable
     {
         object message = messageFormat.CreateFrame();
         messageFormat.SetFrameId(message, messageId);
-        messageFormat.SetSubject(message, subject);
-        messageFormat.SetPriority(message, priority);
+        ((TestFrame)message).Subject = subject;
+        ((TestFrame)message).Priority = priority;
         MessageEntity entity = new() { MessageId = messageId, Message = message, FolderId = "root-inbox", IsOutbound = isOutbound };
         await messages.Insert(entity);
         return entity;

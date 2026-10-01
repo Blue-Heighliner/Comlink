@@ -104,7 +104,7 @@ internal sealed partial class EntryItemViewModel : ObservableObject
     public string StatusColorHex => OverallStatus switch
     {
         DestinationStatus.Failed => "#E06C75",
-        DestinationStatus.Confirmed or DestinationStatus.Read or DestinationStatus.Received => "#98C379",
+        DestinationStatus.Read or DestinationStatus.Received => "#98C379",
         _ => "#858585"
     };
 }

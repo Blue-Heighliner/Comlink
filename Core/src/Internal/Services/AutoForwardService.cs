@@ -82,14 +82,15 @@ internal sealed class AutoForwardService : IAutoForwardService
     {
         try
         {
-            object forwarded = engineController.CreateFrame();
-            engineController.SetIsMessage(forwarded, true);
-            engineController.SetSubject(forwarded, engineController.GetSubject(original));
-            engineController.SetBody(forwarded, engineController.GetBody(original));
-            engineController.SetIsAlert(forwarded, engineController.GetIsAlert(original));
-            engineController.SetPriority(forwarded, engineController.GetPriority(original));
-            engineController.SetTag(forwarded, engineController.GetTag(original));
-            engineController.SetSecurityLevel(forwarded, engineController.GetSecurityLevel(original));
+            object forwarded = engineController.CreateMessage(new MessageCreateContext
+            {
+                Subject = engineController.GetSubject(original),
+                Body = engineController.GetBody(original),
+                IsAlert = engineController.GetIsAlert(original),
+                Priority = engineController.GetPriority(original),
+                Tag = engineController.GetTag(original),
+                SecurityLevel = engineController.GetSecurityLevel(original)
+            });
             engineController.SetAddresses(forwarded, [.. recipients.Select(name => new MessageAddress { UserName = name, Type = AddressType.To })]);
 
             await messageRouting.RouteFrame(fromUser, forwarded, CancellationToken.None);

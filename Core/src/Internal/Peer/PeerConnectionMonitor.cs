@@ -85,8 +85,6 @@ internal sealed class PeerConnectionMonitor(IEngineController engineController, 
 
     private object Heartbeat()
     {
-        object frame = engineController.CreateFrame();
-        engineController.SetIsMessage(frame, false);
-        return frame;
+        return engineController.CreateFrame();
     }
 }

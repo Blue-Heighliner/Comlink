@@ -33,9 +33,7 @@ internal sealed class RetrievalService : IRetrievalService
     {
         string user = currentUserProvider.UserName ?? throw new InvalidOperationException("A retrieval request needs an installed user.");
 
-        object request = engineController.CreateFrame();
-        engineController.SetIsMessage(request, false);
-        engineController.SetRetrieval(request, criteria);
+        object request = engineController.CreateRetrieval(criteria);
         engineController.SetAddresses(request, [new MessageAddress { UserName = serverName, Type = AddressType.To }]);
 
         (_, IReadOnlyList<UserDeliveryResult> results) = await messageRouting.RouteFrame(user, request, cancellation);

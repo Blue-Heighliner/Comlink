@@ -17,14 +17,6 @@ internal sealed class FrameMap
     public required Func<object, string> GetSender { get; init; }
     /// <summary>Writes the sender.</summary>
     public required Action<object, string> SetSender { get; init; }
-    /// <summary>Reads the subject.</summary>
-    public required Func<object, string> GetSubject { get; init; }
-    /// <summary>Writes the subject.</summary>
-    public required Action<object, string> SetSubject { get; init; }
-    /// <summary>Reads the body.</summary>
-    public required Func<object, string> GetBody { get; init; }
-    /// <summary>Writes the body.</summary>
-    public required Action<object, string> SetBody { get; init; }
     /// <summary>Reads the recipients.</summary>
     public required Func<object, List<MessageAddress>> GetAddresses { get; init; }
     /// <summary>Writes the recipients.</summary>
@@ -33,52 +25,12 @@ internal sealed class FrameMap
     public required Func<object, DateTime> GetSentAt { get; init; }
     /// <summary>Writes the sent time.</summary>
     public required Action<object, DateTime> SetSentAt { get; init; }
-    /// <summary>Reads the identifier of the message this frame confirms.</summary>
-    public required Func<object, string> GetConfirmationId { get; init; }
-    /// <summary>Writes the identifier of the message this frame confirms.</summary>
-    public required Action<object, string> SetConfirmationId { get; init; }
-    /// <summary>Reads whether the frame is a retrieval request.</summary>
-    public required Func<object, bool> GetIsRetrieval { get; init; }
-    /// <summary>Writes whether the frame is a retrieval request.</summary>
-    public required Action<object, bool> SetIsRetrieval { get; init; }
-    /// <summary>Reads a retrieval request's lower sent-time bound.</summary>
-    public required Func<object, DateTime?> GetRetrievalFrom { get; init; }
-    /// <summary>Writes a retrieval request's lower sent-time bound.</summary>
-    public required Action<object, DateTime?> SetRetrievalFrom { get; init; }
-    /// <summary>Reads a retrieval request's upper sent-time bound.</summary>
-    public required Func<object, DateTime?> GetRetrievalTo { get; init; }
-    /// <summary>Writes a retrieval request's upper sent-time bound.</summary>
-    public required Action<object, DateTime?> SetRetrievalTo { get; init; }
-    /// <summary>Reads a retrieval request's sender names.</summary>
-    public required Func<object, List<string>> GetRetrievalAuthors { get; init; }
-    /// <summary>Writes a retrieval request's sender names.</summary>
-    public required Action<object, List<string>> SetRetrievalAuthors { get; init; }
-    /// <summary>Reads a retrieval request's addressee names.</summary>
-    public required Func<object, List<string>> GetRetrievalDestinations { get; init; }
-    /// <summary>Writes a retrieval request's addressee names.</summary>
-    public required Action<object, List<string>> SetRetrievalDestinations { get; init; }
-    /// <summary>Reads a retrieval request's message identifiers.</summary>
-    public required Func<object, List<string>> GetRetrievalIds { get; init; }
-    /// <summary>Writes a retrieval request's message identifiers.</summary>
-    public required Action<object, List<string>> SetRetrievalIds { get; init; }
-    /// <summary>Reads whether the frame is a message.</summary>
-    public required Func<object, bool> GetIsMessage { get; init; }
-    /// <summary>Writes whether the frame is a message.</summary>
-    public required Action<object, bool> SetIsMessage { get; init; }
-    /// <summary>Reads whether the message is an alert.</summary>
-    public required Func<object, bool> GetIsAlert { get; init; }
-    /// <summary>Writes whether the message is an alert.</summary>
-    public required Action<object, bool> SetIsAlert { get; init; }
-    /// <summary>Reads the priority.</summary>
-    public required Func<object, int> GetPriority { get; init; }
-    /// <summary>Writes the priority.</summary>
-    public required Action<object, int> SetPriority { get; init; }
-    /// <summary>Reads the tag.</summary>
-    public required Func<object, string> GetTag { get; init; }
-    /// <summary>Writes the tag.</summary>
-    public required Action<object, string> SetTag { get; init; }
-    /// <summary>Reads the security level.</summary>
-    public required Func<object, string> GetSecurityLevel { get; init; }
-    /// <summary>Writes the security level.</summary>
-    public required Action<object, string> SetSecurityLevel { get; init; }
+    /// <summary>Gets how the host's message handler is instantiated.</summary>
+    public required ServiceRegistration<IMessageFrameHandler> Message { get; init; }
+    /// <summary>Gets how the host's retrieval request handler is instantiated.</summary>
+    public required ServiceRegistration<IRetrievalFrameHandler> Retrieval { get; init; }
+    /// <summary>Gets how the host's read receipt handler is instantiated.</summary>
+    public required ServiceRegistration<IReceiptFrameHandler> ReadReceipt { get; init; }
+    /// <summary>Gets how the host's receive receipt handler is instantiated.</summary>
+    public required ServiceRegistration<IReceiptFrameHandler> ReceiveReceipt { get; init; }
 }

@@ -459,11 +459,11 @@ public sealed class EntryServiceTests : IDisposable
             [new AddressData { UserName = "SELF", Type = "To" }], DateTime.UtcNow,
             [new UserDeliveryResult { UserName = "SELF", Success = true, AddressedVia = [] }]);
 
-        MessageEntity? updated = await service.UpdateDeliveryStatus(messageId, "SELF", DestinationStatus.Confirmed);
+        MessageEntity? updated = await service.UpdateDeliveryStatus(messageId, "SELF", DestinationStatus.Received);
 
         Assert.NotNull(updated);
         Assert.True(updated.IsOutbound);
-        Assert.Equal(DestinationStatus.Confirmed, Assert.Single(updated.DeliveryStatuses).Status);
+        Assert.Equal(DestinationStatus.Received, Assert.Single(updated.DeliveryStatuses).Status);
 
         (List<MessageEntity> inboxItems, _) = await service.GetMessages("root-inbox", 1);
         MessageEntity inboxCopy = Assert.Single(inboxItems);
@@ -471,15 +471,15 @@ public sealed class EntryServiceTests : IDisposable
         Assert.Empty(inboxCopy.DeliveryStatuses);
     }
 
-    /// <summary>A successful user result seeds the Outbox record with Confirmed status immediately — a successful send already implies full MSMT delivery.</summary>
+    /// <summary>A successful user result seeds the Outbox record with Sent status; Received only follows the destination's receive receipt.</summary>
     [Fact]
-    public async Task StoreSentMessage_SuccessfulUserResult_SeedsConfirmedStatusImmediately()
+    public async Task StoreSentMessage_SuccessfulUserResult_SeedsSentStatusImmediately()
     {
         MessageEntity entity = await service.StoreSentMessage(
             Guid.NewGuid().ToString("N"), "Subj", "Body", [],
             DateTime.UtcNow, [new UserDeliveryResult { UserName = "SELF", Success = true, AddressedVia = [] }]);
 
-        Assert.Equal(DestinationStatus.Confirmed, Assert.Single(entity.DeliveryStatuses).Status);
+        Assert.Equal(DestinationStatus.Sent, Assert.Single(entity.DeliveryStatuses).Status);
         Assert.True(entity.IsOutbound);
     }
 
@@ -513,20 +513,35 @@ public sealed class EntryServiceTests : IDisposable
         return messageId;
     }
 
-    /// <summary>Status events for one send arrive in any order; a late "Sent" never moves an already Confirmed status back.</summary>
+    /// <summary>Status events for one send arrive in any order; a late "Sent" never moves an already Received status back.</summary>
     [Fact]
     public async Task UpdateDeliveryStatus_LateEarlierStatus_IsIgnored()
     {
         string messageId = await StoreSentTo("BOB", success: true);
+        await service.UpdateDeliveryStatus(messageId, "BOB", DestinationStatus.Received);
 
         MessageEntity? updated = await service.UpdateDeliveryStatus(messageId, "BOB", DestinationStatus.Sent);
 
-        Assert.Equal(DestinationStatus.Confirmed, Assert.Single(updated!.DeliveryStatuses).Status);
+        Assert.Equal(DestinationStatus.Received, Assert.Single(updated!.DeliveryStatuses).Status);
         (List<MessageEntity> outbox, _) = await service.GetMessages("root-outbox", 1);
-        Assert.Equal(DestinationStatus.Confirmed, Assert.Single(Assert.Single(outbox).DeliveryStatuses).Status);
+        Assert.Equal(DestinationStatus.Received, Assert.Single(Assert.Single(outbox).DeliveryStatuses).Status);
     }
 
-    /// <summary>A status that moves forward is applied, including a read confirmation after a send that was reported failed.</summary>
+    /// <summary>A status that arrives before the Outbox record is stored is kept and applied when the record is stored.</summary>
+    [Fact]
+    public async Task UpdateDeliveryStatus_BeforeStore_IsAppliedWhenStored()
+    {
+        string messageId = Guid.NewGuid().ToString("N");
+
+        Assert.Null(await service.UpdateDeliveryStatus(messageId, "BOB", DestinationStatus.Received));
+        MessageEntity entity = await service.StoreSentMessage(messageId, "Hello", "Body",
+            [new AddressData { UserName = "BOB", Type = "To" }], DateTime.UtcNow,
+            [new UserDeliveryResult { UserName = "BOB", Success = true, AddressedVia = [] }]);
+
+        Assert.Equal(DestinationStatus.Received, Assert.Single(entity.DeliveryStatuses).Status);
+    }
+
+    /// <summary>A status that moves forward is applied, including a read receipt after a send that was reported failed.</summary>
     [Theory]
     [InlineData(true, DestinationStatus.Read)]
     [InlineData(false, DestinationStatus.Read)]
@@ -539,7 +554,7 @@ public sealed class EntryServiceTests : IDisposable
         Assert.Equal(later, Assert.Single(updated!.DeliveryStatuses).Status);
     }
 
-    /// <summary>Users are matched case-insensitively, as everywhere else in routing, so a confirmation from "bob" updates "BOB".</summary>
+    /// <summary>Users are matched case-insensitively, as everywhere else in routing, so a receipt from "bob" updates "BOB".</summary>
     [Fact]
     public async Task UpdateDeliveryStatus_DifferentCase_UpdatesSameUser()
     {

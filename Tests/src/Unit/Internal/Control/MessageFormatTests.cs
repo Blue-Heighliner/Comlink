@@ -42,20 +42,20 @@ public sealed class MessageFormatTests
 
         format.SetFrameId(message, "MSG1");
         format.SetFromUser(message, "ALPHA");
-        format.SetSubject(message, "Hello");
-        format.SetBody(message, "World");
+        ((TestFrame)message).Subject = "Hello";
+        ((TestFrame)message).Body = "World";
         format.SetAddresses(message, addresses);
         format.SetSentAt(message, sentAt);
-        format.SetConfirmationMessageId(message, "MSG0");
-        format.SetIsAlert(message, true);
-        format.SetPriority(message, 3);
+        ((TestFrame)message).ReadReceiptMessageId = "MSG0";
+        ((TestFrame)message).IsAlert = true;
+        ((TestFrame)message).Priority = 3;
 
         Assert.Equal("MSG1", format.GetFrameId(message));
         Assert.Equal("ALPHA", format.GetFromUser(message));
         Assert.Equal("Hello", format.GetSubject(message));
         Assert.Equal("World", format.GetBody(message));
         Assert.Equal(sentAt, format.GetSentAt(message));
-        Assert.Equal("MSG0", format.GetConfirmationMessageId(message));
+        Assert.Equal("MSG0", format.GetReadReceiptMessageId(message));
         Assert.True(format.GetIsAlert(message));
         Assert.Equal(3, format.GetPriority(message));
 

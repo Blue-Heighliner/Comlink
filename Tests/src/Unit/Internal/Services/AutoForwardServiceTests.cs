@@ -9,7 +9,8 @@ public sealed class AutoForwardServiceTests
     {
         public event Func<object, Task>? FrameDelivered;
 #pragma warning disable CS0067
-        public event Func<string, string, Task>? ConfirmationReceived;
+        public event Func<string, string, Task>? ReadReceiptReceived;
+        public event Func<string, string, Task>? ReceiveReceiptReceived;
         public event Func<string, string, DestinationStatus, Task>? DeliveryStatusChanged;
         public event Func<string, Task>? UserConnected;
         public event Func<string, Task>? UserDisconnected;

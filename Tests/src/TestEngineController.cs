@@ -16,8 +16,10 @@ public sealed class TestFrame
     [ProtoMember(5)] public List<TestAddressEntry> Addresses { get; set; } = [];
     /// <summary>UTC timestamp when the message was originally sent.</summary>
     [ProtoMember(6)] public DateTime SentAt { get; set; }
-    /// <summary>Message ID this message is a user-read confirmation for; empty for an ordinary message.</summary>
-    [ProtoMember(7)] public string ConfirmationMessageId { get; set; } = string.Empty;
+    /// <summary>Message ID this message is a read receipt for; empty for an ordinary message.</summary>
+    [ProtoMember(7)] public string ReadReceiptMessageId { get; set; } = string.Empty;
+    /// <summary>Message ID this message is a receive receipt for; empty for an ordinary message.</summary>
+    [ProtoMember(19)] public string ReceiveReceiptMessageId { get; set; } = string.Empty;
     /// <summary>Whether this message is an alert.</summary>
     [ProtoMember(8)] public bool IsAlert { get; set; }
     /// <summary>Priority number of this message.</summary>

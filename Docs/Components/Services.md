@@ -56,24 +56,24 @@ UserInfo? installed = await service.Install("SN01", cancellation);
 
 ## MessageRoutingService
 
-Routes outbound messages to peer nodes and surfaces their delivery status. Delivery status comes entirely from `IPeerService`'s own `DestinationStatus` stream, itself derived from MSMT's delivery status (see [Peer.md](Peer.md#delivery-status)); the one application-level status above that — `Read` — comes from the user-read confirmation message flow (see [Peer.md](Peer.md#read-confirmation)).
+Routes outbound messages to peer nodes and surfaces their delivery status. Delivery status comes from `IPeerService`'s `DestinationStatus` stream: `Sent` and `Failed` from the transport, `Received` and `Read` from the receipt frame flow (see [Peer.md](Peer.md#delivery-status)).
 
 **Key responsibilities**:
-- Build the outbound message via `IEngineController` (`CreateFrame()` then the `Set*` logical-field setters, including `SetIsAlert`, `SetPriority`, `SetTag`) so it can be sent as whatever concrete type the host has configured (see [Configuration.md](Configuration.md#frame-format))
+- Build the outbound message via `IEngineController` (`CreateMessage` with the message content, which runs the host's message handler, then the `SetFrameId`, `SetFromUser`, `SetAddresses` and `SetSentAt` setters for the fields every frame has) so it can be sent as whatever concrete type the host has configured (see [Configuration.md](Configuration.md#frame-format))
 - For each recipient in `SendMessagePayload.Addresses`, deliver via `IPeerService.Send`
 - Subscribe to `IPeerService.DeliveryStatusChanged` and forward each `DestinationStatus` unchanged as its own `DeliveryStatusChanged`
-- Subscribe to `IPeerService.ConfirmationReceived` and re-raise it as `DeliveryStatusChanged(messageId, confirmingUser, DestinationStatus.Read)` — reusing the same event as peer-driven status changes
+- Subscribe to `IPeerService.ReceiveReceiptReceived` and `ReadReceiptReceived` and re-raise them as `DeliveryStatusChanged(messageId, user, DestinationStatus.Received)` and `(..., DestinationStatus.Read)` — reusing the same event as peer-driven status changes
 
 **Events**:
 - `DeliveryStatusChanged(messageId, userName, DestinationStatus)` — raised on every per-user status change
 
-**Result timing**: `IPeerService.Send` does not return until MSMT has fully acknowledged the message, so `Route`'s own per-user `UserDeliveryResult.Success` already reflects the final outcome by the time `Route` returns — there is no separate "sent but not yet confirmed" pending state to track.
+**Result timing**: `IPeerService.Send` does not return until the remote node has accepted the message, so `Route`'s per-user `UserDeliveryResult.Success` means accepted (status `Sent`); `Received` and `Read` follow later as receipt frames arrive.
 
 **External addresses**: An `AddressType.External` address is information for the reader only (with its `Information`, e.g. `OMAHA - Deliver to Eastside Office`). It is stored and shown with the message but never routed: no group expansion, no delivery, no status row, and the server ignores it when choosing recipients.
 
 **Security levels**: `Route` reads the message's security level name (`SendMessagePayload.SecurityLevel`) and, before sending, drops any destination whose own assigned level (`IEngineController.GetUserSecurityLevel`) ranks lower - it is never dialed, and its `UserDeliveryResult.Success` is `false`. Unrecognized or empty level names (no security levels configured at all) skip the check entirely, so a host with no use for the feature sees no behavior change. The check applies per destination, so a message can still reach every recipient cleared for it even when others in the same address list are blocked.
 
-**Self-addressing**: When a recipient user name matches the sending user (`fromUser`), that recipient is delivered in-process via `IPeerService.DeliverLocal` — no network connection is opened, and the delivery status for that user is immediately raised as `Confirmed`. A message can address itself alongside remote users in the same `Route` call; each recipient is handled independently.
+**Self-addressing**: When a recipient user name matches the sending user (`fromUser`), that recipient is delivered in-process via `IPeerService.DeliverLocal` — no network connection is opened, and the delivery status for that user is immediately raised as `Received`. A message can address itself alongside remote users in the same `Route` call; each recipient is handled independently.
 
 ```csharp
 var (messageId, results) = await routing.Route(fromUser, payload, ct);
@@ -88,7 +88,7 @@ CRUD for messages, drafts, notes, and activity log reads. Runs in `Client` mode 
 
 **Events** (all `Func<entity, Task>`):
 - `MessageInserted` — fired after `StoreIncomingMessage`
-- `MessageRead` — fired after `MarkMessageRead` transitions an Inbox record from `Received` to `Read`; consumed by `AlertViewModel` to track pending alerts (see [Peer.md](Peer.md#read-confirmation))
+- `MessageRead` — fired after `MarkMessageRead` transitions an Inbox record from `Received` to `Read`; consumed by `AlertViewModel` to track pending alerts (see [Peer.md](Peer.md#receipts))
 - `DraftInserted` — after `CreateDraft`
 - `DraftUpdated` — after `SaveDraft`, only if the draft has not yet been sent
 - `NoteInserted` — after `CreateNote`
@@ -101,10 +101,10 @@ Both `StoreIncomingMessage` and `StoreSentMessage` take the message's logical fi
 | Method | Description |
 |--------|-------------|
 | `StoreIncomingMessage(messageId, fromUser, subject, body, addresses, sentAt, isAlert = false, priority = 0, tag = "", securityLevel = "")` | Creates a `MessageEntity` in the Inbox folder (`IsOutbound = false`, `ReadStatus = Received`), fires `MessageInserted` |
-| `StoreSentMessage(messageId, subject, body, addresses, sentAt, userResults, isAlert = false, priority = 0, tag = "", securityLevel = "")` | Creates a `MessageEntity` in the Outbox (`IsOutbound = true`) with per-user delivery statuses seeded from the routing result — `Confirmed` when `Success` is `true` (a successful send already implies full MSMT delivery, see `Docs/Components/Peer.md`), otherwise `Failed` |
+| `StoreSentMessage(messageId, subject, body, addresses, sentAt, userResults, isAlert = false, priority = 0, tag = "", securityLevel = "")` | Creates a `MessageEntity` in the Outbox (`IsOutbound = true`) with per-user delivery statuses seeded from the routing result — `Sent` when `Success` is `true`, otherwise `Failed`; a status that arrived before the record was stored is applied here |
 | `IncomingMessageExists(messageId)` | Whether the Inbox already holds a record for the ID (an Outbox-only record does not count). `MainViewModel` checks it before `StoreIncomingMessage`, so a message delivered twice - notably a storage server's answer to a retrieval request that includes messages the Inbox already has - is stored and shown once |
-| `UpdateDeliveryStatus(messageId, userName, status)` | Updates per-user delivery status on the Outbox record for `messageId` - always scoped to the outbound record, since a self-addressed message also has an Inbox record sharing the same `messageId`. The user name matches case-insensitively, and a status only ever moves forward (Sending, then Sent, then Confirmed or Failed, then Read): status events for different stages can arrive out of order, so a late earlier one is ignored rather than undoing a later one |
-| `MarkMessageRead(messageId)` | Transitions the Inbox record's `ReadStatus` from `Received` to `Read` and fires `MessageRead`. A no-op (returns `null`) if the record is missing or already `Read` — see [Peer.md](Peer.md#read-confirmation) |
+| `UpdateDeliveryStatus(messageId, userName, status)` | Updates per-user delivery status on the Outbox record for `messageId` - always scoped to the outbound record, since a self-addressed message also has an Inbox record sharing the same `messageId`. The user name matches case-insensitively, and a status only ever moves forward (Sending, then Sent, then Failed, then Received, then Read): status events for different stages can arrive out of order, so a late earlier one is ignored rather than undoing a later one |
+| `MarkMessageRead(messageId)` | Transitions the Inbox record's `ReadStatus` from `Received` to `Read` and fires `MessageRead`. A no-op (returns `null`) if the record is missing or already `Read` — see [Peer.md](Peer.md#receipts) |
 | `CreateDraft()` | Creates a blank draft in the Drafts folder, fires `DraftInserted` |
 | `CreateNote()` | Creates a blank note in the Notes folder, fires `NoteInserted` |
 | `SaveDraft(entity)` | Persists draft changes, fires `DraftUpdated` if not yet sent |
@@ -125,9 +125,9 @@ Implements `IServiceConnection`, registered in both `Client` and `Headless` mode
 
 **Responsibilities**:
 - Forwards `IServiceConnection.SendMessage(subject, body, addresses, isAlert, priority, tag)` → `MessageRoutingService.Route` and returns the result. It does not persist anything itself — in Client mode, `DraftViewModel` calls `EntryService.StoreSentMessage` after a successful send
-- Translates `PeerService.FrameDelivered` → fires `IServiceConnection.MessageReceived` for each frame that is a message (`IEngineController.IsMessage`; any other frame is neither shown nor stored). It does not persist the message itself — in Client mode, `MainViewModel`'s handler for that event calls `EntryService.StoreIncomingMessage`
+- Translates `PeerService.FrameDelivered` → fires `IServiceConnection.MessageReceived` for each frame that is a message (`IEngineController.IsMessage`, answered by the message handler; any other frame is neither shown nor stored). Each such message from another user is also answered with a receive receipt sent straight to its sender. It does not persist the message itself — in Client mode, `MainViewModel`'s handler for that event calls `EntryService.StoreIncomingMessage`
 - On `MessageRoutingService.DeliveryStatusChanged`, updates the Outbox record via `EntryService.UpdateDeliveryStatus`, then fires `IServiceConnection.DeliveryStatusChanged` with the user's status as stored and the resulting `OverallStatus`, so an ignored late status is not shown either
-- `MarkMessageRead(messageId)`: calls `EntryService.MarkMessageRead`, fires `IServiceConnection.DeliveryStatusChanged` locally (empty `UserName`, status `Read`) so Client-mode UI reflects the read state immediately, then sends a user-read confirmation message to the original sender via `IPeerService.Send` directly — or, for a self-addressed message, calls `EntryService.UpdateDeliveryStatus` directly with no network round-trip. See [Peer.md](Peer.md#read-confirmation)
+- `MarkMessageRead(messageId)`: calls `EntryService.MarkMessageRead`, fires `IServiceConnection.DeliveryStatusChanged` locally (empty `UserName`, status `Read`) so Client-mode UI reflects the read state immediately, then sends a read receipt to the original sender via `IPeerService.Send` directly — or, for a self-addressed message, calls `EntryService.UpdateDeliveryStatus` directly with no network round-trip. See [Peer.md](Peer.md#receipts)
 - Implements install, user info query, and user names query by delegating to `UserService` / `IEngineController`
 
 ---
@@ -193,13 +193,13 @@ ImportSummary summary = await importService.Import(packages[0].FullPath, conflic
 
 ## MessageStorageService
 
-The storage half of a storage server (see [Configuration.md](Configuration.md#server-storage)); `ServerRoutingService` is its only caller, and it deliberately does not depend on `IPeerService`, so finding copies and sending them are separate steps. `IsEnabled` is true when the current user is in `IEngineController.StorageServers`. `Store(message)` keeps a copy through `IStoredMessageRepository.InsertIfNew` unless disabled or the message is a confirmation or retrieval request, and swallows and logs any failure. `Find(requester, request)` reads the request's retrieval fields into a `RetrievalCriteria`, loads every stored message, keeps those that fit the criteria (any sender or recipient - no check that the requester was involved), orders them by original sent time, and returns a freshly built copy of each addressed to the requester alone with the alert flag cleared (see [Peer.md](Peer.md#message-storage--retrieval) for why). Times are compared as UTC, since LiteDB returns stored times as local. A server that is not a storage server yields an empty list.
+The storage half of a storage server (see [Configuration.md](Configuration.md#server-storage)); `ServerRoutingService` is its only caller, and it deliberately does not depend on `IPeerService`, so finding copies and sending them are separate steps. `IsEnabled` is true when the current user is in `IEngineController.StorageServers`. `Store(message)` keeps a copy through `IStoredMessageRepository.InsertIfNew` unless disabled or the message is a receipt or retrieval request, and swallows and logs any failure. `Find(requester, request)` reads the request's retrieval fields into a `RetrievalCriteria`, loads every stored message, keeps those that fit the criteria (any sender or recipient - no check that the requester was involved), orders them by original sent time, and returns a freshly built copy of each addressed to the requester alone with the alert flag cleared (see [Peer.md](Peer.md#message-storage--retrieval) for why). Times are compared as UTC, since LiteDB returns stored times as local. A server that is not a storage server yields an empty list.
 
 ---
 
 ## RetrievalService
 
-The client's half: `Request(serverName, criteria)` builds a message of the configured type with `SetRetrieval(criteria)` and a single To address naming the server, routes it from the current user with `IMessageRoutingService.RouteFrame` (which fills in the ID, sender and sent time), and returns whether that server's delivery succeeded - not whether anything matched, since the answer arrives later as ordinary received messages. Throws `InvalidOperationException` with no installed user. `RetrievalCriteria` (`Core/src/Internal/Services/RetrievalCriteria.cs`) holds `From`/`To` (UTC instants), `Authors`, `Destinations` and `Ids`, which the engine controller reads from and writes to the message's mapped retrieval fields.
+The client's half: `Request(serverName, criteria)` builds a request through the host's retrieval handler with `CreateRetrieval(criteria)` and a single To address naming the server, routes it from the current user with `IMessageRoutingService.RouteFrame` (which fills in the ID, sender and sent time), and returns whether that server's delivery succeeded - not whether anything matched, since the answer arrives later as ordinary received messages. Throws `InvalidOperationException` with no installed user. `RetrievalCriteria` (`Core/src/Internal/Services/RetrievalCriteria.cs`) holds `From`/`To` (UTC instants), `Authors`, `Destinations` and `Ids`, which the engine controller hands to the retrieval handler to build a request and reads back from a received one.
 
 ---
 
@@ -213,7 +213,7 @@ DTOs used across the service layer:
 | `AddressRequest` | `UserName`, `Type` |
 | `UserDeliveryResult` | `UserName`, `Success (bool)`, `AddressedVia[]` |
 | `SendMessageResult` | `MessageId`, `UserResults[]` |
-| `DeliveryStatusChangedEvent` | `MessageId`, `UserName`, `Status`, `OverallStatus` — an empty `UserName` marks a local read-status notification for this user's own Inbox record rather than a remote destination (see [Peer.md](Peer.md#read-confirmation)) |
+| `DeliveryStatusChangedEvent` | `MessageId`, `UserName`, `Status`, `OverallStatus` — an empty `UserName` marks a local read-status notification for this user's own Inbox record rather than a remote destination (see [Peer.md](Peer.md#receipts)) |
 | `SendMessagePayload` | `Subject`, `Body`, `Addresses[]` (of `AddressPayload`), `IsAlert`, `Priority`, `Tag` |
 | `AddressPayload` | `UserName`, `Type` |
 

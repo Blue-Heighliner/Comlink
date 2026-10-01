@@ -17,8 +17,8 @@ public sealed class PublicApiTests
                 "ActivityLogEventEntry", "ActivityLogExportData", "AddressRequest", "AddressType", "ConnectionPoint",
                 "DeliveryStatusChangedEvent", "DestinationStatus", "DraftExportData",
                 "Engine", "ExternalSystemBase`1", "FolderType", "FrameSerializer`2", "IConnectionInfo", "IEngineBuilder", "IEngineConfiguration", "IEngineContext", "IExportFormat", "IExternalSystem", "IFrameBuilder`1", "IFrameSerializer",
-                "IImportFormat", "IImportFormatContext", "IInitialFrameContext`1", "IInitialFrameProcessor`1", "IInitialPacketContext`1", "IInitialPacketProcessor`1", "IIpConnectionInfo", "INetworkConnectedContext`1", "INetworkContext`1", "INetworkDisconnectedContext`1", "INetworkProcessor`1", "INetworkReceivedContext`1", "IPacketBuilder`1", "IPacketSerializer", "IRetrievalBuilder`1", "ISerialConnectionInfo", "IServiceConnection",
-                "MessageDeliveryStatus", "MessageExportData", "MessageReceivedEvent", "NoteExportData", "PacketSerializer`2", "PooledBufferWriter", "ProtobufSerializer", "SendMessageResult",
+                "IImportFormat", "IImportFormatContext", "IInitialFrameContext`1", "IInitialFrameProcessor`1", "IInitialPacketContext`1", "IInitialPacketProcessor`1", "IIpConnectionInfo", "IMessageHandler`1", "INetworkConnectedContext`1", "INetworkContext`1", "INetworkDisconnectedContext`1", "INetworkProcessor`1", "INetworkReceivedContext`1", "IPacketBuilder`1", "IPacketSerializer", "IReadReceiptHandler`1", "IReceiveReceiptHandler`1", "IRetrievalHandler`1", "ISerialConnectionInfo", "IServiceConnection",
+                "MessageCreateContext", "MessageDeliveryStatus", "MessageExportData", "MessageReceivedEvent", "NoteExportData", "PacketSerializer`2", "PooledBufferWriter", "ProtobufSerializer", "ReceiptCreateContext", "RetrievalCreateContext", "SendMessageResult",
                 "StagedSendData", "StagedSendMode", "UserDeliveryResult", "UserIdentity", "UserInfo", "UserRole"
             ],
             exported);

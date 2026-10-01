@@ -134,7 +134,7 @@ internal sealed class HelpViewModel : IHelpViewModel
         List<HelpSection> sections =
         [
             new HelpSection("New messages", "Messages arrive in Inbox. Opening one marks it as read and tells the sender you have read it."),
-            new HelpSection("Delivery status", "Open a message from Outbox and expand its delivery status to see each recipient. Sending means it is on its way, Sent means it left this computer, Confirmed means the recipient's application has it, Read means the recipient has opened it, and Failed means it could not be delivered, in which case send it again. The overall status is only Read once every recipient has read it.")
+            new HelpSection("Delivery status", "Open a message from Outbox and expand its delivery status to see each recipient. Sending means it is on its way, Sent means it left this computer, Received means the recipient's application has it, Read means the recipient has opened it, and Failed means it could not be delivered, in which case send it again. The overall status is only Read once every recipient has read it.")
         ];
 
         sections.Add(new HelpSection(engineController.AlertLabel, $"When an {engineController.AlertLabel} message arrives, a red box appears in the title bar and an alarm sounds. The sound stops by itself after a while, but the box stays until every {engineController.AlertLabel} message has been read. Open the message to read it. If quick confirmation is on for this installation, you can also click the box or press Space or Enter, which reads the most recent one and does the next on each further press."));

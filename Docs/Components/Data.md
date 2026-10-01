@@ -78,7 +78,7 @@ Stored in both Inbox (received) and Outbox (sent).
 | `MessageId` | `string` | Denormalized from `Message` (via `IEngineController.GetFrameId`) so LiteDB can query/index on it directly. **Not unique** — see below |
 | `Message` | `object` | The message content — subject, body, sender, addresses, sent time — as an instance of `IEngineController.FrameType`. This is the canonical representation; LiteDB serializes it using its own runtime type (via its built-in `object`-property polymorphism, storing a `_type` discriminator) and reconstructs the same concrete type on load. Read its logical fields through the registered `IEngineController` — see `Docs/Components/Peer.md` and `Docs/Components/Configuration.md`. |
 | `DeliveryStatuses` | `List<DeliveryStatus>` | Per-user delivery state (Outbox messages) |
-| `ReadStatus` | `DestinationStatus?` | Inbox-only: `Received` when stored, `Read` once the user opens it (see `Docs/Components/Peer.md#read-confirmation`). Always `null` on Outbox records — per-destination read state lives in `DeliveryStatuses` instead |
+| `ReadStatus` | `DestinationStatus?` | Inbox-only: `Received` when stored, `Read` once the user opens it (see `Docs/Components/Peer.md#receipts`). Always `null` on Outbox records — per-destination read state lives in `DeliveryStatuses` instead |
 | `ReceivedAt` | `DateTime` | UTC timestamp; denormalized from `Message`'s sent time so LiteDB can sort/index on it directly |
 | `FolderId` | `string` | Parent folder ID |
 | `IsOutbound` | `bool` | `true` for the Outbox (sent) record, `false` for the Inbox (received) record |
@@ -150,7 +150,7 @@ A storage server's copy of one routed message (see `Docs/Components/Configuratio
 
 **`AddressData`**: `UserName (string)`, `Type (string)` (`"To"`, `"Cc"` or `"External"`), `Information (string)` (free-form instructions for the user, e.g. `Deliver to Eastside Office`)
 
-**`DeliveryStatus`**: `UserName (string)`, `Status (DestinationStatus enum)` — `Sending`, `Sent`, `Failed`, `Confirmed`, `Read` (`Received` never appears here — see `ReadStatus` above)
+**`DeliveryStatus`**: `UserName (string)`, `Status (DestinationStatus enum)` — `Sending`, `Sent`, `Failed`, `Received`, `Read`
 
 ## Repositories
 

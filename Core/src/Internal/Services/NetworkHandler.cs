@@ -11,7 +11,7 @@ internal interface INetworkHandler
     /// <param name="context">A snapshot of the engine taken for this event.</param>
     Task OnDisconnected(INetworkUserContext context);
 
-    /// <summary>Called whenever this instance receives a new (non-confirmation) message from a peer.</summary>
+    /// <summary>Called whenever this instance receives a new (non-receipt) message from a peer.</summary>
     /// <param name="context">A snapshot of the engine taken for this event.</param>
     Task OnReceived(INetworkFrameContext context);
 }

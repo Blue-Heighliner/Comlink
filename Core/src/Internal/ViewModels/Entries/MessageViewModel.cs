@@ -207,7 +207,7 @@ internal sealed partial class MessageViewModel : ObservableObject, IMessageViewM
         if (DeliveryStatuses.Count == 0) { return null; }
         if (DeliveryStatuses.Any(d => d.Status == DestinationStatus.Failed)) { return DestinationStatus.Failed; }
         if (DeliveryStatuses.All(d => d.Status == DestinationStatus.Read)) { return DestinationStatus.Read; }
-        if (DeliveryStatuses.All(d => d.Status is DestinationStatus.Confirmed or DestinationStatus.Read)) { return DestinationStatus.Confirmed; }
+        if (DeliveryStatuses.All(d => d.Status is DestinationStatus.Received or DestinationStatus.Read)) { return DestinationStatus.Received; }
         if (DeliveryStatuses.All(d => d.Status != DestinationStatus.Sending)) { return DestinationStatus.Sent; }
         return DestinationStatus.Sending;
     }

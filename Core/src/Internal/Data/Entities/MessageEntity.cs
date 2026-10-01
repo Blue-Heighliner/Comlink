@@ -34,7 +34,7 @@ internal sealed class MessageEntity
     public bool IsOutbound { get; set; }
     /// <summary>
     /// Inbox-only read status: <see cref="DestinationStatus.Received"/> when stored, <see cref="DestinationStatus.Read"/>
-    /// once the user opens it (which also sends a user-read confirmation message back to <see cref="IEngineController.GetFromUser"/>
+    /// once the user opens it (which also sends a read receipt frame back to <see cref="IEngineController.GetFromUser"/>
     /// — see <c>Docs/Components/Peer.md</c>). Always <see langword="null"/> on Outbox records; per-destination read state
     /// there lives in <see cref="DeliveryStatuses"/> instead.
     /// </summary>
@@ -49,7 +49,7 @@ internal sealed class MessageEntity
             if (DeliveryStatuses.Count == 0) { return null; }
             if (DeliveryStatuses.Any(d => d.Status == DestinationStatus.Failed)) { return DestinationStatus.Failed; }
             if (DeliveryStatuses.All(d => d.Status == DestinationStatus.Read)) { return DestinationStatus.Read; }
-            if (DeliveryStatuses.All(d => d.Status is DestinationStatus.Confirmed or DestinationStatus.Read)) { return DestinationStatus.Confirmed; }
+            if (DeliveryStatuses.All(d => d.Status is DestinationStatus.Received or DestinationStatus.Read)) { return DestinationStatus.Received; }
             if (DeliveryStatuses.All(d => d.Status != DestinationStatus.Sending)) { return DestinationStatus.Sent; }
             return DestinationStatus.Sending;
         }

@@ -16,7 +16,7 @@ public interface INetworkProcessor<TFrame> where TFrame : class
     /// <param name="context">A snapshot of the engine taken for this event.</param>
     Task OnDisconnected(INetworkDisconnectedContext<TFrame> context);
 
-    /// <summary>Called whenever this instance receives a new (non-confirmation) frame from a peer, whether or not it is a message. <see cref="INetworkReceivedContext{TFrame}.Frame"/> carries it.</summary>
+    /// <summary>Called whenever this instance receives a new (non-receipt) frame from a peer, whether or not it is a message. <see cref="INetworkReceivedContext{TFrame}.Frame"/> carries it.</summary>
     /// <param name="context">A snapshot of the engine taken for this event.</param>
     Task OnReceived(INetworkReceivedContext<TFrame> context);
 }

@@ -49,7 +49,10 @@ internal sealed class ClientPeerService : IPeerService, IConnectionStatusService
     public event Func<object, Task>? FrameDelivered;
 
     /// <inheritdoc />
-    public event Func<string, string, Task>? ConfirmationReceived;
+    public event Func<string, string, Task>? ReadReceiptReceived;
+
+    /// <inheritdoc />
+    public event Func<string, string, Task>? ReceiveReceiptReceived;
 
 #pragma warning disable CS0067 // No per-message delivery status is tracked across the client/server hierarchy.
     /// <inheritdoc />
@@ -308,7 +311,7 @@ internal sealed class ClientPeerService : IPeerService, IConnectionStatusService
     }
 
     internal Task<bool> HandleMessage(ReadOnlyMemory<byte> data, object? packet = null)
-        => PeerFrameDispatcher.Dispatch(data, engineController, logger, FrameDelivered, ConfirmationReceived, packet);
+        => PeerFrameDispatcher.Dispatch(data, engineController, logger, FrameDelivered, ReadReceiptReceived, ReceiveReceiptReceived, packet);
 
     /// <inheritdoc />
     public async ValueTask DisposeAsync()

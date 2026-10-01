@@ -304,11 +304,11 @@ public sealed class ContentAreaViewModelTests
         {
             MessageId = "MSG-1",
             UserName = "DEST",
-            Status = DestinationStatus.Confirmed
+            Status = DestinationStatus.Received
         };
         await conn.RaiseDeliveryStatusChanged(evt);
 
-        msgVm.Verify(m => m.UpdateDeliveryStatus("DEST", DestinationStatus.Confirmed), Times.Once);
+        msgVm.Verify(m => m.UpdateDeliveryStatus("DEST", DestinationStatus.Received), Times.Once);
     }
 
     /// <summary>A local read-status notification (empty UserName) sets ReadStatus rather than calling UpdateDeliveryStatus.</summary>
@@ -346,7 +346,7 @@ public sealed class ContentAreaViewModelTests
         {
             MessageId = "MSG-OTHER",
             UserName = "DEST",
-            Status = DestinationStatus.Confirmed
+            Status = DestinationStatus.Received
         };
         await conn.RaiseDeliveryStatusChanged(evt);
 
@@ -364,7 +364,7 @@ public sealed class ContentAreaViewModelTests
         {
             MessageId = "MSG-1",
             UserName = "DEST",
-            Status = DestinationStatus.Confirmed
+            Status = DestinationStatus.Received
         };
         await conn.RaiseDeliveryStatusChanged(evt);
     }

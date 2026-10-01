@@ -15,7 +15,7 @@ public sealed class EntryItemViewModelTests
 
     /// <summary>StatusText reflects OverallStatus when set.</summary>
     [Theory]
-    [InlineData(DestinationStatus.Confirmed, "CONFIRMED")]
+    [InlineData(DestinationStatus.Received, "RECEIVED")]
     [InlineData(DestinationStatus.Failed, "FAILED")]
     [InlineData(DestinationStatus.Sent, "SENT")]
     public void StatusText_WithOverallStatus_ReturnsUppercaseName(DestinationStatus status, string expected)
@@ -44,8 +44,8 @@ public sealed class EntryItemViewModelTests
     [Fact]
     public void StatusText_BothSet_OverallStatusWins()
     {
-        EntryItemViewModel vm = Make(fixedStatus: "RECEIVED", overallStatus: DestinationStatus.Confirmed);
-        Assert.Equal("CONFIRMED", vm.StatusText);
+        EntryItemViewModel vm = Make(fixedStatus: "RECEIVED", overallStatus: DestinationStatus.Received);
+        Assert.Equal("RECEIVED", vm.StatusText);
     }
 
     /// <summary>Constructor assigns all properties correctly.</summary>
@@ -134,7 +134,7 @@ public sealed class EntryItemViewModelTests
         List<string> changed = [];
         vm.PropertyChanged += (_, e) => changed.Add(e.PropertyName ?? "");
 
-        vm.OverallStatus = DestinationStatus.Confirmed;
+        vm.OverallStatus = DestinationStatus.Received;
 
         Assert.Contains("StatusText", changed);
         Assert.Contains("StatusColorHex", changed);

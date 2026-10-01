@@ -19,7 +19,7 @@ internal sealed class StatusForegroundConverter : IValueConverter
             return status switch
             {
                 DestinationStatus.Failed => redBrush,
-                DestinationStatus.Confirmed or DestinationStatus.Read or DestinationStatus.Received => greenBrush,
+                DestinationStatus.Read or DestinationStatus.Received => greenBrush,
                 _ => defaultBrush
             };
         }

@@ -112,6 +112,7 @@ internal sealed class EntryService : IEntryService
     private readonly ICurrentUserProvider currentUserProvider;
     private readonly IEngineController engineController;
     private readonly SemaphoreSlim deliveryLock = new(1, 1);
+    private readonly Dictionary<(string MessageId, string UserName), DestinationStatus> pendingStatuses = new();
 
     /// <summary>Raised after an inbound message is persisted to the database.</summary>
     public event Func<MessageEntity, Task>? MessageInserted;
@@ -133,30 +134,31 @@ internal sealed class EntryService : IEntryService
 
     // Status events for one send are raised on separate thread-pool tasks, and can also land after the Outbox record
     // was stored with its final result, so they arrive in any order; a status only ever moves forward, so a late
-    // "Sent" can never overwrite "Confirmed". Failed ranks with Confirmed: either ends the send, and a later read
-    // confirmation still proves the message arrived.
+    // "Sent" can never overwrite "Received". Failed ranks below Received: a later receipt still proves the message arrived.
     private static int DeliveryProgress(DestinationStatus status) => status switch
     {
         DestinationStatus.Sending => 0,
         DestinationStatus.Sent => 1,
-        DestinationStatus.Read => 3,
-        _ => 2
+        DestinationStatus.Failed => 2,
+        DestinationStatus.Received => 3,
+        _ => 4
     };
 
     private object BuildMessage(string messageId, string fromUser, string subject, string body, List<AddressData> addresses, DateTime sentAt, bool isAlert, int priority, string tag, string securityLevel)
     {
-        object message = engineController.CreateFrame();
-        engineController.SetIsMessage(message, true);
+        object message = engineController.CreateMessage(new MessageCreateContext
+        {
+            Subject = subject,
+            Body = body,
+            IsAlert = isAlert,
+            Priority = priority,
+            Tag = tag,
+            SecurityLevel = securityLevel
+        });
         engineController.SetFrameId(message, messageId);
         engineController.SetFromUser(message, fromUser);
-        engineController.SetSubject(message, subject);
-        engineController.SetBody(message, body);
         engineController.SetAddresses(message, addresses.Select(a => new MessageAddress { UserName = a.UserName, Type = a.Type.ParseAddressType(), Information = a.Information }).ToList());
         engineController.SetSentAt(message, sentAt);
-        engineController.SetIsAlert(message, isAlert);
-        engineController.SetPriority(message, priority);
-        engineController.SetTag(message, tag);
-        engineController.SetSecurityLevel(message, securityLevel);
         return message;
     }
 
@@ -164,14 +166,31 @@ internal sealed class EntryService : IEntryService
     public async Task<MessageEntity> StoreSentMessage(string messageId, string subject, string body, List<AddressData> addresses, DateTime sentAt, IReadOnlyList<UserDeliveryResult> userResults, bool isAlert = false, int priority = 0, string tag = "", string securityLevel = "")
     {
         string outboxId = await folders.GetRootId(FolderType.Outbox);
-        List<DeliveryStatus> deliveryStatuses = userResults
-            .Select(r => new DeliveryStatus
+        await deliveryLock.WaitAsync();
+        try
+        {
+            return await InsertSentMessage(messageId, subject, body, addresses, sentAt, userResults, isAlert, priority, tag, securityLevel, outboxId);
+        }
+        finally
+        {
+            deliveryLock.Release();
+        }
+    }
+
+    private async Task<MessageEntity> InsertSentMessage(string messageId, string subject, string body, List<AddressData> addresses, DateTime sentAt, IReadOnlyList<UserDeliveryResult> userResults, bool isAlert, int priority, string tag, string securityLevel, string outboxId)
+    {
+        List<DeliveryStatus> deliveryStatuses = [];
+        foreach (UserDeliveryResult result in userResults)
+        {
+            DestinationStatus status = result.Success ? DestinationStatus.Sent : DestinationStatus.Failed;
+            if (pendingStatuses.Remove((messageId, result.UserName.ToUpperInvariant()), out DestinationStatus early) && DeliveryProgress(early) > DeliveryProgress(status))
             {
-                UserName = r.UserName,
-                Status = r.Success ? DestinationStatus.Confirmed : DestinationStatus.Failed,
-                AddressedVia = [.. r.AddressedVia]
-            })
-            .ToList();
+                status = early;
+            }
+
+            deliveryStatuses.Add(new DeliveryStatus { UserName = result.UserName, Status = status, AddressedVia = [.. result.AddressedVia] });
+        }
+
         MessageEntity entity = new()
         {
             MessageId = messageId,
@@ -194,7 +213,16 @@ internal sealed class EntryService : IEntryService
             // Delivery status always applies to the Outbox (sent) record. A self-addressed message also has
             // an Inbox (received) record sharing the same MessageId, which must never receive this update.
             MessageEntity? entity = await messages.Get(messageId, outbound: true);
-            if (entity is null) { return null; }
+            if (entity is null)
+            {
+                (string, string) key = (messageId, userName.ToUpperInvariant());
+                if (!pendingStatuses.TryGetValue(key, out DestinationStatus pending) || DeliveryProgress(status) > DeliveryProgress(pending))
+                {
+                    pendingStatuses[key] = status;
+                }
+
+                return null;
+            }
 
             DeliveryStatus? existing = entity.DeliveryStatuses.FirstOrDefault(d => string.Equals(d.UserName, userName, StringComparison.OrdinalIgnoreCase));
             if (existing is null)

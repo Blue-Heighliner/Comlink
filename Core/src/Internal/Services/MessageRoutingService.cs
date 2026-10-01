@@ -56,7 +56,8 @@ internal sealed class MessageRoutingService : IMessageRoutingService
         logger = loggerFactory.CreateLogger("ACTIVITY");
 
         peerService.DeliveryStatusChanged += OnPeerDeliveryStatusChanged;
-        peerService.ConfirmationReceived += OnPeerConfirmationReceived;
+        peerService.ReadReceiptReceived += OnPeerReadReceiptReceived;
+        peerService.ReceiveReceiptReceived += OnPeerReceiveReceiptReceived;
     }
 
     private readonly IPeerService peerService;
@@ -72,10 +73,11 @@ internal sealed class MessageRoutingService : IMessageRoutingService
         await DeliveryStatusChanged.InvokeAll(messageId, user, status);
     }
 
-    private async Task OnPeerConfirmationReceived(string messageId, string confirmingUser)
-    {
-        await DeliveryStatusChanged.InvokeAll(messageId, confirmingUser, DestinationStatus.Read);
-    }
+    private async Task OnPeerReadReceiptReceived(string messageId, string readingUser)
+        => await DeliveryStatusChanged.InvokeAll(messageId, readingUser, DestinationStatus.Read);
+
+    private async Task OnPeerReceiveReceiptReceived(string messageId, string receivingUser)
+        => await DeliveryStatusChanged.InvokeAll(messageId, receivingUser, DestinationStatus.Received);
 
     /// <inheritdoc />
     public Task<(string MessageId, IReadOnlyList<UserDeliveryResult> UserResults)> Route(string fromUser, SendMessagePayload payload, CancellationToken cancellation)
@@ -83,18 +85,19 @@ internal sealed class MessageRoutingService : IMessageRoutingService
         string messageId = Guid.NewGuid().ToString("N").ToUpperInvariant();
         List<MessageAddress> addresses = [.. payload.Addresses.Select(a => new MessageAddress { UserName = a.UserName, Type = a.Type.ParseAddressType(), Information = a.Information })];
 
-        object message = engineController.CreateFrame();
-        engineController.SetIsMessage(message, true);
+        object message = engineController.CreateMessage(new MessageCreateContext
+        {
+            Subject = payload.Subject,
+            Body = payload.Body,
+            IsAlert = payload.IsAlert,
+            Priority = payload.Priority,
+            Tag = payload.Tag,
+            SecurityLevel = payload.SecurityLevel
+        });
         engineController.SetFrameId(message, messageId);
         engineController.SetFromUser(message, fromUser);
-        engineController.SetSubject(message, payload.Subject);
-        engineController.SetBody(message, payload.Body);
         engineController.SetAddresses(message, addresses);
         engineController.SetSentAt(message, DateTime.UtcNow);
-        engineController.SetIsAlert(message, payload.IsAlert);
-        engineController.SetPriority(message, payload.Priority);
-        engineController.SetTag(message, payload.Tag);
-        engineController.SetSecurityLevel(message, payload.SecurityLevel);
 
         return RouteBuiltMessage(fromUser, messageId, message, addresses, payload.SecurityLevel, cancellation);
     }
@@ -181,7 +184,7 @@ internal sealed class MessageRoutingService : IMessageRoutingService
             await peerService.DeliverLocal(message);
             IReadOnlyList<string> via = userAddressedVia.TryGetValue(selfUser, out List<string>? v) ? v.AsReadOnly() : Array.Empty<string>();
             logger.LogInformation("{MessageId} delivered locally to {User}", messageId, selfUser);
-            await DeliveryStatusChanged.InvokeAll(messageId, selfUser, DestinationStatus.Confirmed);
+            await DeliveryStatusChanged.InvokeAll(messageId, selfUser, DestinationStatus.Received);
             allResults.Add(new UserDeliveryResult { UserName = selfUser, Success = true, AddressedVia = [.. via] });
         }
 

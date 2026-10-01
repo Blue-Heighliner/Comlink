@@ -54,9 +54,9 @@ public sealed class PrintManagerViewModelTests
     {
         object message = format.CreateFrame();
         format.SetFrameId(message, messageId);
-        format.SetSubject(message, subject);
-        format.SetBody(message, body);
-        format.SetPriority(message, priority);
+        ((TestFrame)message).Subject = subject;
+        ((TestFrame)message).Body = body;
+        ((TestFrame)message).Priority = priority;
         return new MessageEntity { MessageId = messageId, Message = message };
     }
 

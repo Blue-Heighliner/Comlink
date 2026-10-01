@@ -1,10 +1,9 @@
 namespace BlueHeighliner.Comlink;
 
 /// <summary>
-/// Maps the engine's logical frame fields onto the fields of the host's own frame type
-/// <typeparamref name="TFrame"/>. Every field must be mapped; the engine never assumes any particular field name or
-/// shape, and has no frame type of its own. Each mapping is a getter and a setter, so the frame can be read and
-/// built without reflection. See <see cref="IEngineBuilder.Frames{TFrame}"/>.
+/// Configures the host's own frame type <typeparamref name="TFrame"/>. The fields every frame has (identifier, sender, addresses, sent time) are mapped with a getter and
+/// a setter, and each kind of frame (message, retrieval request, read receipt, receive receipt) is stated with a handler that creates, recognizes and reads that kind.
+/// Every one must be stated; the engine never assumes any particular field name or shape, and has no frame type of its own. See <see cref="IEngineBuilder.Frames{TFrame}"/>.
 /// </summary>
 /// <typeparam name="TFrame">The host's frame type.</typeparam>
 public interface IFrameBuilder<TFrame> where TFrame : class, new()
@@ -20,18 +19,6 @@ public interface IFrameBuilder<TFrame> where TFrame : class, new()
 
     /// <summary>Maps the same field by the property or field the expression reads, such as <c>x => x.Sender</c>, building the setter from it. The member must have the same type and be assignable.</summary>
     IFrameBuilder<TFrame> Sender(Expression<Func<TFrame, string>> property);
-
-    /// <summary>Maps the subject line.</summary>
-    IFrameBuilder<TFrame> Subject(Func<TFrame, string> get, Action<TFrame, string> set);
-
-    /// <summary>Maps the same field by the property or field the expression reads, such as <c>x => x.Subject</c>, building the setter from it. The member must have the same type and be assignable.</summary>
-    IFrameBuilder<TFrame> Subject(Expression<Func<TFrame, string>> property);
-
-    /// <summary>Maps the body text.</summary>
-    IFrameBuilder<TFrame> Body(Func<TFrame, string> get, Action<TFrame, string> set);
-
-    /// <summary>Maps the same field by the property or field the expression reads, such as <c>x => x.Body</c>, building the setter from it. The member must have the same type and be assignable.</summary>
-    IFrameBuilder<TFrame> Body(Expression<Func<TFrame, string>> property);
 
     /// <summary>
     /// Maps the recipient list, converting between the host's own recipient shape and the engine's: a name, whether it is
@@ -55,59 +42,49 @@ public interface IFrameBuilder<TFrame> where TFrame : class, new()
     IFrameBuilder<TFrame> SentAt(Expression<Func<TFrame, DateTime>> property);
 
     /// <summary>
-    /// Maps the identifier of the message this frame is a user-read confirmation for, an empty string when it is not
-    /// a confirmation. A confirmation carries only this field, plus the identifier and sender.
+    /// States the handler for message frames: the ones the user reads, which are stored in the Inbox when received and in the Outbox when sent by the user. The handler creates a
+    /// message from its content, recognizes message frames and reads their content (see <see cref="IMessageHandler{TFrame}"/>). A frame that is not a message
+    /// is still routed and handed to the network processor, but is never shown to the user or stored.
     /// </summary>
-    IFrameBuilder<TFrame> ConfirmationId(Func<TFrame, string> get, Action<TFrame, string> set);
-
-    /// <summary>Maps the same field by the property or field the expression reads, such as <c>x => x.ConfirmationId</c>, building the setter from it. The member must have the same type and be assignable.</summary>
-    IFrameBuilder<TFrame> ConfirmationId(Expression<Func<TFrame, string>> property);
+    /// <typeparam name="THandler">The handler type, instantiated through dependency injection when the engine runs: the instance registered for it in the host's services, or else one constructed from them.</typeparam>
+    IFrameBuilder<TFrame> Message<THandler>() where THandler : IMessageHandler<TFrame>;
 
     /// <summary>
-    /// Maps the fields of a retrieval request: whether the frame is one, and the date range, authors, destinations and
-    /// message identifiers it asks a storage server (see <see cref="UserInfo.StoresMessages"/>) for. Each is its
-    /// own property of the host's frame type, mapped through <see cref="IRetrievalBuilder{TFrame}"/>; every one must
-    /// be mapped.
+    /// Adds a custom auto forward controller, shown as an option in the client's auto forward screen to every user
+    /// named in <paramref name="users"/>. Any of them can open it there and maintain their own locally-saved target
+    /// list (added to and removed from freely, persisted between restarts); whenever this instance receives a
+    /// message (a frame the message handler recognizes; other frames are never forwarded) that <paramref name="filter"/> accepts, it is automatically forwarded, unchanged in subject and
+    /// body, to every user currently on that target list - no action needed beyond having set the target list up
+    /// once. <paramref name="filter"/> is never consulted for a user with no access, or with an empty target list,
+    /// so an inaccessible or unconfigured controller costs nothing per received message beyond that one check.
+    /// Calling this again with the same <paramref name="name"/> (case-insensitive) replaces the earlier controller
+    /// of that name in place; a new name adds another alongside it.
     /// </summary>
-    IFrameBuilder<TFrame> Retrieval(Action<IRetrievalBuilder<TFrame>> map);
+    /// <param name="name">Display name shown for this controller in the auto forward screen.</param>
+    /// <param name="users">User names allowed to open this controller and maintain its target list.</param>
+    /// <param name="filter">Answers whether a received message should be auto-forwarded through this controller.</param>
+    IFrameBuilder<TFrame> AutoForward(string name, IEnumerable<string> users, Func<TFrame, bool> filter);
 
     /// <summary>
-    /// Maps whether the frame is a message: one the user reads, which is stored in the Inbox when received and in the Outbox when sent by the user. A frame that is not a message
-    /// is still routed and handed to the network processor, but is never shown to the user or stored. The engine sets this on every frame it builds, true for
-    /// the messages users send and false for its own heartbeats, confirmations and retrieval requests; a host sets it on a frame it sends through the network processor.
+    /// States the handler for retrieval request frames, what a user sends a storage server (see <see cref="UserInfo.StoresMessages"/>) to ask for stored messages
+    /// (see <see cref="IRetrievalHandler{TFrame}"/>). A request is never shown to a user as a received message and is not a message.
     /// </summary>
-    IFrameBuilder<TFrame> IsMessage(Func<TFrame, bool> get, Action<TFrame, bool> set);
-
-    /// <summary>Maps the same field by the property or field the expression reads, such as <c>x => x.IsMessage</c>, building the setter from it. The member must have the same type and be assignable.</summary>
-    IFrameBuilder<TFrame> IsMessage(Expression<Func<TFrame, bool>> property);
-
-    /// <summary>Maps whether the message is an alert, which alarms the receiving user interface until it is read.</summary>
-    IFrameBuilder<TFrame> IsAlert(Func<TFrame, bool> get, Action<TFrame, bool> set);
-
-    /// <summary>Maps the same field by the property or field the expression reads, such as <c>x => x.IsAlert</c>, building the setter from it. The member must have the same type and be assignable.</summary>
-    IFrameBuilder<TFrame> IsAlert(Expression<Func<TFrame, bool>> property);
-
-    /// <summary>Maps the priority number, one of the values given to <see cref="IEngineBuilder.Priorities"/>, which is also the send priority on the network.</summary>
-    IFrameBuilder<TFrame> Priority(Func<TFrame, int> get, Action<TFrame, int> set);
-
-    /// <summary>Maps the same field by the property or field the expression reads, such as <c>x => x.Priority</c>, building the setter from it. The member must have the same type and be assignable.</summary>
-    IFrameBuilder<TFrame> Priority(Expression<Func<TFrame, int>> property);
-
-    /// <summary>Maps the short tag the user gives a message, an empty string when there is none.</summary>
-    IFrameBuilder<TFrame> Tag(Func<TFrame, string> get, Action<TFrame, string> set);
-
-    /// <summary>Maps the same field by the property or field the expression reads, such as <c>x => x.Tag</c>, building the setter from it. The member must have the same type and be assignable.</summary>
-    IFrameBuilder<TFrame> Tag(Expression<Func<TFrame, string>> property);
+    /// <typeparam name="THandler">The handler type, instantiated through dependency injection when the engine runs: the instance registered for it in the host's services, or else one constructed from them.</typeparam>
+    IFrameBuilder<TFrame> Retrieval<THandler>() where THandler : IRetrievalHandler<TFrame>;
 
     /// <summary>
-    /// Maps the security level this message was sent at, one of the names given to <see cref="IEngineBuilder.SecurityLevels"/>,
-    /// or an empty string when no security levels are configured. A destination user whose own assigned level
-    /// (see <see cref="UserInfo.SecurityLevel"/>) ranks lower is never sent this message.
+    /// States the handler for read receipt frames, sent back to the sender of a message when its recipient opens it (see <see cref="IReadReceiptHandler{TFrame}"/>).
+    /// A receipt carries only the identifier of the message it is for plus the frame's own identifier and sender, and is not a message.
     /// </summary>
-    IFrameBuilder<TFrame> SecurityLevel(Func<TFrame, string> get, Action<TFrame, string> set);
+    /// <typeparam name="THandler">The handler type, instantiated through dependency injection when the engine runs: the instance registered for it in the host's services, or else one constructed from them.</typeparam>
+    IFrameBuilder<TFrame> ReadReceipt<THandler>() where THandler : IReadReceiptHandler<TFrame>;
 
-    /// <summary>Maps the same field by the property or field the expression reads, such as <c>x => x.SecurityLevel</c>, building the setter from it. The member must have the same type and be assignable.</summary>
-    IFrameBuilder<TFrame> SecurityLevel(Expression<Func<TFrame, string>> property);
+    /// <summary>
+    /// States the handler for receive receipt frames, sent back to the sender of a message as soon as its recipient's node receives it (see <see cref="IReceiveReceiptHandler{TFrame}"/>).
+    /// A receipt carries only the identifier of the message it is for plus the frame's own identifier and sender, and is not a message.
+    /// </summary>
+    /// <typeparam name="THandler">The handler type, instantiated through dependency injection when the engine runs: the instance registered for it in the host's services, or else one constructed from them.</typeparam>
+    IFrameBuilder<TFrame> ReceiveReceipt<THandler>() where THandler : IReceiveReceiptHandler<TFrame>;
 
     /// <summary>
     /// Replaces the serializer that turns frames into the bytes sent across the network. The default is a
@@ -122,22 +99,6 @@ public interface IFrameBuilder<TFrame> where TFrame : class, new()
 
     /// <summary>Sets how many copies of a received message are printed while "print received" is on. Defaults to one for every message.</summary>
     IFrameBuilder<TFrame> PrintCount(Func<TFrame, int> copies);
-
-    /// <summary>
-    /// Adds a custom auto forward controller, shown as an option in the client's auto forward screen to every user
-    /// named in <paramref name="users"/>. Any of them can open it there and maintain their own locally-saved target
-    /// list (added to and removed from freely, persisted between restarts); whenever this instance receives a
-    /// message that <paramref name="filter"/> accepts, it is automatically forwarded, unchanged in subject and
-    /// body, to every user currently on that target list - no action needed beyond having set the target list up
-    /// once. <paramref name="filter"/> is never consulted for a user with no access, or with an empty target list,
-    /// so an inaccessible or unconfigured controller costs nothing per received message beyond that one check.
-    /// Calling this again with the same <paramref name="name"/> (case-insensitive) replaces the earlier controller
-    /// of that name in place; a new name adds another alongside it.
-    /// </summary>
-    /// <param name="name">Display name shown for this controller in the auto forward screen.</param>
-    /// <param name="users">User names allowed to open this controller and maintain its target list.</param>
-    /// <param name="filter">Answers whether a received message should be auto-forwarded through this controller.</param>
-    IFrameBuilder<TFrame> AutoForward(string name, IEnumerable<string> users, Func<TFrame, bool> filter);
 
     /// <summary>
     /// States the processor that runs host code in reaction to peer activity: a user connecting or disconnecting and a frame being received

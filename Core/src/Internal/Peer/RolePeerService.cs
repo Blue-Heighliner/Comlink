@@ -31,7 +31,10 @@ internal sealed class RolePeerService(IServiceProvider services, IEngineControll
     public event Func<object, Task>? FrameDelivered;
 
     /// <inheritdoc />
-    public event Func<string, string, Task>? ConfirmationReceived;
+    public event Func<string, string, Task>? ReadReceiptReceived;
+
+    /// <inheritdoc />
+    public event Func<string, string, Task>? ReceiveReceiptReceived;
 
     /// <inheritdoc />
     public event Func<string, string, DestinationStatus, Task>? DeliveryStatusChanged;
@@ -126,7 +129,8 @@ internal sealed class RolePeerService(IServiceProvider services, IEngineControll
             _ => ActivatorUtilities.CreateInstance<PeerService>(services)
         };
         created.FrameDelivered += payload => Raise(FrameDelivered, handler => handler(payload));
-        created.ConfirmationReceived += (messageId, userName) => Raise(ConfirmationReceived, handler => handler(messageId, userName));
+        created.ReceiveReceiptReceived += (messageId, userName) => Raise(ReceiveReceiptReceived, handler => handler(messageId, userName));
+        created.ReadReceiptReceived += (messageId, userName) => Raise(ReadReceiptReceived, handler => handler(messageId, userName));
         created.DeliveryStatusChanged += (messageId, userName, status) => Raise(DeliveryStatusChanged, handler => handler(messageId, userName, status));
         created.UserConnected += userName => Raise(UserConnected, handler => handler(userName));
         created.UserDisconnected += userName => Raise(UserDisconnected, handler => handler(userName));

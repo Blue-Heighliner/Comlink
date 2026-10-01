@@ -40,8 +40,25 @@ internal sealed class DirectServiceConnection : IServiceConnection
 
     private async Task OnMessageDelivered(object payload)
     {
-        if (MessageReceived is null || !engineController.IsMessage(payload)) { return; }
+        if (!engineController.IsMessage(payload)) { return; }
+
+        await SendReceiveReceipt(payload);
+        if (MessageReceived is null) { return; }
         await MessageReceived.InvokeAll(engineController.ToMessageReceivedEvent(payload));
+    }
+
+    private async Task SendReceiveReceipt(object message)
+    {
+        UserInfo? userInfo = userService.GetCurrentUserInfo();
+        string fromUser = engineController.GetFromUser(message);
+        if (userInfo is null || string.Equals(fromUser, userInfo.Name, StringComparison.OrdinalIgnoreCase)) { return; }
+
+        object receipt = engineController.CreateReceiveReceipt(engineController.GetFrameId(message));
+        engineController.SetFrameId(receipt, Guid.NewGuid().ToString("N").ToUpperInvariant());
+        engineController.SetFromUser(receipt, userInfo.Name);
+        engineController.SetAddresses(receipt, [new MessageAddress { UserName = fromUser, Type = AddressType.To }]);
+        engineController.SetSentAt(receipt, DateTime.UtcNow);
+        await peerService.Send(fromUser, receipt);
     }
 
     private async Task OnDeliveryStatusChanged(string messageId, string user, DestinationStatus status)
@@ -124,14 +141,12 @@ internal sealed class DirectServiceConnection : IServiceConnection
             return true;
         }
 
-        object confirmation = engineController.CreateFrame();
-        engineController.SetIsMessage(confirmation, false);
-        engineController.SetFrameId(confirmation, Guid.NewGuid().ToString("N").ToUpperInvariant());
-        engineController.SetFromUser(confirmation, userInfo.Name);
-        engineController.SetConfirmationMessageId(confirmation, messageId);
-        engineController.SetAddresses(confirmation, [new MessageAddress { UserName = fromUser, Type = AddressType.To }]);
-        engineController.SetSentAt(confirmation, DateTime.UtcNow);
-        await peerService.Send(fromUser, confirmation, cancellation);
+        object receipt = engineController.CreateReadReceipt(messageId);
+        engineController.SetFrameId(receipt, Guid.NewGuid().ToString("N").ToUpperInvariant());
+        engineController.SetFromUser(receipt, userInfo.Name);
+        engineController.SetAddresses(receipt, [new MessageAddress { UserName = fromUser, Type = AddressType.To }]);
+        engineController.SetSentAt(receipt, DateTime.UtcNow);
+        await peerService.Send(fromUser, receipt, cancellation);
         return true;
     }
 }

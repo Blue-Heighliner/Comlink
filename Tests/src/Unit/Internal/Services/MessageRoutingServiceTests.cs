@@ -9,7 +9,8 @@ public sealed class MessageRoutingServiceTests
     private sealed class FakePeerService : IPeerService
     {
         public event Func<object, Task>? FrameDelivered;
-        public event Func<string, string, Task>? ConfirmationReceived;
+        public event Func<string, string, Task>? ReadReceiptReceived;
+        public event Func<string, string, Task>? ReceiveReceiptReceived;
         public event Func<string, string, DestinationStatus, Task>? DeliveryStatusChanged;
 #pragma warning disable CS0067
         public event Func<string, Task>? UserConnected;
@@ -43,9 +44,14 @@ public sealed class MessageRoutingServiceTests
             if (DeliveryStatusChanged is not null) { await DeliveryStatusChanged(messageId, user, status); }
         }
 
-        public async Task FireConfirmationReceived(string messageId, string confirmingUser)
+        public async Task FireReceiveReceiptReceived(string messageId, string receivingUser)
         {
-            if (ConfirmationReceived is not null) { await ConfirmationReceived(messageId, confirmingUser); }
+            if (ReceiveReceiptReceived is not null) { await ReceiveReceiptReceived(messageId, receivingUser); }
+        }
+
+        public async Task FireReadReceiptReceived(string messageId, string confirmingUser)
+        {
+            if (ReadReceiptReceived is not null) { await ReadReceiptReceived(messageId, confirmingUser); }
         }
     }
 
@@ -303,7 +309,7 @@ public sealed class MessageRoutingServiceTests
 
         Assert.Single(statusEvents);
         Assert.Equal(messageId, statusEvents[0].MessageId);
-        Assert.Equal(DestinationStatus.Confirmed, statusEvents[0].Status);
+        Assert.Equal(DestinationStatus.Received, statusEvents[0].Status);
     }
 
     /// <summary>Sending to a mix of self and a remote user delivers locally to self and over the network to the remote user.</summary>
@@ -340,7 +346,7 @@ public sealed class MessageRoutingServiceTests
     [InlineData(DestinationStatus.Sending)]
     [InlineData(DestinationStatus.Sent)]
     [InlineData(DestinationStatus.Failed)]
-    [InlineData(DestinationStatus.Confirmed)]
+    [InlineData(DestinationStatus.Received)]
     public async Task PeerDeliveryStatusChanged_ForwardsStatusUnchanged(DestinationStatus status)
     {
         FakePeerService fake = new();
@@ -373,12 +379,30 @@ public sealed class MessageRoutingServiceTests
             return Task.CompletedTask;
         };
 
-        await fake.FireConfirmationReceived("MSG1", "ALPHA");
+        await fake.FireReadReceiptReceived("MSG1", "ALPHA");
 
         (string messageId, string user, DestinationStatus status) = Assert.Single(changes);
         Assert.Equal("MSG1", messageId);
         Assert.Equal("ALPHA", user);
         Assert.Equal(DestinationStatus.Read, status);
+    }
+
+    /// <summary>A receive receipt from a peer advances that user's delivery status to Received.</summary>
+    [Fact]
+    public async Task ReceiveReceiptReceived_RaisesReceivedStatus()
+    {
+        FakePeerService fake = new();
+        MessageRoutingService service = new(fake, format, loggerFactory);
+        List<(string MessageId, string User, DestinationStatus Status)> changes = [];
+        service.DeliveryStatusChanged += (messageId, user, status) =>
+        {
+            changes.Add((messageId, user, status));
+            return Task.CompletedTask;
+        };
+
+        await fake.FireReceiveReceiptReceived("MSG1", "ALPHA");
+
+        Assert.Equal(("MSG1", "ALPHA", DestinationStatus.Received), Assert.Single(changes));
     }
 
     /// <summary>With ExternalServer configured, remote sends go to it exactly once, regardless of recipient count, instead of dialing each peer individually.</summary>

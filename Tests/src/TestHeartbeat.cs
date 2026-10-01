@@ -30,7 +30,7 @@ internal static class TestHeartbeat
     private static object Frame()
     {
         object frame = controller.CreateFrame();
-        controller.SetIsMessage(frame, false);
+        ((TestFrame)frame).IsHidden = true;
         return frame;
     }
 }

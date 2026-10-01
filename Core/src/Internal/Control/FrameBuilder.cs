@@ -7,6 +7,10 @@ internal sealed class FrameBuilder<TFrame> : IFrameBuilder<TFrame> where TFrame 
     private ServiceRegistration<IFrameSerializer> serializer = new(_ => new ProtobufSerializer(typeof(TFrame)));
     private readonly List<AutoForwardControllerDefinition> autoForwardControllers = [];
     private Func<TFrame> create = () => new();
+    private ServiceRegistration<IMessageFrameHandler>? message;
+    private ServiceRegistration<IRetrievalFrameHandler>? retrieval;
+    private ServiceRegistration<IReceiptFrameHandler>? readReceipt;
+    private ServiceRegistration<IReceiptFrameHandler>? receiveReceipt;
 
     /// <summary>How many copies of a received message print, if stated.</summary>
     public Func<object, int>? PrintCountValue { get; private set; }
@@ -33,18 +37,6 @@ internal sealed class FrameBuilder<TFrame> : IFrameBuilder<TFrame> where TFrame 
     public IFrameBuilder<TFrame> Sender(Expression<Func<TFrame, string>> property) => Map(nameof(Sender), property);
 
     /// <inheritdoc />
-    public IFrameBuilder<TFrame> Subject(Func<TFrame, string> get, Action<TFrame, string> set) => Map(nameof(Subject), get, set);
-
-    /// <inheritdoc />
-    public IFrameBuilder<TFrame> Subject(Expression<Func<TFrame, string>> property) => Map(nameof(Subject), property);
-
-    /// <inheritdoc />
-    public IFrameBuilder<TFrame> Body(Func<TFrame, string> get, Action<TFrame, string> set) => Map(nameof(Body), get, set);
-
-    /// <inheritdoc />
-    public IFrameBuilder<TFrame> Body(Expression<Func<TFrame, string>> property) => Map(nameof(Body), property);
-
-    /// <inheritdoc />
     public IFrameBuilder<TFrame> Addresses(Func<TFrame, IEnumerable<(string Name, AddressType Type, string Information)>> get, Action<TFrame, IReadOnlyList<(string Name, AddressType Type, string Information)>> set)
         => Map<List<MessageAddress>>(
             nameof(Addresses),
@@ -64,47 +56,50 @@ internal sealed class FrameBuilder<TFrame> : IFrameBuilder<TFrame> where TFrame 
     public IFrameBuilder<TFrame> SentAt(Expression<Func<TFrame, DateTime>> property) => Map(nameof(SentAt), property);
 
     /// <inheritdoc />
-    public IFrameBuilder<TFrame> ConfirmationId(Func<TFrame, string> get, Action<TFrame, string> set) => Map(nameof(ConfirmationId), get, set);
-
-    /// <inheritdoc />
-    public IFrameBuilder<TFrame> ConfirmationId(Expression<Func<TFrame, string>> property) => Map(nameof(ConfirmationId), property);
-
-    /// <inheritdoc />
-    public IFrameBuilder<TFrame> Retrieval(Action<IRetrievalBuilder<TFrame>> map)
+    public IFrameBuilder<TFrame> Message<THandler>() where THandler : IMessageHandler<TFrame>
     {
-        map(new RetrievalBuilder<TFrame>(fields));
+        message = ServiceRegistration<IMessageFrameHandler>.Of(typeof(THandler), handler => new MessageFrameHandler<TFrame>((IMessageHandler<TFrame>)handler));
         return this;
     }
 
     /// <inheritdoc />
-    public IFrameBuilder<TFrame> IsMessage(Func<TFrame, bool> get, Action<TFrame, bool> set) => Map(nameof(IsMessage), get, set);
+    public IFrameBuilder<TFrame> AutoForward(string name, IEnumerable<string> users, Func<TFrame, bool> filter)
+    {
+        AutoForwardControllerDefinition definition = new() { Name = name, Users = [.. users], Filter = frame => filter((TFrame)frame) };
+        int existingIndex = autoForwardControllers.FindIndex(c => string.Equals(c.Name, name, StringComparison.OrdinalIgnoreCase));
+        if (existingIndex >= 0) { autoForwardControllers[existingIndex] = definition; }
+        else { autoForwardControllers.Add(definition); }
+        return this;
+    }
 
     /// <inheritdoc />
-    public IFrameBuilder<TFrame> IsMessage(Expression<Func<TFrame, bool>> property) => Map(nameof(IsMessage), property);
+    public IFrameBuilder<TFrame> Retrieval<THandler>() where THandler : IRetrievalHandler<TFrame>
+    {
+        retrieval = ServiceRegistration<IRetrievalFrameHandler>.Of(typeof(THandler), handler => new RetrievalFrameHandler<TFrame>((IRetrievalHandler<TFrame>)handler));
+        return this;
+    }
 
     /// <inheritdoc />
-    public IFrameBuilder<TFrame> IsAlert(Func<TFrame, bool> get, Action<TFrame, bool> set) => Map(nameof(IsAlert), get, set);
+    public IFrameBuilder<TFrame> ReadReceipt<THandler>() where THandler : IReadReceiptHandler<TFrame>
+    {
+        readReceipt = ServiceRegistration<IReceiptFrameHandler>.Of(typeof(THandler), instance =>
+        {
+            IReadReceiptHandler<TFrame> handler = (IReadReceiptHandler<TFrame>)instance;
+            return new ReceiptFrameHandler<TFrame>(handler.IsValid, handler.Create, handler.GetMessageId);
+        });
+        return this;
+    }
 
     /// <inheritdoc />
-    public IFrameBuilder<TFrame> IsAlert(Expression<Func<TFrame, bool>> property) => Map(nameof(IsAlert), property);
-
-    /// <inheritdoc />
-    public IFrameBuilder<TFrame> Priority(Func<TFrame, int> get, Action<TFrame, int> set) => Map(nameof(Priority), get, set);
-
-    /// <inheritdoc />
-    public IFrameBuilder<TFrame> Priority(Expression<Func<TFrame, int>> property) => Map(nameof(Priority), property);
-
-    /// <inheritdoc />
-    public IFrameBuilder<TFrame> Tag(Func<TFrame, string> get, Action<TFrame, string> set) => Map(nameof(Tag), get, set);
-
-    /// <inheritdoc />
-    public IFrameBuilder<TFrame> Tag(Expression<Func<TFrame, string>> property) => Map(nameof(Tag), property);
-
-    /// <inheritdoc />
-    public IFrameBuilder<TFrame> SecurityLevel(Func<TFrame, string> get, Action<TFrame, string> set) => Map(nameof(SecurityLevel), get, set);
-
-    /// <inheritdoc />
-    public IFrameBuilder<TFrame> SecurityLevel(Expression<Func<TFrame, string>> property) => Map(nameof(SecurityLevel), property);
+    public IFrameBuilder<TFrame> ReceiveReceipt<THandler>() where THandler : IReceiveReceiptHandler<TFrame>
+    {
+        receiveReceipt = ServiceRegistration<IReceiptFrameHandler>.Of(typeof(THandler), instance =>
+        {
+            IReceiveReceiptHandler<TFrame> handler = (IReceiveReceiptHandler<TFrame>)instance;
+            return new ReceiptFrameHandler<TFrame>(handler.IsValid, handler.Create, handler.GetMessageId);
+        });
+        return this;
+    }
 
     /// <inheritdoc />
     public IFrameBuilder<TFrame> Serializer<TSerializer>() where TSerializer : IFrameSerializer
@@ -128,16 +123,6 @@ internal sealed class FrameBuilder<TFrame> : IFrameBuilder<TFrame> where TFrame 
     }
 
     /// <inheritdoc />
-    public IFrameBuilder<TFrame> AutoForward(string name, IEnumerable<string> users, Func<TFrame, bool> filter)
-    {
-        AutoForwardControllerDefinition definition = new() { Name = name, Users = [.. users], Filter = message => filter((TFrame)message) };
-        int existingIndex = autoForwardControllers.FindIndex(c => string.Equals(c.Name, name, StringComparison.OrdinalIgnoreCase));
-        if (existingIndex >= 0) { autoForwardControllers[existingIndex] = definition; }
-        else { autoForwardControllers.Add(definition); }
-        return this;
-    }
-
-    /// <inheritdoc />
     public IFrameBuilder<TFrame> Processor<TProcessor>() where TProcessor : INetworkProcessor<TFrame>
     {
         NetworkHandler = ServiceRegistration<INetworkHandler>.Of(typeof(TProcessor), processor => new NetworkProcessorAdapter<TFrame>((INetworkProcessor<TFrame>)processor));
@@ -152,14 +137,15 @@ internal sealed class FrameBuilder<TFrame> : IFrameBuilder<TFrame> where TFrame 
     }
 
     /// <summary>Builds the engine-side map.</summary>
-    /// <exception cref="InvalidOperationException">A logical field has not been mapped.</exception>
+    /// <exception cref="InvalidOperationException">A logical field or frame kind has not been stated.</exception>
     public FrameMap Build()
     {
-        string[] missing = [.. new[] { nameof(Id), nameof(Sender), nameof(Subject), nameof(Body), nameof(Addresses), nameof(SentAt), nameof(ConfirmationId), nameof(IsMessage), nameof(IsAlert), nameof(Priority), nameof(Tag), nameof(SecurityLevel) }.Concat(RetrievalBuilder<TFrame>.Names).Where(name => !fields.ContainsKey(name))];
-        if (missing.Length > 0) { throw new InvalidOperationException($"The frame mapping for {typeof(TFrame).Name} does not map: {string.Join(", ", missing)}"); }
+        string[] missing = [.. new[] { nameof(Id), nameof(Sender), nameof(Addresses), nameof(SentAt) }.Where(name => !fields.ContainsKey(name)),
+            .. new (string Name, bool Stated)[] { (nameof(Message), message is not null), (nameof(Retrieval), retrieval is not null), (nameof(ReadReceipt), readReceipt is not null), (nameof(ReceiveReceipt), receiveReceipt is not null) }.Where(kind => !kind.Stated).Select(kind => kind.Name)];
+        if (missing.Length > 0) { throw new InvalidOperationException($"The frame mapping for {typeof(TFrame).Name} does not state: {string.Join(", ", missing)}"); }
 
-        Func<object, T> Getter<T>(string name) => message => ((Func<TFrame, T>)fields[name].Get)((TFrame)message);
-        Action<object, T> Setter<T>(string name) => (message, value) => ((Action<TFrame, T>)fields[name].Set)((TFrame)message, value);
+        Func<object, T> Getter<T>(string name) => frame => ((Func<TFrame, T>)fields[name].Get)((TFrame)frame);
+        Action<object, T> Setter<T>(string name) => (frame, value) => ((Action<TFrame, T>)fields[name].Set)((TFrame)frame, value);
 
         return new FrameMap
         {
@@ -170,38 +156,14 @@ internal sealed class FrameBuilder<TFrame> : IFrameBuilder<TFrame> where TFrame 
             SetId = Setter<string>(nameof(Id)),
             GetSender = Getter<string>(nameof(Sender)),
             SetSender = Setter<string>(nameof(Sender)),
-            GetSubject = Getter<string>(nameof(Subject)),
-            SetSubject = Setter<string>(nameof(Subject)),
-            GetBody = Getter<string>(nameof(Body)),
-            SetBody = Setter<string>(nameof(Body)),
             GetAddresses = Getter<List<MessageAddress>>(nameof(Addresses)),
             SetAddresses = Setter<List<MessageAddress>>(nameof(Addresses)),
             GetSentAt = Getter<DateTime>(nameof(SentAt)),
             SetSentAt = Setter<DateTime>(nameof(SentAt)),
-            GetConfirmationId = Getter<string>(nameof(ConfirmationId)),
-            SetConfirmationId = Setter<string>(nameof(ConfirmationId)),
-            GetIsRetrieval = Getter<bool>(RetrievalBuilder<TFrame>.IsRequestName),
-            SetIsRetrieval = Setter<bool>(RetrievalBuilder<TFrame>.IsRequestName),
-            GetRetrievalFrom = Getter<DateTime?>(RetrievalBuilder<TFrame>.FromName),
-            SetRetrievalFrom = Setter<DateTime?>(RetrievalBuilder<TFrame>.FromName),
-            GetRetrievalTo = Getter<DateTime?>(RetrievalBuilder<TFrame>.ToName),
-            SetRetrievalTo = Setter<DateTime?>(RetrievalBuilder<TFrame>.ToName),
-            GetRetrievalAuthors = Getter<List<string>>(RetrievalBuilder<TFrame>.AuthorsName),
-            SetRetrievalAuthors = Setter<List<string>>(RetrievalBuilder<TFrame>.AuthorsName),
-            GetRetrievalDestinations = Getter<List<string>>(RetrievalBuilder<TFrame>.DestinationsName),
-            SetRetrievalDestinations = Setter<List<string>>(RetrievalBuilder<TFrame>.DestinationsName),
-            GetRetrievalIds = Getter<List<string>>(RetrievalBuilder<TFrame>.IdsName),
-            SetRetrievalIds = Setter<List<string>>(RetrievalBuilder<TFrame>.IdsName),
-            GetIsMessage = Getter<bool>(nameof(IsMessage)),
-            SetIsMessage = Setter<bool>(nameof(IsMessage)),
-            GetIsAlert = Getter<bool>(nameof(IsAlert)),
-            SetIsAlert = Setter<bool>(nameof(IsAlert)),
-            GetPriority = Getter<int>(nameof(Priority)),
-            SetPriority = Setter<int>(nameof(Priority)),
-            GetTag = Getter<string>(nameof(Tag)),
-            SetTag = Setter<string>(nameof(Tag)),
-            GetSecurityLevel = Getter<string>(nameof(SecurityLevel)),
-            SetSecurityLevel = Setter<string>(nameof(SecurityLevel))
+            Message = message!,
+            Retrieval = retrieval!,
+            ReadReceipt = readReceipt!,
+            ReceiveReceipt = receiveReceipt!
         };
     }
 

@@ -167,19 +167,21 @@ internal sealed class ImportService : IImportService
             return false;
         }
 
-        object message = engineController.CreateFrame();
-        engineController.SetIsMessage(message, true);
+        object message = engineController.CreateMessage(new MessageCreateContext
+        {
+            Subject = data.Subject,
+            Body = data.Body,
+            IsAlert = data.IsAlert,
+            Priority = data.Priority,
+            Tag = data.Tag,
+            SecurityLevel = string.Empty
+        });
         engineController.SetFrameId(message, data.MessageId);
         engineController.SetFromUser(message, data.FromUser);
-        engineController.SetSubject(message, data.Subject);
-        engineController.SetBody(message, data.Body);
         engineController.SetAddresses(message, data.Addresses
             .Select(a => new MessageAddress { UserName = a.UserName, Type = a.Type.ParseAddressType(), Information = a.Information })
             .ToList());
         engineController.SetSentAt(message, data.SentAt);
-        engineController.SetIsAlert(message, data.IsAlert);
-        engineController.SetPriority(message, data.Priority);
-        engineController.SetTag(message, data.Tag);
 
         MessageEntity entity = new()
         {

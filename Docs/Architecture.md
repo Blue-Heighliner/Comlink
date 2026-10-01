@@ -80,7 +80,7 @@ sequenceDiagram
     PS->>PS: Find the connection identified as the recipient
     PS->>RP: MSMT send over that connection
     RP-->>PS: MSMT Acknowledged
-    PS-->>MRS: DeliveryStatusChanged (Confirmed)
+    PS-->>MRS: DeliveryStatusChanged (Received)
     MRS-->>SC: DeliveryStatusChanged event
     SC-->>DVM: DeliveryStatusChanged event
 ```
@@ -101,7 +101,7 @@ sequenceDiagram
     MVM->>MVM: Prepend to EntryBar if Inbox active
 ```
 
-When the user opens that Inbox message, `ContentAreaViewModel` calls `IServiceConnection.MarkMessageRead`, which transitions `ReadStatus` to `Read` and sends a user-read confirmation back to the sender — see [Peer.md](Components/Peer.md#read-confirmation). If the message is an alert (`IEngineController.GetIsAlert`), `AlertViewModel` also alarms (title bar box + sound) until it — and every other pending alert — is read; see `Docs/Components/ViewModels.md`.
+When the user opens that Inbox message, `ContentAreaViewModel` calls `IServiceConnection.MarkMessageRead`, which transitions `ReadStatus` to `Read` and sends a read receipt back to the sender — see [Peer.md](Components/Peer.md#receipts). If the message is an alert (`IEngineController.GetIsAlert`), `AlertViewModel` also alarms (title bar box + sound) until it — and every other pending alert — is read; see `Docs/Components/ViewModels.md`.
 
 ### Receiving/relaying a message (via an external system)
 1. An external system (the configured external systems) reports an inbound message via `Receive`.

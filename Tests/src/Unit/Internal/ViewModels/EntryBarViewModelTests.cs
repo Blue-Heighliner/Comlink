@@ -13,12 +13,12 @@ public sealed class EntryBarViewModelTests
         object message = format.CreateFrame();
         format.SetFrameId(message, id);
         format.SetFromUser(message, fromUser);
-        format.SetSubject(message, subject);
-        format.SetBody(message, "body");
-        format.SetPriority(message, priority);
-        format.SetTag(message, tag);
-        format.SetSecurityLevel(message, securityLevel);
-        format.SetIsAlert(message, isAlert);
+        ((TestFrame)message).Subject = subject;
+        ((TestFrame)message).Body = "body";
+        ((TestFrame)message).Priority = priority;
+        ((TestFrame)message).Tag = tag;
+        ((TestFrame)message).SecurityLevel = securityLevel;
+        ((TestFrame)message).IsAlert = isAlert;
         return new MessageEntity
         {
             MessageId = id,
@@ -954,9 +954,9 @@ public sealed class EntryBarViewModelTests
         EntryBarViewModel vm = new(svc.Object, format);
         await vm.LoadFolder(MakeFolder("root-outbox", FolderType.Outbox));
 
-        await vm.UpdateEntryStatus("MSG42", DestinationStatus.Confirmed);
+        await vm.UpdateEntryStatus("MSG42", DestinationStatus.Received);
 
-        Assert.Equal(DestinationStatus.Confirmed, vm.Entries[0].OverallStatus);
+        Assert.Equal(DestinationStatus.Received, vm.Entries[0].OverallStatus);
     }
 
     /// <summary>UpdateEntryStatus for an unknown ID does not throw.</summary>

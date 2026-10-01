@@ -23,8 +23,8 @@ public sealed class SampleFrame
     [ProtoMember(5)] public List<SampleRecipient> Recipients { get; set; } = [];
     /// <summary>UTC timestamp when the message was originally sent.</summary>
     [ProtoMember(6)] public DateTime Timestamp { get; set; }
-    /// <summary>Message ID this message is a user-read confirmation for; empty for an ordinary message.</summary>
-    [ProtoMember(7)] public string ConfirmsId { get; set; } = string.Empty;
+    /// <summary>Message ID this message is a read receipt for; empty for an ordinary message.</summary>
+    [ProtoMember(7)] public string ReadMessageId { get; set; } = string.Empty;
     /// <summary>Whether this message is an alert.</summary>
     [ProtoMember(8)] public bool Alert { get; set; }
     /// <summary>Priority number of this message.</summary>
@@ -47,6 +47,12 @@ public sealed class SampleFrame
     [ProtoMember(17)] public List<string> RetrievalIds { get; set; } = [];
     /// <summary>Whether this frame is a message the user reads and that is stored, rather than only network traffic.</summary>
     [ProtoMember(18)] public bool IsMessage { get; set; }
+    /// <summary>Whether this frame is a read receipt for the message in <see cref="ReadMessageId"/>.</summary>
+    [ProtoMember(19)] public bool IsReadReceipt { get; set; }
+    /// <summary>The message this frame is a receive receipt for, when <see cref="IsReceiveReceipt"/>.</summary>
+    [ProtoMember(20)] public string ReceivedMessageId { get; set; } = string.Empty;
+    /// <summary>Whether this frame is a receive receipt for the message in <see cref="ReceivedMessageId"/>.</summary>
+    [ProtoMember(21)] public bool IsReceiveReceipt { get; set; }
 }
 
 /// <summary>A single recipient entry within a <see cref="SampleFrame"/>.</summary>

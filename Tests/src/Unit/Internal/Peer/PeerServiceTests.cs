@@ -88,9 +88,9 @@ public sealed class PeerServiceTests
         Assert.False(ok);
     }
 
-    /// <summary>A message carrying a non-empty ConfirmationMessageId raises ConfirmationReceived, not FrameDelivered.</summary>
+    /// <summary>A message carrying a non-empty ReadReceiptMessageId raises ReadReceiptReceived, not FrameDelivered.</summary>
     [Fact]
-    public async Task HandleMessage_ConfirmationMessage_RaisesConfirmationReceivedNotMessageDelivered()
+    public async Task HandleMessage_ReadReceipt_RaisesReadReceiptReceivedNotMessageDelivered()
     {
         Mock<IPeerTransport> peer = BuildPeerMock();
         Mock<TestEngineController> userDirectory = BuildUserDirectory();
@@ -99,9 +99,9 @@ public sealed class PeerServiceTests
         object? delivered = null;
         svc.FrameDelivered += p => { delivered = p; return Task.CompletedTask; };
         (string MessageId, string ConfirmingUser)? confirmation = null;
-        svc.ConfirmationReceived += (messageId, user) => { confirmation = (messageId, user); return Task.CompletedTask; };
+        svc.ReadReceiptReceived += (messageId, user) => { confirmation = (messageId, user); return Task.CompletedTask; };
 
-        TestFrame payload = new() { FromUser = "REMOTE", ConfirmationMessageId = "ORIGINAL-MSG-1" };
+        TestFrame payload = new() { FromUser = "REMOTE", ReadReceiptMessageId = "ORIGINAL-MSG-1" };
         bool ok = await svc.HandleMessage(Encode(payload));
 
         Assert.True(ok);
@@ -111,16 +111,16 @@ public sealed class PeerServiceTests
         Assert.Equal("REMOTE", confirmation.Value.ConfirmingUser);
     }
 
-    /// <summary>An ordinary message (empty ConfirmationMessageId) raises FrameDelivered, not ConfirmationReceived.</summary>
+    /// <summary>An ordinary message (empty ReadReceiptMessageId) raises FrameDelivered, not ReadReceiptReceived.</summary>
     [Fact]
-    public async Task HandleMessage_OrdinaryMessage_RaisesMessageDeliveredNotConfirmationReceived()
+    public async Task HandleMessage_OrdinaryMessage_RaisesMessageDeliveredNotReadReceiptReceived()
     {
         Mock<IPeerTransport> peer = BuildPeerMock();
         Mock<TestEngineController> userDirectory = BuildUserDirectory();
 
         PeerService svc = BuildService(peer, userDirectory);
         bool confirmationFired = false;
-        svc.ConfirmationReceived += (_, _) => { confirmationFired = true; return Task.CompletedTask; };
+        svc.ReadReceiptReceived += (_, _) => { confirmationFired = true; return Task.CompletedTask; };
 
         TestFrame payload = new() { MessageId = "MSG1", FromUser = "REMOTE" };
         bool ok = await svc.HandleMessage(Encode(payload));
@@ -333,7 +333,7 @@ public sealed class PeerServiceTests
 
     /// <summary>A successful Request's outcome re-raises DeliveryStatusChanged with the matching message and user.</summary>
     [Fact]
-    public async Task Send_Acknowledged_RaisesDeliveryStatusChanged()
+    public async Task Send_Acknowledged_ReturnsTrueWithoutReportingReceived()
     {
         Mock<IPeerTransport> peer = BuildPeerMock();
         AutoAcknowledge(peer);
@@ -342,19 +342,15 @@ public sealed class PeerServiceTests
         PeerService svc = BuildService(peer, userDirectory);
         Reach(peer, "DEST");
 
-        List<(string MessageId, string UserName, DestinationStatus Status)> events = [];
-        TaskCompletionSource tcs = new();
-        svc.DeliveryStatusChanged += (messageId, userName, status) =>
+        List<DestinationStatus> statuses = [];
+        svc.DeliveryStatusChanged += (_, _, status) =>
         {
-            events.Add((messageId, userName, status));
-            if (status == DestinationStatus.Confirmed) { tcs.TrySetResult(); }
+            lock (statuses) { statuses.Add(status); }
             return Task.CompletedTask;
         };
 
-        await svc.Send("DEST", new TestFrame { MessageId = "M1", FromUser = "SOURCE" });
-        await tcs.Task.WaitAsync(TimeSpan.FromSeconds(30));
-
-        Assert.Contains(events, e => e.MessageId == "M1" && e.UserName == "DEST" && e.Status == DestinationStatus.Confirmed);
+        Assert.True(await svc.Send("DEST", new TestFrame { MessageId = "M1", FromUser = "SOURCE" }));
+        lock (statuses) { Assert.DoesNotContain(DestinationStatus.Received, statuses); }
     }
 
     /// <summary>Start, using the production DI constructor, creates a transport via IPeerTransportFactory and starts its IP listener on PeerPort.</summary>

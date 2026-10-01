@@ -702,9 +702,9 @@ public sealed class ControlProviderTests
         Assert.Equal("M1", controller.GetFrameId(message));
         controller.SetFromUser(message, "ALICE");
         Assert.Equal("ALICE", controller.GetFromUser(message));
-        controller.SetSubject(message, "Hi");
+        ((TestFrame)message).Subject = "Hi";
         Assert.Equal("Hi", controller.GetSubject(message));
-        controller.SetBody(message, "Body text");
+        ((TestFrame)message).Body = "Body text";
         Assert.Equal("Body text", controller.GetBody(message));
         List<MessageAddress> addresses = [new MessageAddress { UserName = "BOB", Type = AddressType.To }];
         controller.SetAddresses(message, addresses);
@@ -714,13 +714,13 @@ public sealed class ControlProviderTests
         DateTime sentAt = new(2026, 1, 1, 0, 0, 0, DateTimeKind.Utc);
         controller.SetSentAt(message, sentAt);
         Assert.Equal(sentAt, controller.GetSentAt(message));
-        controller.SetConfirmationMessageId(message, "M0");
-        Assert.Equal("M0", controller.GetConfirmationMessageId(message));
-        controller.SetIsAlert(message, true);
+        ((TestFrame)message).ReadReceiptMessageId = "M0";
+        Assert.Equal("M0", controller.GetReadReceiptMessageId(message));
+        ((TestFrame)message).IsAlert = true;
         Assert.True(controller.GetIsAlert(message));
-        controller.SetPriority(message, 2);
+        ((TestFrame)message).Priority = 2;
         Assert.Equal(2, controller.GetPriority(message));
-        controller.SetTag(message, "URGENT");
+        ((TestFrame)message).Tag = "URGENT";
         Assert.Equal("URGENT", controller.GetTag(message));
     }
 

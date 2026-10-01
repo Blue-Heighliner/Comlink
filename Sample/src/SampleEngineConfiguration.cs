@@ -37,24 +37,19 @@ public sealed class SampleEngineConfiguration : IEngineConfiguration
                 .Processor<SampleNetworkProcessor>()
                 .Id(m => m.Id)
                 .Sender(m => m.Sender)
-                .Subject(m => m.Title)
-                .Body(m => m.Text)
                 .Addresses(
                     m => m.Recipients.Select(r => (r.User, r.Kind switch { "CC" => AddressType.Cc, "OUTSIDE" => AddressType.External, _ => AddressType.To }, r.Note)),
                     (m, value) => m.Recipients = [.. value.Select(a => new SampleRecipient { User = a.Name, Kind = a.Type switch { AddressType.Cc => "CC", AddressType.External => "OUTSIDE", _ => "TO" }, Note = a.Information })])
                 .SentAt(m => m.Timestamp)
-                .ConfirmationId(m => m.ConfirmsId)
-                .IsMessage(m => m.IsMessage)
-                .Retrieval(r => r.IsRequest(m => m.IsRetrieval).From(m => m.RetrievalFrom).To(m => m.RetrievalTo).Authors(m => m.RetrievalAuthors, (m, v) => m.RetrievalAuthors = [.. v]).Destinations(m => m.RetrievalDestinations, (m, v) => m.RetrievalDestinations = [.. v]).Ids(m => m.RetrievalIds, (m, v) => m.RetrievalIds = [.. v]))
-                .IsAlert(m => m.Alert)
-                .Priority(m => m.Importance)
-                .Tag(m => m.Category)
-                .SecurityLevel(m => m.Classification)
-                .PrintCount(m => m.Alert ? 2 : 1)
+                .Message<SampleMessageHandler>()
                 .AutoForward(
                     "Escalation",
                     ["PEER1", "PEER2", "CLIENT1", "CLIENT2"],
-                    message => message.Alert || string.Equals(message.Category, "URGENT", StringComparison.OrdinalIgnoreCase)))
+                    frame => frame.Alert || string.Equals(frame.Category, "URGENT", StringComparison.OrdinalIgnoreCase))
+                .Retrieval<SampleRetrievalHandler>()
+                .ReadReceipt<SampleReadReceiptHandler>()
+                .ReceiveReceipt<SampleReceiveReceiptHandler>()
+                .PrintCount(m => m.Alert ? 2 : 1))
             .Packets<SamplePacket>(packet => packet
                 .InitialProcessor<SampleIdentityProcessor>()
                 .PayloadId(p => p.Group)
