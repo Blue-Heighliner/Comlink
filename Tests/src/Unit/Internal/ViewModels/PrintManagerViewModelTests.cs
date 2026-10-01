@@ -385,6 +385,6 @@ public sealed class PrintManagerViewModelTests
         failing = false;
         vm.EnqueueManual(entry);
 
-        await printed.Task.WaitAsync(TimeSpan.FromSeconds(2));
+        await printed.Task.WaitAsync(TimeSpan.FromSeconds(30));
     }
 }

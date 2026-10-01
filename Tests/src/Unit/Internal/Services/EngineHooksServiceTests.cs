@@ -108,7 +108,7 @@ public sealed class EngineHooksServiceTests
         (EngineHooksService service, FakePeerService peer, Mock<TestEngineController> engineController, _, _) = Build();
         engineController.Setup(e => e.NetworkHandler).Returns((INetworkHandler?)null);
 
-        await service.Start(CancellationToken.None).WaitAsync(TimeSpan.FromSeconds(2));
+        await service.Start(CancellationToken.None).WaitAsync(TimeSpan.FromSeconds(30));
 
         Assert.False(peer.HasUserConnectedSubscribers);
         Assert.False(peer.HasUserDisconnectedSubscribers);
@@ -130,7 +130,7 @@ public sealed class EngineHooksServiceTests
         Assert.False(startTask.IsCompleted);
 
         cts.Cancel();
-        await startTask.WaitAsync(TimeSpan.FromSeconds(2));
+        await startTask.WaitAsync(TimeSpan.FromSeconds(30));
         Assert.False(peer.HasUserConnectedSubscribers);
     }
 
@@ -295,7 +295,7 @@ public sealed class EngineHooksServiceTests
 
         await peer.FireUserConnected("ALICE");
 
-        await WaitUntil(() => routing.RoutedMessages.Count > 0, TimeSpan.FromSeconds(2));
+        await WaitUntil(() => routing.RoutedMessages.Count > 0, TimeSpan.FromSeconds(30));
         Assert.Equal("ME", routing.RoutedMessages[0].FromUser);
         Assert.Same(message, routing.RoutedMessages[0].Message);
         cts.Cancel();

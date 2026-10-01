@@ -19,11 +19,13 @@ internal sealed class PointMaintenance(PeerConnectionMonitor monitor)
     /// <param name="desired">The points that should be maintained now; a point names the same place as another when their keys are equal.</param>
     /// <param name="lifetime">Cancelled when the service stops, which ends every loop.</param>
     /// <param name="acknowledged">Called with a connection each time its point's heartbeat is acknowledged.</param>
+    /// <param name="starting">Called with each point just before its loop starts, so whatever the caller tracks per point is in place before the loop can connect and raise events about it.</param>
     public (IReadOnlyList<ConnectionPoint> Removed, IReadOnlyList<(ConnectionPoint Point, PeerLinkControl Control)> Started) Sync(
         IPeerTransport transport,
         IEnumerable<ConnectionPoint> desired,
         CancellationToken lifetime,
-        Action<PeerConnection>? acknowledged = null)
+        Action<PeerConnection>? acknowledged = null,
+        Action<ConnectionPoint>? starting = null)
     {
         Dictionary<string, ConnectionPoint> wanted = [];
         foreach (ConnectionPoint point in desired) { wanted.TryAdd(point.Key, point); }
@@ -50,6 +52,7 @@ internal sealed class PointMaintenance(PeerConnectionMonitor monitor)
 
                 if (closed.Remove(key)) { transport.SetClosed(point, false); }
                 CancellationTokenSource cancel = CancellationTokenSource.CreateLinkedTokenSource(lifetime);
+                starting?.Invoke(point);
                 PeerLinkControl control = monitor.Maintain(transport, point, cancel.Token, acknowledged);
                 entries[key] = new Entry(point, cancel);
                 started.Add((point, control));

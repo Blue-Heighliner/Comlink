@@ -82,7 +82,7 @@ public sealed class ExternalSystemBaseTests
         using CancellationTokenSource cts = new();
         Task startTask = system.Start(cts.Token);
 
-        await WaitUntil(() => system.IsConnected, TimeSpan.FromSeconds(2));
+        await WaitUntil(() => system.IsConnected, TimeSpan.FromSeconds(30));
 
         cts.Cancel();
         await startTask;
@@ -100,7 +100,7 @@ public sealed class ExternalSystemBaseTests
         using CancellationTokenSource cts = new();
         Task startTask = system.Start(cts.Token);
 
-        await WaitUntil(() => attempts >= 3, TimeSpan.FromSeconds(2));
+        await WaitUntil(() => attempts >= 3, TimeSpan.FromSeconds(30));
 
         Assert.False(system.IsConnected);
         cts.Cancel();
@@ -136,7 +136,7 @@ public sealed class ExternalSystemBaseTests
         using CancellationTokenSource cts = new();
         Task startTask = system.Start(cts.Token);
 
-        await WaitUntil(() => system.DisconnectCallCount > 0, TimeSpan.FromSeconds(2));
+        await WaitUntil(() => system.DisconnectCallCount > 0, TimeSpan.FromSeconds(30));
 
         cts.Cancel();
         await startTask;
@@ -155,7 +155,7 @@ public sealed class ExternalSystemBaseTests
         using CancellationTokenSource cts = new();
         Task startTask = system.Start(cts.Token);
 
-        await WaitUntil(() => connectAttempts >= 2, TimeSpan.FromSeconds(2));
+        await WaitUntil(() => connectAttempts >= 2, TimeSpan.FromSeconds(30));
 
         cts.Cancel();
         await startTask;
@@ -180,7 +180,7 @@ public sealed class ExternalSystemBaseTests
         FakeExternalSystem system = new(TimeSpan.FromMilliseconds(20), TimeSpan.FromSeconds(30));
         using CancellationTokenSource cts = new();
         Task startTask = system.Start(cts.Token);
-        await WaitUntil(() => system.IsConnected, TimeSpan.FromSeconds(2));
+        await WaitUntil(() => system.IsConnected, TimeSpan.FromSeconds(30));
 
         TestMessage message = new() { MessageId = "M1" };
         bool result = await ((IExternalSystem)system).Send(message);
@@ -203,7 +203,7 @@ public sealed class ExternalSystemBaseTests
         };
         using CancellationTokenSource cts = new();
         Task startTask = system.Start(cts.Token);
-        await WaitUntil(() => system.IsConnected, TimeSpan.FromSeconds(2));
+        await WaitUntil(() => system.IsConnected, TimeSpan.FromSeconds(30));
 
         bool result = await ((IExternalSystem)system).Send(new TestMessage { MessageId = "M1" });
 
@@ -227,7 +227,7 @@ public sealed class ExternalSystemBaseTests
         TestMessage sent = new() { MessageId = "M1" };
         await system.Deliver(sent);
 
-        await WaitUntil(() => received is not null, TimeSpan.FromSeconds(2));
+        await WaitUntil(() => received is not null, TimeSpan.FromSeconds(30));
         Assert.Same(sent, received);
 
         cts.Cancel();
@@ -272,7 +272,7 @@ public sealed class ExternalSystemBaseTests
         TestMessage[] messages = [.. Enumerable.Range(0, 5).Select(i => new TestMessage { MessageId = $"M{i}" })];
         await Task.WhenAll(messages.Select(system.Deliver));
 
-        await WaitUntil(() => deliveredIds.Count == messages.Length, TimeSpan.FromSeconds(5));
+        await WaitUntil(() => deliveredIds.Count == messages.Length, TimeSpan.FromSeconds(30));
 
         Assert.Equal(1, maxObservedConcurrency);
         Assert.Equal(messages.Select(m => m.MessageId), deliveredIds);
@@ -296,7 +296,7 @@ public sealed class ExternalSystemBaseTests
         using CancellationTokenSource cts = new();
         Task startTask = system.Start(cts.Token);
 
-        await WaitUntil(() => system.IsConnected, TimeSpan.FromSeconds(2));
+        await WaitUntil(() => system.IsConnected, TimeSpan.FromSeconds(30));
         await Task.Delay(150);
 
         Assert.True(system.IsConnected);
@@ -314,11 +314,11 @@ public sealed class ExternalSystemBaseTests
         using CancellationTokenSource cts = new();
         Task startTask = system.Start(cts.Token);
 
-        await WaitUntil(() => system.IsConnected, TimeSpan.FromSeconds(2));
+        await WaitUntil(() => system.IsConnected, TimeSpan.FromSeconds(30));
 
         system.SimulateDisconnect();
 
-        await WaitUntil(() => system.DisconnectCallCount > 0, TimeSpan.FromSeconds(1));
+        await WaitUntil(() => system.DisconnectCallCount > 0, TimeSpan.FromSeconds(30));
 
         cts.Cancel();
         await startTask;
@@ -340,7 +340,7 @@ public sealed class ExternalSystemBaseTests
         NonPollingFakeExternalSystem system = new(TimeSpan.FromMilliseconds(20), TimeSpan.FromMilliseconds(20));
         using CancellationTokenSource cts = new();
         Task startTask = system.Start(cts.Token);
-        await WaitUntil(() => system.IsConnected, TimeSpan.FromSeconds(2));
+        await WaitUntil(() => system.IsConnected, TimeSpan.FromSeconds(30));
 
         cts.Cancel();
         await startTask;

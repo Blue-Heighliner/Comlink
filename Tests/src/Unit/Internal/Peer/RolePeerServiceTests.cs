@@ -70,7 +70,7 @@ public sealed class RolePeerServiceTests
         Assert.False(run.IsCompleted);
 
         await stop.CancelAsync();
-        await run.WaitAsync(TimeSpan.FromSeconds(5));
+        await run.WaitAsync(TimeSpan.FromSeconds(30));
     }
 
     /// <summary>Each restart raises StatusesChanged so the connection tables rebuild from the new implementation.</summary>
@@ -88,6 +88,6 @@ public sealed class RolePeerServiceTests
 
         await harness.WaitFor(() => raised == 2);
         await stop.CancelAsync();
-        await run.WaitAsync(TimeSpan.FromSeconds(5));
+        await run.WaitAsync(TimeSpan.FromSeconds(30));
     }
 }

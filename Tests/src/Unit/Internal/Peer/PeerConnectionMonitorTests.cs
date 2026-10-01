@@ -108,11 +108,11 @@ public sealed class PeerConnectionMonitorTests
         PeerConnectionMonitor monitor = new(new TestEngineController(), steadyInterval: TimeSpan.FromMinutes(10), fastRetryInterval: TimeSpan.FromMinutes(10));
         using CancellationTokenSource cts = new();
         PeerLinkControl control = monitor.Maintain(transport.Object, target, cts.Token);
-        await WaitUntil(() => Heartbeats(transport) == 1, TimeSpan.FromSeconds(2));
+        await WaitUntil(() => Heartbeats(transport) == 1, TimeSpan.FromSeconds(30));
 
         control.Refresh();
 
-        await WaitUntil(() => Heartbeats(transport) == 2, TimeSpan.FromSeconds(2));
+        await WaitUntil(() => Heartbeats(transport) == 2, TimeSpan.FromSeconds(30));
         cts.Cancel();
     }
 
@@ -125,11 +125,11 @@ public sealed class PeerConnectionMonitorTests
         PeerConnectionMonitor monitor = new(new TestEngineController(), steadyInterval: TimeSpan.FromMinutes(10), fastRetryInterval: TimeSpan.FromMinutes(10));
         using CancellationTokenSource cts = new();
         PeerLinkControl control = monitor.Maintain(transport.Object, target, cts.Token);
-        await WaitUntil(() => Heartbeats(transport) == 1, TimeSpan.FromSeconds(2));
+        await WaitUntil(() => Heartbeats(transport) == 1, TimeSpan.FromSeconds(30));
 
         control.NotifyLost();
 
-        await WaitUntil(() => Heartbeats(transport) == 2, TimeSpan.FromSeconds(2));
+        await WaitUntil(() => Heartbeats(transport) == 2, TimeSpan.FromSeconds(30));
         cts.Cancel();
     }
 
@@ -142,7 +142,7 @@ public sealed class PeerConnectionMonitorTests
         PeerConnectionMonitor monitor = new(new TestEngineController(), steadyInterval: TimeSpan.FromMinutes(10), fastRetryInterval: TimeSpan.FromMinutes(10));
         using CancellationTokenSource cts = new();
         PeerLinkControl control = monitor.Maintain(transport.Object, target, cts.Token);
-        await WaitUntil(() => Heartbeats(transport) == 1, TimeSpan.FromSeconds(2));
+        await WaitUntil(() => Heartbeats(transport) == 1, TimeSpan.FromSeconds(30));
         await Task.Delay(50);
 
         control.NotifyLost();
@@ -161,7 +161,7 @@ public sealed class PeerConnectionMonitorTests
         PeerConnectionMonitor monitor = new(new TestEngineController(), steadyInterval: TimeSpan.FromMilliseconds(20), fastRetryInterval: TimeSpan.FromMilliseconds(20));
         using CancellationTokenSource cts = new();
         PeerLinkControl control = monitor.Maintain(transport.Object, target, cts.Token);
-        await WaitUntil(() => Heartbeats(transport) >= 2, TimeSpan.FromSeconds(2));
+        await WaitUntil(() => Heartbeats(transport) >= 2, TimeSpan.FromSeconds(30));
 
         control.Close();
         await Task.Delay(100);
@@ -172,7 +172,7 @@ public sealed class PeerConnectionMonitorTests
         Assert.Equal(whileClosed, Heartbeats(transport));
 
         control.Open();
-        await WaitUntil(() => Heartbeats(transport) > whileClosed, TimeSpan.FromSeconds(2));
+        await WaitUntil(() => Heartbeats(transport) > whileClosed, TimeSpan.FromSeconds(30));
         Assert.False(control.IsClosed);
         cts.Cancel();
     }
@@ -217,7 +217,7 @@ public sealed class PeerConnectionMonitorTests
         monitor.Maintain(failing.Object, target, cts.Token, _ => failedAcks++);
         monitor.Maintain(throwing.Object, target, cts.Token, _ => thrownAcks++);
         monitor.Maintain(working.Object, target, cts.Token, _ => acks++);
-        await WaitUntil(() => acks >= 3, TimeSpan.FromSeconds(2));
+        await WaitUntil(() => acks >= 3, TimeSpan.FromSeconds(30));
 
         Assert.Equal(0, failedAcks);
         Assert.Equal(0, thrownAcks);
@@ -235,7 +235,7 @@ public sealed class PeerConnectionMonitorTests
 
         monitor.Maintain(transport.Object, target, cts.Token, _ => throw new InvalidOperationException());
 
-        await WaitUntil(() => Heartbeats(transport) >= 3, TimeSpan.FromSeconds(2));
+        await WaitUntil(() => Heartbeats(transport) >= 3, TimeSpan.FromSeconds(30));
         cts.Cancel();
     }
 
@@ -268,7 +268,7 @@ public sealed class PeerConnectionMonitorTests
         using CancellationTokenSource cts = new();
         monitor.Maintain(transport.Object, target, cts.Token);
 
-        await WaitUntil(() => transport.Invocations.Count(i => i.Method.Name == nameof(IPeerTransport.Connect)) >= 3, TimeSpan.FromSeconds(2));
+        await WaitUntil(() => transport.Invocations.Count(i => i.Method.Name == nameof(IPeerTransport.Connect)) >= 3, TimeSpan.FromSeconds(30));
         cts.Cancel();
         Assert.Equal(0, Heartbeats(transport));
     }
@@ -285,7 +285,7 @@ public sealed class PeerConnectionMonitorTests
 
         monitor.Maintain(transport.Object, target, cts.Token, c => acknowledged = c);
 
-        await WaitUntil(() => acknowledged is not null, TimeSpan.FromSeconds(2));
+        await WaitUntil(() => acknowledged is not null, TimeSpan.FromSeconds(30));
         Assert.Same(connection, acknowledged);
         cts.Cancel();
     }

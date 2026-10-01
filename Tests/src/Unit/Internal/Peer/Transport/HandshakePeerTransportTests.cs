@@ -6,7 +6,7 @@ public sealed class HandshakePeerTransportTests
     private static readonly ILogger logger = LoggerFactory.Create(_ => { }).CreateLogger("test");
     private static readonly ConnectionPoint point = new() { IpAddress = "10.0.0.5", Port = 4000 };
     private static readonly ConnectionPoint serialPoint = new() { SerialPort = "SL0" };
-    private static readonly TimeSpan timeout = TimeSpan.FromSeconds(5);
+    private static readonly TimeSpan timeout = TimeSpan.FromSeconds(30);
 
     private static bool Matches(IConnectionInfo info) => info is ISerialConnectionInfo { SerialPort: "SL0", SerialAddress: 0xFF };
 

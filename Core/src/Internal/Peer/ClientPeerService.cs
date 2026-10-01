@@ -92,7 +92,7 @@ internal sealed class ClientPeerService : IPeerService, IConnectionStatusService
         lock (reconfigureLock)
         {
             lifetime = cancellation;
-            (_, IReadOnlyList<(ConnectionPoint Point, PeerLinkControl Control)> started) = points.Sync(transport, [point], lifetime, OnHeartbeatAcknowledged);
+            (_, IReadOnlyList<(ConnectionPoint Point, PeerLinkControl Control)> started) = points.Sync(transport, [point], lifetime, OnHeartbeatAcknowledged, startingPoint => serverPoint = startingPoint);
             serverPoint = started[0].Point;
             serverLink = started[0].Control;
         }
@@ -145,14 +145,14 @@ internal sealed class ClientPeerService : IPeerService, IConnectionStatusService
             ConnectionPoint? wanted = engineController.OutgoingPoints.FirstOrDefault();
             if (wanted is null) { logger.LogError("Client role requires an outgoing connection point to its server; none is defined any more"); }
 
-            (IReadOnlyList<ConnectionPoint> removed, IReadOnlyList<(ConnectionPoint Point, PeerLinkControl Control)> started) = points.Sync(transport, wanted is null ? [] : [wanted], lifetime, OnHeartbeatAcknowledged);
+            (IReadOnlyList<ConnectionPoint> removed, IReadOnlyList<(ConnectionPoint Point, PeerLinkControl Control)> started) = points.Sync(transport, wanted is null ? [] : [wanted], lifetime, OnHeartbeatAcknowledged, startingPoint => serverPoint = startingPoint);
             if (removed.Count == 0 && started.Count == 0) { return; }
 
             if (removed.Count > 0)
             {
                 serverConnection?.Drop();
                 UpdateConnectionStatus(false);
-                serverPoint = null;
+                serverPoint = started.Count > 0 ? started[0].Point : null;
                 serverLink = null;
                 isClosed = false;
             }

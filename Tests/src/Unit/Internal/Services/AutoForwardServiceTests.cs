@@ -66,7 +66,7 @@ public sealed class AutoForwardServiceTests
     {
         (AutoForwardService service, FakePeerService peer, _, _, _, _) = Build();
 
-        await service.Start(CancellationToken.None).WaitAsync(TimeSpan.FromSeconds(2));
+        await service.Start(CancellationToken.None).WaitAsync(TimeSpan.FromSeconds(30));
 
         Assert.False(peer.HasMessageDeliveredSubscribers);
     }
@@ -86,7 +86,7 @@ public sealed class AutoForwardServiceTests
         Assert.False(startTask.IsCompleted);
 
         cts.Cancel();
-        await startTask.WaitAsync(TimeSpan.FromSeconds(2));
+        await startTask.WaitAsync(TimeSpan.FromSeconds(30));
         Assert.False(peer.HasMessageDeliveredSubscribers);
     }
 

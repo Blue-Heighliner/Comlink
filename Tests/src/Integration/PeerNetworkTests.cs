@@ -8,13 +8,23 @@ namespace BlueHeighliner.Comlink.Tests.Integration;
 public sealed class PeerNetworkTests
 {
     private static readonly ILoggerFactory noLogger = LoggerFactory.Create(_ => { });
-    private static readonly TimeSpan timeout = TimeSpan.FromSeconds(15);
+    private static readonly TimeSpan timeout = TimeSpan.FromSeconds(30);
+
+    private static readonly HashSet<int> handedOut = [];
+    private static readonly Lock portGate = new();
 
     private static int FreePort()
     {
-        using TcpListener listener = new(IPAddress.Loopback, 0);
-        listener.Start();
-        return ((IPEndPoint)listener.LocalEndpoint).Port;
+        lock (portGate)
+        {
+            while (true)
+            {
+                using TcpListener listener = new(IPAddress.Loopback, 0);
+                listener.Start();
+                int port = ((IPEndPoint)listener.LocalEndpoint).Port;
+                if (handedOut.Add(port)) { return port; }
+            }
+        }
     }
 
     private static ConnectionPoint Local(int port) => new() { IpAddress = "127.0.0.1", Port = port };

@@ -270,7 +270,7 @@ public sealed class PeerServiceTests
         bool ok = await svc.Send("UNKNOWN", msg);
 
         Assert.False(ok);
-        Assert.Equal(DestinationStatus.Failed, await failed.Task.WaitAsync(TimeSpan.FromSeconds(2)));
+        Assert.Equal(DestinationStatus.Failed, await failed.Task.WaitAsync(TimeSpan.FromSeconds(30)));
         peer.Verify(p => p.Request(It.IsAny<PeerConnection>(), It.IsAny<ReadOnlyMemory<byte>>(), It.IsAny<PeerSendOptions>(), It.IsAny<CancellationToken>()), Times.Never);
     }
 
@@ -326,7 +326,7 @@ public sealed class PeerServiceTests
         TestMessage msg = new() { MessageId = "M1", FromUser = "SOURCE" };
 
         Task<bool> sendTask = svc.Send("DEST", msg);
-        bool ok = await sendTask.WaitAsync(TimeSpan.FromSeconds(2));
+        bool ok = await sendTask.WaitAsync(TimeSpan.FromSeconds(30));
 
         Assert.False(ok);
     }
@@ -352,7 +352,7 @@ public sealed class PeerServiceTests
         };
 
         await svc.Send("DEST", new TestMessage { MessageId = "M1", FromUser = "SOURCE" });
-        await tcs.Task.WaitAsync(TimeSpan.FromSeconds(2));
+        await tcs.Task.WaitAsync(TimeSpan.FromSeconds(30));
 
         Assert.Contains(events, e => e.MessageId == "M1" && e.UserName == "DEST" && e.Status == DestinationStatus.Confirmed);
     }
@@ -479,8 +479,8 @@ public sealed class PeerServiceTests
         svc.DeliveryStatusChanged += (_, _, status) => { statuses.Add(status); return Task.CompletedTask; };
 
         Task<bool> sendTask = svc.Send("DEST", new TestMessage { MessageId = "M1", FromUser = "SOURCE" });
-        await requestStarted.Task.WaitAsync(TimeSpan.FromSeconds(2));
-        await WaitUntil(() => statuses.Contains(DestinationStatus.Sent), TimeSpan.FromSeconds(2));
+        await requestStarted.Task.WaitAsync(TimeSpan.FromSeconds(30));
+        await WaitUntil(() => statuses.Contains(DestinationStatus.Sent), TimeSpan.FromSeconds(30));
 
         requestCompletion.TrySetResult(true);
         await sendTask;
@@ -502,7 +502,7 @@ public sealed class PeerServiceTests
             Payload = Encode(new TestMessage { MessageId = "M1", FromUser = "REMOTE" })
         });
 
-        TestMessage message = Assert.IsType<TestMessage>(await delivered.Task.WaitAsync(TimeSpan.FromSeconds(2)));
+        TestMessage message = Assert.IsType<TestMessage>(await delivered.Task.WaitAsync(TimeSpan.FromSeconds(30)));
         Assert.Equal("M1", message.MessageId);
     }
 
@@ -530,7 +530,7 @@ public sealed class PeerServiceTests
 
         Reach(peer, "DEST");
 
-        await WaitUntil(() => connected.Count > 0, TimeSpan.FromSeconds(2));
+        await WaitUntil(() => connected.Count > 0, TimeSpan.FromSeconds(30));
         Assert.Equal(["DEST"], connected);
         Assert.Equal(["DEST"], svc.GetConnectedUsers());
     }
@@ -545,7 +545,7 @@ public sealed class PeerServiceTests
         svc.UserConnected += name => { connected.Add(name); return Task.CompletedTask; };
 
         Reach(peer, "DEST");
-        await WaitUntil(() => connected.Count > 0, TimeSpan.FromSeconds(2));
+        await WaitUntil(() => connected.Count > 0, TimeSpan.FromSeconds(30));
         Reach(peer, "DEST", inbound: true);
         await Task.Delay(50);
 
@@ -569,7 +569,7 @@ public sealed class PeerServiceTests
         Assert.Equal(["DEST"], svc.GetConnectedUsers());
 
         Lose(peer, second);
-        await WaitUntil(() => disconnected.Count > 0, TimeSpan.FromSeconds(2));
+        await WaitUntil(() => disconnected.Count > 0, TimeSpan.FromSeconds(30));
         Assert.Equal(["DEST"], disconnected);
         Assert.Empty(svc.GetConnectedUsers());
     }

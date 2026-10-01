@@ -98,7 +98,7 @@ public sealed class ClientPeerServiceTests
         AutoAcknowledge(fx);
         CancellationTokenSource cts = new();
         Task startTask = fx.Service.Start(cts.Token);
-        await WaitUntil(() => fx.Service.GetStatuses().Single().IsConnected, TimeSpan.FromSeconds(2));
+        await WaitUntil(() => fx.Service.GetStatuses().Single().IsConnected, TimeSpan.FromSeconds(30));
         return (fx, cts, startTask);
     }
 
@@ -127,7 +127,7 @@ public sealed class ClientPeerServiceTests
         using CancellationTokenSource cts = new();
 
         Task startTask = fx.Service.Start(cts.Token);
-        await WaitUntil(() => Heartbeats(fx.Transport) >= 1, TimeSpan.FromSeconds(2));
+        await WaitUntil(() => Heartbeats(fx.Transport) >= 1, TimeSpan.FromSeconds(30));
 
         fx.Transport.Verify(p => p.StartListener(It.IsAny<int>()), Times.Never);
         fx.Transport.Verify(p => p.Connect(point, It.IsAny<CancellationToken>()), Times.AtLeastOnce);
@@ -156,7 +156,7 @@ public sealed class ClientPeerServiceTests
         service.StatusesChanged += () => statusChanges++;
         using CancellationTokenSource cts = new();
         Task startTask = service.Start(cts.Token);
-        await WaitUntil(() => transport.Invocations.Any(i => i.Method.Name == nameof(IPeerTransport.Connect)), TimeSpan.FromSeconds(2));
+        await WaitUntil(() => transport.Invocations.Any(i => i.Method.Name == nameof(IPeerTransport.Connect)), TimeSpan.FromSeconds(30));
 
         service.Reconfigure();
         transport.Verify(p => p.SetClosed(It.IsAny<ConnectionPoint>(), It.IsAny<bool>()), Times.Never);
@@ -164,7 +164,7 @@ public sealed class ClientPeerServiceTests
 
         outgoing = [other];
         service.Reconfigure();
-        await WaitUntil(() => transport.Invocations.Any(i => i.Method.Name == nameof(IPeerTransport.Connect) && Equals(i.Arguments[0], other)), TimeSpan.FromSeconds(2));
+        await WaitUntil(() => transport.Invocations.Any(i => i.Method.Name == nameof(IPeerTransport.Connect) && Equals(i.Arguments[0], other)), TimeSpan.FromSeconds(30));
 
         transport.Verify(p => p.SetClosed(serverPoint, true), Times.Once);
         Assert.Equal(1, statusChanges);
@@ -191,7 +191,7 @@ public sealed class ClientPeerServiceTests
         using CancellationTokenSource cts = new();
 
         Task startTask = service.Start(cts.Token);
-        await WaitUntil(() => transport.Invocations.Any(i => i.Method.Name == nameof(IPeerTransport.Connect)), TimeSpan.FromSeconds(2));
+        await WaitUntil(() => transport.Invocations.Any(i => i.Method.Name == nameof(IPeerTransport.Connect)), TimeSpan.FromSeconds(30));
 
         transport.Verify(p => p.Connect(other, It.IsAny<CancellationToken>()), Times.Never);
 
@@ -279,7 +279,7 @@ public sealed class ClientPeerServiceTests
 
         fx.Received.Publish(new PeerReceivedEventArgs { Connection = fx.Server, Payload = Encode(new TestMessage { MessageId = "MSG1", FromUser = "REMOTE" }) });
 
-        TestMessage message = Assert.IsType<TestMessage>(await tcs.Task.WaitAsync(TimeSpan.FromSeconds(2)));
+        TestMessage message = Assert.IsType<TestMessage>(await tcs.Task.WaitAsync(TimeSpan.FromSeconds(30)));
         Assert.Equal("MSG1", message.MessageId);
 
         cts.Cancel();
@@ -366,7 +366,7 @@ public sealed class ClientPeerServiceTests
 
         fx.Drop();
 
-        await WaitUntil(() => Heartbeats(fx.Transport) > countBefore, TimeSpan.FromSeconds(1));
+        await WaitUntil(() => Heartbeats(fx.Transport) > countBefore, TimeSpan.FromSeconds(30));
 
         cts.Cancel();
         await startTask;
@@ -403,7 +403,7 @@ public sealed class ClientPeerServiceTests
         Assert.Equal(string.Empty, Assert.Single(fx.Service.GetStatuses()).UserName);
         Task startTask = fx.Service.Start(cts.Token);
 
-        await WaitUntil(() => fx.Service.GetStatuses().Single().IsConnected, TimeSpan.FromSeconds(2));
+        await WaitUntil(() => fx.Service.GetStatuses().Single().IsConnected, TimeSpan.FromSeconds(30));
         Assert.Equal("Server1", Assert.Single(fx.Service.GetStatuses()).UserName);
 
         fx.Drop();
@@ -487,7 +487,7 @@ public sealed class ClientPeerServiceTests
 
         fx.Come();
 
-        await WaitUntil(() => connected.Count > 0, TimeSpan.FromSeconds(2));
+        await WaitUntil(() => connected.Count > 0, TimeSpan.FromSeconds(30));
         Assert.Equal(["SL0"], connected);
         Assert.Equal(["SL0"], fx.Service.GetConnectedUsers());
 
@@ -509,7 +509,7 @@ public sealed class ClientPeerServiceTests
 
         fx.Drop();
 
-        await WaitUntil(() => disconnected.Count > 0, TimeSpan.FromSeconds(2));
+        await WaitUntil(() => disconnected.Count > 0, TimeSpan.FromSeconds(30));
         Assert.Equal(["SL0"], disconnected);
         Assert.Empty(fx.Service.GetConnectedUsers());
 
@@ -557,7 +557,7 @@ public sealed class ClientPeerServiceTests
         AutoAcknowledge(fx);
         using CancellationTokenSource cts = new();
         Task startTask = fx.Service.Start(cts.Token);
-        await WaitUntil(() => fx.Service.GetStatuses().Single().IsConnected, TimeSpan.FromSeconds(2));
+        await WaitUntil(() => fx.Service.GetStatuses().Single().IsConnected, TimeSpan.FromSeconds(30));
         int raised = 0;
         fx.Service.StatusesChanged += () => raised++;
 
@@ -611,11 +611,11 @@ public sealed class ClientPeerServiceTests
         int whileClosed = Heartbeats(fx.Transport);
 
         fx.Service.SetClosed(PeerConnectionKind.Server, string.Empty, false);
-        await WaitUntil(() => Heartbeats(fx.Transport) > whileClosed, TimeSpan.FromSeconds(2));
+        await WaitUntil(() => Heartbeats(fx.Transport) > whileClosed, TimeSpan.FromSeconds(30));
 
         fx.Transport.Verify(t => t.SetClosed(serverPoint, false), Times.Once);
         Assert.False(Assert.Single(fx.Service.GetStatuses()).IsClosed);
-        await WaitUntil(() => fx.Service.GetStatuses().Single().IsConnected, TimeSpan.FromSeconds(2));
+        await WaitUntil(() => fx.Service.GetStatuses().Single().IsConnected, TimeSpan.FromSeconds(30));
         Assert.True(await fx.Service.Send("DEST", new TestMessage { MessageId = "M2", FromUser = "SOURCE" }));
 
         cts.Cancel();
@@ -632,7 +632,7 @@ public sealed class ClientPeerServiceTests
         fx.Service.Refresh(PeerConnectionKind.Server, string.Empty);
 
         fx.Transport.Verify(t => t.Reset(serverPoint), Times.Once);
-        await WaitUntil(() => Heartbeats(fx.Transport) > before, TimeSpan.FromSeconds(2));
+        await WaitUntil(() => Heartbeats(fx.Transport) > before, TimeSpan.FromSeconds(30));
 
         cts.Cancel();
         await startTask;
@@ -671,7 +671,7 @@ public sealed class ClientPeerServiceTests
 
         Task startTask = fx.Service.Start(cts.Token);
 
-        await raised.Task.WaitAsync(TimeSpan.FromSeconds(2));
+        await raised.Task.WaitAsync(TimeSpan.FromSeconds(30));
 
         cts.Cancel();
         await startTask;

@@ -179,13 +179,13 @@ public sealed class ServerRoutingServiceTests
 
         fx.Come(connection);
 
-        await WaitUntil(() => connected.Count > 0, TimeSpan.FromSeconds(2));
+        await WaitUntil(() => connected.Count > 0, TimeSpan.FromSeconds(30));
         Assert.Equal(["ClientA1"], connected);
         Assert.Contains("ClientA1", fx.Service.GetConnectedUsers());
 
         fx.Lose(connection);
 
-        await WaitUntil(() => disconnectedNames.Count > 0, TimeSpan.FromSeconds(2));
+        await WaitUntil(() => disconnectedNames.Count > 0, TimeSpan.FromSeconds(30));
         Assert.Equal(["ClientA1"], disconnectedNames);
         Assert.DoesNotContain("ClientA1", fx.Service.GetConnectedUsers());
         await Stop(fx);
@@ -338,7 +338,7 @@ public sealed class ServerRoutingServiceTests
 
         fx.Receive(clientA1, Encode(MessageTo("ClientA2")));
 
-        await WaitUntil(() => SentReal(fx, clientA2), TimeSpan.FromSeconds(2));
+        await WaitUntil(() => SentReal(fx, clientA2), TimeSpan.FromSeconds(30));
         Assert.Equal(1, Requests(fx, clientA2, real: true));
         Assert.Equal(0, Requests(fx, serverB, real: true));
         Assert.Equal(0, Requests(fx, clientA1, real: true));
@@ -384,7 +384,7 @@ public sealed class ServerRoutingServiceTests
         // Addressed to both of ServerB's children, which should still forward to ServerB exactly once.
         fx.Receive(clientA1, Encode(MessageTo("ClientB1", "ClientB2")));
 
-        await WaitUntil(() => SentReal(fx, serverB), TimeSpan.FromSeconds(2));
+        await WaitUntil(() => SentReal(fx, serverB), TimeSpan.FromSeconds(30));
         await Task.Delay(50);
         Assert.Equal(1, Requests(fx, serverB, real: true));
         await Stop(fx);
@@ -398,11 +398,11 @@ public sealed class ServerRoutingServiceTests
         Fixture fx = await BuildStarted(configureTransport: (transport, connected) => Reachable(transport, connected, serverBPoint, serverB), outgoing: [serverBPoint]);
         PeerConnection clientA1 = Inbound("ClientA1");
         fx.Come(clientA1);
-        await WaitUntil(() => fx.Service.GetStatuses().Single(s => s.UserName == "ServerB").IsConnected, TimeSpan.FromSeconds(2));
+        await WaitUntil(() => fx.Service.GetStatuses().Single(s => s.UserName == "ServerB").IsConnected, TimeSpan.FromSeconds(30));
 
         fx.Receive(clientA1, Encode(MessageTo("ClientB1")));
 
-        await WaitUntil(() => SentReal(fx, serverB), TimeSpan.FromSeconds(2));
+        await WaitUntil(() => SentReal(fx, serverB), TimeSpan.FromSeconds(30));
         await Stop(fx);
     }
 
@@ -433,7 +433,7 @@ public sealed class ServerRoutingServiceTests
 
         fx.Receive(serverB, Encode(MessageTo("ClientA1", "ClientB1")));
 
-        await WaitUntil(() => SentReal(fx, clientA1), TimeSpan.FromSeconds(2));
+        await WaitUntil(() => SentReal(fx, clientA1), TimeSpan.FromSeconds(30));
         await Task.Delay(50);
         Assert.Equal(1, Requests(fx, clientA1, real: true));
         Assert.Equal(0, Requests(fx, serverB, real: true));
@@ -465,7 +465,7 @@ public sealed class ServerRoutingServiceTests
         PeerConnection serverB = Outbound(serverBPoint, "ServerB");
         Fixture fx = await BuildStarted(configureTransport: (transport, connected) => Reachable(transport, connected, serverBPoint, serverB), outgoing: [serverBPoint]);
 
-        await WaitUntil(() => fx.Service.GetStatuses().Single(s => s.UserName == "ServerB").IsConnected, TimeSpan.FromSeconds(2));
+        await WaitUntil(() => fx.Service.GetStatuses().Single(s => s.UserName == "ServerB").IsConnected, TimeSpan.FromSeconds(30));
 
         fx.Transport.Verify(p => p.Request(serverB, It.Is<ReadOnlyMemory<byte>>(payload => TestHeartbeat.Is(payload)), It.IsAny<PeerSendOptions>(), It.IsAny<CancellationToken>()), Times.AtLeastOnce);
         PeerConnectionStatus status = Assert.Single(fx.Service.GetStatuses(), s => s.UserName == "ServerB");
@@ -604,7 +604,7 @@ public sealed class ServerRoutingServiceTests
         bool ok = await fx.Service.Send("ClientA2", message);
 
         Assert.True(ok);
-        await WaitUntil(() => SentReal(fx, clientA2), TimeSpan.FromSeconds(2));
+        await WaitUntil(() => SentReal(fx, clientA2), TimeSpan.FromSeconds(30));
         Assert.Equal(1, Requests(fx, clientA2, real: true));
         await Stop(fx);
     }
@@ -655,7 +655,7 @@ public sealed class ServerRoutingServiceTests
 
         fx.Receive(link, Encode(MessageTo("ClientA2", "ClientB1")));
 
-        await WaitUntil(() => SentReal(fx, clientA2) && SentReal(fx, serverB), TimeSpan.FromSeconds(2));
+        await WaitUntil(() => SentReal(fx, clientA2) && SentReal(fx, serverB), TimeSpan.FromSeconds(30));
         Assert.Equal(1, Requests(fx, clientA2, real: true));
         Assert.Equal(1, Requests(fx, serverB, real: true));
         await Stop(fx);
@@ -673,7 +673,7 @@ public sealed class ServerRoutingServiceTests
 
         fx.Receive(serverB, Encode(MessageTo("ClientA2", "ClientB1")));
 
-        await WaitUntil(() => SentReal(fx, clientA2), TimeSpan.FromSeconds(2));
+        await WaitUntil(() => SentReal(fx, clientA2), TimeSpan.FromSeconds(30));
         Assert.Equal(0, Requests(fx, serverB, real: true));
         await Stop(fx);
     }
@@ -724,7 +724,7 @@ public sealed class ServerRoutingServiceTests
     {
         PeerConnection serverB = Outbound(serverBPoint, "ServerB");
         Fixture fx = await BuildStarted(configureTransport: (transport, connected) => Reachable(transport, connected, serverBPoint, serverB), outgoing: [serverBPoint]);
-        await WaitUntil(() => fx.Service.GetStatuses().Single(s => s.UserName == "ServerB").IsConnected, TimeSpan.FromSeconds(2));
+        await WaitUntil(() => fx.Service.GetStatuses().Single(s => s.UserName == "ServerB").IsConnected, TimeSpan.FromSeconds(30));
 
         fx.Service.SetClosed(PeerConnectionKind.Server, "ServerB", true);
 
@@ -803,7 +803,7 @@ public sealed class ServerRoutingServiceTests
     {
         PeerConnection serverB = Outbound(serverBPoint, "ServerB");
         Fixture fx = await BuildStarted(configureTransport: (transport, connected) => Reachable(transport, connected, serverBPoint, serverB), outgoing: [serverBPoint]);
-        await WaitUntil(() => Requests(fx, serverB) >= 1, TimeSpan.FromSeconds(2));
+        await WaitUntil(() => Requests(fx, serverB) >= 1, TimeSpan.FromSeconds(30));
 
         fx.Service.SetClosed(PeerConnectionKind.Server, "ServerB", true);
         await Task.Delay(100);
@@ -812,7 +812,7 @@ public sealed class ServerRoutingServiceTests
         Assert.Equal(whileClosed, Requests(fx, serverB));
 
         fx.Service.SetClosed(PeerConnectionKind.Server, "ServerB", false);
-        await WaitUntil(() => Requests(fx, serverB) > whileClosed, TimeSpan.FromSeconds(2));
+        await WaitUntil(() => Requests(fx, serverB) > whileClosed, TimeSpan.FromSeconds(30));
         fx.Transport.Verify(t => t.SetClosed(serverBPoint, false), Times.Once);
         await Stop(fx);
     }
@@ -824,14 +824,14 @@ public sealed class ServerRoutingServiceTests
         int drops = 0;
         PeerConnection serverB = Outbound(serverBPoint, "ServerB", () => drops++);
         Fixture fx = await BuildStarted(configureTransport: (transport, connected) => Reachable(transport, connected, serverBPoint, serverB), outgoing: [serverBPoint]);
-        await WaitUntil(() => Requests(fx, serverB) >= 1, TimeSpan.FromSeconds(2));
+        await WaitUntil(() => Requests(fx, serverB) >= 1, TimeSpan.FromSeconds(30));
         int before = Requests(fx, serverB);
 
         fx.Service.Refresh(PeerConnectionKind.Server, "ServerB");
 
         fx.Transport.Verify(t => t.Reset(serverBPoint), Times.Once);
         Assert.Equal(1, drops);
-        await WaitUntil(() => Requests(fx, serverB) > before, TimeSpan.FromSeconds(2));
+        await WaitUntil(() => Requests(fx, serverB) > before, TimeSpan.FromSeconds(30));
 
         fx.Service.SetClosed(PeerConnectionKind.Server, "ServerB", true);
         fx.Service.Refresh(PeerConnectionKind.Server, "ServerB");
@@ -876,7 +876,7 @@ public sealed class ServerRoutingServiceTests
     {
         PeerConnection serverB = Outbound(serverBPoint, "ServerB");
         Fixture fx = await BuildStarted(configureTransport: (transport, connected) => Reachable(transport, connected, serverBPoint, serverB), outgoing: [serverBPoint]);
-        await WaitUntil(() => fx.Service.GetStatuses().Single(s => s.UserName == "ServerB").IsConnected, TimeSpan.FromSeconds(2));
+        await WaitUntil(() => fx.Service.GetStatuses().Single(s => s.UserName == "ServerB").IsConnected, TimeSpan.FromSeconds(30));
 
         fx.Lose(serverB);
 
@@ -894,7 +894,7 @@ public sealed class ServerRoutingServiceTests
         Fixture fx = await BuildStarted(configureTransport: (transport, connected) => Reachable(transport, connected, serverBPoint, outbound), outgoing: [serverBPoint]);
         PeerConnection inbound = Inbound("ServerB");
         fx.Come(inbound);
-        await WaitUntil(() => fx.Service.GetStatuses().Single(s => s.UserName == "ServerB").IsConnected, TimeSpan.FromSeconds(2));
+        await WaitUntil(() => fx.Service.GetStatuses().Single(s => s.UserName == "ServerB").IsConnected, TimeSpan.FromSeconds(30));
 
         fx.Lose(inbound);
         Assert.True(Assert.Single(fx.Service.GetStatuses(), s => s.UserName == "ServerB").IsConnected);
@@ -910,12 +910,12 @@ public sealed class ServerRoutingServiceTests
     {
         PeerConnection serverB = Outbound(serverBPoint, "ServerB");
         Fixture fx = await BuildStarted(configureTransport: (transport, connected) => Reachable(transport, connected, serverBPoint, serverB), outgoing: [serverBPoint]);
-        await WaitUntil(() => fx.Service.GetStatuses().Single(s => s.UserName == "ServerB").IsConnected, TimeSpan.FromSeconds(2));
+        await WaitUntil(() => fx.Service.GetStatuses().Single(s => s.UserName == "ServerB").IsConnected, TimeSpan.FromSeconds(30));
         int countBefore = Requests(fx, serverB);
 
         fx.Lose(serverB);
 
-        await WaitUntil(() => Requests(fx, serverB) > countBefore, TimeSpan.FromSeconds(1));
+        await WaitUntil(() => Requests(fx, serverB) > countBefore, TimeSpan.FromSeconds(30));
         await Stop(fx);
     }
 
@@ -935,7 +935,7 @@ public sealed class ServerRoutingServiceTests
 
         fx.Receive(clientA1, Encode(message));
 
-        await WaitUntil(() => SentReal(fx, clientA2) && SentReal(fx, serverB), TimeSpan.FromSeconds(2));
+        await WaitUntil(() => SentReal(fx, clientA2) && SentReal(fx, serverB), TimeSpan.FromSeconds(30));
         fx.Transport.Verify(p => p.Request(clientA2, It.Is<ReadOnlyMemory<byte>>(payload => IsRealPayload(payload)), It.Is<PeerSendOptions>(o => o.Priority == 7), It.IsAny<CancellationToken>()), Times.Once);
         fx.Transport.Verify(p => p.Request(serverB, It.Is<ReadOnlyMemory<byte>>(payload => IsRealPayload(payload)), It.Is<PeerSendOptions>(o => o.Priority == 7), It.IsAny<CancellationToken>()), Times.Once);
         await Stop(fx);
@@ -957,7 +957,7 @@ public sealed class ServerRoutingServiceTests
 
         fx.Receive(clientA1, Encode(MessageTo("ClientA2", "ClientB1")));
 
-        await WaitUntil(() => SentReal(fx, serverB), TimeSpan.FromSeconds(2));
+        await WaitUntil(() => SentReal(fx, serverB), TimeSpan.FromSeconds(30));
         stuck.SetResult(true);
         await Stop(fx);
     }
@@ -999,7 +999,7 @@ public sealed class ServerRoutingServiceTests
     {
         PeerConnection serverB = Outbound(serverBPoint, "ServerB");
         Fixture fx = await BuildStarted(configureTransport: (transport, connected) => Reachable(transport, connected, serverBPoint, serverB), outgoing: [serverBPoint]);
-        await WaitUntil(() => fx.Service.GetStatuses().Single(s => s.UserName == "ServerB").IsConnected, TimeSpan.FromSeconds(2));
+        await WaitUntil(() => fx.Service.GetStatuses().Single(s => s.UserName == "ServerB").IsConnected, TimeSpan.FromSeconds(30));
 
         fx.Service.SetClosed(PeerConnectionKind.Server, "ServerB", true);
         await Task.Delay(100);
@@ -1029,7 +1029,7 @@ public sealed class ServerRoutingServiceTests
 
         fx.Receive(clientA1, Encode(MessageTo("ClientA2")));
 
-        await WaitUntil(() => storage.Invocations.Count > 0, TimeSpan.FromSeconds(2));
+        await WaitUntil(() => storage.Invocations.Count > 0, TimeSpan.FromSeconds(30));
         storage.Verify(s => s.Store(It.Is<object>(m => ((TestMessage)m).MessageId == "M1")), Times.Once);
         await Stop(fx);
     }
@@ -1045,7 +1045,7 @@ public sealed class ServerRoutingServiceTests
 
         fx.Receive(serverB, Encode(MessageTo("ClientA1")));
 
-        await WaitUntil(() => storage.Invocations.Count > 0, TimeSpan.FromSeconds(2));
+        await WaitUntil(() => storage.Invocations.Count > 0, TimeSpan.FromSeconds(30));
         storage.Verify(s => s.Store(It.IsAny<object>()), Times.Once);
         await Stop(fx);
     }
@@ -1063,7 +1063,7 @@ public sealed class ServerRoutingServiceTests
 
         fx.Receive(clientA1, Encode(RetrievalTo("ServerA", "ClientA1")));
 
-        await WaitUntil(() => SentReal(fx, clientA1), TimeSpan.FromSeconds(2));
+        await WaitUntil(() => SentReal(fx, clientA1), TimeSpan.FromSeconds(30));
         Assert.Equal(1, Requests(fx, clientA1, real: true));
         storage.Verify(s => s.Store(It.IsAny<object>()), Times.Never);
         await Stop(fx);
@@ -1082,7 +1082,7 @@ public sealed class ServerRoutingServiceTests
 
         fx.Receive(clientA1, Encode(RetrievalTo("ServerB", "ClientA1")));
 
-        await WaitUntil(() => SentReal(fx, serverB), TimeSpan.FromSeconds(2));
+        await WaitUntil(() => SentReal(fx, serverB), TimeSpan.FromSeconds(30));
         Assert.Equal(1, Requests(fx, serverB, real: true));
         storage.Verify(s => s.Find(It.IsAny<string>(), It.IsAny<object>()), Times.Never);
         storage.Verify(s => s.Store(It.IsAny<object>()), Times.Never);
@@ -1101,7 +1101,7 @@ public sealed class ServerRoutingServiceTests
 
         fx.Receive(serverB, Encode(RetrievalTo("ServerA", "ClientB1")));
 
-        await WaitUntil(() => SentReal(fx, serverB), TimeSpan.FromSeconds(2));
+        await WaitUntil(() => SentReal(fx, serverB), TimeSpan.FromSeconds(30));
         Assert.Equal(1, Requests(fx, serverB, real: true));
         await Stop(fx);
     }

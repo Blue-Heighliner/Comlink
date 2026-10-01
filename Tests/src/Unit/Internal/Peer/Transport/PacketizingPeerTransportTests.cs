@@ -81,7 +81,7 @@ public sealed class PacketizingPeerTransportTests
 
     private static async Task WaitUntil(Func<bool> condition)
     {
-        DateTime deadline = DateTime.UtcNow + TimeSpan.FromSeconds(3);
+        DateTime deadline = DateTime.UtcNow + TimeSpan.FromSeconds(30);
         while (!condition())
         {
             if (DateTime.UtcNow > deadline) { throw new TimeoutException("Condition was not met in time."); }

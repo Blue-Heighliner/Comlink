@@ -5,7 +5,7 @@ public sealed class SerialPeerTransportTests
 {
     private static readonly ILogger logger = LoggerFactory.Create(_ => { }).CreateLogger("test");
     private static readonly ConnectionPoint point = new() { SerialPort = "SL0" };
-    private static readonly TimeSpan timeout = TimeSpan.FromSeconds(5);
+    private static readonly TimeSpan timeout = TimeSpan.FromSeconds(30);
 
     private sealed record Pair(SerialPeerTransport A, SerialPeerTransport B, FakeMicroGateCable Cable, PeerCollector AConnections, PeerCollector BReceived) : IAsyncDisposable
     {

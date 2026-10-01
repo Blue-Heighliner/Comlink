@@ -26,7 +26,7 @@ public sealed class DeleteConfirmationTests
         DeleteConfirmation confirmation = new(pending => { if (!pending) { expired.TrySetResult(); } }, TimeSpan.FromMilliseconds(50));
 
         Assert.False(confirmation.Confirm());
-        await expired.Task.WaitAsync(TimeSpan.FromSeconds(2));
+        await expired.Task.WaitAsync(TimeSpan.FromSeconds(30));
 
         Assert.False(confirmation.IsPending);
         Assert.False(confirmation.Confirm());

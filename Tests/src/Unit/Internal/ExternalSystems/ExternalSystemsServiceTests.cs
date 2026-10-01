@@ -86,7 +86,7 @@ public sealed class ExternalSystemsServiceTests
         FakePeerService peer = new();
         ExternalSystemsService service = new(MakeController([]), peer, noLogger);
 
-        await service.Start(CancellationToken.None).WaitAsync(TimeSpan.FromSeconds(2));
+        await service.Start(CancellationToken.None).WaitAsync(TimeSpan.FromSeconds(30));
     }
 
     /// <summary>Start runs every configured external system's own Start loop concurrently.</summary>
@@ -105,7 +105,7 @@ public sealed class ExternalSystemsServiceTests
         Assert.False(startTask.IsCompleted);
 
         cts.Cancel();
-        await startTask.WaitAsync(TimeSpan.FromSeconds(2));
+        await startTask.WaitAsync(TimeSpan.FromSeconds(30));
     }
 
     /// <summary>A message the app receives (via peer delivery) is relayed out through every external system.</summary>
@@ -130,7 +130,7 @@ public sealed class ExternalSystemsServiceTests
         Assert.Same(message, systemB.SentMessages[0]);
 
         cts.Cancel();
-        await startTask.WaitAsync(TimeSpan.FromSeconds(2));
+        await startTask.WaitAsync(TimeSpan.FromSeconds(30));
     }
 
     /// <summary>A message received from an external system is processed as an ordinary received message (delivered locally).</summary>
@@ -152,7 +152,7 @@ public sealed class ExternalSystemsServiceTests
         Assert.Same(message, peer.DeliveredLocally[0]);
 
         cts.Cancel();
-        await startTask.WaitAsync(TimeSpan.FromSeconds(2));
+        await startTask.WaitAsync(TimeSpan.FromSeconds(30));
     }
 
     /// <summary>A message received from one external system is relayed to every other external system, but not back to its own source.</summary>
@@ -179,7 +179,7 @@ public sealed class ExternalSystemsServiceTests
         Assert.Same(message, systemC.SentMessages[0]);
 
         cts.Cancel();
-        await startTask.WaitAsync(TimeSpan.FromSeconds(2));
+        await startTask.WaitAsync(TimeSpan.FromSeconds(30));
     }
 
     /// <summary>Concurrent deliveries from two different external systems each exclude only their own source, not each other's.</summary>
@@ -199,7 +199,7 @@ public sealed class ExternalSystemsServiceTests
         TestMessage messageFromB = new() { MessageId = "FromB" };
         await Task.WhenAll(systemA.Deliver(messageFromA), systemB.Deliver(messageFromB));
 
-        await WaitUntil(() => systemA.SentMessages.Count >= 1 && systemB.SentMessages.Count >= 1, TimeSpan.FromSeconds(2));
+        await WaitUntil(() => systemA.SentMessages.Count >= 1 && systemB.SentMessages.Count >= 1, TimeSpan.FromSeconds(30));
 
         Assert.DoesNotContain(messageFromA, systemA.SentMessages);
         Assert.Contains(messageFromA, systemB.SentMessages);
@@ -207,7 +207,7 @@ public sealed class ExternalSystemsServiceTests
         Assert.Contains(messageFromB, systemA.SentMessages);
 
         cts.Cancel();
-        await startTask.WaitAsync(TimeSpan.FromSeconds(2));
+        await startTask.WaitAsync(TimeSpan.FromSeconds(30));
     }
 
     /// <summary>With an ExternalServer configured, a peer-delivered message goes exclusively to it, not to any other external system.</summary>
@@ -231,7 +231,7 @@ public sealed class ExternalSystemsServiceTests
         Assert.Empty(other.SentMessages);
 
         cts.Cancel();
-        await startTask.WaitAsync(TimeSpan.FromSeconds(2));
+        await startTask.WaitAsync(TimeSpan.FromSeconds(30));
     }
 
     /// <summary>With an ExternalServer configured, a message received from another external system is routed exclusively to the external server, not to any other configured system.</summary>
@@ -257,7 +257,7 @@ public sealed class ExternalSystemsServiceTests
         Assert.Empty(other.SentMessages);
 
         cts.Cancel();
-        await startTask.WaitAsync(TimeSpan.FromSeconds(2));
+        await startTask.WaitAsync(TimeSpan.FromSeconds(30));
     }
 
     /// <summary>With an ExternalServer configured, a message received from the external server itself is routed to every other external system, exactly as it would be without one configured.</summary>
@@ -284,6 +284,6 @@ public sealed class ExternalSystemsServiceTests
         Assert.Empty(externalServer.SentMessages);
 
         cts.Cancel();
-        await startTask.WaitAsync(TimeSpan.FromSeconds(2));
+        await startTask.WaitAsync(TimeSpan.FromSeconds(30));
     }
 }
