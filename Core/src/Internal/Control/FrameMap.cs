@@ -21,10 +21,6 @@ internal sealed class FrameMap
     public required Func<object, List<MessageAddress>> GetAddresses { get; init; }
     /// <summary>Writes the recipients.</summary>
     public required Action<object, List<MessageAddress>> SetAddresses { get; init; }
-    /// <summary>Reads the sent time.</summary>
-    public required Func<object, DateTime> GetSentAt { get; init; }
-    /// <summary>Writes the sent time.</summary>
-    public required Action<object, DateTime> SetSentAt { get; init; }
     /// <summary>Gets how the host's message handler is instantiated.</summary>
     public required ServiceRegistration<IMessageFrameHandler> Message { get; init; }
     /// <summary>Gets how the host's retrieval request handler is instantiated.</summary>

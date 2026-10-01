@@ -148,6 +148,7 @@ internal sealed class EntryService : IEntryService
     {
         object message = engineController.CreateMessage(new MessageCreateContext
         {
+            SentAt = sentAt,
             Body = body,
             IsAlert = isAlert,
             Priority = priority,
@@ -157,7 +158,6 @@ internal sealed class EntryService : IEntryService
         engineController.SetFrameId(message, messageId);
         engineController.SetFromUser(message, fromUser);
         engineController.SetAddresses(message, addresses.Select(a => new MessageAddress { UserName = a.UserName, Type = a.Type.ParseAddressType(), Information = a.Information }).ToList());
-        engineController.SetSentAt(message, sentAt);
         return message;
     }
 

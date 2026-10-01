@@ -238,7 +238,7 @@ internal interface IEngineController
     /// <summary>The server users, from <see cref="Servers"/>, that keep a copy of every message they route and answer retrieval requests; see <see cref="UserInfo.StoresMessages"/>. Empty if none.</summary>
     IReadOnlyList<string> StorageServers { get; }
 
-    /// <summary>Every custom auto forward controller added via <see cref="IFrameBuilder{TFrame}.AutoForward"/>, in the order added; empty if none.</summary>
+    /// <summary>Every custom auto forward controller added via <see cref="IFrameBuilder{TFrame}.AutoForward{TController}"/>, in the order added; empty if none.</summary>
     IReadOnlyList<AutoForwardControllerDefinition> AutoForwardControllers { get; }
 
     /// <summary>Creates a new, empty instance of <see cref="FrameType"/>.</summary>
@@ -259,8 +259,6 @@ internal interface IEngineController
     void SetAddresses(object frame, List<MessageAddress> value);
     /// <summary>Gets the UTC sent timestamp from <paramref name="frame"/>.</summary>
     DateTime GetSentAt(object frame);
-    /// <summary>Sets the UTC sent timestamp on <paramref name="frame"/>.</summary>
-    void SetSentAt(object frame, DateTime value);
     /// <summary>
     /// Gets the message ID this frame is a read receipt for, or an empty string if
     /// <paramref name="frame"/> is not a read receipt. A read receipt frame carries only this field
@@ -313,32 +311,20 @@ internal interface IEngineController
     /// </summary>
     string GetSecurityLevel(object frame);
 
-    /// <summary>Creates a new, empty instance of <see cref="PacketType"/>. Only called while <see cref="PacketType"/> is set.</summary>
-    object CreatePacket();
+    /// <summary>Creates a frame packet carrying <paramref name="context"/> through the host's frame packet handler. Only called while <see cref="PacketType"/> is set.</summary>
+    object CreateFramePacket(FramePacketCreateContext context);
+    /// <summary>Gets whether <paramref name="packet"/> is a frame packet, one that carries a piece of a frame's payload.</summary>
+    bool IsFramePacket(object packet);
     /// <summary>Gets the identifier shared by every packet of one payload, which tells packets of different payloads apart.</summary>
     int GetPayloadId(object packet);
-    /// <summary>Sets the payload identifier on <paramref name="packet"/>.</summary>
-    void SetPayloadId(object packet, int value);
     /// <summary>Gets the zero-based position of <paramref name="packet"/> among the packets of its payload.</summary>
     int GetPacketIndex(object packet);
-    /// <summary>Sets the position of <paramref name="packet"/> among the packets of its payload.</summary>
-    void SetPacketIndex(object packet, int value);
     /// <summary>Gets how many packets the payload <paramref name="packet"/> belongs to was broken into.</summary>
     int GetPacketCount(object packet);
-    /// <summary>Sets the number of packets the payload <paramref name="packet"/> belongs to was broken into.</summary>
-    void SetPacketCount(object packet, int value);
-    /// <summary>Gets whether <paramref name="packet"/> is a data packet, one that carries a piece of a frame's payload.</summary>
-    bool GetIsData(object packet);
-    /// <summary>Sets whether <paramref name="packet"/> is a data packet.</summary>
-    void SetIsData(object packet, bool value);
     /// <summary>Gets the length in bytes of the whole payload <paramref name="packet"/> belongs to.</summary>
     int GetPayloadLength(object packet);
-    /// <summary>Sets the length in bytes of the whole payload <paramref name="packet"/> belongs to.</summary>
-    void SetPayloadLength(object packet, int value);
     /// <summary>Gets the slice of the payload <paramref name="packet"/> carries.</summary>
     ReadOnlyMemory<byte> GetPacketData(object packet);
-    /// <summary>Sets the slice of the payload <paramref name="packet"/> carries; the value is only valid for the duration of the call, so a packet that stores it must copy it.</summary>
-    void SetPacketData(object packet, ReadOnlyMemory<byte> value);
 
     /// <summary>Resolves <paramref name="userCode"/> to the name of the user it installs, or <see langword="null"/> if the code is unrecognized. Unless the host states its own scheme (<see cref="IEngineBuilder.UserCodes"/>), a code is the name of a user of the network.</summary>
     /// <param name="userCode">The user installation code to resolve.</param>
@@ -439,6 +425,7 @@ internal class EngineController(EngineBuilder builder, ICurrentUserProvider curr
     private readonly Lazy<IRetrievalFrameHandler> retrievalHandler = new(() => builder.FrameMap!.Retrieval.Create(services));
     private readonly Lazy<IReceiptFrameHandler> readReceiptHandler = new(() => builder.FrameMap!.ReadReceipt.Create(services));
     private readonly Lazy<IReceiptFrameHandler> receiveReceiptHandler = new(() => builder.FrameMap!.ReceiveReceipt.Create(services));
+    private readonly Lazy<IFramePacketAdapter> framePacketHandler = new(() => (builder.PacketMap ?? throw new NotSupportedException("This engine has no packet type; state one with Packets<TPacket>(...) to enable packetization.")).FramePacket.Create(services));
     private readonly Lazy<IFrameSerializer> frameSerializer = new(() => (builder.FrameMap ?? throw new InvalidOperationException("The engine configuration must state its frame type with Frames<TFrame>(...).")).Serializer.Create(services));
     private readonly Lazy<IPacketSerializer?> packetSerializer = new(() => builder.PacketMap?.Serializer.Create(services));
     private readonly Lazy<IReadOnlyList<ExportFormatDefinition>> exportFormats = new(() => Replacing(
@@ -448,6 +435,10 @@ internal class EngineController(EngineBuilder builder, ICurrentUserProvider curr
     private readonly Lazy<IReadOnlyList<ImportFormatDefinition>> importFormats = new(() => Replacing(
         builder.ImportFormats.Select(registration => registration.Create(services)),
         format => new ImportFormatDefinition { Name = format.Name, Read = format.Import, StagedSendMode = format.StagedSendMode, StagedSendDelay = format.StagedSendDelay },
+        definition => definition.Name));
+    private readonly Lazy<IReadOnlyList<AutoForwardControllerDefinition>> autoForwardControllers = new(() => Replacing(
+        builder.AutoForwardControllers.Select(registration => registration.Create(services)),
+        definition => definition,
         definition => definition.Name));
     private readonly Lazy<IInitialProcessor?> initialPacketProcessor = new(() => builder.InitialPacketProcessor?.Create(services));
     private readonly Lazy<IInitialProcessor?> initialMessageProcessor = new(() => builder.InitialFrameProcessor?.Create(services));
@@ -558,10 +549,22 @@ internal class EngineController(EngineBuilder builder, ICurrentUserProvider curr
         ?? MsmtCertificateLookup.BuildPeerOptions(currentUserProvider.UserName, GetCertificateName, TrustedAuthorityCertificateName));
 
     /// <inheritdoc />
-    public virtual MsmtSessionPeerOptions ConfigureConnectionOptions(MsmtSessionPeerOptions options) => builder.MsmtOptionsValue?.Invoke(options) ?? options;
+    public virtual MsmtSessionPeerOptions ConfigureConnectionOptions(MsmtSessionPeerOptions options) => builder.MsmtOptionsValue is { } stated
+        ? options with
+        {
+            HandshakeTimeout = stated.HandshakeTimeout,
+            StallTimeout = stated.StallTimeout,
+            ResponseTimeout = stated.ResponseTimeout,
+            TcpKeepAliveTime = stated.TcpKeepAliveTime,
+            MaximumSessionLifetime = stated.MaximumSessionLifetime,
+            SessionLifetime = stated.SessionLifetime,
+            KeepAliveMinInterval = stated.KeepAliveMinInterval,
+            KeepAliveMaxInterval = stated.KeepAliveMaxInterval
+        }
+        : options;
 
     /// <inheritdoc />
-    public virtual MicroGatePeerOptions MicroGateOptions => builder.MicroGateOptionsValue?.Invoke(new()) ?? new();
+    public virtual MicroGatePeerOptions MicroGateOptions => builder.MicroGateOptionsValue ?? new();
 
     /// <inheritdoc />
     public virtual UserRole Role => CurrentUserInfo?.Role ?? UserRole.Peer;
@@ -605,7 +608,7 @@ internal class EngineController(EngineBuilder builder, ICurrentUserProvider curr
     /// <inheritdoc />
     public virtual IReadOnlyList<string> StorageServers => [.. Servers.Keys.Where(name => GetUserInfo(name).StoresMessages)];
     /// <inheritdoc />
-    public virtual IReadOnlyList<AutoForwardControllerDefinition> AutoForwardControllers => builder.AutoForwardControllers;
+    public virtual IReadOnlyList<AutoForwardControllerDefinition> AutoForwardControllers => autoForwardControllers.Value;
 
     /// <inheritdoc />
     public virtual string TrustedAuthorityCertificateName => network.TrustedAuthorityCertificateName ?? builder.TrustedAuthorityValue ?? "COMLINK-ROOT";
@@ -625,9 +628,7 @@ internal class EngineController(EngineBuilder builder, ICurrentUserProvider curr
     /// <inheritdoc />
     public virtual void SetAddresses(object value, List<MessageAddress> addresses) => frame.SetAddresses(value, addresses);
     /// <inheritdoc />
-    public virtual DateTime GetSentAt(object value) => frame.GetSentAt(value);
-    /// <inheritdoc />
-    public virtual void SetSentAt(object value, DateTime sentAt) => frame.SetSentAt(value, sentAt);
+    public virtual DateTime GetSentAt(object value) => messageHandler.Value.GetSentAt(value);
     /// <inheritdoc />
     public virtual bool IsMessage(object value) => messageHandler.Value.IsValid(value);
     /// <inheritdoc />
@@ -676,31 +677,19 @@ internal class EngineController(EngineBuilder builder, ICurrentUserProvider curr
     };
 
     /// <inheritdoc />
-    public virtual object CreatePacket() => Packet.Create();
+    public virtual object CreateFramePacket(FramePacketCreateContext context) => framePacketHandler.Value.Create(context);
     /// <inheritdoc />
-    public virtual int GetPayloadId(object value) => Packet.GetPayloadId(value);
+    public virtual bool IsFramePacket(object value) => framePacketHandler.Value.IsValid(value);
     /// <inheritdoc />
-    public virtual void SetPayloadId(object value, int id) => Packet.SetPayloadId(value, id);
+    public virtual int GetPayloadId(object value) => framePacketHandler.Value.GetPayloadId(value);
     /// <inheritdoc />
-    public virtual int GetPacketIndex(object value) => Packet.GetIndex(value);
+    public virtual int GetPacketIndex(object value) => framePacketHandler.Value.GetIndex(value);
     /// <inheritdoc />
-    public virtual void SetPacketIndex(object value, int index) => Packet.SetIndex(value, index);
+    public virtual int GetPacketCount(object value) => framePacketHandler.Value.GetCount(value);
     /// <inheritdoc />
-    public virtual int GetPacketCount(object value) => Packet.GetCount(value);
+    public virtual int GetPayloadLength(object value) => framePacketHandler.Value.GetPayloadLength(value);
     /// <inheritdoc />
-    public virtual void SetPacketCount(object value, int count) => Packet.SetCount(value, count);
-    /// <inheritdoc />
-    public virtual bool GetIsData(object value) => Packet.GetIsData(value);
-    /// <inheritdoc />
-    public virtual void SetIsData(object value, bool isData) => Packet.SetIsData(value, isData);
-    /// <inheritdoc />
-    public virtual int GetPayloadLength(object value) => Packet.GetPayloadLength(value);
-    /// <inheritdoc />
-    public virtual void SetPayloadLength(object value, int length) => Packet.SetPayloadLength(value, length);
-    /// <inheritdoc />
-    public virtual ReadOnlyMemory<byte> GetPacketData(object value) => Packet.GetData(value);
-    /// <inheritdoc />
-    public virtual void SetPacketData(object value, ReadOnlyMemory<byte> data) => Packet.SetData(value, data);
+    public virtual ReadOnlyMemory<byte> GetPacketData(object value) => framePacketHandler.Value.GetData(value);
 
     /// <inheritdoc />
     public virtual string? ResolveUserName(string userCode)

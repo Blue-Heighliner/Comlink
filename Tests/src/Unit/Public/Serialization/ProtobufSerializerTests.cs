@@ -79,21 +79,21 @@ public sealed class ProtobufSerializerTests
         Assert.Equal("M1", Serializer.Deserialize<TestFrame>((ReadOnlyMemory<byte>)envelope.Payload).MessageId);
     }
 
-    /// <summary>With no envelope there is nothing to determine a type from, so empty data deserializes to null rather than a default instance.</summary>
+    /// <summary>With no envelope there is nothing to determine a type from, so empty data is refused rather than deserialized to a default instance.</summary>
     [Fact]
-    public void Deserialize_EmptyData_ReturnsNull()
+    public void Deserialize_EmptyData_Throws()
     {
-        Assert.Null(serializer.Deserialize(ReadOnlyMemory<byte>.Empty));
+        Assert.Throws<InvalidDataException>(() => serializer.Deserialize(ReadOnlyMemory<byte>.Empty));
     }
 
-    /// <summary>An envelope naming a type that cannot be resolved deserializes to null rather than throwing.</summary>
+    /// <summary>An envelope naming a type that cannot be resolved is refused with an InvalidDataException.</summary>
     [Fact]
-    public void Deserialize_UnknownTypeName_ReturnsNull()
+    public void Deserialize_UnknownTypeName_Throws()
     {
         using MemoryStream stream = new();
         Serializer.Serialize(stream, new ProtobufEnvelope { TypeName = "No.Such.Type, NoSuchAssembly", Payload = [1, 2, 3] });
 
-        Assert.Null(serializer.Deserialize(stream.ToArray()));
+        Assert.Throws<InvalidDataException>(() => serializer.Deserialize(stream.ToArray()));
     }
 
     private static byte[] Envelope(string typeName)
@@ -111,7 +111,7 @@ public sealed class ProtobufSerializerTests
         using IMemoryOwner<byte> message = serializer.Serialize(new TestFrame { MessageId = "M1" });
         ProtobufSerializer restricted = new(typeof(TestFrame));
 
-        Assert.Null(restricted.Deserialize(other.Memory));
+        Assert.Throws<InvalidDataException>(() => restricted.Deserialize(other.Memory));
         Assert.IsType<TestFrame>(restricted.Deserialize(message.Memory));
         Assert.IsType<OtherDto>(new ProtobufSerializer(typeof(OtherDto), typeof(TestFrame)).Deserialize(other.Memory));
     }
@@ -120,7 +120,7 @@ public sealed class ProtobufSerializerTests
     [Fact]
     public void Deserialize_UnrestrictedSerializer_RefusesTypesWithoutAContract()
     {
-        Assert.Null(serializer.Deserialize(Envelope(typeof(Uri).AssemblyQualifiedName!)));
+        Assert.Throws<InvalidDataException>(() => serializer.Deserialize(Envelope(typeof(Uri).AssemblyQualifiedName!)));
     }
 
     /// <summary>An engine controller's serializers build only its own message and packet types.</summary>
@@ -132,10 +132,10 @@ public sealed class ProtobufSerializerTests
         using IMemoryOwner<byte> message = serializer.Serialize(new TestFrame { MessageId = "M1" });
         using IMemoryOwner<byte> packet = serializer.Serialize(new TestPacket { Count = 1 });
 
-        Assert.Null(controller.FrameSerializer.Deserialize(other.Memory, null));
-        Assert.Null(controller.FrameSerializer.Deserialize(packet.Memory, null));
+        Assert.Throws<InvalidDataException>(() => controller.FrameSerializer.Deserialize(other.Memory, null));
+        Assert.Throws<InvalidDataException>(() => controller.FrameSerializer.Deserialize(packet.Memory, null));
         Assert.IsType<TestFrame>(controller.FrameSerializer.Deserialize(message.Memory, null));
-        Assert.Null(controller.PacketSerializer!.Deserialize(message.Memory));
+        Assert.Throws<InvalidDataException>(() => controller.PacketSerializer!.Deserialize(message.Memory));
         Assert.IsType<TestPacket>(controller.PacketSerializer!.Deserialize(packet.Memory));
     }
 }

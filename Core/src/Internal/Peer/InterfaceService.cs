@@ -126,7 +126,7 @@ internal sealed class InterfaceService : IInterfaceService
 
     internal async Task HandleInterfaceMessage(ReadOnlyMemory<byte> data)
     {
-        object? message;
+        object message;
         try
         {
             message = engineController.FrameSerializer.Deserialize(data, null);
@@ -139,7 +139,7 @@ internal sealed class InterfaceService : IInterfaceService
         // FrameSerializer determines the type from the data itself, so bytes from an incompatible sender
         // could describe a type other than this instance's own FrameType; treat that the same as a
         // failed deserialize rather than let a mismatched cast below throw.
-        if (message is null || message.GetType() != engineController.FrameType) { return; }
+        if (message.GetType() != engineController.FrameType) { return; }
 
         UserInfo? userInfo = userService.GetCurrentUserInfo();
         if (userInfo is null) { return; }

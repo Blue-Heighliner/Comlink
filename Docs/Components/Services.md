@@ -59,7 +59,7 @@ UserInfo? installed = await service.Install("SN01", cancellation);
 Routes outbound messages to peer nodes and surfaces their delivery status. Delivery status comes from `IPeerService`'s `DestinationStatus` stream: `Sent` and `Failed` from the transport, `Received` and `Read` from the receipt frame flow (see [Peer.md](Peer.md#delivery-status)).
 
 **Key responsibilities**:
-- Build the outbound message via `IEngineController` (`CreateMessage` with the message content, which runs the host's message handler, then the `SetFrameId`, `SetFromUser`, `SetAddresses` and `SetSentAt` setters for the fields every frame has) so it can be sent as whatever concrete type the host has configured (see [Configuration.md](Configuration.md#frame-format))
+- Build the outbound message via `IEngineController` (`CreateMessage` with the message content, which runs the host's message handler, with the sent time in its content, then the `SetFrameId`, `SetFromUser` and `SetAddresses` setters for the fields every frame has) so it can be sent as whatever concrete type the host has configured (see [Configuration.md](Configuration.md#frame-format))
 - For each recipient in `SendMessagePayload.Addresses`, deliver via `IPeerService.Send`
 - Subscribe to `IPeerService.DeliveryStatusChanged` and forward each `DestinationStatus` unchanged as its own `DeliveryStatusChanged`
 - Subscribe to `IPeerService.ReceiveReceiptReceived` and `ReadReceiptReceived` and re-raise them as `DeliveryStatusChanged(messageId, user, DestinationStatus.Received)` and `(..., DestinationStatus.Read)` — reusing the same event as peer-driven status changes

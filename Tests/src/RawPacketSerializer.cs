@@ -20,13 +20,14 @@ public sealed class RawPacketSerializer : IPacketSerializer
     }
 
     /// <inheritdoc />
-    public object? Deserialize(ReadOnlyMemory<byte> data)
+    public object Deserialize(ReadOnlyMemory<byte> data)
     {
-        if (data.Length < HeaderSize) { return null; }
+        if (data.Length < HeaderSize) { throw new InvalidDataException("too short"); }
 
         ReadOnlySpan<byte> span = data.Span;
         return new TestPacket
         {
+            IsFramePacket = true,
             PayloadId = BinaryPrimitives.ReadInt32BigEndian(span),
             Index = BinaryPrimitives.ReadInt32BigEndian(span[4..]),
             Count = BinaryPrimitives.ReadInt32BigEndian(span[8..]),

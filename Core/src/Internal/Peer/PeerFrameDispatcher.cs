@@ -32,8 +32,7 @@ internal static class PeerFrameDispatcher
     {
         try
         {
-            object? frame = engineController.FrameSerializer.Deserialize(data, packet);
-            if (frame is null) { return false; }
+            object frame = engineController.FrameSerializer.Deserialize(data, packet);
 
             if (engineController.IsHeartbeat(frame)) { return true; }
 

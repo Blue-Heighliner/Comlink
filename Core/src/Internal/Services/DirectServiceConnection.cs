@@ -57,7 +57,6 @@ internal sealed class DirectServiceConnection : IServiceConnection
         engineController.SetFrameId(receipt, Guid.NewGuid().ToString("N").ToUpperInvariant());
         engineController.SetFromUser(receipt, userInfo.Name);
         engineController.SetAddresses(receipt, [new MessageAddress { UserName = fromUser, Type = AddressType.To }]);
-        engineController.SetSentAt(receipt, DateTime.UtcNow);
         await peerService.Send(fromUser, receipt);
     }
 
@@ -144,7 +143,6 @@ internal sealed class DirectServiceConnection : IServiceConnection
         engineController.SetFrameId(receipt, Guid.NewGuid().ToString("N").ToUpperInvariant());
         engineController.SetFromUser(receipt, userInfo.Name);
         engineController.SetAddresses(receipt, [new MessageAddress { UserName = fromUser, Type = AddressType.To }]);
-        engineController.SetSentAt(receipt, DateTime.UtcNow);
         await peerService.Send(fromUser, receipt, cancellation);
         return true;
     }

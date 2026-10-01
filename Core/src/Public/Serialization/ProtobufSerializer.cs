@@ -34,7 +34,7 @@ public sealed class ProtobufSerializer : IFrameSerializer, IPacketSerializer
     public IMemoryOwner<byte> Serialize(object value, object? frame) => Serialize(value);
 
     /// <inheritdoc />
-    public object? Deserialize(ReadOnlyMemory<byte> data, object? packet) => Deserialize(data);
+    public object Deserialize(ReadOnlyMemory<byte> data, object? packet) => Deserialize(data);
 
     /// <summary>Serializes <paramref name="value"/>, a frame or a packet, into a pool-backed buffer the caller disposes.</summary>
     /// <param name="value">What to serialize.</param>
@@ -55,13 +55,14 @@ public sealed class ProtobufSerializer : IFrameSerializer, IPacketSerializer
 
     /// <summary>Deserializes a frame or a packet from <paramref name="data"/>, building only the types this serializer was told about.</summary>
     /// <param name="data">The raw payload.</param>
-    public object? Deserialize(ReadOnlyMemory<byte> data)
+    /// <exception cref="InvalidDataException">The payload is not an envelope, or names a type this serializer was not told about.</exception>
+    public object Deserialize(ReadOnlyMemory<byte> data)
     {
         ProtobufEnvelope? envelope = Serializer.Deserialize<ProtobufEnvelope>(data);
-        if (envelope is null || string.IsNullOrEmpty(envelope.TypeName)) { return null; }
+        if (envelope is null || string.IsNullOrEmpty(envelope.TypeName)) { throw new InvalidDataException("The bytes are not a serialized frame or packet"); }
 
-        Type? type = Resolve(envelope.TypeName);
-        return type is null ? null : Serializer.NonGeneric.Deserialize(type, envelope.Payload);
+        Type type = Resolve(envelope.TypeName) ?? throw new InvalidDataException("The bytes name a type this serializer does not build");
+        return Serializer.NonGeneric.Deserialize(type, envelope.Payload) ?? throw new InvalidDataException("The bytes hold no value");
     }
 
     private Type? Resolve(string typeName)

@@ -22,7 +22,7 @@ public sealed class SerializerBaseTests
 
         public override IMemoryOwner<byte> Serialize(TestFrame frame) => new Owner();
 
-        public override TestFrame? Deserialize(ReadOnlyMemory<byte> data, TestPacket? packet)
+        public override TestFrame Deserialize(ReadOnlyMemory<byte> data, TestPacket? packet)
         {
             SeenPacket = packet;
             return new TestFrame { MessageId = "M" };
@@ -39,7 +39,7 @@ public sealed class SerializerBaseTests
             return new Owner();
         }
 
-        public override TestPacket? Deserialize(ReadOnlyMemory<byte> data) => new() { Count = 1 };
+        public override TestPacket Deserialize(ReadOnlyMemory<byte> data) => new() { Count = 1 };
     }
 
     /// <summary>The frame serializer hands the typed packet through from the object-typed interface, and a null packet stays null.</summary>

@@ -15,8 +15,9 @@ public interface IPacketSerializer
 
     /// <summary>Deserializes a packet from <paramref name="data"/>, determining its own concrete type from the data itself rather than being told it.</summary>
     /// <param name="data">The raw, already-received packet.</param>
-    /// <returns>The deserialized packet, or <see langword="null"/> if deserialization produced no value.</returns>
-    object? Deserialize(ReadOnlyMemory<byte> data);
+    /// <returns>The deserialized packet.</returns>
+    /// <exception cref="InvalidDataException"><paramref name="data"/> is not a packet this serializer can or will build.</exception>
+    object Deserialize(ReadOnlyMemory<byte> data);
 }
 
 /// <summary>The base class for a host's own <see cref="IPacketSerializer"/>, working with the packet and frame types rather than <see cref="object"/>.</summary>
@@ -33,12 +34,13 @@ public abstract class PacketSerializer<TFrame, TPacket> : IPacketSerializer
 
     /// <summary>Deserializes a packet from <paramref name="data"/>.</summary>
     /// <param name="data">The raw, already-received packet.</param>
-    /// <returns>The deserialized packet, or <see langword="null"/> if there is none.</returns>
-    public abstract TPacket? Deserialize(ReadOnlyMemory<byte> data);
+    /// <returns>The deserialized packet.</returns>
+    /// <exception cref="InvalidDataException"><paramref name="data"/> is not a packet this serializer can or will build.</exception>
+    public abstract TPacket Deserialize(ReadOnlyMemory<byte> data);
 
     /// <inheritdoc />
     IMemoryOwner<byte> IPacketSerializer.Serialize(object packet, object? frame) => Serialize((TPacket)packet, (TFrame?)frame);
 
     /// <inheritdoc />
-    object? IPacketSerializer.Deserialize(ReadOnlyMemory<byte> data) => Deserialize(data);
+    object IPacketSerializer.Deserialize(ReadOnlyMemory<byte> data) => Deserialize(data);
 }

@@ -18,5 +18,5 @@ public sealed class SampleJsonSerializer : FrameSerializer<SampleFrame, SamplePa
     }
 
     /// <inheritdoc />
-    public override SampleFrame? Deserialize(ReadOnlyMemory<byte> data, SamplePacket? packet) => JsonSerializer.Deserialize<SampleFrame>(data.Span);
+    public override SampleFrame Deserialize(ReadOnlyMemory<byte> data, SamplePacket? packet) => JsonSerializer.Deserialize<SampleFrame>(data.Span) ?? throw new InvalidDataException("The bytes hold no frame");
 }

@@ -10,12 +10,16 @@ public sealed class TestMessageHandler : IMessageHandler<TestFrame>
     public TestFrame Create(MessageCreateContext context)
         => new()
         {
+            SentAt = context.SentAt,
             Body = context.Body,
             IsAlert = context.IsAlert,
             Priority = context.Priority,
             Tag = context.Tag,
             SecurityLevel = context.SecurityLevel
         };
+
+    /// <inheritdoc />
+    public DateTime GetSentAt(TestFrame frame) => frame.SentAt;
 
     /// <inheritdoc />
     public string GetBody(TestFrame frame) => frame.Body;

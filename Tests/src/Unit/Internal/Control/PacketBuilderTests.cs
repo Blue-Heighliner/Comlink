@@ -6,54 +6,35 @@ public sealed class PacketBuilderTests
     private static PacketBuilder<TestPacket> Complete()
     {
         PacketBuilder<TestPacket> builder = new();
-        builder
-            .PayloadId(p => p.PayloadId, (p, v) => p.PayloadId = v)
-            .Index(p => p.Index, (p, v) => p.Index = v)
-            .Count(p => p.Count, (p, v) => p.Count = v)
-            .PayloadLength(p => p.PayloadLength, (p, v) => p.PayloadLength = v)
-            .IsData(p => p.IsData, (p, v) => p.IsData = v)
-            .Data(p => p.Data, (p, v) => p.Data = v.ToArray());
+        builder.Frame<TestFramePacketHandler>();
         return builder;
     }
 
-    /// <summary>Building fails and names every packet field that was not mapped.</summary>
+    /// <summary>Building fails and names the frame packet handler when it was not stated.</summary>
     [Fact]
-    public void Build_UnmappedFields_ThrowsNamingThem()
+    public void Build_UnstatedHandler_ThrowsNamingIt()
     {
         PacketBuilder<TestPacket> builder = new();
-        builder.PayloadId(p => p.PayloadId, (p, v) => p.PayloadId = v);
 
         InvalidOperationException error = Assert.Throws<InvalidOperationException>(() => builder.Build());
 
         Assert.Contains("TestPacket", error.Message);
-        Assert.Contains("Index", error.Message);
-        Assert.Contains("Count", error.Message);
-        Assert.Contains("PayloadLength", error.Message);
-        Assert.Contains("Data", error.Message);
+        Assert.Contains("Frame", error.Message);
     }
 
-    /// <summary>The map reads and writes each packet field through the object-typed accessors.</summary>
+    /// <summary>The frame packet handler the host states creates a packet from a piece of a payload, recognizes it, and reads each aspect back.</summary>
     [Fact]
-    public void Map_ReadsAndWritesEveryField()
+    public void FramePacketHandler_CreatesRecognizesAndReads()
     {
-        PacketMap map = Complete().Build();
-        object packet = map.Create();
+        IFramePacketAdapter handler = Complete().Build().FramePacket.Create(null);
 
-        map.SetPayloadId(packet, 5);
-        map.SetIndex(packet, 2);
-        map.SetCount(packet, 9);
-        map.SetPayloadLength(packet, 1000);
-        map.SetIsData(packet, true);
-        map.SetData(packet, new byte[] { 1, 2, 3 });
+        object packet = handler.Create(new FramePacketCreateContext { PayloadId = 5, Index = 2, Count = 9, PayloadLength = 1000, Data = new byte[] { 1, 2, 3 } });
 
         Assert.IsType<TestPacket>(packet);
-        Assert.Equal(5, map.GetPayloadId(packet));
-        Assert.Equal(2, map.GetIndex(packet));
-        Assert.Equal(9, map.GetCount(packet));
-        Assert.Equal(1000, map.GetPayloadLength(packet));
-        Assert.True(map.GetIsData(packet));
-        Assert.Equal(new byte[] { 1, 2, 3 }, map.GetData(packet).ToArray());
-        Assert.Equal(typeof(TestPacket), map.Type);
+        Assert.True(handler.IsValid(packet));
+        Assert.False(handler.IsValid(new TestPacket()));
+        Assert.Equal((5, 2, 9, 1000), (handler.GetPayloadId(packet), handler.GetIndex(packet), handler.GetCount(packet), handler.GetPayloadLength(packet)));
+        Assert.Equal(new byte[] { 1, 2, 3 }, handler.GetData(packet).ToArray());
     }
 
     /// <summary>The default size is 16 KiB, the default window is 1, and the default serializer builds only the packet type.</summary>
@@ -68,43 +49,21 @@ public sealed class PacketBuilderTests
         Assert.Equal(16 * 1024, map.Size);
         Assert.Equal(1, map.Window);
         Assert.IsType<TestPacket>(serializer.Deserialize(own.Memory));
-        Assert.Null(serializer.Deserialize(other.Memory));
+        Assert.Throws<InvalidDataException>(() => serializer.Deserialize(other.Memory));
     }
 
-    /// <summary>The size, window, serializer and factory a host states replace the defaults.</summary>
+    /// <summary>The size, window and serializer a host states replace the defaults.</summary>
     [Fact]
-    public void Size_Window_Serializer_AndCreate_CanBeReplaced()
+    public void Size_Window_AndSerializer_CanBeReplaced()
     {
         IPacketSerializer serializer = Mock.Of<IPacketSerializer>();
-        TestPacket created = new() { Count = 42 };
         PacketBuilder<TestPacket> builder = Complete();
-        builder.Size(200).Window(3).Serializer<IPacketSerializer>().Create(() => created);
+        builder.Size(200).Window(3).Serializer<IPacketSerializer>();
 
         PacketMap map = builder.Build();
 
         Assert.Equal(200, map.Size);
         Assert.Equal(3, map.Window);
         Assert.Same(serializer, map.Serializer.Create(new ServiceCollection().AddSingleton(serializer).BuildServiceProvider()));
-        Assert.Same(created, map.Create());
-    }
-
-    /// <summary>The integer fields can be mapped by naming the property alone, while the data keeps its explicit getter and setter.</summary>
-    [Fact]
-    public void PropertyOverloads_MapEachMatchingFieldWithoutASetter()
-    {
-        PacketBuilder<TestPacket> builder = new();
-        builder.PayloadId(p => p.PayloadId).Index(p => p.Index).Count(p => p.Count).PayloadLength(p => p.PayloadLength).IsData(p => p.IsData)
-            .Data(p => p.Data, (p, v) => p.Data = v.ToArray());
-        PacketMap map = builder.Build();
-        object packet = map.Create();
-
-        map.SetPayloadId(packet, 1);
-        map.SetIndex(packet, 2);
-        map.SetCount(packet, 3);
-        map.SetPayloadLength(packet, 4);
-
-        TestPacket typed = Assert.IsType<TestPacket>(packet);
-        Assert.Equal((1, 2, 3, 4), (typed.PayloadId, typed.Index, typed.Count, typed.PayloadLength));
-        Assert.Equal(3, map.GetCount(packet));
     }
 }

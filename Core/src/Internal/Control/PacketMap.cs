@@ -11,30 +11,6 @@ internal sealed class PacketMap
     public required int Size { get; init; }
     /// <summary>How many packets may be in flight over one connection at once.</summary>
     public required int Window { get; init; }
-    /// <summary>Creates a new, empty packet.</summary>
-    public required Func<object> Create { get; init; }
-    /// <summary>Reads the payload identifier.</summary>
-    public required Func<object, int> GetPayloadId { get; init; }
-    /// <summary>Writes the payload identifier.</summary>
-    public required Action<object, int> SetPayloadId { get; init; }
-    /// <summary>Reads the packet index.</summary>
-    public required Func<object, int> GetIndex { get; init; }
-    /// <summary>Writes the packet index.</summary>
-    public required Action<object, int> SetIndex { get; init; }
-    /// <summary>Reads the packet count.</summary>
-    public required Func<object, int> GetCount { get; init; }
-    /// <summary>Writes the packet count.</summary>
-    public required Action<object, int> SetCount { get; init; }
-    /// <summary>Reads the payload length.</summary>
-    public required Func<object, bool> GetIsData { get; init; }
-    /// <summary>Writes whether the packet is a data packet.</summary>
-    public required Action<object, bool> SetIsData { get; init; }
-    /// <summary>Reads the payload length.</summary>
-    public required Func<object, int> GetPayloadLength { get; init; }
-    /// <summary>Writes the payload length.</summary>
-    public required Action<object, int> SetPayloadLength { get; init; }
-    /// <summary>Reads the packet data.</summary>
-    public required Func<object, ReadOnlyMemory<byte>> GetData { get; init; }
-    /// <summary>Writes the packet data.</summary>
-    public required Action<object, ReadOnlyMemory<byte>> SetData { get; init; }
+    /// <summary>Gets how the host's frame packet handler is instantiated.</summary>
+    public required ServiceRegistration<IFramePacketAdapter> FramePacket { get; init; }
 }

@@ -494,15 +494,14 @@ public sealed class MessageRoutingServiceTests
         Assert.Same(message, fake.Sent[0].Message);
     }
 
-    /// <summary>RouteFrame overwrites the message's own MessageId/FromUser/SentAt with a freshly generated ID, the given fromUser, and the current time, regardless of what the caller set them to.</summary>
+    /// <summary>RouteFrame overwrites the message's own MessageId and FromUser with a freshly generated ID and the given fromUser, regardless of what the caller set them to, and leaves its sent time alone.</summary>
     [Fact]
-    public async Task RouteMessage_OverwritesMessageIdFromUserAndSentAt()
+    public async Task RouteMessage_OverwritesMessageIdAndFromUser()
     {
         FakePeerService fake = new();
         MessageRoutingService service = new(fake, format, loggerFactory);
         TestFrame message = new() { MessageId = "STALE-ID", FromUser = "WRONG-USER", SentAt = new DateTime(2000, 1, 1) };
         format.SetAddresses(message, [new MessageAddress { UserName = "TargetUser", Type = AddressType.To }]);
-        DateTime before = DateTime.UtcNow;
 
         (string messageId, _) = await service.RouteFrame("SourceUser", message, default);
 
@@ -510,7 +509,7 @@ public sealed class MessageRoutingServiceTests
         Assert.True(Guid.TryParseExact(messageId, "N", out _));
         Assert.Equal(messageId, message.MessageId);
         Assert.Equal("SourceUser", message.FromUser, ignoreCase: true);
-        Assert.InRange(message.SentAt, before, DateTime.UtcNow);
+        Assert.Equal(new DateTime(2000, 1, 1), message.SentAt);
     }
 
     /// <summary>RouteFrame applies the same security-level filtering as Route, reading the blocking level from the message itself.</summary>

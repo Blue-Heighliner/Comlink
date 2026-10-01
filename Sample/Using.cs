@@ -12,3 +12,4 @@ global using BlueHeighliner.Comlink.Data;
 global using BlueHeighliner.Comlink.Models;
 global using BlueHeighliner.Comlink.Peer;
 global using BlueHeighliner.Comlink.Services;
+global using BlueHeighliner.MicroGate;

@@ -18,9 +18,9 @@ internal interface IMessageRoutingService
     /// The same as <see cref="Route"/>, except every field this reads (addresses, security level) comes straight from
     /// <paramref name="message"/> itself, via <see cref="Control.IEngineController"/>'s Get accessors, rather than
     /// from a <see cref="SendMessagePayload"/> - so the caller builds the whole message (an instance of
-    /// <see cref="Control.IEngineController.FrameType"/>) itself instead of stating loose fields. Its message ID,
-    /// sender, and sent time are still overwritten with a freshly generated ID, <paramref name="fromUser"/>, and the
-    /// current UTC time, exactly as <see cref="Route"/> also does, so a caller only needs to set the content fields.
+    /// <see cref="Control.IEngineController.FrameType"/>) itself instead of stating loose fields. Its message ID
+    /// and sender are still overwritten with a freshly generated ID and <paramref name="fromUser"/>, exactly as <see cref="Route"/> also does,
+    /// so a caller only needs to set the content fields, including the sent time when the frame is a message.
     /// </summary>
     Task<(string MessageId, IReadOnlyList<UserDeliveryResult> UserResults)> RouteFrame(string fromUser, object message, CancellationToken cancellation);
 }
@@ -87,6 +87,7 @@ internal sealed class MessageRoutingService : IMessageRoutingService
 
         object message = engineController.CreateMessage(new MessageCreateContext
         {
+            SentAt = DateTime.UtcNow,
             Body = payload.Body,
             IsAlert = payload.IsAlert,
             Priority = payload.Priority,
@@ -96,7 +97,6 @@ internal sealed class MessageRoutingService : IMessageRoutingService
         engineController.SetFrameId(message, messageId);
         engineController.SetFromUser(message, fromUser);
         engineController.SetAddresses(message, addresses);
-        engineController.SetSentAt(message, DateTime.UtcNow);
 
         return RouteBuiltMessage(fromUser, messageId, message, addresses, payload.SecurityLevel, cancellation);
     }
@@ -107,7 +107,6 @@ internal sealed class MessageRoutingService : IMessageRoutingService
         string messageId = Guid.NewGuid().ToString("N").ToUpperInvariant();
         engineController.SetFrameId(message, messageId);
         engineController.SetFromUser(message, fromUser);
-        engineController.SetSentAt(message, DateTime.UtcNow);
 
         return RouteBuiltMessage(fromUser, messageId, message, engineController.GetAddresses(message), engineController.GetSecurityLevel(message), cancellation);
     }

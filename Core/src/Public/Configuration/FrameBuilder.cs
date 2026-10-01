@@ -35,12 +35,6 @@ public interface IFrameBuilder<TFrame> where TFrame : class, new()
     /// </summary>
     IFrameBuilder<TFrame> Addresses(Func<TFrame, IEnumerable<(string Name, AddressType Type)>> get, Action<TFrame, IReadOnlyList<(string Name, AddressType Type)>> set);
 
-    /// <summary>Maps the UTC time the frame was sent.</summary>
-    IFrameBuilder<TFrame> SentAt(Func<TFrame, DateTime> get, Action<TFrame, DateTime> set);
-
-    /// <summary>Maps the same field by the property or field the expression reads, such as <c>x => x.SentAt</c>, building the setter from it. The member must have the same type and be assignable.</summary>
-    IFrameBuilder<TFrame> SentAt(Expression<Func<TFrame, DateTime>> property);
-
     /// <summary>
     /// States the handler for message frames: the ones the user reads, which are stored in the Inbox when received and in the Outbox when sent by the user. The handler creates a
     /// message from its content, recognizes message frames and reads their content (see <see cref="IMessageHandler{TFrame}"/>). A frame that is not a message
@@ -50,20 +44,11 @@ public interface IFrameBuilder<TFrame> where TFrame : class, new()
     IFrameBuilder<TFrame> Message<THandler>() where THandler : IMessageHandler<TFrame>;
 
     /// <summary>
-    /// Adds a custom auto forward controller, shown as an option in the client's auto forward screen to every user
-    /// named in <paramref name="users"/>. Any of them can open it there and maintain their own locally-saved target
-    /// list (added to and removed from freely, persisted between restarts); whenever this instance receives a
-    /// message (a frame the message handler recognizes; other frames are never forwarded) that <paramref name="filter"/> accepts, it is automatically forwarded, unchanged in
-    /// body, to every user currently on that target list - no action needed beyond having set the target list up
-    /// once. <paramref name="filter"/> is never consulted for a user with no access, or with an empty target list,
-    /// so an inaccessible or unconfigured controller costs nothing per received message beyond that one check.
-    /// Calling this again with the same <paramref name="name"/> (case-insensitive) replaces the earlier controller
-    /// of that name in place; a new name adds another alongside it.
+    /// Adds a custom auto forward controller (see <see cref="IAutoForwardController{TFrame}"/>), shown as an option in the client's auto forward screen to the users it names. Only messages
+    /// are forwarded. Adding another controller with the same name (case-insensitive) replaces the earlier one in place; a new name adds another alongside it.
     /// </summary>
-    /// <param name="name">Display name shown for this controller in the auto forward screen.</param>
-    /// <param name="users">User names allowed to open this controller and maintain its target list.</param>
-    /// <param name="filter">Answers whether a received message should be auto-forwarded through this controller.</param>
-    IFrameBuilder<TFrame> AutoForward(string name, IEnumerable<string> users, Func<TFrame, bool> filter);
+    /// <typeparam name="TController">The controller type, instantiated through dependency injection when the engine runs: the instance registered for it in the host's services, or else one constructed from them.</typeparam>
+    IFrameBuilder<TFrame> AutoForward<TController>() where TController : IAutoForwardController<TFrame>;
 
     /// <summary>
     /// States the handler for retrieval request frames, what a user sends a storage server (see <see cref="UserInfo.StoresMessages"/>) to ask for stored messages

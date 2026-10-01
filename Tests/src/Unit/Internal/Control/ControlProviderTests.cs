@@ -51,7 +51,7 @@ public sealed class ControlProviderTests
 
         Assert.Null(controller.PacketType);
         Assert.Null(controller.PacketSerializer);
-        Assert.Throws<NotSupportedException>(() => controller.CreatePacket());
+        Assert.Throws<NotSupportedException>(() => controller.CreateFramePacket(new FramePacketCreateContext { PayloadId = 1, Index = 0, Count = 1, PayloadLength = 0, Data = ReadOnlyMemory<byte>.Empty }));
         Assert.Throws<NotSupportedException>(() => controller.GetPacketIndex(new object()));
     }
 
@@ -65,21 +65,17 @@ public sealed class ControlProviderTests
         Assert.Equal(typeof(TestPacket), controller.PacketType);
         Assert.IsType<ProtobufSerializer>(controller.PacketSerializer);
         Assert.IsType<TestPacketSerializer>(custom.PacketSerializer);
-        Assert.IsType<TestPacket>(controller.CreatePacket());
+        Assert.IsType<TestPacket>(controller.CreateFramePacket(new FramePacketCreateContext { PayloadId = 1, Index = 0, Count = 1, PayloadLength = 0, Data = ReadOnlyMemory<byte>.Empty }));
     }
 
-    /// <summary>The packet field members get and set the fields of the host's packet type.</summary>
+    /// <summary>Creating a frame packet through the controller and reading it back round-trips the fields of the host's packet type.</summary>
     [Fact]
     public void PacketEngineController_PacketFields_RoundTripThroughTheController()
     {
         IEngineController controller = new TestPacketEngineController();
-        object packet = controller.CreatePacket();
+        object packet = controller.CreateFramePacket(new FramePacketCreateContext { PayloadId = 7, Index = 2, Count = 5, PayloadLength = 99, Data = new byte[] { 1, 2, 3 } });
 
-        controller.SetPayloadId(packet, 7);
-        controller.SetPacketIndex(packet, 2);
-        controller.SetPacketCount(packet, 5);
-        controller.SetPayloadLength(packet, 99);
-        controller.SetPacketData(packet, new byte[] { 1, 2, 3 });
+        Assert.True(controller.IsFramePacket(packet));
 
         Assert.Equal(7, controller.GetPayloadId(packet));
         Assert.Equal(2, controller.GetPacketIndex(packet));
@@ -116,14 +112,14 @@ public sealed class ControlProviderTests
     private sealed class TestPacketSerializer : IPacketSerializer
     {
         public IMemoryOwner<byte> Serialize(object value, object? frame) => throw new NotSupportedException();
-        public object? Deserialize(ReadOnlyMemory<byte> data) => throw new NotSupportedException();
+        public object Deserialize(ReadOnlyMemory<byte> data) => throw new NotSupportedException();
     }
 
     private sealed class TestNetworkSerializer : IFrameSerializer
     {
         public void ConfigurePacket(object frame, object packet) => throw new NotSupportedException();
         public IMemoryOwner<byte> Serialize(object value) => throw new NotSupportedException();
-        public object? Deserialize(ReadOnlyMemory<byte> data, object? packet) => throw new NotSupportedException();
+        public object Deserialize(ReadOnlyMemory<byte> data, object? packet) => throw new NotSupportedException();
     }
 
     private sealed class TestNetworkSerializerOverride : TestEngineController
@@ -668,12 +664,7 @@ public sealed class ControlProviderTests
         Assert.Same(fallback.PacketSerializer, controller.PacketSerializer);
         Assert.Equal(fallback.PacketSize, controller.PacketSize);
         Assert.Equal(fallback.PacketWindow, controller.PacketWindow);
-        object packet = controller.CreatePacket();
-        controller.SetPayloadId(packet, 9);
-        controller.SetPacketIndex(packet, 1);
-        controller.SetPacketCount(packet, 2);
-        controller.SetPayloadLength(packet, 30);
-        controller.SetPacketData(packet, new byte[] { 5 });
+        object packet = controller.CreateFramePacket(new FramePacketCreateContext { PayloadId = 9, Index = 1, Count = 2, PayloadLength = 30, Data = new byte[] { 5 } });
         Assert.Equal(9, controller.GetPayloadId(packet));
         Assert.Equal(1, controller.GetPacketIndex(packet));
         Assert.Equal(2, controller.GetPacketCount(packet));
@@ -710,7 +701,7 @@ public sealed class ControlProviderTests
         Assert.Equal("BOB", roundTripped.UserName);
         Assert.Equal(AddressType.To, roundTripped.Type);
         DateTime sentAt = new(2026, 1, 1, 0, 0, 0, DateTimeKind.Utc);
-        controller.SetSentAt(message, sentAt);
+        ((TestFrame)message).SentAt = sentAt;
         Assert.Equal(sentAt, controller.GetSentAt(message));
         ((TestFrame)message).ReadReceiptMessageId = "M0";
         Assert.Equal("M0", controller.GetReadReceiptMessageId(message));

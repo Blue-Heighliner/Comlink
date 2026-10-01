@@ -44,7 +44,7 @@ public sealed class MessageFormatTests
         format.SetFromUser(message, "ALPHA");
         ((TestFrame)message).Body = "World";
         format.SetAddresses(message, addresses);
-        format.SetSentAt(message, sentAt);
+        ((TestFrame)message).SentAt = sentAt;
         ((TestFrame)message).ReadReceiptMessageId = "MSG0";
         ((TestFrame)message).IsAlert = true;
         ((TestFrame)message).Priority = 3;

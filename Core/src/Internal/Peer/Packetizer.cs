@@ -103,14 +103,7 @@ internal sealed class Packetizer : IPacketizer
 
     private object Build(int id, int index, int count, int length, ReadOnlyMemory<byte> data)
     {
-        object packet = engineController.CreatePacket();
-        engineController.SetPayloadId(packet, id);
-        engineController.SetPacketIndex(packet, index);
-        engineController.SetPacketCount(packet, count);
-        engineController.SetIsData(packet, true);
-        engineController.SetPayloadLength(packet, length);
-        engineController.SetPacketData(packet, data);
-        return packet;
+        return engineController.CreateFramePacket(new FramePacketCreateContext { PayloadId = id, Index = index, Count = count, PayloadLength = length, Data = data });
     }
 
     // What a serializer makes of a packet is the host's business, so how much payload fits under the packet size is

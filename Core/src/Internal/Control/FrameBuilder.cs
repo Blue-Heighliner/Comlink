@@ -5,7 +5,7 @@ internal sealed class FrameBuilder<TFrame> : IFrameBuilder<TFrame> where TFrame 
 {
     private readonly Dictionary<string, (Delegate Get, Delegate Set)> fields = [];
     private ServiceRegistration<IFrameSerializer> serializer = new(_ => new ProtobufSerializer(typeof(TFrame)));
-    private readonly List<AutoForwardControllerDefinition> autoForwardControllers = [];
+    private readonly List<ServiceRegistration<AutoForwardControllerDefinition>> autoForwardControllers = [];
     private Func<TFrame> create = () => new();
     private ServiceRegistration<IMessageFrameHandler>? message;
     private ServiceRegistration<IRetrievalFrameHandler>? retrieval;
@@ -22,7 +22,7 @@ internal sealed class FrameBuilder<TFrame> : IFrameBuilder<TFrame> where TFrame 
     public ServiceRegistration<INetworkHandler>? NetworkHandler { get; private set; }
 
     /// <summary>The custom auto forward controllers.</summary>
-    public IReadOnlyList<AutoForwardControllerDefinition> AutoForwardControllers => autoForwardControllers;
+    public IReadOnlyList<ServiceRegistration<AutoForwardControllerDefinition>> AutoForwardControllers => autoForwardControllers;
 
     /// <inheritdoc />
     public IFrameBuilder<TFrame> Id(Func<TFrame, string> get, Action<TFrame, string> set) => Map(nameof(Id), get, set);
@@ -50,12 +50,6 @@ internal sealed class FrameBuilder<TFrame> : IFrameBuilder<TFrame> where TFrame 
             (message, addresses) => set(message, [.. addresses.Select(address => (address.Name, address.Type))]));
 
     /// <inheritdoc />
-    public IFrameBuilder<TFrame> SentAt(Func<TFrame, DateTime> get, Action<TFrame, DateTime> set) => Map(nameof(SentAt), get, set);
-
-    /// <inheritdoc />
-    public IFrameBuilder<TFrame> SentAt(Expression<Func<TFrame, DateTime>> property) => Map(nameof(SentAt), property);
-
-    /// <inheritdoc />
     public IFrameBuilder<TFrame> Message<THandler>() where THandler : IMessageHandler<TFrame>
     {
         message = ServiceRegistration<IMessageFrameHandler>.Of(typeof(THandler), handler => new MessageFrameHandler<TFrame>((IMessageHandler<TFrame>)handler));
@@ -63,12 +57,13 @@ internal sealed class FrameBuilder<TFrame> : IFrameBuilder<TFrame> where TFrame 
     }
 
     /// <inheritdoc />
-    public IFrameBuilder<TFrame> AutoForward(string name, IEnumerable<string> users, Func<TFrame, bool> filter)
+    public IFrameBuilder<TFrame> AutoForward<TController>() where TController : IAutoForwardController<TFrame>
     {
-        AutoForwardControllerDefinition definition = new() { Name = name, Users = [.. users], Filter = frame => filter((TFrame)frame) };
-        int existingIndex = autoForwardControllers.FindIndex(c => string.Equals(c.Name, name, StringComparison.OrdinalIgnoreCase));
-        if (existingIndex >= 0) { autoForwardControllers[existingIndex] = definition; }
-        else { autoForwardControllers.Add(definition); }
+        autoForwardControllers.Add(ServiceRegistration<AutoForwardControllerDefinition>.Of(typeof(TController), instance =>
+        {
+            IAutoForwardController<TFrame> controller = (IAutoForwardController<TFrame>)instance;
+            return new AutoForwardControllerDefinition { Name = controller.Name, Users = [.. controller.Users], Filter = frame => controller.Accepts((TFrame)frame) };
+        }));
         return this;
     }
 
@@ -140,7 +135,7 @@ internal sealed class FrameBuilder<TFrame> : IFrameBuilder<TFrame> where TFrame 
     /// <exception cref="InvalidOperationException">A logical field or frame kind has not been stated.</exception>
     public FrameMap Build()
     {
-        string[] missing = [.. new[] { nameof(Id), nameof(Sender), nameof(Addresses), nameof(SentAt) }.Where(name => !fields.ContainsKey(name)),
+        string[] missing = [.. new[] { nameof(Id), nameof(Sender), nameof(Addresses) }.Where(name => !fields.ContainsKey(name)),
             .. new (string Name, bool Stated)[] { (nameof(Message), message is not null), (nameof(Retrieval), retrieval is not null), (nameof(ReadReceipt), readReceipt is not null), (nameof(ReceiveReceipt), receiveReceipt is not null) }.Where(kind => !kind.Stated).Select(kind => kind.Name)];
         if (missing.Length > 0) { throw new InvalidOperationException($"The frame mapping for {typeof(TFrame).Name} does not state: {string.Join(", ", missing)}"); }
 
@@ -158,8 +153,6 @@ internal sealed class FrameBuilder<TFrame> : IFrameBuilder<TFrame> where TFrame 
             SetSender = Setter<string>(nameof(Sender)),
             GetAddresses = Getter<List<MessageAddress>>(nameof(Addresses)),
             SetAddresses = Setter<List<MessageAddress>>(nameof(Addresses)),
-            GetSentAt = Getter<DateTime>(nameof(SentAt)),
-            SetSentAt = Setter<DateTime>(nameof(SentAt)),
             Message = message!,
             Retrieval = retrieval!,
             ReadReceipt = readReceipt!,

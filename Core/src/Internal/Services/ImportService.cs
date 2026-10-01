@@ -167,6 +167,7 @@ internal sealed class ImportService : IImportService
 
         object message = engineController.CreateMessage(new MessageCreateContext
         {
+            SentAt = data.SentAt,
             Body = data.Body,
             IsAlert = data.IsAlert,
             Priority = data.Priority,
@@ -178,7 +179,6 @@ internal sealed class ImportService : IImportService
         engineController.SetAddresses(message, data.Addresses
             .Select(a => new MessageAddress { UserName = a.UserName, Type = a.Type.ParseAddressType(), Information = a.Information })
             .ToList());
-        engineController.SetSentAt(message, data.SentAt);
 
         MessageEntity entity = new()
         {

@@ -468,8 +468,8 @@ internal sealed class ServerRoutingService : IPeerService, IConnectionStatusServ
             // FrameSerializer determines the type from the data itself, so bytes from an incompatible
             // sender could describe a type other than this instance's own FrameType; treat that the
             // same as a failed deserialize rather than let a mismatched cast downstream throw.
-            object? message = engineController.FrameSerializer.Deserialize(data, packet);
-            return message?.GetType() == engineController.FrameType ? message : null;
+            object message = engineController.FrameSerializer.Deserialize(data, packet);
+            return message.GetType() == engineController.FrameType ? message : null;
         }
         catch
         {

@@ -17,7 +17,6 @@ public sealed class TestEngineConfiguration(bool packets = false, Action<IFrameB
                 .Addresses(
                     m => m.Addresses.Select(a => (a.UserName, a.Type.ParseAddressType(), a.Information)),
                     (m, value) => m.Addresses = [.. value.Select(a => new TestAddressEntry { UserName = a.Name, Type = a.Type.ToString(), Information = a.Information })])
-                .SentAt(m => m.SentAt)
                 .Message<TestMessageHandler>()
                 .Retrieval<TestRetrievalHandler>()
                 .ReadReceipt<TestReadReceiptHandler>()
@@ -30,13 +29,7 @@ public sealed class TestEngineConfiguration(bool packets = false, Action<IFrameB
         {
             engine.Packets<TestPacket>(packet =>
             {
-                packet
-                    .PayloadId(p => p.PayloadId)
-                    .Index(p => p.Index)
-                    .Count(p => p.Count)
-                    .PayloadLength(p => p.PayloadLength)
-                    .IsData(p => p.IsData)
-                    .Data(p => p.Data, (p, value) => p.Data = value.ToArray());
+                packet.Frame<TestFramePacketHandler>();
                 packetExtra?.Invoke(packet);
             });
         }

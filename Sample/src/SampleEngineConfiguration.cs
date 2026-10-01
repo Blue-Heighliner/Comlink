@@ -40,24 +40,15 @@ public sealed class SampleEngineConfiguration : IEngineConfiguration
                 .Addresses(
                     m => m.Recipients.Select(r => (r.User, r.Kind switch { "CC" => AddressType.Cc, "OUTSIDE" => AddressType.External, _ => AddressType.To }, r.Note)),
                     (m, value) => m.Recipients = [.. value.Select(a => new SampleRecipient { User = a.Name, Kind = a.Type switch { AddressType.Cc => "CC", AddressType.External => "OUTSIDE", _ => "TO" }, Note = a.Information })])
-                .SentAt(m => m.Timestamp)
                 .Message<SampleMessageHandler>()
-                .AutoForward(
-                    "Escalation",
-                    ["PEER1", "PEER2", "CLIENT1", "CLIENT2"],
-                    frame => frame.Alert || string.Equals(frame.Category, "URGENT", StringComparison.OrdinalIgnoreCase))
+                .AutoForward<SampleEscalationController>()
                 .Retrieval<SampleRetrievalHandler>()
                 .ReadReceipt<SampleReadReceiptHandler>()
                 .ReceiveReceipt<SampleReceiveReceiptHandler>()
                 .PrintCount(m => m.Alert ? 2 : 1))
             .Packets<SamplePacket>(packet => packet
                 .InitialProcessor<SampleIdentityProcessor>()
-                .PayloadId(p => p.Group)
-                .Index(p => p.Position)
-                .Count(p => p.Total)
-                .PayloadLength(p => p.FullLength)
-                .IsData(p => p.IsData)
-                .Data(p => p.Chunk, (p, value) => p.Chunk = value.ToArray()))
+                .Frame<SampleFramePacketHandler>())
             .HomeText("Select a folder and entry to get started, or create a new draft or note.")
             .WindowIcon("avares://BlueHeighliner.Comlink.Sample/Assets/envelope.png")
             .Priorities(
@@ -73,8 +64,8 @@ public sealed class SampleEngineConfiguration : IEngineConfiguration
                 ("RESTRICTED", "#C62828"))
             .CanDelete(folder => folder is FolderType.Drafts or FolderType.Notes)
             .CommandLineOverrides(true)
-            .MsmtOptions(options => options with { HandshakeTimeout = TimeSpan.FromSeconds(15), ResponseTimeout = TimeSpan.FromSeconds(60) })
-            .MicroGateOptions(options => options with { MaxInfoField = 1024, TransmitWindow = 4 })
+            .MsmtOptions(new MsmtConnectionOptions { HandshakeTimeout = TimeSpan.FromSeconds(15), ResponseTimeout = TimeSpan.FromSeconds(60) })
+            .MicroGateOptions(new MicroGatePeerOptions { MaxInfoField = 1024, TransmitWindow = 4 })
             .ExportFormat<SampleTextExportFormat>()
             .ImportFormat<SampleCsvImportFormat>();
 }

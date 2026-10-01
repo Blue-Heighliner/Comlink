@@ -299,13 +299,13 @@ public sealed class EngineBuilderTests
         Assert.Same(options, controller.ConnectionOptions);
     }
 
-    /// <summary>The MSMT adjustment is applied on top of the stated or built options, and left out when none is stated.</summary>
+    /// <summary>The stated MSMT options are used with the engine's own credentials, and the built options are used as they are when none are stated.</summary>
     [Fact]
-    public void Stated_MsmtOptions_AdjustTheOptionsUsedForEveryConnection()
+    public void Stated_MsmtOptions_ReplaceTheSettingsUsedForEveryConnectionKeepingTheEnginesCredentials()
     {
         MsmtSessionPeerOptions options = new() { Credentials = new MsmtCredentials { Identity = TestMsmtCertificates.Create().Server, TrustedAuthorities = [] } };
         (_, EngineController adjusted) = Build(engine => engine
-            .ConnectionOptions(() => options).MsmtOptions(o => o with { HandshakeTimeout = TimeSpan.FromSeconds(7) }));
+            .ConnectionOptions(() => options).MsmtOptions(new MsmtConnectionOptions { HandshakeTimeout = TimeSpan.FromSeconds(7) }));
         (_, EngineController plain) = Build(engine => engine.ConnectionOptions(() => options));
 
         Assert.Equal(TimeSpan.FromSeconds(7), adjusted.ConnectionOptions.HandshakeTimeout);
@@ -313,12 +313,12 @@ public sealed class EngineBuilderTests
         Assert.Equal(options.HandshakeTimeout, plain.ConnectionOptions.HandshakeTimeout);
     }
 
-    /// <summary>The MicroGate adjustment starts from the defaults and defaults to them when none is stated.</summary>
+    /// <summary>The stated MicroGate options are used, and the defaults when none are stated.</summary>
     [Fact]
-    public void Stated_MicroGateOptions_AdjustTheDefaults()
+    public void Stated_MicroGateOptions_ReplaceTheDefaults()
     {
         (_, EngineController adjusted) = Build(engine => engine
-            .MicroGateOptions(o => o with { MaxInfoField = 512, Link = o.Link with { Crc = MicroGateCrc.Crc32Ccitt } }));
+            .MicroGateOptions(new MicroGatePeerOptions { MaxInfoField = 512, Link = new MicroGatePeerOptions().Link with { Crc = MicroGateCrc.Crc32Ccitt } }));
         (_, EngineController plain) = Build(engine => engine);
 
         Assert.Equal(512, adjusted.MicroGateOptions.MaxInfoField);

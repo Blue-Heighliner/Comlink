@@ -11,12 +11,16 @@ public sealed class SampleMessageHandler : IMessageHandler<SampleFrame>
         => new()
         {
             IsMessage = true,
+            Timestamp = context.SentAt,
             Text = context.Body,
             Alert = context.IsAlert,
             Importance = context.Priority,
             Category = context.Tag,
             Classification = context.SecurityLevel
         };
+
+    /// <inheritdoc />
+    public DateTime GetSentAt(SampleFrame frame) => frame.Timestamp;
 
     /// <inheritdoc />
     public string GetBody(SampleFrame frame) => frame.Text;

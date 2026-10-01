@@ -20,7 +20,7 @@ public sealed class PacketizerTests
             return new Owner(Encoding.ASCII.GetBytes(Convert.ToHexString(bytes.Memory.Span)));
         }
 
-        public object? Deserialize(ReadOnlyMemory<byte> data) => raw.Deserialize(Convert.FromHexString(Encoding.ASCII.GetString(data.Span)));
+        public object Deserialize(ReadOnlyMemory<byte> data) => raw.Deserialize(Convert.FromHexString(Encoding.ASCII.GetString(data.Span)));
     }
 
     private sealed class BloatingPacketEngineController(int packetSize) : RawPacketEngineController(packetSize)
@@ -38,7 +38,7 @@ public sealed class PacketizerTests
             return new Owner([.. bytes.Memory.ToArray(), .. new byte[((TestPacket)value).Index == 1 ? 100 : 0]]);
         }
 
-        public object? Deserialize(ReadOnlyMemory<byte> data) => raw.Deserialize(data);
+        public object Deserialize(ReadOnlyMemory<byte> data) => raw.Deserialize(data);
     }
 
     private sealed class Owner(byte[] bytes) : IMemoryOwner<byte>
@@ -69,7 +69,7 @@ public sealed class PacketizerTests
             return raw.Serialize(value, frame);
         }
 
-        public object? Deserialize(ReadOnlyMemory<byte> data) => raw.Deserialize(data);
+        public object Deserialize(ReadOnlyMemory<byte> data) => raw.Deserialize(data);
     }
 
     /// <summary>The original frame is handed to the packet serializer with every packet it makes.</summary>
@@ -98,12 +98,12 @@ public sealed class PacketizerTests
 
         public IMemoryOwner<byte> Serialize(object frame) => throw new NotSupportedException();
 
-        public object? Deserialize(ReadOnlyMemory<byte> data, object? packet) => throw new NotSupportedException();
+        public object Deserialize(ReadOnlyMemory<byte> data, object? packet) => throw new NotSupportedException();
     }
 
-    /// <summary>Every data packet is marked as one and configured from its frame by the frame serializer, in order; with no frame there is nothing to configure from.</summary>
+    /// <summary>Every frame packet is marked as one and configured from its frame by the frame serializer, in order; with no frame there is nothing to configure from.</summary>
     [Fact]
-    public void Split_DataPackets_AreMarkedAndConfiguredFromTheirFrame()
+    public void Split_FramePackets_AreMarkedAndConfiguredFromTheirFrame()
     {
         List<(object Frame, TestPacket Packet)> configured = [];
         Packetizer packetizer = new(new ConfiguringEngineController(Header + 10, configured));
@@ -114,7 +114,7 @@ public sealed class PacketizerTests
 
         Assert.Equal([0, 1, 2, 3], configured.Select(entry => entry.Packet.Index));
         Assert.All(configured, entry => Assert.Same(frame, entry.Frame));
-        Assert.All(configured, entry => Assert.True(entry.Packet.IsData));
+        Assert.All(configured, entry => Assert.True(entry.Packet.IsFramePacket));
 
         configured.Clear();
         Release(packetizer.Split(Payload(35), 0));

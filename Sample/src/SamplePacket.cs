@@ -3,7 +3,7 @@ namespace BlueHeighliner.Comlink.Sample;
 /// <summary>
 /// Demonstrates injecting a custom packet DTO, which enables the engine's standard packetization. As with
 /// <see cref="SampleFrame"/>, the field names are deliberately unlike the engine's own logical ones, so it is
-/// <see cref="SampleEngineConfiguration"/>'s packet mapping that maps them; the engine does all the splitting
+/// <see cref="SampleFramePacketHandler"/> that maps them; the engine does all the splitting
 /// and reassembling itself.
 /// </summary>
 [ProtoContract]
@@ -20,5 +20,5 @@ public sealed class SamplePacket
     /// <summary>The slice of the payload this packet carries.</summary>
     [ProtoMember(5)] public byte[] Chunk { get; set; } = [];
     /// <summary>Whether this packet carries a piece of a frame, as opposed to a packet that carries none, such as an identification packet.</summary>
-    [ProtoMember(6)] public bool IsData { get; set; }
+    [ProtoMember(6)] public bool IsFramePacket { get; set; }
 }

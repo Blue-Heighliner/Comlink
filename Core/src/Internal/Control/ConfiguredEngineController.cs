@@ -71,8 +71,6 @@ internal sealed class ConfiguredEngineController : IEngineController
     /// <inheritdoc />
     public DateTime GetSentAt(object frame) => fallback.GetSentAt(frame);
     /// <inheritdoc />
-    public void SetSentAt(object frame, DateTime value) => fallback.SetSentAt(frame, value);
-    /// <inheritdoc />
     public string GetReadReceiptMessageId(object frame) => fallback.GetReadReceiptMessageId(frame);
     /// <inheritdoc />
     public bool IsReadReceipt(object frame) => fallback.IsReadReceipt(frame);
@@ -97,31 +95,19 @@ internal sealed class ConfiguredEngineController : IEngineController
     /// <inheritdoc />
     public string GetSecurityLevel(object frame) => fallback.GetSecurityLevel(frame);
     /// <inheritdoc />
-    public object CreatePacket() => fallback.CreatePacket();
+    public object CreateFramePacket(FramePacketCreateContext context) => fallback.CreateFramePacket(context);
+    /// <inheritdoc />
+    public bool IsFramePacket(object packet) => fallback.IsFramePacket(packet);
     /// <inheritdoc />
     public int GetPayloadId(object packet) => fallback.GetPayloadId(packet);
     /// <inheritdoc />
-    public void SetPayloadId(object packet, int value) => fallback.SetPayloadId(packet, value);
-    /// <inheritdoc />
     public int GetPacketIndex(object packet) => fallback.GetPacketIndex(packet);
-    /// <inheritdoc />
-    public void SetPacketIndex(object packet, int value) => fallback.SetPacketIndex(packet, value);
     /// <inheritdoc />
     public int GetPacketCount(object packet) => fallback.GetPacketCount(packet);
     /// <inheritdoc />
-    public void SetPacketCount(object packet, int value) => fallback.SetPacketCount(packet, value);
-    /// <inheritdoc />
-    public bool GetIsData(object packet) => fallback.GetIsData(packet);
-    /// <inheritdoc />
-    public void SetIsData(object packet, bool value) => fallback.SetIsData(packet, value);
-    /// <inheritdoc />
     public int GetPayloadLength(object packet) => fallback.GetPayloadLength(packet);
     /// <inheritdoc />
-    public void SetPayloadLength(object packet, int value) => fallback.SetPayloadLength(packet, value);
-    /// <inheritdoc />
     public ReadOnlyMemory<byte> GetPacketData(object packet) => fallback.GetPacketData(packet);
-    /// <inheritdoc />
-    public void SetPacketData(object packet, ReadOnlyMemory<byte> value) => fallback.SetPacketData(packet, value);
 
     /// <inheritdoc />
     public string AppName => fallback.AppName;

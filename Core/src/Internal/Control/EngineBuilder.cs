@@ -16,7 +16,7 @@ internal sealed class EngineBuilder : IEngineBuilder, IAsyncDisposable
     private readonly List<IExternalSystem> externalSystems = [];
     private readonly List<ServiceRegistration<IExportFormat>> exportFormats = [];
     private readonly List<ServiceRegistration<IImportFormat>> importFormats = [];
-    private readonly List<AutoForwardControllerDefinition> autoForwardControllers = [];
+    private readonly List<ServiceRegistration<AutoForwardControllerDefinition>> autoForwardControllers = [];
     private ServiceProvider? bootstrap;
 
     /// <summary>The frame mapping, or <see langword="null"/> until <see cref="Frames{TFrame}"/> is called.</summary>
@@ -72,9 +72,9 @@ internal sealed class EngineBuilder : IEngineBuilder, IAsyncDisposable
     /// <summary>How the MSMT peer options are built, if stated.</summary>
     public Func<MsmtSessionPeerOptions>? ConnectionOptionsValue { get; private set; }
     /// <summary>How the MSMT peer options are adjusted, if stated.</summary>
-    public Func<MsmtSessionPeerOptions, MsmtSessionPeerOptions>? MsmtOptionsValue { get; private set; }
+    public MsmtConnectionOptions? MsmtOptionsValue { get; private set; }
     /// <summary>How the MicroGate peer options are adjusted, if stated.</summary>
-    public Func<MicroGatePeerOptions, MicroGatePeerOptions>? MicroGateOptionsValue { get; private set; }
+    public MicroGatePeerOptions? MicroGateOptionsValue { get; private set; }
     /// <summary>How connections are identified, if stated.</summary>
     public Func<IConnectionInfo, string?>? IdentifyValue { get; private set; }
     /// <summary>The initial packet processor, if stated.</summary>
@@ -94,7 +94,7 @@ internal sealed class EngineBuilder : IEngineBuilder, IAsyncDisposable
     /// <summary>The custom import formats, in the order added.</summary>
     public IReadOnlyList<ServiceRegistration<IImportFormat>> ImportFormats => importFormats;
     /// <summary>The custom auto forward controllers, in the order added.</summary>
-    public IReadOnlyList<AutoForwardControllerDefinition> AutoForwardControllers => autoForwardControllers;
+    public IReadOnlyList<ServiceRegistration<AutoForwardControllerDefinition>> AutoForwardControllers => autoForwardControllers;
 
     /// <summary>
     /// Constructs <typeparamref name="TConfiguration"/> from a bootstrap container, so it can take dependencies, then
@@ -317,16 +317,16 @@ internal sealed class EngineBuilder : IEngineBuilder, IAsyncDisposable
     }
 
     /// <inheritdoc />
-    public IEngineBuilder MsmtOptions(Func<MsmtSessionPeerOptions, MsmtSessionPeerOptions> configure)
+    public IEngineBuilder MsmtOptions(MsmtConnectionOptions options)
     {
-        MsmtOptionsValue = configure;
+        MsmtOptionsValue = options;
         return this;
     }
 
     /// <inheritdoc />
-    public IEngineBuilder MicroGateOptions(Func<MicroGatePeerOptions, MicroGatePeerOptions> configure)
+    public IEngineBuilder MicroGateOptions(MicroGatePeerOptions options)
     {
-        MicroGateOptionsValue = configure;
+        MicroGateOptionsValue = options;
         return this;
     }
 

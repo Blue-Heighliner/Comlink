@@ -2,48 +2,19 @@ namespace BlueHeighliner.Comlink;
 
 /// <summary>
 /// Describes the packets payloads are broken into for the network. The engine does all of the splitting and
-/// reassembling itself; the host only says how a packet is stored and serialized, by mapping the five fields the engine
-/// needs. Every field must be mapped. See <see cref="IEngineBuilder.Packets{TPacket}"/>.
+/// reassembling itself; the host only says how a packet is stored and serialized, by stating the handler that creates and reads its frame packets.
+/// The handler must be stated. See <see cref="IEngineBuilder.Packets{TPacket}"/>.
 /// </summary>
 /// <typeparam name="TPacket">The host's packet type.</typeparam>
 public interface IPacketBuilder<TPacket> where TPacket : class, new()
 {
-    /// <summary>Maps the identifier shared by every packet of one payload, which tells packets of different payloads apart.</summary>
-    IPacketBuilder<TPacket> PayloadId(Func<TPacket, int> get, Action<TPacket, int> set);
-
-    /// <summary>Maps the same field by the property or field the expression reads, such as <c>x => x.PayloadId</c>, building the setter from it. The member must have the same type and be assignable.</summary>
-    IPacketBuilder<TPacket> PayloadId(Expression<Func<TPacket, int>> property);
-
-    /// <summary>Maps the zero-based position of a packet among the packets of its payload.</summary>
-    IPacketBuilder<TPacket> Index(Func<TPacket, int> get, Action<TPacket, int> set);
-
-    /// <summary>Maps the same field by the property or field the expression reads, such as <c>x => x.Index</c>, building the setter from it. The member must have the same type and be assignable.</summary>
-    IPacketBuilder<TPacket> Index(Expression<Func<TPacket, int>> property);
-
-    /// <summary>Maps how many packets the payload was broken into.</summary>
-    IPacketBuilder<TPacket> Count(Func<TPacket, int> get, Action<TPacket, int> set);
-
-    /// <summary>Maps the same field by the property or field the expression reads, such as <c>x => x.Count</c>, building the setter from it. The member must have the same type and be assignable.</summary>
-    IPacketBuilder<TPacket> Count(Expression<Func<TPacket, int>> property);
-
     /// <summary>
-    /// Maps whether the packet is a data packet, one that carries a piece of a frame's payload, as opposed to a packet that carries no frame (such as one an
-    /// initial packet processor exchanges). The engine sets it true on every packet it cuts a payload into and calls
-    /// <see cref="IFrameSerializer.ConfigurePacket"/> on it with its frame, so a data packet can have its own properties set from the frame.
+    /// States the handler for frame packets: the packets that carry a piece of a serialized frame. The handler creates a frame packet from a piece of a payload, recognizes frame packets
+    /// and reads their aspects back (see <see cref="IFramePacketHandler{TPacket}"/>). The engine creates every packet it cuts a payload into through it and calls
+    /// <see cref="IFrameSerializer.ConfigurePacket"/> on each with its frame, so a frame packet can have its own properties set from the frame.
     /// </summary>
-    IPacketBuilder<TPacket> IsData(Func<TPacket, bool> get, Action<TPacket, bool> set);
-
-    /// <summary>Maps the same field by the property or field the expression reads, such as <c>x => x.IsData</c>, building the setter from it. The member must have the same type and be assignable.</summary>
-    IPacketBuilder<TPacket> IsData(Expression<Func<TPacket, bool>> property);
-
-    /// <summary>Maps the length in bytes of the whole payload.</summary>
-    IPacketBuilder<TPacket> PayloadLength(Func<TPacket, int> get, Action<TPacket, int> set);
-
-    /// <summary>Maps the same field by the property or field the expression reads, such as <c>x => x.PayloadLength</c>, building the setter from it. The member must have the same type and be assignable.</summary>
-    IPacketBuilder<TPacket> PayloadLength(Expression<Func<TPacket, int>> property);
-
-    /// <summary>Maps the slice of the payload a packet carries. The value given to the setter is only valid for the duration of the call, so a packet that stores it must copy it.</summary>
-    IPacketBuilder<TPacket> Data(Func<TPacket, ReadOnlyMemory<byte>> get, Action<TPacket, ReadOnlyMemory<byte>> set);
+    /// <typeparam name="THandler">The handler type, instantiated through dependency injection when the engine runs: the instance registered for it in the host's services, or else one constructed from them.</typeparam>
+    IPacketBuilder<TPacket> Frame<THandler>() where THandler : IFramePacketHandler<TPacket>;
 
     /// <summary>
     /// Sets the largest a serialized packet may be, in bytes. Smaller packets let a higher-priority payload cut in
@@ -62,9 +33,6 @@ public interface IPacketBuilder<TPacket> where TPacket : class, new()
     /// <summary>Replaces the serializer that turns packets into bytes. The default is a <see cref="ProtobufSerializer"/> that builds only <typeparamref name="TPacket"/>.</summary>
     /// <typeparam name="TSerializer">The serializer type, instantiated through dependency injection when the engine runs: the instance registered for it in the host's services, or else one constructed from them.</typeparam>
     IPacketBuilder<TPacket> Serializer<TSerializer>() where TSerializer : IPacketSerializer;
-
-    /// <summary>Replaces how a new, empty packet is created. The default is <c>new TPacket()</c>.</summary>
-    IPacketBuilder<TPacket> Create(Func<TPacket> create);
 
     /// <summary>
     /// States how nodes introduce themselves on a new connection, with packets: the processor is told when a connection forms and given each packet that

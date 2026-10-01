@@ -4,6 +4,9 @@ namespace BlueHeighliner.Comlink;
 public sealed record MessageCreateContext
 {
 
+    /// <summary>Gets the UTC time the message was sent.</summary>
+    public required DateTime SentAt { get; init; }
+
     /// <summary>Gets the body text.</summary>
     public required string Body { get; init; }
 

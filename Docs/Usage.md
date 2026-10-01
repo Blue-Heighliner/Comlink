@@ -28,7 +28,6 @@ public sealed class MyEngineConfiguration : IEngineConfiguration
             .Id(m => m.Id)
             .Sender(m => m.FromUser)
             .Addresses(m => m.Addresses, (m, value) => m.Addresses = [.. value])
-            .SentAt(m => m.SentAt)
             .Message<MyMessageHandler>()
             .Retrieval<MyRetrievalHandler>()
             .ReadReceipt<MyReadReceiptHandler>()
@@ -44,7 +43,8 @@ A common field whose type already matches is mapped by naming the property (`m =
 public sealed class MyMessageHandler : IMessageHandler<MyFrame>
 {
     public bool IsValid(MyFrame frame) => frame.IsMessage;
-    public MyFrame Create(MessageCreateContext context) => new() { IsMessage = true, Body = context.Body, IsAlert = context.IsAlert, Priority = context.Priority, Tag = context.Tag, SecurityLevel = context.SecurityLevel };
+    public MyFrame Create(MessageCreateContext context) => new() { IsMessage = true, SentAt = context.SentAt, Body = context.Body, IsAlert = context.IsAlert, Priority = context.Priority, Tag = context.Tag, SecurityLevel = context.SecurityLevel };
+    public DateTime GetSentAt(MyFrame frame) => frame.SentAt;
     public string GetBody(MyFrame frame) => frame.Body;
     public bool GetIsAlert(MyFrame frame) => frame.IsAlert;
     public int GetPriority(MyFrame frame) => frame.Priority;

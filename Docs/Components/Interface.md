@@ -15,8 +15,8 @@ whatever the host's packet type is.
 An interface connection represents no user of its own:
 
 - **Interface → outbound**: every message an interface sends is routed out to peers exactly as if this
-  user's own installed identity had composed and sent it — `Subject`, `Body`, and `Addresses` are read
-  from the message via the host's frame mapping; `MessageId`, `FromUser`, and `SentAt` are ignored and
+  user's own installed identity had composed and sent it — `Body` and `Addresses` are read
+  from the message via the host's frame handlers; `MessageId` and `FromUser` are ignored and
   re-assigned by `MessageRoutingService.Route`, the same call `DirectServiceConnection.SendMessage`
   makes for a GUI-composed send.
 - **Inbound → interface**: not currently supported. Mirroring a message this user receives from a peer

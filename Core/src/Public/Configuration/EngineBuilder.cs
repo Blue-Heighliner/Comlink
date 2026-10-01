@@ -104,20 +104,20 @@ public interface IEngineBuilder
     IEngineBuilder ConnectionOptions(Func<MsmtSessionPeerOptions> options);
 
     /// <summary>
-    /// Adjusts the MSMT options used for every IP connection, inbound and outbound, including the interface listener: timeouts,
-    /// keep-alive and session lifetimes. The function receives the options as they would otherwise be, with the identity
-    /// certificate and trusted authorities already in place, and returns the options to use, typically by <c>with</c>
-    /// expression. It runs each time connections are set up, after <see cref="ConnectionOptions"/>. Defaults to leaving them as they are.
+    /// States the MSMT settings used for every IP connection, inbound and outbound, including the interface listener: timeouts,
+    /// keep-alive and session lifetimes. The identity certificate and trusted authorities are still the engine's (or what <see cref="ConnectionOptions"/> builds).
+    /// Defaults to the MSMT package defaults.
     /// </summary>
-    IEngineBuilder MsmtOptions(Func<MsmtSessionPeerOptions, MsmtSessionPeerOptions> configure);
+    /// <param name="options">The settings to use.</param>
+    IEngineBuilder MsmtOptions(MsmtConnectionOptions options);
 
     /// <summary>
-    /// Adjusts the MicroGate options used for every serial connection: line encoding, CRC, clocking, frame size, windowing and
-    /// retransmission, which must match the station at the other end of the cable. The function receives the defaults and returns
-    /// the options to use, typically by <c>with</c> expression. The HDLC address is not an option; it comes from each serial
+    /// States the MicroGate options used for every serial connection: line encoding, CRC, clocking, frame size, windowing and
+    /// retransmission, which must match the station at the other end of the cable. The HDLC address is not an option; it comes from each serial
     /// connection point. Defaults to the MicroGate defaults.
     /// </summary>
-    IEngineBuilder MicroGateOptions(Func<MicroGatePeerOptions, MicroGatePeerOptions> configure);
+    /// <param name="options">The options to use.</param>
+    IEngineBuilder MicroGateOptions(MicroGatePeerOptions options);
 
     /// <summary>
     /// Sets who is on the other end of a connection that has just formed, by user name. Return <see langword="null"/> to leave it to the engine, which names an

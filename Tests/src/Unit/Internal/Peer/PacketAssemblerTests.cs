@@ -21,7 +21,7 @@ public sealed class PacketAssemblerTests
 
     private static byte[] Wire(int id, int index, int count, int total, byte[] data)
     {
-        using IMemoryOwner<byte> owner = serializer.Serialize(new TestPacket { PayloadId = id, Index = index, Count = count, PayloadLength = total, Data = data }, null);
+        using IMemoryOwner<byte> owner = serializer.Serialize(new TestPacket { IsFramePacket = true, PayloadId = id, Index = index, Count = count, PayloadLength = total, Data = data }, null);
         return owner.Memory.ToArray();
     }
 

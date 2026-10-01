@@ -10,7 +10,6 @@ public sealed class FrameBuilderTests
             .Id(m => m.MessageId, (m, v) => m.MessageId = v)
             .Sender(m => m.FromUser, (m, v) => m.FromUser = v)
             .Addresses(m => m.Addresses.Select(a => (a.UserName, a.Type.ParseAddressType(), a.Information)), (m, v) => m.Addresses = [.. v.Select(a => new TestAddressEntry { UserName = a.Name, Type = a.Type.ToString(), Information = a.Information })])
-            .SentAt(m => m.SentAt, (m, v) => m.SentAt = v)
             .Message<TestMessageHandler>()
             .Retrieval<TestRetrievalHandler>()
             .ReadReceipt<TestReadReceiptHandler>()
@@ -29,7 +28,7 @@ public sealed class FrameBuilderTests
 
         Assert.Contains("TestFrame", error.Message);
         string[] missing = error.Message[(error.Message.IndexOf(':') + 1)..].Split(',', StringSplitOptions.TrimEntries);
-        Assert.Equal(["Sender", "Addresses", "SentAt", "Message", "Retrieval", "ReadReceipt", "ReceiveReceipt"], missing);
+        Assert.Equal(["Sender", "Addresses", "Message", "Retrieval", "ReadReceipt", "ReceiveReceipt"], missing);
     }
 
     /// <summary>The map reads and writes each common field of the host's frame through the object-typed accessors.</summary>
@@ -38,12 +37,9 @@ public sealed class FrameBuilderTests
     {
         FrameMap map = Complete().Build();
         object message = map.Create();
-        DateTime sentAt = new(2026, 9, 28, 1, 2, 3, DateTimeKind.Utc);
-
         map.SetId(message, "ID");
         map.SetSender(message, "FROM");
         map.SetAddresses(message, [new MessageAddress { UserName = "A", Type = AddressType.Cc }]);
-        map.SetSentAt(message, sentAt);
 
         TestFrame typed = Assert.IsType<TestFrame>(message);
         Assert.Equal("ID", typed.MessageId);
@@ -52,7 +48,6 @@ public sealed class FrameBuilderTests
         MessageAddress address = Assert.Single(map.GetAddresses(message));
         Assert.Equal("A", address.UserName);
         Assert.Equal(AddressType.Cc, address.Type);
-        Assert.Equal(sentAt, map.GetSentAt(message));
         Assert.Equal(typeof(TestFrame), map.Type);
     }
 
@@ -61,13 +56,14 @@ public sealed class FrameBuilderTests
     public void MessageHandler_CreatesRecognizesAndReads()
     {
         IMessageFrameHandler handler = Complete().Build().Message.Create(null);
+        DateTime sentAt = new(2026, 9, 28, 1, 2, 3, DateTimeKind.Utc);
 
-        object message = handler.Create(new MessageCreateContext { Body = "BODY", IsAlert = true, Priority = 7, Tag = "TAG", SecurityLevel = "SECRET" });
+        object message = handler.Create(new MessageCreateContext { SentAt = sentAt, Body = "BODY", IsAlert = true, Priority = 7, Tag = "TAG", SecurityLevel = "SECRET" });
 
         Assert.IsType<TestFrame>(message);
         Assert.True(handler.IsValid(message));
         Assert.False(handler.IsValid(new TestFrame { IsHidden = true }));
-        Assert.Equal(("BODY", true, 7, "TAG", "SECRET"), (handler.GetBody(message), handler.GetIsAlert(message), handler.GetPriority(message), handler.GetTag(message), handler.GetSecurityLevel(message)));
+        Assert.Equal((sentAt, "BODY", true, 7, "TAG", "SECRET"), (handler.GetSentAt(message), handler.GetBody(message), handler.GetIsAlert(message), handler.GetPriority(message), handler.GetTag(message), handler.GetSecurityLevel(message)));
     }
 
     /// <summary>The retrieval handler the host states creates a request from its criteria, recognizes it, and reads the criteria back.</summary>
@@ -117,7 +113,7 @@ public sealed class FrameBuilderTests
         using IMemoryOwner<byte> other = new ProtobufSerializer().Serialize(new TestHello { Name = "N" });
 
         Assert.IsType<TestFrame>(serializer.Deserialize(own.Memory, null));
-        Assert.Null(serializer.Deserialize(other.Memory, null));
+        Assert.Throws<InvalidDataException>(() => serializer.Deserialize(other.Memory, null));
         Assert.IsType<TestFrame>(map.Create());
     }
 
@@ -144,20 +140,52 @@ public sealed class FrameBuilderTests
         Assert.Equal("replaced", builder.Build().GetSender(new TestFrame { FromUser = "original" }));
     }
 
-    /// <summary>Auto forward controllers are stated on the frame builder, accumulate, and a later one of the same name replaces an earlier one in place.</summary>
+    private sealed class AlertsController : IAutoForwardController<TestFrame>
+    {
+        public string Name { get; } = "Alerts";
+        public IReadOnlyList<string> Users { get; } = ["ALICE"];
+        public bool Accepts(TestFrame frame) => frame.IsAlert;
+    }
+
+    private sealed class OtherController : IAutoForwardController<TestFrame>
+    {
+        public string Name { get; } = "Other";
+        public IReadOnlyList<string> Users { get; } = ["BOB"];
+        public bool Accepts(TestFrame frame) => false;
+    }
+
+    private sealed class ReplacingAlertsController : IAutoForwardController<TestFrame>
+    {
+        public string Name { get; } = "ALERTS";
+        public IReadOnlyList<string> Users { get; } = ["CAROL"];
+        public bool Accepts(TestFrame frame) => true;
+    }
+
+    /// <summary>Auto forward controllers are stated by type on the frame builder and describe themselves once instantiated.</summary>
     [Fact]
-    public void AutoForward_Accumulates_AndSameNameReplaces()
+    public void AutoForward_RegistersControllersByType()
     {
         FrameBuilder<TestFrame> builder = Complete();
 
-        builder
-            .AutoForward("Alerts", ["ALICE"], m => m.IsAlert)
-            .AutoForward("Other", ["BOB"], m => false)
-            .AutoForward("ALERTS", ["CAROL"], m => true);
+        builder.AutoForward<AlertsController>().AutoForward<OtherController>();
 
-        Assert.Equal(["ALERTS", "Other"], builder.AutoForwardControllers.Select(controller => controller.Name));
-        Assert.True(builder.AutoForwardControllers[0].Filter(new TestFrame()));
-        Assert.Equal(["CAROL"], builder.AutoForwardControllers[0].Users);
+        List<AutoForwardControllerDefinition> controllers = [.. builder.AutoForwardControllers.Select(registration => registration.Create(null))];
+        Assert.Equal(["Alerts", "Other"], controllers.Select(controller => controller.Name));
+        Assert.Equal(["ALICE"], controllers[0].Users);
+        Assert.True(controllers[0].Filter(new TestFrame { IsAlert = true }));
+        Assert.False(controllers[0].Filter(new TestFrame()));
+    }
+
+    /// <summary>A later auto forward controller with the same name as an earlier one replaces it in place once the engine controller resolves them.</summary>
+    [Fact]
+    public void AutoForward_SameNameReplacesInPlace()
+    {
+        EngineBuilder engine = EngineBuilder.Build(new TestEngineConfiguration(false, frame => frame.AutoForward<AlertsController>().AutoForward<OtherController>().AutoForward<ReplacingAlertsController>()));
+
+        EngineController controller = new(engine, new CurrentUserProvider());
+
+        Assert.Equal(["ALERTS", "Other"], controller.AutoForwardControllers.Select(definition => definition.Name));
+        Assert.Equal(["CAROL"], controller.AutoForwardControllers[0].Users);
     }
 
     private sealed class Plain
@@ -165,7 +193,6 @@ public sealed class FrameBuilderTests
         public string Id { get; set; } = "";
         public string Sender { get; set; } = "";
         public List<(string Name, AddressType Type, string Information)> Addresses { get; set; } = [];
-        public DateTime SentAt { get; set; }
     }
 
     /// <summary>Every field whose type already matches can be mapped by naming the property alone, and behaves exactly like the explicit getter and setter.</summary>
@@ -175,18 +202,14 @@ public sealed class FrameBuilderTests
         FrameBuilder<Plain> builder = new();
         builder.Id(m => m.Id).Sender(m => m.Sender)
             .Addresses(m => m.Addresses, (m, v) => m.Addresses = [.. v])
-            .SentAt(m => m.SentAt)
             .Message<IMessageHandler<Plain>>().Retrieval<IRetrievalHandler<Plain>>().ReadReceipt<IReadReceiptHandler<Plain>>().ReceiveReceipt<IReceiveReceiptHandler<Plain>>();
         FrameMap map = builder.Build();
         object message = map.Create();
-        DateTime sentAt = new(2026, 9, 28, 0, 0, 0, DateTimeKind.Utc);
-
         map.SetId(message, "ID");
         map.SetSender(message, "FROM");
-        map.SetSentAt(message, sentAt);
 
         Plain typed = Assert.IsType<Plain>(message);
-        Assert.Equal(("ID", "FROM", sentAt), (typed.Id, typed.Sender, typed.SentAt));
+        Assert.Equal(("ID", "FROM"), (typed.Id, typed.Sender));
         Assert.Equal("ID", map.GetId(message));
     }
 
@@ -226,7 +249,6 @@ public sealed class FrameBuilderTests
             .Addresses(
                 m => m.Addresses.Select(a => (a.UserName, a.Type.ParseAddressType())),
                 (m, v) => m.Addresses = [.. v.Select(a => new TestAddressEntry { UserName = a.Name, Type = a.Type.ToString() })])
-            .SentAt(m => default, (m, v) => { })
             .Message<TestMessageHandler>().Retrieval<TestRetrievalHandler>().ReadReceipt<TestReadReceiptHandler>().ReceiveReceipt<TestReceiveReceiptHandler>();
         FrameMap map = builder.Build();
         object message = map.Create();

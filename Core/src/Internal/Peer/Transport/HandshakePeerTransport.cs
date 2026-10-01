@@ -209,7 +209,7 @@ internal sealed class HandshakePeerTransport : IPeerTransport
 
     private Task OnHandshakePayload(Session session, byte[] body, object? packet)
     {
-        object item = handshake!.Deserialize(body, packet) ?? throw new InvalidDataException("nothing was sent");
+        object item = handshake!.Deserialize(body, packet);
         if (item.GetType() != handshake.Processor.ItemType) { throw new InvalidDataException($"expected a {handshake.Processor.ItemType.Name}"); }
 
         return IsInitiator(session.Connection.Info) ? handshake.Processor.OnReply(session.Initial, item) : handshake.Processor.OnInitial(session.Initial, item);

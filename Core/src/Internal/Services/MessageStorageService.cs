@@ -112,6 +112,7 @@ internal sealed class MessageStorageService : IMessageStorageService
     {
         object copy = engineController.CreateMessage(new MessageCreateContext
         {
+            SentAt = Utc(engineController.GetSentAt(original)),
             Body = engineController.GetBody(original),
             IsAlert = false,
             Priority = engineController.GetPriority(original),
@@ -120,7 +121,6 @@ internal sealed class MessageStorageService : IMessageStorageService
         });
         engineController.SetFrameId(copy, engineController.GetFrameId(original));
         engineController.SetFromUser(copy, engineController.GetFromUser(original));
-        engineController.SetSentAt(copy, Utc(engineController.GetSentAt(original)));
         engineController.SetAddresses(copy, [new MessageAddress { UserName = requester, Type = AddressType.To }]);
         return copy;
     }

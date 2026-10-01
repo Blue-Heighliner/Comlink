@@ -11,10 +11,13 @@ public interface IMessageHandler<TFrame> where TFrame : class
     /// <param name="frame">The frame to classify.</param>
     bool IsValid(TFrame frame);
 
-    /// <summary>Creates a new message frame carrying <paramref name="context"/>, for which <see cref="IsValid"/> returns <see langword="true"/>. The engine sets the identifier, sender, addresses and sent time itself.</summary>
+    /// <summary>Creates a new message frame carrying <paramref name="context"/>, for which <see cref="IsValid"/> returns <see langword="true"/>. The engine sets the identifier, sender and addresses itself.</summary>
     /// <param name="context">The content of the message.</param>
     /// <returns>The new frame.</returns>
     TFrame Create(MessageCreateContext context);
+
+    /// <summary>Gets the UTC time <paramref name="frame"/> was sent.</summary>
+    DateTime GetSentAt(TFrame frame);
 
     /// <summary>Gets the body text of <paramref name="frame"/>.</summary>
     string GetBody(TFrame frame);
