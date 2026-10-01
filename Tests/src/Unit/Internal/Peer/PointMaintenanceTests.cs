@@ -17,7 +17,7 @@ public sealed class PointMaintenanceTests
     [Fact]
     public void Sync_SamePointsAgain_ChangesNothing()
     {
-        PointMaintenance maintenance = new(new PeerConnectionMonitor());
+        PointMaintenance maintenance = new(new PeerConnectionMonitor(new TestEngineController()));
         Mock<IPeerTransport> transport = Transport();
         using CancellationTokenSource lifetime = new();
 
@@ -36,7 +36,7 @@ public sealed class PointMaintenanceTests
     [Fact]
     public void Sync_PointsChanged_StopsTheRemovedAndStartsTheAdded()
     {
-        PointMaintenance maintenance = new(new PeerConnectionMonitor());
+        PointMaintenance maintenance = new(new PeerConnectionMonitor(new TestEngineController()));
         Mock<IPeerTransport> transport = Transport();
         using CancellationTokenSource lifetime = new();
         maintenance.Sync(transport.Object, [first], lifetime.Token);
@@ -53,7 +53,7 @@ public sealed class PointMaintenanceTests
     [Fact]
     public void Sync_PointReturns_IsReopened()
     {
-        PointMaintenance maintenance = new(new PeerConnectionMonitor());
+        PointMaintenance maintenance = new(new PeerConnectionMonitor(new TestEngineController()));
         Mock<IPeerTransport> transport = Transport();
         using CancellationTokenSource lifetime = new();
         maintenance.Sync(transport.Object, [first], lifetime.Token);
@@ -69,7 +69,7 @@ public sealed class PointMaintenanceTests
     [Fact]
     public void Sync_SerialPointUserChanged_ReopensThePoint()
     {
-        PointMaintenance maintenance = new(new PeerConnectionMonitor());
+        PointMaintenance maintenance = new(new PeerConnectionMonitor(new TestEngineController()));
         Mock<IPeerTransport> transport = Transport();
         using CancellationTokenSource lifetime = new();
         ConnectionPoint before = new() { SerialPort = "SL0", User = "A" };

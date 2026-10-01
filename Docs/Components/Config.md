@@ -122,7 +122,7 @@ The points the node connects out to and keeps connected. A `"Client"` uses the f
 | `RemoteSerialAddress` | `int` | HDLC station address of the node at the other end of the cable (0-255, default 254). The other end lists the two addresses the other way round |
 | `User` | `string` | For a serial point, the user at the other end of the cable, which the connection is identified as |
 
-A serial link carries no certificate, so unless the point names its `User`, its user is named after the port; override `IdentifyConnection` or configure a connection message for anything more elaborate.
+A serial link carries no certificate, so unless the point names its `User`, its user is named after the port; override `Identify` or configure an initial packet or message for anything more elaborate.
 
 ### `ChildClients`
 

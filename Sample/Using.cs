@@ -3,6 +3,7 @@ global using Microsoft.Extensions.Logging;
 global using ProtoBuf;
 global using System.Diagnostics;
 global using System.Reflection;
+global using System.Text;
 global using BlueHeighliner.Comlink;
 global using BlueHeighliner.Comlink.Control;
 global using BlueHeighliner.Comlink.Data;

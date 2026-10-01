@@ -1,6 +1,6 @@
 namespace BlueHeighliner.Comlink.Control;
 
-/// <summary>A custom import format added via <see cref="IEngineBuilder.ImportFormat"/>.</summary>
+/// <summary>A custom import format added via <see cref="IEngineBuilder.ImportFormat(string, StagedSendMode, Nullable{TimeSpan}, Func{Stream, IImportFormatContext, CancellationToken, Task})"/>.</summary>
 internal sealed record ImportFormatDefinition
 {
     /// <summary>Display name shown for this format in the client's import screen, and the source of <see cref="FileExtension"/>.</summary>

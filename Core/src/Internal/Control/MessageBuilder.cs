@@ -5,7 +5,20 @@ internal sealed class MessageBuilder<TMessage> : IMessageBuilder<TMessage> where
 {
     private readonly Dictionary<string, (Delegate Get, Delegate Set)> fields = [];
     private INetworkSerializer serializer = new ProtobufNetworkSerializer(typeof(TMessage));
+    private readonly List<AutoForwardControllerDefinition> autoForwardControllers = [];
     private Func<TMessage> create = () => new();
+
+    /// <summary>How many copies of a received message print, if stated.</summary>
+    public Func<object, int>? PrintCountValue { get; private set; }
+
+    /// <summary>The initial message processor, if stated.</summary>
+    public ProcessorRegistration<IInitialProcessor>? Initial { get; private set; }
+
+    /// <summary>The processor that reacts to peer activity, if stated.</summary>
+    public ProcessorRegistration<INetworkHandler>? NetworkHandler { get; private set; }
+
+    /// <summary>The custom auto forward controllers.</summary>
+    public IReadOnlyList<AutoForwardControllerDefinition> AutoForwardControllers => autoForwardControllers;
 
     /// <inheritdoc />
     public IMessageBuilder<TMessage> Id(Func<TMessage, string> get, Action<TMessage, string> set) => Map(nameof(Id), get, set);
@@ -98,6 +111,37 @@ internal sealed class MessageBuilder<TMessage> : IMessageBuilder<TMessage> where
     public IMessageBuilder<TMessage> Create(Func<TMessage> create)
     {
         this.create = create;
+        return this;
+    }
+
+    /// <inheritdoc />
+    public IMessageBuilder<TMessage> PrintCount(Func<TMessage, int> copies)
+    {
+        PrintCountValue = message => copies((TMessage)message);
+        return this;
+    }
+
+    /// <inheritdoc />
+    public IMessageBuilder<TMessage> AutoForward(string name, IEnumerable<string> users, Func<TMessage, bool> filter)
+    {
+        AutoForwardControllerDefinition definition = new() { Name = name, Users = [.. users], Filter = message => filter((TMessage)message) };
+        int existingIndex = autoForwardControllers.FindIndex(c => string.Equals(c.Name, name, StringComparison.OrdinalIgnoreCase));
+        if (existingIndex >= 0) { autoForwardControllers[existingIndex] = definition; }
+        else { autoForwardControllers.Add(definition); }
+        return this;
+    }
+
+    /// <inheritdoc />
+    public IMessageBuilder<TMessage> Processor<TProcessor>() where TProcessor : INetworkProcessor<TMessage>
+    {
+        NetworkHandler = new ProcessorRegistration<INetworkHandler>(typeof(TProcessor), processor => new NetworkProcessorAdapter<TMessage>((INetworkProcessor<TMessage>)processor));
+        return this;
+    }
+
+    /// <inheritdoc />
+    public IMessageBuilder<TMessage> InitialProcessor<TProcessor>() where TProcessor : IInitialMessageProcessor<TMessage>
+    {
+        Initial = new ProcessorRegistration<IInitialProcessor>(typeof(TProcessor), processor => new InitialMessageProcessorAdapter<TMessage>((IInitialMessageProcessor<TMessage>)processor));
         return this;
     }
 

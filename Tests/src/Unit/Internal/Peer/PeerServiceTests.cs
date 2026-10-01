@@ -19,7 +19,7 @@ public sealed class PeerServiceTests
     /// <summary>Publishes a newly established connection identified as <paramref name="user"/> on <paramref name="peer"/>, the way the transport does once a connection has been identified.</summary>
     private static PeerConnection Reach(Mock<IPeerTransport> peer, string user, bool inbound = false)
     {
-        PeerConnection connection = new(inbound ? null : fakeConnectionPoint, new ConnectionInfo { IsInbound = inbound }, () => { }) { User = new UserIdentity { Name = user } };
+        PeerConnection connection = new(inbound ? null : fakeConnectionPoint, new IpConnectionInfo { IsInbound = inbound }, () => { }) { User = new UserIdentity { Name = user } };
         ((TestObservable<PeerConnectionEventArgs>)peer.Object.Connected).Publish(new PeerConnectionEventArgs { Connection = connection });
         return connection;
     }
@@ -498,7 +498,7 @@ public sealed class PeerServiceTests
 
         received.Publish(new PeerReceivedEventArgs
         {
-            Connection = new PeerConnection(null, new ConnectionInfo { IsInbound = true }, () => { }),
+            Connection = new PeerConnection(null, new IpConnectionInfo { IsInbound = true }, () => { }),
             Payload = Encode(new TestMessage { MessageId = "M1", FromUser = "REMOTE" })
         });
 

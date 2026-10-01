@@ -2,9 +2,11 @@ namespace BlueHeighliner.Comlink.Peer;
 
 /// <summary>
 /// Proactively opens, and continuously maintains, the connection to one of this node's outgoing
-/// <see cref="ConnectionPoint"/>s by connecting to it and requesting an empty heartbeat payload over the connection,
-/// awaiting its outcome - <see cref="PeerMessageDispatcher.Dispatch"/> and <see cref="ServerRoutingService"/> both treat
-/// an empty payload as a no-op, so it never reaches the remote peer's application logic. Over IP a heartbeat reuses the
+/// <see cref="ConnectionPoint"/>s by connecting to it and requesting a heartbeat over the connection,
+/// awaiting its outcome. The heartbeat is an empty instance of the message type, serialized like any message (see
+/// <see cref="EngineControllerExtensions.IsHeartbeat"/>), so nothing but serialized messages and packets ever crosses a connection;
+/// <see cref="PeerMessageDispatcher.Dispatch"/> and <see cref="ServerRoutingService"/> acknowledge it without acting on it, so it never
+/// reaches the remote peer's application logic. Over IP a heartbeat reuses the
 /// same cached session connection, so the connection genuinely stays open between heartbeats rather than flapping; over
 /// serial the first connect is what creates the link to the port, which then reconnects on its own.
 /// </summary>
@@ -18,14 +20,14 @@ namespace BlueHeighliner.Comlink.Peer;
 /// normal way, through <see cref="IPeerTransport.Connected"/>/<see cref="IPeerTransport.Disconnected"/>, by
 /// whichever caller subscribes to those observables. See <c>Docs/Components/Peer.md</c>.
 /// </remarks>
-internal sealed class PeerConnectionMonitor(TimeSpan? steadyInterval = null, TimeSpan? fastRetryInterval = null)
+internal sealed class PeerConnectionMonitor(IEngineController engineController, TimeSpan? steadyInterval = null, TimeSpan? fastRetryInterval = null)
 {
     private readonly TimeSpan steadyInterval = steadyInterval ?? TimeSpan.FromSeconds(30);
     private readonly TimeSpan fastRetryInterval = fastRetryInterval ?? TimeSpan.FromSeconds(2);
 
     /// <summary>
-    /// Starts connecting to <paramref name="target"/> through <paramref name="transport"/> and requesting an empty
-    /// heartbeat payload over the connection in the background, immediately and then repeatedly - on <see cref="fastRetryInterval"/>
+    /// Starts connecting to <paramref name="target"/> through <paramref name="transport"/> and requesting a
+    /// heartbeat over the connection in the background, immediately and then repeatedly - on <see cref="fastRetryInterval"/>
     /// while disconnected, on <see cref="steadyInterval"/> once connected - until <paramref
     /// name="cancellation"/> is triggered.
     /// </summary>
@@ -57,7 +59,9 @@ internal sealed class PeerConnectionMonitor(TimeSpan? steadyInterval = null, Tim
                 try
                 {
                     connection = await transport.Connect(target, cancellation);
-                    connected = await transport.Request(connection, ReadOnlyMemory<byte>.Empty, new PeerSendOptions { Priority = int.MinValue }, cancellation);
+                    byte[] heartbeat;
+                    using (IMemoryOwner<byte> owner = engineController.NetworkSerializer.Serialize(engineController.CreateMessage())) { heartbeat = owner.Memory.ToArray(); }
+                    connected = await transport.Request(connection, heartbeat, new PeerSendOptions { Priority = int.MinValue }, cancellation);
                 }
                 catch
                 {

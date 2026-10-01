@@ -40,9 +40,9 @@ internal partial class EngineApp : Application
         if (ApplicationLifetime is IClassicDesktopStyleApplicationLifetime desktop)
         {
             MainWindow mainWindow = host.Services.GetRequiredService<MainWindow>();
-            if (host.Services.GetRequiredService<IEngineController>().WindowIconUri is { } iconUri)
+            if (host.Services.GetRequiredService<IEngineController>().WindowIconPath is { } iconPath)
             {
-                mainWindow.Icon = new WindowIcon(AssetLoader.Open(iconUri));
+                mainWindow.Icon = new WindowIcon(iconPath.Contains("://", StringComparison.Ordinal) ? AssetLoader.Open(new Uri(iconPath)) : File.OpenRead(iconPath));
             }
             desktop.MainWindow = mainWindow;
 

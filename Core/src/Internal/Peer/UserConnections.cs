@@ -2,7 +2,7 @@ namespace BlueHeighliner.Comlink.Peer;
 
 /// <summary>
 /// Which established connections lead to which users. Connections are identified as they form (see
-/// <see cref="IdentifyingPeerTransport"/>), so this is how a peer service finds the way to a user: not through anything
+/// <see cref="HandshakePeerTransport"/>), so this is how a peer service finds the way to a user: not through anything
 /// configured for that user, but through whichever connection is currently identified as them.
 /// </summary>
 internal interface IUserConnections

@@ -9,21 +9,21 @@ public sealed class ServerRoutingServiceTests
     private static readonly ConnectionPoint serverBSerialPoint = new() { SerialPort = "SL9", SerialAddress = 3 };
     private static readonly ConnectionPoint clientA1SerialPoint = new() { SerialPort = "SL1" };
 
-    private static bool IsRealPayload(ReadOnlyMemory<byte> payload) => payload.Length > 0;
+    private static bool IsRealPayload(ReadOnlyMemory<byte> payload) => !TestHeartbeat.Is(payload);
 
     private static UserIdentity Identity(string name) => new() { Name = name };
 
     /// <summary>Builds a connection a remote node opened to this one, identified as <paramref name="user"/>.</summary>
     private static PeerConnection Inbound(string user, Action? drop = null)
-        => new(null, new ConnectionInfo { IsInbound = true }, drop ?? (() => { })) { User = Identity(user) };
+        => new(null, new IpConnectionInfo { IsInbound = true }, drop ?? (() => { })) { User = Identity(user) };
 
     /// <summary>Builds a connection this node opened to <paramref name="point"/>, identified as <paramref name="user"/>.</summary>
     private static PeerConnection Outbound(ConnectionPoint point, string user, Action? drop = null)
-        => new(point, new ConnectionInfo(), drop ?? (() => { })) { User = Identity(user) };
+        => new(point, new IpConnectionInfo(), drop ?? (() => { })) { User = Identity(user) };
 
     /// <summary>Builds the connection of a serial link to <paramref name="point"/>, identified as <paramref name="user"/>.</summary>
     private static PeerConnection Serial(ConnectionPoint point, string user)
-        => new(point, new ConnectionInfo { IsSerial = true }, () => { }) { User = Identity(user) };
+        => new(point, new SerialConnectionInfo { }, () => { }) { User = Identity(user) };
 
     private static PeerReceivedEventArgs ReceivedFrom(PeerConnection connection, ReadOnlyMemory<byte> payload)
         => new() { Connection = connection, Payload = payload };
@@ -467,7 +467,7 @@ public sealed class ServerRoutingServiceTests
 
         await WaitUntil(() => fx.Service.GetStatuses().Single(s => s.UserName == "ServerB").IsConnected, TimeSpan.FromSeconds(2));
 
-        fx.Transport.Verify(p => p.Request(serverB, It.Is<ReadOnlyMemory<byte>>(payload => payload.Length == 0), It.IsAny<PeerSendOptions>(), It.IsAny<CancellationToken>()), Times.AtLeastOnce);
+        fx.Transport.Verify(p => p.Request(serverB, It.Is<ReadOnlyMemory<byte>>(payload => TestHeartbeat.Is(payload)), It.IsAny<PeerSendOptions>(), It.IsAny<CancellationToken>()), Times.AtLeastOnce);
         PeerConnectionStatus status = Assert.Single(fx.Service.GetStatuses(), s => s.UserName == "ServerB");
         Assert.NotNull(status.LastConnectedAt);
         await Stop(fx);
@@ -558,9 +558,9 @@ public sealed class ServerRoutingServiceTests
         await Stop(fx);
     }
 
-    /// <summary>A heartbeat (an empty payload) from a child is not a message and is not relayed.</summary>
+    /// <summary>A heartbeat (an empty message) from a child is not a real message and is not relayed or stored.</summary>
     [Fact]
-    public async Task FromChild_EmptyPayload_IsIgnored()
+    public async Task FromChild_Heartbeat_IsIgnored()
     {
         Fixture fx = await BuildStarted();
         PeerConnection clientA1 = Inbound("ClientA1");
@@ -568,7 +568,7 @@ public sealed class ServerRoutingServiceTests
         fx.Come(clientA1);
         fx.Come(clientA2);
 
-        fx.Receive(clientA1, ReadOnlyMemory<byte>.Empty);
+        fx.Receive(clientA1, TestHeartbeat.Bytes());
 
         await Task.Delay(50);
         Assert.Equal(0, Requests(fx, clientA2));

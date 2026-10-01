@@ -52,11 +52,13 @@ A `Server`-role instance has no inbox/outbox/notes/drafts GUI at all - `MainWind
 
 **When a row counts as up**: an IP connection only counts as up once a heartbeat over it has been acknowledged, not when the TLS connection is merely established. A node that has closed a connection accepts it and drops it again without ever answering, so counting the bare connection flashed the row green on every reconnect attempt. `PeerConnectionMonitor.Maintain` reports each acknowledged heartbeat to its caller for this. A serial link only comes up when the far end answers, so it counts as up immediately. A row goes down only once no live connection to that user remains, since another server can be connected both inbound and outbound at once and losing one direction does not take it offline.
 
+**Everything on the wire is a message or a packet**: a connection carries serialized instances of the configured message type (through the network serializer) and, when packets are configured, of the configured packet type (through the packet serializer), and nothing else. That covers the initial packet and message exchange that introduces a node (see [Identification.md](Identification.md#initial-packet-and-message-exchange)) and the heartbeat below, neither of which has a frame, tag or special payload of its own. The protocols of the media themselves (MSMT's framing and acknowledgements, and the serial link's fragmentation and acknowledgement frames described in [Transport.md](Transport.md)) sit beneath all of this and are not something the engine configures.
+
 **Keeping a hierarchical connection genuinely live**: Comlink always uses MSMT's session-mode `IMsmtSessionPeer` (see [MsmtIntegration.md](MsmtIntegration.md#session-peer)), so a connection persists across multiple sends instead of closing after each one. Without something to actually send, though, a connection would only ever open the moment a real message needed to be routed - leaving the status table showing every row disconnected for as long as the app happens to be idle. A background `PeerConnectionMonitor`, started per outgoing point (`ClientPeerService`'s one server point; each of `ServerRoutingService`'s and `PeerService`'s points), avoids this by connecting to the point and sending an empty heartbeat payload over the connection immediately on startup and repeatedly thereafter:
 
 - A heartbeat reuses the same Session-mode connection a real message would use (`IPeerTransport.Connect` returns the cached one) - so it establishes and keeps the connection open, observed the normal way through `Connected`/`Disconnected`, rather than opening a separate side channel. Over serial, the first connect is what creates the link to the port, which then reconnects on its own.
 - `IMsmtReachabilityChecker.Reach` is deliberately **not** used for this: it opens and immediately closes its own one-shot connection every call, which - because the remote peer's receiver can't distinguish a reachability probe from a real connection until it reads the first message - would make the remote side's own `Connected`/`Disconnected` events flap on every check, corrupting its status table instead of stabilizing it.
-- An empty payload is recognized as a heartbeat and never reaches application logic: `PeerMessageDispatcher.Dispatch` returns immediately without deserializing it, and `ServerRoutingService.OnReceived` skips it before any routing decision, so it is never mistaken for a real (if malformed) message, never logged as "received", and never relayed.
+- A heartbeat is an empty instance of the message type, serialized with the network serializer like any message (and packetized like one when packets are configured): nothing else ever crosses a connection. `EngineControllerExtensions.IsHeartbeat` recognizes it by having no identifier, addresses, confirmation or retrieval, which no message built by the engine lacks. It never reaches application logic: `PeerMessageDispatcher.Dispatch` acknowledges it without delivering it, and `ServerRoutingService` skips it before any routing or storage decision, so it is never logged as "received", stored or relayed.
 - Each heartbeat's outcome governs how soon the next one fires: while the last heartbeat did not succeed - including the very first one, which commonly races the remote peer's own receiver still starting up, since a fresh `ECONNREFUSED` is near-instant rather than a slow timeout - the next retry follows quickly (2 seconds by default) instead of waiting on the full steady-state interval (30 seconds by default).
 - A connection dropping is not always the monitor's own next heartbeat noticing - it can just as well be reported by `Disconnected` while the monitor is still asleep for the rest of its steady-state interval, following an earlier successful heartbeat. `ClientPeerService`/`ServerRoutingService.OnDisconnected` wake the monitor for that point directly whenever this leaves it with no live connection, so it retries (and the fast-retry cadence above kicks in) right away instead of waiting out the remainder of that sleep - otherwise a hierarchical connection's status table could sit incorrectly "down" for up to the full steady interval after a drop it did not itself detect.
 
@@ -64,11 +66,11 @@ A `Server`-role instance has no inbox/outbox/notes/drafts GUI at all - `MainWind
 
 Peer traffic carries exactly one payload shape and nothing else: an instance of `IEngineController.MessageType`, serialized through `IEngineController.NetworkSerializer` - by default `ProtobufNetworkSerializer`, protobuf-net (binary) - which returns a pool-backed `IMemoryOwner<byte>` so a send does not allocate a fresh buffer every time. `INetworkSerializer.Deserialize` takes no type: the serializer makes its own wire format self-describing, and the default does so with one fixed outer `ProtobufEnvelope` around every payload, carrying the value's assembly-qualified type name and its own protobuf-net encoding as nested bytes. A receiver therefore rebuilds the right concrete type from the bytes alone, and callers that need a specific one (`ServerRoutingService`, `InterfaceService`) check the result against `IEngineController.MessageType` and drop a mismatch. That envelope belongs to the serialization layer, not to Comlink's own protocol: there is still no Comlink-level envelope or command discriminator. MSMT-level delivery (did the bytes arrive) is tracked entirely through MSMT's own delivery status (see [Delivery status](#delivery-status) below); the only application-level reply that exists is the user-read confirmation described in [Read Confirmation](#read-confirmation), and it is itself just an ordinary instance of `IEngineController.MessageType` with one field set — there is still no separate envelope or command discriminator.
 
-The concrete message type is **injectable**, not hardwired. The message mapping a host states with `IEngineBuilder.Message<TMessage>` (see [Configuration.md](Configuration.md#message-format)) provides the type itself and maps the engine's logical fields onto that type's real fields: message id, sender, subject, body, addresses, sent time, confirmation id, alert flag, priority and tag, each a getter and a setter. Internally these become the `IEngineController` members `MessageType`, `CreateMessage()`, and a `Get`/`Set` pair per field, all `object`-typed.
+The concrete message type is **injectable**, not hardwired. The message mapping a host states with `Message` (see [Configuration.md](Configuration.md#message-format)) provides the type itself and maps the engine's logical fields onto that type's real fields: message id, sender, subject, body, addresses, sent time, confirmation id, alert flag, priority and tag, each a getter and a setter. Internally these become the `IEngineController` members `MessageType`, `CreateMessage()`, and a `Get`/`Set` pair per field, all `object`-typed.
 
 Every layer that carries or stores a message (`PeerService`, `InterfaceService`, `MessageRoutingService`, `EntryService`, and `MessageEntity.Message` in the database, see [Data.md](Data.md)) works purely in terms of `object`, calling into `IEngineController` for every logical field it needs. The engine has no message type of its own and never assumes a particular field name or wire layout beyond what a host's own `[ProtoContract]`/`[ProtoMember]` attributes declare on its DTO.
 
-The mapping is **required**, with no default: the engine has no message DTO of its own, so a host that never calls `Message<TMessage>`, or leaves a field unmapped, fails at `Engine.Start` with an error naming what is missing.
+The mapping is **required**, with no default: the engine has no message DTO of its own, so a host that never calls `Message`, or leaves a field unmapped, fails at `Engine.Start` with an error naming what is missing.
 
 The `Sample` project's `SampleEngineConfiguration` maps every logical field onto a `SampleMessage` DTO (`Id`/`Sender`/`Title`/`Text`/`Recipients` fields) to demonstrate a working configuration; the mapping, not any particular field name, is what the engine actually depends on. See `Sample/src/SampleEngineConfiguration.cs`.
 
@@ -119,7 +121,7 @@ Beyond MSMT's own delivery status, the engine tracks one more step per recipient
 
 An alert is an ordinary message with `IEngineController.GetIsAlert` set to `true` — nothing about its wire format, routing, or storage differs from a non-alert message. The only difference is client-side: a Client-mode UI that receives an alert message alarms (a red box in the title bar, plus a looping sound) until the user reads it, via the same Read Confirmation flow described above. See `Docs/Components/ViewModels.md` for `AlertViewModel` and the `IEngineController` members that drive this.
 
-## Connection & Message Hooks
+## Network Processor
 
 Every `IPeerService` implementation also raises `UserConnected`/`UserDisconnected` - once when a user goes from
 unreachable to reachable over at least one live connection, and once when the last such connection is lost - and
@@ -132,12 +134,12 @@ connection, the same way `Send` does for a message but bypassing the normal pack
 message goes through, and carrying no delivery-status tracking of its own.
 
 `EngineHooksService` (started by `EngineHost` alongside the peer and interface listeners, in both Client and
-Headless mode, a no-op if the host configured no hooks at all) subscribes to `UserConnected`/`UserDisconnected`/
-`MessageDelivered`, and runs the host's own hooks (`IEngineBuilder.OnUserConnected`/`OnUserDisconnected`/`OnMessageReceived`,
-see [Configuration.md](Configuration.md#connection--message-hooks)) for each - every hook for one firing handed the
-same freshly-built `IUserConnectionHookContext`/`IMessageReceivedHookContext`, so `SendMessage`/`SendPacket` route
-through `IMessageRoutingService.RouteMessage`/`IPeerService.SendPacket` respectively on that context's behalf. A
-failing hook is logged and never stops the rest, of that event or a later one, from running.
+Headless mode, a no-op if the host configured no network processor) subscribes to `UserConnected`/`UserDisconnected`/
+`MessageDelivered`, and runs the host's own network processor (`IMessageBuilder<TMessage>.Processor`, `OnConnected`/`OnDisconnected`/`OnReceived`,
+see [Configuration.md](Configuration.md#network-processor)) for each - every event handed its own
+freshly-built internal context, which the processor sees typed as `INetworkConnectedContext<TMessage>`/`INetworkDisconnectedContext<TMessage>`/`INetworkReceivedContext<TMessage>`, so `Send` routes
+through `IMessageRoutingService.RouteMessage` on that context's behalf. A
+failing processor method is logged and never stops a later event from being handled.
 
 ## Auto Forward
 
@@ -155,7 +157,7 @@ a re-send of the original. The current user's own name is always excluded from t
 if present in the saved target list, since that message would otherwise be re-delivered right back to this same
 instance, matching the same controller's filter again and forwarding forever. A controller with no access, or an
 inaccessible one, or a `Filter` that throws, is skipped without affecting any other configured controller - a
-failure is logged the same way a failing hook is.
+failure is logged the same way a failing processor method is.
 
 ## Message Storage & Retrieval
 

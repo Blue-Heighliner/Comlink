@@ -55,6 +55,7 @@ internal sealed class PeerService : IPeerService, IReconfigurable, IAsyncDisposa
     {
         this.transportFactory = transportFactory;
         this.engineController = engineController;
+        points = new PointMaintenance(new PeerConnectionMonitor(engineController));
         logger = loggerFactory.CreateLogger("ACTIVITY");
     }
 
@@ -63,6 +64,7 @@ internal sealed class PeerService : IPeerService, IReconfigurable, IAsyncDisposa
     {
         transportFactory = null;
         this.engineController = engineController;
+        points = new PointMaintenance(new PeerConnectionMonitor(engineController));
         logger = loggerFactory.CreateLogger("ACTIVITY");
         Wire(transport);
     }
@@ -70,7 +72,7 @@ internal sealed class PeerService : IPeerService, IReconfigurable, IAsyncDisposa
     private readonly IPeerTransportFactory? transportFactory;
     private readonly IEngineController engineController;
     private readonly ILogger logger;
-    private readonly PointMaintenance points = new(new PeerConnectionMonitor());
+    private readonly PointMaintenance points;
     private readonly Lock reconfigureLock = new();
     private readonly UserConnections connections = new();
 

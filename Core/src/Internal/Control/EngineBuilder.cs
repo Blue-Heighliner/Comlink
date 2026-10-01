@@ -14,9 +14,6 @@ internal sealed class EngineBuilder : IEngineBuilder, IAsyncDisposable
     private readonly List<TagPriorityBlock> blocked = [];
     private readonly Dictionary<AddressType, string> addressTypeLabels = [];
     private readonly List<IExternalSystem> externalSystems = [];
-    private readonly List<Action<IUserConnectionHookContext>> userConnectedHooks = [];
-    private readonly List<Action<IUserConnectionHookContext>> userDisconnectedHooks = [];
-    private readonly List<Action<IMessageReceivedHookContext>> messageReceivedHooks = [];
     private readonly List<ExportFormatDefinition> exportFormats = [];
     private readonly List<ImportFormatDefinition> importFormats = [];
     private readonly List<AutoForwardControllerDefinition> autoForwardControllers = [];
@@ -35,7 +32,7 @@ internal sealed class EngineBuilder : IEngineBuilder, IAsyncDisposable
     /// <summary>The home text, if stated.</summary>
     public string? HomeTextValue { get; private set; }
     /// <summary>The window icon, if stated.</summary>
-    public Uri? WindowIconValue { get; private set; }
+    public string? WindowIconValue { get; private set; }
     /// <summary>The debug user name, if stated.</summary>
     public string? DebugUserValue { get; private set; }
     /// <summary>How installation codes resolve, if stated.</summary>
@@ -79,29 +76,19 @@ internal sealed class EngineBuilder : IEngineBuilder, IAsyncDisposable
     /// <summary>How the MicroGate peer options are adjusted, if stated.</summary>
     public Func<MicroGatePeerOptions, MicroGatePeerOptions>? MicroGateOptionsValue { get; private set; }
     /// <summary>How connections are identified, if stated.</summary>
-    public Func<ConnectionInfo, UserIdentity?>? IdentifyValue { get; private set; }
-    /// <summary>The connection message type, if stated.</summary>
-    public Type? ConnectionMessageType { get; private set; }
-    /// <summary>Builds the connection message, if stated.</summary>
-    public Func<ConnectionInfo, object?>? ConnectionMessageFactory { get; private set; }
-    /// <summary>The connection response type, if stated.</summary>
-    public Type? ConnectionResponseType { get; private set; }
-    /// <summary>Builds the connection response, if stated.</summary>
-    public Func<ConnectionInfo, object?>? ConnectionResponseFactory { get; private set; }
-    /// <summary>The connection message serializer, if stated.</summary>
-    public INetworkSerializer? ConnectionSerializerValue { get; private set; }
+    public Func<IConnectionInfo, string?>? IdentifyValue { get; private set; }
+    /// <summary>The initial packet processor, if stated.</summary>
+    public ProcessorRegistration<IInitialProcessor>? InitialPacketProcessor { get; private set; }
+    /// <summary>The initial message processor, if stated.</summary>
+    public ProcessorRegistration<IInitialProcessor>? InitialMessageProcessor { get; private set; }
     /// <summary>Whether the <c>--config</c> and <c>--user</c> arguments are honored.</summary>
     public bool AreCommandLineOverridesAllowed { get; private set; }
     /// <summary>The external systems.</summary>
     public IReadOnlyList<IExternalSystem> ExternalSystems => externalSystems;
     /// <summary>The designated upstream hub, if any.</summary>
     public IExternalSystem? ExternalServerValue { get; private set; }
-    /// <summary>The hooks run when a user comes online.</summary>
-    public IReadOnlyList<Action<IUserConnectionHookContext>> UserConnectedHooks => userConnectedHooks;
-    /// <summary>The hooks run when a user goes offline.</summary>
-    public IReadOnlyList<Action<IUserConnectionHookContext>> UserDisconnectedHooks => userDisconnectedHooks;
-    /// <summary>The hooks run when a message is received.</summary>
-    public IReadOnlyList<Action<IMessageReceivedHookContext>> MessageReceivedHooks => messageReceivedHooks;
+    /// <summary>The processor that reacts to peer activity, if stated.</summary>
+    public ProcessorRegistration<INetworkHandler>? NetworkHandler { get; private set; }
     /// <summary>The custom export formats, in the order added.</summary>
     public IReadOnlyList<ExportFormatDefinition> ExportFormats => exportFormats;
     /// <summary>The custom import formats, in the order added.</summary>
@@ -154,6 +141,11 @@ internal sealed class EngineBuilder : IEngineBuilder, IAsyncDisposable
         MessageBuilder<TMessage> builder = new();
         map(builder);
         MessageMap = builder.Build();
+        PrintCountValue = builder.PrintCountValue;
+        InitialMessageProcessor = builder.Initial;
+        NetworkHandler = builder.NetworkHandler;
+        autoForwardControllers.Clear();
+        autoForwardControllers.AddRange(builder.AutoForwardControllers);
         return this;
     }
 
@@ -163,6 +155,7 @@ internal sealed class EngineBuilder : IEngineBuilder, IAsyncDisposable
         PacketBuilder<TPacket> builder = new();
         map(builder);
         PacketMap = builder.Build();
+        InitialPacketProcessor = builder.Initial;
         return this;
     }
 
@@ -195,9 +188,9 @@ internal sealed class EngineBuilder : IEngineBuilder, IAsyncDisposable
     }
 
     /// <inheritdoc />
-    public IEngineBuilder WindowIcon(Uri uri)
+    public IEngineBuilder WindowIcon(string path)
     {
-        WindowIconValue = uri;
+        WindowIconValue = path;
         return this;
     }
 
@@ -303,13 +296,6 @@ internal sealed class EngineBuilder : IEngineBuilder, IAsyncDisposable
     }
 
     /// <inheritdoc />
-    public IEngineBuilder PrintCount<TMessage>(Func<TMessage, int> copies) where TMessage : class
-    {
-        PrintCountValue = message => copies((TMessage)message);
-        return this;
-    }
-
-    /// <inheritdoc />
     public IEngineBuilder CanDelete(Func<FolderType, bool> allowed)
     {
         CanDeleteValue = allowed;
@@ -345,32 +331,9 @@ internal sealed class EngineBuilder : IEngineBuilder, IAsyncDisposable
     }
 
     /// <inheritdoc />
-    public IEngineBuilder Identify(Func<ConnectionInfo, UserIdentity?> identify)
+    public IEngineBuilder Identify(Func<IConnectionInfo, string?> identify)
     {
         IdentifyValue = identify;
-        return this;
-    }
-
-    /// <inheritdoc />
-    public IEngineBuilder ConnectionMessage<TMessage>(Func<ConnectionInfo, TMessage?> create) where TMessage : class
-    {
-        ConnectionMessageType = typeof(TMessage);
-        ConnectionMessageFactory = create;
-        return this;
-    }
-
-    /// <inheritdoc />
-    public IEngineBuilder ConnectionResponse<TResponse>(Func<ConnectionInfo, TResponse?> create) where TResponse : class
-    {
-        ConnectionResponseType = typeof(TResponse);
-        ConnectionResponseFactory = create;
-        return this;
-    }
-
-    /// <inheritdoc />
-    public IEngineBuilder ConnectionSerializer(INetworkSerializer serializer)
-    {
-        ConnectionSerializerValue = serializer;
         return this;
     }
 
@@ -397,38 +360,19 @@ internal sealed class EngineBuilder : IEngineBuilder, IAsyncDisposable
     }
 
     /// <inheritdoc />
-    public IEngineBuilder OnUserConnected(Action<IUserConnectionHookContext> hook)
-    {
-        userConnectedHooks.Add(hook);
-        return this;
-    }
+    public IEngineBuilder ExportFormat(string name, Func<object, Stream, CancellationToken, Task> serialize) => AddExportFormat(name, null, serialize);
 
     /// <inheritdoc />
-    public IEngineBuilder OnUserDisconnected(Action<IUserConnectionHookContext> hook)
-    {
-        userDisconnectedHooks.Add(hook);
-        return this;
-    }
+    public IEngineBuilder ExportFormat(string name, Func<FolderType, bool> entryTypes, Func<object, Stream, CancellationToken, Task> serialize) => AddExportFormat(name, entryTypes, serialize);
 
     /// <inheritdoc />
-    public IEngineBuilder OnMessageReceived(Action<IMessageReceivedHookContext> hook)
-    {
-        messageReceivedHooks.Add(hook);
-        return this;
-    }
+    public IEngineBuilder ImportFormat(string name, Func<Stream, IImportFormatContext, CancellationToken, Task> read) => ImportFormat(name, StagedSendMode.Sequential, null, read);
 
     /// <inheritdoc />
-    public IEngineBuilder ExportFormat(string name, Func<object, Stream, CancellationToken, Task> serialize, Func<FolderType, bool>? entryTypes = null)
-    {
-        ExportFormatDefinition definition = new() { Name = name, Serialize = serialize, AllowedTypes = entryTypes };
-        int existingIndex = exportFormats.FindIndex(f => string.Equals(f.Name, name, StringComparison.OrdinalIgnoreCase));
-        if (existingIndex >= 0) { exportFormats[existingIndex] = definition; }
-        else { exportFormats.Add(definition); }
-        return this;
-    }
+    public IEngineBuilder ImportFormat(string name, StagedSendMode stagedSendMode, Func<Stream, IImportFormatContext, CancellationToken, Task> read) => ImportFormat(name, stagedSendMode, null, read);
 
     /// <inheritdoc />
-    public IEngineBuilder ImportFormat(string name, Func<Stream, IImportFormatContext, CancellationToken, Task> read, StagedSendMode stagedSendMode = StagedSendMode.Sequential, TimeSpan? stagedSendDelay = null)
+    public IEngineBuilder ImportFormat(string name, StagedSendMode stagedSendMode, TimeSpan? stagedSendDelay, Func<Stream, IImportFormatContext, CancellationToken, Task> read)
     {
         ImportFormatDefinition definition = new() { Name = name, Read = read, StagedSendMode = stagedSendMode, StagedSendDelay = stagedSendDelay };
         int existingIndex = importFormats.FindIndex(f => string.Equals(f.Name, name, StringComparison.OrdinalIgnoreCase));
@@ -437,13 +381,12 @@ internal sealed class EngineBuilder : IEngineBuilder, IAsyncDisposable
         return this;
     }
 
-    /// <inheritdoc />
-    public IEngineBuilder AutoForwardController<TMessage>(string name, IEnumerable<string> users, Func<TMessage, bool> filter) where TMessage : class
+    private IEngineBuilder AddExportFormat(string name, Func<FolderType, bool>? entryTypes, Func<object, Stream, CancellationToken, Task> serialize)
     {
-        AutoForwardControllerDefinition definition = new() { Name = name, Users = [.. users], Filter = message => filter((TMessage)message) };
-        int existingIndex = autoForwardControllers.FindIndex(c => string.Equals(c.Name, name, StringComparison.OrdinalIgnoreCase));
-        if (existingIndex >= 0) { autoForwardControllers[existingIndex] = definition; }
-        else { autoForwardControllers.Add(definition); }
+        ExportFormatDefinition definition = new() { Name = name, Serialize = serialize, AllowedTypes = entryTypes };
+        int existingIndex = exportFormats.FindIndex(f => string.Equals(f.Name, name, StringComparison.OrdinalIgnoreCase));
+        if (existingIndex >= 0) { exportFormats[existingIndex] = definition; }
+        else { exportFormats.Add(definition); }
         return this;
     }
 

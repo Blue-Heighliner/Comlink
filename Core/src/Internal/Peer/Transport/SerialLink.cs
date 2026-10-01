@@ -32,7 +32,7 @@ internal sealed class SerialLink : IAsyncDisposable
         this.disconnected = disconnected;
         this.reconnectDelay = reconnectDelay ?? TimeSpan.FromSeconds(2);
         this.requestTimeout = requestTimeout ?? TimeSpan.FromSeconds(60);
-        connection = new PeerConnection(point, new ConnectionInfo { IsSerial = true, SerialPort = point.SerialPort, SerialAddress = point.SerialAddress }, () => DropPeer(current));
+        connection = new PeerConnection(point, new SerialConnectionInfo { SerialPort = point.SerialPort!, SerialAddress = point.SerialAddress, RemoteSerialAddress = point.RemoteSerialAddress }, () => DropPeer(current));
         isClosed = startClosed;
         if (!startClosed) { openGate.TrySetResult(); }
         loop = Task.Run(Run);

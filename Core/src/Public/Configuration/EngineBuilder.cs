@@ -10,9 +10,10 @@ namespace BlueHeighliner.Comlink;
 public interface IEngineBuilder
 {
     /// <summary>
-    /// States the host's message type and how the engine's logical message fields map onto it. Required. The type must be
-    /// LiteDB-serializable for storage, and must satisfy whatever serializer is used for the network (by default
-    /// protobuf-net, so it needs <c>[ProtoContract]</c>/<c>[ProtoMember]</c> attributes).
+    /// States the host's message type and how the engine's logical message fields map onto it, and what else depends on the message type: the print
+    /// count, auto forward controllers, the network processor and the initial message processor. Required. The type must be LiteDB-serializable for
+    /// storage, and must satisfy whatever serializer is used for the network (by default protobuf-net, so it needs
+    /// <c>[ProtoContract]</c>/<c>[ProtoMember]</c> attributes).
     /// </summary>
     /// <typeparam name="TMessage">The host's message type.</typeparam>
     /// <param name="map">Maps each logical field.</param>
@@ -20,8 +21,8 @@ public interface IEngineBuilder
 
     /// <summary>
     /// Turns on packetization: payloads are broken into prioritized packets of type <typeparamref name="TPacket"/> and
-    /// reassembled on the other side, so a large payload does not hold up higher-priority ones. Off by default. Every
-    /// node on a network must be configured alike, since neither side can tell whether the other packetizes.
+    /// reassembled on the other side, so a large payload does not hold up higher-priority ones, and states what else depends on the packet type, the
+    /// initial packet processor. Off by default. Every node on a network must be configured alike, since neither side can tell whether the other packetizes.
     /// </summary>
     /// <typeparam name="TPacket">The host's packet type.</typeparam>
     /// <param name="map">Maps the packet fields and sets the packet size and window.</param>
@@ -39,8 +40,8 @@ public interface IEngineBuilder
     /// <summary>Sets the text shown in the content area when no entry is selected.</summary>
     IEngineBuilder HomeText(string text);
 
-    /// <summary>Sets the <c>avares://</c> URI of the window icon. Defaults to the operating system's.</summary>
-    IEngineBuilder WindowIcon(Uri uri);
+    /// <summary>Sets the window icon: an <c>avares://</c> URI of an Avalonia asset, or else the path of an image file. Defaults to the operating system's.</summary>
+    IEngineBuilder WindowIcon(string path);
 
     /// <summary>Sets a user name for development and testing, which skips the installed user lookup.</summary>
     IEngineBuilder DebugUser(string userName);
@@ -93,10 +94,6 @@ public interface IEngineBuilder
     /// <summary>Sets whether the print manager's "print received" toggle starts enabled, printing every received message from startup. Off by default.</summary>
     IEngineBuilder PrintReceived(bool enabledByDefault = true);
 
-    /// <summary>Sets how many copies of a received message are printed while "print received" is on. Defaults to one for every message.</summary>
-    /// <typeparam name="TMessage">The host's message type, as given to <see cref="Message{TMessage}"/>.</typeparam>
-    IEngineBuilder PrintCount<TMessage>(Func<TMessage, int> copies) where TMessage : class;
-
     /// <summary>Sets which root folders let the user delete entries. Defaults to all of them.</summary>
     IEngineBuilder CanDelete(Func<FolderType, bool> allowed);
 
@@ -122,28 +119,12 @@ public interface IEngineBuilder
     /// </summary>
     IEngineBuilder MicroGateOptions(Func<MicroGatePeerOptions, MicroGatePeerOptions> configure);
 
-    /// <summary>Sets who is on the other end of a connection that has just formed. Return <see langword="null"/> to leave it to the engine, which names an IP connection after the user whose certificate name it carries and a serial connection after its port.</summary>
-    IEngineBuilder Identify(Func<ConnectionInfo, UserIdentity?> identify);
-
     /// <summary>
-    /// Turns on the connection message: the node that opens a connection sends the message built by <paramref name="create"/>
-    /// first (both nodes of a serial link do), and the connection is not usable until the exchange completes. Every node on a
-    /// network must be configured alike.
+    /// Sets who is on the other end of a connection that has just formed, by user name. Return <see langword="null"/> to leave it to the engine, which names an
+    /// IP connection after the user whose certificate name it carries and a serial connection after the user named on its outgoing point (or else its port).
+    /// The app-specific data that travels with the identity is the named user's <see cref="UserInfo.Data"/>.
     /// </summary>
-    /// <typeparam name="TMessage">The type of the connection message.</typeparam>
-    /// <param name="create">Builds the message for a connection, or returns <see langword="null"/> to send an empty one.</param>
-    IEngineBuilder ConnectionMessage<TMessage>(Func<ConnectionInfo, TMessage?> create) where TMessage : class;
-
-    /// <summary>
-    /// Adds a reply to the connection message: the node that receives one answers with the response built by
-    /// <paramref name="create"/>, which the opening node waits for. Only used together with <see cref="ConnectionMessage{TMessage}"/>.
-    /// </summary>
-    /// <typeparam name="TResponse">The type of the connection response.</typeparam>
-    /// <param name="create">Builds the response, given the connection with the message just received, or returns <see langword="null"/> to send an empty one.</param>
-    IEngineBuilder ConnectionResponse<TResponse>(Func<ConnectionInfo, TResponse?> create) where TResponse : class;
-
-    /// <summary>Replaces the serializer for the connection message and response. The default builds only those two types with protobuf-net.</summary>
-    IEngineBuilder ConnectionSerializer(INetworkSerializer serializer);
+    IEngineBuilder Identify(Func<IConnectionInfo, string?> identify);
 
     /// <summary>
     /// Sets whether command-line arguments may override where the network configuration file (the file that describes every user
@@ -161,73 +142,50 @@ public interface IEngineBuilder
     IEngineBuilder ExternalServer(IExternalSystem system);
 
     /// <summary>
-    /// Adds a hook run when a user goes from having no live peer connection to having at least one. Handed an
-    /// <see cref="IUserConnectionHookContext"/> whose <see cref="IUserConnectionHookContext.TargetUser"/> names
-    /// the user that connected. Adding more than one hook runs every one of them, in the order added.
-    /// </summary>
-    IEngineBuilder OnUserConnected(Action<IUserConnectionHookContext> hook);
-
-    /// <summary>
-    /// Adds a hook run when a user goes from having at least one live peer connection to having none. Handed an
-    /// <see cref="IUserConnectionHookContext"/> whose <see cref="IUserConnectionHookContext.TargetUser"/> names
-    /// the user that disconnected. Adding more than one hook runs every one of them, in the order added.
-    /// </summary>
-    IEngineBuilder OnUserDisconnected(Action<IUserConnectionHookContext> hook);
-
-    /// <summary>
-    /// Adds a hook run whenever this instance receives a new (non-confirmation) message from a peer. Handed an
-    /// <see cref="IMessageReceivedHookContext"/> whose <see cref="IMessageReceivedHookContext.Message"/> carries
-    /// the received message. Adding more than one hook runs every one of them, in the order added.
-    /// </summary>
-    IEngineBuilder OnMessageReceived(Action<IMessageReceivedHookContext> hook);
-
-    /// <summary>
     /// Adds a custom export format, shown as an option alongside the built-in JSON format in the client's export
     /// screen. <paramref name="serialize"/> writes one entry - a <see cref="MessageExportData"/>,
     /// <see cref="DraftExportData"/>, <see cref="NoteExportData"/>, or <see cref="ActivityLogExportData"/>,
-    /// depending on which root folder type it came from - to a stream. <paramref name="entryTypes"/>, when given,
-    /// restricts which root folder types this format accepts; an entry outside them is left out of an export
-    /// using this format instead of being passed to <paramref name="serialize"/>. Calling this again with the
+    /// depending on which root folder type it came from - to a stream. Calling this again with the
     /// same <paramref name="name"/> (case-insensitive) replaces the earlier format of that name in place; a new
-    /// name adds another format alongside it.
+    /// name adds another format alongside it. Every root folder type is accepted.
     /// </summary>
     /// <param name="name">Display name shown for this format in the export screen.</param>
     /// <param name="serialize">Writes one entry to a stream.</param>
-    /// <param name="entryTypes">Restricts which root folder types this format accepts, or <see langword="null"/> (the default) to accept every type.</param>
-    IEngineBuilder ExportFormat(string name, Func<object, Stream, CancellationToken, Task> serialize, Func<FolderType, bool>? entryTypes = null);
+    IEngineBuilder ExportFormat(string name, Func<object, Stream, CancellationToken, Task> serialize);
+
+    /// <summary>
+    /// Adds a custom export format like <see cref="ExportFormat(string, Func{object, Stream, CancellationToken, Task})"/>, restricted to the root folder types
+    /// <paramref name="entryTypes"/> accepts; an entry outside them is left out of an export using this format instead of being passed to <paramref name="serialize"/>.
+    /// </summary>
+    /// <param name="name">Display name shown for this format in the export screen.</param>
+    /// <param name="entryTypes">Restricts which root folder types this format accepts.</param>
+    /// <param name="serialize">Writes one entry to a stream.</param>
+    IEngineBuilder ExportFormat(string name, Func<FolderType, bool> entryTypes, Func<object, Stream, CancellationToken, Task> serialize);
 
     /// <summary>
     /// Adds a custom import format, shown as an option alongside the built-in package format in the client's
     /// import screen. <paramref name="read"/> reads one whole file the user chose - found on the source drive by
-    /// this format's own name-derived extension, the same way an <see cref="ExportFormat"/> entry's file
+    /// this format's own name-derived extension, the same way an <see cref="ExportFormat(string, Func{object, Stream, CancellationToken, Task})"/> entry's file
     /// extension is derived - and, through the handed <see cref="IImportFormatContext"/>, turns what it reads
     /// into new messages, drafts, notes, and staged sends; unlike the built-in format, this is the reader's own
-    /// file layout, not a zip archive of typed entries. <paramref name="stagedSendMode"/> and
-    /// <paramref name="stagedSendDelay"/> state how the staged send screen sends everything this format ever adds
-    /// via <see cref="IImportFormatContext.AddStagedSend"/>, once the user presses its final send button. Calling
+    /// file layout, not a zip archive of typed entries. Calling
     /// this again with the same <paramref name="name"/> (case-insensitive) replaces the earlier format of that
-    /// name in place; a new name adds another format alongside it.
+    /// name in place; a new name adds another format alongside it. Staged sends are sent one at a time with no pause.
     /// </summary>
     /// <param name="name">Display name shown for this format in the import screen.</param>
     /// <param name="read">Reads one file's stream, adding what it finds through the handed context.</param>
-    /// <param name="stagedSendMode">Whether this format's staged sends are all sent at once, or one at a time. Defaults to <see cref="Control.StagedSendMode.Sequential"/>.</param>
-    /// <param name="stagedSendDelay">While <paramref name="stagedSendMode"/> is <see cref="Control.StagedSendMode.Sequential"/>, an optional pause between each send. <see langword="null"/> (the default) sends the next immediately.</param>
-    IEngineBuilder ImportFormat(string name, Func<Stream, IImportFormatContext, CancellationToken, Task> read, StagedSendMode stagedSendMode = StagedSendMode.Sequential, TimeSpan? stagedSendDelay = null);
+    IEngineBuilder ImportFormat(string name, Func<Stream, IImportFormatContext, CancellationToken, Task> read);
 
-    /// <summary>
-    /// Adds a custom auto forward controller, shown as an option in the client's auto forward screen to every user
-    /// named in <paramref name="users"/>. Any of them can open it there and maintain their own locally-saved target
-    /// list (added to and removed from freely, persisted between restarts); whenever this instance receives a
-    /// message that <paramref name="filter"/> accepts, it is automatically forwarded, unchanged in subject and
-    /// body, to every user currently on that target list - no action needed beyond having set the target list up
-    /// once. <paramref name="filter"/> is never consulted for a user with no access, or with an empty target list,
-    /// so an inaccessible or unconfigured controller costs nothing per received message beyond that one check.
-    /// Calling this again with the same <paramref name="name"/> (case-insensitive) replaces the earlier controller
-    /// of that name in place; a new name adds another alongside it.
-    /// </summary>
-    /// <typeparam name="TMessage">The host's message type, as given to <see cref="Message{TMessage}"/>.</typeparam>
-    /// <param name="name">Display name shown for this controller in the auto forward screen.</param>
-    /// <param name="users">User names allowed to open this controller and maintain its target list.</param>
-    /// <param name="filter">Answers whether a received message should be auto-forwarded through this controller.</param>
-    IEngineBuilder AutoForwardController<TMessage>(string name, IEnumerable<string> users, Func<TMessage, bool> filter) where TMessage : class;
+    /// <summary>Adds a custom import format like <see cref="ImportFormat(string, Func{Stream, IImportFormatContext, CancellationToken, Task})"/>, stating how its staged sends are sent.</summary>
+    /// <param name="name">Display name shown for this format in the import screen.</param>
+    /// <param name="stagedSendMode">Whether this format's staged sends, added via <see cref="IImportFormatContext.AddStagedSend"/>, are all sent at once, or one at a time, once the user presses the staged send screen's final send button.</param>
+    /// <param name="read">Reads one file's stream, adding what it finds through the handed context.</param>
+    IEngineBuilder ImportFormat(string name, StagedSendMode stagedSendMode, Func<Stream, IImportFormatContext, CancellationToken, Task> read);
+
+    /// <summary>Adds a custom import format like <see cref="ImportFormat(string, StagedSendMode, Func{Stream, IImportFormatContext, CancellationToken, Task})"/>, with a pause between sends.</summary>
+    /// <param name="name">Display name shown for this format in the import screen.</param>
+    /// <param name="stagedSendMode">Whether this format's staged sends are all sent at once, or one at a time.</param>
+    /// <param name="stagedSendDelay">While <paramref name="stagedSendMode"/> is <see cref="Control.StagedSendMode.Sequential"/>, an optional pause between each send. <see langword="null"/> sends the next immediately.</param>
+    /// <param name="read">Reads one file's stream, adding what it finds through the handed context.</param>
+    IEngineBuilder ImportFormat(string name, StagedSendMode stagedSendMode, TimeSpan? stagedSendDelay, Func<Stream, IImportFormatContext, CancellationToken, Task> read);
 }

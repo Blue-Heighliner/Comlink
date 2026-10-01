@@ -3,7 +3,7 @@ namespace BlueHeighliner.Comlink.Tests.Unit.Internal.Peer.Transport;
 /// <summary>Unit tests for <see cref="PacketizingPeerTransport"/>.</summary>
 public sealed class PacketizingPeerTransportTests
 {
-    private static readonly PeerConnection target = new(new ConnectionPoint { IpAddress = "10.0.0.5", Port = 4000 }, new ConnectionInfo { Host = "10.0.0.5", Port = 4000 }, () => { });
+    private static readonly PeerConnection target = new(new ConnectionPoint { IpAddress = "10.0.0.5", Port = 4000 }, new IpConnectionInfo { Host = "10.0.0.5", Port = 4000 }, () => { });
     private static readonly ILogger logger = LoggerFactory.Create(_ => { }).CreateLogger("test");
     private static int Header => RawPacketSerializer.HeaderSize;
 
@@ -91,7 +91,7 @@ public sealed class PacketizingPeerTransportTests
 
     private static byte[] Payload(int length) => [.. Enumerable.Range(0, length).Select(i => (byte)(i % 251))];
 
-    private static PeerConnection Connection() => new(null, new ConnectionInfo { IsInbound = true }, () => { });
+    private static PeerConnection Connection() => new(null, new IpConnectionInfo { IsInbound = true }, () => { });
 
     private static List<byte[]> Packets(byte[] payload)
     {
@@ -272,7 +272,7 @@ public sealed class PacketizingPeerTransportTests
     {
         Manual manual = new();
         Fixture fx = Build(respond: manual.Respond);
-        PeerConnection other = new(new ConnectionPoint { IpAddress = "10.0.0.6", Port = 4000 }, new ConnectionInfo(), () => { });
+        PeerConnection other = new(new ConnectionPoint { IpAddress = "10.0.0.6", Port = 4000 }, new IpConnectionInfo(), () => { });
 
         Task<bool> first = fx.Transport.Request(target, Payload(5));
         await WaitUntil(() => fx.Sends.Count == 1);
@@ -368,21 +368,6 @@ public sealed class PacketizingPeerTransportTests
         Assert.Equal(2, fx.Sends.Count);
     }
 
-    /// <summary>An empty payload is a heartbeat and goes through as it is, not as a packet.</summary>
-    [Fact]
-    public async Task Request_EmptyPayload_PassesThroughUnchanged()
-    {
-        Fixture fx = Build();
-        PeerSendOptions options = new() { Priority = int.MinValue };
-
-        bool ok = await fx.Transport.Request(target, ReadOnlyMemory<byte>.Empty, options);
-
-        Assert.True(ok);
-        Sent sent = Assert.Single(fx.Sends);
-        Assert.Empty(sent.Data);
-        Assert.Same(options, sent.Options);
-    }
-
     /// <summary>The Transmitted callback fires once, only after the last packet has been transmitted.</summary>
     [Fact]
     public async Task Request_Transmitted_FiresOnceAfterLastPacket()
@@ -452,20 +437,6 @@ public sealed class PacketizingPeerTransportTests
         PeerReceivedEventArgs args = Assert.Single(published);
         Assert.Same(connection, args.Connection);
         Assert.Equal(payload, args.Payload.ToArray());
-    }
-
-    /// <summary>An empty received payload is a heartbeat and is published as it is.</summary>
-    [Fact]
-    public void Received_EmptyPayload_PassesThrough()
-    {
-        Fixture fx = Build();
-        List<PeerReceivedEventArgs> published = [];
-        fx.Transport.Received.Listen(published.Add);
-        PeerReceivedEventArgs heartbeat = new() { Connection = Connection(), Payload = ReadOnlyMemory<byte>.Empty };
-
-        fx.Received.Publish(heartbeat);
-
-        Assert.Same(heartbeat, Assert.Single(published));
     }
 
     /// <summary>Bytes that are not a packet, such as a whole payload from a node that does not packetize, are dropped without throwing.</summary>

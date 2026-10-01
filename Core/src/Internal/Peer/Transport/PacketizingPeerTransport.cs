@@ -5,8 +5,7 @@ namespace BlueHeighliner.Comlink.Peer.Transport;
 /// breaks them into rather than as one message: a request sends every packet as its own request on the wrapped
 /// transport, through a <see cref="PacketScheduler"/> per connection that always sends the highest-priority queued
 /// packet next and never has more than a window of them in flight, so a higher-priority payload overtakes the remaining packets of a lower-priority one that is still
-/// being transmitted; received packets are reassembled per connection and only a complete payload is published. An empty payload is a
-/// <see cref="PeerConnectionMonitor"/> heartbeat and passes through untouched in both directions.
+/// being transmitted; received packets are reassembled per connection and only a complete payload is published.
 /// </summary>
 internal sealed class PacketizingPeerTransport : IPeerTransport
 {
@@ -59,8 +58,6 @@ internal sealed class PacketizingPeerTransport : IPeerTransport
     /// <inheritdoc />
     public async Task<bool> Request(PeerConnection connection, ReadOnlyMemory<byte> data, PeerSendOptions? options = null, CancellationToken cancellation = default)
     {
-        if (data.IsEmpty) { return await inner.Request(connection, data, options, cancellation); }
-
         IReadOnlyList<Packet> packets = packetizer.Split(data, options?.Priority ?? 0);
         try
         {
@@ -100,12 +97,6 @@ internal sealed class PacketizingPeerTransport : IPeerTransport
 
     private void OnReceived(PeerReceivedEventArgs args)
     {
-        if (args.Payload.IsEmpty)
-        {
-            received.Publish(args);
-            return;
-        }
-
         IMemoryOwner<byte>? complete;
         try
         {

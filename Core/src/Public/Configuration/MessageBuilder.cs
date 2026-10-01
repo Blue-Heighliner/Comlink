@@ -108,4 +108,39 @@ public interface IMessageBuilder<TMessage> where TMessage : class, new()
 
     /// <summary>Replaces how a new, empty message is created. The default is <c>new TMessage()</c>.</summary>
     IMessageBuilder<TMessage> Create(Func<TMessage> create);
+
+    /// <summary>Sets how many copies of a received message are printed while "print received" is on. Defaults to one for every message.</summary>
+    IMessageBuilder<TMessage> PrintCount(Func<TMessage, int> copies);
+
+    /// <summary>
+    /// Adds a custom auto forward controller, shown as an option in the client's auto forward screen to every user
+    /// named in <paramref name="users"/>. Any of them can open it there and maintain their own locally-saved target
+    /// list (added to and removed from freely, persisted between restarts); whenever this instance receives a
+    /// message that <paramref name="filter"/> accepts, it is automatically forwarded, unchanged in subject and
+    /// body, to every user currently on that target list - no action needed beyond having set the target list up
+    /// once. <paramref name="filter"/> is never consulted for a user with no access, or with an empty target list,
+    /// so an inaccessible or unconfigured controller costs nothing per received message beyond that one check.
+    /// Calling this again with the same <paramref name="name"/> (case-insensitive) replaces the earlier controller
+    /// of that name in place; a new name adds another alongside it.
+    /// </summary>
+    /// <param name="name">Display name shown for this controller in the auto forward screen.</param>
+    /// <param name="users">User names allowed to open this controller and maintain its target list.</param>
+    /// <param name="filter">Answers whether a received message should be auto-forwarded through this controller.</param>
+    IMessageBuilder<TMessage> AutoForward(string name, IEnumerable<string> users, Func<TMessage, bool> filter);
+
+    /// <summary>
+    /// States the processor that runs host code in reaction to peer activity: a user connecting or disconnecting and a message being received
+    /// (see <see cref="INetworkProcessor{TMessage}"/>). None by default.
+    /// </summary>
+    /// <typeparam name="TProcessor">The processor type, instantiated through dependency injection when the engine runs: the instance registered for it in the host's services, or else one constructed from them.</typeparam>
+    IMessageBuilder<TMessage> Processor<TProcessor>() where TProcessor : INetworkProcessor<TMessage>;
+
+    /// <summary>
+    /// States how nodes introduce themselves on a new connection, with messages: the processor is told when a connection forms and given each message that
+    /// arrives until it marks the connection connected as a named user (see <see cref="IInitialMessageProcessor{TMessage}"/>). What it sends is a serialized
+    /// instance of the message type, split into packets like any message when packets are configured, and is not stored, routed or shown. Without one, a connection
+    /// is identified by <see cref="IEngineBuilder.Identify"/> or the engine's own rule straight away. Every node on a network must be configured alike.
+    /// </summary>
+    /// <typeparam name="TProcessor">The processor type, instantiated through dependency injection when the engine runs: the instance registered for it in the host's services, or else one constructed from them.</typeparam>
+    IMessageBuilder<TMessage> InitialProcessor<TProcessor>() where TProcessor : IInitialMessageProcessor<TMessage>;
 }

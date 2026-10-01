@@ -39,7 +39,7 @@ Core/src/
 │   ├── Configuration/   The fluent builders a configuration is written against, and the types they take
 │   ├── Connection/      IServiceConnection and its models
 │   ├── ExternalSystems/ The external system contract and its base class
-│   ├── Models/          Types that appear in configuration (UserInfo, ConnectionPoint, ConnectionInfo, ...)
+│   ├── Models/          Types that appear in configuration (UserInfo, ConnectionPoint, IConnectionInfo, ...)
 │   └── Serialization/   The network serializer contract and its protobuf default
 └── Internal/      Everything else, never public
     ├── Control/       The controller the builder's state becomes, the network file's node settings decorator, and the builders' implementations
@@ -159,7 +159,7 @@ sequenceDiagram
 1. `UserService.Load` - restores installed user from `State.json` (or applies the configured debug user)
 2. `PeerService.Start` — begins accepting peer connections
 3. `InterfaceService.Start` — begins accepting interface connections (always, regardless of mode)
-4. `EngineHooksService.Start` - subscribes to `IPeerService`'s connection and message events on behalf of the host's configured hooks (`IEngineBuilder.OnUserConnected`/`OnUserDisconnected`/`OnMessageReceived`, see [Configuration.md](Components/Configuration.md#connection--message-hooks)); a no-op if none are configured
+4. `EngineHooksService.Start` - subscribes to `IPeerService`'s connection and message events on behalf of the host's configured network processor (`IMessageBuilder<TMessage>.Processor`, see [Configuration.md](Components/Configuration.md#network-processor)); a no-op if none is configured
 
 Steps 2 through 4 (and external systems) only run once a user is installed: a fresh installation has no name, so it cannot identify itself to peers, pick its own certificate, or stamp messages it routes. When no user is installed yet, `EngineHost` waits for `UserService.Installed` and starts networking then, without a restart.
 

@@ -7,12 +7,13 @@ internal interface IPeerTransportFactory
     IPeerTransport Create();
 }
 
-/// <summary>Builds a <see cref="CompositePeerTransport"/> of MSMT (IP) and MicroGate (serial), leaving out IP when no identity certificate is available, wraps it in a <see cref="PacketizingPeerTransport"/> when <see cref="IEngineController.PacketType"/> is set, and finally in an <see cref="IdentifyingPeerTransport"/> that identifies each connection.</summary>
+/// <summary>Builds a <see cref="CompositePeerTransport"/> of MSMT (IP) and MicroGate (serial), leaving out IP when no identity certificate is available, wraps it in a <see cref="PacketizingPeerTransport"/> when <see cref="IEngineController.PacketType"/> is set, and finally in a <see cref="HandshakePeerTransport"/> that carries out the initial message exchange and identifies each connection. An initial packet exchange, when configured, is carried out by another <see cref="HandshakePeerTransport"/> beneath the packetizer.</summary>
 internal sealed class PeerTransportFactory(
     IMsmtSessionPeer.IFactory msmtFactory,
     IMicroGatePeerFactory microGateFactory,
     IEngineController engineController,
-    ILoggerFactory loggerFactory) : IPeerTransportFactory
+    ILoggerFactory loggerFactory,
+    IEngineContextFactory? contexts = null) : IPeerTransportFactory
 {
     /// <inheritdoc />
     public IPeerTransport Create()
@@ -31,15 +32,18 @@ internal sealed class PeerTransportFactory(
         }
 
         IPeerTransport transport = new CompositePeerTransport(ip, new SerialPeerTransport(microGateFactory, logger, options: engineController.MicroGateOptions));
-        if (packetizer is not null) { transport = new PacketizingPeerTransport(transport, packetizer, engineController.PacketWindow, logger); }
-        return CreateIdentifying(transport, logger);
-    }
-
-    private IdentifyingPeerTransport CreateIdentifying(IPeerTransport transport, ILogger logger)
-    {
         try
         {
-            return new IdentifyingPeerTransport(transport, engineController, logger);
+            // The initial packet travels as a packet of its own, so its exchange happens beneath the packetizer; the initial message is a message like
+            // any other, so its exchange, and identification, happen above it.
+            if (packetizer is null && engineController.InitialPacketProcessor is not null) { throw new InvalidOperationException("An initial packet needs a packet type, but none is configured"); }
+            if (packetizer is not null)
+            {
+                if (Handshake.ForPackets(engineController) is { } initialPacket) { transport = new HandshakePeerTransport(transport, engineController, logger, initialPacket, identify: false, contexts: contexts); }
+                transport = new PacketizingPeerTransport(transport, packetizer, engineController.PacketWindow, logger);
+            }
+
+            return new HandshakePeerTransport(transport, engineController, logger, Handshake.ForMessages(engineController), identify: true, contexts: contexts);
         }
         catch (Exception ex)
         {

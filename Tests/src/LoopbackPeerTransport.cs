@@ -81,14 +81,14 @@ internal sealed class LoopbackPeerTransport : IPeerTransport
         local = new PeerConnection(
             point,
             IsSerial
-                ? new ConnectionInfo { IsSerial = true, SerialPort = point.SerialPort, SerialAddress = point.SerialAddress }
-                : new ConnectionInfo { Host = point.IpAddress, Port = point.Port, CertificateSubject = far.CertificateNames.Count > 0 ? $"CN={far.CertificateNames[0]}" : null, CertificateNames = far.CertificateNames },
+                ? new SerialConnectionInfo { SerialPort = point.SerialPort!, SerialAddress = point.SerialAddress, RemoteSerialAddress = point.RemoteSerialAddress }
+                : new IpConnectionInfo { Host = point.IpAddress, Port = point.Port, CertificateSubject = far.CertificateNames.Count > 0 ? $"CN={far.CertificateNames[0]}" : null, CertificateNames = far.CertificateNames },
             () => Break(local!, counterpart!));
         counterpart = new PeerConnection(
             IsSerial ? point : null,
             IsSerial
-                ? new ConnectionInfo { IsSerial = true, SerialPort = point.SerialPort, SerialAddress = point.SerialAddress }
-                : new ConnectionInfo { IsInbound = true, Host = "127.0.0.1", Port = 40000, CertificateSubject = CertificateNames.Count > 0 ? $"CN={CertificateNames[0]}" : null, CertificateNames = CertificateNames },
+                ? new SerialConnectionInfo { SerialPort = point.SerialPort!, SerialAddress = point.RemoteSerialAddress, RemoteSerialAddress = point.SerialAddress }
+                : new IpConnectionInfo { IsInbound = true, Host = "127.0.0.1", Port = 40000, CertificateSubject = CertificateNames.Count > 0 ? $"CN={CertificateNames[0]}" : null, CertificateNames = CertificateNames },
             () => Break(local!, counterpart!));
         peers[local] = counterpart;
         far.peers[counterpart] = local;

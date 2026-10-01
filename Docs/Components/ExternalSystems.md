@@ -45,7 +45,7 @@ instead subclasses the optional convenience base class `ExternalSystemBase<TMess
 `IExternalSystem` on your behalf and exposes only type-safe `TMessage`-typed members — `protected abstract`
 methods for the real connection behavior (plus one `protected virtual` method, `PollIsConnected` — see
 [Lifecycle](#lifecycle) below), and `protected Task Receive(TMessage message)` to report an inbound
-message. `TMessage` should match the host's own message type (the one given to `IEngineBuilder.Message`).
+message. `TMessage` should match the host's own message type (the one given to `Message<TMessage>`).
 
 `ExternalSystemBase<TMessage>`'s constructor deliberately does not take an `ILoggerFactory` — each
 external system is constructed directly by the host's `IEngineConfiguration`, not resolved from the running
@@ -106,7 +106,7 @@ called for it.
 
 ## `ExternalSystems` and `ExternalSystemsService`
 
-The external systems added with `IEngineBuilder.ExternalSystem` (see [Configuration.md](Configuration.md#external-systems)) are the list
+The external systems added with `ExternalSystem` (see [Configuration.md](Configuration.md#external-systems)) are the list
 of external systems this instance communicates with, resolved once at startup. `ExternalSystemsService`
 (`Core/src/Internal/ExternalSystems/ExternalSystemsService.cs`, an internal hosted-service-style component started
 by `EngineHost` alongside the peer and interface listeners) reads this list once and then:
@@ -132,7 +132,7 @@ returns immediately without subscribing to anything.
 
 ## `ExternalServer`
 
-`IEngineBuilder.ExternalServer` (see [Configuration.md](Configuration.md#external-systems)) designates one entry of
+`ExternalServer` (see [Configuration.md](Configuration.md#external-systems)) designates one entry of
 the external systems — or none, the default — as the exclusive upstream hub for every message this instance
 would otherwise send out. When it is set, `ExternalSystemsService` changes the relay step above:
 

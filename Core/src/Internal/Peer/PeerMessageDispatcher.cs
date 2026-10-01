@@ -10,8 +10,8 @@ internal static class PeerMessageDispatcher
     /// <summary>
     /// Deserializes <paramref name="data"/> as an instance of <see cref="IEngineController.MessageType"/> and
     /// raises <paramref name="confirmationReceived"/> or <paramref name="messageDelivered"/> as appropriate.
-    /// An empty <paramref name="data"/> is a <see cref="PeerConnectionMonitor"/> heartbeat, not a real
-    /// message, and is silently ignored.
+    /// A <see cref="PeerConnectionMonitor"/> heartbeat (an empty message, see <see cref="EngineControllerExtensions.IsHeartbeat"/>)
+    /// is not a real message and is acknowledged without being delivered.
     /// </summary>
     /// <param name="data">The raw, already-received message payload.</param>
     /// <param name="engineController">Maps logical fields onto the engine's message type.</param>
@@ -26,12 +26,12 @@ internal static class PeerMessageDispatcher
         Func<object, Task>? messageDelivered,
         Func<string, string, Task>? confirmationReceived)
     {
-        if (data.IsEmpty) { return true; }
-
         try
         {
             object? message = engineController.NetworkSerializer.Deserialize(data);
             if (message is null) { return false; }
+
+            if (engineController.IsHeartbeat(message)) { return true; }
 
             string confirmationMessageId = engineController.GetConfirmationMessageId(message);
             if (!string.IsNullOrEmpty(confirmationMessageId))

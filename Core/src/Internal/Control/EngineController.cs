@@ -7,7 +7,7 @@ namespace BlueHeighliner.Comlink.Control;
 /// identity/presentation, local user identity, the user/group directory, listener ports, alert settings,
 /// message composition, the automatic print policy, MSMT peer certificate naming and peer options, network
 /// topology, the points this node connects out to, how the user on the other end of a connection is identified
-/// (optionally after a connection message exchange), the external systems this instance communicates with, the
+/// (optionally after an initial packet and message exchange), the external systems this instance communicates with, the
 /// hooks run on connection and message activity, and whether command-line arguments may override the network configuration file and user. External drive discovery and printer discovery/driving are real
 /// OS-level behavior, not configuration or rules, so they live on <see cref="Devices.IExternalDriveProvider"/>
 /// and <see cref="Devices.IPrintDriver"/> instead. See <c>Docs/Components/Configuration.md</c>.
@@ -82,8 +82,8 @@ internal interface IEngineController
     bool IsKioskMode { get; }
     /// <summary>The text displayed in the content area when no entry is selected.</summary>
     string HomeText { get; }
-    /// <summary>Optional <c>avares://</c> URI of the window icon to apply to the main window, or <see langword="null"/> to use the OS default.</summary>
-    Uri? WindowIconUri { get; }
+    /// <summary>Optional <c>avares://</c> URI or file path of the window icon to apply to the main window, or <see langword="null"/> to use the OS default.</summary>
+    string? WindowIconPath { get; }
 
     /// <summary>The overridden user name for development/testing, or <see langword="null"/> if no override is active.</summary>
     string? DebugUserName { get; }
@@ -193,25 +193,10 @@ internal interface IEngineController
     /// </summary>
     IReadOnlyDictionary<string, ServerUserConfig> Servers { get; }
 
-    /// <summary>
-    /// The type of the connection message, or <see langword="null"/> (the default) for none. When set, the node that
-    /// opens a connection sends one (both ends of a serial link do) as the first thing on it, built by
-    /// <see cref="CreateConnectionMessage"/>, and the connection is not usable, nor identified, until the exchange
-    /// completes. Every node must be configured alike, since neither side can tell whether the other expects one.
-    /// </summary>
-    Type? ConnectionMessageType { get; }
-    /// <summary>
-    /// The type of the connection response, or <see langword="null"/> (the default) for none. Only used while
-    /// <see cref="ConnectionMessageType"/> is set: the node that receives a connection message answers it with a response
-    /// built by <see cref="CreateConnectionResponse"/>, which the opening node waits for before the connection is usable.
-    /// </summary>
-    Type? ConnectionResponseType { get; }
-    /// <summary>
-    /// Serializes and deserializes connection messages and responses. <see langword="null"/> exactly when
-    /// <see cref="ConnectionMessageType"/> is. Defaults to a <see cref="ProtobufNetworkSerializer"/> that builds only
-    /// the message and response types.
-    /// </summary>
-    INetworkSerializer? ConnectionSerializer { get; }
+    /// <summary>Gets the processor that carries out the initial packet exchange on each new connection (see <see cref="IPacketBuilder{TPacket}.InitialProcessor"/>), or <see langword="null"/> for none. Requires <see cref="PacketType"/>.</summary>
+    IInitialProcessor? InitialPacketProcessor { get; }
+    /// <summary>Gets the processor that carries out the initial message exchange on each new connection (see <see cref="IMessageBuilder{TMessage}.InitialProcessor"/>), or <see langword="null"/> for none.</summary>
+    IInitialProcessor? InitialMessageProcessor { get; }
     /// <summary>When <see langword="true"/>, the <c>--config</c> and <c>--user</c> command-line arguments override where the network configuration file and the running user come from (see <see cref="IEngineBuilder.CommandLineOverrides"/>); when <see langword="false"/> (the default) they are ignored and only <c>Config.json</c> and <c>User.json</c> in the working directory are used.</summary>
     bool CommandLineOverridesAllowed { get; }
 
@@ -241,25 +226,19 @@ internal interface IEngineController
     /// </summary>
     IExternalSystem? ExternalServer { get; }
 
-    /// <summary>Every hook run when a user goes from having no live peer connection to having at least one.</summary>
-    IReadOnlyList<Action<IUserConnectionHookContext>> UserConnectedHooks { get; }
+    /// <summary>The processor that reacts to a user connecting or disconnecting and to a message being received (see <see cref="IMessageBuilder{TMessage}.Processor"/>), or <see langword="null"/> for none.</summary>
+    INetworkHandler? NetworkHandler { get; }
 
-    /// <summary>Every hook run when a user goes from having at least one live peer connection to having none.</summary>
-    IReadOnlyList<Action<IUserConnectionHookContext>> UserDisconnectedHooks { get; }
-
-    /// <summary>Every hook run whenever this instance receives a new (non-confirmation) message from a peer.</summary>
-    IReadOnlyList<Action<IMessageReceivedHookContext>> MessageReceivedHooks { get; }
-
-    /// <summary>Every custom export format added via <see cref="IEngineBuilder.ExportFormat"/>, in the order added; empty if none.</summary>
+    /// <summary>Every custom export format added via <see cref="IEngineBuilder.ExportFormat(string, Func{object, Stream, CancellationToken, Task})"/>, in the order added; empty if none.</summary>
     IReadOnlyList<ExportFormatDefinition> ExportFormats { get; }
 
-    /// <summary>Every custom import format added via <see cref="IEngineBuilder.ImportFormat"/>, in the order added; empty if none.</summary>
+    /// <summary>Every custom import format added via <see cref="IEngineBuilder.ImportFormat(string, StagedSendMode, Nullable{TimeSpan}, Func{Stream, IImportFormatContext, CancellationToken, Task})"/>, in the order added; empty if none.</summary>
     IReadOnlyList<ImportFormatDefinition> ImportFormats { get; }
 
     /// <summary>The server users, from <see cref="Servers"/>, that keep a copy of every message they route and answer retrieval requests; see <see cref="UserInfo.StoresMessages"/>. Empty if none.</summary>
     IReadOnlyList<string> StorageServers { get; }
 
-    /// <summary>Every custom auto forward controller added via <see cref="IEngineBuilder.AutoForwardController{TMessage}"/>, in the order added; empty if none.</summary>
+    /// <summary>Every custom auto forward controller added via <see cref="IMessageBuilder{TMessage}.AutoForward"/>, in the order added; empty if none.</summary>
     IReadOnlyList<AutoForwardControllerDefinition> AutoForwardControllers { get; }
 
     /// <summary>Creates a new, empty instance of <see cref="MessageType"/>.</summary>
@@ -379,28 +358,19 @@ internal interface IEngineController
 
     /// <summary>
     /// Decides who is on the other end of a connection that has just formed, from what is known about it: for IP the
-    /// remote host, port and certificate names, for serial the port and address, and the connection message and
-    /// response when those are configured. Returns <see langword="null"/> (the default) to let the engine decide:
+    /// remote host, port and certificate names, for serial the port and addresses, and the initial packet and
+    /// message exchange when those are configured. Returns <see langword="null"/> (the default) to let the engine decide:
     /// an IP connection is the user whose <see cref="GetCertificateName"/> matches a name in its certificate (or, when
     /// none does, a user named after that certificate name), and a serial connection is a user named after its port.
     /// A host overrides this to identify by anything else, such as a serial port to user table, or a user name carried
-    /// in the connection message. The user's <see cref="UserIdentity.Data"/> is normally <see cref="GetUserData"/>.
+    /// in an initial packet or message. The identity built from the returned name carries <see cref="GetUserData"/> for it.
     /// </summary>
     /// <param name="connection">What is known about the connection.</param>
-    UserIdentity? IdentifyConnection(ConnectionInfo connection);
+    string? IdentifyConnection(IConnectionInfo connection);
 
-    /// <summary>
-    /// Builds the connection message to send on a connection that has just formed, or returns <see langword="null"/> to
-    /// send an empty one. Only called while <see cref="ConnectionMessageType"/> is set.
-    /// </summary>
+    /// <summary>Adds what the engine knows about this node, namely which user it runs as, to a description of a new connection before it is handed to a host's processor.</summary>
     /// <param name="connection">What is known about the connection.</param>
-    object? CreateConnectionMessage(ConnectionInfo connection);
-    /// <summary>
-    /// Builds the response to the connection message in <see cref="ConnectionInfo.ConnectionMessage"/>, or returns
-    /// <see langword="null"/> to send an empty one. Only called while <see cref="ConnectionResponseType"/> is set.
-    /// </summary>
-    /// <param name="connection">What is known about the connection, including the message just received.</param>
-    object? CreateConnectionResponse(ConnectionInfo connection);
+    IConnectionInfo WithLocalUser(IConnectionInfo connection);
 
     /// <summary>
     /// Returns how many times <paramref name="message"/> should be automatically added to the print queue
@@ -445,13 +415,16 @@ internal interface IEngineController
 /// <param name="builder">What the host stated.</param>
 /// <param name="currentUserProvider">Tracks the user name of the currently running instance, read for <see cref="ConnectionOptions"/>.</param>
 /// <param name="networkConfig">The network configuration file describing every user of the network; empty when none is loaded.</param>
-internal class EngineController(EngineBuilder builder, ICurrentUserProvider currentUserProvider, NetworkConfig? networkConfig = null) : IEngineController
+/// <param name="services">The running engine's container, which instantiates the host's processors; <see langword="null"/> for one with no services.</param>
+internal class EngineController(EngineBuilder builder, ICurrentUserProvider currentUserProvider, NetworkConfig? networkConfig = null, IServiceProvider? services = null) : IEngineController
 {
     private readonly MessageMap message = builder.MessageMap ?? throw new InvalidOperationException("The engine configuration must state its message type with Message<TMessage>(...).");
     private readonly PacketMap? packet = builder.PacketMap;
+    private readonly Lazy<IInitialProcessor?> initialPacketProcessor = new(() => builder.InitialPacketProcessor?.Create(services));
+    private readonly Lazy<IInitialProcessor?> initialMessageProcessor = new(() => builder.InitialMessageProcessor?.Create(services));
+    private readonly Lazy<INetworkHandler?> networkHandler = new(() => builder.NetworkHandler?.Create(services));
     private readonly IReadOnlyList<MessagePriorityOption> defaultPriorities = [new MessagePriorityOption { Name = "Normal", Value = 0 }];
     private readonly IReadOnlyList<AddressType> addressTypeOrder = [AddressType.To, AddressType.Cc, AddressType.External];
-    private INetworkSerializer? connectionSerializer;
 
     /// <inheritdoc />
     public virtual Type MessageType => message.Type;
@@ -485,7 +458,7 @@ internal class EngineController(EngineBuilder builder, ICurrentUserProvider curr
     private UserInfo? CurrentUserInfo => currentUserProvider.UserName is { Length: > 0 } name ? GetUserInfo(name) : null;
 
     /// <inheritdoc />
-    public virtual Uri? WindowIconUri => builder.WindowIconValue;
+    public virtual string? WindowIconPath => builder.WindowIconValue;
 
     /// <inheritdoc />
     public virtual string? DebugUserName => builder.DebugUserValue;
@@ -581,13 +554,10 @@ internal class EngineController(EngineBuilder builder, ICurrentUserProvider curr
     }
 
     /// <inheritdoc />
-    public virtual Type? ConnectionMessageType => builder.ConnectionMessageType;
+    public virtual IInitialProcessor? InitialPacketProcessor => initialPacketProcessor.Value;
+
     /// <inheritdoc />
-    public virtual Type? ConnectionResponseType => builder.ConnectionResponseType;
-    /// <inheritdoc />
-    public virtual INetworkSerializer? ConnectionSerializer => ConnectionMessageType is null
-        ? null
-        : builder.ConnectionSerializerValue ?? (connectionSerializer ??= new ProtobufNetworkSerializer([.. new[] { ConnectionMessageType, ConnectionResponseType }.OfType<Type>()]));
+    public virtual IInitialProcessor? InitialMessageProcessor => initialMessageProcessor.Value;
 
     /// <inheritdoc />
     public virtual bool CommandLineOverridesAllowed => builder.AreCommandLineOverridesAllowed;
@@ -598,11 +568,7 @@ internal class EngineController(EngineBuilder builder, ICurrentUserProvider curr
     public virtual IExternalSystem? ExternalServer => builder.ExternalServerValue;
 
     /// <inheritdoc />
-    public virtual IReadOnlyList<Action<IUserConnectionHookContext>> UserConnectedHooks => builder.UserConnectedHooks;
-    /// <inheritdoc />
-    public virtual IReadOnlyList<Action<IUserConnectionHookContext>> UserDisconnectedHooks => builder.UserDisconnectedHooks;
-    /// <inheritdoc />
-    public virtual IReadOnlyList<Action<IMessageReceivedHookContext>> MessageReceivedHooks => builder.MessageReceivedHooks;
+    public virtual INetworkHandler? NetworkHandler => networkHandler.Value;
     /// <inheritdoc />
     public virtual IReadOnlyList<ExportFormatDefinition> ExportFormats => builder.ExportFormats;
     /// <inheritdoc />
@@ -722,11 +688,9 @@ internal class EngineController(EngineBuilder builder, ICurrentUserProvider curr
     public virtual IReadOnlyDictionary<string, string> GetUserData(string userName) => GetUserInfo(userName).Data;
 
     /// <inheritdoc />
-    public virtual UserIdentity? IdentifyConnection(ConnectionInfo connection) => builder.IdentifyValue?.Invoke(connection);
+    public virtual string? IdentifyConnection(IConnectionInfo connection) => builder.IdentifyValue?.Invoke(connection);
     /// <inheritdoc />
-    public virtual object? CreateConnectionMessage(ConnectionInfo connection) => builder.ConnectionMessageFactory?.Invoke(connection);
-    /// <inheritdoc />
-    public virtual object? CreateConnectionResponse(ConnectionInfo connection) => builder.ConnectionResponseFactory?.Invoke(connection);
+    public virtual IConnectionInfo WithLocalUser(IConnectionInfo connection) => connection;
 
     /// <inheritdoc />
     public virtual int GetPrintCount(object value) => builder.PrintCountValue?.Invoke(value) ?? 1;
@@ -745,6 +709,18 @@ internal static class EngineControllerExtensions
 {
     extension(IEngineController engineController)
     {
+        /// <summary>
+        /// The message a node sends to keep a connection verified: an empty instance of <see cref="IEngineController.MessageType"/>, serialized like any
+        /// message. It is recognized by having no identifier, addresses, confirmation or retrieval, which no message built by the engine ever lacks,
+        /// and is acknowledged and otherwise ignored.
+        /// </summary>
+        /// <param name="message">A received instance of <see cref="IEngineController.MessageType"/>.</param>
+        public bool IsHeartbeat(object message)
+            => string.IsNullOrEmpty(engineController.GetMessageId(message))
+            && engineController.GetAddresses(message).Count == 0
+            && string.IsNullOrEmpty(engineController.GetConfirmationMessageId(message))
+            && !engineController.IsRetrieval(message);
+
         /// <summary>
         /// Reads every logical field of <paramref name="payload"/> (an instance of <see cref="IEngineController.MessageType"/>)
         /// into a new <see cref="MessageReceivedEvent"/>. Shared by <see cref="DirectServiceConnection"/> and

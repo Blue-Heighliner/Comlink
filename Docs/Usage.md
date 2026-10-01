@@ -56,7 +56,7 @@ A host only states what it needs distinct behavior for; every other setting keep
 public IEngineBuilder Configure(IEngineBuilder engine) => engine
     .Message<MyMessage>(/* ...required mapping from above... */)
     .HomeText("Select a folder and entry to get started.")
-    .WindowIcon(new Uri("avares://MyApp/Assets/icon.png"));
+    .WindowIcon("avares://MyApp/Assets/icon.png");
 ```
 
 ## The network configuration file

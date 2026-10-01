@@ -1,7 +1,7 @@
 namespace BlueHeighliner.Comlink.Services;
 
 /// <summary>
-/// A message a custom import format's reader (see <see cref="BlueHeighliner.Comlink.IEngineBuilder.ImportFormat"/>) has prepared
+/// A message a custom import format's reader (see <see cref="IEngineBuilder.ImportFormat(string, StagedSendMode, Nullable{TimeSpan}, Func{Stream, IImportFormatContext, CancellationToken, Task})"/>) has prepared
 /// to send, added via <see cref="Control.IImportFormatContext.AddStagedSend"/>. Shown to the user in the staged
 /// send screen for review, and sent only once they press its final send button - never sent automatically.
 /// </summary>

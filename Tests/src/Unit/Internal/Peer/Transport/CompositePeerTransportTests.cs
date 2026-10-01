@@ -24,7 +24,7 @@ public sealed class CompositePeerTransportTests
     }
 
     private static PeerConnection Connection(ConnectionPoint point)
-        => new(point, new ConnectionInfo { IsSerial = point.IsSerial }, () => { });
+        => new(point, point.IsSerial ? new SerialConnectionInfo() : new IpConnectionInfo(), () => { });
 
     /// <summary>A connect to a serial point goes to the serial transport and one to an IP point goes to the IP transport.</summary>
     [Fact]
@@ -52,7 +52,7 @@ public sealed class CompositePeerTransportTests
         CompositePeerTransport composite = new(ipPart.Transport.Object, serialPart.Transport.Object);
         PeerConnection ipConnection = Connection(ip);
         PeerConnection serialConnection = Connection(serial);
-        PeerConnection inbound = new(null, new ConnectionInfo { IsInbound = true }, () => { });
+        PeerConnection inbound = new(null, new IpConnectionInfo { IsInbound = true }, () => { });
 
         await composite.Request(ipConnection, new byte[] { 1 });
         await composite.Request(serialConnection, new byte[] { 2 });
@@ -88,7 +88,7 @@ public sealed class CompositePeerTransportTests
         composite.Received.Listen(_ => log.Add("received"));
         composite.Connected.Listen(_ => log.Add("connected"));
         composite.Disconnected.Listen(_ => log.Add("disconnected"));
-        PeerConnection connection = new(null, new ConnectionInfo { IsInbound = true }, () => { });
+        PeerConnection connection = new(null, new IpConnectionInfo { IsInbound = true }, () => { });
 
         foreach (Part part in new[] { ipPart, serialPart })
         {
@@ -224,22 +224,21 @@ public sealed class CompositePeerTransportTests
         Assert.True(packet.Length > 3);
     }
 
-    /// <summary>A connection message type without a serializer stops the transport being created rather than failing every connection later.</summary>
+    /// <summary>An initial packet with no packets configured stops the transport being created rather than failing every connection later.</summary>
     [Fact]
-    public void Factory_ConnectionMessageWithoutSerializer_Throws()
+    public void Factory_InitialPacketWithoutPackets_Throws()
     {
         Mock<TestEngineController> controller = new() { CallBase = true };
-        controller.Setup(c => c.ConnectionMessageType).Returns(typeof(TestHello));
-        controller.Setup(c => c.ConnectionSerializer).Returns((INetworkSerializer?)null);
+        controller.Setup(c => c.InitialPacketProcessor).Returns(Mock.Of<IInitialProcessor>());
         controller.Setup(c => c.ConnectionOptions).Throws(new InvalidOperationException("no current user"));
         PeerTransportFactory factory = new(Mock.Of<IMsmtSessionPeer.IFactory>(), Mock.Of<IMicroGatePeerFactory>(), controller.Object, LoggerFactory.Create(_ => { }));
 
         Assert.Throws<InvalidOperationException>(() => factory.Create());
     }
 
-    /// <summary>The factory always produces a transport that identifies its connections.</summary>
+    /// <summary>The factory always produces an outermost transport that carries out the initial message exchange and identifies its connections.</summary>
     [Fact]
-    public async Task Factory_AlwaysBuildsIdentifyingTransport()
+    public async Task Factory_AlwaysBuildsHandshakeTransport()
     {
         Mock<TestEngineController> controller = new() { CallBase = true };
         controller.Setup(c => c.ConnectionOptions).Throws(new InvalidOperationException("no current user"));
@@ -247,7 +246,7 @@ public sealed class CompositePeerTransportTests
 
         await using IPeerTransport transport = factory.Create();
 
-        Assert.IsType<IdentifyingPeerTransport>(transport);
+        Assert.IsType<HandshakePeerTransport>(transport);
     }
 
     /// <summary>A packet size the packet format leaves no room in, or a window below 1, stops the transport being created rather than failing every send later.</summary>
@@ -276,7 +275,7 @@ public sealed class CompositePeerTransportTests
 
         await using IPeerTransport transport = factory.Create();
 
-        Assert.IsType<IdentifyingPeerTransport>(transport);
+        Assert.IsType<HandshakePeerTransport>(transport);
     }
 
     /// <summary>With no identity certificate (a node that only uses serial) the factory still builds a transport, leaving IP unavailable.</summary>

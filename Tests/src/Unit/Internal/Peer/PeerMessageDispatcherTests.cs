@@ -24,6 +24,32 @@ public sealed class PeerMessageDispatcherTests
         Assert.Single(delivered);
     }
 
+    /// <summary>A heartbeat, an empty message, is acknowledged and neither delivered nor treated as a confirmation.</summary>
+    [Fact]
+    public async Task Dispatch_Heartbeat_IsAcknowledgedAndIgnored()
+    {
+        TestEngineController controller = new();
+        List<object> delivered = [];
+        int confirmations = 0;
+
+        bool ok = await PeerMessageDispatcher.Dispatch(
+            TestHeartbeat.Bytes(), controller, logger,
+            m => { delivered.Add(m); return Task.CompletedTask; }, (_, _) => { confirmations++; return Task.CompletedTask; });
+
+        Assert.True(ok);
+        Assert.Empty(delivered);
+        Assert.Equal(0, confirmations);
+    }
+
+    /// <summary>An empty payload is not a serialized message, so it is refused rather than treated as a heartbeat.</summary>
+    [Fact]
+    public async Task Dispatch_EmptyPayload_IsRefused()
+    {
+        TestEngineController controller = new();
+
+        Assert.False(await PeerMessageDispatcher.Dispatch(ReadOnlyMemory<byte>.Empty, controller, logger, null, null));
+    }
+
     /// <summary>A retrieval request is neither delivered as a message nor treated as a confirmation: only a storage server answers one.</summary>
     [Fact]
     public async Task Dispatch_RetrievalRequest_IsIgnored()

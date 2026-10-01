@@ -1,6 +1,6 @@
 namespace BlueHeighliner.Comlink.Control;
 
-/// <summary>A custom export format added via <see cref="IEngineBuilder.ExportFormat"/>.</summary>
+/// <summary>A custom export format added via <see cref="IEngineBuilder.ExportFormat(string, Func{object, Stream, CancellationToken, Task})"/>.</summary>
 internal sealed record ExportFormatDefinition
 {
     /// <summary>Display name shown for this format in the client's export screen.</summary>

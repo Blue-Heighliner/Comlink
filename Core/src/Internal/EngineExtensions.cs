@@ -23,7 +23,7 @@ internal static class EngineExtensions
             services.AddSingleton<IEngineController>(sp =>
             {
                 ICurrentUserProvider currentUser = sp.GetRequiredService<ICurrentUserProvider>();
-                return new ConfiguredEngineController(new EngineController(engine, currentUser, network), network, currentUser);
+                return new ConfiguredEngineController(new EngineController(engine, currentUser, network, sp), network, currentUser);
             });
 
             services.AddSingleton<RolePeerService>();

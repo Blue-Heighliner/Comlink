@@ -2,7 +2,7 @@ namespace BlueHeighliner.Comlink.Services;
 
 /// <summary>
 /// Exported representation of a message entry: what the engine's own built-in JSON export writes, and what a
-/// custom export format's serializer (see <see cref="IEngineBuilder.ExportFormat"/>) receives for a message.
+/// custom export format's serializer (see <see cref="IEngineBuilder.ExportFormat(string, Func{object, Stream, CancellationToken, Task})"/>) receives for a message.
 /// </summary>
 public sealed record MessageExportData
 {
@@ -47,7 +47,7 @@ public sealed record MessageDeliveryStatus
 
 /// <summary>
 /// Exported representation of a draft entry: what the engine's own built-in JSON export writes, and what a
-/// custom export format's serializer (see <see cref="IEngineBuilder.ExportFormat"/>) receives for a draft.
+/// custom export format's serializer (see <see cref="IEngineBuilder.ExportFormat(string, Func{object, Stream, CancellationToken, Task})"/>) receives for a draft.
 /// </summary>
 public sealed record DraftExportData
 {
@@ -79,7 +79,7 @@ public sealed record DraftExportData
 
 /// <summary>
 /// Exported representation of a note entry: what the engine's own built-in JSON export writes, and what a
-/// custom export format's serializer (see <see cref="IEngineBuilder.ExportFormat"/>) receives for a note.
+/// custom export format's serializer (see <see cref="IEngineBuilder.ExportFormat(string, Func{object, Stream, CancellationToken, Task})"/>) receives for a note.
 /// </summary>
 public sealed record NoteExportData
 {
@@ -95,7 +95,7 @@ public sealed record NoteExportData
 
 /// <summary>
 /// Exported representation of an activity log entry: what the engine's own built-in JSON export writes, and what
-/// a custom export format's serializer (see <see cref="IEngineBuilder.ExportFormat"/>) receives for an activity log.
+/// a custom export format's serializer (see <see cref="IEngineBuilder.ExportFormat(string, Func{object, Stream, CancellationToken, Task})"/>) receives for an activity log.
 /// </summary>
 public sealed record ActivityLogExportData
 {

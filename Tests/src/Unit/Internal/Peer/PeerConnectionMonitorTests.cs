@@ -5,7 +5,7 @@ public sealed class PeerConnectionMonitorTests
 {
     private static readonly ConnectionPoint target = new() { IpAddress = "10.0.0.1", Port = 9000 };
 
-    private static readonly PeerConnection connection = new(target, new ConnectionInfo(), () => { });
+    private static readonly PeerConnection connection = new(target, new IpConnectionInfo(), () => { });
 
     private static void AutoConnect(Mock<IPeerTransport> transport)
         => transport.Setup(t => t.Connect(target, It.IsAny<CancellationToken>())).ReturnsAsync(connection);
@@ -15,6 +15,12 @@ public sealed class PeerConnectionMonitorTests
         AutoConnect(transport);
         transport.Setup(t => t.Request(connection, It.IsAny<ReadOnlyMemory<byte>>(), It.IsAny<PeerSendOptions>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync(success);
+    }
+
+    private static bool IsHeartbeat(ReadOnlyMemory<byte> payload)
+    {
+        TestEngineController controller = new();
+        return controller.NetworkSerializer.Deserialize(payload) is { } message && controller.IsHeartbeat(message);
     }
 
     private static async Task WaitUntil(Func<bool> condition, TimeSpan timeout)
@@ -27,19 +33,19 @@ public sealed class PeerConnectionMonitorTests
         }
     }
 
-    /// <summary>Maintain sends an empty heartbeat immediately, without waiting for the first interval to elapse.</summary>
+    /// <summary>Maintain sends a heartbeat, a serialized empty message, immediately, without waiting for the first interval to elapse.</summary>
     [Fact]
     public async Task Maintain_SendsHeartbeatImmediately()
     {
         Mock<IPeerTransport> transport = new();
         AutoAcknowledge(transport);
-        PeerConnectionMonitor monitor = new(steadyInterval: TimeSpan.FromMinutes(10), fastRetryInterval: TimeSpan.FromMinutes(10));
+        PeerConnectionMonitor monitor = new(new TestEngineController(), steadyInterval: TimeSpan.FromMinutes(10), fastRetryInterval: TimeSpan.FromMinutes(10));
 
         using CancellationTokenSource cts = new();
         monitor.Maintain(transport.Object, target, cts.Token);
 
         await WaitUntil(
-            () => transport.Invocations.Any(i => i.Method.Name == nameof(IPeerTransport.Request) && ((ReadOnlyMemory<byte>)i.Arguments[1]).Length == 0),
+            () => transport.Invocations.Any(i => i.Method.Name == nameof(IPeerTransport.Request) && IsHeartbeat((ReadOnlyMemory<byte>)i.Arguments[1])),
             TimeSpan.FromSeconds(2));
 
         cts.Cancel();
@@ -53,7 +59,7 @@ public sealed class PeerConnectionMonitorTests
         AutoConnect(transport);
         transport.Setup(t => t.Request(connection, It.IsAny<ReadOnlyMemory<byte>>(), It.IsAny<PeerSendOptions>(), It.IsAny<CancellationToken>()))
             .ThrowsAsync(new IOException("refused"));
-        PeerConnectionMonitor monitor = new(steadyInterval: TimeSpan.FromMinutes(10), fastRetryInterval: TimeSpan.FromMilliseconds(50));
+        PeerConnectionMonitor monitor = new(new TestEngineController(), steadyInterval: TimeSpan.FromMinutes(10), fastRetryInterval: TimeSpan.FromMilliseconds(50));
 
         using CancellationTokenSource cts = new();
         monitor.Maintain(transport.Object, target, cts.Token);
@@ -71,7 +77,7 @@ public sealed class PeerConnectionMonitorTests
     {
         Mock<IPeerTransport> transport = new();
         AutoAcknowledge(transport);
-        PeerConnectionMonitor monitor = new(steadyInterval: TimeSpan.FromSeconds(30), fastRetryInterval: TimeSpan.FromMilliseconds(20));
+        PeerConnectionMonitor monitor = new(new TestEngineController(), steadyInterval: TimeSpan.FromSeconds(30), fastRetryInterval: TimeSpan.FromMilliseconds(20));
 
         using CancellationTokenSource cts = new();
         monitor.Maintain(transport.Object, target, cts.Token);
@@ -99,7 +105,7 @@ public sealed class PeerConnectionMonitorTests
     {
         Mock<IPeerTransport> transport = new();
         AutoAcknowledge(transport);
-        PeerConnectionMonitor monitor = new(steadyInterval: TimeSpan.FromMinutes(10), fastRetryInterval: TimeSpan.FromMinutes(10));
+        PeerConnectionMonitor monitor = new(new TestEngineController(), steadyInterval: TimeSpan.FromMinutes(10), fastRetryInterval: TimeSpan.FromMinutes(10));
         using CancellationTokenSource cts = new();
         PeerLinkControl control = monitor.Maintain(transport.Object, target, cts.Token);
         await WaitUntil(() => Heartbeats(transport) == 1, TimeSpan.FromSeconds(2));
@@ -116,7 +122,7 @@ public sealed class PeerConnectionMonitorTests
     {
         Mock<IPeerTransport> transport = new();
         AutoAcknowledge(transport);
-        PeerConnectionMonitor monitor = new(steadyInterval: TimeSpan.FromMinutes(10), fastRetryInterval: TimeSpan.FromMinutes(10));
+        PeerConnectionMonitor monitor = new(new TestEngineController(), steadyInterval: TimeSpan.FromMinutes(10), fastRetryInterval: TimeSpan.FromMinutes(10));
         using CancellationTokenSource cts = new();
         PeerLinkControl control = monitor.Maintain(transport.Object, target, cts.Token);
         await WaitUntil(() => Heartbeats(transport) == 1, TimeSpan.FromSeconds(2));
@@ -133,7 +139,7 @@ public sealed class PeerConnectionMonitorTests
     {
         Mock<IPeerTransport> transport = new();
         AutoAcknowledge(transport, success: false);
-        PeerConnectionMonitor monitor = new(steadyInterval: TimeSpan.FromMinutes(10), fastRetryInterval: TimeSpan.FromMinutes(10));
+        PeerConnectionMonitor monitor = new(new TestEngineController(), steadyInterval: TimeSpan.FromMinutes(10), fastRetryInterval: TimeSpan.FromMinutes(10));
         using CancellationTokenSource cts = new();
         PeerLinkControl control = monitor.Maintain(transport.Object, target, cts.Token);
         await WaitUntil(() => Heartbeats(transport) == 1, TimeSpan.FromSeconds(2));
@@ -152,7 +158,7 @@ public sealed class PeerConnectionMonitorTests
     {
         Mock<IPeerTransport> transport = new();
         AutoAcknowledge(transport);
-        PeerConnectionMonitor monitor = new(steadyInterval: TimeSpan.FromMilliseconds(20), fastRetryInterval: TimeSpan.FromMilliseconds(20));
+        PeerConnectionMonitor monitor = new(new TestEngineController(), steadyInterval: TimeSpan.FromMilliseconds(20), fastRetryInterval: TimeSpan.FromMilliseconds(20));
         using CancellationTokenSource cts = new();
         PeerLinkControl control = monitor.Maintain(transport.Object, target, cts.Token);
         await WaitUntil(() => Heartbeats(transport) >= 2, TimeSpan.FromSeconds(2));
@@ -177,7 +183,7 @@ public sealed class PeerConnectionMonitorTests
     {
         Mock<IPeerTransport> transport = new();
         AutoAcknowledge(transport);
-        PeerConnectionMonitor monitor = new(steadyInterval: TimeSpan.FromMilliseconds(20), fastRetryInterval: TimeSpan.FromMilliseconds(20));
+        PeerConnectionMonitor monitor = new(new TestEngineController(), steadyInterval: TimeSpan.FromMilliseconds(20), fastRetryInterval: TimeSpan.FromMilliseconds(20));
         using CancellationTokenSource cts = new();
         PeerLinkControl control = monitor.Maintain(transport.Object, target, cts.Token);
 
@@ -202,7 +208,7 @@ public sealed class PeerConnectionMonitorTests
         throwing.Setup(t => t.Request(connection, It.IsAny<ReadOnlyMemory<byte>>(), It.IsAny<PeerSendOptions>(), It.IsAny<CancellationToken>())).ThrowsAsync(new IOException());
         Mock<IPeerTransport> working = new();
         AutoAcknowledge(working);
-        PeerConnectionMonitor monitor = new(steadyInterval: TimeSpan.FromMilliseconds(20), fastRetryInterval: TimeSpan.FromMilliseconds(20));
+        PeerConnectionMonitor monitor = new(new TestEngineController(), steadyInterval: TimeSpan.FromMilliseconds(20), fastRetryInterval: TimeSpan.FromMilliseconds(20));
         using CancellationTokenSource cts = new();
         int failedAcks = 0;
         int thrownAcks = 0;
@@ -224,7 +230,7 @@ public sealed class PeerConnectionMonitorTests
     {
         Mock<IPeerTransport> transport = new();
         AutoAcknowledge(transport);
-        PeerConnectionMonitor monitor = new(steadyInterval: TimeSpan.FromMilliseconds(20), fastRetryInterval: TimeSpan.FromMilliseconds(20));
+        PeerConnectionMonitor monitor = new(new TestEngineController(), steadyInterval: TimeSpan.FromMilliseconds(20), fastRetryInterval: TimeSpan.FromMilliseconds(20));
         using CancellationTokenSource cts = new();
 
         monitor.Maintain(transport.Object, target, cts.Token, _ => throw new InvalidOperationException());
@@ -239,7 +245,7 @@ public sealed class PeerConnectionMonitorTests
     {
         Mock<IPeerTransport> transport = new();
         AutoAcknowledge(transport, success: false);
-        PeerConnectionMonitor monitor = new(steadyInterval: TimeSpan.FromMinutes(10), fastRetryInterval: TimeSpan.FromMilliseconds(50));
+        PeerConnectionMonitor monitor = new(new TestEngineController(), steadyInterval: TimeSpan.FromMinutes(10), fastRetryInterval: TimeSpan.FromMilliseconds(50));
 
         using CancellationTokenSource cts = new();
         monitor.Maintain(transport.Object, target, cts.Token);
@@ -257,7 +263,7 @@ public sealed class PeerConnectionMonitorTests
     {
         Mock<IPeerTransport> transport = new();
         transport.Setup(t => t.Connect(target, It.IsAny<CancellationToken>())).ThrowsAsync(new IOException("refused"));
-        PeerConnectionMonitor monitor = new(steadyInterval: TimeSpan.FromMinutes(10), fastRetryInterval: TimeSpan.FromMilliseconds(30));
+        PeerConnectionMonitor monitor = new(new TestEngineController(), steadyInterval: TimeSpan.FromMinutes(10), fastRetryInterval: TimeSpan.FromMilliseconds(30));
 
         using CancellationTokenSource cts = new();
         monitor.Maintain(transport.Object, target, cts.Token);
@@ -273,7 +279,7 @@ public sealed class PeerConnectionMonitorTests
     {
         Mock<IPeerTransport> transport = new();
         AutoAcknowledge(transport);
-        PeerConnectionMonitor monitor = new(steadyInterval: TimeSpan.FromMinutes(10), fastRetryInterval: TimeSpan.FromMinutes(10));
+        PeerConnectionMonitor monitor = new(new TestEngineController(), steadyInterval: TimeSpan.FromMinutes(10), fastRetryInterval: TimeSpan.FromMinutes(10));
         using CancellationTokenSource cts = new();
         PeerConnection? acknowledged = null;
 

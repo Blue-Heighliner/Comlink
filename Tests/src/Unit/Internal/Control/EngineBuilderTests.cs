@@ -8,6 +8,28 @@ public sealed class EngineBuilderTests
         public IEngineBuilder Configure(IEngineBuilder engine) => configure(new TestEngineConfiguration().Configure(engine));
     }
 
+    private sealed class PacketConfiguration(Func<IEngineBuilder, IEngineBuilder> configure) : IEngineConfiguration
+    {
+        public IEngineBuilder Configure(IEngineBuilder engine) => configure(new TestEngineConfiguration(packets: true).Configure(engine));
+    }
+
+    private static IServiceProvider Services(params object[] processors)
+    {
+        ServiceCollection services = new();
+        foreach (object processor in processors)
+        {
+            foreach (Type type in processor.GetType().GetInterfaces().Where(type => type.IsGenericType && type.Namespace == typeof(IInitialMessageProcessor<>).Namespace && type.Name.EndsWith("Processor`1"))) { services.AddSingleton(type, processor); }
+        }
+
+        return services.BuildServiceProvider();
+    }
+
+    private static (EngineBuilder Builder, EngineController Controller) BuildWith(Action<IMessageBuilder<TestMessage>>? message = null, Action<IPacketBuilder<TestPacket>>? packet = null, IServiceProvider? services = null)
+    {
+        EngineBuilder builder = packet is null ? EngineBuilder.Build(new TestEngineConfiguration(false, message)) : EngineBuilder.Build(new TestEngineConfiguration(false, message, packet));
+        return (builder, new EngineController(builder, new CurrentUserProvider(), null, services));
+    }
+
     private static (EngineBuilder Builder, EngineController Controller) Build(Func<IEngineBuilder, IEngineBuilder> configure, string? currentUser = null, NetworkConfig? network = null)
     {
         EngineBuilder builder = EngineBuilder.Build(new Configuration(configure));
@@ -55,7 +77,7 @@ public sealed class EngineBuilderTests
 
         Assert.Equal("HOME", controller.HomeText);
         Assert.False(controller.IsKioskMode);
-        Assert.Null(controller.WindowIconUri);
+        Assert.Null(controller.WindowIconPath);
         Assert.Null(controller.DebugUserName);
         Assert.Equal(50021, controller.PeerPort);
         Assert.Equal(50020, controller.InterfacePort);
@@ -73,9 +95,7 @@ public sealed class EngineBuilderTests
         Assert.Empty(controller.Servers);
         Assert.Empty(controller.ExternalSystems);
         Assert.Null(controller.ExternalServer);
-        Assert.Empty(controller.UserConnectedHooks);
-        Assert.Empty(controller.UserDisconnectedHooks);
-        Assert.Empty(controller.MessageReceivedHooks);
+        Assert.Null(controller.NetworkHandler);
         Assert.Null(controller.PacketType);
         Assert.Single(controller.Priorities);
         Assert.Equal("Normal", controller.Priorities[0].Name);
@@ -90,7 +110,7 @@ public sealed class EngineBuilderTests
     [Fact]
     public void Stated_AppAndPortSettings_AreReported()
     {
-        Uri icon = new("avares://Host/icon.png");
+        const string icon = "avares://Host/icon.png";
         (_, EngineController controller) = Build(engine => engine
             .AppName("MyApp").AppVersion("2.3.4").KioskMode().HomeText("Welcome").WindowIcon(icon)
             .DebugUser("DEBUG").CommandLineOverrides(true));
@@ -99,7 +119,7 @@ public sealed class EngineBuilderTests
         Assert.Equal("2.3.4", controller.AppVersion);
         Assert.True(controller.IsKioskMode);
         Assert.Equal("Welcome", controller.HomeText);
-        Assert.Equal(icon, controller.WindowIconUri);
+        Assert.Equal(icon, controller.WindowIconPath);
         Assert.Equal("DEBUG", controller.DebugUserName);
         Assert.True(controller.CommandLineOverridesAllowed);
     }
@@ -126,7 +146,7 @@ public sealed class EngineBuilderTests
             .AlertLabel("ALARM").AlarmDuration(TimeSpan.FromSeconds(5)).QuickConfirmation(false).ComposeAlerts(false)
             .Priorities(("Low", 0), ("High", 9))
             .Tags(false, "Category").BlockTag("SPAM", null).BlockTag(null, 9)
-            .PrintReceived().PrintCount<TestMessage>(message => message.IsAlert ? 2 : 1)
+            .PrintReceived()
             .CanDelete(folder => folder == FolderType.Drafts));
 
         Assert.Equal("ALARM", controller.AlertLabel);
@@ -138,8 +158,6 @@ public sealed class EngineBuilderTests
         Assert.Equal("Category", controller.TagLabel);
         Assert.Equal(2, controller.BlockedCombinations.Count);
         Assert.True(controller.PrintReceivedDefaultEnabled);
-        Assert.Equal(2, controller.GetPrintCount(new TestMessage { IsAlert = true }));
-        Assert.Equal(1, controller.GetPrintCount(new TestMessage()));
         Assert.True(controller.CanDelete(FolderType.Drafts));
         Assert.False(controller.CanDelete(FolderType.Inbox));
     }
@@ -308,47 +326,96 @@ public sealed class EngineBuilderTests
         Assert.Equal(new MicroGatePeerOptions(), plain.MicroGateOptions);
     }
 
-    /// <summary>The identification hook and the connection message, response and serializer are reported and used.</summary>
+    /// <summary>The print count function stated with the message is used for received messages.</summary>
+    [Fact]
+    public void Stated_PrintCount_IsUsed()
+    {
+        (_, EngineController controller) = BuildWith(message => message.PrintCount(m => m.IsAlert ? 2 : 1));
+
+        Assert.Equal(2, controller.GetPrintCount(new TestMessage { IsAlert = true }));
+        Assert.Equal(1, controller.GetPrintCount(new TestMessage()));
+    }
+
+    /// <summary>The identification hook and the initial message and packet processors are reported and used.</summary>
     [Fact]
     public void Stated_Identification_IsUsed()
     {
-        ConnectionInfo info = new() { Host = "10.0.0.1" };
-        (_, EngineController controller) = Build(engine => engine
-            .Identify(connection => new UserIdentity { Name = connection.Host })
-            .ConnectionMessage<TestHello>(connection => new TestHello { Name = connection.Host })
-            .ConnectionResponse<TestWelcome>(connection => new TestWelcome { Name = "R", Station = 3 }));
+        IpConnectionInfo info = new() { Host = "10.0.0.1" };
+        Mock<IInitialMessageProcessor<TestMessage>> messages = new();
+        Mock<IInitialPacketProcessor<TestPacket>> packets = new();
+        EngineBuilder builder = EngineBuilder.Build(new TestEngineConfiguration(
+            false,
+            message => message.InitialProcessor<IInitialMessageProcessor<TestMessage>>(),
+            packet => packet.InitialProcessor<IInitialPacketProcessor<TestPacket>>()));
+        builder.Identify(connection => ((IIpConnectionInfo)connection).Host);
+        EngineController controller = new(builder, new CurrentUserProvider(), null, Services(messages.Object, packets.Object));
+        Mock<IInitialSession> session = new();
+        TestMessage initialMessage = new();
+        TestPacket initialPacket = new();
 
-        Assert.Equal("10.0.0.1", controller.IdentifyConnection(info)!.Name);
-        Assert.Equal(typeof(TestHello), controller.ConnectionMessageType);
-        Assert.Equal(typeof(TestWelcome), controller.ConnectionResponseType);
-        Assert.Equal("10.0.0.1", ((TestHello)controller.CreateConnectionMessage(info)!).Name);
-        Assert.Equal(3, ((TestWelcome)controller.CreateConnectionResponse(info)!).Station);
-        Assert.NotNull(controller.ConnectionSerializer);
+        Assert.Equal("10.0.0.1", controller.IdentifyConnection(info));
+        controller.InitialMessageProcessor!.OnConnected(session.Object);
+        controller.InitialMessageProcessor.OnInitial(session.Object, initialMessage);
+        controller.InitialMessageProcessor.OnReply(session.Object, initialMessage);
+        controller.InitialPacketProcessor!.OnInitial(session.Object, initialPacket);
+
+        Assert.Equal(typeof(TestMessage), controller.InitialMessageProcessor.ItemType);
+        Assert.Equal(typeof(TestPacket), controller.InitialPacketProcessor.ItemType);
+        messages.Verify(m => m.OnConnected(It.IsAny<IInitialMessageContext<TestMessage>>()), Times.Once);
+        messages.Verify(m => m.OnInitial(It.IsAny<IInitialMessageContext<TestMessage>>(), initialMessage), Times.Once);
+        messages.Verify(m => m.OnReply(It.IsAny<IInitialMessageContext<TestMessage>>(), initialMessage), Times.Once);
+        packets.Verify(p => p.OnInitial(It.IsAny<IInitialPacketContext<TestPacket>>(), initialPacket), Times.Once);
     }
 
-    /// <summary>Without a connection message there is no exchange and no serializer, and the identification hook leaves the decision to the engine.</summary>
+    /// <summary>The context a processor is handed reflects the connection session it stands for.</summary>
+    [Fact]
+    public async Task InitialProcessor_Context_ReflectsTheSession()
+    {
+        Mock<IInitialSession> session = new();
+        IpConnectionInfo info = new() { Host = "10.0.0.1", LocalUser = "ME" };
+        Mock<IEngineContext> engine = new();
+        engine.Setup(e => e.CurrentUser).Returns(new UserInfo { Name = "ME" });
+        engine.Setup(e => e.IsConnected("BOB")).Returns(true);
+        session.Setup(s => s.Engine).Returns(engine.Object);
+        session.Setup(s => s.IsOpener).Returns(true);
+        session.Setup(s => s.Connection).Returns(info);
+        session.Setup(s => s.Send(It.IsAny<object>())).ReturnsAsync(true);
+        IInitialMessageContext<TestMessage>? seen = null;
+        Mock<IInitialMessageProcessor<TestMessage>> processor = new();
+        processor.Setup(p => p.OnConnected(It.IsAny<IInitialMessageContext<TestMessage>>())).Returns((IInitialMessageContext<TestMessage> context) =>
+        {
+            seen = context;
+            return Task.CompletedTask;
+        });
+        EngineBuilder builder = EngineBuilder.Build(new TestEngineConfiguration(false, message => message.InitialProcessor<IInitialMessageProcessor<TestMessage>>()));
+        EngineController controller = new(builder, new CurrentUserProvider(), null, Services(processor.Object));
+        TestMessage sent = new() { Subject = "HI" };
+
+        await controller.InitialMessageProcessor!.OnConnected(session.Object);
+
+        Assert.NotNull(seen);
+        Assert.True(seen.IsOpener);
+        Assert.Equal("ME", seen.CurrentUser.Name);
+        Assert.True(seen.IsConnected("BOB"));
+        Assert.False(seen.IsConnected("X"));
+        Assert.Same(info, seen.Connection);
+        Assert.True(await seen.Send(sent));
+        seen.Connected("ALICE");
+        seen.Disconnect();
+        session.Verify(s => s.Send(sent), Times.Once);
+        session.Verify(s => s.Connected("ALICE"), Times.Once);
+        session.Verify(s => s.Disconnect(), Times.Once);
+    }
+
+    /// <summary>Without any initial exchange there is none, and the identification hook leaves the decision to the engine.</summary>
     [Fact]
     public void Unstated_Identification_IsOff()
     {
         (_, EngineController controller) = Build(engine => engine);
-        ConnectionInfo info = new();
 
-        Assert.Null(controller.IdentifyConnection(info));
-        Assert.Null(controller.ConnectionMessageType);
-        Assert.Null(controller.ConnectionResponseType);
-        Assert.Null(controller.ConnectionSerializer);
-        Assert.Null(controller.CreateConnectionMessage(info));
-        Assert.Null(controller.CreateConnectionResponse(info));
-    }
-
-    /// <summary>A serializer a host states for the connection message replaces the default.</summary>
-    [Fact]
-    public void ConnectionSerializer_Stated_ReplacesTheDefault()
-    {
-        INetworkSerializer serializer = Mock.Of<INetworkSerializer>();
-        (_, EngineController controller) = Build(engine => engine.ConnectionMessage<TestHello>(_ => null).ConnectionSerializer(serializer));
-
-        Assert.Same(serializer, controller.ConnectionSerializer);
+        Assert.Null(controller.IdentifyConnection(new IpConnectionInfo()));
+        Assert.Null(controller.InitialPacketProcessor);
+        Assert.Null(controller.InitialMessageProcessor);
     }
 
     /// <summary>External systems are reported in the order added, without duplicates, and the upstream hub is added if it was not already.</summary>
@@ -363,22 +430,70 @@ public sealed class EngineBuilderTests
         Assert.Same(hub, controller.ExternalServer);
     }
 
-    /// <summary>OnUserConnected/OnUserDisconnected/OnMessageReceived each accumulate every hook added, in order, rather than replacing the last one.</summary>
+    /// <summary>The network processor stated with the message is reported, and runs with contexts typed with the host's message.</summary>
     [Fact]
-    public void ConnectionAndMessageHooks_AddedInOrder_AllAreKept()
+    public async Task NetworkProcessor_IsReported_AndGetsTypedContexts()
     {
-        Action<IUserConnectionHookContext> connectedA = _ => { };
-        Action<IUserConnectionHookContext> connectedB = _ => { };
-        Action<IUserConnectionHookContext> disconnectedA = _ => { };
-        Action<IMessageReceivedHookContext> receivedA = _ => { };
-        (_, EngineController controller) = Build(engine => engine
-            .OnUserConnected(connectedA).OnUserConnected(connectedB)
-            .OnUserDisconnected(disconnectedA)
-            .OnMessageReceived(receivedA));
+        List<string> calls = [];
+        Mock<INetworkProcessor<TestMessage>> processor = new();
+        processor.Setup(p => p.OnConnected(It.IsAny<INetworkConnectedContext<TestMessage>>())).Returns((INetworkConnectedContext<TestMessage> context) =>
+        {
+            calls.Add($"connected:{context.TargetUser}");
+            return Task.CompletedTask;
+        });
+        processor.Setup(p => p.OnDisconnected(It.IsAny<INetworkDisconnectedContext<TestMessage>>())).Returns((INetworkDisconnectedContext<TestMessage> context) =>
+        {
+            calls.Add($"disconnected:{context.TargetUser}");
+            return Task.CompletedTask;
+        });
+        processor.Setup(p => p.OnReceived(It.IsAny<INetworkReceivedContext<TestMessage>>())).Returns((INetworkReceivedContext<TestMessage> context) =>
+        {
+            calls.Add($"received:{context.Message.Subject}");
+            return Task.CompletedTask;
+        });
+        (_, EngineController controller) = BuildWith(message => message.Processor<INetworkProcessor<TestMessage>>(), services: Services(processor.Object));
+        Mock<INetworkUserContext> connection = new();
+        connection.Setup(c => c.TargetUser).Returns("BOB");
+        Mock<INetworkMessageContext> received = new();
+        received.Setup(c => c.Message).Returns(new TestMessage { Subject = "HI" });
 
-        Assert.Equal([connectedA, connectedB], controller.UserConnectedHooks);
-        Assert.Equal([disconnectedA], controller.UserDisconnectedHooks);
-        Assert.Equal([receivedA], controller.MessageReceivedHooks);
+        await controller.NetworkHandler!.OnConnected(connection.Object);
+        await controller.NetworkHandler.OnDisconnected(connection.Object);
+        await controller.NetworkHandler.OnReceived(received.Object);
+
+        Assert.Equal(["connected:BOB", "disconnected:BOB", "received:HI"], calls);
+    }
+
+    private sealed class DependentProcessor(Dependency dependency) : INetworkProcessor<TestMessage>
+    {
+        public Dependency Dependency { get; } = dependency;
+
+        public Task OnConnected(INetworkConnectedContext<TestMessage> context) => Task.CompletedTask;
+
+        public Task OnDisconnected(INetworkDisconnectedContext<TestMessage> context) => Task.CompletedTask;
+
+        public Task OnReceived(INetworkReceivedContext<TestMessage> context) => Task.CompletedTask;
+    }
+
+    /// <summary>A processor type that is not registered is constructed from the container's services, so its constructor can take dependencies.</summary>
+    [Fact]
+    public void Processor_Unregistered_IsConstructedWithInjectedServices()
+    {
+        ServiceCollection services = new();
+        services.AddSingleton(new Dependency("INJECTED"));
+        (_, EngineController controller) = BuildWith(message => message.Processor<DependentProcessor>(), services: services.BuildServiceProvider());
+
+        Assert.NotNull(controller.NetworkHandler);
+        Assert.Same(controller.NetworkHandler, controller.NetworkHandler);
+    }
+
+    /// <summary>Without a processor stated there is none.</summary>
+    [Fact]
+    public void NetworkProcessor_Unstated_IsNull()
+    {
+        (_, EngineController controller) = Build(engine => engine);
+
+        Assert.Null(controller.NetworkHandler);
     }
 
     private sealed class Dependency(string name)

@@ -40,7 +40,7 @@ internal sealed record StagedSendEntry
 
 /// <summary>
 /// ViewModel interface for the staged send screen: every message a custom import format has prepared (see
-/// <see cref="IEngineBuilder.ImportFormat"/>), reviewed by the user and sent only once they press
+/// <see cref="IEngineBuilder.ImportFormat(string, StagedSendMode, Nullable{TimeSpan}, Func{Stream, IImportFormatContext, CancellationToken, Task})"/>), reviewed by the user and sent only once they press
 /// <see cref="SendAllCommand"/>. Registered as a DI singleton (see <see cref="MainViewModel.StagedSend"/>) so
 /// staged sends added by one import, and the progress of a send-all in flight, survive navigating the content
 /// area away to other views and back.

@@ -1,11 +1,9 @@
 namespace BlueHeighliner.Comlink.Services;
 
 /// <summary>
-/// Runs the host's connection and message hooks (<see cref="IEngineController.UserConnectedHooks"/>,
-/// <see cref="IEngineController.UserDisconnectedHooks"/>, <see cref="IEngineController.MessageReceivedHooks"/>)
-/// whenever <see cref="IPeerService"/> raises the matching event, in both Client and Headless mode. Every hook
-/// firing for one event gets a single freshly-built context, so hooks handling the same firing see a consistent
-/// snapshot even if a user connects or disconnects while they run.
+/// Runs the host's <see cref="IEngineController.NetworkHandler"/> whenever <see cref="IPeerService"/> raises the
+/// matching event, in both Client and Headless mode. Each event gets a single freshly-built context, so the
+/// processor sees a consistent snapshot even if a user connects or disconnects while it runs.
 /// </summary>
 internal interface IEngineHooksService
 {
@@ -40,10 +38,7 @@ internal sealed class EngineHooksService : IEngineHooksService
     /// <inheritdoc />
     public async Task Start(CancellationToken cancellation)
     {
-        if (engineController.UserConnectedHooks.Count == 0 && engineController.UserDisconnectedHooks.Count == 0 && engineController.MessageReceivedHooks.Count == 0)
-        {
-            return;
-        }
+        if (engineController.NetworkHandler is null) { return; }
 
         peerService.UserConnected += OnUserConnected;
         peerService.UserDisconnected += OnUserDisconnected;
@@ -61,41 +56,49 @@ internal sealed class EngineHooksService : IEngineHooksService
 
     private Task OnUserConnected(string userName)
     {
-        RunHooks(engineController.UserConnectedHooks, () => BuildConnectionContext(userName), "OnUserConnected", userName);
+        INetworkUserContext context = BuildConnectionContext(userName);
+        Run(handler => handler.OnConnected(context), "OnConnected", userName);
         return Task.CompletedTask;
     }
 
     private Task OnUserDisconnected(string userName)
     {
-        RunHooks(engineController.UserDisconnectedHooks, () => BuildConnectionContext(userName), "OnUserDisconnected", userName);
+        INetworkUserContext context = BuildConnectionContext(userName);
+        Run(handler => handler.OnDisconnected(context), "OnDisconnected", userName);
         return Task.CompletedTask;
     }
 
     private Task OnMessageDelivered(object payload)
     {
-        RunHooks(engineController.MessageReceivedHooks, () => BuildMessageContext(payload), "OnMessageReceived", engineController.GetMessageId(payload));
+        INetworkMessageContext context = BuildMessageContext(payload);
+        Run(handler => handler.OnReceived(context), "OnReceived", engineController.GetMessageId(payload));
         return Task.CompletedTask;
     }
 
-    private void RunHooks<TContext>(IReadOnlyList<Action<TContext>> hooks, Func<TContext> buildContext, string hookName, string subject)
+    private void Run(Func<INetworkHandler, Task> run, string name, string subject)
     {
-        if (hooks.Count == 0) { return; }
+        if (engineController.NetworkHandler is not { } handler) { return; }
 
-        TContext context = buildContext();
-        foreach (Action<TContext> hook in hooks)
-        {
-            try { hook(context); }
-            catch (Exception ex) { logger.LogError(ex, "A {HookName} hook failed for {Subject}", hookName, subject); }
-        }
+        _ = Observe(run, handler, name, subject);
     }
 
-    private IUserConnectionHookContext BuildConnectionContext(string targetUser)
-        => new UserConnectionHookContext(RequireCurrentUser(), engineController.Users, engineController.UserGroups, peerService.IsUserConnected, targetUser, engineController, messageRouting, peerService, logger);
+    private async Task Observe(Func<INetworkHandler, Task> run, INetworkHandler handler, string name, string subject)
+    {
+        try { await run(handler); }
+        catch (Exception ex) { logger.LogError(ex, "The network processor's {Name} failed for {Subject}", name, subject); }
+    }
 
-    private IMessageReceivedHookContext BuildMessageContext(object message)
-        => new MessageReceivedHookContext(RequireCurrentUser(), engineController.Users, engineController.UserGroups, peerService.IsUserConnected, message, engineController, messageRouting, peerService, logger);
+    private INetworkUserContext BuildConnectionContext(string targetUser)
+        => new NetworkUserContext(BuildEngineContext(), targetUser, engineController, messageRouting, logger);
 
-    private UserInfo RequireCurrentUser()
-        => userService.GetCurrentUserInfo()
-            ?? throw new InvalidOperationException("A hook fired with no installed user, which should never happen: EngineHooksService.Start only ever runs once one is installed.");
+    private INetworkMessageContext BuildMessageContext(object message)
+        => new NetworkMessageContext(BuildEngineContext(), message, engineController, messageRouting, logger);
+
+    private EngineContext BuildEngineContext()
+        => new(
+            userService.GetCurrentUserInfo()
+                ?? throw new InvalidOperationException("A processor ran with no installed user, which should never happen: EngineHooksService.Start only ever runs once one is installed."),
+            engineController.Users,
+            engineController.UserGroups,
+            peerService.IsUserConnected);
 }

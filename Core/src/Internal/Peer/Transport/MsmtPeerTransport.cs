@@ -125,7 +125,7 @@ internal sealed class MsmtPeerTransport : IPeerTransport
         if (connections.TryGetValue(connection, out PeerConnection? existing)) { return existing; }
 
         string? subject = connection.Identity?.Subject;
-        ConnectionInfo info = new()
+        IpConnectionInfo info = new()
         {
             IsInbound = connection.Direction != MsmtConnectionDirection.Outgoing,
             Host = connection.Remote.Host,

@@ -130,7 +130,7 @@ internal sealed class ConfiguredEngineController : IEngineController
     /// <inheritdoc />
     public string HomeText => fallback.HomeText;
     /// <inheritdoc />
-    public Uri? WindowIconUri => fallback.WindowIconUri;
+    public string? WindowIconPath => fallback.WindowIconPath;
 
     /// <inheritdoc />
     public string? DebugUserName => config.User ?? fallback.DebugUserName;
@@ -218,11 +218,9 @@ internal sealed class ConfiguredEngineController : IEngineController
     public MicroGatePeerOptions MicroGateOptions => fallback.MicroGateOptions;
 
     /// <inheritdoc />
-    public Type? ConnectionMessageType => fallback.ConnectionMessageType;
+    public IInitialProcessor? InitialPacketProcessor => fallback.InitialPacketProcessor;
     /// <inheritdoc />
-    public Type? ConnectionResponseType => fallback.ConnectionResponseType;
-    /// <inheritdoc />
-    public INetworkSerializer? ConnectionSerializer => fallback.ConnectionSerializer;
+    public IInitialProcessor? InitialMessageProcessor => fallback.InitialMessageProcessor;
 
     /// <inheritdoc />
     public bool CommandLineOverridesAllowed => fallback.CommandLineOverridesAllowed;
@@ -234,11 +232,7 @@ internal sealed class ConfiguredEngineController : IEngineController
     public IExternalSystem? ExternalServer => fallback.ExternalServer;
 
     /// <inheritdoc />
-    public IReadOnlyList<Action<IUserConnectionHookContext>> UserConnectedHooks => fallback.UserConnectedHooks;
-    /// <inheritdoc />
-    public IReadOnlyList<Action<IUserConnectionHookContext>> UserDisconnectedHooks => fallback.UserDisconnectedHooks;
-    /// <inheritdoc />
-    public IReadOnlyList<Action<IMessageReceivedHookContext>> MessageReceivedHooks => fallback.MessageReceivedHooks;
+    public INetworkHandler? NetworkHandler => fallback.NetworkHandler;
     /// <inheritdoc />
     public IReadOnlyList<ExportFormatDefinition> ExportFormats => fallback.ExportFormats;
     /// <inheritdoc />
@@ -254,9 +248,7 @@ internal sealed class ConfiguredEngineController : IEngineController
     /// <inheritdoc />
     public UserInfo GetUserInfo(string userName) => fallback.GetUserInfo(userName);
     /// <inheritdoc />
-    public UserIdentity? IdentifyConnection(ConnectionInfo connection) => fallback.IdentifyConnection(connection);
+    public string? IdentifyConnection(IConnectionInfo connection) => fallback.IdentifyConnection(WithLocalUser(connection));
     /// <inheritdoc />
-    public object? CreateConnectionMessage(ConnectionInfo connection) => fallback.CreateConnectionMessage(connection);
-    /// <inheritdoc />
-    public object? CreateConnectionResponse(ConnectionInfo connection) => fallback.CreateConnectionResponse(connection);
+    public IConnectionInfo WithLocalUser(IConnectionInfo connection) => connection is ConnectionInfo info ? info with { LocalUser = currentUserProvider.UserName } : connection;
 }

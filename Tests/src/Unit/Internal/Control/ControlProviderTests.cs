@@ -587,55 +587,48 @@ public sealed class ControlProviderTests
         Assert.Empty(controller.Servers);
     }
 
-    /// <summary>By default no connection is identified by the controller (the engine decides), and no connection message is configured.</summary>
+    /// <summary>By default no connection is identified by the controller (the engine decides), and no initial exchange is configured.</summary>
     [Fact]
     public void EngineController_NoConnectionHooks()
     {
         TestEngineController controller = new();
-        ConnectionInfo connection = new() { Host = "10.0.0.1" };
 
-        Assert.Null(controller.IdentifyConnection(connection));
-        Assert.Null(controller.ConnectionMessageType);
-        Assert.Null(controller.ConnectionResponseType);
-        Assert.Null(controller.ConnectionSerializer);
-        Assert.Null(controller.CreateConnectionMessage(connection));
-        Assert.Null(controller.CreateConnectionResponse(connection));
+        Assert.Null(controller.IdentifyConnection(new IpConnectionInfo { Host = "10.0.0.1" }));
+        Assert.Null(controller.InitialPacketProcessor);
+        Assert.Null(controller.InitialMessageProcessor);
+        Assert.Null(controller.NetworkHandler);
     }
 
-    /// <summary>Naming a connection message type gives a serializer that builds only the message and response types.</summary>
+    /// <summary>The identification hook and every processor's connection description are told which user this node runs as, so what they send can say who is speaking.</summary>
     [Fact]
-    public void EngineController_ConnectionSerializer_BuildsOnlyTheConfiguredTypes()
+    public void ConfiguredEngineController_ConnectionDescriptions_SeeTheLocalUser()
     {
-        Mock<TestEngineController> controller = new() { CallBase = true };
-        controller.Setup(c => c.ConnectionMessageType).Returns(typeof(TestHello));
-        controller.Setup(c => c.ConnectionResponseType).Returns(typeof(TestWelcome));
-
-        INetworkSerializer serializer = controller.Object.ConnectionSerializer!;
-        using IMemoryOwner<byte> hello = serializer.Serialize(new TestHello { Name = "A" });
-        using IMemoryOwner<byte> welcome = serializer.Serialize(new TestWelcome { Station = 4 });
-
-        Assert.Equal("A", Assert.IsType<TestHello>(serializer.Deserialize(hello.Memory)).Name);
-        Assert.Equal(4, Assert.IsType<TestWelcome>(serializer.Deserialize(welcome.Memory)).Station);
-        using IMemoryOwner<byte> foreign = new ProtobufNetworkSerializer().Serialize(new TestMessage());
-        Assert.Null(serializer.Deserialize(foreign.Memory));
-    }
-
-    /// <summary>The connection hooks and types are not configurable from the network file and delegate to the wrapped provider.</summary>
-    [Fact]
-    public void ConfiguredEngineController_ConnectionHooks_DelegateToFallback()
-    {
-        ConnectionInfo connection = new() { Host = "10.0.0.1" };
-        UserIdentity identity = new() { Name = "BOB" };
-        object message = new();
+        IpConnectionInfo connection = new() { Host = "10.0.0.1" };
         Mock<IEngineController> fallback = new();
-        fallback.Setup(f => f.IdentifyConnection(connection)).Returns(identity);
-        fallback.Setup(f => f.CreateConnectionMessage(connection)).Returns(message);
-        fallback.Setup(f => f.ConnectionMessageType).Returns(typeof(TestHello));
+        ConfiguredEngineController controller = new(fallback.Object, new NetworkConfig(), Me);
+
+        controller.IdentifyConnection(connection);
+
+        IpConnectionInfo expected = connection with { LocalUser = "ME" };
+        Assert.Equal("ME", controller.WithLocalUser(connection).LocalUser);
+        Assert.Equal(expected, controller.WithLocalUser(connection));
+        fallback.Verify(f => f.IdentifyConnection(expected), Times.Once);
+    }
+
+    /// <summary>The initial exchange and network processors are not configurable from the network file and come from the wrapped provider.</summary>
+    [Fact]
+    public void ConfiguredEngineController_Processors_DelegateToFallback()
+    {
+        IInitialProcessor packets = Mock.Of<IInitialProcessor>();
+        INetworkHandler network = Mock.Of<INetworkHandler>();
+        Mock<IEngineController> fallback = new();
+        fallback.Setup(f => f.InitialPacketProcessor).Returns(packets);
+        fallback.Setup(f => f.NetworkHandler).Returns(network);
         ConfiguredEngineController controller = new(fallback.Object, new NetworkConfig(), NoCurrentUser);
 
-        Assert.Same(identity, controller.IdentifyConnection(connection));
-        Assert.Same(message, controller.CreateConnectionMessage(connection));
-        Assert.Equal(typeof(TestHello), controller.ConnectionMessageType);
+        Assert.Same(packets, controller.InitialPacketProcessor);
+        Assert.Null(controller.InitialMessageProcessor);
+        Assert.Same(network, controller.NetworkHandler);
     }
 
     /// <summary>The default implementation always disables config file reading.</summary>
@@ -734,24 +727,6 @@ public sealed class ControlProviderTests
         ConfiguredEngineController controller = new(fallback.Object, new NetworkConfig(), NoCurrentUser);
 
         Assert.Same(externalSystem.Object, Assert.Single(controller.ExternalSystems));
-    }
-
-    /// <summary>UserConnectedHooks/UserDisconnectedHooks/MessageReceivedHooks have no network file field and always delegate to the wrapped provider.</summary>
-    [Fact]
-    public void ConfiguredEngineController_ConnectionAndMessageHooks_AlwaysDelegateToFallback()
-    {
-        Action<IUserConnectionHookContext> connectedHook = _ => { };
-        Action<IUserConnectionHookContext> disconnectedHook = _ => { };
-        Action<IMessageReceivedHookContext> receivedHook = _ => { };
-        Mock<IEngineController> fallback = new();
-        fallback.Setup(f => f.UserConnectedHooks).Returns([connectedHook]);
-        fallback.Setup(f => f.UserDisconnectedHooks).Returns([disconnectedHook]);
-        fallback.Setup(f => f.MessageReceivedHooks).Returns([receivedHook]);
-        ConfiguredEngineController controller = new(fallback.Object, new NetworkConfig(), NoCurrentUser);
-
-        Assert.Same(connectedHook, Assert.Single(controller.UserConnectedHooks));
-        Assert.Same(disconnectedHook, Assert.Single(controller.UserDisconnectedHooks));
-        Assert.Same(receivedHook, Assert.Single(controller.MessageReceivedHooks));
     }
 
     /// <summary>With neither certificate file field configured, ConnectionOptions falls back to the system store lookup - and throws the same way DefaultEngineController does when no current user is registered.</summary>

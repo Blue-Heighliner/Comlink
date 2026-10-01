@@ -32,7 +32,7 @@ public sealed class ClientPeerServiceTests
     }
 
     private static PeerConnection ServerConnection(ConnectionPoint point, string name = "Server1", Action? drop = null)
-        => new(point, new ConnectionInfo { IsSerial = point.IsSerial }, drop ?? (() => { })) { User = new UserIdentity { Name = name } };
+        => new(point, point.IsSerial ? new SerialConnectionInfo() : new IpConnectionInfo(), drop ?? (() => { })) { User = new UserIdentity { Name = name } };
 
     private static Fixture Build(bool pointConfigured = true, ConnectionPoint? point = null, bool reachable = true, string serverName = "Server1")
     {
@@ -222,7 +222,7 @@ public sealed class ClientPeerServiceTests
         bool ok = await fx.Service.Send("DEST", new TestMessage { MessageId = "M1", FromUser = "SOURCE" });
 
         Assert.False(ok);
-        fx.Transport.Verify(p => p.Request(It.IsAny<PeerConnection>(), It.Is<ReadOnlyMemory<byte>>(payload => payload.Length > 0), It.IsAny<PeerSendOptions>(), It.IsAny<CancellationToken>()), Times.Never);
+        fx.Transport.Verify(p => p.Request(It.IsAny<PeerConnection>(), It.Is<ReadOnlyMemory<byte>>(payload => !TestHeartbeat.Is(payload)), It.IsAny<PeerSendOptions>(), It.IsAny<CancellationToken>()), Times.Never);
 
         cts.Cancel();
         await startTask;
@@ -239,7 +239,7 @@ public sealed class ClientPeerServiceTests
         Assert.True(ok);
         fx.Transport.Verify(p => p.Request(
             fx.Server,
-            It.Is<ReadOnlyMemory<byte>>(payload => payload.Length > 0),
+            It.Is<ReadOnlyMemory<byte>>(payload => !TestHeartbeat.Is(payload)),
             It.IsAny<PeerSendOptions>(),
             It.IsAny<CancellationToken>()), Times.Once);
 
@@ -263,7 +263,7 @@ public sealed class ClientPeerServiceTests
             fx.Service.Send("USER-C", message));
 
         Assert.All(results, Assert.True);
-        fx.Transport.Verify(p => p.Request(It.IsAny<PeerConnection>(), It.Is<ReadOnlyMemory<byte>>(payload => payload.Length > 0), It.IsAny<PeerSendOptions>(), It.IsAny<CancellationToken>()), Times.Once);
+        fx.Transport.Verify(p => p.Request(It.IsAny<PeerConnection>(), It.Is<ReadOnlyMemory<byte>>(payload => !TestHeartbeat.Is(payload)), It.IsAny<PeerSendOptions>(), It.IsAny<CancellationToken>()), Times.Once);
 
         cts.Cancel();
         await startTask;
@@ -296,7 +296,7 @@ public sealed class ClientPeerServiceTests
 
         fx.Received.Publish(new PeerReceivedEventArgs
         {
-            Connection = new PeerConnection(null, new ConnectionInfo { IsInbound = true }, () => { }),
+            Connection = new PeerConnection(null, new IpConnectionInfo { IsInbound = true }, () => { }),
             Payload = Encode(new TestMessage { MessageId = "MSG1", FromUser = "REMOTE" })
         });
         await Task.Delay(100);
@@ -448,7 +448,7 @@ public sealed class ClientPeerServiceTests
         await Task.Delay(20);
 
         fx.Connected.Publish(new PeerConnectionEventArgs { Connection = ServerConnection(new ConnectionPoint { IpAddress = "10.9.9.9", Port = 1 }, "Other") });
-        fx.Connected.Publish(new PeerConnectionEventArgs { Connection = new PeerConnection(null, new ConnectionInfo { IsInbound = true }, () => { }) { User = new UserIdentity { Name = "Other" } } });
+        fx.Connected.Publish(new PeerConnectionEventArgs { Connection = new PeerConnection(null, new IpConnectionInfo { IsInbound = true }, () => { }) { User = new UserIdentity { Name = "Other" } } });
 
         Assert.False(Assert.Single(fx.Service.GetStatuses()).IsConnected);
         Assert.Equal(string.Empty, Assert.Single(fx.Service.GetStatuses()).UserName);
@@ -538,7 +538,7 @@ public sealed class ClientPeerServiceTests
 
         fx.Transport.Verify(p => p.Request(
             fx.Server,
-            It.Is<ReadOnlyMemory<byte>>(payload => payload.Length == 0),
+            It.Is<ReadOnlyMemory<byte>>(payload => TestHeartbeat.Is(payload)),
             It.IsAny<PeerSendOptions>(),
             It.IsAny<CancellationToken>()), Times.AtLeastOnce);
         PeerConnectionStatus status = Assert.Single(fx.Service.GetStatuses());

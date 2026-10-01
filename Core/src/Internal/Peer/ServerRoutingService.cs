@@ -5,7 +5,7 @@ namespace BlueHeighliner.Comlink.Peer;
 /// for connections from its child clients and other servers, keeps a connection open to each of its
 /// <see cref="IEngineController.OutgoingPoints"/>, and relays raw message bytes between them. Nothing is configured
 /// about where a child or another server is: a connection is matched to one by the identity it is given when it forms
-/// (see <see cref="IdentifyingPeerTransport"/>), a connection whose identity is neither a child nor a server in the
+/// (see <see cref="HandshakePeerTransport"/>), a connection whose identity is neither a child nor a server in the
 /// cluster is dropped, and connections are bidirectional, so a message for a user goes back over whichever connection is
 /// identified as them, whichever end opened it. A
 /// message received from a child client is routed to any other local child it addresses and, once per
@@ -31,6 +31,7 @@ internal sealed class ServerRoutingService : IPeerService, IConnectionStatusServ
     {
         this.transportFactory = transportFactory;
         this.engineController = engineController;
+        maintenance = new PointMaintenance(new PeerConnectionMonitor(engineController));
         this.currentUserProvider = currentUserProvider;
         this.storage = storage;
         logger = loggerFactory.CreateLogger("ACTIVITY");
@@ -41,7 +42,7 @@ internal sealed class ServerRoutingService : IPeerService, IConnectionStatusServ
     private readonly ICurrentUserProvider currentUserProvider;
     private readonly IMessageStorageService storage;
     private readonly ILogger logger;
-    private readonly PointMaintenance maintenance = new(new PeerConnectionMonitor());
+    private readonly PointMaintenance maintenance;
     private readonly Lock reconfigureLock = new();
 
     private readonly ConcurrentDictionary<string, bool> childConnected = new(StringComparer.OrdinalIgnoreCase);
@@ -320,9 +321,6 @@ internal sealed class ServerRoutingService : IPeerService, IConnectionStatusServ
         string remoteName = user.Name;
         if (closedNames.ContainsKey(remoteName)) { return; }
 
-        // An empty payload is a PeerConnectionMonitor heartbeat, not a real message to relay.
-        if (args.Payload.IsEmpty) { return; }
-
         ReadOnlyMemory<byte> copy = args.Payload;
         if (IsChild(remoteName))
         {
@@ -343,7 +341,7 @@ internal sealed class ServerRoutingService : IPeerService, IConnectionStatusServ
     private async Task HandleFromChild(string childName, ReadOnlyMemory<byte> data)
     {
         object? message = TryDeserialize(data);
-        if (message is null) { return; }
+        if (message is null || engineController.IsHeartbeat(message)) { return; }
 
         HashSet<string> addressedUsers = GetAddressedUsers(message);
         int priority = engineController.GetPriority(message);
@@ -389,7 +387,7 @@ internal sealed class ServerRoutingService : IPeerService, IConnectionStatusServ
     private async Task HandleFromServer(string serverName, ReadOnlyMemory<byte> data)
     {
         object? message = TryDeserialize(data);
-        if (message is null) { return; }
+        if (message is null || engineController.IsHeartbeat(message)) { return; }
 
         HashSet<string> addressedUsers = GetAddressedUsers(message);
         int priority = engineController.GetPriority(message);

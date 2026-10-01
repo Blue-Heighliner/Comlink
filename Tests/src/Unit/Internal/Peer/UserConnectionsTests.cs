@@ -4,7 +4,7 @@ namespace BlueHeighliner.Comlink.Tests.Unit.Internal.Peer;
 public sealed class UserConnectionsTests
 {
     private static PeerConnection Connection(string? user, bool inbound = false)
-        => new(inbound ? null : new ConnectionPoint { IpAddress = "10.0.0.1", Port = 1 }, new ConnectionInfo { IsInbound = inbound }, () => { }) { User = user is null ? null : new UserIdentity { Name = user } };
+        => new(inbound ? null : new ConnectionPoint { IpAddress = "10.0.0.1", Port = 1 }, new IpConnectionInfo { IsInbound = inbound }, () => { }) { User = user is null ? null : new UserIdentity { Name = user } };
 
     /// <summary>A connection is found under the name it was identified as, ignoring case.</summary>
     [Fact]

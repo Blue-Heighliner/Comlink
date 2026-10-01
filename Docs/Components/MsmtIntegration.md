@@ -50,8 +50,8 @@ session lifetime ending. `MsmtPeerTransport` (see below) owns this: it opens one
 given point when it is connected to, and reuses that same connection for every later request over it
 until MSMT reports it disconnected, at which point the next connect opens a fresh one.
 Every peer service additionally runs a background `PeerConnectionMonitor` per outgoing point
-(a client's server; a server's or peer's configured points), sending an empty
-heartbeat payload on an interval so each of those connections is proactively opened and kept alive even
+(a client's server; a server's or peer's configured points), sending a
+heartbeat (an empty instance of the message type) on an interval so each of those connections is proactively opened and kept alive even
 when no real message is being sent - see [Peer.md](Peer.md#connection-status-client-and-server) for the
 full mechanism and why `IMsmtReachabilityChecker.Reach` is not used for this.
 
@@ -85,7 +85,7 @@ node is configured with the users it expects, a connection is matched to a user 
 presents, not by where it was dialed: `IMsmtConnection.Direction` distinguishes an accepted connection from one
 this node dialed, and `IMsmtConnection.Identity` exposes the remote peer's certificate subject (a plain
 distinguished-name string, e.g. `CN=Client1`), which `MsmtPeerTransport` turns into the connection's
-`ConnectionInfo` (host, port, and every common name). `InterfaceService` does not mirror inbound peer messages
+`IIpConnectionInfo` (host, port, and every common name). `InterfaceService` does not mirror inbound peer messages
 back out to a connected interface client over the connection it opened in; see [Peer.md](Peer.md) and
 [Interface.md](Interface.md).
 
@@ -96,7 +96,7 @@ back out to a connected interface client over the connection it opened in; see [
 | `PeerService` (`Core/src/Internal/Peer/PeerService.cs`) | Wraps a single `IPeerTransport` (IP through `MsmtPeerTransport`, which wraps the `IMsmtSessionPeer`, and serial through `SerialPeerTransport`) for `UserRole.Peer`; keeps a connection to each outgoing point and sends to a user over the connection identified as them, serializes/deserializes instances of `IEngineController.MessageType` (see [Configuration.md](Configuration.md#message-format)), and dispatches `MessageDelivered`/`DeliveryStatusChanged` events derived directly from the transport's `Request` outcome and its `Transmitted` progress callback. |
 | `ClientPeerService` (`Core/src/Internal/Peer/ClientPeerService.cs`) | Implements `UserRole.Client`: sends every outbound message over its one connection to the server, which delivers back down that same connection. Proactively maintains the connection via `PeerConnectionMonitor`. |
 | `ServerRoutingService` (`Core/src/Internal/Peer/ServerRoutingService.cs`) | Implements `UserRole.Server`: accepts connections from child clients and other servers, keeps a connection to each outgoing point, and delivers to any recipient (a child or another server) over the connection identified as them. Proactively maintains each outgoing point via `PeerConnectionMonitor`. |
-| `PeerConnectionMonitor` (`Core/src/Internal/Peer/PeerConnectionMonitor.cs`) | Connects to an outgoing point and sends a periodic empty heartbeat over the connection so it opens and stays open without needing a real message. See [Session Peer](#session-peer). |
+| `PeerConnectionMonitor` (`Core/src/Internal/Peer/PeerConnectionMonitor.cs`) | Connects to an outgoing point and sends a periodic heartbeat (an empty message) over the connection so it opens and stays open without needing a real message. See [Session Peer](#session-peer). |
 | `MsmtPeerTransport` (`Core/src/Internal/Peer/Transport/MsmtPeerTransport.cs`) | Adapts an `IMsmtSessionPeer` to the peer transport used by `PeerService`, `ClientPeerService`, and `ServerRoutingService`, caching one outbound connection per point and sending over inbound ones as well. MSMT itself remains IP only; serial goes through `SerialPeerTransport`. |
 | `InterfaceService` (`Core/src/Internal/Peer/InterfaceService.cs`, always active) | Uses its own `IMsmtSessionPeer` to host the local interface listener described in [Interface.md](Interface.md). |
 | `ConnectionOptions` (`IEngineController`) | Builds the `MsmtSessionPeerOptions` (identity certificate, trusted authority, then the host's `MsmtOptions` adjustment: timeouts, keep-alive, session lifetimes) used for both inbound and outbound MSMT session peer connections. See [Configuration.md](Configuration.md#msmt-certificates). |

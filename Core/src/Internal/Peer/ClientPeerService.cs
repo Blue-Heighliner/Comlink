@@ -20,13 +20,14 @@ internal sealed class ClientPeerService : IPeerService, IConnectionStatusService
     {
         this.transportFactory = transportFactory;
         this.engineController = engineController;
+        points = new PointMaintenance(new PeerConnectionMonitor(engineController));
         logger = loggerFactory.CreateLogger("ACTIVITY");
     }
 
     private readonly IPeerTransportFactory transportFactory;
     private readonly IEngineController engineController;
     private readonly ILogger logger;
-    private readonly PointMaintenance points = new(new PeerConnectionMonitor());
+    private readonly PointMaintenance points;
     private readonly Lock reconfigureLock = new();
 
     private readonly ConcurrentDictionary<string, Task<bool>> inFlightSends = new();

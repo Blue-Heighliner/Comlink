@@ -1,0 +1,28 @@
+namespace BlueHeighliner.Comlink.Control;
+
+/// <summary>
+/// Handed to an <see cref="IInitialPacketProcessor{TPacket}"/> for one connection that has just formed, to carry out the initial packet exchange on it:
+/// send packets, then either mark the connection fully connected as a named user or disconnect it. Until one of those happens the connection is unusable,
+/// and it is dropped if it takes too long.
+/// </summary>
+/// <typeparam name="TPacket">The host's packet type.</typeparam>
+public interface IInitialPacketContext<TPacket> : IEngineContext where TPacket : class
+{
+    /// <summary>Gets a value indicating whether this node opens the exchange: the node that opened the connection, or for a serial link, which both ends open, the node at the higher station address.</summary>
+    bool IsOpener { get; }
+
+    /// <summary>Gets what is known about the connection.</summary>
+    IConnectionInfo Connection { get; }
+
+    /// <summary>Marks the connection fully connected, as <paramref name="userName"/>. The connection is then usable, and anything after it is ordinary traffic.</summary>
+    /// <param name="userName">The user on the other end.</param>
+    void Connected(string userName);
+
+    /// <summary>Drops the connection.</summary>
+    void Disconnect();
+
+    /// <summary>Sends <paramref name="packet"/> over the connection, serialized with the packet serializer and sent as it is, since it is itself a packet and is not split.</summary>
+    /// <param name="packet">What to send.</param>
+    /// <returns>Whether the packet was accepted for sending.</returns>
+    Task<bool> Send(TPacket packet);
+}

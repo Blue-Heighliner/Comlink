@@ -14,10 +14,10 @@ public sealed class PublicApiTests
 
         Assert.Equal(
             [
-                "ActivityLogEventEntry", "ActivityLogExportData", "AddressRequest", "AddressType", "ConnectionInfo", "ConnectionPoint",
+                "ActivityLogEventEntry", "ActivityLogExportData", "AddressRequest", "AddressType", "ConnectionPoint",
                 "DeliveryStatusChangedEvent", "DestinationStatus", "DraftExportData",
-                "Engine", "ExternalSystemBase`1", "FolderType", "IEngineBuilder", "IEngineConfiguration", "IEngineHookContext", "IExternalSystem",
-                "IImportFormatContext", "IMessageBuilder`1", "IMessageReceivedHookContext", "INetworkSerializer", "IPacketBuilder`1", "IRetrievalBuilder`1", "IServiceConnection", "IUserConnectionHookContext",
+                "Engine", "ExternalSystemBase`1", "FolderType", "IConnectionInfo", "IEngineBuilder", "IEngineConfiguration", "IEngineContext", "IExternalSystem",
+                "IImportFormatContext", "IInitialMessageContext`1", "IInitialMessageProcessor`1", "IInitialPacketContext`1", "IInitialPacketProcessor`1", "IIpConnectionInfo", "IMessageBuilder`1", "INetworkConnectedContext`1", "INetworkContext`1", "INetworkDisconnectedContext`1", "INetworkProcessor`1", "INetworkReceivedContext`1", "INetworkSerializer", "IPacketBuilder`1", "IRetrievalBuilder`1", "ISerialConnectionInfo", "IServiceConnection",
                 "MessageDeliveryStatus", "MessageExportData", "MessageReceivedEvent", "NoteExportData", "ProtobufNetworkSerializer", "SendMessageResult",
                 "StagedSendData", "StagedSendMode", "UserDeliveryResult", "UserIdentity", "UserInfo", "UserRole"
             ],

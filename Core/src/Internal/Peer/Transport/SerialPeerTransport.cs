@@ -4,7 +4,7 @@ namespace BlueHeighliner.Comlink.Peer.Transport;
 /// The serial half of the peer transport: one persistent <see cref="SerialLink"/> per distinct serial point, created
 /// the first time it is connected to. A serial cable joins exactly two nodes and is opened from both ends, so there is
 /// no listener and no certificate exchange: who is on the other end is worked out from the port and address, or from the
-/// connection message.
+/// initial packet or message the nodes exchange.
 /// </summary>
 internal sealed class SerialPeerTransport : IPeerTransport
 {

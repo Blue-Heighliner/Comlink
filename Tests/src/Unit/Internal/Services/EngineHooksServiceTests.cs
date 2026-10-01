@@ -1,9 +1,34 @@
 namespace BlueHeighliner.Comlink.Tests.Unit.Internal.Services;
 
-/// <summary>Unit tests for <see cref="EngineHooksService"/> running the host's connection and message hooks.</summary>
+/// <summary>Unit tests for <see cref="EngineHooksService"/> running the host's network processor.</summary>
 public sealed class EngineHooksServiceTests
 {
     private static readonly ILoggerFactory noLogger = LoggerFactory.Create(_ => { });
+
+    private sealed class RecordingHandler : INetworkHandler
+    {
+        public List<Action<INetworkUserContext>> Connected { get; } = [];
+        public List<Action<INetworkUserContext>> Disconnected { get; } = [];
+        public List<Action<INetworkMessageContext>> Received { get; } = [];
+
+        public Task OnConnected(INetworkUserContext context)
+        {
+            foreach (Action<INetworkUserContext> action in Connected) { action(context); }
+            return Task.CompletedTask;
+        }
+
+        public Task OnDisconnected(INetworkUserContext context)
+        {
+            foreach (Action<INetworkUserContext> action in Disconnected) { action(context); }
+            return Task.CompletedTask;
+        }
+
+        public Task OnReceived(INetworkMessageContext context)
+        {
+            foreach (Action<INetworkMessageContext> action in Received) { action(context); }
+            return Task.CompletedTask;
+        }
+    }
 
     private sealed class FakePeerService : IPeerService
     {
@@ -60,13 +85,13 @@ public sealed class EngineHooksServiceTests
         }
     }
 
+    private static RecordingHandler Handler<T>(Mock<T> engineController) where T : class, IEngineController => (RecordingHandler)engineController.Object.NetworkHandler!;
+
     private static (EngineHooksService Service, FakePeerService Peer, Mock<TestEngineController> EngineController, Mock<IUserService> UserService, FakeMessageRoutingService Routing) Build()
     {
         FakePeerService peer = new();
         Mock<TestEngineController> engineController = new() { CallBase = true };
-        engineController.Setup(e => e.UserConnectedHooks).Returns((IReadOnlyList<Action<IUserConnectionHookContext>>)[]);
-        engineController.Setup(e => e.UserDisconnectedHooks).Returns((IReadOnlyList<Action<IUserConnectionHookContext>>)[]);
-        engineController.Setup(e => e.MessageReceivedHooks).Returns((IReadOnlyList<Action<IMessageReceivedHookContext>>)[]);
+        engineController.Setup(e => e.NetworkHandler).Returns(new RecordingHandler());
         engineController.Setup(e => e.Users).Returns((IReadOnlyList<string>)[]);
         engineController.Setup(e => e.UserGroups).Returns(new Dictionary<string, IReadOnlyList<string>>());
         Mock<IUserService> userService = new();
@@ -76,11 +101,12 @@ public sealed class EngineHooksServiceTests
         return (service, peer, engineController, userService, routing);
     }
 
-    /// <summary>With no hooks configured at all, Start returns immediately without subscribing to any peer event.</summary>
+    /// <summary>With no processor configured, Start returns immediately without subscribing to any peer event.</summary>
     [Fact]
-    public async Task Start_NoHooksConfigured_ReturnsImmediatelyWithoutSubscribing()
+    public async Task Start_NoProcessorConfigured_ReturnsImmediatelyWithoutSubscribing()
     {
-        (EngineHooksService service, FakePeerService peer, _, _, _) = Build();
+        (EngineHooksService service, FakePeerService peer, Mock<TestEngineController> engineController, _, _) = Build();
+        engineController.Setup(e => e.NetworkHandler).Returns((INetworkHandler?)null);
 
         await service.Start(CancellationToken.None).WaitAsync(TimeSpan.FromSeconds(2));
 
@@ -94,7 +120,7 @@ public sealed class EngineHooksServiceTests
     public async Task Start_HooksConfigured_SubscribesAndBlocksUntilCancelled()
     {
         (EngineHooksService service, FakePeerService peer, Mock<TestEngineController> engineController, _, _) = Build();
-        engineController.Setup(e => e.UserConnectedHooks).Returns((IReadOnlyList<Action<IUserConnectionHookContext>>)[_ => { }]);
+        Handler(engineController).Connected.AddRange([_ => { }]);
         using CancellationTokenSource cts = new();
 
         Task startTask = service.Start(cts.Token);
@@ -108,16 +134,16 @@ public sealed class EngineHooksServiceTests
         Assert.False(peer.HasUserConnectedSubscribers);
     }
 
-    /// <summary>A UserConnected event runs every configured hook, in order, each handed the same context instance carrying the connected user's name.</summary>
+    /// <summary>A UserConnected event runs the processor with a context carrying the connected user's name.</summary>
     [Fact]
     public async Task UserConnected_RunsEveryHookInOrderWithSameContext()
     {
         (EngineHooksService service, FakePeerService peer, Mock<TestEngineController> engineController, _, _) = Build();
         List<string> calls = [];
-        IUserConnectionHookContext? firstContext = null;
-        Action<IUserConnectionHookContext> first = context => { firstContext = context; calls.Add($"first:{context.TargetUser}:{context.CurrentUser.Name}"); };
-        Action<IUserConnectionHookContext> second = context => calls.Add($"second:{context.TargetUser}:{ReferenceEquals(context, firstContext)}");
-        engineController.Setup(e => e.UserConnectedHooks).Returns((IReadOnlyList<Action<IUserConnectionHookContext>>)[first, second]);
+        INetworkUserContext? firstContext = null;
+        Action<INetworkUserContext> first = context => { firstContext = context; calls.Add($"first:{context.TargetUser}:{context.CurrentUser.Name}"); };
+        Action<INetworkUserContext> second = context => calls.Add($"second:{context.TargetUser}:{ReferenceEquals(context, firstContext)}");
+        Handler(engineController).Connected.AddRange([first, second]);
         using CancellationTokenSource cts = new();
         Task startTask = service.Start(cts.Token);
         await Task.Delay(20);
@@ -135,7 +161,7 @@ public sealed class EngineHooksServiceTests
     {
         (EngineHooksService service, FakePeerService peer, Mock<TestEngineController> engineController, _, _) = Build();
         List<string> calls = [];
-        engineController.Setup(e => e.UserDisconnectedHooks).Returns((IReadOnlyList<Action<IUserConnectionHookContext>>)[context => calls.Add(context.TargetUser)]);
+        Handler(engineController).Disconnected.AddRange([context => calls.Add(context.TargetUser)]);
         using CancellationTokenSource cts = new();
         Task startTask = service.Start(cts.Token);
         await Task.Delay(20);
@@ -147,22 +173,18 @@ public sealed class EngineHooksServiceTests
         await startTask;
     }
 
-    /// <summary>A hook that throws is logged and does not stop the remaining hooks from running.</summary>
+    /// <summary>A processor that throws is logged and never thrown back into the peer service.</summary>
     [Fact]
-    public async Task UserConnected_HookThrows_OtherHooksStillRun()
+    public async Task UserConnected_ProcessorThrows_IsLoggedNotThrown()
     {
         (EngineHooksService service, FakePeerService peer, Mock<TestEngineController> engineController, _, _) = Build();
-        List<string> calls = [];
-        Action<IUserConnectionHookContext> failing = _ => throw new InvalidOperationException("boom");
-        Action<IUserConnectionHookContext> succeeding = context => calls.Add(context.TargetUser);
-        engineController.Setup(e => e.UserConnectedHooks).Returns((IReadOnlyList<Action<IUserConnectionHookContext>>)[failing, succeeding]);
+        Handler(engineController).Connected.Add(_ => throw new InvalidOperationException("boom"));
         using CancellationTokenSource cts = new();
         Task startTask = service.Start(cts.Token);
         await Task.Delay(20);
 
         await peer.FireUserConnected("ALICE");
 
-        Assert.Equal(["ALICE"], calls);
         cts.Cancel();
         await startTask;
     }
@@ -173,8 +195,7 @@ public sealed class EngineHooksServiceTests
     {
         (EngineHooksService service, FakePeerService peer, Mock<TestEngineController> engineController, _, _) = Build();
         object? received = null;
-        engineController.Setup(e => e.MessageReceivedHooks).Returns((IReadOnlyList<Action<IMessageReceivedHookContext>>)
-        [
+        Handler(engineController).Received.AddRange([
             context => received = context.Message
         ]);
         using CancellationTokenSource cts = new();
@@ -197,8 +218,8 @@ public sealed class EngineHooksServiceTests
         engineController.Setup(e => e.Users).Returns((IReadOnlyList<string>)["Alice", "Bob"]);
         engineController.Setup(e => e.UserGroups).Returns(new Dictionary<string, IReadOnlyList<string>> { ["OPS"] = ["Alice"] });
         peer.ConnectedUsers = ["Alice"];
-        IUserConnectionHookContext? seen = null;
-        engineController.Setup(e => e.UserConnectedHooks).Returns((IReadOnlyList<Action<IUserConnectionHookContext>>)[context => seen = context]);
+        INetworkUserContext? seen = null;
+        Handler(engineController).Connected.AddRange([context => seen = context]);
         using CancellationTokenSource cts = new();
         Task startTask = service.Start(cts.Token);
         await Task.Delay(20);
@@ -229,7 +250,7 @@ public sealed class EngineHooksServiceTests
     {
         (EngineHooksService service, FakePeerService peer, Mock<TestEngineController> engineController, Mock<IUserService> userService, _) = Build();
         userService.Setup(u => u.GetCurrentUserInfo()).Returns((UserInfo?)null);
-        engineController.Setup(e => e.UserConnectedHooks).Returns((IReadOnlyList<Action<IUserConnectionHookContext>>)[_ => { }]);
+        Handler(engineController).Connected.AddRange([_ => { }]);
         using CancellationTokenSource cts = new();
         Task startTask = service.Start(cts.Token);
         await Task.Delay(20);
@@ -240,14 +261,13 @@ public sealed class EngineHooksServiceTests
         await startTask;
     }
 
-    /// <summary>SendMessage rejects an object that is not an instance of the configured message type, synchronously, before ever forking a background send.</summary>
+    /// <summary>Send rejects an object that is not an instance of the configured message type, synchronously, before ever forking a background send.</summary>
     [Fact]
-    public async Task Context_SendMessage_WrongType_ThrowsSynchronously()
+    public async Task Context_Send_WrongType_ThrowsSynchronously()
     {
         (EngineHooksService service, FakePeerService peer, Mock<TestEngineController> engineController, _, FakeMessageRoutingService routing) = Build();
-        engineController.Setup(e => e.UserConnectedHooks).Returns((IReadOnlyList<Action<IUserConnectionHookContext>>)
-        [
-            context => Assert.Throws<ArgumentException>(() => context.SendMessage("not a message"))
+        Handler(engineController).Connected.AddRange([
+            context => Assert.Throws<ArgumentException>(() => context.Send("not a message"))
         ]);
         using CancellationTokenSource cts = new();
         Task startTask = service.Start(cts.Token);
@@ -260,15 +280,14 @@ public sealed class EngineHooksServiceTests
         await startTask;
     }
 
-    /// <summary>SendMessage of a correctly-typed message is fire-and-forget - the hook returns immediately - but still routes it, from CurrentUser, in the background.</summary>
+    /// <summary>Send of a correctly-typed message is fire-and-forget - the hook returns immediately - but still routes it, from CurrentUser, in the background.</summary>
     [Fact]
-    public async Task Context_SendMessage_CorrectType_RoutesInBackgroundFromCurrentUser()
+    public async Task Context_Send_CorrectType_RoutesInBackgroundFromCurrentUser()
     {
         (EngineHooksService service, FakePeerService peer, Mock<TestEngineController> engineController, _, FakeMessageRoutingService routing) = Build();
         TestMessage message = new() { Subject = "Hi" };
-        engineController.Setup(e => e.UserConnectedHooks).Returns((IReadOnlyList<Action<IUserConnectionHookContext>>)
-        [
-            context => context.SendMessage(message)
+        Handler(engineController).Connected.AddRange([
+            context => context.Send(message)
         ]);
         using CancellationTokenSource cts = new();
         Task startTask = service.Start(cts.Token);
@@ -279,83 +298,6 @@ public sealed class EngineHooksServiceTests
         await WaitUntil(() => routing.RoutedMessages.Count > 0, TimeSpan.FromSeconds(2));
         Assert.Equal("ME", routing.RoutedMessages[0].FromUser);
         Assert.Same(message, routing.RoutedMessages[0].Message);
-        cts.Cancel();
-        await startTask;
-    }
-
-    /// <summary>SendPacket throws when no packet type is configured at all.</summary>
-    [Fact]
-    public async Task Context_SendPacket_NoPacketTypeConfigured_Throws()
-    {
-        (EngineHooksService service, FakePeerService peer, Mock<TestEngineController> engineController, _, _) = Build();
-        engineController.Setup(e => e.UserConnectedHooks).Returns((IReadOnlyList<Action<IUserConnectionHookContext>>)
-        [
-            context => Assert.Throws<ArgumentException>(() => context.SendPacket(new object(), "ALICE"))
-        ]);
-        using CancellationTokenSource cts = new();
-        Task startTask = service.Start(cts.Token);
-        await Task.Delay(20);
-
-        await peer.FireUserConnected("ALICE");
-
-        Assert.Empty(peer.SentPackets);
-        cts.Cancel();
-        await startTask;
-    }
-
-    /// <summary>With a packet type configured, SendPacket rejects an object that is not an instance of it.</summary>
-    [Fact]
-    public async Task Context_SendPacket_WrongType_Throws()
-    {
-        FakePeerService peer = new();
-        Mock<TestPacketEngineController> engineController = new() { CallBase = true };
-        engineController.Setup(e => e.UserConnectedHooks).Returns((IReadOnlyList<Action<IUserConnectionHookContext>>)
-        [
-            context => Assert.Throws<ArgumentException>(() => context.SendPacket("not a packet", "ALICE"))
-        ]);
-        engineController.Setup(e => e.UserDisconnectedHooks).Returns((IReadOnlyList<Action<IUserConnectionHookContext>>)[]);
-        engineController.Setup(e => e.MessageReceivedHooks).Returns((IReadOnlyList<Action<IMessageReceivedHookContext>>)[]);
-        Mock<IUserService> userService = new();
-        userService.Setup(u => u.GetCurrentUserInfo()).Returns(new UserInfo { Name = "ME" });
-        EngineHooksService service = new(peer, engineController.Object, userService.Object, new FakeMessageRoutingService(), noLogger);
-        using CancellationTokenSource cts = new();
-        Task startTask = service.Start(cts.Token);
-        await Task.Delay(20);
-
-        await peer.FireUserConnected("ALICE");
-
-        Assert.Empty(peer.SentPackets);
-        cts.Cancel();
-        await startTask;
-    }
-
-    /// <summary>A correctly-typed packet is sent, fire-and-forget, directly to every named user, bypassing IMessageRoutingService entirely.</summary>
-    [Fact]
-    public async Task Context_SendPacket_CorrectType_SendsToEachUserNameInBackground()
-    {
-        FakePeerService peer = new();
-        Mock<TestPacketEngineController> engineController = new() { CallBase = true };
-        TestPacket packet = new() { PayloadId = 1 };
-        engineController.Setup(e => e.UserConnectedHooks).Returns((IReadOnlyList<Action<IUserConnectionHookContext>>)
-        [
-            context => context.SendPacket(packet, "ALICE", "BOB")
-        ]);
-        engineController.Setup(e => e.UserDisconnectedHooks).Returns((IReadOnlyList<Action<IUserConnectionHookContext>>)[]);
-        engineController.Setup(e => e.MessageReceivedHooks).Returns((IReadOnlyList<Action<IMessageReceivedHookContext>>)[]);
-        Mock<IUserService> userService = new();
-        userService.Setup(u => u.GetCurrentUserInfo()).Returns(new UserInfo { Name = "ME" });
-        FakeMessageRoutingService routing = new();
-        EngineHooksService service = new(peer, engineController.Object, userService.Object, routing, noLogger);
-        using CancellationTokenSource cts = new();
-        Task startTask = service.Start(cts.Token);
-        await Task.Delay(20);
-
-        await peer.FireUserConnected("ALICE");
-
-        await WaitUntil(() => peer.SentPackets.Count == 2, TimeSpan.FromSeconds(2));
-        Assert.Contains(peer.SentPackets, s => s.UserName == "ALICE" && ReferenceEquals(s.Packet, packet));
-        Assert.Contains(peer.SentPackets, s => s.UserName == "BOB" && ReferenceEquals(s.Packet, packet));
-        Assert.Empty(routing.RoutedMessages);
         cts.Cancel();
         await startTask;
     }

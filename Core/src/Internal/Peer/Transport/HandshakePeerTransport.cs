@@ -1,40 +1,38 @@
 namespace BlueHeighliner.Comlink.Peer.Transport;
 
 /// <summary>
-/// Wraps another <see cref="IPeerTransport"/> so that a connection is only published, and only usable, once the node on
-/// the other end has been identified. When the engine controller configures a connection message
-/// (<see cref="IEngineController.ConnectionMessageType"/>) the node that opened the connection sends one first (both ends
-/// of a serial link do), the node that receives it may answer with a response, and every payload from then on travels
-/// in a one byte frame that tells the three apart; the exchange has to complete, within a timeout, before the connection
-/// counts. Without one there is no framing and a connection is identified the moment it forms. Either way
-/// <see cref="IEngineController.IdentifyConnection"/> decides who is on the other end, falling back to the engine's own
-/// rule (a certificate name matching a user, or the serial port name), and the result is set on the connection's
-/// <see cref="PeerConnection.User"/>. A connection that cannot be identified is dropped. An empty payload is a
-/// <see cref="PeerConnectionMonitor"/> heartbeat and is framed like any other data.
+/// Wraps another <see cref="IPeerTransport"/> so that a connection is only published, and only usable, once its initial exchange has completed and,
+/// optionally, the node on the other end has been identified. The exchange is a <see cref="Handshake"/>: a host's processor is told when the connection
+/// forms and is given each item that arrives, on the accepting node as an initial item and on the opening node (the node at the higher station address
+/// for a serial link) as a reply, until it marks the connection connected as a named user or disconnects it. Each item is an instance of the message or
+/// packet type serialized with its own serializer and nothing is added to it, so items are recognized by position: every payload a node receives on a
+/// connection that is still in its exchange is an item, and everything after the connection is marked connected is ordinary data. The exchange has to
+/// complete within a timeout or the connection is dropped. With <c>identify</c>, the user the processor named (here or in the exchange beneath this one),
+/// else <see cref="IEngineController.IdentifyConnection"/>, else the engine's own rule (a certificate name matching a user, or the user named on the serial
+/// point or else the serial port name) decides who is on the other end, and the result is set on the connection's <see cref="PeerConnection.User"/>; a
+/// connection that cannot be identified is dropped.
 /// </summary>
-internal sealed class IdentifyingPeerTransport : IPeerTransport
+internal sealed class HandshakePeerTransport : IPeerTransport
 {
-    private const byte DataFrame = 1;
-    private const byte MessageFrame = 2;
-    private const byte ResponseFrame = 3;
     private const int MaxBufferedPayloads = 64;
 
-    /// <summary>Initializes a new <see cref="IdentifyingPeerTransport"/> over <paramref name="inner"/>.</summary>
+    /// <summary>Initializes a new <see cref="HandshakePeerTransport"/> over <paramref name="inner"/>.</summary>
     /// <param name="inner">The transport to wrap.</param>
-    /// <param name="engineController">Decides the connection message configuration and identifies connections.</param>
+    /// <param name="engineController">Identifies connections.</param>
     /// <param name="logger">Receives a warning for every connection that is refused.</param>
-    /// <param name="handshakeTimeout">How long the connection message exchange may take. Defaults to ten seconds.</param>
-    public IdentifyingPeerTransport(IPeerTransport inner, IEngineController engineController, ILogger logger, TimeSpan? handshakeTimeout = null)
+    /// <param name="handshake">The initial exchange to carry out, or <see langword="null"/> for none.</param>
+    /// <param name="identify">Whether to identify the node on the other end once the exchange is done. Only the outermost handshake transport does.</param>
+    /// <param name="handshakeTimeout">How long the exchange may take. Defaults to ten seconds.</param>
+    /// <param name="contexts">Creates the engine snapshot a processor sees, or <see langword="null"/> for one that knows no connected users.</param>
+    public HandshakePeerTransport(IPeerTransport inner, IEngineController engineController, ILogger logger, Handshake? handshake, bool identify, TimeSpan? handshakeTimeout = null, IEngineContextFactory? contexts = null)
     {
         this.inner = inner;
         this.engineController = engineController;
         this.logger = logger;
+        this.handshake = handshake;
+        this.identify = identify;
         this.handshakeTimeout = handshakeTimeout ?? TimeSpan.FromSeconds(10);
-        if (engineController.ConnectionMessageType is not null)
-        {
-            serializer = engineController.ConnectionSerializer ?? throw new InvalidOperationException("A connection message type needs a connection serializer, but the engine controller has none");
-            respond = engineController.ConnectionResponseType is not null;
-        }
+        this.contexts = contexts;
 
         inner.Received.Listen(OnReceived);
         inner.Connected.Listen(OnConnected);
@@ -44,9 +42,10 @@ internal sealed class IdentifyingPeerTransport : IPeerTransport
     private readonly IPeerTransport inner;
     private readonly IEngineController engineController;
     private readonly ILogger logger;
+    private readonly Handshake? handshake;
+    private readonly bool identify;
     private readonly TimeSpan handshakeTimeout;
-    private readonly INetworkSerializer? serializer;
-    private readonly bool respond;
+    private readonly IEngineContextFactory? contexts;
     private readonly ConditionalWeakTable<PeerConnection, Session> sessions = new();
     private readonly PeerEvent<PeerReceivedEventArgs> received = new();
     private readonly PeerEvent<PeerConnectionEventArgs> connected = new();
@@ -85,21 +84,23 @@ internal sealed class IdentifyingPeerTransport : IPeerTransport
     public async Task<bool> Request(PeerConnection connection, ReadOnlyMemory<byte> data, PeerSendOptions? options = null, CancellationToken cancellation = default)
     {
         await WaitUntilEstablished(connection, cancellation);
-        return await inner.Request(connection, serializer is null ? data : Frame(DataFrame, data), options, cancellation);
+        return await inner.Request(connection, data, options, cancellation);
     }
 
     /// <inheritdoc />
     public ValueTask DisposeAsync() => inner.DisposeAsync();
 
-    private static byte[] Frame(byte kind, ReadOnlyMemory<byte> body)
-    {
-        byte[] frame = new byte[1 + body.Length];
-        frame[0] = kind;
-        body.Span.CopyTo(frame.AsSpan(1));
-        return frame;
-    }
+    // The node that opens a connection starts the exchange. A serial link has no opener, since both ends open the port, so the node at the higher station
+    // address plays that part and the other accepts.
+    private static bool IsInitiator(ConnectionInfo info) => !info.IsInbound && (info is not SerialConnectionInfo serial || serial.SerialAddress > serial.RemoteSerialAddress);
 
-    private Session GetSession(PeerConnection connection) => sessions.GetValue(connection, static key => new Session(key));
+    private Session GetSession(PeerConnection connection)
+        => sessions.GetValue(connection, key =>
+        {
+            Session created = new(key);
+            created.Initial = new InitialSession(this, created);
+            return created;
+        });
 
     private async Task WaitUntilEstablished(PeerConnection connection, CancellationToken cancellation)
     {
@@ -129,7 +130,7 @@ internal sealed class IdentifyingPeerTransport : IPeerTransport
             session.IsStarted = true;
         }
 
-        if (serializer is null)
+        if (handshake is null)
         {
             Establish(session);
             return;
@@ -138,72 +139,55 @@ internal sealed class IdentifyingPeerTransport : IPeerTransport
         _ = Task.Run(() => RunExchange(session));
     }
 
-    private async Task RunExchange(Session session)
+    private void RunExchange(Session session)
     {
         _ = Task.Run(async () =>
         {
             try { await Task.Delay(handshakeTimeout, session.Deadline.Token); }
             catch (OperationCanceledException) { return; }
 
-            Fail(session, "did not complete the connection message exchange in time");
+            Fail(session, "did not complete its initial exchange in time");
         });
 
-        if (session.Connection.IsInbound) { return; }
-
-        try
-        {
-            object? message = engineController.CreateConnectionMessage(session.Connection.Info);
-            if (!await Send(session, MessageFrame, message)) { Fail(session, "had its connection message rejected"); return; }
-            Evaluate(session);
-        }
-        catch (Exception ex)
-        {
-            Fail(session, $"could not send its connection message: {ex.Message}");
-        }
+        Process(session, () => handshake!.Processor.OnConnected(session.Initial));
     }
 
-    private async Task<bool> Send(Session session, byte kind, object? value)
+    private void Process(Session session, Func<Task> work)
     {
-        byte[] frame;
-        if (value is null)
-        {
-            frame = Frame(kind, ReadOnlyMemory<byte>.Empty);
-        }
-        else
-        {
-            using IMemoryOwner<byte> body = serializer!.Serialize(value);
-            frame = Frame(kind, body.Memory);
-        }
+        lock (session.Gate) { session.Tail = Chain(session, session.Tail, work); }
+    }
 
-        return await inner.Request(session.Connection, frame, new PeerSendOptions { Priority = int.MaxValue }, session.Aborted.Token);
+    private async Task Chain(Session session, Task previous, Func<Task> work)
+    {
+        await previous;
+        if (session.State != SessionState.Handshaking) { return; }
+
+        try { await work(); }
+        catch (Exception ex) { Fail(session, $"could not complete its initial exchange: {ex.Message}"); }
+    }
+
+    private async Task<bool> Send(Session session, object item)
+    {
+        using IMemoryOwner<byte> body = handshake!.Serializer.Serialize(item);
+        return await inner.Request(session.Connection, body.Memory, new PeerSendOptions { Priority = int.MaxValue }, session.Aborted.Token);
     }
 
     private void OnReceived(PeerReceivedEventArgs args)
     {
         Session session = GetSession(args.Connection);
-        if (serializer is null)
+        Start(session);
+
+        bool isHandshakePayload;
+        lock (session.Gate) { isHandshakePayload = handshake is not null && session.State == SessionState.Handshaking; }
+
+        if (isHandshakePayload)
         {
-            Start(session);
-            OnData(session, args);
+            byte[] body = args.Payload.ToArray();
+            Process(session, () => OnHandshakePayload(session, body));
             return;
         }
 
-        if (args.Payload.IsEmpty) { return; }
-
-        byte kind = args.Payload.Span[0];
-        ReadOnlyMemory<byte> body = args.Payload[1..];
-        switch (kind)
-        {
-            case DataFrame:
-                if (session.IsStarted) { OnData(session, new PeerReceivedEventArgs { Connection = args.Connection, Payload = body }); }
-                break;
-            case MessageFrame:
-                _ = Task.Run(() => OnConnectionMessage(session, body));
-                break;
-            case ResponseFrame:
-                OnConnectionResponse(session, body);
-                break;
-        }
+        OnData(session, args);
     }
 
     private void OnData(Session session, PeerReceivedEventArgs args)
@@ -221,69 +205,12 @@ internal sealed class IdentifyingPeerTransport : IPeerTransport
         received.Publish(args);
     }
 
-    private async Task OnConnectionMessage(Session session, ReadOnlyMemory<byte> body)
+    private Task OnHandshakePayload(Session session, byte[] body)
     {
-        try
-        {
-            object? message = Deserialize(body, engineController.ConnectionMessageType!);
-            lock (session.Gate)
-            {
-                session.HasMessage = true;
-                session.Connection.Info = session.Connection.Info with { ConnectionMessage = message };
-            }
+        object item = handshake!.Serializer.Deserialize(body) ?? throw new InvalidDataException("nothing was sent");
+        if (item.GetType() != handshake.Processor.ItemType) { throw new InvalidDataException($"expected a {handshake.Processor.ItemType.Name}"); }
 
-            if (respond)
-            {
-                object? response = engineController.CreateConnectionResponse(session.Connection.Info);
-                if (!await Send(session, ResponseFrame, response)) { Fail(session, "had its connection response rejected"); return; }
-            }
-
-            Evaluate(session);
-        }
-        catch (Exception ex)
-        {
-            Fail(session, $"sent an unusable connection message: {ex.Message}");
-        }
-    }
-
-    private void OnConnectionResponse(Session session, ReadOnlyMemory<byte> body)
-    {
-        try
-        {
-            object? response = respond ? Deserialize(body, engineController.ConnectionResponseType!) : null;
-            lock (session.Gate)
-            {
-                session.HasResponse = true;
-                session.Connection.Info = session.Connection.Info with { ConnectionResponse = response };
-            }
-
-            Evaluate(session);
-        }
-        catch (Exception ex)
-        {
-            Fail(session, $"sent an unusable connection response: {ex.Message}");
-        }
-    }
-
-    private object? Deserialize(ReadOnlyMemory<byte> body, Type expected)
-    {
-        if (body.IsEmpty) { return null; }
-
-        object? value = serializer!.Deserialize(body);
-        return value is null || value.GetType() != expected ? throw new InvalidDataException($"expected a {expected.Name}") : value;
-    }
-
-    private void Evaluate(Session session)
-    {
-        PeerConnection connection = session.Connection;
-        bool expectMessage = connection.IsInbound || connection.IsSerial;
-        bool expectResponse = respond && !connection.IsInbound;
-        lock (session.Gate)
-        {
-            if (session.State != SessionState.Handshaking || (expectMessage && !session.HasMessage) || (expectResponse && !session.HasResponse)) { return; }
-        }
-
-        Establish(session);
+        return IsInitiator(session.Connection.Info) ? handshake.Processor.OnReply(session.Initial, item) : handshake.Processor.OnInitial(session.Initial, item);
     }
 
     private void Establish(Session session)
@@ -295,27 +222,30 @@ internal sealed class IdentifyingPeerTransport : IPeerTransport
             session.State = SessionState.Establishing;
         }
 
-        UserIdentity? identity;
-        try { identity = Identify(connection.Info); }
-        catch (Exception ex)
+        if (identify)
         {
-            Fail(session, $"could not be identified: {ex.Message}");
-            return;
+            UserIdentity? identity;
+            try { identity = Identify(connection); }
+            catch (Exception ex)
+            {
+                Fail(session, $"could not be identified: {ex.Message}");
+                return;
+            }
+
+            if (identity is null)
+            {
+                Fail(session, "could not be identified");
+                return;
+            }
+
+            lock (session.Gate)
+            {
+                if (session.State == SessionState.Closed) { return; }
+                connection.User = identity;
+            }
         }
 
-        if (identity is null)
-        {
-            Fail(session, "could not be identified");
-            return;
-        }
-
-        lock (session.Gate)
-        {
-            if (session.State == SessionState.Closed) { return; }
-            connection.User = identity;
-            session.IsPublished = true;
-        }
-
+        lock (session.Gate) { session.IsPublished = true; }
         connected.Publish(new PeerConnectionEventArgs { Connection = connection });
 
         List<PeerReceivedEventArgs> pending;
@@ -359,23 +289,21 @@ internal sealed class IdentifyingPeerTransport : IPeerTransport
             session.Pending.Clear();
         }
 
-        args.Connection.Info = args.Connection.Info with { ConnectionMessage = null, ConnectionResponse = null };
+        args.Connection.InitialUser = null;
         session.Established.TrySetResult(false);
         session.Deadline.Cancel();
         session.Aborted.Cancel();
         if (wasPublished) { disconnected.Publish(args); }
     }
 
-    private UserIdentity? Identify(ConnectionInfo info)
+    private UserIdentity? Identify(PeerConnection connection)
     {
-        UserIdentity? identity = engineController.IdentifyConnection(info);
-        if (identity is not null) { return identity; }
-
-        string? name = info.IsSerial ? SerialUser(info) : MatchCertificate(info.CertificateNames);
+        ConnectionInfo info = connection.Info;
+        string? name = connection.InitialUser ?? engineController.IdentifyConnection(info) ?? info switch { SerialConnectionInfo serial => SerialUser(serial), IpConnectionInfo ip => MatchCertificate(ip.CertificateNames), _ => null };
         return name is null ? null : new UserIdentity { Name = name, Data = engineController.GetUserData(name) };
     }
 
-    private string? SerialUser(ConnectionInfo info)
+    private string? SerialUser(SerialConnectionInfo info)
         => engineController.OutgoingPoints.FirstOrDefault(point => point.IsSerial && point.User is not null
             && string.Equals(point.SerialPort, info.SerialPort, StringComparison.OrdinalIgnoreCase) && point.SerialAddress == info.SerialAddress)?.User
             ?? info.SerialPort;
@@ -422,7 +350,26 @@ internal sealed class IdentifyingPeerTransport : IPeerTransport
         public SessionState State { get; set; }
         public bool IsStarted { get; set; }
         public bool IsPublished { get; set; }
-        public bool HasMessage { get; set; }
-        public bool HasResponse { get; set; }
+        public Task Tail { get; set; } = Task.CompletedTask;
+        public IInitialSession Initial { get; set; } = null!;
+    }
+
+    private sealed class InitialSession(HandshakePeerTransport owner, Session session) : IInitialSession
+    {
+        public bool IsOpener => IsInitiator(session.Connection.Info);
+
+        public IConnectionInfo Connection => owner.engineController.WithLocalUser(session.Connection.Info);
+
+        public IEngineContext Engine => owner.contexts?.Create() ?? new EngineContext(new UserInfo { Name = Connection.LocalUser ?? string.Empty }, owner.engineController.Users, owner.engineController.UserGroups, _ => false);
+
+        public void Connected(string userName)
+        {
+            session.Connection.InitialUser = userName;
+            owner.Establish(session);
+        }
+
+        public void Disconnect() => owner.Fail(session, "was disconnected by its initial processor");
+
+        public Task<bool> Send(object item) => owner.Send(session, item);
     }
 }

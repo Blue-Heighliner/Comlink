@@ -162,10 +162,9 @@ public sealed class SerialPeerTransportTests
         Assert.NotNull(connection);
         Assert.Equal(point, connection.Point);
         Assert.False(connection.IsInbound);
-        Assert.True(connection.Info.IsSerial);
-        Assert.Equal("SL0", connection.Info.SerialPort);
-        Assert.Equal(0xFF, connection.Info.SerialAddress);
-        Assert.Null(connection.Info.CertificateSubject);
+        ISerialConnectionInfo serial = Assert.IsAssignableFrom<ISerialConnectionInfo>(connection.Info);
+        Assert.Equal("SL0", serial.SerialPort);
+        Assert.Equal(0xFF, serial.SerialAddress);
     }
 
     /// <summary>Every serial link starts its peer with the configured options and the point's own and remote station addresses.</summary>

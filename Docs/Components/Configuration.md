@@ -1,6 +1,6 @@
 # Engine Configuration
 
-A host tells the engine how to run by implementing `IEngineConfiguration` and naming it to `Engine.Start<T>`, which constructs it through dependency injection. The engine calls `Configure` once, before anything else starts, handing it an `IEngineBuilder`; every call on the builder is optional except `Message<TMessage>`, and each returns the builder so a configuration reads as one fluent expression. The builder is the only public way to change what the engine does; everything it collects is read internally through `IEngineController`, which is not part of the public surface. See each area below for what it covers.
+A host tells the engine how to run by implementing `IEngineConfiguration` and naming it to `Engine.Start<T>`, which constructs it through dependency injection. The engine calls `Configure` once, before anything else starts, handing it an `IEngineBuilder`; every call on the builder is optional except `Message<TMessage>`, which states the message type and everything typed with it (through `IMessageBuilder<TMessage>`), and each returns the builder so a configuration reads as one fluent expression. `Packets<TPacket>` likewise states the packet type and what is typed with it (through `IPacketBuilder<TPacket>`). The builder is the only public way to change what the engine does; everything it collects is read internally through `IEngineController`, which is not part of the public surface. See each area below for what it covers.
 
 ## Concept
 
@@ -52,7 +52,7 @@ engine
 
 `Message` supplies the concrete message type used throughout the engine, on the wire (peer and interface connections) and in the database, and maps the engine's logical fields onto that type's real fields. Each mapping is a getter and a setter, so the engine reads and builds the host's message without ever assuming a field name or shape. Where the host's field has the type the engine wants, naming the property (`.Id(m => m.Id)`) is enough: the builder reads the member access from the expression and compiles a getter and setter from it once, when the configuration runs, so using it costs no more than writing them out (an init-only property works; a member that cannot be assigned, or an expression that is not a plain member access such as `m => m.Id.ToUpper()`, is refused at once with an error naming it). Where the types differ - the addresses, which the host stores in its own recipient shape and converts to and from `(string Name, AddressType Type, string Information)` tuples (the getter returns any sequence of them, the setter receives a list; `Information` is optional custom per-address instructions, e.g. `Deliver to Eastside Office` - a `(string Name, AddressType Type)` overload with no `Information` is also available for a host with no use for it), and a packet's data, which is a `ReadOnlyMemory<byte>` - the getter and setter are given explicitly. Every field must be mapped. The type must be LiteDB-serializable for storage, and must additionally satisfy whatever serializer is used for the wire, which by default is a `ProtobufNetworkSerializer` that builds only the message type (so `[ProtoContract]`/`[ProtoMember]` attributes). `Serializer` on the message builder replaces it, as long as every node this instance talks to (including its own interface connections) uses a matching one: Comlink never negotiates or advertises which format a payload used, so a mismatch deserializes garbage or throws rather than failing cleanly. `INetworkSerializer.Deserialize` is given only the bytes, so a custom serializer must make its format self-describing enough to rebuild the right type itself (the default wraps every payload in an outer envelope naming the type). `Create` replaces `new TMessage()` for building an empty message. The retrieval fields back [Server Storage](#server-storage); the confirmation id and alert flag back the user-read confirmation and alert-message features (see [Peer.md](Peer.md#read-confirmation) and [Peer.md](Peer.md#alert-messages)); the priority backs [Message Composition](#message-composition) and the MSMT send priority, and the tag backs [Message Composition](#message-composition) too.
 
-Packetization is off unless `Packets` is called. With it, payloads are broken into prioritized packets of the host's packet type and reassembled on the other side. The host only says how the five fields the engine needs are stored in its packet (payload id, packet index, packet count, payload length, data); all splitting, reassembly and priority scheduling is the engine's, so a host gets its own packet format and serialization without writing any packetization logic. The packet serializer defaults to a `ProtobufNetworkSerializer` that wraps every packet in an envelope naming its type, a fixed overhead per packet that a leaner custom serializer avoids. `Size` (default 16 KiB) is the largest serialized packet in bytes: the engine measures what the serializer makes of a packet to see how much payload fits, and refuses to start with an error in the log if none does. `Window` (default 1) is how many packets may be in flight over one connection at once, and must be at least 1. Every node must be configured alike, since neither side can tell whether the other packetizes. Interface connections are never packetized.
+Packetization is off unless `Packets<TPacket>` is called. With it, payloads are broken into prioritized packets of the host's packet type and reassembled on the other side. The host only says how the five fields the engine needs are stored in its packet (payload id, packet index, packet count, payload length, data); all splitting, reassembly and priority scheduling is the engine's, so a host gets its own packet format and serialization without writing any packetization logic. The packet serializer defaults to a `ProtobufNetworkSerializer` that wraps every packet in an envelope naming its type, a fixed overhead per packet that a leaner custom serializer avoids. `Size` (default 16 KiB) is the largest serialized packet in bytes: the engine measures what the serializer makes of a packet to see how much payload fits, and refuses to start with an error in the log if none does. `Window` (default 1) is how many packets may be in flight over one connection at once, and must be at least 1. Every node must be configured alike, since neither side can tell whether the other packetizes. Interface connections are never packetized.
 
 Internally the mappings become a `MessageMap` and a `PacketMap`, whose accessors take the message or packet as an `object`, since that is the boundary every other layer (LiteDB storage, MSMT wire serialization) operates at. A packet member of an engine that never called `Packets` throws `NotSupportedException`, because nothing calls them.
 
@@ -67,10 +67,10 @@ Internally the mappings become a `MessageMap` and a `PacketMap`, whose accessors
 ### App Settings
 
 ```csharp
-engine.AppName("MyApp").AppVersion("1.2.3").KioskMode().HomeText("Welcome").WindowIcon(new Uri("avares://Host/icon.png"));
+engine.AppName("MyApp").AppVersion("1.2.3").KioskMode().HomeText("Welcome").WindowIcon("avares://Host/icon.png");
 ```
 
-This app's own identity and top-level presentation: the display name (also the name of the folder holding the install state), the version shown in the title bar and the info popup, whether the main window runs in kiosk mode (hides window chrome and restricts navigation), the placeholder text shown in the content area when no entry is selected, and the window icon.
+This app's own identity and top-level presentation: the display name (also the name of the folder holding the install state), the version shown in the title bar and the info popup, whether the main window runs in kiosk mode (hides window chrome and restricts navigation), the placeholder text shown in the content area when no entry is selected, and the window icon (an `avares://` URI of an Avalonia asset, or else the path of an image file).
 
 **Default:** the name comes from the entry assembly name; the version is the entry assembly's `major.minor.build` version (`1.0.0` if it has none); kiosk mode is off; the home text is `"HOME"`; the icon is the operating system's.
 
@@ -154,19 +154,18 @@ The current user's info is what decides how this node behaves, so it is read onc
 
 ```csharp
 engine
-    .Identify(connection => new UserIdentity { Name = ... })
-    .ConnectionMessage<MyHello>(connection => new MyHello { ... })
-    .ConnectionResponse<MyWelcome>(connection => new MyWelcome { ... })
-    .ConnectionSerializer(serializer);
+    .Message<MyMessage>(message => message.InitialProcessor<MyMessageIntroduction>())
+    .Packets<MyPacket>(packet => packet.InitialProcessor<MyPacketIntroduction>())
+    .Identify(connection => ...);
 ```
 
-Who is on the other end of a connection, decided as the connection forms. `Identify` is handed a `ConnectionInfo` (for IP the remote host, port and certificate names, for serial the port and address, and the connection message and response when those are configured) and returns a `UserIdentity`, or `null` to let the engine decide. `ConnectionMessage` (with `ConnectionResponse` for an optional reply) makes the node that opens a connection send a message first, and the receiver answer with a response; identification then sees both, so a host can carry a user name, a station or any other detail across the wire. The serializer defaults to one that builds only the two types. The exchange, the framing it puts on the wire, and what the engine does by default are described in [Identification.md](Identification.md). Every node on a network must be configured alike, as with packetization.
+Who is on the other end of a connection, decided as the connection forms. All traffic between nodes is a serialized instance of the configured message type, or of the packet type when packets are configured, and nothing else, so the introduction is too: an `IInitialPacketProcessor<TPacket>` (stated on the packet configuration) and an `IInitialMessageProcessor<TMessage>` (stated on the message configuration) each get `OnConnected` on both nodes when a connection forms, `OnInitial` on the accepting node for each item the opener sent and `OnReply` on the opener for each item the accepting node sent, every time with a controller that can send an item, mark the connection fully connected as a user name, or disconnect it. The packet exchange runs beneath the packetizer and first, the message exchange above it, and the name a processor marks the connection connected as wins; otherwise `Identify` is handed an `IConnectionInfo` (an `IIpConnectionInfo` for IP: the remote host, port and certificate names; an `ISerialConnectionInfo` for serial: the port and addresses; and this node's own `LocalUser`) and returns the user name, or `null` to let the engine decide. The exchange, where it sits in the transport stack, and what the engine does by default are described in [Identification.md](Identification.md). Every node on a network must be configured alike, as with packetization. Processors are stated by type and instantiated through the running engine's dependency injection container (the instance the host registered for the type, or else one constructed from the host's services), once and on first use, so a processor's constructor can take services.
 
-**Default:** the hook returns `null` (the engine identifies an IP connection by its certificate name and a serial connection by its port name), and no connection message or response is stated, so no exchange takes place.
+**Default:** the hook returns `null` (the engine identifies an IP connection by its certificate name and a serial connection by its port name), and no initial packet or message processor is stated, so no exchange takes place.
 
 **Network file:** none, because these are behavior, not settings.
 
-**Sample:** none.
+**Sample:** `SampleEngineConfiguration` states a `SampleIdentityProcessor`: the opener sends a `SamplePacket` whose chunk is its user name (`IConnectionInfo.LocalUser`), the accepting node answers with one carrying its own, and each marks the connection connected as the name it received, so its connections, IP and serial, are identified by the packet instead of by certificate name or port.
 
 ---
 
@@ -230,7 +229,7 @@ engine
     .SecurityLevels(("PUBLIC", "#2E7D32"), ("INTERNAL", "#1565C0"), ("RESTRICTED", "#C62828"));
 ```
 
-Defines the ordered set of security levels a message may be sent at (`Message<TMessage>.SecurityLevel`, see [Message Format](#message-format)): each a display name paired with the hex color shown for it in the title bar's banner (`SecurityLevelBanner`, replacing the fixed orange "DEBUG" banner every user used to see). Order matters: each level ranks higher than the one stated before it, so the last one given is the most senior. A user's level is the `SecurityLevel` on their [user info](#user-info).
+Defines the ordered set of security levels a message may be sent at (`IMessageBuilder<TMessage>.SecurityLevel`, see [Message Format](#message-format)): each a display name paired with the hex color shown for it in the title bar's banner (`SecurityLevelBanner`, replacing the fixed orange "DEBUG" banner every user used to see). Order matters: each level ranks higher than the one stated before it, so the last one given is the most senior. A user's level is the `SecurityLevel` on their [user info](#user-info).
 
 A destination user may only receive a message whose security level their own assigned level ranks at or above: `MessageRoutingService.Route` drops any lower-ranked destination before sending, and the draft editor's security level picker only ever offers the sending user's own level and lower, so a message can be deliberately declassified but never sent above the sender's own clearance. Turning the feature off entirely is just leaving `SecurityLevels` empty (the default): every message maps to an empty security level, the picker is hidden, and no destination is ever blocked for lacking one.
 
@@ -245,10 +244,12 @@ A destination user may only receive a message whose security level their own ass
 ### Print Policy
 
 ```csharp
-engine.PrintReceived().PrintCount<MyMessage>(message => message.IsAlert ? 2 : 1);
+engine
+    .PrintReceived()
+    .Message<MyMessage>(message => message.PrintCount(m => m.IsAlert ? 2 : 1));
 ```
 
-The print manager's automatic "print received" behavior: whether its toggle starts enabled, automatically adding every received message to the print queue from the moment the app starts (the user can still toggle it at any time), and how many times each received message is added to the print queue while it is (`0` to not print it, `1` once, `2` for two copies, and so on). Consulted once per received message via `IEntryService.MessageInserted`. `PrintCount` is generic over the host's message type so the rule receives the message typed; the engine casts once on the host's behalf.
+The print manager's automatic "print received" behavior: whether its toggle starts enabled, automatically adding every received message to the print queue from the moment the app starts (the user can still toggle it at any time), and how many times each received message is added to the print queue while it is (`0` to not print it, `1` once, `2` for two copies, and so on). Consulted once per received message via `IEntryService.MessageInserted`. `PrintCount` is stated on the message configuration, so the rule receives the message typed; the engine casts once on the host's behalf.
 
 **Default:** off / `1` for every message.
 
@@ -279,6 +280,7 @@ Whether the user can delete entries in a given root folder type (`FolderType.Inb
 ```csharp
 engine.ExportFormat(
     "CSV",
+    type => type is FolderType.Inbox or FolderType.Outbox,
     async (entry, stream, cancellation) =>
     {
         if (entry is MessageExportData message)
@@ -286,8 +288,7 @@ engine.ExportFormat(
             await using StreamWriter writer = new(stream, leaveOpen: true);
             await writer.WriteLineAsync($"{message.SentAt:O},{message.FromUser},{message.Subject}");
         }
-    },
-    entryTypes: type => type is FolderType.Inbox or FolderType.Outbox);
+    });
 ```
 
 Adds a custom export format, shown as an option in the export screen's format picker alongside the built-in JSON
@@ -295,7 +296,7 @@ format (see `Docs/Components/ViewModels.md`, `IExportViewModel`). The serializer
 `MessageExportData`, `DraftExportData`, `NoteExportData`, or `ActivityLogExportData` depending on which root
 folder type it came from, the exact same public DTOs the engine's own built-in JSON export writes - and a stream
 to write it to; a host that only handles some entry types checks the runtime type (as above) or narrows what it
-ever receives at all with `entryTypes`. `entryTypes`, when stated, also determines which entries `ExportService.Export`
+ever receives at all with the overload taking `entryTypes`, which comes before the serializer; the serializer and the import reader are always the last argument. `entryTypes`, when stated, also determines which entries `ExportService.Export`
 leaves out of the archive entirely for this format, so an excluded entry's data is never touched, not merely
 unwritten. Each entry's file inside the export zip gets an extension derived from the format's own name (lowercased,
 stripped to letters and digits - `"CSV"` above becomes `.csv`), so files stay recognizable to whatever tool a host
@@ -320,6 +321,8 @@ format instead.
 ```csharp
 engine.ImportFormat(
     "CSV",
+    StagedSendMode.Sequential,
+    TimeSpan.FromSeconds(1),
     async (stream, context, cancellation) =>
     {
         using StreamReader reader = new(stream, leaveOpen: true);
@@ -330,9 +333,7 @@ engine.ImportFormat(
             if (parts.Length < 3) { continue; }
             context.AddStagedSend(new StagedSendData { Subject = parts[0], Body = parts[2], Addresses = [new AddressRequest { UserName = parts[1] }] });
         }
-    },
-    stagedSendMode: StagedSendMode.Sequential,
-    stagedSendDelay: TimeSpan.FromSeconds(1));
+    });
 ```
 
 Adds a custom import format, shown as an option in the import screen's format picker alongside the built-in
@@ -365,17 +366,17 @@ Calling `ImportFormat` again with the same name (case-insensitive) replaces that
 **Network file:** none; formats are behavior, not settings.
 
 **Sample:** a `"CSV"` format reading `Subject,User,Body` lines and staging one send per line, sent one at a time
-a second apart (`StagedSendMode.Sequential`, `stagedSendDelay: TimeSpan.FromSeconds(1)`).
+a second apart (`StagedSendMode.Sequential`, a one second `stagedSendDelay`).
 
 ---
 
 ### Auto Forward Controllers
 
 ```csharp
-engine.AutoForwardController<MyMessage>(
+engine.Message<MyMessage>(message => message.AutoForward(
     "Escalation",
     users: ["Alice", "Bob"],
-    filter: message => message.Priority >= 2);
+    filter: m => m.Priority >= 2));
 ```
 
 Adds a custom auto forward controller, shown as an option in the auto forward screen to every user named in
@@ -383,8 +384,7 @@ Adds a custom auto forward controller, shown as an option in the auto forward sc
 from freely, persisted between restarts (see `Docs/Components/ViewModels.md`, `IAutoForwardViewModel`). Whenever
 this instance receives a message `filter` accepts, it is forwarded automatically, unchanged in subject and body,
 to every user currently on that target list - no action needed from the user beyond having set the target list up
-once. `filter` receives the message as an instance of the configured message type, the same as
-`PrintCount<TMessage>`; it is never consulted for a user with no access to the controller, or whose target list is
+once. `filter` receives the message typed, since the controller is stated on the message configuration like `PrintCount`; it is never consulted for a user with no access to the controller, or whose target list is
 currently empty, so an inaccessible or unconfigured controller costs nothing per received message beyond that one
 check. The controller's own name is never sent as one of the forwarded message's own addresses, even if a user
 adds themselves to their own target list, avoiding a self-forward loop. Calling this again with the same name
@@ -531,56 +531,42 @@ Each external system is constructed directly by the configuration, not resolved 
 
 ---
 
-### Connection & Message Hooks
+### Network Processor
 
 ```csharp
-engine
-    .OnUserConnected(context => context.SendMessage(new MyMessage { ... }))
-    .OnUserDisconnected(context =>
-    {
-        foreach (UserInfo user in context.ConnectedUsers) { context.SendMessage(new MyMessage { ... }); }
-    })
-    .OnMessageReceived(context =>
-    {
-        MyMessage message = (MyMessage)context.Message;
-        if (message.Body.Contains("ping", StringComparison.OrdinalIgnoreCase))
-        {
-            context.SendMessage(new MyMessage { ... });
-        }
-    });
+engine.Message<MyMessage>(message => message.Processor<MyNetworkProcessor>());
+
+public sealed class MyNetworkProcessor : INetworkProcessor<MyMessage>
+{
+    public Task OnConnected(INetworkConnectedContext<MyMessage> context) { ... }
+    public Task OnDisconnected(INetworkDisconnectedContext<MyMessage> context) { ... }
+    public Task OnReceived(INetworkReceivedContext<MyMessage> context) { ... }
+}
 ```
 
-Runs host code in reaction to peer activity, independent of any UI: `OnUserConnected`/`OnUserDisconnected` fire once
+Runs host code in reaction to peer activity, independent of any UI: `OnConnected`/`OnDisconnected` fire once
 each time a user goes from unreachable to reachable over at least one live peer connection, or the other way
-around (see [Peer.md](Peer.md#connection--message-hooks) for exactly what counts as "a live connection" for each
-`UserRole`), handed an `IUserConnectionHookContext` whose `TargetUser` names that user; `OnMessageReceived` fires
-for every new (non-confirmation) message this instance receives, handed an `IMessageReceivedHookContext` whose
-`Message` is that message, as an instance of the configured message type - the same as anywhere else a host's own
-message type crosses the engine boundary, a hook never sees an internal representation of it. Both context types
-extend the common `IEngineHookContext`: `CurrentUser` (this instance's own installed user), `Users`/`ConnectedUsers`
+around (see [Peer.md](Peer.md#network-processor) for exactly what counts as "a live connection" for each
+`UserRole`), handed an `INetworkConnectedContext<TMessage>` or `INetworkDisconnectedContext<TMessage>` whose `TargetUser` names that user; `OnReceived` fires
+for every new (non-confirmation) message this instance receives, handed an `INetworkReceivedContext<TMessage>` whose
+`Message` is that message, typed as the host's own message type - a processor never sees an internal representation of it. The processor is
+stated on the message configuration (`Message`), so every context is generic over that type. Every processor context, network and initial exchange alike, extends the common `IEngineContext`; the network ones add `Send` through `INetworkContext<TMessage>`: `CurrentUser` (this instance's own installed user), `Users`/`ConnectedUsers`
 (every known user, and the subset of them currently reachable, each as a `UserInfo` carrying its directly-assigned
-group memberships but no real installation code), `IsConnected(userName)`, and two ways to originate new outbound
-traffic:
+group memberships but no real installation code), `IsConnected(userName)`, and `Send(TMessage message)`, which originates a new
+outbound message: its message ID, sender, and sent time are overwritten before it is routed (mirroring
+`IServiceConnection.SendMessage`'s own field handling), so a processor only needs to set the content fields. It is
+fire-and-forget: a processor does not track or await the send, so it returns nothing, and a failed send is logged rather than
+thrown back. Each processor method runs in the background and is not awaited by the engine;
+an exception it throws is logged and never stops a later event from being handled. Each event gets one freshly-built context, so the
+processor sees a consistent snapshot.
 
-- `SendMessage(object message)` - `message` must be an instance of the configured message type; its message ID,
-  sender, and sent time are overwritten before it is routed (mirroring `IServiceConnection.SendMessage`'s own
-  field handling), so a hook only needs to set the content fields.
-- `SendPacket(object packet, params IEnumerable<string> userNames)` - sends a raw, already-built packet (an
-  instance of the configured packet type; throws if none is configured, or if the packet type doesn't match)
-  directly to each named user, bypassing the normal packetization/reassembly a full message goes through and
-  routing's address expansion entirely, since a packet carries no address list of its own.
+The processor is stated by type and instantiated through the running engine's dependency injection container, so its constructor can take services.
 
-Both are fire-and-forget: a hook does not track or await the send it makes, so neither returns anything, and a
-failed send is logged rather than thrown back into the hook. Calling a builder method more than once adds another
-hook rather than replacing the last one: every hook added for an event runs, in the order added, each time it
-fires, all handed the same context instance so they see a consistent snapshot. A hook that throws is logged and
-never stops the rest, of that firing or a later one, from running.
+**Default:** no network processor; `EngineHooksService` (which runs it) does nothing when none is configured.
 
-**Default:** no hooks of any kind; `EngineHooksService` (which runs them) does nothing when none are configured.
+**Network file:** none; a processor is behavior, not a setting.
 
-**Network file:** none; hooks are behavior, not settings.
-
-**Sample:** `SampleEngineConfiguration` sends a newly connected user a welcome message naming who else is currently online (`ConnectedUsers`), tells everyone still online when someone disconnects, and auto-replies `PONG` to any received message tagged `PING` - all via `SendMessage`, so every hook's effect shows up as an ordinary message in the recipient's Inbox rather than a log line only visible from the host process's own console.
+**Sample:** `SampleNetworkProcessor` sends a newly connected user a welcome message naming who else is currently online (`ConnectedUsers`), tells everyone still online when someone disconnects, and auto-replies `PONG` to any received message tagged `PING` - all via `Send`, so every reaction shows up as an ordinary message in the recipient's Inbox rather than a log line only visible from the host process's own console.
 
 ---
 

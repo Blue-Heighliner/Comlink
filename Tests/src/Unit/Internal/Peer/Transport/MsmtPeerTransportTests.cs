@@ -218,8 +218,8 @@ public sealed class MsmtPeerTransportTests
         Assert.NotNull(published);
         Assert.False(published.IsInbound);
         Assert.Equal(target, published.Point);
-        Assert.Equal("10.0.0.5", published.Info.Host);
-        Assert.Equal(4000, published.Info.Port);
+        Assert.Equal("10.0.0.5", ((IIpConnectionInfo)published.Info).Host);
+        Assert.Equal(4000, ((IIpConnectionInfo)published.Info).Port);
     }
 
     /// <summary>Reusing a cached connection for a second request does not publish a second Connected event.</summary>
@@ -252,8 +252,8 @@ public sealed class MsmtPeerTransportTests
         Assert.NotNull(connection);
         Assert.True(connection.IsInbound);
         Assert.Null(connection.Point);
-        Assert.Equal("CN=Alice", connection.Info.CertificateSubject);
-        Assert.Equal(["Alice"], connection.Info.CertificateNames);
+        Assert.Equal("CN=Alice", ((IIpConnectionInfo)connection.Info).CertificateSubject);
+        Assert.Equal(["Alice"], ((IIpConnectionInfo)connection.Info).CertificateNames);
     }
 
     /// <summary>Dropping the published connection disposes the underlying MSMT connection.</summary>
@@ -338,7 +338,7 @@ public sealed class MsmtPeerTransportTests
         fx.Disconnected.Publish(new MsmtDisconnection { Connection = known.Object });
 
         PeerConnection connection = Assert.Single(disconnected);
-        Assert.Equal("CN=Alice", connection.Info.CertificateSubject);
+        Assert.Equal("CN=Alice", ((IIpConnectionInfo)connection.Info).CertificateSubject);
     }
 
     /// <summary>Closing an point drops its live outbound connection and makes requests to it fail without dialing MSMT; other points are unaffected.</summary>
@@ -495,7 +495,7 @@ public sealed class MsmtPeerTransportTests
 
         fx.Connected.Publish(InboundConnection("CN=Alice, O=Org, CN=Alias").Object);
 
-        Assert.Equal(["Alice", "Alias"], connection!.Info.CertificateNames);
+        Assert.Equal(["Alice", "Alias"], ((IIpConnectionInfo)connection!.Info).CertificateNames);
     }
 
     /// <summary>Disposing the transport disposes the MSMT peer.</summary>

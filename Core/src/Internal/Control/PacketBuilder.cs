@@ -9,6 +9,9 @@ internal sealed class PacketBuilder<TPacket> : IPacketBuilder<TPacket> where TPa
     private int size = 16 * 1024;
     private int window = 1;
 
+    /// <summary>The initial packet processor, if stated.</summary>
+    public ProcessorRegistration<IInitialProcessor>? Initial { get; private set; }
+
     /// <inheritdoc />
     public IPacketBuilder<TPacket> PayloadId(Func<TPacket, int> get, Action<TPacket, int> set) => Map(nameof(PayloadId), get, set);
 
@@ -61,6 +64,13 @@ internal sealed class PacketBuilder<TPacket> : IPacketBuilder<TPacket> where TPa
     public IPacketBuilder<TPacket> Create(Func<TPacket> create)
     {
         this.create = create;
+        return this;
+    }
+
+    /// <inheritdoc />
+    public IPacketBuilder<TPacket> InitialProcessor<TProcessor>() where TProcessor : IInitialPacketProcessor<TPacket>
+    {
+        Initial = new ProcessorRegistration<IInitialProcessor>(typeof(TProcessor), processor => new InitialPacketProcessorAdapter<TPacket>((IInitialPacketProcessor<TPacket>)processor));
         return this;
     }
 
