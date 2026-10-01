@@ -5,8 +5,6 @@ internal interface IMessageViewModel
 {
     /// <summary>Gets the unique message identifier.</summary>
     string MessageId { get; }
-    /// <summary>Gets the message subject line.</summary>
-    string Subject { get; }
     /// <summary>Gets the message body text.</summary>
     string Body { get; }
     /// <summary>Gets the name of the user that originated the message.</summary>
@@ -104,7 +102,6 @@ internal sealed partial class MessageViewModel : ObservableObject, IMessageViewM
     public MessageViewModel(MessageEntity entity, IEngineController engineController)
     {
         MessageId = entity.MessageId;
-        Subject = engineController.GetSubject(entity.Message);
         Body = engineController.GetBody(entity.Message);
         FromUser = engineController.GetFromUser(entity.Message);
         ReceivedAt = entity.ReceivedAt;
@@ -145,8 +142,6 @@ internal sealed partial class MessageViewModel : ObservableObject, IMessageViewM
 
     /// <summary>Gets the unique message identifier.</summary>
     public string MessageId { get; }
-    /// <summary>Gets the message subject line.</summary>
-    public string Subject { get; }
     /// <summary>Gets the message body text.</summary>
     public string Body { get; }
     /// <summary>Gets the name of the user that originated the message.</summary>

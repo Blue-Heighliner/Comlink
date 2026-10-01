@@ -16,11 +16,11 @@ internal interface IEntryService
     /// <summary>Raised after an Inbox message's <see cref="MessageEntity.ReadStatus"/> transitions from <c>Received</c> to <c>Read</c>.</summary>
     event Func<MessageEntity, Task>? MessageRead;
     /// <summary>Persists a sent message to the Outbox folder, including per-user delivery status entries.</summary>
-    Task<MessageEntity> StoreSentMessage(string messageId, string subject, string body, List<AddressData> addresses, DateTime sentAt, IReadOnlyList<UserDeliveryResult> userResults, bool isAlert = false, int priority = 0, string tag = "", string securityLevel = "");
+    Task<MessageEntity> StoreSentMessage(string messageId, string body, List<AddressData> addresses, DateTime sentAt, IReadOnlyList<UserDeliveryResult> userResults, bool isAlert = false, int priority = 0, string tag = "", string securityLevel = "");
     /// <summary>Updates the delivery status for a specific user on the Outbox record, ignoring a status that would move it backward (for example a late "Sent" after "Confirmed"); user names match case-insensitively.</summary>
     Task<MessageEntity?> UpdateDeliveryStatus(string messageId, string userName, DestinationStatus status);
     /// <summary>Persists a received message to the Inbox folder with <see cref="MessageEntity.ReadStatus"/> set to <see cref="DestinationStatus.Received"/>, and raises <see cref="MessageInserted"/>.</summary>
-    Task<MessageEntity> StoreIncomingMessage(string messageId, string fromUser, string subject, string body, List<AddressData> addresses, DateTime sentAt, bool isAlert = false, int priority = 0, string tag = "", string securityLevel = "");
+    Task<MessageEntity> StoreIncomingMessage(string messageId, string fromUser, string body, List<AddressData> addresses, DateTime sentAt, bool isAlert = false, int priority = 0, string tag = "", string securityLevel = "");
     /// <summary>Returns whether the Inbox already holds a record for <paramref name="messageId"/>.</summary>
     Task<bool> IncomingMessageExists(string messageId);
     /// <summary>
@@ -40,7 +40,7 @@ internal interface IEntryService
     /// <summary>
     /// Returns a page of messages from the specified folder together with the total message count. A non-empty
     /// <paramref name="filter"/> matches <see cref="EntryFilter.Search"/> case-insensitively against the message's
-    /// subject, sender, destinations, tag, priority label and security level name; <see cref="EntryFilter.DateFrom"/>/<see cref="EntryFilter.DateTo"/>
+    /// body, sender, destinations, tag, priority label and security level name; <see cref="EntryFilter.DateFrom"/>/<see cref="EntryFilter.DateTo"/>
     /// bound its received date; <see cref="EntryFilter.Author"/> matches its sender and <see cref="EntryFilter.Destination"/> any addressee (both by substring); <see cref="EntryFilter.SecurityLevel"/>/<see cref="EntryFilter.Priority"/>/<see cref="EntryFilter.AlertOnly"/>
     /// match exactly. Filtering loads the whole folder rather than paginating the LiteDB query directly, since a
     /// message's fields live inside the host's own opaque frame type and cannot be queried in the database.
@@ -48,7 +48,7 @@ internal interface IEntryService
     Task<(List<MessageEntity> Items, int Total)> GetMessages(string folderId, int page, EntryFilter? filter = null);
     /// <summary>
     /// Returns a page of drafts from the specified folder together with the total draft count. A non-empty
-    /// <paramref name="filter"/> matches <see cref="EntryFilter.Search"/> against subject or tag;
+    /// <paramref name="filter"/> matches <see cref="EntryFilter.Search"/> against body or tag;
     /// <see cref="EntryFilter.DateFrom"/>/<see cref="EntryFilter.DateTo"/> bound the last-modified date;
     /// <see cref="EntryFilter.Destination"/> matches any addressee by substring;
     /// <see cref="EntryFilter.SecurityLevel"/>/<see cref="EntryFilter.Priority"/>/<see cref="EntryFilter.AlertOnly"/> match exactly.
@@ -144,11 +144,10 @@ internal sealed class EntryService : IEntryService
         _ => 4
     };
 
-    private object BuildMessage(string messageId, string fromUser, string subject, string body, List<AddressData> addresses, DateTime sentAt, bool isAlert, int priority, string tag, string securityLevel)
+    private object BuildMessage(string messageId, string fromUser, string body, List<AddressData> addresses, DateTime sentAt, bool isAlert, int priority, string tag, string securityLevel)
     {
         object message = engineController.CreateMessage(new MessageCreateContext
         {
-            Subject = subject,
             Body = body,
             IsAlert = isAlert,
             Priority = priority,
@@ -163,13 +162,13 @@ internal sealed class EntryService : IEntryService
     }
 
     /// <summary>Persists a sent message to the Outbox folder, including per-user delivery status entries.</summary>
-    public async Task<MessageEntity> StoreSentMessage(string messageId, string subject, string body, List<AddressData> addresses, DateTime sentAt, IReadOnlyList<UserDeliveryResult> userResults, bool isAlert = false, int priority = 0, string tag = "", string securityLevel = "")
+    public async Task<MessageEntity> StoreSentMessage(string messageId, string body, List<AddressData> addresses, DateTime sentAt, IReadOnlyList<UserDeliveryResult> userResults, bool isAlert = false, int priority = 0, string tag = "", string securityLevel = "")
     {
         string outboxId = await folders.GetRootId(FolderType.Outbox);
         await deliveryLock.WaitAsync();
         try
         {
-            return await InsertSentMessage(messageId, subject, body, addresses, sentAt, userResults, isAlert, priority, tag, securityLevel, outboxId);
+            return await InsertSentMessage(messageId, body, addresses, sentAt, userResults, isAlert, priority, tag, securityLevel, outboxId);
         }
         finally
         {
@@ -177,7 +176,7 @@ internal sealed class EntryService : IEntryService
         }
     }
 
-    private async Task<MessageEntity> InsertSentMessage(string messageId, string subject, string body, List<AddressData> addresses, DateTime sentAt, IReadOnlyList<UserDeliveryResult> userResults, bool isAlert, int priority, string tag, string securityLevel, string outboxId)
+    private async Task<MessageEntity> InsertSentMessage(string messageId, string body, List<AddressData> addresses, DateTime sentAt, IReadOnlyList<UserDeliveryResult> userResults, bool isAlert, int priority, string tag, string securityLevel, string outboxId)
     {
         List<DeliveryStatus> deliveryStatuses = [];
         foreach (UserDeliveryResult result in userResults)
@@ -194,7 +193,7 @@ internal sealed class EntryService : IEntryService
         MessageEntity entity = new()
         {
             MessageId = messageId,
-            Message = BuildMessage(messageId, currentUserProvider.UserName ?? string.Empty, subject, body, addresses, sentAt, isAlert, priority, tag, securityLevel),
+            Message = BuildMessage(messageId, currentUserProvider.UserName ?? string.Empty, body, addresses, sentAt, isAlert, priority, tag, securityLevel),
             DeliveryStatuses = deliveryStatuses,
             ReceivedAt = sentAt,
             FolderId = outboxId,
@@ -248,13 +247,13 @@ internal sealed class EntryService : IEntryService
     }
 
     /// <summary>Persists a received message to the Inbox folder and raises <see cref="MessageInserted"/>.</summary>
-    public async Task<MessageEntity> StoreIncomingMessage(string messageId, string fromUser, string subject, string body, List<AddressData> addresses, DateTime sentAt, bool isAlert = false, int priority = 0, string tag = "", string securityLevel = "")
+    public async Task<MessageEntity> StoreIncomingMessage(string messageId, string fromUser, string body, List<AddressData> addresses, DateTime sentAt, bool isAlert = false, int priority = 0, string tag = "", string securityLevel = "")
     {
         string inboxId = await folders.GetRootId(FolderType.Inbox);
         MessageEntity entity = new()
         {
             MessageId = messageId,
-            Message = BuildMessage(messageId, fromUser, subject, body, addresses, sentAt, isAlert, priority, tag, securityLevel),
+            Message = BuildMessage(messageId, fromUser, body, addresses, sentAt, isAlert, priority, tag, securityLevel),
             ReceivedAt = sentAt,
             FolderId = inboxId,
             ReadStatus = DestinationStatus.Received
@@ -385,7 +384,7 @@ internal sealed class EntryService : IEntryService
 
         string destinations = string.Join(" ", engineController.GetAddresses(message).Select(a => a.UserName));
         string priorityLabel = engineController.Priorities.GetLabel(engineController.GetPriority(message));
-        return Contains(engineController.GetSubject(message), search)
+        return Contains(engineController.GetBody(message), search)
             || Contains(engineController.GetFromUser(message), search)
             || Contains(destinations, search)
             || Contains(engineController.GetTag(message), search)
@@ -401,7 +400,7 @@ internal sealed class EntryService : IEntryService
         if (filter.AlertOnly is true && !entity.IsAlert) { return false; }
         if (filter.SecurityLevel is { } level && !string.Equals(entity.SecurityLevel, level, StringComparison.OrdinalIgnoreCase)) { return false; }
         if (!string.IsNullOrWhiteSpace(filter.Destination) && !entity.Addresses.Any(a => Contains(a.UserName, filter.Destination.Trim()))) { return false; }
-        return string.IsNullOrWhiteSpace(filter.Search) || Contains(entity.Subject, filter.Search) || Contains(entity.Tag, filter.Search);
+        return string.IsNullOrWhiteSpace(filter.Search) || Contains(entity.Body, filter.Search) || Contains(entity.Tag, filter.Search);
     }
 
     private static bool MatchesNote(NoteEntity entity, EntryFilter filter)

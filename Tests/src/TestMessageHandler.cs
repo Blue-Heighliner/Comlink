@@ -10,16 +10,12 @@ public sealed class TestMessageHandler : IMessageHandler<TestFrame>
     public TestFrame Create(MessageCreateContext context)
         => new()
         {
-            Subject = context.Subject,
             Body = context.Body,
             IsAlert = context.IsAlert,
             Priority = context.Priority,
             Tag = context.Tag,
             SecurityLevel = context.SecurityLevel
         };
-
-    /// <inheritdoc />
-    public string GetSubject(TestFrame frame) => frame.Subject;
 
     /// <inheritdoc />
     public string GetBody(TestFrame frame) => frame.Body;

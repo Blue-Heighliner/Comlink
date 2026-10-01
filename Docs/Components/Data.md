@@ -45,7 +45,6 @@ erDiagram
     DraftEntity {
         ObjectId Id PK
         string FolderId FK
-        string Subject
         bool IsSent
         DateTime ModifiedAt
     }
@@ -76,7 +75,7 @@ Stored in both Inbox (received) and Outbox (sent).
 |-------|------|-------|
 | `Id` | `ObjectId` | LiteDB auto-ID (the actual primary key) |
 | `MessageId` | `string` | Denormalized from `Message` (via `IEngineController.GetFrameId`) so LiteDB can query/index on it directly. **Not unique** — see below |
-| `Message` | `object` | The message content — subject, body, sender, addresses, sent time — as an instance of `IEngineController.FrameType`. This is the canonical representation; LiteDB serializes it using its own runtime type (via its built-in `object`-property polymorphism, storing a `_type` discriminator) and reconstructs the same concrete type on load. Read its logical fields through the registered `IEngineController` — see `Docs/Components/Peer.md` and `Docs/Components/Configuration.md`. |
+| `Message` | `object` | The message content — body, sender, addresses, sent time — as an instance of `IEngineController.FrameType`. This is the canonical representation; LiteDB serializes it using its own runtime type (via its built-in `object`-property polymorphism, storing a `_type` discriminator) and reconstructs the same concrete type on load. Read its logical fields through the registered `IEngineController` — see `Docs/Components/Peer.md` and `Docs/Components/Configuration.md`. |
 | `DeliveryStatuses` | `List<DeliveryStatus>` | Per-user delivery state (Outbox messages) |
 | `ReadStatus` | `DestinationStatus?` | Inbox-only: `Received` when stored, `Read` once the user opens it (see `Docs/Components/Peer.md#receipts`). Always `null` on Outbox records — per-destination read state lives in `DeliveryStatuses` instead |
 | `ReceivedAt` | `DateTime` | UTC timestamp; denormalized from `Message`'s sent time so LiteDB can sort/index on it directly |
@@ -90,7 +89,6 @@ Stored in both Inbox (received) and Outbox (sent).
 | Field | Type | Notes |
 |-------|------|-------|
 | `Id` | `ObjectId` | LiteDB auto-ID |
-| `Subject` | `string` | |
 | `Body` | `string` | Plain text representation |
 | `BodySegmentsJson` | `string` | JSON array of `DraftBodySegmentData` — used for fill-ins |
 | `Addresses` | `List<AddressData>` | |
@@ -173,7 +171,7 @@ All repositories take `LiteDbContext` by constructor. All public methods are `Ta
 
 | Method | Description |
 |--------|-------------|
-| `GetPage(folderId, page, alphabetical)` | Alphabetical by subject or by `ModifiedAt` descending |
+| `GetPage(folderId, page, alphabetical)` | Alphabetical by body or by `ModifiedAt` descending |
 | `Count(folderId)` | |
 | `Get(id)` | |
 | `Insert / Update / Delete` | |

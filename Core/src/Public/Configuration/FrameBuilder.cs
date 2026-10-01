@@ -53,7 +53,7 @@ public interface IFrameBuilder<TFrame> where TFrame : class, new()
     /// Adds a custom auto forward controller, shown as an option in the client's auto forward screen to every user
     /// named in <paramref name="users"/>. Any of them can open it there and maintain their own locally-saved target
     /// list (added to and removed from freely, persisted between restarts); whenever this instance receives a
-    /// message (a frame the message handler recognizes; other frames are never forwarded) that <paramref name="filter"/> accepts, it is automatically forwarded, unchanged in subject and
+    /// message (a frame the message handler recognizes; other frames are never forwarded) that <paramref name="filter"/> accepts, it is automatically forwarded, unchanged in
     /// body, to every user currently on that target list - no action needed beyond having set the target list up
     /// once. <paramref name="filter"/> is never consulted for a user with no access, or with an empty target list,
     /// so an inaccessible or unconfigured controller costs nothing per received message beyond that one check.

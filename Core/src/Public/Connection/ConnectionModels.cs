@@ -7,8 +7,6 @@ public sealed class MessageReceivedEvent
     public string MessageId { get; set; } = string.Empty;
     /// <summary>User name of the sender.</summary>
     public string FromUser { get; set; } = string.Empty;
-    /// <summary>Message subject line.</summary>
-    public string Subject { get; set; } = string.Empty;
     /// <summary>Message body text.</summary>
     public string Body { get; set; } = string.Empty;
     /// <summary>Address list associated with the message.</summary>

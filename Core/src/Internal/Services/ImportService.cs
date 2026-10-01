@@ -17,7 +17,7 @@ internal interface IImportService
     /// <list type="bullet">
     /// <item>A message matching an existing message's ID, direction, and date is skipped.</item>
     /// <item>
-    /// A draft/note matching an existing entry's name (subject, or note first line) invokes
+    /// A draft/note matching an existing entry's name (first line of the body) invokes
     /// <paramref name="resolveConflict"/> to ask how to proceed, unless a prior conflict in this same call
     /// was resolved as <see cref="DraftNoteConflictResolution.OverwriteAll"/>, in which case it is
     /// overwritten without asking.
@@ -38,8 +38,6 @@ internal interface IImportService
 /// <summary>Lists export packages on a drive and restores their entries into the local database.</summary>
 internal sealed class ImportService : IImportService
 {
-    private static string FirstLine(string? body) => (body ?? string.Empty).Split('\n').FirstOrDefault()?.Trim() ?? string.Empty;
-
     private static List<AddressData> ToAddressData(List<AddressRequest> addresses)
         => [.. addresses.Select(a => new AddressData { UserName = a.UserName, Type = a.Type, Information = a.Information })];
 
@@ -169,7 +167,6 @@ internal sealed class ImportService : IImportService
 
         object message = engineController.CreateMessage(new MessageCreateContext
         {
-            Subject = data.Subject,
             Body = data.Body,
             IsAlert = data.IsAlert,
             Priority = data.Priority,
@@ -203,13 +200,12 @@ internal sealed class ImportService : IImportService
         Func<bool> getOverwriteAll,
         Action<bool> setOverwriteAll)
     {
-        string subject = data.Subject.Trim();
-        DraftEntity? existing = (await drafts.GetAll()).FirstOrDefault(d => d.Subject.Trim() == subject);
+        string name = data.Body.FirstLine;
+        DraftEntity? existing = (await drafts.GetAll()).FirstOrDefault(d => d.Body.FirstLine == name);
         if (existing is null)
         {
             DraftEntity entity = new()
             {
-                Subject = data.Subject,
                 Body = data.Body,
                 BodySegmentsJson = data.BodySegmentsJson ?? string.Empty,
                 Addresses = ToAddressData(data.Addresses),
@@ -226,7 +222,7 @@ internal sealed class ImportService : IImportService
 
         DraftNoteConflictResolution resolution = getOverwriteAll()
             ? DraftNoteConflictResolution.OverwriteAll
-            : await resolveConflict(new ImportConflict { EntryType = EntryType.Draft, Name = subject });
+            : await resolveConflict(new ImportConflict { EntryType = EntryType.Draft, Name = name });
 
         if (resolution == DraftNoteConflictResolution.KeepExisting)
         {
@@ -238,7 +234,6 @@ internal sealed class ImportService : IImportService
             setOverwriteAll(true);
         }
 
-        existing.Subject = data.Subject;
         existing.Body = data.Body;
         existing.BodySegmentsJson = data.BodySegmentsJson ?? string.Empty;
         existing.Addresses = ToAddressData(data.Addresses);
@@ -258,8 +253,8 @@ internal sealed class ImportService : IImportService
         Func<bool> getOverwriteAll,
         Action<bool> setOverwriteAll)
     {
-        string firstLine = FirstLine(data.Body);
-        NoteEntity? existing = (await notes.GetAll()).FirstOrDefault(n => FirstLine(n.Body) == firstLine);
+        string firstLine = data.Body.FirstLine;
+        NoteEntity? existing = (await notes.GetAll()).FirstOrDefault(n => n.Body.FirstLine == firstLine);
         if (existing is null)
         {
             NoteEntity entity = new() { Body = data.Body, FolderId = await folders.GetRootId(FolderType.Notes) };

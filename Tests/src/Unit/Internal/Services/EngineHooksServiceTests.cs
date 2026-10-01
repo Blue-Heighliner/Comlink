@@ -203,7 +203,7 @@ public sealed class EngineHooksServiceTests
         using CancellationTokenSource cts = new();
         Task startTask = service.Start(cts.Token);
         await Task.Delay(20);
-        TestFrame payload = new() { MessageId = "M1", FromUser = "SENDER", Subject = "Hi", Body = "Hello" };
+        TestFrame payload = new() { MessageId = "M1", FromUser = "SENDER", Body = "Hello" };
 
         await peer.FireMessageDelivered(payload);
 
@@ -305,7 +305,7 @@ public sealed class EngineHooksServiceTests
     public async Task Context_Send_CorrectType_RoutesInBackgroundFromCurrentUser()
     {
         (EngineHooksService service, FakePeerService peer, Mock<TestEngineController> engineController, _, FakeMessageRoutingService routing) = Build();
-        TestFrame message = new() { Subject = "Hi" };
+        TestFrame message = new() { };
         Handler(engineController).Connected.AddRange([
             context => context.Send(message)
         ]);

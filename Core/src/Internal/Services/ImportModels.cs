@@ -10,14 +10,14 @@ internal sealed record ImportPackageInfo
 }
 
 /// <summary>
-/// A draft or note being imported whose name (subject, or note first line) matches an entry that already
+/// A draft or note being imported whose name (first line of the body) matches an entry that already
 /// exists, requiring the user to choose how to proceed.
 /// </summary>
 internal sealed record ImportConflict
 {
     /// <summary>Gets the type of the conflicting entry — always <see cref="Data.EntryType.Draft"/> or <see cref="Data.EntryType.Note"/>.</summary>
     public required EntryType EntryType { get; init; }
-    /// <summary>Gets the matching name — the draft's subject, or the note's first line.</summary>
+    /// <summary>Gets the matching name — the first line of the draft's or note's body.</summary>
     public required string Name { get; init; }
 }
 

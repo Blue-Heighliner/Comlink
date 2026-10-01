@@ -109,7 +109,7 @@ internal sealed class HelpViewModel : IHelpViewModel
         List<HelpSection> sections =
         [
             new HelpSection("Starting a message", "Press NEW DRAFT. Type the name of each recipient in the address box and press ADD. Choose To or CC for each one first. Names complete as you type, and you can also address a group, which delivers to everyone in it once."),
-            new HelpSection("Writing it", "Give the message a subject and write the body. The FILL-IN button puts a blank in the text at the cursor. Click the blank to build a list of options for it and choose the one to use."),
+            new HelpSection("Writing it", "Write the message. The first line is what the entry listing shows. The FILL-IN button puts a blank in the text at the cursor. Click the blank to build a list of options for it and choose the one to use."),
             new HelpSection("Spelling out letters and digits", "The PLSO button cycles OFF, ON and SPACES. While it is on, each letter or digit you type is written as its phonetic word, for example G as GOLF and 5 as FIVE, with a space after each word in SPACES. Backspace removes a whole word at a time.")
         ];
 

@@ -404,7 +404,7 @@ internal sealed partial class EntryBarViewModel : ObservableObject, IEntryBarVie
                     {
                         string timeText = m.ReceivedAt.ToString("dd-MMM-yyyy HH:mm").ToUpperInvariant();
                         EntryItemViewModel item = new(m.MessageId, engineController.GetFromUser(m.Message), EntryType.Message, m.ReceivedAt,
-                            secondaryText: engineController.GetSubject(m.Message), priorityText: GetPriorityLabel(m.Message), tagText: GetTagLabel(m.Message), timeText: timeText,
+                            secondaryText: engineController.GetBody(m.Message).FirstLine, priorityText: GetPriorityLabel(m.Message), tagText: GetTagLabel(m.Message), timeText: timeText,
                             securityLevelColorHex: GetSecurityLevelColor(m.Message), isAlert: engineController.GetIsAlert(m.Message));
                         item.OverallStatus = m.ReadStatus;
                         items.Add(item);
@@ -420,7 +420,7 @@ internal sealed partial class EntryBarViewModel : ObservableObject, IEntryBarVie
                         string destinations = string.Join(", ", engineController.GetAddresses(m.Message).Select(a => a.UserName).Distinct());
                         string timeText = m.ReceivedAt.ToString("dd-MMM-yyyy HH:mm").ToUpperInvariant();
                         EntryItemViewModel item = new(m.MessageId, destinations, EntryType.Message, m.ReceivedAt,
-                            secondaryText: engineController.GetSubject(m.Message), priorityText: GetPriorityLabel(m.Message), tagText: GetTagLabel(m.Message), timeText: timeText, isOutboundMessage: true,
+                            secondaryText: engineController.GetBody(m.Message).FirstLine, priorityText: GetPriorityLabel(m.Message), tagText: GetTagLabel(m.Message), timeText: timeText, isOutboundMessage: true,
                             securityLevelColorHex: GetSecurityLevelColor(m.Message), isAlert: engineController.GetIsAlert(m.Message));
                         item.OverallStatus = m.OverallStatus;
                         items.Add(item);
@@ -433,9 +433,9 @@ internal sealed partial class EntryBarViewModel : ObservableObject, IEntryBarVie
                     (List<DraftEntity> drafts, int total) = await entryService.GetDrafts(folder.Id, CurrentPage, IsAlphabeticalSort, Filter);
                     foreach (DraftEntity d in drafts)
                     {
-                        string subject = string.IsNullOrEmpty(d.Subject) ? "(No subject)" : d.Subject;
+                        string title = d.Body.FirstLine;
                         string timeText = d.ModifiedAt.ToString("dd-MMM-yyyy HH:mm").ToUpperInvariant();
-                        items.Add(new EntryItemViewModel(d.Id.ToString(), subject, EntryType.Draft, d.ModifiedAt, timeText: timeText, isAlert: d.IsAlert));
+                        items.Add(new EntryItemViewModel(d.Id.ToString(), string.IsNullOrEmpty(title) ? "(Empty draft)" : title, EntryType.Draft, d.ModifiedAt, timeText: timeText, isAlert: d.IsAlert));
                     }
                     return (items, total);
                 }

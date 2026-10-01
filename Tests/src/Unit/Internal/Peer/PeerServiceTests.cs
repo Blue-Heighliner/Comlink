@@ -63,7 +63,6 @@ public sealed class PeerServiceTests
         {
             MessageId = "MSG1",
             FromUser = "REMOTE",
-            Subject = "Hi",
             Body = "Hello"
         };
         bool ok = await svc.HandleMessage(Encode(payload));

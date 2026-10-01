@@ -18,7 +18,7 @@ public interface IServiceConnection
     /// <summary>Registers this instance as a user using <paramref name="userCode"/> and returns the resulting <see cref="UserInfo"/>.</summary>
     Task<UserInfo?> InstallUser(string userCode, CancellationToken cancellation = default);
     /// <summary>
-    /// Sends a message with the given <paramref name="subject"/> and <paramref name="body"/> to the specified
+    /// Sends a message with the given <paramref name="body"/> to the specified
     /// <paramref name="addresses"/>. When <paramref name="isAlert"/> is <see langword="true"/>, recipients'
     /// Client-mode UI alarms until the message is read; see <c>Docs/Components/ViewModels.md</c>. <paramref name="priority"/>
     /// is used verbatim as the MSMT send priority (see <see cref="IFrameBuilder{TFrame}"/>). <paramref name="tag"/>
@@ -26,7 +26,7 @@ public interface IServiceConnection
     /// is the security level name this message is sent at; a destination user whose own assigned level ranks lower
     /// is never sent the message (see <see cref="IFrameBuilder{TFrame}"/>).
     /// </summary>
-    Task<SendMessageResult?> SendMessage(string subject, string body, List<AddressRequest> addresses, bool isAlert = false, int priority = 0, string tag = "", string securityLevel = "", CancellationToken cancellation = default);
+    Task<SendMessageResult?> SendMessage(string body, List<AddressRequest> addresses, bool isAlert = false, int priority = 0, string tag = "", string securityLevel = "", CancellationToken cancellation = default);
     /// <summary>
     /// Marks the Inbox record for <paramref name="messageId"/> as read (no-op if already read or not
     /// found) and sends a read receipt frame back to the original sender so it can advance

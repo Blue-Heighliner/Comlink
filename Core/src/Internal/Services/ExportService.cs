@@ -33,7 +33,6 @@ internal sealed class ExportService : IExportService
     private static DraftExportData BuildDraftExportData(DraftEntity entity) => new()
     {
         Id = entity.Id.ToString(),
-        Subject = entity.Subject,
         Body = entity.Body,
         BodySegmentsJson = entity.BodySegmentsJson,
         Addresses = [.. entity.Addresses.Select(a => new AddressRequest { UserName = a.UserName, Type = a.Type, Information = a.Information })],
@@ -226,7 +225,6 @@ internal sealed class ExportService : IExportService
         MessageId = entity.MessageId,
         IsOutbound = entity.IsOutbound,
         FromUser = engineController.GetFromUser(entity.Message),
-        Subject = engineController.GetSubject(entity.Message),
         Body = engineController.GetBody(entity.Message),
         Addresses = engineController.GetAddresses(entity.Message)
             .Select(a => new AddressRequest { UserName = a.UserName, Type = a.Type.ToString(), Information = a.Information })

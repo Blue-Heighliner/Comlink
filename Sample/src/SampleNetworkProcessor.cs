@@ -11,8 +11,8 @@ public sealed class SampleNetworkProcessor : INetworkProcessor<SampleFrame>
     {
         string userName = context.TargetUser;
         List<string> others = [.. context.ConnectedUsers.Select(u => u.Name).Where(name => !string.Equals(name, userName, StringComparison.OrdinalIgnoreCase))];
-        string body = others.Count > 0 ? $"Also online right now: {string.Join(", ", others)}." : "You're the only one online right now.";
-        context.Send(new SampleFrame { IsMessage = true, Title = "Welcome", Text = body, Recipients = [new SampleRecipient { User = userName }] });
+        string body = others.Count > 0 ? $"Welcome. Also online right now: {string.Join(", ", others)}." : "Welcome. You're the only one online right now.";
+        context.Send(new SampleFrame { IsMessage = true, Text = body, Recipients = [new SampleRecipient { User = userName }] });
         return Task.CompletedTask;
     }
 
@@ -22,7 +22,7 @@ public sealed class SampleNetworkProcessor : INetworkProcessor<SampleFrame>
         string userName = context.TargetUser;
         foreach (UserInfo user in context.ConnectedUsers)
         {
-            context.Send(new SampleFrame { IsMessage = true, Title = "Offline", Text = $"{userName} just went offline.", Recipients = [new SampleRecipient { User = user.Name }] });
+            context.Send(new SampleFrame { IsMessage = true, Text = $"{userName} just went offline.", Recipients = [new SampleRecipient { User = user.Name }] });
         }
 
         return Task.CompletedTask;
@@ -34,7 +34,7 @@ public sealed class SampleNetworkProcessor : INetworkProcessor<SampleFrame>
         SampleFrame frame = context.Frame;
         if (frame.IsMessage && string.Equals(frame.Category, "PING", StringComparison.OrdinalIgnoreCase))
         {
-            context.Send(new SampleFrame { IsMessage = true, Title = "Re: " + frame.Title, Text = "PONG", Recipients = [new SampleRecipient { User = frame.Sender }] });
+            context.Send(new SampleFrame { IsMessage = true, Text = "PONG", Recipients = [new SampleRecipient { User = frame.Sender }] });
         }
 
         return Task.CompletedTask;

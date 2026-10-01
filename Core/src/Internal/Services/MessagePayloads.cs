@@ -3,8 +3,6 @@ namespace BlueHeighliner.Comlink.Services;
 /// <summary>Request payload for routing a message to one or more addressed users via <see cref="IMessageRoutingService.Route"/>.</summary>
 internal sealed class SendMessagePayload
 {
-    /// <summary>Message subject line.</summary>
-    public string Subject { get; set; } = string.Empty;
     /// <summary>Message body text.</summary>
     public string Body { get; set; } = string.Empty;
     /// <summary>List of recipient addresses for this message.</summary>

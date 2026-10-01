@@ -11,7 +11,6 @@ public sealed class MyFrame
 {
     public string Id { get; set; } = "";
     public string FromUser { get; set; } = "";
-    public string Subject { get; set; } = "";
     public string Body { get; set; } = "";
     public List<(string Name, AddressType Type)> Addresses { get; set; } = [];
     public DateTime SentAt { get; set; }
@@ -45,8 +44,7 @@ A common field whose type already matches is mapped by naming the property (`m =
 public sealed class MyMessageHandler : IMessageHandler<MyFrame>
 {
     public bool IsValid(MyFrame frame) => frame.IsMessage;
-    public MyFrame Create(MessageCreateContext context) => new() { IsMessage = true, Subject = context.Subject, Body = context.Body, IsAlert = context.IsAlert, Priority = context.Priority, Tag = context.Tag, SecurityLevel = context.SecurityLevel };
-    public string GetSubject(MyFrame frame) => frame.Subject;
+    public MyFrame Create(MessageCreateContext context) => new() { IsMessage = true, Body = context.Body, IsAlert = context.IsAlert, Priority = context.Priority, Tag = context.Tag, SecurityLevel = context.SecurityLevel };
     public string GetBody(MyFrame frame) => frame.Body;
     public bool GetIsAlert(MyFrame frame) => frame.IsAlert;
     public int GetPriority(MyFrame frame) => frame.Priority;

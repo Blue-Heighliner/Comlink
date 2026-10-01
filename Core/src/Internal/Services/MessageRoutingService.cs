@@ -87,7 +87,6 @@ internal sealed class MessageRoutingService : IMessageRoutingService
 
         object message = engineController.CreateMessage(new MessageCreateContext
         {
-            Subject = payload.Subject,
             Body = payload.Body,
             IsAlert = payload.IsAlert,
             Priority = payload.Priority,

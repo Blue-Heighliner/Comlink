@@ -12,8 +12,6 @@ public sealed record MessageExportData
     public required bool IsOutbound { get; init; }
     /// <summary>User name of the sender.</summary>
     public required string FromUser { get; init; }
-    /// <summary>Message subject line.</summary>
-    public required string Subject { get; init; }
     /// <summary>Message body text.</summary>
     public required string Body { get; init; }
     /// <summary>Recipient addresses on this message.</summary>
@@ -53,8 +51,6 @@ public sealed record DraftExportData
 {
     /// <summary>LiteDB object-id string for this draft.</summary>
     public required string Id { get; init; }
-    /// <summary>Subject line of the draft.</summary>
-    public required string Subject { get; init; }
     /// <summary>Plain-text body of the draft.</summary>
     public required string Body { get; init; }
     /// <summary>The draft body with its fill-ins, or <see langword="null"/> in a package written before fill-ins were exported, in which case only <see cref="Body"/> is restored.</summary>

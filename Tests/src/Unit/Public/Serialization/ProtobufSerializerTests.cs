@@ -21,7 +21,6 @@ public sealed class ProtobufSerializerTests
         {
             MessageId = "MSG123",
             FromUser = "ALPHA",
-            Subject = "Hello",
             Body = "World",
             SentAt = sentAt,
             Addresses =
@@ -37,7 +36,6 @@ public sealed class ProtobufSerializerTests
         Assert.NotNull(decoded);
         Assert.Equal(original.MessageId, decoded.MessageId);
         Assert.Equal(original.FromUser, decoded.FromUser);
-        Assert.Equal(original.Subject, decoded.Subject);
         Assert.Equal(original.Body, decoded.Body);
         Assert.Equal(original.SentAt, decoded.SentAt);
         Assert.Equal(2, decoded.Addresses.Count);
@@ -64,7 +62,7 @@ public sealed class ProtobufSerializerTests
     [Fact]
     public void Serialize_ProducesNonEmptyBytes()
     {
-        TestFrame msg = new() { MessageId = "x", FromUser = "SOURCE", Subject = "s" };
+        TestFrame msg = new() { MessageId = "x", FromUser = "SOURCE" };
         using IMemoryOwner<byte> buf = serializer.Serialize(msg);
         Assert.True(buf.Memory.Length > 0);
     }

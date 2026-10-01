@@ -18,7 +18,7 @@ public sealed class ContentAreaViewModelTests
         public Task<List<string>> GetUserNames(CancellationToken cancellation = default) => Task.FromResult(new List<string>());
         public Task<List<string>> GetConnectedUsers(CancellationToken cancellation = default) => Task.FromResult(new List<string>());
         public Task<UserInfo?> InstallUser(string userCode, CancellationToken cancellation = default) => Task.FromResult<UserInfo?>(null);
-        public Task<SendMessageResult?> SendMessage(string subject, string body, List<AddressRequest> addresses, bool isAlert = false, int priority = 0, string tag = "", string securityLevel = "", CancellationToken cancellation = default) => Task.FromResult<SendMessageResult?>(null);
+        public Task<SendMessageResult?> SendMessage(string body, List<AddressRequest> addresses, bool isAlert = false, int priority = 0, string tag = "", string securityLevel = "", CancellationToken cancellation = default) => Task.FromResult<SendMessageResult?>(null);
 
         public Task<bool> MarkMessageRead(string messageId, CancellationToken cancellation = default)
         {
@@ -101,7 +101,7 @@ public sealed class ContentAreaViewModelTests
     public async Task OpenDraft_DeletedFromEditor_ShowsHomeAndRaisesEntryDeleted()
     {
         ContentAreaViewModel vm = BuildWithEditors(out _, out Mock<IDraftRepository> drafts, out Mock<IEntryService> entry);
-        DraftEntity draft = new() { Id = new ObjectId(), Subject = "S", Body = "B", Addresses = [], FolderId = "root-drafts" };
+        DraftEntity draft = new() { Id = new ObjectId(), Body = "B", Addresses = [], FolderId = "root-drafts" };
         drafts.Setup(d => d.Get(draft.Id)).ReturnsAsync(draft);
         int raised = 0;
         vm.EntryDeleted += () => { raised++; return Task.CompletedTask; };
@@ -127,7 +127,7 @@ public sealed class ContentAreaViewModelTests
         factory.Setup(f => f.Create()).Returns(document);
         ContentAreaViewModel vm = new(MakeEngineController(), entry.Object, new FakeServiceConnection(), new Mock<IMessageRepository>().Object,
             drafts.Object, new Mock<INoteRepository>().Object, new Mock<IActivityLogRepository>().Object, LoggerFactory.Create(_ => { }), new CurrentUserProvider(), new Mock<IStagedSendViewModel>().Object, factory.Object);
-        DraftEntity draft = new() { Id = new ObjectId(), Subject = "S", Body = "B", Addresses = [], FolderId = "root-drafts" };
+        DraftEntity draft = new() { Id = new ObjectId(), Body = "B", Addresses = [], FolderId = "root-drafts" };
         drafts.Setup(d => d.Get(draft.Id)).ReturnsAsync(draft);
 
         await vm.ShowEntry(new EntryItemViewModel(draft.Id.ToString(), "D", EntryType.Draft, DateTime.UtcNow));

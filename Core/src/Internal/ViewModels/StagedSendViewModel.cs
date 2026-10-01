@@ -18,8 +18,8 @@ internal sealed record StagedSendEntry
 {
     /// <summary>Unique identifier for this queue entry.</summary>
     public required string Id { get; init; }
-    /// <summary>Message subject line.</summary>
-    public required string Subject { get; init; }
+    /// <summary>Gets the first line of the message body, shown for the entry in the queue.</summary>
+    public string Preview => Body.FirstLine;
     /// <summary>Message body text.</summary>
     public required string Body { get; init; }
     /// <summary>Recipient addresses for this send.</summary>
@@ -118,7 +118,6 @@ internal sealed partial class StagedSendViewModel : ObservableObject, IStagedSen
                 queue.Add(new StagedSendEntry
                 {
                     Id = Guid.NewGuid().ToString("N"),
-                    Subject = send.Subject,
                     Body = send.Body,
                     Addresses = send.Addresses,
                     IsAlert = send.IsAlert,
@@ -215,7 +214,7 @@ internal sealed partial class StagedSendViewModel : ObservableObject, IStagedSen
         try
         {
             SendMessageResult? result = await connection.SendMessage(
-                entry.Subject, entry.Body, entry.Addresses, entry.IsAlert, entry.Priority, entry.Tag, entry.SecurityLevel);
+                entry.Body, entry.Addresses, entry.IsAlert, entry.Priority, entry.Tag, entry.SecurityLevel);
             if (result is null)
             {
                 SetStatus(entry.Id, StagedSendStatus.Failed, "Cannot send until a user is installed");
@@ -224,14 +223,14 @@ internal sealed partial class StagedSendViewModel : ObservableObject, IStagedSen
 
             List<AddressData> addresses = [.. entry.Addresses.Select(a => new AddressData { UserName = a.UserName, Type = a.Type, Information = a.Information })];
             await entryService.StoreSentMessage(
-                result.MessageId, entry.Subject, entry.Body, addresses, DateTime.UtcNow, result.UserResults,
+                result.MessageId, entry.Body, addresses, DateTime.UtcNow, result.UserResults,
                 entry.IsAlert, entry.Priority, entry.Tag, entry.SecurityLevel);
 
             SetStatus(entry.Id, StagedSendStatus.Sent);
         }
         catch (Exception ex)
         {
-            activityLogger.LogError(ex, "Staged send transmission failed for {Subject}", entry.Subject);
+            activityLogger.LogError(ex, "Staged send transmission failed for {Preview}", entry.Preview);
             SetStatus(entry.Id, StagedSendStatus.Failed, ex.Message);
         }
     }

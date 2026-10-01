@@ -94,14 +94,14 @@ CRUD for messages, drafts, notes, and activity log reads. Runs in `Client` mode 
 - `NoteInserted` — after `CreateNote`
 - `NoteUpdated` — after `SaveNote`
 
-Both `StoreIncomingMessage` and `StoreSentMessage` take the message's logical fields (subject, body, addresses, etc.) as plain parameters, plus an `isAlert` flag, and build `MessageEntity.Message` from them via `IEngineController` (`CreateFrame()` + `Set*`) before saving — callers never construct the stored frame type directly. `MessageEntity.MessageId` is denormalized from the same value passed to `IEngineController.SetFrameId` so it stays queryable/indexable (see [Data.md](Data.md#messageentity)).
+Both `StoreIncomingMessage` and `StoreSentMessage` take the message's logical fields (body, addresses, etc.) as plain parameters, plus an `isAlert` flag, and build `MessageEntity.Message` from them via `IEngineController` (`CreateMessage` followed by the common field setters) before saving — callers never construct the stored frame type directly. `MessageEntity.MessageId` is denormalized from the same value passed to `IEngineController.SetFrameId` so it stays queryable/indexable (see [Data.md](Data.md#messageentity)).
 
 **Key methods**:
 
 | Method | Description |
 |--------|-------------|
-| `StoreIncomingMessage(messageId, fromUser, subject, body, addresses, sentAt, isAlert = false, priority = 0, tag = "", securityLevel = "")` | Creates a `MessageEntity` in the Inbox folder (`IsOutbound = false`, `ReadStatus = Received`), fires `MessageInserted` |
-| `StoreSentMessage(messageId, subject, body, addresses, sentAt, userResults, isAlert = false, priority = 0, tag = "", securityLevel = "")` | Creates a `MessageEntity` in the Outbox (`IsOutbound = true`) with per-user delivery statuses seeded from the routing result — `Sent` when `Success` is `true`, otherwise `Failed`; a status that arrived before the record was stored is applied here |
+| `StoreIncomingMessage(messageId, fromUser, body, addresses, sentAt, isAlert = false, priority = 0, tag = "", securityLevel = "")` | Creates a `MessageEntity` in the Inbox folder (`IsOutbound = false`, `ReadStatus = Received`), fires `MessageInserted` |
+| `StoreSentMessage(messageId, body, addresses, sentAt, userResults, isAlert = false, priority = 0, tag = "", securityLevel = "")` | Creates a `MessageEntity` in the Outbox (`IsOutbound = true`) with per-user delivery statuses seeded from the routing result — `Sent` when `Success` is `true`, otherwise `Failed`; a status that arrived before the record was stored is applied here |
 | `IncomingMessageExists(messageId)` | Whether the Inbox already holds a record for the ID (an Outbox-only record does not count). `MainViewModel` checks it before `StoreIncomingMessage`, so a message delivered twice - notably a storage server's answer to a retrieval request that includes messages the Inbox already has - is stored and shown once |
 | `UpdateDeliveryStatus(messageId, userName, status)` | Updates per-user delivery status on the Outbox record for `messageId` - always scoped to the outbound record, since a self-addressed message also has an Inbox record sharing the same `messageId`. The user name matches case-insensitively, and a status only ever moves forward (Sending, then Sent, then Failed, then Received, then Read): status events for different stages can arrive out of order, so a late earlier one is ignored rather than undoing a later one |
 | `MarkMessageRead(messageId)` | Transitions the Inbox record's `ReadStatus` from `Received` to `Read` and fires `MessageRead`. A no-op (returns `null`) if the record is missing or already `Read` — see [Peer.md](Peer.md#receipts) |
@@ -109,8 +109,8 @@ Both `StoreIncomingMessage` and `StoreSentMessage` take the message's logical fi
 | `CreateNote()` | Creates a blank note in the Notes folder, fires `NoteInserted` |
 | `SaveDraft(entity)` | Persists draft changes, fires `DraftUpdated` if not yet sent |
 | `SaveNote(entity)` | Persists note changes, fires `NoteUpdated` |
-| `GetMessages(folderId, page, filter = null)` | Paginated messages, ordered by `ReceivedAt` descending. A non-empty `EntryFilter` loads the whole folder to filter in memory instead of paginating the LiteDB query directly, since a message's fields live inside the host's own opaque frame type: `Search` matches case-insensitively against subject, sender, destinations, tag, priority label, or security level name; `Author` matches the sender and `Destination` any addressee, both by case-insensitive substring; `DateFrom`/`DateTo` bound `ReceivedAt` as exact instants (a caller wanting a whole calendar day combines the date with its start/end of day itself - `EntryBarViewModel` does this by default); `SecurityLevel`/`Priority`/`AlertOnly` match the decoded message exactly |
-| `GetDrafts(folderId, page, alphabetical, filter = null)` | Paginated drafts, same in-memory filtering approach. `Search` matches subject or tag; `Destination` matches any address's user name by case-insensitive substring; `DateFrom`/`DateTo` bound `ModifiedAt` the same exact-instant way; `SecurityLevel`/`Priority`/`AlertOnly` match directly against `DraftEntity`'s own fields |
+| `GetMessages(folderId, page, filter = null)` | Paginated messages, ordered by `ReceivedAt` descending. A non-empty `EntryFilter` loads the whole folder to filter in memory instead of paginating the LiteDB query directly, since a message's fields live inside the host's own opaque frame type: `Search` matches case-insensitively against body, sender, destinations, tag, priority label, or security level name; `Author` matches the sender and `Destination` any addressee, both by case-insensitive substring; `DateFrom`/`DateTo` bound `ReceivedAt` as exact instants (a caller wanting a whole calendar day combines the date with its start/end of day itself - `EntryBarViewModel` does this by default); `SecurityLevel`/`Priority`/`AlertOnly` match the decoded message exactly |
+| `GetDrafts(folderId, page, alphabetical, filter = null)` | Paginated drafts, same in-memory filtering approach. `Search` matches body or tag; `Destination` matches any address's user name by case-insensitive substring; `DateFrom`/`DateTo` bound `ModifiedAt` the same exact-instant way; `SecurityLevel`/`Priority`/`AlertOnly` match directly against `DraftEntity`'s own fields |
 | `GetNotes(folderId, page, alphabetical, filter = null)` | Paginated notes, same in-memory filtering approach. `Search` matches body text; `DateFrom`/`DateTo` bound `ModifiedAt` the same exact-instant way; `Author`/`Destination`/`SecurityLevel`/`Priority`/`AlertOnly` are ignored - `NoteEntity` has none of those fields |
 | `GetActivityLogs(page)` | Paginated activity log entries, newest first |
 | `DeleteEntry(id, entryType, isOutboundMessage = false)` | Permanently deletes an entry; `isOutboundMessage` disambiguates the Inbox vs. Outbox record for a self-addressed message |
@@ -124,7 +124,7 @@ Both `StoreIncomingMessage` and `StoreSentMessage` take the message's logical fi
 Implements `IServiceConnection`, registered in both `Client` and `Headless` mode. Wires engine internals to the interface consumed by ViewModels (Client) or embedding host code (Headless).
 
 **Responsibilities**:
-- Forwards `IServiceConnection.SendMessage(subject, body, addresses, isAlert, priority, tag)` → `MessageRoutingService.Route` and returns the result. It does not persist anything itself — in Client mode, `DraftViewModel` calls `EntryService.StoreSentMessage` after a successful send
+- Forwards `IServiceConnection.SendMessage(body, addresses, isAlert, priority, tag)` → `MessageRoutingService.Route` and returns the result. It does not persist anything itself — in Client mode, `DraftViewModel` calls `EntryService.StoreSentMessage` after a successful send
 - Translates `PeerService.FrameDelivered` → fires `IServiceConnection.MessageReceived` for each frame that is a message (`IEngineController.IsMessage`, answered by the message handler; any other frame is neither shown nor stored). Each such message from another user is also answered with a receive receipt sent straight to its sender. It does not persist the message itself — in Client mode, `MainViewModel`'s handler for that event calls `EntryService.StoreIncomingMessage`
 - On `MessageRoutingService.DeliveryStatusChanged`, updates the Outbox record via `EntryService.UpdateDeliveryStatus`, then fires `IServiceConnection.DeliveryStatusChanged` with the user's status as stored and the resulting `OverallStatus`, so an ignored late status is not shown either
 - `MarkMessageRead(messageId)`: calls `EntryService.MarkMessageRead`, fires `IServiceConnection.DeliveryStatusChanged` locally (empty `UserName`, status `Read`) so Client-mode UI reflects the read state immediately, then sends a read receipt to the original sender via `IPeerService.Send` directly — or, for a self-addressed message, calls `EntryService.UpdateDeliveryStatus` directly with no network round-trip. See [Peer.md](Peer.md#receipts)
@@ -172,7 +172,7 @@ Lists files on a drive and restores their entries into the local database, in th
   | Entry type | Match key | On conflict |
   |---|---|---|
   | Message | `MessageId` + direction (`IsOutbound`), and the same calendar date (`ReceivedAt.Date`) | Skipped — no prompt |
-  | Draft | `Subject`, trimmed | Invokes `resolveConflict` (unless a prior conflict in this call chose `OverwriteAll`) |
+  | Draft | First line of `Body`, trimmed | Invokes `resolveConflict` (unless a prior conflict in this call chose `OverwriteAll`) |
   | Note | First line of `Body`, trimmed (same rule `EntryBarViewModel` uses for a note's display title) | Invokes `resolveConflict` (unless a prior conflict in this call chose `OverwriteAll`) |
   | Activity log | `Date` | Always merged (see below) — no prompt |
 
@@ -209,12 +209,12 @@ DTOs used across the service layer:
 
 | Type | Fields |
 |------|--------|
-| `MessageReceivedEvent` | `MessageId`, `FromUser`, `Subject`, `Body`, `Addresses[]`, `SentAt`, `IsAlert`, `Priority`, `Tag` |
+| `MessageReceivedEvent` | `MessageId`, `FromUser`, `Body`, `Addresses[]`, `SentAt`, `IsAlert`, `Priority`, `Tag` |
 | `AddressRequest` | `UserName`, `Type` |
 | `UserDeliveryResult` | `UserName`, `Success (bool)`, `AddressedVia[]` |
 | `SendMessageResult` | `MessageId`, `UserResults[]` |
 | `DeliveryStatusChangedEvent` | `MessageId`, `UserName`, `Status`, `OverallStatus` — an empty `UserName` marks a local read-status notification for this user's own Inbox record rather than a remote destination (see [Peer.md](Peer.md#receipts)) |
-| `SendMessagePayload` | `Subject`, `Body`, `Addresses[]` (of `AddressPayload`), `IsAlert`, `Priority`, `Tag` |
+| `SendMessagePayload` | `Body`, `Addresses[]` (of `AddressPayload`), `IsAlert`, `Priority`, `Tag` |
 | `AddressPayload` | `UserName`, `Type` |
 
 ---
@@ -232,10 +232,10 @@ Internal DTOs used by `ImportService` (`Core/src/Internal/Services/ImportModels.
 | Type | Fields |
 |------|--------|
 | `ImportPackageInfo` | `FileName`, `FullPath` — a file found on a drive, matching either the built-in package extension or a custom format's own |
-| `ImportConflict` | `EntryType` (always `Draft` or `Note`), `Name` (the conflicting subject or note first line) |
+| `ImportConflict` | `EntryType` (always `Draft` or `Note`), `Name` (the first line of the conflicting draft's or note's body) |
 | `DraftNoteConflictResolution` (enum) | `KeepExisting`, `Overwrite`, `OverwriteAll` |
 | `ImportSummary` | `Imported`, `Skipped`, `Overwritten` (counts), `StagedSends` (a custom format's reader's `AddStagedSend` additions; always empty for the built-in package format) |
 
-The public `StagedSendData` type a custom import format's reader builds for `AddStagedSend` - subject, body,
+The public `StagedSendData` type a custom import format's reader builds for `AddStagedSend` - body,
 addresses, and the same `IsAlert`/`Priority`/`Tag`/`SecurityLevel` fields a send normally carries - is in
 `Core/src/Public/Models/ImportModels.cs`; see [Configuration.md](Configuration.md#import-formats).

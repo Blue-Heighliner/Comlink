@@ -1,6 +1,6 @@
 namespace BlueHeighliner.Comlink.Sample;
 
-/// <summary>A CSV reader that stages one send per <c>Subject,User,Body</c> line for the user to review and send from the staged send screen, one at a time a second apart.</summary>
+/// <summary>A CSV reader that stages one send per <c>User,Body</c> line for the user to review and send from the staged send screen, one at a time a second apart.</summary>
 public sealed class SampleCsvImportFormat : IImportFormat
 {
     /// <inheritdoc />
@@ -19,9 +19,9 @@ public sealed class SampleCsvImportFormat : IImportFormat
         string? line;
         while ((line = await reader.ReadLineAsync(cancellation)) is not null)
         {
-            string[] parts = line.Split(',', 3);
-            if (parts.Length < 3) { continue; }
-            context.AddStagedSend(new StagedSendData { Subject = parts[0], Body = parts[2], Addresses = [new AddressRequest { UserName = parts[1] }] });
+            string[] parts = line.Split(',', 2);
+            if (parts.Length < 2) { continue; }
+            context.AddStagedSend(new StagedSendData { Body = parts[1], Addresses = [new AddressRequest { UserName = parts[0] }] });
         }
     }
 }

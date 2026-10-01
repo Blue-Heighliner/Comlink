@@ -50,11 +50,10 @@ public sealed class PrintManagerViewModelTests
             noLogger);
     }
 
-    private static MessageEntity MakeMessage(string messageId, string subject, string body, int priority)
+    private static MessageEntity MakeMessage(string messageId, string body, int priority)
     {
         object message = format.CreateFrame();
         format.SetFrameId(message, messageId);
-        ((TestFrame)message).Subject = subject;
         ((TestFrame)message).Body = body;
         ((TestFrame)message).Priority = priority;
         return new MessageEntity { MessageId = messageId, Message = message };
@@ -126,7 +125,7 @@ public sealed class PrintManagerViewModelTests
         s.EngineController.Setup(p => p.PrintReceivedDefaultEnabled).Returns(true);
         PrintManagerViewModel vm = s.Build();
 
-        s.EntryService.Raise(e => e.MessageInserted += null, MakeMessage("MSG1", "High priority", "body", 99));
+        s.EntryService.Raise(e => e.MessageInserted += null, MakeMessage("MSG1", "High priority\n\nbody", 99));
         vm.EnqueueManual(MakeEntryItem("N1", "Manual note"));
 
         Assert.Equal(2, vm.Queue.Count);
@@ -142,7 +141,7 @@ public sealed class PrintManagerViewModelTests
         s.PrintDriver.Setup(p => p.GetDefaultPrinter()).Returns((string?)null);
         PrintManagerViewModel vm = s.Build();
 
-        s.EntryService.Raise(e => e.MessageInserted += null, MakeMessage("MSG1", "Subject", "body", 0));
+        s.EntryService.Raise(e => e.MessageInserted += null, MakeMessage("MSG1", "body", 0));
 
         Assert.Empty(vm.Queue);
     }
@@ -157,7 +156,7 @@ public sealed class PrintManagerViewModelTests
         PrintManagerViewModel vm = s.Build();
         vm.PrintReceivedEnabled = true;
 
-        s.EntryService.Raise(e => e.MessageInserted += null, MakeMessage("MSG1", "Subject", "body", 0));
+        s.EntryService.Raise(e => e.MessageInserted += null, MakeMessage("MSG1", "body", 0));
 
         Assert.Equal(3, vm.Queue.Count);
         Assert.All(vm.Queue, e => Assert.False(e.IsManual));
@@ -174,7 +173,7 @@ public sealed class PrintManagerViewModelTests
         PrintManagerViewModel vm = s.Build();
         vm.PrintReceivedEnabled = true;
 
-        s.EntryService.Raise(e => e.MessageInserted += null, MakeMessage("MSG1", "Subject", "body", 0));
+        s.EntryService.Raise(e => e.MessageInserted += null, MakeMessage("MSG1", "body", 0));
 
         Assert.Empty(vm.Queue);
     }
@@ -188,8 +187,8 @@ public sealed class PrintManagerViewModelTests
         s.EngineController.Setup(p => p.PrintReceivedDefaultEnabled).Returns(true);
         PrintManagerViewModel vm = s.Build();
 
-        s.EntryService.Raise(e => e.MessageInserted += null, MakeMessage("LOW", "Low", "body", 1));
-        s.EntryService.Raise(e => e.MessageInserted += null, MakeMessage("HIGH", "High", "body", 9));
+        s.EntryService.Raise(e => e.MessageInserted += null, MakeMessage("LOW", "Low\n\nbody", 1));
+        s.EntryService.Raise(e => e.MessageInserted += null, MakeMessage("HIGH", "High\n\nbody", 9));
 
         Assert.Equal(["HIGH", "LOW"], vm.Queue.Select(e => e.EntryId).ToList());
     }
@@ -203,8 +202,8 @@ public sealed class PrintManagerViewModelTests
         s.EngineController.Setup(p => p.PrintReceivedDefaultEnabled).Returns(true);
         PrintManagerViewModel vm = s.Build();
 
-        s.EntryService.Raise(e => e.MessageInserted += null, MakeMessage("FIRST", "First", "body", 5));
-        s.EntryService.Raise(e => e.MessageInserted += null, MakeMessage("SECOND", "Second", "body", 5));
+        s.EntryService.Raise(e => e.MessageInserted += null, MakeMessage("FIRST", "First\n\nbody", 5));
+        s.EntryService.Raise(e => e.MessageInserted += null, MakeMessage("SECOND", "Second\n\nbody", 5));
 
         Assert.Equal(["FIRST", "SECOND"], vm.Queue.Select(e => e.EntryId).ToList());
     }
@@ -284,9 +283,9 @@ public sealed class PrintManagerViewModelTests
         Setup s = new();
         s.EngineController.Setup(p => p.PrintReceivedDefaultEnabled).Returns(true);
         s.Messages.Setup(m => m.Get("LOW", false))
-            .ReturnsAsync(MakeMessage("LOW", "Low", "L1\nL2", 1));
+            .ReturnsAsync(MakeMessage("LOW", "Low\n\nL1\nL2", 1));
         s.Messages.Setup(m => m.Get("HIGH", false))
-            .ReturnsAsync(MakeMessage("HIGH", "High", "H1", 9));
+            .ReturnsAsync(MakeMessage("HIGH", "High\n\nH1", 9));
         PrintManagerViewModel vm = s.Build();
 
         TaskCompletionSource interruptTriggered = new();
@@ -298,7 +297,7 @@ public sealed class PrintManagerViewModelTests
             if (!interruptQueued && line == "Low")
             {
                 interruptQueued = true;
-                s.EntryService.Raise(e => e.MessageInserted += null, MakeMessage("HIGH", "High", "H1", 9));
+                s.EntryService.Raise(e => e.MessageInserted += null, MakeMessage("HIGH", "High\n\nH1", 9));
                 interruptTriggered.TrySetResult();
             }
             if (line == "Low" && s.PrintedLines.Count(l => l.Line == "Low") == 2)
@@ -309,7 +308,7 @@ public sealed class PrintManagerViewModelTests
         };
 
         // Enqueues LOW (priority 1) and starts the loop.
-        s.EntryService.Raise(e => e.MessageInserted += null, MakeMessage("LOW", "Low", "L1\nL2", 1));
+        s.EntryService.Raise(e => e.MessageInserted += null, MakeMessage("LOW", "Low\n\nL1\nL2", 1));
 
         await Task.WhenAny(allDone.Task, Task.Delay(2000));
         for (int i = 0; i < 100 && vm.Queue.Count > 0; i++)

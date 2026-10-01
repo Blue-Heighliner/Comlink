@@ -8,13 +8,12 @@ public sealed class EntryBarViewModelTests
     private static FolderItemViewModel MakeFolder(string id, FolderType type)
         => new(id, type.ToString(), type, null);
 
-    private static MessageEntity MakeMessage(string id = "MSG1", string fromUser = "ALPHA", string subject = "Hello", int priority = 0, string tag = "", string securityLevel = "", bool isAlert = false)
+    private static MessageEntity MakeMessage(string id = "MSG1", string fromUser = "ALPHA", string body = "Hello", int priority = 0, string tag = "", string securityLevel = "", bool isAlert = false)
     {
         object message = format.CreateFrame();
         format.SetFrameId(message, id);
         format.SetFromUser(message, fromUser);
-        ((TestFrame)message).Subject = subject;
-        ((TestFrame)message).Body = "body";
+        ((TestFrame)message).Body = body;
         ((TestFrame)message).Priority = priority;
         ((TestFrame)message).Tag = tag;
         ((TestFrame)message).SecurityLevel = securityLevel;
@@ -28,12 +27,11 @@ public sealed class EntryBarViewModelTests
         };
     }
 
-    private static DraftEntity MakeDraft(string subject = "Draft subject", bool isAlert = false)
+    private static DraftEntity MakeDraft(string body = "Draft body", bool isAlert = false)
         => new()
         {
             Id = new ObjectId(),
-            Subject = subject,
-            Body = "",
+            Body = body,
             FolderId = "root-drafts",
             ModifiedAt = DateTime.UtcNow,
             Addresses = [],
@@ -144,7 +142,7 @@ public sealed class EntryBarViewModelTests
     public async Task SearchText_Set_ResetsPageAndPassesSearchToService()
     {
         Mock<IEntryService> svc = new();
-        MessageEntity match = MakeMessage(subject: "Quarterly Report");
+        MessageEntity match = MakeMessage(body: "Quarterly Report");
         svc.SetupSequence(s => s.GetMessages(It.IsAny<string>(), It.IsAny<int>(), It.IsAny<EntryFilter>()))
            .ReturnsAsync((Items: new List<MessageEntity> { MakeMessage() }, Total: 1))
            .ReturnsAsync((Items: new List<MessageEntity> { match }, Total: 1));

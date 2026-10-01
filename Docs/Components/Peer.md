@@ -149,7 +149,7 @@ delivered message, checks every `IEngineController.AutoForwardControllers` entry
 user is named in: a controller whose `Filter` accepts the message is forwarded to every user currently on that
 controller's locally-saved target list (`IAutoForwardTargetsRepository`, see `Docs/Components/Data.md`), unless
 that list is empty, in which case nothing happens. A forwarded message is a freshly built instance of the
-configured frame type carrying the original's subject, body, and other content fields unchanged, addressed to
+configured frame type carrying the original's body and other content fields unchanged, addressed to
 the target list and routed via `IMessageRoutingService.RouteFrame` from this instance's own installed user - the
 same routing path a hook-originated send uses - so it becomes an ordinary Outbox record and a new message ID, not
 a re-send of the original. The current user's own name is always excluded from the forwarded address list, even

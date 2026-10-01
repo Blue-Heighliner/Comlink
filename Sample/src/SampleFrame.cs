@@ -2,8 +2,7 @@ namespace BlueHeighliner.Comlink.Sample;
 
 /// <summary>
 /// Demonstrates injecting a custom frame DTO. Field names are deliberately unlike the engine's own
-/// logical field names (<c>Id</c> vs frame id, <c>Sender</c> vs sender user, <c>Title</c> vs subject,
-/// <c>Text</c> vs body, <c>Recipients</c> with a <see cref="bool"/> flag vs an address-type enum) to show
+/// logical field names (<c>Id</c> vs frame id, <c>Sender</c> vs sender user, <c>Text</c> vs body, <c>Recipients</c> with a <see cref="bool"/> flag vs an address-type enum) to show
 /// that <see cref="SampleEngineConfiguration"/>'s frame mapping is what maps the engine's logical
 /// fields onto this type's real ones — the engine itself never assumes any particular field name or
 /// shape, and requires a host to state its frame type since it has no built-in one of its own.
@@ -15,8 +14,6 @@ public sealed class SampleFrame
     [ProtoMember(1)] public string Id { get; set; } = string.Empty;
     /// <summary>User name of the sender.</summary>
     [ProtoMember(2)] public string Sender { get; set; } = string.Empty;
-    /// <summary>Message subject line.</summary>
-    [ProtoMember(3)] public string Title { get; set; } = string.Empty;
     /// <summary>Message body text.</summary>
     [ProtoMember(4)] public string Text { get; set; } = string.Empty;
     /// <summary>Recipient list.</summary>

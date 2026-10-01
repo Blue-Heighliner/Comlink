@@ -110,7 +110,7 @@ When the user opens that Inbox message, `ContentAreaViewModel` calls `IServiceCo
 
 ### Sending a message from an interface
 1. An external program sends an instance of the host's frame type on its interface connection.
-2. `InterfaceService` reads `Subject`/`Body`/`Addresses` from it via `IEngineController` and calls `MessageRoutingService.Route` with this user's own installed name as `fromUser` — exactly as if the user itself had composed the message. This happens in both Client and Headless mode.
+2. `InterfaceService` reads `Body`/`Addresses` from it via `IEngineController` and calls `MessageRoutingService.Route` with this user's own installed name as `fromUser` — exactly as if the user itself had composed the message. This happens in both Client and Headless mode.
 
 ### Exporting and importing entries (Client mode)
 

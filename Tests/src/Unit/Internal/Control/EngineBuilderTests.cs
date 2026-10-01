@@ -389,7 +389,7 @@ public sealed class EngineBuilderTests
         });
         EngineBuilder builder = EngineBuilder.Build(new TestEngineConfiguration(false, message => message.InitialProcessor<IInitialFrameProcessor<TestFrame>>()));
         EngineController controller = new(builder, new CurrentUserProvider(), null, Services(processor.Object));
-        TestFrame sent = new() { Subject = "HI" };
+        TestFrame sent = new() { Body = "HI" };
 
         await controller.InitialFrameProcessor!.OnConnected(session.Object);
 
@@ -448,14 +448,14 @@ public sealed class EngineBuilderTests
         });
         processor.Setup(p => p.OnReceived(It.IsAny<INetworkReceivedContext<TestFrame>>())).Returns((INetworkReceivedContext<TestFrame> context) =>
         {
-            calls.Add($"received:{context.Frame.Subject}");
+            calls.Add($"received:{context.Frame.Body}");
             return Task.CompletedTask;
         });
         (_, EngineController controller) = BuildWith(message => message.Processor<INetworkProcessor<TestFrame>>(), services: Services(processor.Object));
         Mock<INetworkUserContext> connection = new();
         connection.Setup(c => c.TargetUser).Returns("BOB");
         Mock<INetworkFrameContext> received = new();
-        received.Setup(c => c.Frame).Returns(new TestFrame { Subject = "HI" });
+        received.Setup(c => c.Frame).Returns(new TestFrame { Body = "HI" });
 
         await controller.NetworkHandler!.OnConnected(connection.Object);
         await controller.NetworkHandler.OnDisconnected(connection.Object);

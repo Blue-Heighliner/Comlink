@@ -211,7 +211,6 @@ public sealed class DirectServiceConnectionTests
         {
             MessageId = "MSG1",
             FromUser = "REMOTE",
-            Subject = "Hi",
             Body = "Body text",
             Addresses = [new TestAddressEntry { UserName = "LOCAL", Type = "To" }, new TestAddressEntry { UserName = "OMAHA", Type = "External", Information = "Deliver to Eastside Office" }],
             SentAt = new DateTime(2025, 7, 4, 12, 0, 0, DateTimeKind.Utc),
@@ -222,7 +221,6 @@ public sealed class DirectServiceConnectionTests
         Assert.NotNull(received);
         Assert.Equal("MSG1", received.MessageId);
         Assert.Equal("REMOTE", received.FromUser);
-        Assert.Equal("Hi", received.Subject);
         Assert.Equal("Body text", received.Body);
         Assert.Equal(2, received.Addresses.Count);
         Assert.Equal("LOCAL", received.Addresses[0].UserName);
@@ -266,7 +264,7 @@ public sealed class DirectServiceConnectionTests
         DirectServiceConnection conn = Build(out _, out _, out Mock<IUserService> user, out _, out _);
         user.Setup(s => s.GetCurrentUserInfo()).Returns((UserInfo?)null);
 
-        SendMessageResult? result = await conn.SendMessage("Subject", "Body", []);
+        SendMessageResult? result = await conn.SendMessage("Body", []);
 
         Assert.Null(result);
     }
@@ -285,7 +283,7 @@ public sealed class DirectServiceConnectionTests
             [new UserDeliveryResult { UserName = "DEST", Success = true, AddressedVia = [] }];
         routing.RouteResult = ("MSGID1", userResults);
 
-        SendMessageResult? result = await conn.SendMessage("Hi", "Body", [new AddressRequest { UserName = "DEST" }]);
+        SendMessageResult? result = await conn.SendMessage("Body", [new AddressRequest { UserName = "DEST" }]);
 
         Assert.NotNull(result);
         Assert.Equal("MSGID1", result.MessageId);
@@ -306,7 +304,7 @@ public sealed class DirectServiceConnectionTests
         });
         routing.RouteResult = ("MSGID1", []);
 
-        await conn.SendMessage("Hi", "Body", [new AddressRequest { UserName = "DEST" }], priority: 3);
+        await conn.SendMessage("Body", [new AddressRequest { UserName = "DEST" }], priority: 3);
 
         Assert.NotNull(routing.LastPayload);
         Assert.Equal(3, routing.LastPayload.Priority);

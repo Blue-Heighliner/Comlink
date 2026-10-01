@@ -78,7 +78,7 @@ public sealed class PeerNetworkTests
     }
 
     private static TestFrame MessageTo(string from, string to, string id = "M1")
-        => new() { MessageId = id, FromUser = from, Subject = "Hi", Addresses = [new TestAddressEntry { UserName = to, Type = "To" }] };
+        => new() { MessageId = id, FromUser = from, Addresses = [new TestAddressEntry { UserName = to, Type = "To" }] };
 
     private static async Task WaitUntil(Func<bool> condition, string what)
     {
@@ -164,7 +164,7 @@ public sealed class PeerNetworkTests
 
             await WaitUntil(() => !client1.Delivered.IsEmpty, "the stored copy to reach Client1");
             Assert.True(client1.Delivered.TryPeek(out TestFrame? copy));
-            Assert.Equal(("M1", "Client1", "Hi"), (copy.MessageId, copy.FromUser, copy.Subject));
+            Assert.Equal(("M1", "Client1"), (copy.MessageId, copy.FromUser));
             Assert.Equal("Client1", Assert.Single(copy.Addresses).UserName);
             await Task.Delay(300);
             Assert.Single(client1.Delivered);

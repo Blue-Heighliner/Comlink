@@ -33,7 +33,6 @@ public sealed class MessageStorageServiceTests : IDisposable
     {
         MessageId = id,
         FromUser = from,
-        Subject = $"Subject {id}",
         Body = $"Body {id}",
         SentAt = sentAt,
         IsAlert = true,
@@ -146,7 +145,7 @@ public sealed class MessageStorageServiceTests : IDisposable
 
         TestFrame copy = (TestFrame)Assert.Single(await service.Find("CAROL", Request(new RetrievalCriteria())));
 
-        Assert.Equal(("M1", "ALICE", "Subject M1", "Body M1"), (copy.MessageId, copy.FromUser, copy.Subject, copy.Body));
+        Assert.Equal(("M1", "ALICE", "Body M1"), (copy.MessageId, copy.FromUser, copy.Body));
         Assert.Equal(day1, copy.SentAt);
         Assert.Equal((2, "TAG"), (copy.Priority, copy.Tag));
         Assert.False(copy.IsAlert);

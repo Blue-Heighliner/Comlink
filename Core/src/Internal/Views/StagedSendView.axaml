@@ -75,10 +75,10 @@
                            Foreground="#CCCCCC" />
               </Border>
               <StackPanel Grid.Column="1" Spacing="1">
-                <TextBlock Text="{Binding Subject}"
+                <TextBlock Text="{Binding Preview}"
                            FontSize="13"
                            TextTrimming="CharacterEllipsis"
-                           ToolTip.Tip="{Binding Subject}"
+                           ToolTip.Tip="{Binding Preview}"
                            VerticalAlignment="Center" />
                 <TextBlock Text="{Binding StatusMessage}"
                            IsVisible="{Binding StatusMessage, Converter={x:Static StringConverters.IsNotNullOrEmpty}}"

@@ -27,13 +27,13 @@ public sealed class EntryServiceTests : IDisposable
     public async Task StoreIncomingMessageAsync_CreatesMessageInInbox()
     {
         MessageEntity entity = await service.StoreIncomingMessage(
-            Guid.NewGuid().ToString(), "SenderUser", "Hello", "Body text",
+            Guid.NewGuid().ToString(), "SenderUser", "Hello",
             [new AddressData { UserName = "LocalUser", Type = "To" }],
             DateTime.UtcNow);
 
         Assert.NotNull(entity);
         Assert.Equal("SenderUser", format.GetFromUser(entity.Message));
-        Assert.Equal("Hello", format.GetSubject(entity.Message));
+        Assert.Equal("Hello", format.GetBody(entity.Message));
         Assert.Contains("root-inbox", entity.FolderId);
     }
 
@@ -42,7 +42,7 @@ public sealed class EntryServiceTests : IDisposable
     public async Task StoreIncomingMessageAsync_SetsReadStatusReceived()
     {
         MessageEntity entity = await service.StoreIncomingMessage(
-            Guid.NewGuid().ToString(), "SenderUser", "Hello", "Body", [], DateTime.UtcNow);
+            Guid.NewGuid().ToString(), "SenderUser", "Hello", [], DateTime.UtcNow);
 
         Assert.Equal(DestinationStatus.Received, entity.ReadStatus);
     }
@@ -52,11 +52,11 @@ public sealed class EntryServiceTests : IDisposable
     public async Task StoreMessage_IsAlertTrue_RoundTripsOnStoredMessage()
     {
         MessageEntity incoming = await service.StoreIncomingMessage(
-            Guid.NewGuid().ToString(), "SenderUser", "Hello", "Body", [], DateTime.UtcNow, isAlert: true);
+            Guid.NewGuid().ToString(), "SenderUser", "Hello", [], DateTime.UtcNow, isAlert: true);
         Assert.True(format.GetIsAlert(incoming.Message));
 
         MessageEntity sent = await service.StoreSentMessage(
-            Guid.NewGuid().ToString("N"), "Subj", "Body", [], DateTime.UtcNow, [], isAlert: true);
+            Guid.NewGuid().ToString("N"), "Subj", [], DateTime.UtcNow, [], isAlert: true);
         Assert.True(format.GetIsAlert(sent.Message));
     }
 
@@ -65,11 +65,11 @@ public sealed class EntryServiceTests : IDisposable
     public async Task StoreMessage_Priority_RoundTripsOnStoredMessage()
     {
         MessageEntity incoming = await service.StoreIncomingMessage(
-            Guid.NewGuid().ToString(), "SenderUser", "Hello", "Body", [], DateTime.UtcNow, priority: 2);
+            Guid.NewGuid().ToString(), "SenderUser", "Hello", [], DateTime.UtcNow, priority: 2);
         Assert.Equal(2, format.GetPriority(incoming.Message));
 
         MessageEntity sent = await service.StoreSentMessage(
-            Guid.NewGuid().ToString("N"), "Subj", "Body", [], DateTime.UtcNow, [], priority: 3);
+            Guid.NewGuid().ToString("N"), "Subj", [], DateTime.UtcNow, [], priority: 3);
         Assert.Equal(3, format.GetPriority(sent.Message));
     }
 
@@ -78,7 +78,7 @@ public sealed class EntryServiceTests : IDisposable
     public async Task MarkMessageRead_ReceivedMessage_TransitionsToReadAndFiresEvent()
     {
         string messageId = Guid.NewGuid().ToString("N");
-        await service.StoreIncomingMessage(messageId, "Sender", "Subj", "Body", [], DateTime.UtcNow);
+        await service.StoreIncomingMessage(messageId, "Sender", "Subj", [], DateTime.UtcNow);
 
         MessageEntity? readEntity = null;
         service.MessageRead += entity => { readEntity = entity; return Task.CompletedTask; };
@@ -96,7 +96,7 @@ public sealed class EntryServiceTests : IDisposable
     public async Task MarkMessageRead_AlreadyRead_IsNoOp()
     {
         string messageId = Guid.NewGuid().ToString("N");
-        await service.StoreIncomingMessage(messageId, "Sender", "Subj", "Body", [], DateTime.UtcNow);
+        await service.StoreIncomingMessage(messageId, "Sender", "Subj", [], DateTime.UtcNow);
         await service.MarkMessageRead(messageId);
 
         int eventCount = 0;
@@ -145,7 +145,7 @@ public sealed class EntryServiceTests : IDisposable
         for (int i = 0; i < 5; i++)
         {
             await service.StoreIncomingMessage(
-                Guid.NewGuid().ToString(), "Sender", $"Subject {i}", "Body",
+                Guid.NewGuid().ToString(), "Sender", $"Body {i}",
                 [], DateTime.UtcNow.AddMinutes(-i));
         }
 
@@ -160,50 +160,50 @@ public sealed class EntryServiceTests : IDisposable
     public async Task GetMessagesAsync_SortsNewestFirst()
     {
         MessageEntity first = await service.StoreIncomingMessage(
-            Guid.NewGuid().ToString(), "S", "First", "", [], DateTime.UtcNow.AddHours(-2));
+            Guid.NewGuid().ToString(), "S", "First", [], DateTime.UtcNow.AddHours(-2));
         MessageEntity second = await service.StoreIncomingMessage(
-            Guid.NewGuid().ToString(), "S", "Second", "", [], DateTime.UtcNow);
+            Guid.NewGuid().ToString(), "S", "Second", [], DateTime.UtcNow);
 
         (List<MessageEntity> items, int _) = await service.GetMessages("root-inbox", 1);
 
-        Assert.Equal("Second", format.GetSubject(items[0].Message));
-        Assert.Equal("First", format.GetSubject(items[1].Message));
+        Assert.Equal("Second", format.GetBody(items[0].Message));
+        Assert.Equal("First", format.GetBody(items[1].Message));
     }
 
-    /// <summary>A message search matches case-insensitively against the subject, and excludes messages that don't match.</summary>
+    /// <summary>A message search matches case-insensitively against the body, and excludes messages that don't match.</summary>
     [Fact]
-    public async Task GetMessagesAsync_SearchMatchesSubjectCaseInsensitively()
+    public async Task GetMessagesAsync_SearchMatchesBodyCaseInsensitively()
     {
-        await service.StoreIncomingMessage(Guid.NewGuid().ToString(), "Sender", "Quarterly Report", "Body", [], DateTime.UtcNow);
-        await service.StoreIncomingMessage(Guid.NewGuid().ToString(), "Sender", "Lunch plans", "Body", [], DateTime.UtcNow);
+        await service.StoreIncomingMessage(Guid.NewGuid().ToString(), "Sender", "Quarterly Report", [], DateTime.UtcNow);
+        await service.StoreIncomingMessage(Guid.NewGuid().ToString(), "Sender", "Lunch plans", [], DateTime.UtcNow);
 
         (List<MessageEntity> items, int total) = await service.GetMessages("root-inbox", 1, filter: new EntryFilter { Search = "report" });
 
         Assert.Equal(1, total);
-        Assert.Equal("Quarterly Report", format.GetSubject(Assert.Single(items).Message));
+        Assert.Equal("Quarterly Report", format.GetBody(Assert.Single(items).Message));
     }
 
-    /// <summary>A message search also matches the sender, the tag, and the priority label, not just the subject.</summary>
+    /// <summary>A message search also matches the sender, the tag, and the priority label, not just the body.</summary>
     [Theory]
     [InlineData("Sender", "ALPHA")]
     [InlineData("URGENT", "ALPHA")]
     [InlineData("Normal", "ALPHA")]
-    public async Task GetMessagesAsync_SearchMatchesSenderTagAndPriority(string search, string expectedSubject)
+    public async Task GetMessagesAsync_SearchMatchesSenderTagAndPriority(string search, string expectedBody)
     {
-        await service.StoreIncomingMessage(Guid.NewGuid().ToString(), "Sender", expectedSubject, "Body", [], DateTime.UtcNow, priority: 0, tag: "URGENT");
-        await service.StoreIncomingMessage(Guid.NewGuid().ToString(), "BRAVO", "Unrelated", "Body", [], DateTime.UtcNow, priority: 9);
+        await service.StoreIncomingMessage(Guid.NewGuid().ToString(), "Sender", expectedBody, [], DateTime.UtcNow, priority: 0, tag: "URGENT");
+        await service.StoreIncomingMessage(Guid.NewGuid().ToString(), "BRAVO", "Unrelated", [], DateTime.UtcNow, priority: 9);
 
         (List<MessageEntity> items, int total) = await service.GetMessages("root-inbox", 1, filter: new EntryFilter { Search = search });
 
         Assert.Equal(1, total);
-        Assert.Equal(expectedSubject, format.GetSubject(Assert.Single(items).Message));
+        Assert.Equal(expectedBody, format.GetBody(Assert.Single(items).Message));
     }
 
     /// <summary>A message search with no matches returns an empty page and a zero total rather than falling back to the unfiltered folder.</summary>
     [Fact]
     public async Task GetMessagesAsync_SearchWithNoMatches_ReturnsEmpty()
     {
-        await service.StoreIncomingMessage(Guid.NewGuid().ToString(), "Sender", "Hello", "Body", [], DateTime.UtcNow);
+        await service.StoreIncomingMessage(Guid.NewGuid().ToString(), "Sender", "Hello", [], DateTime.UtcNow);
 
         (List<MessageEntity> items, int total) = await service.GetMessages("root-inbox", 1, filter: new EntryFilter { Search = "nonexistent" });
 
@@ -211,19 +211,19 @@ public sealed class EntryServiceTests : IDisposable
         Assert.Empty(items);
     }
 
-    /// <summary>A draft search matches the subject; an empty or whitespace-only search behaves as no search.</summary>
+    /// <summary>A draft search matches the body; an empty or whitespace-only search behaves as no search.</summary>
     [Theory]
     [InlineData("Budget", 1)]
     [InlineData("", 2)]
     [InlineData("   ", 2)]
     [InlineData("nonexistent", 0)]
-    public async Task GetDraftsAsync_SearchMatchesSubject(string search, int expectedTotal)
+    public async Task GetDraftsAsync_SearchMatchesBody(string search, int expectedTotal)
     {
         DraftEntity budget = await service.CreateDraft();
-        budget.Subject = "Budget review";
+        budget.Body = "Budget review";
         await service.SaveDraft(budget);
         DraftEntity other = await service.CreateDraft();
-        other.Subject = "Team lunch";
+        other.Body = "Team lunch";
         await service.SaveDraft(other);
 
         (List<DraftEntity> items, int total) = await service.GetDrafts("root-drafts", 1, alphabetical: false, filter: new EntryFilter { Search = search });
@@ -253,21 +253,21 @@ public sealed class EntryServiceTests : IDisposable
     [Fact]
     public async Task GetMessagesAsync_FilterMatchesSecurityLevelExactly()
     {
-        await service.StoreIncomingMessage(Guid.NewGuid().ToString(), "S", "Restricted memo", "Body", [], DateTime.UtcNow, securityLevel: "RESTRICTED");
-        await service.StoreIncomingMessage(Guid.NewGuid().ToString(), "S", "Public memo", "Body", [], DateTime.UtcNow, securityLevel: "PUBLIC");
+        await service.StoreIncomingMessage(Guid.NewGuid().ToString(), "S", "Restricted memo", [], DateTime.UtcNow, securityLevel: "RESTRICTED");
+        await service.StoreIncomingMessage(Guid.NewGuid().ToString(), "S", "Public memo", [], DateTime.UtcNow, securityLevel: "PUBLIC");
 
         (List<MessageEntity> items, int total) = await service.GetMessages("root-inbox", 1, filter: new EntryFilter { SecurityLevel = "restricted" });
 
         Assert.Equal(1, total);
-        Assert.Equal("Restricted memo", format.GetSubject(Assert.Single(items).Message));
+        Assert.Equal("Restricted memo", format.GetBody(Assert.Single(items).Message));
     }
 
     /// <summary>IncomingMessageExists reports whether the Inbox holds the ID, and an Outbox-only record does not count.</summary>
     [Fact]
     public async Task IncomingMessageExists_ReflectsInboxRecordsOnly()
     {
-        await service.StoreIncomingMessage("IN1", "S", "Subject", "Body", [], DateTime.UtcNow);
-        await service.StoreSentMessage("OUT1", "Subject", "Body", [], DateTime.UtcNow, []);
+        await service.StoreIncomingMessage("IN1", "S", "Subject", [], DateTime.UtcNow);
+        await service.StoreSentMessage("OUT1", "Subject", [], DateTime.UtcNow, []);
 
         Assert.True(await service.IncomingMessageExists("IN1"));
         Assert.False(await service.IncomingMessageExists("OUT1"));
@@ -278,26 +278,26 @@ public sealed class EntryServiceTests : IDisposable
     [Fact]
     public async Task GetMessagesAsync_FilterAuthor_MatchesSenderSubstring()
     {
-        await service.StoreIncomingMessage(Guid.NewGuid().ToString(), "ALICE", "From alice", "Body", [], DateTime.UtcNow);
-        await service.StoreIncomingMessage(Guid.NewGuid().ToString(), "BOB", "From bob", "Body", [], DateTime.UtcNow);
+        await service.StoreIncomingMessage(Guid.NewGuid().ToString(), "ALICE", "From alice", [], DateTime.UtcNow);
+        await service.StoreIncomingMessage(Guid.NewGuid().ToString(), "BOB", "From bob", [], DateTime.UtcNow);
 
         (List<MessageEntity> items, int total) = await service.GetMessages("root-inbox", 1, filter: new EntryFilter { Author = "lic" });
 
         Assert.Equal(1, total);
-        Assert.Equal("From alice", format.GetSubject(Assert.Single(items).Message));
+        Assert.Equal("From alice", format.GetBody(Assert.Single(items).Message));
     }
 
     /// <summary>A message filter's Destination matches any addressee by case-insensitive substring.</summary>
     [Fact]
     public async Task GetMessagesAsync_FilterDestination_MatchesAnyAddressee()
     {
-        await service.StoreIncomingMessage(Guid.NewGuid().ToString(), "S", "To carol", "Body", [new AddressData { UserName = "DAVE" }, new AddressData { UserName = "CAROL" }], DateTime.UtcNow);
-        await service.StoreIncomingMessage(Guid.NewGuid().ToString(), "S", "To dave only", "Body", [new AddressData { UserName = "DAVE" }], DateTime.UtcNow);
+        await service.StoreIncomingMessage(Guid.NewGuid().ToString(), "S", "To carol", [new AddressData { UserName = "DAVE" }, new AddressData { UserName = "CAROL" }], DateTime.UtcNow);
+        await service.StoreIncomingMessage(Guid.NewGuid().ToString(), "S", "To dave only", [new AddressData { UserName = "DAVE" }], DateTime.UtcNow);
 
         (List<MessageEntity> items, int total) = await service.GetMessages("root-inbox", 1, filter: new EntryFilter { Destination = "carol" });
 
         Assert.Equal(1, total);
-        Assert.Equal("To carol", format.GetSubject(Assert.Single(items).Message));
+        Assert.Equal("To carol", format.GetBody(Assert.Single(items).Message));
     }
 
     /// <summary>A draft filter's Destination matches any addressee by case-insensitive substring.</summary>
@@ -305,44 +305,44 @@ public sealed class EntryServiceTests : IDisposable
     public async Task GetDraftsAsync_FilterDestination_MatchesAnyAddressee()
     {
         DraftEntity match = await service.CreateDraft();
-        match.Subject = "Match";
+        match.Body = "Match";
         match.Addresses = [new AddressData { UserName = "ERIN" }];
         await service.SaveDraft(match);
         DraftEntity other = await service.CreateDraft();
-        other.Subject = "Other";
+        other.Body = "Other";
         other.Addresses = [new AddressData { UserName = "FRANK" }];
         await service.SaveDraft(other);
 
         (List<DraftEntity> items, int total) = await service.GetDrafts("root-drafts", 1, alphabetical: false, filter: new EntryFilter { Destination = "eri" });
 
         Assert.Equal(1, total);
-        Assert.Equal("Match", Assert.Single(items).Subject);
+        Assert.Equal("Match", Assert.Single(items).Body);
     }
 
     /// <summary>A message filter's Priority matches the exact stored priority number.</summary>
     [Fact]
     public async Task GetMessagesAsync_FilterMatchesPriorityExactly()
     {
-        await service.StoreIncomingMessage(Guid.NewGuid().ToString(), "S", "High priority", "Body", [], DateTime.UtcNow, priority: 2);
-        await service.StoreIncomingMessage(Guid.NewGuid().ToString(), "S", "Low priority", "Body", [], DateTime.UtcNow, priority: 0);
+        await service.StoreIncomingMessage(Guid.NewGuid().ToString(), "S", "High priority", [], DateTime.UtcNow, priority: 2);
+        await service.StoreIncomingMessage(Guid.NewGuid().ToString(), "S", "Low priority", [], DateTime.UtcNow, priority: 0);
 
         (List<MessageEntity> items, int total) = await service.GetMessages("root-inbox", 1, filter: new EntryFilter { Priority = 2 });
 
         Assert.Equal(1, total);
-        Assert.Equal("High priority", format.GetSubject(Assert.Single(items).Message));
+        Assert.Equal("High priority", format.GetBody(Assert.Single(items).Message));
     }
 
     /// <summary>A message filter's AlertOnly excludes every non-alert message.</summary>
     [Fact]
     public async Task GetMessagesAsync_FilterAlertOnly_ExcludesNonAlerts()
     {
-        await service.StoreIncomingMessage(Guid.NewGuid().ToString(), "S", "Urgent", "Body", [], DateTime.UtcNow, isAlert: true);
-        await service.StoreIncomingMessage(Guid.NewGuid().ToString(), "S", "Routine", "Body", [], DateTime.UtcNow, isAlert: false);
+        await service.StoreIncomingMessage(Guid.NewGuid().ToString(), "S", "Urgent", [], DateTime.UtcNow, isAlert: true);
+        await service.StoreIncomingMessage(Guid.NewGuid().ToString(), "S", "Routine", [], DateTime.UtcNow, isAlert: false);
 
         (List<MessageEntity> items, int total) = await service.GetMessages("root-inbox", 1, filter: new EntryFilter { AlertOnly = true });
 
         Assert.Equal(1, total);
-        Assert.Equal("Urgent", format.GetSubject(Assert.Single(items).Message));
+        Assert.Equal("Urgent", format.GetBody(Assert.Single(items).Message));
     }
 
     /// <summary>A message filter's DateFrom/DateTo bound the received date inclusively, by date only.</summary>
@@ -353,16 +353,16 @@ public sealed class EntryServiceTests : IDisposable
         // BsonMapper converts to local time on read) - so the boundaries here are built the same way a
         // DatePicker/TimePicker's own local-calendar selection would be, rather than in UTC terms.
         DateTime today = DateTime.Now.Date;
-        await service.StoreIncomingMessage(Guid.NewGuid().ToString(), "S", "Today early", "Body", [], today.AddHours(1));
-        await service.StoreIncomingMessage(Guid.NewGuid().ToString(), "S", "Today late", "Body", [], today.AddHours(23));
-        await service.StoreIncomingMessage(Guid.NewGuid().ToString(), "S", "Yesterday", "Body", [], today.AddDays(-1));
-        await service.StoreIncomingMessage(Guid.NewGuid().ToString(), "S", "Tomorrow", "Body", [], today.AddDays(1));
+        await service.StoreIncomingMessage(Guid.NewGuid().ToString(), "S", "Today early", [], today.AddHours(1));
+        await service.StoreIncomingMessage(Guid.NewGuid().ToString(), "S", "Today late", [], today.AddHours(23));
+        await service.StoreIncomingMessage(Guid.NewGuid().ToString(), "S", "Yesterday", [], today.AddDays(-1));
+        await service.StoreIncomingMessage(Guid.NewGuid().ToString(), "S", "Tomorrow", [], today.AddDays(1));
 
         (List<MessageEntity> items, int total) = await service.GetMessages("root-inbox", 1,
             filter: new EntryFilter { DateFrom = today, DateTo = today.AddDays(1).AddTicks(-1) });
 
         Assert.Equal(2, total);
-        Assert.Equal(["Today early", "Today late"], items.Select(i => format.GetSubject(i.Message)).OrderBy(s => s));
+        Assert.Equal(["Today early", "Today late"], items.Select(i => format.GetBody(i.Message)).OrderBy(s => s));
     }
 
     /// <summary>A message filter's DateFrom/DateTo also bound an exact time of day, not just the calendar date.</summary>
@@ -370,29 +370,29 @@ public sealed class EntryServiceTests : IDisposable
     public async Task GetMessagesAsync_FilterByDateRange_MatchesExactTimeOfDay()
     {
         DateTime today = DateTime.Now.Date;
-        await service.StoreIncomingMessage(Guid.NewGuid().ToString(), "S", "Before window", "Body", [], today.AddHours(9));
-        await service.StoreIncomingMessage(Guid.NewGuid().ToString(), "S", "In window", "Body", [], today.AddHours(13));
-        await service.StoreIncomingMessage(Guid.NewGuid().ToString(), "S", "After window", "Body", [], today.AddHours(18));
+        await service.StoreIncomingMessage(Guid.NewGuid().ToString(), "S", "Before window", [], today.AddHours(9));
+        await service.StoreIncomingMessage(Guid.NewGuid().ToString(), "S", "In window", [], today.AddHours(13));
+        await service.StoreIncomingMessage(Guid.NewGuid().ToString(), "S", "After window", [], today.AddHours(18));
 
         (List<MessageEntity> items, int total) = await service.GetMessages("root-inbox", 1,
             filter: new EntryFilter { DateFrom = today.AddHours(12), DateTo = today.AddHours(14) });
 
         Assert.Equal(1, total);
-        Assert.Equal("In window", format.GetSubject(Assert.Single(items).Message));
+        Assert.Equal("In window", format.GetBody(Assert.Single(items).Message));
     }
 
     /// <summary>Multiple filter criteria combine with AND semantics: a message must satisfy every stated criterion.</summary>
     [Fact]
     public async Task GetMessagesAsync_MultipleCriteria_CombineWithAnd()
     {
-        await service.StoreIncomingMessage(Guid.NewGuid().ToString(), "S", "Match", "Body", [], DateTime.UtcNow, priority: 2, securityLevel: "RESTRICTED");
-        await service.StoreIncomingMessage(Guid.NewGuid().ToString(), "S", "WrongPriority", "Body", [], DateTime.UtcNow, priority: 0, securityLevel: "RESTRICTED");
-        await service.StoreIncomingMessage(Guid.NewGuid().ToString(), "S", "WrongLevel", "Body", [], DateTime.UtcNow, priority: 2, securityLevel: "PUBLIC");
+        await service.StoreIncomingMessage(Guid.NewGuid().ToString(), "S", "Match", [], DateTime.UtcNow, priority: 2, securityLevel: "RESTRICTED");
+        await service.StoreIncomingMessage(Guid.NewGuid().ToString(), "S", "WrongPriority", [], DateTime.UtcNow, priority: 0, securityLevel: "RESTRICTED");
+        await service.StoreIncomingMessage(Guid.NewGuid().ToString(), "S", "WrongLevel", [], DateTime.UtcNow, priority: 2, securityLevel: "PUBLIC");
 
         (List<MessageEntity> items, int total) = await service.GetMessages("root-inbox", 1, filter: new EntryFilter { Priority = 2, SecurityLevel = "RESTRICTED" });
 
         Assert.Equal(1, total);
-        Assert.Equal("Match", format.GetSubject(Assert.Single(items).Message));
+        Assert.Equal("Match", format.GetBody(Assert.Single(items).Message));
     }
 
     /// <summary>A draft filter matches SecurityLevel, Priority and AlertOnly directly against the stored fields, the same way a message filter matches the decoded message.</summary>
@@ -400,20 +400,20 @@ public sealed class EntryServiceTests : IDisposable
     public async Task GetDraftsAsync_FilterMatchesSecurityLevelPriorityAndAlert()
     {
         DraftEntity match = await service.CreateDraft();
-        match.Subject = "Match";
+        match.Body = "Match";
         match.Priority = 2;
         match.SecurityLevel = "RESTRICTED";
         match.IsAlert = true;
         await service.SaveDraft(match);
         DraftEntity other = await service.CreateDraft();
-        other.Subject = "Other";
+        other.Body = "Other";
         await service.SaveDraft(other);
 
         (List<DraftEntity> items, int total) = await service.GetDrafts("root-drafts", 1, alphabetical: false,
             filter: new EntryFilter { Priority = 2, SecurityLevel = "RESTRICTED", AlertOnly = true });
 
         Assert.Equal(1, total);
-        Assert.Equal("Match", Assert.Single(items).Subject);
+        Assert.Equal("Match", Assert.Single(items).Body);
     }
 
     /// <summary>A note filter's DateFrom/DateTo bound the last-modified date inclusively, by date only.</summary>
@@ -435,17 +435,17 @@ public sealed class EntryServiceTests : IDisposable
     [Fact]
     public async Task StoreIncomingMessageAsync_FiresMessageInsertedEvent()
     {
-        string? receivedSubject = null;
+        string? receivedBody = null;
         service.MessageInserted += entity =>
         {
-            receivedSubject = format.GetSubject(entity.Message);
+            receivedBody = format.GetBody(entity.Message);
             return Task.CompletedTask;
         };
 
         await service.StoreIncomingMessage(
-            Guid.NewGuid().ToString(), "S", "EventTest", "", [], DateTime.UtcNow);
+            Guid.NewGuid().ToString(), "S", "EventTest", [], DateTime.UtcNow);
 
-        Assert.Equal("EventTest", receivedSubject);
+        Assert.Equal("EventTest", receivedBody);
     }
 
     /// <summary>A self-addressed message creates an Inbox and an Outbox record sharing the same MessageId; delivery-status updates must only ever touch the Outbox record.</summary>
@@ -453,9 +453,9 @@ public sealed class EntryServiceTests : IDisposable
     public async Task UpdateDeliveryStatus_SelfAddressedMessage_OnlyUpdatesOutboundRecord()
     {
         string messageId = Guid.NewGuid().ToString("N");
-        await service.StoreIncomingMessage(messageId, "SELF", "Hello", "Body",
+        await service.StoreIncomingMessage(messageId, "SELF", "Hello",
             [new AddressData { UserName = "SELF", Type = "To" }], DateTime.UtcNow);
-        await service.StoreSentMessage(messageId, "Hello", "Body",
+        await service.StoreSentMessage(messageId, "Hello",
             [new AddressData { UserName = "SELF", Type = "To" }], DateTime.UtcNow,
             [new UserDeliveryResult { UserName = "SELF", Success = true, AddressedVia = [] }]);
 
@@ -476,7 +476,7 @@ public sealed class EntryServiceTests : IDisposable
     public async Task StoreSentMessage_SuccessfulUserResult_SeedsSentStatusImmediately()
     {
         MessageEntity entity = await service.StoreSentMessage(
-            Guid.NewGuid().ToString("N"), "Subj", "Body", [],
+            Guid.NewGuid().ToString("N"), "Subj", [],
             DateTime.UtcNow, [new UserDeliveryResult { UserName = "SELF", Success = true, AddressedVia = [] }]);
 
         Assert.Equal(DestinationStatus.Sent, Assert.Single(entity.DeliveryStatuses).Status);
@@ -488,7 +488,7 @@ public sealed class EntryServiceTests : IDisposable
     public async Task StoreSentMessage_FailedUserResult_SeedsFailedStatusImmediately()
     {
         MessageEntity entity = await service.StoreSentMessage(
-            Guid.NewGuid().ToString("N"), "Subj", "Body", [],
+            Guid.NewGuid().ToString("N"), "Subj", [],
             DateTime.UtcNow, [new UserDeliveryResult { UserName = "UNREACHABLE", Success = false, AddressedVia = [] }]);
 
         Assert.Equal(DestinationStatus.Failed, Assert.Single(entity.DeliveryStatuses).Status);
@@ -507,7 +507,7 @@ public sealed class EntryServiceTests : IDisposable
     private async Task<string> StoreSentTo(string user, bool success)
     {
         string messageId = Guid.NewGuid().ToString("N");
-        await service.StoreSentMessage(messageId, "Hello", "Body",
+        await service.StoreSentMessage(messageId, "Hello",
             [new AddressData { UserName = user, Type = "To" }], DateTime.UtcNow,
             [new UserDeliveryResult { UserName = user, Success = success, AddressedVia = [] }]);
         return messageId;
@@ -534,7 +534,7 @@ public sealed class EntryServiceTests : IDisposable
         string messageId = Guid.NewGuid().ToString("N");
 
         Assert.Null(await service.UpdateDeliveryStatus(messageId, "BOB", DestinationStatus.Received));
-        MessageEntity entity = await service.StoreSentMessage(messageId, "Hello", "Body",
+        MessageEntity entity = await service.StoreSentMessage(messageId, "Hello",
             [new AddressData { UserName = "BOB", Type = "To" }], DateTime.UtcNow,
             [new UserDeliveryResult { UserName = "BOB", Success = true, AddressedVia = [] }]);
 
@@ -571,7 +571,7 @@ public sealed class EntryServiceTests : IDisposable
     [Fact]
     public async Task DeleteFolderContents_DeletesMessagesDraftsAndNotesOfThatFolderOnly()
     {
-        await service.StoreIncomingMessage(Guid.NewGuid().ToString("N"), "A", "S", "B", [], DateTime.UtcNow);
+        await service.StoreIncomingMessage(Guid.NewGuid().ToString("N"), "A", "S", [], DateTime.UtcNow);
         await service.CreateDraft();
         await service.CreateNote();
         NoteEntity untouched = await service.CreateNote();

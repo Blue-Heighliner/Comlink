@@ -63,8 +63,6 @@ internal sealed class ConfiguredEngineController : IEngineController
     /// <inheritdoc />
     public void SetFromUser(object frame, string value) => fallback.SetFromUser(frame, value);
     /// <inheritdoc />
-    public string GetSubject(object frame) => fallback.GetSubject(frame);
-    /// <inheritdoc />
     public string GetBody(object frame) => fallback.GetBody(frame);
     /// <inheritdoc />
     public List<MessageAddress> GetAddresses(object frame) => fallback.GetAddresses(frame);

@@ -702,8 +702,6 @@ public sealed class ControlProviderTests
         Assert.Equal("M1", controller.GetFrameId(message));
         controller.SetFromUser(message, "ALICE");
         Assert.Equal("ALICE", controller.GetFromUser(message));
-        ((TestFrame)message).Subject = "Hi";
-        Assert.Equal("Hi", controller.GetSubject(message));
         ((TestFrame)message).Body = "Body text";
         Assert.Equal("Body text", controller.GetBody(message));
         List<MessageAddress> addresses = [new MessageAddress { UserName = "BOB", Type = AddressType.To }];

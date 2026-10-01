@@ -54,7 +54,7 @@ engine
         .Size(16 * 1024).Window(1));
 ```
 
-A **frame** is the data format of all network traffic other than packets: every heartbeat, receive receipt, read receipt, retrieval request and user message, and any other frame the host's own processors exchange, is an instance of the host's one frame type. A **message** is a kind of frame, the kind the user sees: it is shown in the UI, stored in the Inbox when received and in the Outbox when sent, and is what auto forward, printing, server storage and external systems act on. Each kind of frame is stated with a handler type (`Message<THandler>`, `Retrieval<THandler>`, `ReadReceipt<THandler>`, `ReceiveReceipt<THandler>`), instantiated through dependency injection like serializers and processors, and implementing the matching interface (`IMessageHandler<TFrame>`, `IRetrievalHandler<TFrame>`, `IReadReceiptHandler<TFrame>`, `IReceiveReceiptHandler<TFrame>`). A handler has three jobs: `Create` takes the inputs relevant to its kind (a `MessageCreateContext`, `RetrievalCreateContext` or `ReceiptCreateContext`) and returns a new frame that is of that kind; `IsValid` says whether a given frame is of that kind; and getters read the kind's logical fields from a frame (subject, body, alert, priority, tag and security level for a message; the date range, authors, destinations and ids for a retrieval request; the message id for a receipt). Every handler must be stated. The aspects every frame needs to be routed (id, sender, addresses, sent time) stay on the frame builder as getter and setter mappings, and the engine stamps them onto every frame a handler creates. A frame the message handler does not recognize is still routed and handed to the network processor but is never shown or stored; a processor that sends a frame the recipient should see makes one the message handler recognizes. Frames are classified by asking handlers, never by a stored enum, so a host decides how a frame says what it is (a flag, a field that is empty or not, a derived rule; the tests recognize a message as a frame whose `IsHidden` flag is not set, so a default frame is a message).
+A **frame** is the data format of all network traffic other than packets: every heartbeat, receive receipt, read receipt, retrieval request and user message, and any other frame the host's own processors exchange, is an instance of the host's one frame type. A **message** is a kind of frame, the kind the user sees: it is shown in the UI, stored in the Inbox when received and in the Outbox when sent, and is what auto forward, printing, server storage and external systems act on. Each kind of frame is stated with a handler type (`Message<THandler>`, `Retrieval<THandler>`, `ReadReceipt<THandler>`, `ReceiveReceipt<THandler>`), instantiated through dependency injection like serializers and processors, and implementing the matching interface (`IMessageHandler<TFrame>`, `IRetrievalHandler<TFrame>`, `IReadReceiptHandler<TFrame>`, `IReceiveReceiptHandler<TFrame>`). A handler has three jobs: `Create` takes the inputs relevant to its kind (a `MessageCreateContext`, `RetrievalCreateContext` or `ReceiptCreateContext`) and returns a new frame that is of that kind; `IsValid` says whether a given frame is of that kind; and getters read the kind's logical fields from a frame (body, alert, priority, tag and security level for a message; the date range, authors, destinations and ids for a retrieval request; the message id for a receipt). Every handler must be stated. The aspects every frame needs to be routed (id, sender, addresses, sent time) stay on the frame builder as getter and setter mappings, and the engine stamps them onto every frame a handler creates. A frame the message handler does not recognize is still routed and handed to the network processor but is never shown or stored; a processor that sends a frame the recipient should see makes one the message handler recognizes. Frames are classified by asking handlers, never by a stored enum, so a host decides how a frame says what it is (a flag, a field that is empty or not, a derived rule; the tests recognize a message as a frame whose `IsHidden` flag is not set, so a default frame is a message).
 
 `Frames` supplies the concrete frame type used throughout the engine, on the wire (peer and interface connections) and in the database, and maps the engine's logical fields onto that type's real fields. Each mapping is a getter and a setter, so the engine reads and builds the host's frame without ever assuming a field name or shape. Where the host's field has the type the engine wants, naming the property (`.Id(m => m.Id)`) is enough: the builder reads the member access from the expression and compiles a getter and setter from it once, when the configuration runs, so using it costs no more than writing them out (an init-only property works; a member that cannot be assigned, or an expression that is not a plain member access such as `m => m.Id.ToUpper()`, is refused at once with an error naming it). Where the types differ - the addresses, which the host stores in its own recipient shape and converts to and from `(string Name, AddressType Type, string Information)` tuples (the getter returns any sequence of them, the setter receives a list; `Information` is optional custom per-address instructions, e.g. `Deliver to Eastside Office` - a `(string Name, AddressType Type)` overload with no `Information` is also available for a host with no use for it), and a packet's data, which is a `ReadOnlyMemory<byte>` - the getter and setter are given explicitly. Every field and every handler must be stated. The type must be LiteDB-serializable for storage, and must additionally satisfy whatever serializer is used for the wire, which by default is a `ProtobufSerializer` that builds only the frame type (so `[ProtoContract]`/`[ProtoMember]` attributes). `Serializer<TSerializer>` on the frame builder replaces it with a type implementing `IFrameSerializer` (derive from `FrameSerializer<TFrame, TPacket>` to work with the frame and packet types rather than `object`), instantiated through the running engine's dependency injection container, as long as every node this instance talks to (including its own interface connections) uses a matching one: Comlink never negotiates or advertises which format a payload used, so a mismatch deserializes garbage or throws rather than failing cleanly. A serializer can write into a `PooledBufferWriter` (an `IBufferWriter<byte>`, which a `Utf8JsonWriter` accepts) and return its `ToOwner()` to keep the buffers it hands back pooled rather than allocated per frame; `SampleJsonSerializer` does this. `IFrameSerializer.Deserialize` is given the bytes and the first packet that carried the frame across (`null` when packetization is disabled, or the frame arrived over an interface connection), so a serializer can read what the host's own packet fields say about the frame; it so a custom serializer must make its format self-describing enough to rebuild the right type itself (the default wraps every payload in an outer envelope naming the type). `Create` replaces `new TFrame()` for building an empty message. The retrieval fields back [Server Storage](#server-storage); the confirmation id and alert flag back the user-read confirmation and alert-message features (see [Peer.md](Peer.md#read-confirmation) and [Peer.md](Peer.md#alert-messages)); the priority backs [Message Composition](#message-composition) and the MSMT send priority, and the tag backs [Message Composition](#message-composition) too.
 
@@ -297,7 +297,7 @@ public sealed class MyCsvExportFormat : IExportFormat
         if (entry is MessageExportData message)
         {
             await using StreamWriter writer = new(stream, leaveOpen: true);
-            await writer.WriteLineAsync($"{message.SentAt:O},{message.FromUser},{message.Subject}");
+            await writer.WriteLineAsync($"{message.SentAt:O},{message.FromUser},{message.Body.Split('\n')[0]}");
         }
     }
 }
@@ -347,7 +347,7 @@ public sealed class MyCsvImportFormat : IImportFormat
         {
             string[] parts = line.Split(',', 3);
             if (parts.Length < 3) { continue; }
-            context.AddStagedSend(new StagedSendData { Subject = parts[0], Body = parts[2], Addresses = [new AddressRequest { UserName = parts[1] }] });
+            context.AddStagedSend(new StagedSendData { Body = parts[1], Addresses = [new AddressRequest { UserName = parts[0] }] });
         }
     }
 }
@@ -368,7 +368,7 @@ The context turns whatever the reader finds into real changes:
   ID, direction, and date) is skipped, and a draft/note matching an existing entry's name prompts the user through
   the same Keep Existing / Overwrite / Overwrite All dialog - a reader only builds the DTO, never reimplements
   matching or conflict prompting.
-- `AddStagedSend(StagedSendData)` - adds a prepared message (`Subject`, `Body`, `Addresses`, and the same
+- `AddStagedSend(StagedSendData)` - adds a prepared message (`Body`, `Addresses`, and the same
   `IsAlert`/`Priority`/`Tag`/`SecurityLevel` fields a send normally carries) to the staged send screen instead of
   writing anything to the database directly; nothing is sent until the user reviews the batch there and presses
   its own send button.
@@ -382,7 +382,7 @@ Stating a format whose `Name` matches an earlier one (case-insensitive) replaces
 
 **Network file:** none; formats are behavior, not settings.
 
-**Sample:** a `"CSV"` format reading `Subject,User,Body` lines and staging one send per line, sent one at a time
+**Sample:** a `"CSV"` format reading `User,Body` lines and staging one send per line, sent one at a time
 a second apart (`StagedSendMode.Sequential`, a one second `StagedSendDelay`).
 
 ---
@@ -400,7 +400,7 @@ engine.Frames<MyFrame>(frame => frame
 Adds a custom auto forward controller, shown as an option in the auto forward screen to every user named in
 `users` - each of them can open it there and maintain their own locally-saved target list, added to and removed
 from freely, persisted between restarts (see `Docs/Components/ViewModels.md`, `IAutoForwardViewModel`). Whenever
-this instance receives a message `filter` accepts, it is forwarded automatically, unchanged in subject and body,
+this instance receives a message `filter` accepts, it is forwarded automatically, unchanged in body,
 to every user currently on that target list - no action needed from the user beyond having set the target list up
 once. `filter` receives the frame typed, since the controller is stated on the frame configuration like `PrintCount` (only frames the message handler recognizes are auto forwarded); it is never consulted for a user with no access to the controller, or whose target list is
 currently empty, so an inaccessible or unconfigured controller costs nothing per received message beyond that one
@@ -445,7 +445,7 @@ destinations, its ID one of the IDs - each list matching any of its entries, exa
 unset criterion matches anything. Nothing restricts a request to the requester's own traffic: any user can retrieve
 any stored message, whoever sent or received it.
 
-Each found copy keeps the original's ID, sender, sent time, subject, body, priority, tag and security level, but is
+Each found copy keeps the original's ID, sender, sent time, body, priority, tag and security level, but is
 addressed to the requester alone and is never an alert: servers route purely by address list, so the copy has to
 name the requester, and an old alert must not alarm again. It arrives as an ordinary received message, oldest
 first; a client skips any whose ID its Inbox already holds, so retrieving what it already has does nothing. A
@@ -638,7 +638,7 @@ Task<UserInfo?> GetUserInfo(CancellationToken cancellation = default);
 Task<List<string>> GetUserNames(CancellationToken cancellation = default);
 Task<List<string>> GetConnectedUsers(CancellationToken cancellation = default);
 Task<UserInfo?> InstallUser(string userCode, CancellationToken cancellation = default);
-Task<SendMessageResult?> SendMessage(string subject, string body, List<AddressRequest> addresses, bool isAlert = false, int priority = 0, string tag = "", CancellationToken cancellation = default);
+Task<SendMessageResult?> SendMessage(string body, List<AddressRequest> addresses, bool isAlert = false, int priority = 0, string tag = "", CancellationToken cancellation = default);
 Task<bool> MarkMessageRead(string messageId, CancellationToken cancellation = default);
 ```
 

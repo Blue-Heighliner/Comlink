@@ -16,9 +16,6 @@ public interface IMessageHandler<TFrame> where TFrame : class
     /// <returns>The new frame.</returns>
     TFrame Create(MessageCreateContext context);
 
-    /// <summary>Gets the subject line of <paramref name="frame"/>.</summary>
-    string GetSubject(TFrame frame);
-
     /// <summary>Gets the body text of <paramref name="frame"/>.</summary>
     string GetBody(TFrame frame);
 

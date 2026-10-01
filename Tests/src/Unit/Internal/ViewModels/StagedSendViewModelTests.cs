@@ -5,7 +5,7 @@ public sealed class StagedSendViewModelTests
 {
     private static readonly ILoggerFactory noLogger = LoggerFactory.Create(_ => { });
 
-    private static StagedSendData MakeSend(string subject) => new() { Subject = subject, Body = "Body", Addresses = [new AddressRequest { UserName = "Bob" }] };
+    private static StagedSendData MakeSend(string body) => new() { Body = body, Addresses = [new AddressRequest { UserName = "Bob" }] };
 
     private sealed class Setup
     {
@@ -23,7 +23,7 @@ public sealed class StagedSendViewModelTests
 
         vm.Enqueue([MakeSend("A"), MakeSend("B")], StagedSendMode.Sequential, null);
 
-        Assert.Equal(["A", "B"], vm.Queue.Select(e => e.Subject));
+        Assert.Equal(["A", "B"], vm.Queue.Select(e => e.Preview));
         Assert.All(vm.Queue, e => Assert.Equal(StagedSendStatus.Pending, e.Status));
         Assert.True(vm.HasQueue);
     }
@@ -37,7 +37,7 @@ public sealed class StagedSendViewModelTests
 
         vm.RemoveCommand.Execute(vm.Queue[0]);
 
-        Assert.Equal(["B"], vm.Queue.Select(e => e.Subject));
+        Assert.Equal(["B"], vm.Queue.Select(e => e.Preview));
     }
 
     /// <summary>ClearCommand removes every entry from the queue.</summary>
@@ -68,7 +68,7 @@ public sealed class StagedSendViewModelTests
     {
         Setup s = new();
         s.Connection
-            .Setup(c => c.SendMessage(It.IsAny<string>(), It.IsAny<string>(), It.IsAny<List<AddressRequest>>(), It.IsAny<bool>(), It.IsAny<int>(), It.IsAny<string>(), It.IsAny<string>(), It.IsAny<CancellationToken>()))
+            .Setup(c => c.SendMessage(It.IsAny<string>(), It.IsAny<List<AddressRequest>>(), It.IsAny<bool>(), It.IsAny<int>(), It.IsAny<string>(), It.IsAny<string>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync(new SendMessageResult { MessageId = "M1", UserResults = [new UserDeliveryResult { UserName = "Bob", Success = true, AddressedVia = [] }] });
         StagedSendViewModel vm = s.Build();
         vm.Enqueue([MakeSend("A"), MakeSend("B")], StagedSendMode.Sequential, null);
@@ -78,7 +78,7 @@ public sealed class StagedSendViewModelTests
         Assert.All(vm.Queue, e => Assert.Equal(StagedSendStatus.Sent, e.Status));
         Assert.Equal("Sent 2 of 2", vm.StatusMessage);
         s.EntryService.Verify(e => e.StoreSentMessage(
-            "M1", It.IsAny<string>(), It.IsAny<string>(), It.IsAny<List<AddressData>>(), It.IsAny<DateTime>(),
+            "M1", It.IsAny<string>(), It.IsAny<List<AddressData>>(), It.IsAny<DateTime>(),
             It.IsAny<IReadOnlyList<UserDeliveryResult>>(), It.IsAny<bool>(), It.IsAny<int>(), It.IsAny<string>(), It.IsAny<string>()), Times.Exactly(2));
     }
 
@@ -89,10 +89,10 @@ public sealed class StagedSendViewModelTests
         Setup s = new();
         List<string> order = [];
         s.Connection
-            .Setup(c => c.SendMessage(It.IsAny<string>(), It.IsAny<string>(), It.IsAny<List<AddressRequest>>(), It.IsAny<bool>(), It.IsAny<int>(), It.IsAny<string>(), It.IsAny<string>(), It.IsAny<CancellationToken>()))
-            .Returns<string, string, List<AddressRequest>, bool, int, string, string, CancellationToken>((subject, _, _, _, _, _, _, _) =>
+            .Setup(c => c.SendMessage(It.IsAny<string>(), It.IsAny<List<AddressRequest>>(), It.IsAny<bool>(), It.IsAny<int>(), It.IsAny<string>(), It.IsAny<string>(), It.IsAny<CancellationToken>()))
+            .Returns<string, List<AddressRequest>, bool, int, string, string, CancellationToken>((body, _, _, _, _, _, _) =>
             {
-                order.Add(subject);
+                order.Add(body);
                 return Task.FromResult<SendMessageResult?>(new SendMessageResult { MessageId = "M", UserResults = [] });
             });
         StagedSendViewModel vm = s.Build();
@@ -109,7 +109,7 @@ public sealed class StagedSendViewModelTests
     {
         Setup s = new();
         s.Connection
-            .Setup(c => c.SendMessage(It.IsAny<string>(), It.IsAny<string>(), It.IsAny<List<AddressRequest>>(), It.IsAny<bool>(), It.IsAny<int>(), It.IsAny<string>(), It.IsAny<string>(), It.IsAny<CancellationToken>()))
+            .Setup(c => c.SendMessage(It.IsAny<string>(), It.IsAny<List<AddressRequest>>(), It.IsAny<bool>(), It.IsAny<int>(), It.IsAny<string>(), It.IsAny<string>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync(new SendMessageResult { MessageId = "M", UserResults = [] });
         StagedSendViewModel vm = s.Build();
         vm.Enqueue([MakeSend("A"), MakeSend("B")], StagedSendMode.Simultaneous, null);
@@ -117,7 +117,7 @@ public sealed class StagedSendViewModelTests
         await vm.SendAllCommand.ExecuteAsync(null);
 
         Assert.All(vm.Queue, e => Assert.Equal(StagedSendStatus.Sent, e.Status));
-        s.Connection.Verify(c => c.SendMessage(It.IsAny<string>(), It.IsAny<string>(), It.IsAny<List<AddressRequest>>(), It.IsAny<bool>(), It.IsAny<int>(), It.IsAny<string>(), It.IsAny<string>(), It.IsAny<CancellationToken>()), Times.Exactly(2));
+        s.Connection.Verify(c => c.SendMessage(It.IsAny<string>(), It.IsAny<List<AddressRequest>>(), It.IsAny<bool>(), It.IsAny<int>(), It.IsAny<string>(), It.IsAny<string>(), It.IsAny<CancellationToken>()), Times.Exactly(2));
     }
 
     /// <summary>A send that returns null (no installed user) marks that entry Failed with an explanatory message.</summary>
@@ -126,7 +126,7 @@ public sealed class StagedSendViewModelTests
     {
         Setup s = new();
         s.Connection
-            .Setup(c => c.SendMessage(It.IsAny<string>(), It.IsAny<string>(), It.IsAny<List<AddressRequest>>(), It.IsAny<bool>(), It.IsAny<int>(), It.IsAny<string>(), It.IsAny<string>(), It.IsAny<CancellationToken>()))
+            .Setup(c => c.SendMessage(It.IsAny<string>(), It.IsAny<List<AddressRequest>>(), It.IsAny<bool>(), It.IsAny<int>(), It.IsAny<string>(), It.IsAny<string>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync((SendMessageResult?)null);
         StagedSendViewModel vm = s.Build();
         vm.Enqueue([MakeSend("A")], StagedSendMode.Sequential, null);
@@ -144,7 +144,7 @@ public sealed class StagedSendViewModelTests
     {
         Setup s = new();
         s.Connection
-            .SetupSequence(c => c.SendMessage(It.IsAny<string>(), It.IsAny<string>(), It.IsAny<List<AddressRequest>>(), It.IsAny<bool>(), It.IsAny<int>(), It.IsAny<string>(), It.IsAny<string>(), It.IsAny<CancellationToken>()))
+            .SetupSequence(c => c.SendMessage(It.IsAny<string>(), It.IsAny<List<AddressRequest>>(), It.IsAny<bool>(), It.IsAny<int>(), It.IsAny<string>(), It.IsAny<string>(), It.IsAny<CancellationToken>()))
             .ThrowsAsync(new IOException("disk error"))
             .ReturnsAsync(new SendMessageResult { MessageId = "M", UserResults = [] });
         StagedSendViewModel vm = s.Build();
@@ -164,7 +164,7 @@ public sealed class StagedSendViewModelTests
     {
         Setup s = new();
         s.Connection
-            .Setup(c => c.SendMessage(It.IsAny<string>(), It.IsAny<string>(), It.IsAny<List<AddressRequest>>(), It.IsAny<bool>(), It.IsAny<int>(), It.IsAny<string>(), It.IsAny<string>(), It.IsAny<CancellationToken>()))
+            .Setup(c => c.SendMessage(It.IsAny<string>(), It.IsAny<List<AddressRequest>>(), It.IsAny<bool>(), It.IsAny<int>(), It.IsAny<string>(), It.IsAny<string>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync(new SendMessageResult { MessageId = "M", UserResults = [] });
         StagedSendViewModel vm = s.Build();
         vm.Enqueue([MakeSend("A")], StagedSendMode.Sequential, null);

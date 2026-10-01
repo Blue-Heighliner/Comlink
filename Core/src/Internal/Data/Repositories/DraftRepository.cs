@@ -3,7 +3,7 @@ namespace BlueHeighliner.Comlink.Data.Repositories;
 /// <summary>Provides data-access operations for <see cref="DraftEntity"/> documents.</summary>
 internal interface IDraftRepository
 {
-    /// <summary>Returns a page of unsent drafts in the specified folder, ordered by subject or modified date.</summary>
+    /// <summary>Returns a page of unsent drafts in the specified folder, ordered by body or modified date.</summary>
     Task<List<DraftEntity>> GetPage(string folderId, int page, bool alphabetical);
     /// <summary>Returns the count of unsent drafts in the specified folder.</summary>
     Task<int> Count(string folderId);
@@ -39,7 +39,7 @@ internal sealed class DraftRepository : IDraftRepository
         {
             ILiteQueryable<DraftEntity> query = ctx.Drafts.Query().Where(d => d.FolderId == folderId && !d.IsSent);
             return (alphabetical
-                ? query.OrderBy(d => d.Subject)
+                ? query.OrderBy(d => d.Body)
                 : query.OrderByDescending(d => d.ModifiedAt))
                 .Skip((page - 1) * PageSize)
                 .Limit(PageSize)
@@ -56,7 +56,7 @@ internal sealed class DraftRepository : IDraftRepository
         {
             ILiteQueryable<DraftEntity> query = ctx.Drafts.Query().Where(d => d.FolderId == folderId && !d.IsSent);
             return (alphabetical
-                ? query.OrderBy(d => d.Subject)
+                ? query.OrderBy(d => d.Body)
                 : query.OrderByDescending(d => d.ModifiedAt))
                 .ToList();
         });

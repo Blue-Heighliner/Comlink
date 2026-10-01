@@ -10,8 +10,8 @@ public sealed class RepositoryTests : IDisposable
         return new MessageEntity { MessageId = messageId, Message = message, FolderId = folderId, IsOutbound = isOutbound };
     }
 
-    private static DraftEntity MakeDraft(string folderId, string subject = "Sub", bool sent = false, DateTime? modifiedAt = null)
-        => new() { FolderId = folderId, Subject = subject, IsSent = sent, ModifiedAt = modifiedAt ?? DateTime.UtcNow };
+    private static DraftEntity MakeDraft(string folderId, string body = "Sub", bool sent = false, DateTime? modifiedAt = null)
+        => new() { FolderId = folderId, Body = body, IsSent = sent, ModifiedAt = modifiedAt ?? DateTime.UtcNow };
 
     private static FolderEntity MakeFolder(string id, FolderType type, string? parentId = null)
         => new() { Id = id, Name = type.ToString(), RootType = type, ParentId = parentId };
@@ -136,7 +136,7 @@ public sealed class RepositoryTests : IDisposable
 
     /// <summary>GetPage returns unsent drafts alphabetically when alphabetical=true.</summary>
     [Fact]
-    public async Task Draft_GetPage_Alphabetical_ReturnsInSubjectOrder()
+    public async Task Draft_GetPage_Alphabetical_ReturnsInBodyOrder()
     {
         DraftRepository repo = new(ctx);
         await repo.Insert(MakeDraft("root-drafts", "Zebra"));
@@ -145,7 +145,7 @@ public sealed class RepositoryTests : IDisposable
 
         List<DraftEntity> page = await repo.GetPage("root-drafts", 1, alphabetical: true);
 
-        Assert.Equal(["Alpha", "Mango", "Zebra"], page.Select(d => d.Subject).ToList());
+        Assert.Equal(["Alpha", "Mango", "Zebra"], page.Select(d => d.Body).ToList());
     }
 
     /// <summary>GetPage returns unsent drafts newest-first when alphabetical=false.</summary>
@@ -159,8 +159,8 @@ public sealed class RepositoryTests : IDisposable
 
         List<DraftEntity> page = await repo.GetPage("root-drafts", 1, alphabetical: false);
 
-        Assert.Equal("New", page[0].Subject);
-        Assert.Equal("Old", page[1].Subject);
+        Assert.Equal("New", page[0].Body);
+        Assert.Equal("Old", page[1].Body);
     }
 
     /// <summary>GetPage excludes sent drafts.</summary>
@@ -174,7 +174,7 @@ public sealed class RepositoryTests : IDisposable
         List<DraftEntity> page = await repo.GetPage("root-drafts", 1, alphabetical: true);
 
         Assert.Single(page);
-        Assert.Equal("Unsent", page[0].Subject);
+        Assert.Equal("Unsent", page[0].Body);
     }
 
     /// <summary>Count returns count of unsent drafts in the folder.</summary>
@@ -192,16 +192,16 @@ public sealed class RepositoryTests : IDisposable
 
     /// <summary>Update persists changes to a draft.</summary>
     [Fact]
-    public async Task Draft_Update_PersistsSubjectChange()
+    public async Task Draft_Update_PersistsBodyChange()
     {
         DraftRepository repo = new(ctx);
         DraftEntity draft = MakeDraft("root-drafts", "Original");
         await repo.Insert(draft);
-        draft.Subject = "Updated";
+        draft.Body = "Updated";
         await repo.Update(draft);
 
         DraftEntity? found = await repo.Get(draft.Id);
-        Assert.Equal("Updated", found!.Subject);
+        Assert.Equal("Updated", found!.Body);
     }
 
     /// <summary>Delete removes the draft from the database.</summary>

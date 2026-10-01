@@ -232,7 +232,7 @@ public sealed class ImportViewModelTests
     public async Task StartImportCommand_CustomFormatWithStagedSends_EnqueuesAndRaisesStagedSendsReady()
     {
         ImportFormatDefinition csv = new() { Name = "CSV", Read = (_, _, _) => Task.CompletedTask, StagedSendMode = StagedSendMode.Simultaneous, StagedSendDelay = TimeSpan.FromSeconds(2) };
-        List<StagedSendData> staged = [new StagedSendData { Subject = "S", Body = "B", Addresses = [] }];
+        List<StagedSendData> staged = [new StagedSendData { Body = "B", Addresses = [] }];
         ImportPackageInfo csvFile = new() { FileName = "a.csv", FullPath = "/media/a/a.csv" };
         Setup s = new();
         s.EngineController.Setup(e => e.ImportFormats).Returns([csv]);

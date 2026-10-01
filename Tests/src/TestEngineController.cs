@@ -8,8 +8,6 @@ public sealed class TestFrame
     [ProtoMember(1)] public string MessageId { get; set; } = string.Empty;
     /// <summary>User name of the sender.</summary>
     [ProtoMember(2)] public string FromUser { get; set; } = string.Empty;
-    /// <summary>Message subject line.</summary>
-    [ProtoMember(3)] public string Subject { get; set; } = string.Empty;
     /// <summary>Message body text.</summary>
     [ProtoMember(4)] public string Body { get; set; } = string.Empty;
     /// <summary>Address list associated with the message.</summary>

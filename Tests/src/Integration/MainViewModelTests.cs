@@ -624,7 +624,7 @@ public sealed class MainViewModelTests
         s.Connection.Raise(c => c.MessageReceived += null!, new MessageReceivedEvent { MessageId = "M1", FromUser = "BOB" });
         await Task.Delay(100);
 
-        s.EntryService.Verify(e => e.StoreIncomingMessage(It.IsAny<string>(), It.IsAny<string>(), It.IsAny<string>(), It.IsAny<string>(), It.IsAny<List<AddressData>>(), It.IsAny<DateTime>(), It.IsAny<bool>(), It.IsAny<int>(), It.IsAny<string>(), It.IsAny<string>()), Times.Never);
+        s.EntryService.Verify(e => e.StoreIncomingMessage(It.IsAny<string>(), It.IsAny<string>(), It.IsAny<string>(), It.IsAny<List<AddressData>>(), It.IsAny<DateTime>(), It.IsAny<bool>(), It.IsAny<int>(), It.IsAny<string>(), It.IsAny<string>()), Times.Never);
         GC.KeepAlive(vm);
     }
 

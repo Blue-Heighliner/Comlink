@@ -7,8 +7,6 @@ namespace BlueHeighliner.Comlink.Services;
 /// </summary>
 public sealed record StagedSendData
 {
-    /// <summary>Message subject line.</summary>
-    public required string Subject { get; init; }
     /// <summary>Message body text.</summary>
     public required string Body { get; init; }
     /// <summary>Recipient addresses for this send.</summary>

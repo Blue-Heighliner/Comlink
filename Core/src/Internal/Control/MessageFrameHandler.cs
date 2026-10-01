@@ -7,8 +7,6 @@ internal interface IMessageFrameHandler
     bool IsValid(object frame);
     /// <summary>Creates a message frame carrying <paramref name="context"/>.</summary>
     object Create(MessageCreateContext context);
-    /// <summary>Gets the subject line of <paramref name="frame"/>.</summary>
-    string GetSubject(object frame);
     /// <summary>Gets the body text of <paramref name="frame"/>.</summary>
     string GetBody(object frame);
     /// <summary>Gets whether <paramref name="frame"/> is an alert.</summary>
@@ -29,9 +27,6 @@ internal sealed class MessageFrameHandler<TFrame>(IMessageHandler<TFrame> handle
 
     /// <inheritdoc />
     public object Create(MessageCreateContext context) => handler.Create(context);
-
-    /// <inheritdoc />
-    public string GetSubject(object frame) => handler.GetSubject((TFrame)frame);
 
     /// <inheritdoc />
     public string GetBody(object frame) => handler.GetBody((TFrame)frame);

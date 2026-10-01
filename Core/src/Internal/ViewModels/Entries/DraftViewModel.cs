@@ -8,8 +8,6 @@ internal interface IDraftViewModel
 
     /// <summary>Gets the LiteDB object-id string for this draft.</summary>
     string Id { get; }
-    /// <summary>Gets or sets the message subject.</summary>
-    string Subject { get; set; }
     /// <summary>Gets or sets the user name being typed into the address field (auto-uppercased).</summary>
     string NewAddressUser { get; set; }
     /// <summary>Gets or sets the address type selected in the address field.</summary>
@@ -153,7 +151,6 @@ internal sealed partial class DraftViewModel : ObservableObject, IDraftViewModel
         this.connection = connection;
         this.engineController = engineController;
         activityLogger = loggerFactory.CreateLogger("ACTIVITY");
-        subject = entity.Subject;
         isSent = entity.IsSent;
         isAlert = entity.IsAlert;
         tag = entity.Tag;
@@ -196,7 +193,6 @@ internal sealed partial class DraftViewModel : ObservableObject, IDraftViewModel
     private DraftEntity entity;
     private string lastValidTag = string.Empty;
 
-    [ObservableProperty] private string subject;
     [ObservableProperty] private string newAddressUser = string.Empty;
     [ObservableProperty] private AddressTypeOption newAddressType;
     [ObservableProperty] private string newAddressInformation = string.Empty;
@@ -401,7 +397,6 @@ internal sealed partial class DraftViewModel : ObservableObject, IDraftViewModel
         IsSaving = true;
         try
         {
-            entity.Subject = Subject;
             entity.Body = BuildPlainBody();
             entity.BodySegmentsJson = SerializeBody();
             entity.Addresses = [.. Addresses];
@@ -437,7 +432,6 @@ internal sealed partial class DraftViewModel : ObservableObject, IDraftViewModel
         try
         {
             string body = BuildPlainBody();
-            entity.Subject = Subject;
             entity.Body = body;
             entity.BodySegmentsJson = SerializeBody();
             entity.Addresses = [.. Addresses];
@@ -448,7 +442,7 @@ internal sealed partial class DraftViewModel : ObservableObject, IDraftViewModel
             entity.SecurityLevel = securityLevel;
 
             SendMessageResult? result = await connection.SendMessage(
-                Subject, body,
+                body,
                 Addresses.Select(a => new AddressRequest { UserName = a.UserName, Type = a.Type, Information = a.Information }).ToList(),
                 IsAlert, SelectedPriority.Value, Tag, securityLevel);
             if (result is null)
@@ -463,7 +457,7 @@ internal sealed partial class DraftViewModel : ObservableObject, IDraftViewModel
 
             DateTime sentAt = entity.SentAt ?? DateTime.UtcNow;
             MessageEntity sentMessage = await entryService.StoreSentMessage(
-                result.MessageId, Subject, body, [.. Addresses], sentAt, result.UserResults, IsAlert, SelectedPriority.Value, Tag, securityLevel);
+                result.MessageId, body, [.. Addresses], sentAt, result.UserResults, IsAlert, SelectedPriority.Value, Tag, securityLevel);
 
             IsSent = true;
             StatusMessage = "Sent";
@@ -475,7 +469,7 @@ internal sealed partial class DraftViewModel : ObservableObject, IDraftViewModel
         }
         catch (Exception ex)
         {
-            activityLogger.LogError(ex, "Message transmission failed for {Subject}", Subject);
+            activityLogger.LogError(ex, "Message transmission failed for {Preview}", BuildPlainBody().FirstLine);
             StatusMessage = $"Send failed: {ex.Message}";
         }
         finally

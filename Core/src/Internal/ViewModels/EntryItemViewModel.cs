@@ -84,16 +84,16 @@ internal sealed partial class EntryItemViewModel : ObservableObject
     /// <summary>
     /// Gets the hex color for <see cref="Title"/>: the default light gray, except red when <see cref="IsAlert"/>
     /// and there is no <see cref="SecondaryText"/> - for entry types with no secondary line (drafts, notes),
-    /// <see cref="Title"/> itself is the subject line, so it takes the alert coloring that would otherwise go
+    /// <see cref="Title"/> itself is the first line of the body, so it takes the alert coloring that would otherwise go
     /// to <see cref="SecondaryTextColorHex"/>. For messages, where <see cref="Title"/> is the sender/destination
-    /// rather than the subject, it never turns red.
+    /// rather than the first line of the body, it never turns red.
     /// </summary>
     public string TitleColorHex => IsAlert && string.IsNullOrEmpty(SecondaryText) ? "#E06C75" : "#CCCCCC";
 
     /// <summary>
     /// Gets the hex color for <see cref="SecondaryText"/>: the default light gray, except red when
     /// <see cref="IsAlert"/> and <see cref="SecondaryText"/> is set - for messages, <see cref="SecondaryText"/>
-    /// is the subject line, so only it takes the alert coloring rather than the sender/destination in <see cref="Title"/>.
+    /// is the first line of the body, so only it takes the alert coloring rather than the sender/destination in <see cref="Title"/>.
     /// </summary>
     public string SecondaryTextColorHex => IsAlert && !string.IsNullOrEmpty(SecondaryText) ? "#E06C75" : "#CCCCCC";
 

@@ -12,7 +12,7 @@ internal sealed class MessageEntity
     /// </summary>
     public string MessageId { get; set; } = string.Empty;
     /// <summary>
-    /// The message content — subject, body, sender, addresses, sent time — as an instance of
+    /// The message content — body, sender, addresses, sent time — as an instance of
     /// <see cref="IEngineController.FrameType"/>. This is the canonical representation of the message;
     /// read its logical fields via the registered <see cref="IEngineController"/>.
     /// </summary>

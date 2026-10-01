@@ -7,7 +7,6 @@ public sealed class MessageViewModelTests
 
     private static MessageEntity MakeEntity(
         string? messageId = null,
-        string subject = "Test Subject",
         string body = "Test body",
         string fromUser = "SENDER",
         AddressData[]? addresses = null,
@@ -19,7 +18,6 @@ public sealed class MessageViewModelTests
         string id = messageId ?? Guid.NewGuid().ToString("N").ToUpperInvariant();
         object message = format.CreateFrame();
         format.SetFrameId(message, id);
-        ((TestFrame)message).Subject = subject;
         ((TestFrame)message).Body = body;
         format.SetFromUser(message, fromUser);
         ((TestFrame)message).Priority = priority;
@@ -77,7 +75,6 @@ public sealed class MessageViewModelTests
     public void Ctor_OverriddenAddressTypeLabel_IsReflectedUppercased()
     {
         Mock<IEngineController> mock = new(MockBehavior.Loose) { CallBase = false };
-        mock.Setup(e => e.GetSubject(It.IsAny<object>())).Returns(format.GetSubject);
         mock.Setup(e => e.GetBody(It.IsAny<object>())).Returns(format.GetBody);
         mock.Setup(e => e.GetFromUser(It.IsAny<object>())).Returns(format.GetFromUser);
         mock.Setup(e => e.GetIsAlert(It.IsAny<object>())).Returns(format.GetIsAlert);
@@ -106,7 +103,6 @@ public sealed class MessageViewModelTests
     {
         MessageEntity entity = MakeEntity(
             messageId: "ABC123",
-            subject: "Hello",
             body: "World",
             fromUser: "ALPHA",
             addresses:
@@ -118,7 +114,6 @@ public sealed class MessageViewModelTests
         MessageViewModel vm = new(entity, format);
 
         Assert.Equal("ABC123", vm.MessageId);
-        Assert.Equal("Hello", vm.Subject);
         Assert.Equal("World", vm.Body);
         Assert.Equal("ALPHA", vm.FromUser);
         Assert.Equal("BETA", vm.ToList);

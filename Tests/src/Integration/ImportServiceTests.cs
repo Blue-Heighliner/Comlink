@@ -72,11 +72,11 @@ public sealed class ImportServiceTests : IDisposable
         return path;
     }
 
-    private async Task<MessageEntity> InsertSourceMessage(string messageId, string subject, bool isOutbound, DateTime? receivedAt = null, int priority = 0)
+    private async Task<MessageEntity> InsertSourceMessage(string messageId, string body, bool isOutbound, DateTime? receivedAt = null, int priority = 0)
     {
         object message = messageFormat.CreateFrame();
         messageFormat.SetFrameId(message, messageId);
-        ((TestFrame)message).Subject = subject;
+        ((TestFrame)message).Body = body;
         ((TestFrame)message).Priority = priority;
         MessageEntity entity = new()
         {
@@ -132,7 +132,7 @@ public sealed class ImportServiceTests : IDisposable
         Assert.Equal(0, summary.Skipped);
         MessageEntity? imported = await destMessages.Get("M1", outbound: false);
         Assert.NotNull(imported);
-        Assert.Equal("Hello", messageFormat.GetSubject(imported.Message));
+        Assert.Equal("Hello", messageFormat.GetBody(imported.Message));
         Assert.Equal(2, messageFormat.GetPriority(imported.Message));
     }
 
@@ -174,19 +174,19 @@ public sealed class ImportServiceTests : IDisposable
         Assert.Equal(2, summary.Imported);
     }
 
-    /// <summary>A draft with no existing entry of the same subject is inserted.</summary>
+    /// <summary>A draft with no existing entry of the same first line is inserted.</summary>
     [Fact]
     public async Task Import_NewDraft_IsInserted()
     {
-        DraftEntity source = await sourceDrafts.Insert(new DraftEntity { Subject = "Plan", Body = "Body", FolderId = "root-drafts", Priority = 2 });
+        DraftEntity source = await sourceDrafts.Insert(new DraftEntity { Body = "Plan\nBody", FolderId = "root-drafts", Priority = 2 });
         string package = await BuildPackage(new ExportEntryRef { Id = source.Id.ToString(), EntryType = EntryType.Draft });
 
         ImportSummary summary = await import.Import(package, NeverAsked);
 
         Assert.Equal(1, summary.Imported);
-        DraftEntity? imported = (await destDrafts.GetAll()).SingleOrDefault(d => d.Subject == "Plan");
+        DraftEntity? imported = (await destDrafts.GetAll()).SingleOrDefault(d => d.Body.FirstLine == "Plan");
         Assert.NotNull(imported);
-        Assert.Equal("Body", imported.Body);
+        Assert.Equal("Plan\nBody", imported.Body);
         Assert.Equal(2, imported.Priority);
     }
 
@@ -194,9 +194,9 @@ public sealed class ImportServiceTests : IDisposable
     [Fact]
     public async Task Import_DraftConflict_KeepExisting_PreservesExistingContent()
     {
-        DraftEntity source = await sourceDrafts.Insert(new DraftEntity { Subject = "Plan", Body = "New", FolderId = "root-drafts" });
+        DraftEntity source = await sourceDrafts.Insert(new DraftEntity { Body = "Plan\nNew", FolderId = "root-drafts" });
         string package = await BuildPackage(new ExportEntryRef { Id = source.Id.ToString(), EntryType = EntryType.Draft });
-        DraftEntity existing = await destDrafts.Insert(new DraftEntity { Subject = "Plan", Body = "Old", FolderId = "root-drafts" });
+        DraftEntity existing = await destDrafts.Insert(new DraftEntity { Body = "Plan\nOld", FolderId = "root-drafts" });
 
         ImportSummary summary = await import.Import(package, _ => Task.FromResult(DraftNoteConflictResolution.KeepExisting));
 
@@ -204,34 +204,34 @@ public sealed class ImportServiceTests : IDisposable
         Assert.Equal(1, summary.Skipped);
         Assert.Equal(0, summary.Overwritten);
         DraftEntity? found = await destDrafts.Get(existing.Id);
-        Assert.Equal("Old", found!.Body);
+        Assert.Equal("Plan\nOld", found!.Body);
     }
 
     /// <summary>Overwrite replaces the existing draft's content, keeping its identity.</summary>
     [Fact]
     public async Task Import_DraftConflict_Overwrite_ReplacesContent()
     {
-        DraftEntity source = await sourceDrafts.Insert(new DraftEntity { Subject = "Plan", Body = "New", FolderId = "root-drafts", Priority = 3 });
+        DraftEntity source = await sourceDrafts.Insert(new DraftEntity { Body = "Plan\nNew", FolderId = "root-drafts", Priority = 3 });
         string package = await BuildPackage(new ExportEntryRef { Id = source.Id.ToString(), EntryType = EntryType.Draft });
-        DraftEntity existing = await destDrafts.Insert(new DraftEntity { Subject = "Plan", Body = "Old", FolderId = "root-drafts", Priority = 0 });
+        DraftEntity existing = await destDrafts.Insert(new DraftEntity { Body = "Plan\nOld", FolderId = "root-drafts", Priority = 0 });
 
         ImportSummary summary = await import.Import(package, _ => Task.FromResult(DraftNoteConflictResolution.Overwrite));
 
         Assert.Equal(0, summary.Imported);
         Assert.Equal(1, summary.Overwritten);
         DraftEntity? found = await destDrafts.Get(existing.Id);
-        Assert.Equal("New", found!.Body);
+        Assert.Equal("Plan\nNew", found!.Body);
         Assert.Equal(existing.Id, found.Id);
         Assert.Equal(3, found.Priority);
     }
 
-    /// <summary>The conflict prompt receives the draft's subject as the conflict name.</summary>
+    /// <summary>The conflict prompt receives the draft's first line as the conflict name.</summary>
     [Fact]
-    public async Task Import_DraftConflict_PromptCarriesSubjectAndType()
+    public async Task Import_DraftConflict_PromptCarriesNameAndType()
     {
-        DraftEntity source = await sourceDrafts.Insert(new DraftEntity { Subject = "Plan", Body = "New", FolderId = "root-drafts" });
+        DraftEntity source = await sourceDrafts.Insert(new DraftEntity { Body = "Plan\nNew", FolderId = "root-drafts" });
         string package = await BuildPackage(new ExportEntryRef { Id = source.Id.ToString(), EntryType = EntryType.Draft });
-        await destDrafts.Insert(new DraftEntity { Subject = "Plan", Body = "Old", FolderId = "root-drafts" });
+        await destDrafts.Insert(new DraftEntity { Body = "Plan\nOld", FolderId = "root-drafts" });
 
         ImportConflict? seen = null;
         await import.Import(package, c => { seen = c; return Task.FromResult(DraftNoteConflictResolution.KeepExisting); });
@@ -245,13 +245,13 @@ public sealed class ImportServiceTests : IDisposable
     [Fact]
     public async Task Import_OverwriteAll_AppliesToAllRemainingConflictsWithoutPrompting()
     {
-        DraftEntity source1 = await sourceDrafts.Insert(new DraftEntity { Subject = "A", Body = "New A", FolderId = "root-drafts" });
-        DraftEntity source2 = await sourceDrafts.Insert(new DraftEntity { Subject = "B", Body = "New B", FolderId = "root-drafts" });
+        DraftEntity source1 = await sourceDrafts.Insert(new DraftEntity { Body = "A\nNew A", FolderId = "root-drafts" });
+        DraftEntity source2 = await sourceDrafts.Insert(new DraftEntity { Body = "B\nNew B", FolderId = "root-drafts" });
         string package = await BuildPackage(
             new ExportEntryRef { Id = source1.Id.ToString(), EntryType = EntryType.Draft },
             new ExportEntryRef { Id = source2.Id.ToString(), EntryType = EntryType.Draft });
-        DraftEntity existing1 = await destDrafts.Insert(new DraftEntity { Subject = "A", Body = "Old A", FolderId = "root-drafts" });
-        DraftEntity existing2 = await destDrafts.Insert(new DraftEntity { Subject = "B", Body = "Old B", FolderId = "root-drafts" });
+        DraftEntity existing1 = await destDrafts.Insert(new DraftEntity { Body = "A\nOld A", FolderId = "root-drafts" });
+        DraftEntity existing2 = await destDrafts.Insert(new DraftEntity { Body = "B\nOld B", FolderId = "root-drafts" });
 
         int promptCount = 0;
         ImportSummary summary = await import.Import(package, _ =>
@@ -262,8 +262,8 @@ public sealed class ImportServiceTests : IDisposable
 
         Assert.Equal(1, promptCount);
         Assert.Equal(2, summary.Overwritten);
-        Assert.Equal("New A", (await destDrafts.Get(existing1.Id))!.Body);
-        Assert.Equal("New B", (await destDrafts.Get(existing2.Id))!.Body);
+        Assert.Equal("A\nNew A", (await destDrafts.Get(existing1.Id))!.Body);
+        Assert.Equal("B\nNew B", (await destDrafts.Get(existing2.Id))!.Body);
     }
 
     /// <summary>Notes are matched by the first line of their body text.</summary>
@@ -382,7 +382,7 @@ public sealed class ImportServiceTests : IDisposable
     public async Task Import_Draft_KeepsFillIns()
     {
         string segments = "[{\"kind\":\"text\",\"text\":\"Go to \"},{\"kind\":\"fillin\",\"id\":\"abcd1234\",\"options\":[\"A\",\"B\"],\"selected\":\"B\"}]";
-        DraftEntity draft = new() { Subject = "With fill-in", Body = "Go to B", BodySegmentsJson = segments, FolderId = "root-drafts" };
+        DraftEntity draft = new() { Body = "With fill-in\nGo to B", BodySegmentsJson = segments, FolderId = "root-drafts" };
         await sourceDrafts.Insert(draft);
         string package = await BuildPackage(new ExportEntryRef { Id = draft.Id.ToString(), EntryType = EntryType.Draft });
 
@@ -396,7 +396,7 @@ public sealed class ImportServiceTests : IDisposable
     [Fact]
     public async Task GetPackages_CustomFormat_FindsOnlyFilesWithFormatExtension()
     {
-        await File.WriteAllTextAsync(Path.Combine(packageDir, "contacts.csv"), "Subject,Body");
+        await File.WriteAllTextAsync(Path.Combine(packageDir, "contacts.csv"), "User,Body");
         await File.WriteAllTextAsync(Path.Combine(packageDir, "notes.txt"), "hello");
         await BuildPackage();
         ImportFormatDefinition format = new() { Name = "CSV", Read = (_, _, _) => Task.CompletedTask };
@@ -423,8 +423,7 @@ public sealed class ImportServiceTests : IDisposable
                     MessageId = "M1",
                     IsOutbound = false,
                     FromUser = "Alice",
-                    Subject = "Hello",
-                    Body = "Body",
+                    Body = "Hello",
                     Addresses = [],
                     SentAt = DateTime.UtcNow,
                     IsAlert = false,
@@ -436,8 +435,7 @@ public sealed class ImportServiceTests : IDisposable
                 await context.AddDraft(new DraftExportData
                 {
                     Id = string.Empty,
-                    Subject = "New Draft",
-                    Body = "Draft body",
+                    Body = "New Draft\nDraft body",
                     Addresses = [],
                     IsSent = false,
                     IsAlert = false,
@@ -447,7 +445,7 @@ public sealed class ImportServiceTests : IDisposable
                     ModifiedAt = DateTime.UtcNow
                 });
                 await context.AddNote(new NoteExportData { Id = string.Empty, Body = "New note", CreatedAt = DateTime.UtcNow, ModifiedAt = DateTime.UtcNow });
-                context.AddStagedSend(new StagedSendData { Subject = "Staged", Body = "Staged body", Addresses = [new AddressRequest { UserName = "Bob" }] });
+                context.AddStagedSend(new StagedSendData { Body = "Staged body", Addresses = [new AddressRequest { UserName = "Bob" }] });
             }
         };
 
@@ -457,17 +455,17 @@ public sealed class ImportServiceTests : IDisposable
         Assert.Equal(0, summary.Skipped);
         Assert.Equal(0, summary.Overwritten);
         StagedSendData staged = Assert.Single(summary.StagedSends);
-        Assert.Equal("Staged", staged.Subject);
+        Assert.Equal("Staged body", staged.Body);
         Assert.NotNull(await destMessages.Get("M1", outbound: false));
-        Assert.Contains(await destDrafts.GetAll(), d => d.Subject == "New Draft");
+        Assert.Contains(await destDrafts.GetAll(), d => d.Body.StartsWith("New Draft"));
         Assert.Contains(await destNotes.GetAll(), n => n.Body == "New note");
     }
 
-    /// <summary>A draft added through a custom format's context that matches an existing subject still prompts resolveConflict.</summary>
+    /// <summary>A draft added through a custom format's context that matches an existing first line still prompts resolveConflict.</summary>
     [Fact]
     public async Task Import_CustomFormat_DraftConflict_InvokesResolveConflict()
     {
-        await destDrafts.Insert(new DraftEntity { Subject = "Plan", Body = "Old", FolderId = "root-drafts" });
+        await destDrafts.Insert(new DraftEntity { Body = "Plan\nOld", FolderId = "root-drafts" });
         string path = Path.Combine(packageDir, "batch.csv");
         await File.WriteAllTextAsync(path, "irrelevant");
         ImportFormatDefinition format = new()
@@ -476,8 +474,7 @@ public sealed class ImportServiceTests : IDisposable
             Read = (stream, context, cancellation) => context.AddDraft(new DraftExportData
             {
                 Id = string.Empty,
-                Subject = "Plan",
-                Body = "New",
+                Body = "Plan\nNew",
                 Addresses = [],
                 IsSent = false,
                 IsAlert = false,

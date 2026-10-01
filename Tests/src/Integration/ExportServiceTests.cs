@@ -37,11 +37,11 @@ public sealed class ExportServiceTests : IDisposable
 
     private string ZipPath() => Path.Combine(exportDir, "export" + IExportService.PackageExtension);
 
-    private async Task<MessageEntity> InsertMessage(string messageId, string subject, bool isOutbound, int priority = 0)
+    private async Task<MessageEntity> InsertMessage(string messageId, string body, bool isOutbound, int priority = 0)
     {
         object message = messageFormat.CreateFrame();
         messageFormat.SetFrameId(message, messageId);
-        ((TestFrame)message).Subject = subject;
+        ((TestFrame)message).Body = body;
         ((TestFrame)message).Priority = priority;
         MessageEntity entity = new() { MessageId = messageId, Message = message, FolderId = "root-inbox", IsOutbound = isOutbound };
         await messages.Insert(entity);
@@ -53,7 +53,7 @@ public sealed class ExportServiceTests : IDisposable
     public async Task GetAllEntryRefs_ReturnsRefForEveryEntryType()
     {
         MessageEntity message = await InsertMessage("M1", "Hello", isOutbound: false);
-        DraftEntity draft = await drafts.Insert(new DraftEntity { Subject = "D", FolderId = "root-drafts" });
+        DraftEntity draft = await drafts.Insert(new DraftEntity { Body = "D", FolderId = "root-drafts" });
         NoteEntity note = await notes.Insert(new NoteEntity { Body = "N", FolderId = "root-notes" });
         ActivityLogEntity log = await activityLogs.Insert(new ActivityLogEntity { Date = DateTime.UtcNow.Date });
 
@@ -85,7 +85,7 @@ public sealed class ExportServiceTests : IDisposable
     public async Task Export_WritesOneJsonFilePerEntry()
     {
         await InsertMessage("M1", "Hello World", isOutbound: false, priority: 3);
-        DraftEntity draft = await drafts.Insert(new DraftEntity { Subject = "Draft Subject", FolderId = "root-drafts", Priority = 2 });
+        DraftEntity draft = await drafts.Insert(new DraftEntity { Body = "Draft Subject", FolderId = "root-drafts", Priority = 2 });
         string zipPath = ZipPath();
 
         List<ExportEntryRef> refs =
@@ -105,7 +105,7 @@ public sealed class ExportServiceTests : IDisposable
         using (StreamReader reader = new(messageEntry.Open()))
         {
             MessageExportData? data = JsonSerializer.Deserialize<MessageExportData>(reader.ReadToEnd());
-            Assert.Equal("Hello World", data!.Subject);
+            Assert.Equal("Hello World", data!.Body);
             Assert.Equal(3, data.Priority);
         }
 
@@ -113,7 +113,7 @@ public sealed class ExportServiceTests : IDisposable
         using (StreamReader reader = new(draftEntry.Open()))
         {
             DraftExportData? data = JsonSerializer.Deserialize<DraftExportData>(reader.ReadToEnd());
-            Assert.Equal("Draft Subject", data!.Subject);
+            Assert.Equal("Draft Subject", data!.Body);
             Assert.Equal(2, data.Priority);
         }
     }
@@ -168,7 +168,7 @@ public sealed class ExportServiceTests : IDisposable
     public async Task Export_CustomFormatWithEntryTypeFilter_SkipsDisallowedTypes()
     {
         await InsertMessage("M1", "Hello", isOutbound: false);
-        DraftEntity draft = await drafts.Insert(new DraftEntity { Subject = "D", FolderId = "root-drafts" });
+        DraftEntity draft = await drafts.Insert(new DraftEntity { Body = "D", FolderId = "root-drafts" });
         string zipPath = ZipPath();
         List<ExportEntryRef> refs =
         [

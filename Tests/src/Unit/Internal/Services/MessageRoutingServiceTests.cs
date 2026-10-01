@@ -94,7 +94,6 @@ public sealed class MessageRoutingServiceTests
         MessageRoutingService service = new(fake, format, loggerFactory);
         SendMessagePayload payload = new()
         {
-            Subject = "Hello",
             Body = "World",
             Addresses = [new AddressPayload { UserName = "TargetUser", Type = "To" }]
         };
@@ -113,7 +112,6 @@ public sealed class MessageRoutingServiceTests
         MessageRoutingService service = new(fake, format, loggerFactory);
         SendMessagePayload payload = new()
         {
-            Subject = "Hello",
             Body = "World",
             Addresses = [new AddressPayload { UserName = "TargetUser", Type = "To" }],
             Priority = 2
@@ -132,7 +130,6 @@ public sealed class MessageRoutingServiceTests
         MessageRoutingService service = new(fake, format, loggerFactory);
         SendMessagePayload payload = new()
         {
-            Subject = "Multi",
             Body = "Body",
             Addresses =
             [
@@ -159,7 +156,6 @@ public sealed class MessageRoutingServiceTests
         MessageRoutingService service = new(fake, controller.Object, loggerFactory);
         SendMessagePayload payload = new()
         {
-            Subject = "Hi",
             Body = "Body",
             Addresses =
             [
@@ -187,7 +183,7 @@ public sealed class MessageRoutingServiceTests
     {
         FakePeerService fake = new();
         MessageRoutingService service = new(fake, format, loggerFactory);
-        SendMessagePayload payload = new() { Subject = "Hi", Body = "Body", Addresses = [new AddressPayload { UserName = "OMAHA", Type = "External" }] };
+        SendMessagePayload payload = new() { Body = "Body", Addresses = [new AddressPayload { UserName = "OMAHA", Type = "External" }] };
 
         (string messageId, IReadOnlyList<UserDeliveryResult> results) = await service.Route("Source", payload, default);
 
@@ -204,7 +200,6 @@ public sealed class MessageRoutingServiceTests
         MessageRoutingService service = new(fake, format, loggerFactory);
         SendMessagePayload payload = new()
         {
-            Subject = "Fail",
             Body = "Body",
             Addresses = [new AddressPayload { UserName = "Unreachable", Type = "To" }]
         };
@@ -232,7 +227,6 @@ public sealed class MessageRoutingServiceTests
 
         SendMessagePayload payload = new()
         {
-            Subject = "Broadcast",
             Body = "Body",
             Addresses = [new AddressPayload { UserName = "OPS", Type = "To" }]
         };
@@ -264,7 +258,6 @@ public sealed class MessageRoutingServiceTests
 
         SendMessagePayload payload = new()
         {
-            Subject = "Nested",
             Body = "Body",
             Addresses = [new AddressPayload { UserName = "OUTER", Type = "To" }]
         };
@@ -292,7 +285,6 @@ public sealed class MessageRoutingServiceTests
 
         SendMessagePayload payload = new()
         {
-            Subject = "Self",
             Body = "Body",
             Addresses = [new AddressPayload { UserName = "SOURCE", Type = "To" }]
         };
@@ -321,7 +313,6 @@ public sealed class MessageRoutingServiceTests
 
         SendMessagePayload payload = new()
         {
-            Subject = "Mixed",
             Body = "Body",
             Addresses =
             [
@@ -417,7 +408,6 @@ public sealed class MessageRoutingServiceTests
 
         SendMessagePayload payload = new()
         {
-            Subject = "ViaExternalServer",
             Body = "Body",
             Addresses =
             [
@@ -450,7 +440,6 @@ public sealed class MessageRoutingServiceTests
 
         SendMessagePayload payload = new()
         {
-            Subject = "Fail",
             Body = "Body",
             Addresses = [new AddressPayload { UserName = "Alpha", Type = "To" }]
         };
@@ -476,7 +465,6 @@ public sealed class MessageRoutingServiceTests
 
         SendMessagePayload payload = new()
         {
-            Subject = "Self",
             Body = "Body",
             Addresses = [new AddressPayload { UserName = "SOURCE", Type = "To" }]
         };
@@ -496,7 +484,7 @@ public sealed class MessageRoutingServiceTests
     {
         FakePeerService fake = new();
         MessageRoutingService service = new(fake, format, loggerFactory);
-        TestFrame message = new() { Subject = "Hi", Body = "Body" };
+        TestFrame message = new() { Body = "Body" };
         format.SetAddresses(message, [new MessageAddress { UserName = "TargetUser", Type = AddressType.To }]);
 
         await service.RouteFrame("SourceUser", message, default);
@@ -535,7 +523,7 @@ public sealed class MessageRoutingServiceTests
         controller.Setup(c => c.GetUserSecurityLevel("Blocked")).Returns("LOW");
         FakePeerService fake = new();
         MessageRoutingService service = new(fake, controller.Object, loggerFactory);
-        TestFrame message = new() { Subject = "Secret", Body = "Body", SecurityLevel = "HIGH" };
+        TestFrame message = new() { Body = "Body", SecurityLevel = "HIGH" };
         controller.Object.SetAddresses(message, [new MessageAddress { UserName = "Cleared", Type = AddressType.To }, new MessageAddress { UserName = "Blocked", Type = AddressType.To }]);
 
         (_, IReadOnlyList<UserDeliveryResult> results) = await service.RouteFrame("SourceUser", message, default);

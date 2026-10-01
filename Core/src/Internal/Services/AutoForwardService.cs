@@ -3,7 +3,7 @@ namespace BlueHeighliner.Comlink.Services;
 /// <summary>
 /// Runs the host's auto forward controllers (<see cref="IEngineController.AutoForwardControllers"/>) whenever
 /// <see cref="IPeerService"/> delivers a new message, in both Client and Headless mode: for every controller this
-/// instance's own installed user has access to, a matching message is forwarded, unchanged in subject and body, to
+/// instance's own installed user has access to, a matching message is forwarded, unchanged in body, to
 /// every user on that controller's locally-saved target list.
 /// </summary>
 internal interface IAutoForwardService
@@ -84,7 +84,6 @@ internal sealed class AutoForwardService : IAutoForwardService
         {
             object forwarded = engineController.CreateMessage(new MessageCreateContext
             {
-                Subject = engineController.GetSubject(original),
                 Body = engineController.GetBody(original),
                 IsAlert = engineController.GetIsAlert(original),
                 Priority = engineController.GetPriority(original),

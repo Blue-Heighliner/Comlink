@@ -3,8 +3,6 @@ namespace BlueHeighliner.Comlink;
 /// <summary>The content the engine hands to <see cref="IMessageHandler{TFrame}.Create"/> to build a message frame.</summary>
 public sealed record MessageCreateContext
 {
-    /// <summary>Gets the subject line.</summary>
-    public required string Subject { get; init; }
 
     /// <summary>Gets the body text.</summary>
     public required string Body { get; init; }

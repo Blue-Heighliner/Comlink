@@ -17,7 +17,7 @@ public interface IImportFormatContext
     Task AddMessage(MessageExportData message);
 
     /// <summary>
-    /// Adds a draft. An existing draft with the same (trimmed) <see cref="DraftExportData.Subject"/> prompts the
+    /// Adds a draft. An existing draft with the same (trimmed) first line of <see cref="DraftExportData.Body"/> prompts the
     /// user to keep, overwrite, or overwrite-all, the same as a conflicting entry from a built-in package.
     /// </summary>
     Task AddDraft(DraftExportData draft);

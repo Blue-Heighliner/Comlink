@@ -141,7 +141,7 @@ internal sealed partial class PrintManagerViewModel : ObservableObject, IPrintMa
         if (count <= 0) { return Task.CompletedTask; }
 
         int priority = engineController.GetPriority(entity.Message);
-        string title = engineController.GetSubject(entity.Message);
+        string title = engineController.GetBody(entity.Message).FirstLine;
         for (int i = 0; i < count; i++)
         {
             Enqueue(new PrintQueueEntry
@@ -311,18 +311,14 @@ internal sealed partial class PrintManagerViewModel : ObservableObject, IPrintMa
                 {
                     MessageEntity? entity = await messages.Get(job.EntryId, job.IsOutboundMessage);
                     if (entity is null) { return []; }
-                    List<string> lines = [engineController.GetSubject(entity.Message), string.Empty];
-                    lines.AddRange(SplitLines(engineController.GetBody(entity.Message)));
-                    return lines;
+                    return [.. SplitLines(engineController.GetBody(entity.Message))];
                 }
             case EntryType.Draft:
                 {
                     ObjectId? id = TryParseObjectId(job.EntryId);
                     DraftEntity? entity = id is null ? null : await drafts.Get(id);
                     if (entity is null) { return []; }
-                    List<string> lines = [entity.Subject, string.Empty];
-                    lines.AddRange(SplitLines(entity.Body));
-                    return lines;
+                    return [.. SplitLines(entity.Body)];
                 }
             case EntryType.Note:
                 {

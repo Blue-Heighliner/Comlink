@@ -381,7 +381,7 @@ internal sealed partial class MainViewModel : ObservableObject, IMainViewModel
             if (await entryService.IncomingMessageExists(evt.MessageId)) { return; }
 
             MessageEntity entity = await entryService.StoreIncomingMessage(
-                evt.MessageId, evt.FromUser, evt.Subject, evt.Body,
+                evt.MessageId, evt.FromUser, evt.Body,
                 evt.Addresses.Select(a => new Data.Entities.AddressData { UserName = a.UserName, Type = a.Type, Information = a.Information }).ToList(),
                 evt.SentAt, evt.IsAlert, evt.Priority, evt.Tag, evt.SecurityLevel);
 
@@ -393,7 +393,7 @@ internal sealed partial class MainViewModel : ObservableObject, IMainViewModel
                 string? tagText = engineController.TagsEnabled && !string.IsNullOrEmpty(evt.Tag) ? evt.Tag : null;
                 string? securityLevelColor = engineController.SecurityLevels.IsRecognized(evt.SecurityLevel) ? engineController.SecurityLevels.GetColor(evt.SecurityLevel) : null;
                 EntryItemViewModel item = new(entity.MessageId, evt.FromUser, EntryType.Message, entity.ReceivedAt,
-                    secondaryText: evt.Subject, priorityText: priorityText, tagText: tagText, timeText: timeText, securityLevelColorHex: securityLevelColor, isAlert: evt.IsAlert);
+                    secondaryText: evt.Body.FirstLine, priorityText: priorityText, tagText: tagText, timeText: timeText, securityLevelColorHex: securityLevelColor, isAlert: evt.IsAlert);
                 item.OverallStatus = entity.ReadStatus;
                 await entryBar.PrependEntry(item);
             }

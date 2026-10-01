@@ -5,8 +5,6 @@ internal sealed class DraftEntity
 {
     /// <summary>Unique document identifier.</summary>
     public ObjectId Id { get; set; } = ObjectId.NewObjectId();
-    /// <summary>Subject line of the draft.</summary>
-    public string Subject { get; set; } = string.Empty;
     /// <summary>Plain-text body of the draft.</summary>
     public string Body { get; set; } = string.Empty;
     /// <summary>JSON-serialized array of <see cref="DraftBodySegmentData"/> segments.</summary>

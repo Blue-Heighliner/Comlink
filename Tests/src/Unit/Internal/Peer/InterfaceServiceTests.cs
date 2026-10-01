@@ -24,7 +24,6 @@ public sealed class InterfaceServiceTests
 
         TestFrame incoming = new()
         {
-            Subject = "Hi",
             Body = "Body",
             Addresses = [new TestAddressEntry { UserName = "DEST", Type = "To" }, new TestAddressEntry { UserName = "OMAHA", Type = "External", Information = "Deliver to Eastside Office" }],
             IsAlert = true,
@@ -35,7 +34,7 @@ public sealed class InterfaceServiceTests
         await svc.HandleInterfaceMessage(buf.Memory.ToArray());
 
         routing.Verify(r => r.Route("LOCAL", It.Is<SendMessagePayload>(p =>
-            p.Subject == "Hi" && p.Body == "Body" && p.Addresses.Count == 2 && p.Addresses[0].UserName == "DEST" && p.Addresses[1].Type == "External" && p.Addresses[1].Information == "Deliver to Eastside Office" && p.IsAlert && p.Priority == 2),
+            p.Body == "Body" && p.Addresses.Count == 2 && p.Addresses[0].UserName == "DEST" && p.Addresses[1].Type == "External" && p.Addresses[1].Information == "Deliver to Eastside Office" && p.IsAlert && p.Priority == 2),
             It.IsAny<CancellationToken>()), Times.Once);
     }
 
@@ -49,7 +48,7 @@ public sealed class InterfaceServiceTests
         Mock<IUserService> user = new();
         user.Setup(s => s.GetCurrentUserInfo()).Returns(MakeUserInfo("LOCAL"));
         InterfaceService svc = new(peerFactory.Object, format, routing.Object, user.Object, noLogger);
-        using IMemoryOwner<byte> buf = serializer.Serialize(new TestFrame { Subject = "Hi" });
+        using IMemoryOwner<byte> buf = serializer.Serialize(new TestFrame { Body = "Hi" });
 
         await svc.HandleInterfaceMessage(buf.Memory.ToArray());
 
@@ -67,7 +66,7 @@ public sealed class InterfaceServiceTests
 
         InterfaceService svc = new(peerFactory.Object, format, routing.Object, user.Object, noLogger);
 
-        using IMemoryOwner<byte> buf = serializer.Serialize(new TestFrame { Subject = "Hi" });
+        using IMemoryOwner<byte> buf = serializer.Serialize(new TestFrame { Body = "Hi" });
         await svc.HandleInterfaceMessage(buf.Memory.ToArray());
 
         routing.Verify(r => r.Route(It.IsAny<string>(), It.IsAny<SendMessagePayload>(), It.IsAny<CancellationToken>()), Times.Never);
@@ -146,7 +145,6 @@ public sealed class InterfaceServiceTests
 
         TestFrame outgoing = new()
         {
-            Subject = "FromInterface",
             Body = "Body",
             Addresses = [new TestAddressEntry { UserName = "DEST", Type = "To" }]
         };
@@ -174,7 +172,7 @@ public sealed class InterfaceServiceTests
 
         (string fromUser, SendMessagePayload payload) = await routeCalled.Task.WaitAsync(TimeSpan.FromSeconds(10));
         Assert.Equal("LOCAL", fromUser);
-        Assert.Equal("FromInterface", payload.Subject);
+        Assert.Equal("Body", payload.Body);
         Assert.Single(payload.Addresses);
         Assert.Equal("DEST", payload.Addresses[0].UserName);
 

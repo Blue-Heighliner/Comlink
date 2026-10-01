@@ -11,16 +11,12 @@ public sealed class SampleMessageHandler : IMessageHandler<SampleFrame>
         => new()
         {
             IsMessage = true,
-            Title = context.Subject,
             Text = context.Body,
             Alert = context.IsAlert,
             Importance = context.Priority,
             Category = context.Tag,
             Classification = context.SecurityLevel
         };
-
-    /// <inheritdoc />
-    public string GetSubject(SampleFrame frame) => frame.Title;
 
     /// <inheritdoc />
     public string GetBody(SampleFrame frame) => frame.Text;

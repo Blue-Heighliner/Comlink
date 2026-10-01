@@ -143,18 +143,6 @@
       </DockPanel>
     </Border>
 
-    <!-- Subject -->
-    <TextBox DockPanel.Dock="Top"
-             Text="{Binding Subject}"
-             Watermark="Subject"
-             IsReadOnly="{Binding IsSent}"
-             FontSize="18"
-             FontWeight="SemiBold"
-             Background="Transparent"
-             BorderThickness="0"
-             Padding="0,4,0,4"
-             Margin="0,0,0,12" />
-
     <!-- Addresses -->
     <Border DockPanel.Dock="Top"
             BorderBrush="#3E3E42"

@@ -251,8 +251,6 @@ internal interface IEngineController
     string GetFromUser(object frame);
     /// <summary>Sets the sender user name on <paramref name="frame"/>.</summary>
     void SetFromUser(object frame, string value);
-    /// <summary>Gets the subject line from <paramref name="frame"/>.</summary>
-    string GetSubject(object frame);
     /// <summary>Gets the body text from <paramref name="frame"/>.</summary>
     string GetBody(object frame);
     /// <summary>Gets the recipient address list from <paramref name="frame"/>.</summary>
@@ -266,7 +264,7 @@ internal interface IEngineController
     /// <summary>
     /// Gets the message ID this frame is a read receipt for, or an empty string if
     /// <paramref name="frame"/> is not a read receipt. A read receipt frame carries only this field
-    /// (plus <see cref="GetFrameId"/>/<see cref="GetFromUser"/> for its own transport) — subject, body,
+    /// (plus <see cref="GetFrameId"/>/<see cref="GetFromUser"/> for its own transport) — body,
     /// and addresses are left unset — and is sent back to the original sender when the recipient opens the
     /// referenced message, so the sender can advance that message's delivery status to <c>Read</c>. See
     /// <c>Docs/Components/Peer.md</c>.
@@ -635,8 +633,6 @@ internal class EngineController(EngineBuilder builder, ICurrentUserProvider curr
     /// <inheritdoc />
     public virtual object CreateMessage(MessageCreateContext context) => messageHandler.Value.Create(context);
     /// <inheritdoc />
-    public virtual string GetSubject(object value) => messageHandler.Value.GetSubject(value);
-    /// <inheritdoc />
     public virtual string GetBody(object value) => messageHandler.Value.GetBody(value);
     /// <inheritdoc />
     public virtual bool GetIsAlert(object value) => messageHandler.Value.GetIsAlert(value);
@@ -765,7 +761,6 @@ internal static class EngineControllerExtensions
         {
             MessageId = engineController.GetFrameId(payload),
             FromUser = engineController.GetFromUser(payload),
-            Subject = engineController.GetSubject(payload),
             Body = engineController.GetBody(payload),
             Addresses = [.. engineController.GetAddresses(payload).Select(a => new AddressRequest { UserName = a.UserName, Type = a.Type.ToString(), Information = a.Information })],
             SentAt = engineController.GetSentAt(payload),

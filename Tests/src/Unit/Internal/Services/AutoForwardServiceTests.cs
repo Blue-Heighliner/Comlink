@@ -101,14 +101,13 @@ public sealed class AutoForwardServiceTests
         using CancellationTokenSource cts = new();
         Task startTask = service.Start(cts.Token);
         await Task.Delay(20);
-        TestFrame message = new() { MessageId = "M1", FromUser = "SENDER", Subject = "Hi", Body = "Hello" };
+        TestFrame message = new() { MessageId = "M1", FromUser = "SENDER", Body = "Hello" };
 
         await peer.FireMessageDelivered(message);
 
         (string fromUser, object forwarded) = Assert.Single(routing.RoutedMessages);
         Assert.Equal("ME", fromUser);
         TestFrame sent = Assert.IsType<TestFrame>(forwarded);
-        Assert.Equal("Hi", sent.Subject);
         Assert.Equal("Hello", sent.Body);
         cts.Cancel();
         await startTask;
@@ -125,10 +124,10 @@ public sealed class AutoForwardServiceTests
         Task startTask = service.Start(cts.Token);
         await Task.Delay(20);
 
-        await peer.FireMessageDelivered(new TestFrame { MessageId = "F1", FromUser = "SENDER", Subject = "Hi", IsHidden = true });
+        await peer.FireMessageDelivered(new TestFrame { MessageId = "F1", FromUser = "SENDER", IsHidden = true });
         Assert.Empty(routing.RoutedMessages);
 
-        await peer.FireMessageDelivered(new TestFrame { MessageId = "M1", FromUser = "SENDER", Subject = "Hi" });
+        await peer.FireMessageDelivered(new TestFrame { MessageId = "M1", FromUser = "SENDER" });
         (_, object forwarded) = Assert.Single(routing.RoutedMessages);
         Assert.False(Assert.IsType<TestFrame>(forwarded).IsHidden);
         cts.Cancel();
