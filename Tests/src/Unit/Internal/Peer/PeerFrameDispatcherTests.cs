@@ -7,7 +7,7 @@ public sealed class PeerFrameDispatcherTests
 
     private static ReadOnlyMemory<byte> Encode(IEngineController controller, TestFrame message)
     {
-        using IMemoryOwner<byte> buf = controller.NetworkSerializer.Serialize(message);
+        using IMemoryOwner<byte> buf = controller.FrameSerializer.Serialize(message);
         return buf.Memory.ToArray();
     }
 
@@ -22,6 +22,24 @@ public sealed class PeerFrameDispatcherTests
 
         Assert.True(ok);
         Assert.Single(delivered);
+    }
+
+    /// <summary>The first packet that carried a frame is handed to the frame serializer along with the bytes.</summary>
+    [Fact]
+    public async Task Dispatch_PacketArgument_IsHandedToTheFrameSerializer()
+    {
+        Mock<IFrameSerializer> serializer = new();
+        TestFrame frame = new() { MessageId = "M1" };
+        object packet = new();
+        serializer.Setup(s => s.Deserialize(It.IsAny<ReadOnlyMemory<byte>>(), packet)).Returns(frame);
+        Mock<TestEngineController> controller = new() { CallBase = true };
+        controller.Setup(c => c.FrameSerializer).Returns(serializer.Object);
+        List<object> delivered = [];
+
+        bool ok = await PeerFrameDispatcher.Dispatch(new byte[] { 1 }, controller.Object, logger, m => { delivered.Add(m); return Task.CompletedTask; }, null, packet);
+
+        Assert.True(ok);
+        Assert.Same(frame, Assert.Single(delivered));
     }
 
     /// <summary>A heartbeat, an empty message, is acknowledged and neither delivered nor treated as a confirmation.</summary>

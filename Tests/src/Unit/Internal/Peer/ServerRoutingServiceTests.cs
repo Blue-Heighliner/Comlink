@@ -115,7 +115,7 @@ public sealed class ServerRoutingServiceTests
         });
     }
 
-    private static readonly INetworkSerializer serializer = new ProtobufNetworkSerializer();
+    private static readonly ProtobufSerializer serializer = new();
 
     private static ReadOnlyMemory<byte> Encode(TestFrame message)
     {

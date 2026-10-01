@@ -16,17 +16,17 @@ internal interface IEngineController
 {
     /// <summary>
     /// The concrete frame type used throughout the engine. Must be a type LiteDB can serialize for
-    /// storage, and must satisfy whatever <see cref="NetworkSerializer"/> requires for wire transport - the
-    /// default <see cref="ProtobufNetworkSerializer"/> requires it to carry <c>[ProtoContract]</c>/<c>[ProtoMember]</c> attributes.
+    /// storage, and must satisfy whatever <see cref="FrameSerializer"/> requires for wire transport - the
+    /// default <see cref="ProtobufSerializer"/> requires it to carry <c>[ProtoContract]</c>/<c>[ProtoMember]</c> attributes.
     /// </summary>
     Type FrameType { get; }
 
     /// <summary>
     /// Serializes and deserializes instances of <see cref="FrameType"/> to and from the bytes actually
-    /// sent across the network. Defaults to <see cref="ProtobufNetworkSerializer"/>; override to use a
+    /// sent across the network. Defaults to <see cref="ProtobufSerializer"/>; override to use a
     /// different wire format, as long as every node this instance talks to is configured the same way.
     /// </summary>
-    INetworkSerializer NetworkSerializer { get; }
+    IFrameSerializer FrameSerializer { get; }
 
     /// <summary>
     /// The concrete packet type payloads are broken into for the network, or <see langword="null"/> (the default)
@@ -41,10 +41,10 @@ internal interface IEngineController
 
     /// <summary>
     /// Serializes and deserializes instances of <see cref="PacketType"/> to and from the bytes actually sent
-    /// across the network, like <see cref="NetworkSerializer"/> does for messages. <see langword="null"/> exactly
+    /// across the network, like <see cref="FrameSerializer"/> does for messages. <see langword="null"/> exactly
     /// when <see cref="PacketType"/> is.
     /// </summary>
-    INetworkSerializer? PacketSerializer { get; }
+    IPacketSerializer? PacketSerializer { get; }
 
     /// <summary>
     /// The largest a serialized packet may be, in bytes. Smaller packets let a higher-priority payload cut in
@@ -333,6 +333,10 @@ internal interface IEngineController
     int GetPacketCount(object packet);
     /// <summary>Sets the number of packets the payload <paramref name="packet"/> belongs to was broken into.</summary>
     void SetPacketCount(object packet, int value);
+    /// <summary>Gets whether <paramref name="packet"/> is a data packet, one that carries a piece of a frame's payload.</summary>
+    bool GetIsData(object packet);
+    /// <summary>Sets whether <paramref name="packet"/> is a data packet.</summary>
+    void SetIsData(object packet, bool value);
     /// <summary>Gets the length in bytes of the whole payload <paramref name="packet"/> belongs to.</summary>
     int GetPayloadLength(object packet);
     /// <summary>Sets the length in bytes of the whole payload <paramref name="packet"/> belongs to.</summary>
@@ -437,8 +441,8 @@ internal class EngineController(EngineBuilder builder, ICurrentUserProvider curr
 
     private readonly FrameMap frame = builder.FrameMap ?? throw new InvalidOperationException("The engine configuration must state its frame type with Frames<TFrame>(...).");
     private readonly PacketMap? packet = builder.PacketMap;
-    private readonly Lazy<INetworkSerializer> networkSerializer = new(() => (builder.FrameMap ?? throw new InvalidOperationException("The engine configuration must state its frame type with Frames<TFrame>(...).")).Serializer.Create(services));
-    private readonly Lazy<INetworkSerializer?> packetSerializer = new(() => builder.PacketMap?.Serializer.Create(services));
+    private readonly Lazy<IFrameSerializer> frameSerializer = new(() => (builder.FrameMap ?? throw new InvalidOperationException("The engine configuration must state its frame type with Frames<TFrame>(...).")).Serializer.Create(services));
+    private readonly Lazy<IPacketSerializer?> packetSerializer = new(() => builder.PacketMap?.Serializer.Create(services));
     private readonly Lazy<IReadOnlyList<ExportFormatDefinition>> exportFormats = new(() => Replacing(
         builder.ExportFormats.Select(registration => registration.Create(services)),
         format => new ExportFormatDefinition { Name = format.Name, Serialize = format.Export, AllowedTypes = format.Accepts },
@@ -456,11 +460,11 @@ internal class EngineController(EngineBuilder builder, ICurrentUserProvider curr
     /// <inheritdoc />
     public virtual Type FrameType => frame.Type;
     /// <inheritdoc />
-    public virtual INetworkSerializer NetworkSerializer => networkSerializer.Value;
+    public virtual IFrameSerializer FrameSerializer => frameSerializer.Value;
     /// <inheritdoc />
     public virtual Type? PacketType => packet?.Type;
     /// <inheritdoc />
-    public virtual INetworkSerializer? PacketSerializer => packetSerializer.Value;
+    public virtual IPacketSerializer? PacketSerializer => packetSerializer.Value;
     /// <inheritdoc />
     public virtual int PacketSize => packet?.Size ?? 16 * 1024;
     /// <inheritdoc />
@@ -694,6 +698,10 @@ internal class EngineController(EngineBuilder builder, ICurrentUserProvider curr
     public virtual int GetPacketCount(object value) => Packet.GetCount(value);
     /// <inheritdoc />
     public virtual void SetPacketCount(object value, int count) => Packet.SetCount(value, count);
+    /// <inheritdoc />
+    public virtual bool GetIsData(object value) => Packet.GetIsData(value);
+    /// <inheritdoc />
+    public virtual void SetIsData(object value, bool isData) => Packet.SetIsData(value, isData);
     /// <inheritdoc />
     public virtual int GetPayloadLength(object value) => Packet.GetPayloadLength(value);
     /// <inheritdoc />

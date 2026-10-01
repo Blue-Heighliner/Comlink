@@ -11,9 +11,10 @@ internal interface IPacketizer
     /// <summary>Breaks <paramref name="payload"/> into packets. Always returns at least one packet, so an empty payload still produces a packet a receiver can tell apart from silence.</summary>
     /// <param name="payload">The payload to send, already serialized.</param>
     /// <param name="priority">The payload's own send priority, which every packet inherits.</param>
+    /// <param name="frame">The original frame the payload is the serialization of, handed to the packet serializer with each packet, or <see langword="null"/> when the payload is not a frame.</param>
     /// <returns>The packets, in the order they should be queued. The caller owns them and must dispose each once sent.</returns>
     /// <exception cref="ArgumentOutOfRangeException">The payload is too large to send.</exception>
-    IReadOnlyList<Packet> Split(ReadOnlyMemory<byte> payload, int priority);
+    IReadOnlyList<Packet> Split(ReadOnlyMemory<byte> payload, int priority, object? frame = null);
 
     /// <summary>Creates the state one remote sender's packets are reassembled with. Each sender needs its own, so that packets of different senders never mix.</summary>
     /// <returns>A new assembler, owned by the caller.</returns>
@@ -53,7 +54,7 @@ internal sealed class Packetizer : IPacketizer
     }
 
     private readonly IEngineController engineController;
-    private readonly INetworkSerializer serializer;
+    private readonly IPacketSerializer serializer;
     private readonly int maxPayloadSize;
     private readonly int maxPendingPayloads;
     private readonly int packetSize;
@@ -61,7 +62,7 @@ internal sealed class Packetizer : IPacketizer
     private int nextId;
 
     /// <inheritdoc />
-    public IReadOnlyList<Packet> Split(ReadOnlyMemory<byte> payload, int priority)
+    public IReadOnlyList<Packet> Split(ReadOnlyMemory<byte> payload, int priority, object? frame = null)
     {
         ArgumentOutOfRangeException.ThrowIfGreaterThan(payload.Length, maxPayloadSize, nameof(payload));
 
@@ -76,7 +77,8 @@ internal sealed class Packetizer : IPacketizer
             {
                 int offset = index * chunkSize;
                 object packet = Build(id, index, count, payload.Length, payload.Slice(offset, Math.Min(chunkSize, payload.Length - offset)));
-                IMemoryOwner<byte> data = serializer.Serialize(packet);
+                if (frame is not null) { engineController.FrameSerializer.ConfigurePacket(frame, packet); }
+                IMemoryOwner<byte> data = serializer.Serialize(packet, frame);
                 if (data.Memory.Length > packetSize)
                 {
                     int length = data.Memory.Length;
@@ -105,6 +107,7 @@ internal sealed class Packetizer : IPacketizer
         engineController.SetPayloadId(packet, id);
         engineController.SetPacketIndex(packet, index);
         engineController.SetPacketCount(packet, count);
+        engineController.SetIsData(packet, true);
         engineController.SetPayloadLength(packet, length);
         engineController.SetPacketData(packet, data);
         return packet;
@@ -133,7 +136,7 @@ internal sealed class Packetizer : IPacketizer
     private int Probe(int dataLength)
     {
         object packet = Build(int.MaxValue, int.MaxValue, int.MaxValue, int.MaxValue, new byte[dataLength]);
-        using IMemoryOwner<byte> serialized = serializer.Serialize(packet);
+        using IMemoryOwner<byte> serialized = serializer.Serialize(packet, null);
         return serialized.Memory.Length;
     }
 }

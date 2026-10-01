@@ -6,7 +6,7 @@ internal sealed class PacketMap
     /// <summary>The host's packet type.</summary>
     public required Type Type { get; init; }
     /// <summary>The serializer for the packet type.</summary>
-    public required ServiceRegistration<INetworkSerializer> Serializer { get; init; }
+    public required ServiceRegistration<IPacketSerializer> Serializer { get; init; }
     /// <summary>The largest a serialized packet may be, in bytes.</summary>
     public required int Size { get; init; }
     /// <summary>How many packets may be in flight over one connection at once.</summary>
@@ -25,6 +25,10 @@ internal sealed class PacketMap
     public required Func<object, int> GetCount { get; init; }
     /// <summary>Writes the packet count.</summary>
     public required Action<object, int> SetCount { get; init; }
+    /// <summary>Reads the payload length.</summary>
+    public required Func<object, bool> GetIsData { get; init; }
+    /// <summary>Writes whether the packet is a data packet.</summary>
+    public required Action<object, bool> SetIsData { get; init; }
     /// <summary>Reads the payload length.</summary>
     public required Func<object, int> GetPayloadLength { get; init; }
     /// <summary>Writes the payload length.</summary>

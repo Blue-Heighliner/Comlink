@@ -26,7 +26,7 @@ public sealed class PacketizingPeerTransportTests
 
     private sealed class TrackingPacketizer(List<TrackedOwner> owners) : IPacketizer
     {
-        public IReadOnlyList<Packet> Split(ReadOnlyMemory<byte> payload, int priority)
+        public IReadOnlyList<Packet> Split(ReadOnlyMemory<byte> payload, int priority, object? frame = null)
         {
             List<Packet> packets = [];
             for (byte i = 0; i < 3; i++)
@@ -115,10 +115,53 @@ public sealed class PacketizingPeerTransportTests
         Assert.Equal(4, fx.Sends.Count);
         Assert.All(fx.Sends, sent => Assert.Equal(7, sent.Options!.Priority));
         using IPacketAssembler assembler = new Packetizer(new RawPacketEngineController(Header + 10)).CreateAssembler();
-        IMemoryOwner<byte>? complete = null;
+        AssembledPayload? complete = null;
         foreach (Sent sent in fx.Sends) { complete = assembler.Add(sent.Data) ?? complete; }
-        using IMemoryOwner<byte> owner = Assert.IsAssignableFrom<IMemoryOwner<byte>>(complete);
+        using IMemoryOwner<byte> owner = Assert.IsType<AssembledPayload>(complete).Payload;
         Assert.Equal(payload, owner.Memory.ToArray());
+    }
+
+    private sealed class FrameSpyPacketizer(List<object?> frames) : IPacketizer
+    {
+        public IReadOnlyList<Packet> Split(ReadOnlyMemory<byte> payload, int priority, object? frame = null)
+        {
+            frames.Add(frame);
+            return [new Packet { Data = new TrackedOwner([1]), Priority = priority }];
+        }
+
+        public IPacketAssembler CreateAssembler() => throw new NotSupportedException();
+    }
+
+    /// <summary>The frame a send states is handed to the packetizer so the packet serializer can see it.</summary>
+    [Fact]
+    public async Task Request_FrameOption_IsHandedToThePacketizer()
+    {
+        List<object?> frames = [];
+        Fixture fx = Build(new FrameSpyPacketizer(frames));
+        object frame = new();
+
+        await fx.Transport.Request(target, new byte[] { 1 }, new PeerSendOptions { Frame = frame });
+        await fx.Transport.Request(target, new byte[] { 1 });
+
+        Assert.Same(frame, frames[0]);
+        Assert.Null(frames[1]);
+    }
+
+    /// <summary>A reassembled payload is published with the first packet that carried it.</summary>
+    [Fact]
+    public async Task Received_ReassembledPayload_CarriesTheFirstPacket()
+    {
+        Fixture fx = Build();
+        PeerConnection connection = Connection();
+        List<PeerReceivedEventArgs> published = [];
+        fx.Transport.Received.Listen(published.Add);
+        byte[] payload = Payload(35);
+
+        foreach (byte[] packet in Packets(payload)) { fx.Received.Publish(new PeerReceivedEventArgs { Connection = connection, Payload = packet }); }
+
+        await WaitUntil(() => published.Count == 1);
+        Assert.Equal(payload, published[0].Payload.ToArray());
+        Assert.Equal(0, Assert.IsType<TestPacket>(published[0].Packet).Index);
     }
 
     /// <summary>The wrapped transport is handed one packet at a time, so nothing is queued there that a more urgent payload could not overtake.</summary>

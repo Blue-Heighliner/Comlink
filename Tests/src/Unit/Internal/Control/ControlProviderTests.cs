@@ -35,12 +35,12 @@ public sealed class ControlProviderTests
         public override string AppVersion => "4.5.6";
     }
 
-    /// <summary>The default NetworkSerializer is the protobuf-net implementation, and a host can override it entirely.</summary>
+    /// <summary>The default FrameSerializer is the protobuf-net implementation, and a host can override it entirely.</summary>
     [Fact]
     public void EngineController_NetworkSerializer_DefaultsToProtobufAndIsOverridable()
     {
-        Assert.IsType<ProtobufNetworkSerializer>(new TestEngineController().NetworkSerializer);
-        Assert.IsType<TestNetworkSerializer>(new TestNetworkSerializerOverride().NetworkSerializer);
+        Assert.IsType<ProtobufSerializer>(new TestEngineController().FrameSerializer);
+        Assert.IsType<TestNetworkSerializer>(new TestNetworkSerializerOverride().FrameSerializer);
     }
 
     /// <summary>An engine controller with one generic parameter has no packet type, serializer or packet fields, so nothing is packetized.</summary>
@@ -63,8 +63,8 @@ public sealed class ControlProviderTests
         IEngineController custom = new TestPacketSerializerOverride();
 
         Assert.Equal(typeof(TestPacket), controller.PacketType);
-        Assert.IsType<ProtobufNetworkSerializer>(controller.PacketSerializer);
-        Assert.IsType<TestNetworkSerializer>(custom.PacketSerializer);
+        Assert.IsType<ProtobufSerializer>(controller.PacketSerializer);
+        Assert.IsType<TestPacketSerializer>(custom.PacketSerializer);
         Assert.IsType<TestPacket>(controller.CreatePacket());
     }
 
@@ -110,18 +110,25 @@ public sealed class ControlProviderTests
 
     private sealed class TestPacketSerializerOverride : TestPacketEngineController
     {
-        public override INetworkSerializer PacketSerializer { get; } = new TestNetworkSerializer();
+        public override IPacketSerializer? PacketSerializer { get; } = new TestPacketSerializer();
     }
 
-    private sealed class TestNetworkSerializer : INetworkSerializer
+    private sealed class TestPacketSerializer : IPacketSerializer
     {
-        public IMemoryOwner<byte> Serialize(object value) => throw new NotSupportedException();
+        public IMemoryOwner<byte> Serialize(object value, object? frame) => throw new NotSupportedException();
         public object? Deserialize(ReadOnlyMemory<byte> data) => throw new NotSupportedException();
+    }
+
+    private sealed class TestNetworkSerializer : IFrameSerializer
+    {
+        public void ConfigurePacket(object frame, object packet) => throw new NotSupportedException();
+        public IMemoryOwner<byte> Serialize(object value) => throw new NotSupportedException();
+        public object? Deserialize(ReadOnlyMemory<byte> data, object? packet) => throw new NotSupportedException();
     }
 
     private sealed class TestNetworkSerializerOverride : TestEngineController
     {
-        public override INetworkSerializer NetworkSerializer { get; } = new TestNetworkSerializer();
+        public override IFrameSerializer FrameSerializer { get; } = new TestNetworkSerializer();
     }
 
     /// <summary>A subclass overriding only AppName automatically gets a matching AppDataPath, since the base computes it via virtual dispatch.</summary>
@@ -682,7 +689,7 @@ public sealed class ControlProviderTests
         ConfiguredEngineController controller = new(fallback, new NetworkConfig(), NoCurrentUser);
 
         Assert.Equal(fallback.FrameType, controller.FrameType);
-        Assert.Same(fallback.NetworkSerializer, controller.NetworkSerializer);
+        Assert.Same(fallback.FrameSerializer, controller.FrameSerializer);
         Assert.Null(controller.PacketType);
         Assert.Null(controller.PacketSerializer);
         Assert.Equal(fallback.PacketSize, controller.PacketSize);

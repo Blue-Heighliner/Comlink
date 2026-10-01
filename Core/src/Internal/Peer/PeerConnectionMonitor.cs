@@ -59,9 +59,10 @@ internal sealed class PeerConnectionMonitor(IEngineController engineController, 
                 try
                 {
                     connection = await transport.Connect(target, cancellation);
+                    object frame = Heartbeat();
                     byte[] heartbeat;
-                    using (IMemoryOwner<byte> owner = engineController.NetworkSerializer.Serialize(Heartbeat())) { heartbeat = owner.Memory.ToArray(); }
-                    connected = await transport.Request(connection, heartbeat, new PeerSendOptions { Priority = int.MinValue }, cancellation);
+                    using (IMemoryOwner<byte> owner = engineController.FrameSerializer.Serialize(frame)) { heartbeat = owner.Memory.ToArray(); }
+                    connected = await transport.Request(connection, heartbeat, new PeerSendOptions { Priority = int.MinValue, Frame = frame }, cancellation);
                 }
                 catch
                 {

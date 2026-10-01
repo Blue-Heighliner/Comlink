@@ -58,7 +58,7 @@ internal sealed class PacketizingPeerTransport : IPeerTransport
     /// <inheritdoc />
     public async Task<bool> Request(PeerConnection connection, ReadOnlyMemory<byte> data, PeerSendOptions? options = null, CancellationToken cancellation = default)
     {
-        IReadOnlyList<Packet> packets = packetizer.Split(data, options?.Priority ?? 0);
+        IReadOnlyList<Packet> packets = packetizer.Split(data, options?.Priority ?? 0, options?.Frame);
         try
         {
             int untransmitted = packets.Count;
@@ -97,7 +97,7 @@ internal sealed class PacketizingPeerTransport : IPeerTransport
 
     private void OnReceived(PeerReceivedEventArgs args)
     {
-        IMemoryOwner<byte>? complete;
+        AssembledPayload? complete;
         try
         {
             complete = assemblers.GetOrAdd(args.Connection, _ => packetizer.CreateAssembler()).Add(args.Payload);
@@ -111,8 +111,8 @@ internal sealed class PacketizingPeerTransport : IPeerTransport
         if (complete is null) { return; }
 
         byte[] payload;
-        using (complete) { payload = complete.Memory.ToArray(); }
-        received.Publish(new PeerReceivedEventArgs { Connection = args.Connection, Payload = payload });
+        using (complete.Payload) { payload = complete.Payload.Memory.ToArray(); }
+        received.Publish(new PeerReceivedEventArgs { Connection = args.Connection, Payload = payload, Packet = complete.FirstPacket });
     }
 
     private void OnDisconnected(PeerConnectionEventArgs args)

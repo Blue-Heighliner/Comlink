@@ -6,7 +6,7 @@ internal sealed class FrameMap
     /// <summary>The host's frame type.</summary>
     public required Type Type { get; init; }
     /// <summary>The serializer for the frame type.</summary>
-    public required ServiceRegistration<INetworkSerializer> Serializer { get; init; }
+    public required ServiceRegistration<IFrameSerializer> Serializer { get; init; }
     /// <summary>Creates a new, empty frame.</summary>
     public required Func<object> Create { get; init; }
     /// <summary>Reads the frame identifier.</summary>

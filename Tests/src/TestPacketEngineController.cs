@@ -14,6 +14,8 @@ public sealed class TestPacket
     [ProtoMember(4)] public int PayloadLength { get; set; }
     /// <summary>The slice of the payload this packet carries.</summary>
     [ProtoMember(5)] public byte[] Data { get; set; } = [];
+    /// <summary>Whether the packet carries a piece of a frame.</summary>
+    [ProtoMember(6)] public bool IsData { get; set; }
 }
 
 /// <summary>

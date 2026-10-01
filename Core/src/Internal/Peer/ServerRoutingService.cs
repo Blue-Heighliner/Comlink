@@ -322,13 +322,14 @@ internal sealed class ServerRoutingService : IPeerService, IConnectionStatusServ
         if (closedNames.ContainsKey(remoteName)) { return; }
 
         ReadOnlyMemory<byte> copy = args.Payload;
+        object? packet = args.Packet;
         if (IsChild(remoteName))
         {
-            _ = Task.Run(() => Relay(() => HandleFromChild(remoteName, copy)));
+            _ = Task.Run(() => Relay(() => HandleFromChild(remoteName, copy, packet)));
         }
         else
         {
-            _ = Task.Run(() => Relay(() => HandleFromServer(remoteName, copy)));
+            _ = Task.Run(() => Relay(() => HandleFromServer(remoteName, copy, packet)));
         }
     }
 
@@ -338,9 +339,9 @@ internal sealed class ServerRoutingService : IPeerService, IConnectionStatusServ
         catch (Exception ex) { logger.LogError(ex, "Failed to relay a message"); }
     }
 
-    private async Task HandleFromChild(string childName, ReadOnlyMemory<byte> data)
+    private async Task HandleFromChild(string childName, ReadOnlyMemory<byte> data, object? packet = null)
     {
-        object? message = TryDeserialize(data);
+        object? message = TryDeserialize(data, packet);
         if (message is null || engineController.IsHeartbeat(message)) { return; }
 
         HashSet<string> addressedUsers = GetAddressedUsers(message);
@@ -369,14 +370,14 @@ internal sealed class ServerRoutingService : IPeerService, IConnectionStatusServ
 
         List<Task> sends = [.. addressedUsers
             .Where(user => myConfig.ChildClients.Contains(user, StringComparer.OrdinalIgnoreCase))
-            .Select(user => TrySend(user, data, priority))];
+            .Select(user => TrySend(user, data, priority, message))];
 
         foreach ((string serverName, ServerUserConfig config) in userMap)
         {
             if (string.Equals(serverName, myName, StringComparison.OrdinalIgnoreCase)) { continue; }
             if (config.ChildClients.Any(child => addressedUsers.Contains(child)))
             {
-                sends.Add(TrySend(serverName, data, priority));
+                sends.Add(TrySend(serverName, data, priority, message));
             }
         }
 
@@ -384,9 +385,9 @@ internal sealed class ServerRoutingService : IPeerService, IConnectionStatusServ
         await Task.WhenAll(sends);
     }
 
-    private async Task HandleFromServer(string serverName, ReadOnlyMemory<byte> data)
+    private async Task HandleFromServer(string serverName, ReadOnlyMemory<byte> data, object? packet = null)
     {
-        object? message = TryDeserialize(data);
+        object? message = TryDeserialize(data, packet);
         if (message is null || engineController.IsHeartbeat(message)) { return; }
 
         HashSet<string> addressedUsers = GetAddressedUsers(message);
@@ -405,7 +406,7 @@ internal sealed class ServerRoutingService : IPeerService, IConnectionStatusServ
 
         await Task.WhenAll(addressedUsers
             .Where(user => myConfig.ChildClients.Contains(user, StringComparer.OrdinalIgnoreCase))
-            .Select(user => TrySend(user, data, priority)));
+            .Select(user => TrySend(user, data, priority, message)));
     }
 
     // A retrieval request is addressed to a server, not to any child client, so ordinary routing would drop it: this
@@ -425,7 +426,7 @@ internal sealed class ServerRoutingService : IPeerService, IConnectionStatusServ
         {
             work.AddRange(userMap.Keys
                 .Where(server => !string.Equals(server, myName, StringComparison.OrdinalIgnoreCase) && addressedUsers.Contains(server))
-                .Select(server => TrySend(server, data, priority)));
+                .Select(server => TrySend(server, data, priority, request)));
         }
 
         await Task.WhenAll(work);
@@ -435,7 +436,7 @@ internal sealed class ServerRoutingService : IPeerService, IConnectionStatusServ
     {
         foreach (object copy in await storage.Find(requester, request))
         {
-            using IMemoryOwner<byte> buf = engineController.NetworkSerializer.Serialize(copy);
+            using IMemoryOwner<byte> buf = engineController.FrameSerializer.Serialize(copy);
             await RouteFromChild(copy, buf.Memory);
         }
     }
@@ -458,14 +459,14 @@ internal sealed class ServerRoutingService : IPeerService, IConnectionStatusServ
         return addressed;
     }
 
-    private object? TryDeserialize(ReadOnlyMemory<byte> data)
+    private object? TryDeserialize(ReadOnlyMemory<byte> data, object? packet)
     {
         try
         {
-            // NetworkSerializer determines the type from the data itself, so bytes from an incompatible
+            // FrameSerializer determines the type from the data itself, so bytes from an incompatible
             // sender could describe a type other than this instance's own FrameType; treat that the
             // same as a failed deserialize rather than let a mismatched cast downstream throw.
-            object? message = engineController.NetworkSerializer.Deserialize(data);
+            object? message = engineController.FrameSerializer.Deserialize(data, packet);
             return message?.GetType() == engineController.FrameType ? message : null;
         }
         catch
@@ -474,7 +475,7 @@ internal sealed class ServerRoutingService : IPeerService, IConnectionStatusServ
         }
     }
 
-    private async Task TrySend(string userName, ReadOnlyMemory<byte> data, int priority)
+    private async Task TrySend(string userName, ReadOnlyMemory<byte> data, int priority, object frame)
     {
         if (transport is null || closedNames.ContainsKey(userName)) { return; }
         if (connections.Get(userName) is not { } connection)
@@ -483,7 +484,7 @@ internal sealed class ServerRoutingService : IPeerService, IConnectionStatusServ
             return;
         }
 
-        try { await transport.Request(connection, data, new PeerSendOptions { Priority = priority }, CancellationToken.None); }
+        try { await transport.Request(connection, data, new PeerSendOptions { Priority = priority, Frame = frame }, CancellationToken.None); }
         catch { }
     }
 
@@ -494,7 +495,7 @@ internal sealed class ServerRoutingService : IPeerService, IConnectionStatusServ
 
         try
         {
-            using IMemoryOwner<byte> buf = engineController.PacketSerializer!.Serialize(packet);
+            using IMemoryOwner<byte> buf = engineController.PacketSerializer!.Serialize(packet, null);
             return await transport.Request(connection, buf.Memory, new PeerSendOptions { Priority = 0 }, cancellation);
         }
         catch
@@ -604,7 +605,7 @@ internal sealed class ServerRoutingService : IPeerService, IConnectionStatusServ
     {
         try
         {
-            using IMemoryOwner<byte> buf = engineController.NetworkSerializer.Serialize(message);
+            using IMemoryOwner<byte> buf = engineController.FrameSerializer.Serialize(message);
             await HandleFromChild(currentUserProvider.UserName ?? string.Empty, buf.Memory);
             return true;
         }

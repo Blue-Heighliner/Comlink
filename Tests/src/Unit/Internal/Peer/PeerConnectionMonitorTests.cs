@@ -20,7 +20,7 @@ public sealed class PeerConnectionMonitorTests
     private static bool IsHeartbeat(ReadOnlyMemory<byte> payload)
     {
         TestEngineController controller = new();
-        return controller.NetworkSerializer.Deserialize(payload) is { } message && controller.IsHeartbeat(message);
+        return controller.FrameSerializer.Deserialize(payload, null) is { } message && controller.IsHeartbeat(message);
     }
 
     private static async Task WaitUntil(Func<bool> condition, TimeSpan timeout)

@@ -39,6 +39,7 @@ public sealed class TestEngineConfiguration(bool packets = false, Action<IFrameB
                     .Index(p => p.Index)
                     .Count(p => p.Count)
                     .PayloadLength(p => p.PayloadLength)
+                    .IsData(p => p.IsData)
                     .Data(p => p.Data, (p, value) => p.Data = value.ToArray());
                 packetExtra?.Invoke(packet);
             });

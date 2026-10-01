@@ -40,7 +40,7 @@ public sealed class PeerServiceTests
         => peer.Setup(p => p.Request(It.IsAny<PeerConnection>(), It.IsAny<ReadOnlyMemory<byte>>(), It.IsAny<PeerSendOptions>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync(success);
 
-    private static readonly INetworkSerializer serializer = new ProtobufNetworkSerializer();
+    private static readonly ProtobufSerializer serializer = new();
 
     private static ReadOnlyMemory<byte> Encode(TestFrame message)
     {
@@ -196,16 +196,16 @@ public sealed class PeerServiceTests
         Assert.True(await svc.Send("DEST", new TestFrame { MessageId = "M2", FromUser = "SOURCE" }));
     }
 
-    /// <summary>Send serializes the message through IEngineController.NetworkSerializer rather than a hardcoded format, so a host override is honored.</summary>
+    /// <summary>Send serializes the message through IEngineController.FrameSerializer rather than a hardcoded format, so a host override is honored.</summary>
     [Fact]
     public async Task Send_UsesEngineControllersNetworkSerializer()
     {
         Mock<IPeerTransport> peer = BuildPeerMock();
         AutoAcknowledge(peer);
         Mock<TestEngineController> userDirectory = BuildUserDirectory();
-        Mock<INetworkSerializer> customSerializer = new();
+        Mock<IFrameSerializer> customSerializer = new();
         customSerializer.Setup(s => s.Serialize(It.IsAny<object>())).Returns(new FixedMemoryOwner([9, 9, 9]));
-        userDirectory.Setup(l => l.NetworkSerializer).Returns(customSerializer.Object);
+        userDirectory.Setup(l => l.FrameSerializer).Returns(customSerializer.Object);
         PeerService svc = BuildService(peer, userDirectory);
         Reach(peer, "DEST");
         TestFrame msg = new() { MessageId = "M1", FromUser = "SOURCE" };

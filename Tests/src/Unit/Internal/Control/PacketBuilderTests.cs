@@ -11,6 +11,7 @@ public sealed class PacketBuilderTests
             .Index(p => p.Index, (p, v) => p.Index = v)
             .Count(p => p.Count, (p, v) => p.Count = v)
             .PayloadLength(p => p.PayloadLength, (p, v) => p.PayloadLength = v)
+            .IsData(p => p.IsData, (p, v) => p.IsData = v)
             .Data(p => p.Data, (p, v) => p.Data = v.ToArray());
         return builder;
     }
@@ -42,6 +43,7 @@ public sealed class PacketBuilderTests
         map.SetIndex(packet, 2);
         map.SetCount(packet, 9);
         map.SetPayloadLength(packet, 1000);
+        map.SetIsData(packet, true);
         map.SetData(packet, new byte[] { 1, 2, 3 });
 
         Assert.IsType<TestPacket>(packet);
@@ -49,6 +51,7 @@ public sealed class PacketBuilderTests
         Assert.Equal(2, map.GetIndex(packet));
         Assert.Equal(9, map.GetCount(packet));
         Assert.Equal(1000, map.GetPayloadLength(packet));
+        Assert.True(map.GetIsData(packet));
         Assert.Equal(new byte[] { 1, 2, 3 }, map.GetData(packet).ToArray());
         Assert.Equal(typeof(TestPacket), map.Type);
     }
@@ -58,9 +61,9 @@ public sealed class PacketBuilderTests
     public void Defaults_SizeWindowAndSerializer()
     {
         PacketMap map = Complete().Build();
-        INetworkSerializer serializer = map.Serializer.Create(null);
-        using IMemoryOwner<byte> own = serializer.Serialize(new TestPacket { Count = 1 });
-        using IMemoryOwner<byte> other = new ProtobufNetworkSerializer().Serialize(new TestFrame());
+        IPacketSerializer serializer = map.Serializer.Create(null);
+        using IMemoryOwner<byte> own = serializer.Serialize(new TestPacket { Count = 1 }, null);
+        using IMemoryOwner<byte> other = new ProtobufSerializer().Serialize(new TestFrame());
 
         Assert.Equal(16 * 1024, map.Size);
         Assert.Equal(1, map.Window);
@@ -72,10 +75,10 @@ public sealed class PacketBuilderTests
     [Fact]
     public void Size_Window_Serializer_AndCreate_CanBeReplaced()
     {
-        INetworkSerializer serializer = Mock.Of<INetworkSerializer>();
+        IPacketSerializer serializer = Mock.Of<IPacketSerializer>();
         TestPacket created = new() { Count = 42 };
         PacketBuilder<TestPacket> builder = Complete();
-        builder.Size(200).Window(3).Serializer<INetworkSerializer>().Create(() => created);
+        builder.Size(200).Window(3).Serializer<IPacketSerializer>().Create(() => created);
 
         PacketMap map = builder.Build();
 
@@ -90,7 +93,7 @@ public sealed class PacketBuilderTests
     public void PropertyOverloads_MapEachMatchingFieldWithoutASetter()
     {
         PacketBuilder<TestPacket> builder = new();
-        builder.PayloadId(p => p.PayloadId).Index(p => p.Index).Count(p => p.Count).PayloadLength(p => p.PayloadLength)
+        builder.PayloadId(p => p.PayloadId).Index(p => p.Index).Count(p => p.Count).PayloadLength(p => p.PayloadLength).IsData(p => p.IsData)
             .Data(p => p.Data, (p, v) => p.Data = v.ToArray());
         PacketMap map = builder.Build();
         object packet = map.Create();

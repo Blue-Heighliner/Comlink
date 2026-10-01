@@ -1,7 +1,7 @@
 namespace BlueHeighliner.Comlink.Peer;
 
 /// <summary>
-/// The fixed outer wire shape every <see cref="ProtobufNetworkSerializer"/> payload is wrapped in: the
+/// The fixed outer wire shape every <see cref="ProtobufSerializer"/> payload is wrapped in: the
 /// serialized value's runtime type, by assembly-qualified name, alongside the value's own protobuf-net
 /// encoding as opaque nested bytes.
 /// </summary>

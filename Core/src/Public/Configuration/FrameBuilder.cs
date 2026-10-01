@@ -111,11 +111,11 @@ public interface IFrameBuilder<TFrame> where TFrame : class, new()
 
     /// <summary>
     /// Replaces the serializer that turns frames into the bytes sent across the network. The default is a
-    /// <see cref="ProtobufNetworkSerializer"/> that builds only <typeparamref name="TFrame"/>, so the frame type then
+    /// <see cref="ProtobufSerializer"/> that builds only <typeparamref name="TFrame"/>, so the frame type then
     /// needs <c>[ProtoContract]</c>/<c>[ProtoMember]</c> attributes. Every node on a network must use a matching serializer.
     /// </summary>
     /// <typeparam name="TSerializer">The serializer type, instantiated through dependency injection when the engine runs: the instance registered for it in the host's services, or else one constructed from them.</typeparam>
-    IFrameBuilder<TFrame> Serializer<TSerializer>() where TSerializer : INetworkSerializer;
+    IFrameBuilder<TFrame> Serializer<TSerializer>() where TSerializer : IFrameSerializer;
 
     /// <summary>Replaces how a new, empty frame is created. The default is <c>new TFrame()</c>.</summary>
     IFrameBuilder<TFrame> Create(Func<TFrame> create);

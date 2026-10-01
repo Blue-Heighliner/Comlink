@@ -21,14 +21,15 @@ public sealed class PacketAssemblerTests
 
     private static byte[] Wire(int id, int index, int count, int total, byte[] data)
     {
-        using IMemoryOwner<byte> owner = serializer.Serialize(new TestPacket { PayloadId = id, Index = index, Count = count, PayloadLength = total, Data = data });
+        using IMemoryOwner<byte> owner = serializer.Serialize(new TestPacket { PayloadId = id, Index = index, Count = count, PayloadLength = total, Data = data }, null);
         return owner.Memory.ToArray();
     }
 
     private static byte[]? Add(IPacketAssembler assembler, byte[] packet)
     {
-        using IMemoryOwner<byte>? complete = assembler.Add(packet);
-        return complete?.Memory.ToArray();
+        AssembledPayload? complete = assembler.Add(packet);
+        using IMemoryOwner<byte>? payload = complete?.Payload;
+        return payload?.Memory.ToArray();
     }
 
     /// <summary>Packets that arrive in reverse order still reassemble the payload, and it completes only on the last one.</summary>
@@ -44,6 +45,22 @@ public sealed class PacketAssemblerTests
         for (int i = 0; i < packets.Count - 1; i++) { Assert.Null(Add(assembler, packets[i])); }
 
         Assert.Equal(payload, Add(assembler, packets[^1]));
+    }
+
+    /// <summary>The completed payload comes with the packet at index zero, whichever order the packets arrived in.</summary>
+    [Fact]
+    public void Add_Completion_CarriesTheFirstPacket()
+    {
+        Packetizer packetizer = Build();
+        using IPacketAssembler assembler = packetizer.CreateAssembler();
+        List<byte[]> packets = Packets(packetizer, Payload(35));
+        packets.Reverse();
+
+        AssembledPayload? complete = null;
+        foreach (byte[] packet in packets) { complete = assembler.Add(packet) ?? complete; }
+
+        using IMemoryOwner<byte> payload = Assert.IsType<AssembledPayload>(complete).Payload;
+        Assert.Equal(0, Assert.IsType<TestPacket>(complete.FirstPacket).Index);
     }
 
     /// <summary>Packets of two payloads interleaved on one connection each complete their own payload.</summary>
@@ -110,7 +127,7 @@ public sealed class PacketAssemblerTests
     public void Add_WrongType_Throws()
     {
         using IPacketAssembler assembler = new Packetizer(new TestPacketEngineController()).CreateAssembler();
-        using IMemoryOwner<byte> message = new ProtobufNetworkSerializer().Serialize(new TestFrame { MessageId = "M1" });
+        using IMemoryOwner<byte> message = new ProtobufSerializer().Serialize(new TestFrame { MessageId = "M1" });
 
         Assert.Throws<InvalidDataException>(() => assembler.Add(message.Memory.ToArray()));
     }

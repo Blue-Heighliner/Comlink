@@ -31,11 +31,11 @@ internal sealed class ConfiguredEngineController : IEngineController
     /// <inheritdoc />
     public Type FrameType => fallback.FrameType;
     /// <inheritdoc />
-    public INetworkSerializer NetworkSerializer => fallback.NetworkSerializer;
+    public IFrameSerializer FrameSerializer => fallback.FrameSerializer;
     /// <inheritdoc />
     public Type? PacketType => fallback.PacketType;
     /// <inheritdoc />
-    public INetworkSerializer? PacketSerializer => fallback.PacketSerializer;
+    public IPacketSerializer? PacketSerializer => fallback.PacketSerializer;
     /// <inheritdoc />
     public int PacketSize => fallback.PacketSize;
     /// <inheritdoc />
@@ -110,6 +110,10 @@ internal sealed class ConfiguredEngineController : IEngineController
     public int GetPacketCount(object packet) => fallback.GetPacketCount(packet);
     /// <inheritdoc />
     public void SetPacketCount(object packet, int value) => fallback.SetPacketCount(packet, value);
+    /// <inheritdoc />
+    public bool GetIsData(object packet) => fallback.GetIsData(packet);
+    /// <inheritdoc />
+    public void SetIsData(object packet, bool value) => fallback.SetIsData(packet, value);
     /// <inheritdoc />
     public int GetPayloadLength(object packet) => fallback.GetPayloadLength(packet);
     /// <inheritdoc />

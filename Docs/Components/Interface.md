@@ -7,7 +7,7 @@ not a request/response control channel — it uses the same transport and frame 
 but instances of the host's frame type, with no command discriminator. That type is
 injectable by the host (see [Configuration.md](Configuration.md)), and so is how it is serialized: an external program must
 encode whatever concrete type the running engine is configured with using the engine's
-the frame serializer. With the default, `ProtobufNetworkSerializer`, that is a protobuf-net
+the frame serializer. With the default, `ProtobufSerializer`, that is a protobuf-net
 envelope holding the type's assembly-qualified name and the message's own protobuf-net encoding as nested bytes,
 and only the engine's own frame type is accepted. Payloads on an interface connection are never packetized,
 whatever the host's packet type is.
@@ -54,7 +54,7 @@ IMsmtSessionPeer client = new IMsmtSessionPeer.Factory().Create(new MsmtSessionP
 IMsmtConnection connection = client.Connect(new MsmtNameTarget { Host = "127.0.0.1", Port = 50020, ServerName = "127.0.0.1" });
 await connection.Wait();
 
-// Anything sent here, serialized the way the running engine's NetworkSerializer does it for the message
+// Anything sent here, serialized the way the running engine's FrameSerializer does it for the message
 // type its host registered (SampleFrame in the Sample host), is routed out to peers as if this user
 // sent it.
 connection.Send(messageBytes);

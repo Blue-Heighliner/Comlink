@@ -8,4 +8,7 @@ internal sealed record PeerReceivedEventArgs
 
     /// <summary>The complete message payload, which the subscriber may keep.</summary>
     public required ReadOnlyMemory<byte> Payload { get; init; }
+
+    /// <summary>The first packet (an instance of the packet type) that carried the payload across, or <see langword="null"/> when it did not travel in packets.</summary>
+    public object? Packet { get; init; }
 }

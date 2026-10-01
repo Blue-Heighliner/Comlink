@@ -5,10 +5,10 @@ internal interface IPacketAssembler : IDisposable
 {
     /// <summary>Adds a received packet to the payload it belongs to.</summary>
     /// <param name="packet">The packet's serialized bytes, exactly as an <see cref="IPacketizer"/> produced them.</param>
-    /// <returns>The complete payload once its last packet has arrived, which the caller owns and must dispose; otherwise <see langword="null"/>.</returns>
+    /// <returns>The complete payload and its first packet once its last packet has arrived, the payload being something the caller owns and must dispose; otherwise <see langword="null"/>.</returns>
     /// <exception cref="InvalidDataException">The bytes are not a packet, or contradict the earlier packets of the same payload.</exception>
     /// <exception cref="ObjectDisposedException">This assembler has been disposed.</exception>
-    IMemoryOwner<byte>? Add(ReadOnlyMemory<byte> packet);
+    AssembledPayload? Add(ReadOnlyMemory<byte> packet);
 }
 
 /// <summary>
@@ -24,13 +24,13 @@ internal sealed class PacketAssembler(IEngineController engineController, int ma
 {
     private readonly Lock gate = new();
     private readonly OrderedDictionary<int, Pending> pending = [];
-    private readonly INetworkSerializer serializer = engineController.PacketSerializer ?? throw new InvalidOperationException("The engine controller has no packet serializer");
+    private readonly IPacketSerializer serializer = engineController.PacketSerializer ?? throw new InvalidOperationException("The engine controller has no packet serializer");
     private readonly long maxPendingBytes = 2L * maxPayloadSize;
     private long pendingBytes;
     private bool disposed;
 
     /// <inheritdoc />
-    public IMemoryOwner<byte>? Add(ReadOnlyMemory<byte> packet)
+    public AssembledPayload? Add(ReadOnlyMemory<byte> packet)
     {
         object? decoded = serializer.Deserialize(packet);
         if (decoded is null || decoded.GetType() != engineController.PacketType) { throw new InvalidDataException("The bytes are not a packet"); }
@@ -59,7 +59,7 @@ internal sealed class PacketAssembler(IEngineController engineController, int ma
 
                 PooledMemoryOwner whole = PooledMemoryOwner.Rent(total);
                 chunk.CopyTo(whole.Memory.Span);
-                return whole;
+                return new AssembledPayload(whole, decoded);
             }
 
             if (!pending.TryGetValue(id, out Pending? payload))
@@ -85,6 +85,7 @@ internal sealed class PacketAssembler(IEngineController engineController, int ma
             PooledMemoryOwner held = PooledMemoryOwner.Rent(chunk.Length);
             chunk.CopyTo(held.Memory.Span);
             payload.Chunks[index] = held;
+            if (index == 0) { payload.FirstPacket = decoded; }
             payload.ReceivedCount++;
             payload.ReceivedBytes += chunk.Length;
             pendingBytes += chunk.Length;
@@ -106,7 +107,7 @@ internal sealed class PacketAssembler(IEngineController engineController, int ma
                     offset += part.Memory.Length;
                 }
 
-                return whole;
+                return new AssembledPayload(whole, payload.FirstPacket ?? decoded);
             }
             finally
             {
@@ -144,6 +145,7 @@ internal sealed class PacketAssembler(IEngineController engineController, int ma
         public int Count { get; } = count;
         public int Total { get; } = total;
         public PooledMemoryOwner?[] Chunks { get; } = new PooledMemoryOwner?[count];
+        public object? FirstPacket { get; set; }
         public int ChunkSize { get; set; }
         public int ReceivedCount { get; set; }
         public int ReceivedBytes { get; set; }

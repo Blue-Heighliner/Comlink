@@ -18,17 +18,19 @@ internal static class PeerFrameDispatcher
     /// <param name="logger">Logger for activity messages.</param>
     /// <param name="frameDelivered">Raised with the deserialized frame when it is not a confirmation.</param>
     /// <param name="confirmationReceived">Raised with the confirmed message ID and confirming user when it is a confirmation.</param>
+    /// <param name="packet">The first packet that carried the frame across, or <see langword="null"/> when it did not travel in packets.</param>
     /// <returns><see langword="true"/> if <paramref name="data"/> deserialized successfully or was an ignored heartbeat; otherwise <see langword="false"/>.</returns>
     public static async Task<bool> Dispatch(
         ReadOnlyMemory<byte> data,
         IEngineController engineController,
         ILogger logger,
         Func<object, Task>? frameDelivered,
-        Func<string, string, Task>? confirmationReceived)
+        Func<string, string, Task>? confirmationReceived,
+        object? packet = null)
     {
         try
         {
-            object? frame = engineController.NetworkSerializer.Deserialize(data);
+            object? frame = engineController.FrameSerializer.Deserialize(data, packet);
             if (frame is null) { return false; }
 
             if (engineController.IsHeartbeat(frame)) { return true; }

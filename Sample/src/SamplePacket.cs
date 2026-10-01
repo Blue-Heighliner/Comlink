@@ -19,4 +19,6 @@ public sealed class SamplePacket
     [ProtoMember(4)] public int FullLength { get; set; }
     /// <summary>The slice of the payload this packet carries.</summary>
     [ProtoMember(5)] public byte[] Chunk { get; set; } = [];
+    /// <summary>Whether this packet carries a piece of a frame, as opposed to a packet that carries none, such as an identification packet.</summary>
+    [ProtoMember(6)] public bool IsData { get; set; }
 }

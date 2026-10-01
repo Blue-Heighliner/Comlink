@@ -1,7 +1,7 @@
 namespace BlueHeighliner.Comlink.Tests.Unit.Public.Serialization;
 
-/// <summary>Unit tests for <see cref="ProtobufNetworkSerializer"/> protobuf round-trips and its self-describing envelope.</summary>
-public sealed class ProtobufNetworkSerializerTests
+/// <summary>Unit tests for <see cref="ProtobufSerializer"/> protobuf round-trips and its self-describing envelope.</summary>
+public sealed class ProtobufSerializerTests
 {
     [ProtoContract]
     private sealed class OtherDto
@@ -10,7 +10,7 @@ public sealed class ProtobufNetworkSerializerTests
         [ProtoMember(2)] public int Count { get; set; }
     }
 
-    private static readonly INetworkSerializer serializer = new ProtobufNetworkSerializer();
+    private static readonly ProtobufSerializer serializer = new();
 
     /// <summary>TestFrame round-trips all fields including nested addresses.</summary>
     [Fact]
@@ -111,11 +111,11 @@ public sealed class ProtobufNetworkSerializerTests
     {
         using IMemoryOwner<byte> other = serializer.Serialize(new OtherDto { Name = "n" });
         using IMemoryOwner<byte> message = serializer.Serialize(new TestFrame { MessageId = "M1" });
-        ProtobufNetworkSerializer restricted = new(typeof(TestFrame));
+        ProtobufSerializer restricted = new(typeof(TestFrame));
 
         Assert.Null(restricted.Deserialize(other.Memory));
         Assert.IsType<TestFrame>(restricted.Deserialize(message.Memory));
-        Assert.IsType<OtherDto>(new ProtobufNetworkSerializer(typeof(OtherDto), typeof(TestFrame)).Deserialize(other.Memory));
+        Assert.IsType<OtherDto>(new ProtobufSerializer(typeof(OtherDto), typeof(TestFrame)).Deserialize(other.Memory));
     }
 
     /// <summary>A serializer told nothing still refuses a named type that is not a protobuf contract, rather than loading whatever a sender names.</summary>
@@ -134,9 +134,9 @@ public sealed class ProtobufNetworkSerializerTests
         using IMemoryOwner<byte> message = serializer.Serialize(new TestFrame { MessageId = "M1" });
         using IMemoryOwner<byte> packet = serializer.Serialize(new TestPacket { Count = 1 });
 
-        Assert.Null(controller.NetworkSerializer.Deserialize(other.Memory));
-        Assert.Null(controller.NetworkSerializer.Deserialize(packet.Memory));
-        Assert.IsType<TestFrame>(controller.NetworkSerializer.Deserialize(message.Memory));
+        Assert.Null(controller.FrameSerializer.Deserialize(other.Memory, null));
+        Assert.Null(controller.FrameSerializer.Deserialize(packet.Memory, null));
+        Assert.IsType<TestFrame>(controller.FrameSerializer.Deserialize(message.Memory, null));
         Assert.Null(controller.PacketSerializer!.Deserialize(message.Memory));
         Assert.IsType<TestPacket>(controller.PacketSerializer!.Deserialize(packet.Memory));
     }

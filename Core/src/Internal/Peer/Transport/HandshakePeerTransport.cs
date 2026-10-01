@@ -169,8 +169,8 @@ internal sealed class HandshakePeerTransport : IPeerTransport
 
     private async Task<bool> Send(Session session, object item)
     {
-        using IMemoryOwner<byte> body = handshake!.Serializer.Serialize(item);
-        return await inner.Request(session.Connection, body.Memory, new PeerSendOptions { Priority = int.MaxValue }, session.Aborted.Token);
+        using IMemoryOwner<byte> body = handshake!.Serialize(item);
+        return await inner.Request(session.Connection, body.Memory, new PeerSendOptions { Priority = int.MaxValue, Frame = handshake.CarriesFrames ? item : null }, session.Aborted.Token);
     }
 
     private void OnReceived(PeerReceivedEventArgs args)
@@ -184,7 +184,8 @@ internal sealed class HandshakePeerTransport : IPeerTransport
         if (isHandshakePayload)
         {
             byte[] body = args.Payload.ToArray();
-            Process(session, () => OnHandshakePayload(session, body));
+            object? packet = args.Packet;
+            Process(session, () => OnHandshakePayload(session, body, packet));
             return;
         }
 
@@ -206,9 +207,9 @@ internal sealed class HandshakePeerTransport : IPeerTransport
         received.Publish(args);
     }
 
-    private Task OnHandshakePayload(Session session, byte[] body)
+    private Task OnHandshakePayload(Session session, byte[] body, object? packet)
     {
-        object item = handshake!.Serializer.Deserialize(body) ?? throw new InvalidDataException("nothing was sent");
+        object item = handshake!.Deserialize(body, packet) ?? throw new InvalidDataException("nothing was sent");
         if (item.GetType() != handshake.Processor.ItemType) { throw new InvalidDataException($"expected a {handshake.Processor.ItemType.Name}"); }
 
         return IsInitiator(session.Connection.Info) ? handshake.Processor.OnReply(session.Initial, item) : handshake.Processor.OnInitial(session.Initial, item);

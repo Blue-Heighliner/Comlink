@@ -1,13 +1,13 @@
 namespace BlueHeighliner.Comlink.Tests;
 
 /// <summary>Serializes a <see cref="TestPacket"/> as its id, index, count and payload length in four big-endian 32 bit fields, then the data.</summary>
-public sealed class RawPacketSerializer : INetworkSerializer
+public sealed class RawPacketSerializer : IPacketSerializer
 {
     /// <summary>Gets the number of bytes in front of the data.</summary>
     public static int HeaderSize { get; } = 16;
 
     /// <inheritdoc />
-    public IMemoryOwner<byte> Serialize(object value)
+    public IMemoryOwner<byte> Serialize(object value, object? frame)
     {
         TestPacket packet = (TestPacket)value;
         byte[] bytes = new byte[HeaderSize + packet.Data.Length];

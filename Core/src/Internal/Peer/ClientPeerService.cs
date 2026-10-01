@@ -204,8 +204,8 @@ internal sealed class ClientPeerService : IPeerService, IConnectionStatusService
 
         try
         {
-            using IMemoryOwner<byte> buf = engineController.NetworkSerializer.Serialize(message);
-            return await transport.Request(connection, buf.Memory, new PeerSendOptions { Priority = engineController.GetPriority(message) }, cancellation);
+            using IMemoryOwner<byte> buf = engineController.FrameSerializer.Serialize(message);
+            return await transport.Request(connection, buf.Memory, new PeerSendOptions { Priority = engineController.GetPriority(message), Frame = message }, cancellation);
         }
         catch
         {
@@ -223,7 +223,7 @@ internal sealed class ClientPeerService : IPeerService, IConnectionStatusService
 
         try
         {
-            using IMemoryOwner<byte> buf = engineController.PacketSerializer!.Serialize(packet);
+            using IMemoryOwner<byte> buf = engineController.PacketSerializer!.Serialize(packet, null);
             return await transport.Request(connection, buf.Memory, new PeerSendOptions { Priority = 0 }, cancellation);
         }
         catch
@@ -304,11 +304,11 @@ internal sealed class ClientPeerService : IPeerService, IConnectionStatusService
     {
         if (!ReferenceEquals(args.Connection, serverConnection)) { return; }
 
-        _ = Task.Run(() => HandleMessage(args.Payload));
+        _ = Task.Run(() => HandleMessage(args.Payload, args.Packet));
     }
 
-    internal Task<bool> HandleMessage(ReadOnlyMemory<byte> data)
-        => PeerFrameDispatcher.Dispatch(data, engineController, logger, FrameDelivered, ConfirmationReceived);
+    internal Task<bool> HandleMessage(ReadOnlyMemory<byte> data, object? packet = null)
+        => PeerFrameDispatcher.Dispatch(data, engineController, logger, FrameDelivered, ConfirmationReceived, packet);
 
     /// <inheritdoc />
     public async ValueTask DisposeAsync()

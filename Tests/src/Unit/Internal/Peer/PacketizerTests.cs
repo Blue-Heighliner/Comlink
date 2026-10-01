@@ -7,16 +7,16 @@ public sealed class PacketizerTests
 
     private sealed class HexPacketEngineController(int packetSize) : RawPacketEngineController(packetSize)
     {
-        public override INetworkSerializer PacketSerializer { get; } = new HexPacketSerializer();
+        public override IPacketSerializer? PacketSerializer { get; } = new HexPacketSerializer();
     }
 
-    private sealed class HexPacketSerializer : INetworkSerializer
+    private sealed class HexPacketSerializer : IPacketSerializer
     {
         private readonly RawPacketSerializer raw = new();
 
-        public IMemoryOwner<byte> Serialize(object value)
+        public IMemoryOwner<byte> Serialize(object value, object? frame)
         {
-            using IMemoryOwner<byte> bytes = raw.Serialize(value);
+            using IMemoryOwner<byte> bytes = raw.Serialize(value, frame);
             return new Owner(Encoding.ASCII.GetBytes(Convert.ToHexString(bytes.Memory.Span)));
         }
 
@@ -25,16 +25,16 @@ public sealed class PacketizerTests
 
     private sealed class BloatingPacketEngineController(int packetSize) : RawPacketEngineController(packetSize)
     {
-        public override INetworkSerializer PacketSerializer { get; } = new BloatingPacketSerializer();
+        public override IPacketSerializer? PacketSerializer { get; } = new BloatingPacketSerializer();
     }
 
-    private sealed class BloatingPacketSerializer : INetworkSerializer
+    private sealed class BloatingPacketSerializer : IPacketSerializer
     {
         private readonly RawPacketSerializer raw = new();
 
-        public IMemoryOwner<byte> Serialize(object value)
+        public IMemoryOwner<byte> Serialize(object value, object? frame)
         {
-            using IMemoryOwner<byte> bytes = raw.Serialize(value);
+            using IMemoryOwner<byte> bytes = raw.Serialize(value, frame);
             return new Owner([.. bytes.Memory.ToArray(), .. new byte[((TestPacket)value).Index == 1 ? 100 : 0]]);
         }
 
@@ -52,6 +52,73 @@ public sealed class PacketizerTests
     private static void Release(IEnumerable<Packet> packets)
     {
         foreach (Packet packet in packets) { packet.Dispose(); }
+    }
+
+    private sealed class FrameSpyEngineController(int packetSize, List<object?> frames) : RawPacketEngineController(packetSize)
+    {
+        public override IPacketSerializer? PacketSerializer { get; } = new FrameSpySerializer(frames);
+    }
+
+    private sealed class FrameSpySerializer(List<object?> frames) : IPacketSerializer
+    {
+        private readonly RawPacketSerializer raw = new();
+
+        public IMemoryOwner<byte> Serialize(object value, object? frame)
+        {
+            frames.Add(frame);
+            return raw.Serialize(value, frame);
+        }
+
+        public object? Deserialize(ReadOnlyMemory<byte> data) => raw.Deserialize(data);
+    }
+
+    /// <summary>The original frame is handed to the packet serializer with every packet it makes.</summary>
+    [Fact]
+    public void Split_HandsTheOriginalFrameToThePacketSerializer()
+    {
+        List<object?> frames = [];
+        Packetizer packetizer = new(new FrameSpyEngineController(Header + 10, frames));
+        frames.Clear();
+        object frame = new();
+
+        Release(packetizer.Split(Payload(35), 0, frame));
+
+        Assert.Equal(4, frames.Count);
+        Assert.All(frames, seen => Assert.Same(frame, seen));
+    }
+
+    private sealed class ConfiguringEngineController(int packetSize, List<(object Frame, TestPacket Packet)> configured) : RawPacketEngineController(packetSize)
+    {
+        public override IFrameSerializer FrameSerializer { get; } = new ConfiguringSerializer(configured);
+    }
+
+    private sealed class ConfiguringSerializer(List<(object Frame, TestPacket Packet)> configured) : IFrameSerializer
+    {
+        public void ConfigurePacket(object frame, object packet) => configured.Add((frame, (TestPacket)packet));
+
+        public IMemoryOwner<byte> Serialize(object frame) => throw new NotSupportedException();
+
+        public object? Deserialize(ReadOnlyMemory<byte> data, object? packet) => throw new NotSupportedException();
+    }
+
+    /// <summary>Every data packet is marked as one and configured from its frame by the frame serializer, in order; with no frame there is nothing to configure from.</summary>
+    [Fact]
+    public void Split_DataPackets_AreMarkedAndConfiguredFromTheirFrame()
+    {
+        List<(object Frame, TestPacket Packet)> configured = [];
+        Packetizer packetizer = new(new ConfiguringEngineController(Header + 10, configured));
+        object frame = new();
+
+        IReadOnlyList<Packet> packets = packetizer.Split(Payload(35), 0, frame);
+        Release(packets);
+
+        Assert.Equal([0, 1, 2, 3], configured.Select(entry => entry.Packet.Index));
+        Assert.All(configured, entry => Assert.Same(frame, entry.Frame));
+        Assert.All(configured, entry => Assert.True(entry.Packet.IsData));
+
+        configured.Clear();
+        Release(packetizer.Split(Payload(35), 0));
+        Assert.Empty(configured);
     }
 
     /// <summary>A payload that fits in one packet becomes exactly one packet carrying the payload after the packet's fields.</summary>
@@ -182,9 +249,9 @@ public sealed class PacketizerTests
 
         Assert.All(packets, packet => Assert.True(packet.Data.Memory.Length <= 200));
         using IPacketAssembler assembler = packetizer.CreateAssembler();
-        IMemoryOwner<byte>? complete = null;
+        AssembledPayload? complete = null;
         foreach (Packet packet in packets) { complete = assembler.Add(packet.Data.Memory) ?? complete; }
-        using IMemoryOwner<byte> owner = Assert.IsAssignableFrom<IMemoryOwner<byte>>(complete);
+        using IMemoryOwner<byte> owner = Assert.IsType<AssembledPayload>(complete).Payload;
         Assert.Equal(payload, owner.Memory.ToArray());
         Release(packets);
     }
@@ -225,9 +292,9 @@ public sealed class PacketizerTests
         Assert.True(packets.Count > 2);
         Assert.All(packets, packet => Assert.True(packet.Data.Memory.Length <= 400));
         using IPacketAssembler assembler = packetizer.CreateAssembler();
-        IMemoryOwner<byte>? complete = null;
+        AssembledPayload? complete = null;
         foreach (Packet packet in packets) { complete = assembler.Add(packet.Data.Memory) ?? complete; }
-        using IMemoryOwner<byte> owner = Assert.IsAssignableFrom<IMemoryOwner<byte>>(complete);
+        using IMemoryOwner<byte> owner = Assert.IsType<AssembledPayload>(complete).Payload;
         Assert.Equal(payload, owner.Memory.ToArray());
         Release(packets);
     }
@@ -245,13 +312,13 @@ public sealed class PacketizerTests
         using IPacketAssembler assembler = packetizer.CreateAssembler();
         byte[] payload = Payload(length);
 
-        IMemoryOwner<byte>? complete = null;
+        AssembledPayload? complete = null;
         foreach (Packet packet in packetizer.Split(payload, 0))
         {
             using (packet) { complete = assembler.Add(packet.Data.Memory) ?? complete; }
         }
 
-        using IMemoryOwner<byte> owner = Assert.IsAssignableFrom<IMemoryOwner<byte>>(complete);
+        using IMemoryOwner<byte> owner = Assert.IsType<AssembledPayload>(complete).Payload;
         Assert.Equal(payload, owner.Memory.ToArray());
     }
 }

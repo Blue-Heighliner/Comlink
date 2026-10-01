@@ -28,7 +28,7 @@ internal interface IPeerService
     /// <summary>
     /// Sends <paramref name="packet"/> (an instance of <see cref="IEngineController.PacketType"/>) directly to the
     /// peer identified by <paramref name="userName"/>, serialized via <see cref="IEngineController.PacketSerializer"/>
-    /// instead of <see cref="IEngineController.NetworkSerializer"/> - bypassing the normal packetization/reassembly a
+    /// instead of <see cref="IEngineController.FrameSerializer"/> - bypassing the normal packetization/reassembly a
     /// full message goes through, and carrying no delivery-status tracking of its own.
     /// </summary>
     Task<bool> SendPacket(string userName, object packet, CancellationToken cancellation = default);
@@ -147,11 +147,11 @@ internal sealed class PeerService : IPeerService, IReconfigurable, IAsyncDisposa
 
         try
         {
-            using IMemoryOwner<byte> buf = engineController.NetworkSerializer.Serialize(message);
+            using IMemoryOwner<byte> buf = engineController.FrameSerializer.Serialize(message);
             bool accepted = await transport.Request(
                 connection,
                 buf.Memory,
-                new PeerSendOptions { Priority = engineController.GetPriority(message), Transmitted = () => RaiseDeliveryStatusChanged(tag, DestinationStatus.Sent) },
+                new PeerSendOptions { Priority = engineController.GetPriority(message), Frame = message, Transmitted = () => RaiseDeliveryStatusChanged(tag, DestinationStatus.Sent) },
                 cancellation);
 
             RaiseDeliveryStatusChanged(tag, accepted ? DestinationStatus.Confirmed : DestinationStatus.Failed);
@@ -171,7 +171,7 @@ internal sealed class PeerService : IPeerService, IReconfigurable, IAsyncDisposa
 
         try
         {
-            using IMemoryOwner<byte> buf = engineController.PacketSerializer!.Serialize(packet);
+            using IMemoryOwner<byte> buf = engineController.PacketSerializer!.Serialize(packet, null);
             return await transport.Request(connection, buf.Memory, new PeerSendOptions { Priority = 0 }, cancellation);
         }
         catch
@@ -209,10 +209,10 @@ internal sealed class PeerService : IPeerService, IReconfigurable, IAsyncDisposa
     }
 
     private void OnReceived(PeerReceivedEventArgs args)
-        => _ = Task.Run(() => HandleMessage(args.Payload));
+        => _ = Task.Run(() => HandleMessage(args.Payload, args.Packet));
 
-    internal Task<bool> HandleMessage(ReadOnlyMemory<byte> data)
-        => PeerFrameDispatcher.Dispatch(data, engineController, logger, FrameDelivered, ConfirmationReceived);
+    internal Task<bool> HandleMessage(ReadOnlyMemory<byte> data, object? packet = null)
+        => PeerFrameDispatcher.Dispatch(data, engineController, logger, FrameDelivered, ConfirmationReceived, packet);
 
     private void RaiseDeliveryStatusChanged(DeliveryTag tag, DestinationStatus status)
     {

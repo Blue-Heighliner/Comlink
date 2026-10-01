@@ -11,7 +11,7 @@ internal static class TestHeartbeat
     {
         lock (gate)
         {
-            using IMemoryOwner<byte> owner = controller.NetworkSerializer.Serialize(Frame());
+            using IMemoryOwner<byte> owner = controller.FrameSerializer.Serialize(Frame());
             return owner.Memory.ToArray();
         }
     }
@@ -22,7 +22,7 @@ internal static class TestHeartbeat
     {
         lock (gate)
         {
-            try { return controller.NetworkSerializer.Deserialize(payload) is { } message && controller.IsHeartbeat(message); }
+            try { return controller.FrameSerializer.Deserialize(payload, null) is { } message && controller.IsHeartbeat(message); }
             catch (Exception) { return false; }
         }
     }

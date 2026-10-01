@@ -61,6 +61,7 @@ public sealed class SampleEngineConfiguration : IEngineConfiguration
                 .Index(p => p.Position)
                 .Count(p => p.Total)
                 .PayloadLength(p => p.FullLength)
+                .IsData(p => p.IsData)
                 .Data(p => p.Chunk, (p, value) => p.Chunk = value.ToArray()))
             .HomeText("Select a folder and entry to get started, or create a new draft or note.")
             .WindowIcon("avares://BlueHeighliner.Comlink.Sample/Assets/envelope.png")

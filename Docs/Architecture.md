@@ -40,7 +40,7 @@ Core/src/
 │   ├── Connection/      IServiceConnection and its models
 │   ├── ExternalSystems/ The external system contract and its base class
 │   ├── Models/          Types that appear in configuration (UserInfo, ConnectionPoint, IConnectionInfo, ...)
-│   └── Serialization/   The network serializer contract and its protobuf default
+│   └── Serialization/   The frame and packet serializer contracts, their abstract bases, and the protobuf default
 └── Internal/      Everything else, never public
     ├── Control/       The controller the builder's state becomes, the network file's node settings decorator, and the builders' implementations
     ├── Data/          LiteDB persistence (Client and Headless modes)

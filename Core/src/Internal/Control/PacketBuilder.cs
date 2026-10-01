@@ -4,7 +4,7 @@ namespace BlueHeighliner.Comlink.Control;
 internal sealed class PacketBuilder<TPacket> : IPacketBuilder<TPacket> where TPacket : class, new()
 {
     private readonly Dictionary<string, (Delegate Get, Delegate Set)> fields = [];
-    private ServiceRegistration<INetworkSerializer> serializer = new(_ => new ProtobufNetworkSerializer(typeof(TPacket)));
+    private ServiceRegistration<IPacketSerializer> serializer = new(_ => new ProtobufSerializer(typeof(TPacket)));
     private Func<TPacket> create = () => new();
     private int size = 16 * 1024;
     private int window = 1;
@@ -31,6 +31,12 @@ internal sealed class PacketBuilder<TPacket> : IPacketBuilder<TPacket> where TPa
     public IPacketBuilder<TPacket> Count(Expression<Func<TPacket, int>> property) => Map(nameof(Count), property);
 
     /// <inheritdoc />
+    public IPacketBuilder<TPacket> IsData(Func<TPacket, bool> get, Action<TPacket, bool> set) => Map(nameof(IsData), get, set);
+
+    /// <inheritdoc />
+    public IPacketBuilder<TPacket> IsData(Expression<Func<TPacket, bool>> property) => Map(nameof(IsData), property);
+
+    /// <inheritdoc />
     public IPacketBuilder<TPacket> PayloadLength(Func<TPacket, int> get, Action<TPacket, int> set) => Map(nameof(PayloadLength), get, set);
 
     /// <inheritdoc />
@@ -54,9 +60,9 @@ internal sealed class PacketBuilder<TPacket> : IPacketBuilder<TPacket> where TPa
     }
 
     /// <inheritdoc />
-    public IPacketBuilder<TPacket> Serializer<TSerializer>() where TSerializer : INetworkSerializer
+    public IPacketBuilder<TPacket> Serializer<TSerializer>() where TSerializer : IPacketSerializer
     {
-        serializer = ServiceRegistration<INetworkSerializer>.Of(typeof(TSerializer), instance => (INetworkSerializer)instance);
+        serializer = ServiceRegistration<IPacketSerializer>.Of(typeof(TSerializer), instance => (IPacketSerializer)instance);
         return this;
     }
 
@@ -78,7 +84,7 @@ internal sealed class PacketBuilder<TPacket> : IPacketBuilder<TPacket> where TPa
     /// <exception cref="InvalidOperationException">A packet field has not been mapped.</exception>
     public PacketMap Build()
     {
-        string[] missing = [.. new[] { nameof(PayloadId), nameof(Index), nameof(Count), nameof(PayloadLength), nameof(Data) }.Where(name => !fields.ContainsKey(name))];
+        string[] missing = [.. new[] { nameof(PayloadId), nameof(Index), nameof(Count), nameof(PayloadLength), nameof(IsData), nameof(Data) }.Where(name => !fields.ContainsKey(name))];
         if (missing.Length > 0) { throw new InvalidOperationException($"The packet mapping for {typeof(TPacket).Name} does not map: {string.Join(", ", missing)}"); }
 
         Func<object, T> Getter<T>(string name) => packet => ((Func<TPacket, T>)fields[name].Get)((TPacket)packet);
@@ -97,6 +103,8 @@ internal sealed class PacketBuilder<TPacket> : IPacketBuilder<TPacket> where TPa
             SetIndex = Setter<int>(nameof(Index)),
             GetCount = Getter<int>(nameof(Count)),
             SetCount = Setter<int>(nameof(Count)),
+            GetIsData = Getter<bool>(nameof(IsData)),
+            SetIsData = Setter<bool>(nameof(IsData)),
             GetPayloadLength = Getter<int>(nameof(PayloadLength)),
             SetPayloadLength = Setter<int>(nameof(PayloadLength)),
             GetData = Getter<ReadOnlyMemory<byte>>(nameof(Data)),

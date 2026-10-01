@@ -5,7 +5,7 @@ public sealed class InterfaceServiceTests
 {
     private static readonly ILoggerFactory noLogger = LoggerFactory.Create(_ => { });
     private readonly IEngineController format = new TestEngineController();
-    private static readonly INetworkSerializer serializer = new ProtobufNetworkSerializer();
+    private static readonly ProtobufSerializer serializer = new();
 
     private static UserInfo MakeUserInfo(string name) => new() { Name = name };
 

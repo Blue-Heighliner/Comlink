@@ -4,7 +4,7 @@ namespace BlueHeighliner.Comlink.Control;
 internal sealed class FrameBuilder<TFrame> : IFrameBuilder<TFrame> where TFrame : class, new()
 {
     private readonly Dictionary<string, (Delegate Get, Delegate Set)> fields = [];
-    private ServiceRegistration<INetworkSerializer> serializer = new(_ => new ProtobufNetworkSerializer(typeof(TFrame)));
+    private ServiceRegistration<IFrameSerializer> serializer = new(_ => new ProtobufSerializer(typeof(TFrame)));
     private readonly List<AutoForwardControllerDefinition> autoForwardControllers = [];
     private Func<TFrame> create = () => new();
 
@@ -107,9 +107,9 @@ internal sealed class FrameBuilder<TFrame> : IFrameBuilder<TFrame> where TFrame 
     public IFrameBuilder<TFrame> SecurityLevel(Expression<Func<TFrame, string>> property) => Map(nameof(SecurityLevel), property);
 
     /// <inheritdoc />
-    public IFrameBuilder<TFrame> Serializer<TSerializer>() where TSerializer : INetworkSerializer
+    public IFrameBuilder<TFrame> Serializer<TSerializer>() where TSerializer : IFrameSerializer
     {
-        serializer = ServiceRegistration<INetworkSerializer>.Of(typeof(TSerializer), instance => (INetworkSerializer)instance);
+        serializer = ServiceRegistration<IFrameSerializer>.Of(typeof(TSerializer), instance => (IFrameSerializer)instance);
         return this;
     }
 

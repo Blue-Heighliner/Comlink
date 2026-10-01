@@ -87,12 +87,12 @@ public sealed class FrameBuilderTests
     public void Defaults_SerializerBuildsOnlyTheMessageType_AndCreateIsNew()
     {
         FrameMap map = Complete().Build();
-        INetworkSerializer serializer = map.Serializer.Create(null);
+        IFrameSerializer serializer = map.Serializer.Create(null);
         using IMemoryOwner<byte> own = serializer.Serialize(new TestFrame { MessageId = "M" });
-        using IMemoryOwner<byte> other = new ProtobufNetworkSerializer().Serialize(new TestHello { Name = "N" });
+        using IMemoryOwner<byte> other = new ProtobufSerializer().Serialize(new TestHello { Name = "N" });
 
-        Assert.IsType<TestFrame>(serializer.Deserialize(own.Memory));
-        Assert.Null(serializer.Deserialize(other.Memory));
+        Assert.IsType<TestFrame>(serializer.Deserialize(own.Memory, null));
+        Assert.Null(serializer.Deserialize(other.Memory, null));
         Assert.IsType<TestFrame>(map.Create());
     }
 
@@ -100,10 +100,10 @@ public sealed class FrameBuilderTests
     [Fact]
     public void Serializer_AndCreate_CanBeReplaced()
     {
-        INetworkSerializer serializer = Mock.Of<INetworkSerializer>();
+        IFrameSerializer serializer = Mock.Of<IFrameSerializer>();
         TestFrame created = new() { MessageId = "CREATED" };
 
-        FrameMap map = Complete().Serializer<INetworkSerializer>().Create(() => created) is FrameBuilder<TestFrame> builder ? builder.Build() : throw new InvalidOperationException();
+        FrameMap map = Complete().Serializer<IFrameSerializer>().Create(() => created) is FrameBuilder<TestFrame> builder ? builder.Build() : throw new InvalidOperationException();
 
         Assert.Same(serializer, map.Serializer.Create(new ServiceCollection().AddSingleton(serializer).BuildServiceProvider()));
         Assert.Same(created, map.Create());

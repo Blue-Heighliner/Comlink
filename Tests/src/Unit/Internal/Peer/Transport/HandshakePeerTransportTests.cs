@@ -346,7 +346,7 @@ public sealed class HandshakePeerTransportTests
         await WaitUntil(() => endB.Received.Count == 1 && endA.Received.Count == 1);
         Assert.Equal(new byte[] { 1, 2, 3 }, endB.Received[0]);
         Assert.Equal(new byte[] { 7 }, endA.Received[0]);
-        using IMemoryOwner<byte> expected = a.Object.NetworkSerializer.Serialize(Who("ALICE"));
+        using IMemoryOwner<byte> expected = a.Object.FrameSerializer.Serialize(Who("ALICE"));
         Assert.Equal(expected.Memory.ToArray(), endB.Raw.Delivered.First());
         Assert.Equal(new byte[] { 1, 2, 3 }, endB.Raw.Delivered.ElementAt(1));
     }

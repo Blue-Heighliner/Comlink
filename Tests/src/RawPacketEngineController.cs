@@ -7,7 +7,7 @@ namespace BlueHeighliner.Comlink.Tests;
 internal class RawPacketEngineController(int packetSize = 16 * 1024, int packetWindow = 1) : TestPacketEngineController
 {
     /// <inheritdoc />
-    public override INetworkSerializer PacketSerializer { get; } = new RawPacketSerializer();
+    public override IPacketSerializer? PacketSerializer { get; } = new RawPacketSerializer();
 
     /// <inheritdoc />
     public override int PacketSize => packetSize;

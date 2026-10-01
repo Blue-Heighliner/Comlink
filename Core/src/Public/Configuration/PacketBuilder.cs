@@ -26,6 +26,16 @@ public interface IPacketBuilder<TPacket> where TPacket : class, new()
     /// <summary>Maps the same field by the property or field the expression reads, such as <c>x => x.Count</c>, building the setter from it. The member must have the same type and be assignable.</summary>
     IPacketBuilder<TPacket> Count(Expression<Func<TPacket, int>> property);
 
+    /// <summary>
+    /// Maps whether the packet is a data packet, one that carries a piece of a frame's payload, as opposed to a packet that carries no frame (such as one an
+    /// initial packet processor exchanges). The engine sets it true on every packet it cuts a payload into and calls
+    /// <see cref="IFrameSerializer.ConfigurePacket"/> on it with its frame, so a data packet can have its own properties set from the frame.
+    /// </summary>
+    IPacketBuilder<TPacket> IsData(Func<TPacket, bool> get, Action<TPacket, bool> set);
+
+    /// <summary>Maps the same field by the property or field the expression reads, such as <c>x => x.IsData</c>, building the setter from it. The member must have the same type and be assignable.</summary>
+    IPacketBuilder<TPacket> IsData(Expression<Func<TPacket, bool>> property);
+
     /// <summary>Maps the length in bytes of the whole payload.</summary>
     IPacketBuilder<TPacket> PayloadLength(Func<TPacket, int> get, Action<TPacket, int> set);
 
@@ -49,9 +59,9 @@ public interface IPacketBuilder<TPacket> where TPacket : class, new()
     /// </summary>
     IPacketBuilder<TPacket> Window(int packets);
 
-    /// <summary>Replaces the serializer that turns packets into bytes. The default is a <see cref="ProtobufNetworkSerializer"/> that builds only <typeparamref name="TPacket"/>.</summary>
+    /// <summary>Replaces the serializer that turns packets into bytes. The default is a <see cref="ProtobufSerializer"/> that builds only <typeparamref name="TPacket"/>.</summary>
     /// <typeparam name="TSerializer">The serializer type, instantiated through dependency injection when the engine runs: the instance registered for it in the host's services, or else one constructed from them.</typeparam>
-    IPacketBuilder<TPacket> Serializer<TSerializer>() where TSerializer : INetworkSerializer;
+    IPacketBuilder<TPacket> Serializer<TSerializer>() where TSerializer : IPacketSerializer;
 
     /// <summary>Replaces how a new, empty packet is created. The default is <c>new TPacket()</c>.</summary>
     IPacketBuilder<TPacket> Create(Func<TPacket> create);

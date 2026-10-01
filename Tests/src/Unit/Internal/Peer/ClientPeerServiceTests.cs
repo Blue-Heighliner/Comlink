@@ -74,7 +74,7 @@ public sealed class ClientPeerServiceTests
         => fx.Transport.Setup(p => p.Request(fx.Server, It.IsAny<ReadOnlyMemory<byte>>(), It.IsAny<PeerSendOptions>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync(success);
 
-    private static readonly INetworkSerializer serializer = new ProtobufNetworkSerializer();
+    private static readonly ProtobufSerializer serializer = new();
 
     private static ReadOnlyMemory<byte> Encode(TestFrame message)
     {
