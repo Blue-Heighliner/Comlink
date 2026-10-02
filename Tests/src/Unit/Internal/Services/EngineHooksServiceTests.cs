@@ -11,22 +11,19 @@ public sealed class EngineHooksServiceTests
         public List<Action<INetworkUserContext>> Disconnected { get; } = [];
         public List<Action<INetworkFrameContext>> Received { get; } = [];
 
-        public Task OnConnected(INetworkUserContext context)
+        public void OnConnected(INetworkUserContext context)
         {
             foreach (Action<INetworkUserContext> action in Connected) { action(context); }
-            return Task.CompletedTask;
         }
 
-        public Task OnDisconnected(INetworkUserContext context)
+        public void OnDisconnected(INetworkUserContext context)
         {
             foreach (Action<INetworkUserContext> action in Disconnected) { action(context); }
-            return Task.CompletedTask;
         }
 
-        public Task OnReceived(INetworkFrameContext context)
+        public void OnReceived(INetworkFrameContext context)
         {
             foreach (Action<INetworkFrameContext> action in Received) { action(context); }
-            return Task.CompletedTask;
         }
     }
 

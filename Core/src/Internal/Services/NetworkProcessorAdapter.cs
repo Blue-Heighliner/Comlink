@@ -6,11 +6,11 @@ namespace BlueHeighliner.Comlink.Services;
 internal sealed class NetworkProcessorAdapter<TFrame>(INetworkProcessor<TFrame> processor) : INetworkHandler where TFrame : class
 {
     /// <inheritdoc />
-    public Task OnConnected(INetworkUserContext context) => processor.OnConnected(new TypedNetworkConnectedContext<TFrame>(context));
+    public void OnConnected(INetworkUserContext context) => processor.OnConnected(new TypedNetworkConnectedContext<TFrame>(context));
 
     /// <inheritdoc />
-    public Task OnDisconnected(INetworkUserContext context) => processor.OnDisconnected(new TypedNetworkDisconnectedContext<TFrame>(context));
+    public void OnDisconnected(INetworkUserContext context) => processor.OnDisconnected(new TypedNetworkDisconnectedContext<TFrame>(context));
 
     /// <inheritdoc />
-    public Task OnReceived(INetworkFrameContext context) => processor.OnReceived(new TypedNetworkReceivedContext<TFrame>(context));
+    public void OnReceived(INetworkFrameContext context) => processor.OnReceived(new TypedNetworkReceivedContext<TFrame>(context));
 }

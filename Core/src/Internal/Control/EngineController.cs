@@ -578,12 +578,21 @@ internal class EngineController(EngineBuilder builder, ICurrentUserProvider curr
             Dictionary<string, ServerUserConfig> servers = new(StringComparer.OrdinalIgnoreCase);
             foreach (string name in Users)
             {
-                if (GetUserInfo(name) is { Role: UserRole.Server } info) { servers[name] = new ServerUserConfig { ChildClients = info.ChildClients }; }
+                if (GetUserInfo(name) is { Role: UserRole.Server } info) { servers[name] = BuildServerConfig(info); }
             }
-            if (CurrentUserInfo is { Role: UserRole.Server } current) { servers[current.Name] = new ServerUserConfig { ChildClients = current.ChildClients }; }
+            if (CurrentUserInfo is { Role: UserRole.Server } current) { servers[current.Name] = BuildServerConfig(current); }
             return servers;
         }
     }
+
+    private ServerUserConfig BuildServerConfig(UserInfo server)
+        => new()
+        {
+            ChildClients = server.ChildClients,
+            Routers = server.ChildClients
+                .Where(child => GetUserInfo(child) is { Role: UserRole.Router })
+                .ToDictionary(child => child, child => GetUserInfo(child).ChildClients, StringComparer.OrdinalIgnoreCase)
+        };
 
     /// <inheritdoc />
     public virtual IInitialProcessor? InitialPacketProcessor => initialPacketProcessor.Value;
@@ -701,7 +710,11 @@ internal class EngineController(EngineBuilder builder, ICurrentUserProvider curr
     }
 
     /// <inheritdoc />
-    public virtual UserInfo GetUserInfo(string userName) => network.GetUserInfo(userName) ?? new UserInfo { Name = userName };
+    public virtual UserInfo GetUserInfo(string userName)
+    {
+        UserInfo info = network.GetUserInfo(userName) ?? new UserInfo { Name = userName };
+        return info with { Groups = [.. UserGroups.Where(group => group.Value.Contains(userName, StringComparer.OrdinalIgnoreCase)).Select(group => group.Key)] };
+    }
 
     /// <inheritdoc />
     public virtual IReadOnlyDictionary<string, string> GetUserData(string userName) => GetUserInfo(userName).Data;

@@ -559,13 +559,13 @@ engine.Frames<MyFrame>(frame => frame.Processor<MyNetworkProcessor>());
 
 public sealed class MyNetworkProcessor : INetworkProcessor<MyFrame>
 {
-    public Task OnConnected(INetworkConnectedContext<MyFrame> context) { ... }
-    public Task OnDisconnected(INetworkDisconnectedContext<MyFrame> context) { ... }
-    public Task OnReceived(INetworkReceivedContext<MyFrame> context) { ... }
+    public void OnConnected(INetworkConnectedContext<MyFrame> context) { ... }
+    public void OnDisconnected(INetworkDisconnectedContext<MyFrame> context) { ... }
+    public void OnReceived(INetworkReceivedContext<MyFrame> context) { ... }
 }
 ```
 
-Runs host code in reaction to peer activity, independent of any UI: `OnConnected`/`OnDisconnected` fire once
+Runs host code in reaction to peer activity, independent of any UI: each method is synchronous (`void`) and runs on the thread that raised the event, so it should return quickly (`Send` itself is fire-and-forget); an exception it throws is logged and does not stop later events. `OnConnected`/`OnDisconnected` fire once
 each time a user goes from unreachable to reachable over at least one live peer connection, or the other way
 around (see [Peer.md](Peer.md#network-processor) for exactly what counts as "a live connection" for each
 `UserRole`), handed an `INetworkConnectedContext<TFrame>` or `INetworkDisconnectedContext<TFrame>` whose `TargetUser` names that user; `OnReceived` fires
@@ -587,7 +587,7 @@ The processor is stated by type and instantiated through the running engine's de
 
 **Network file:** none; a processor is behavior, not a setting.
 
-**Sample:** `SampleNetworkProcessor` sends a newly connected user a welcome message naming who else is currently online (`ConnectedUsers`), tells everyone still online when someone disconnects, and auto-replies `PONG` to any received message tagged `PING` - all via `Send` with `IsMessage` set, so every reaction shows up as an ordinary message in the recipient's Inbox rather than a log line only visible from the host process's own console.
+**Sample:** `SampleNetworkProcessor` sends a newly connected user a welcome message naming who else is currently online (`ConnectedUsers`), tells everyone still online when someone disconnects, and auto-replies `PONG` to any received message tagged `PING` - all via `Send` with the frame made a message, and none of it on a router (`context.CurrentUser.Role`), which composes nothing, nor for a router user, which nothing can be addressed to, so every reaction shows up as an ordinary message in the recipient's Inbox rather than a log line only visible from the host process's own console.
 
 ---
 

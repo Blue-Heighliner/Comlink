@@ -21,11 +21,12 @@ between `sh` and `cmd.exe`.
   launched roles never race each other rebuilding the same output.
 - `Scripts/Scenarios/<Scenario>/<Role>.cs` - runs one role of a manual multi-node test scenario
   against `Sample` with `--no-build` (`ClientServer`: `Server`/`Client1`/`Client2`; `ClientServerSerial`: `Server`/`Client1`/`Client2`, Client1 joined to the server by two physically cabled local MicroGate ports and Client2 over MSMT/IP; `Peer`:
-  `Peer1`/`Peer2`; `ServerCluster`: `Server1`/`Server2`/`Client1`/`Client2`), passing the scenario's
+  `Peer1`/`Peer2`; `ServerCluster`: `Server1`/`Server2`/`Client1`/`Client2`; `ClientRouterServer`: `Server`/`Router`/`Client1`/`Client2`, both clients reaching the server only through the router), passing the scenario's
   own `Config.json` (the network configuration describing every user of that scenario) as `--config` and
   naming the role's user with `--user`. Each role simulates one installation talking to the
   others over loopback; `Scripts/Scenarios/Root.cer` is the shared certificate authority signing
-  every role's `{USERNAME}.pfx` identity in every scenario.
+  every role's `{USERNAME}.pfx` identity in every scenario, and `Scripts/Scenarios/Root.pfx` holds that
+  authority's certificate with its private key (no password), so new identities can be issued from it.
 - `Scripts/Scenarios/<Scenario>/Run.task` - runs `Build.cs`, then every role `.cs` script of that
   scenario concurrently against the shared build, as ordered batches separated by a `-` wait marker
   (AutoDev's `.task` file format — see `TaskFileParser` in `Auto-Dev`).

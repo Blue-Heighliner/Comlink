@@ -2,41 +2,48 @@ namespace BlueHeighliner.Comlink.Sample;
 
 /// <summary>
 /// Reacts to peer activity: a newly connected user is welcomed with who else is currently online, everyone still online is told when someone
-/// disconnects, and any received message tagged <c>PING</c> gets an automatic <c>PONG</c> reply.
+/// disconnects, and any received message tagged <c>PING</c> gets an automatic <c>PONG</c> reply. A router composes nothing of its own, so it does none of this, and a router is never welcomed, announced or counted among who is online, since nothing can be addressed to it.
 /// </summary>
 public sealed class SampleNetworkProcessor : INetworkProcessor<SampleFrame>
 {
+    private bool IsRouter(IEnumerable<UserInfo> users, string userName) => users.Any(user => user.Role == UserRole.Router && string.Equals(user.Name, userName, StringComparison.OrdinalIgnoreCase));
+
     /// <inheritdoc />
-    public Task OnConnected(INetworkConnectedContext<SampleFrame> context)
+    public void OnConnected(INetworkConnectedContext<SampleFrame> context)
     {
+        if (context.CurrentUser.Role == UserRole.Router) { return; }
+
         string userName = context.TargetUser;
-        List<string> others = [.. context.ConnectedUsers.Select(u => u.Name).Where(name => !string.Equals(name, userName, StringComparison.OrdinalIgnoreCase))];
+        if (IsRouter(context.Users, userName)) { return; }
+
+        List<string> others = [.. context.ConnectedUsers.Where(u => u.Role != UserRole.Router).Select(u => u.Name).Where(name => !string.Equals(name, userName, StringComparison.OrdinalIgnoreCase))];
         string body = others.Count > 0 ? $"Welcome. Also online right now: {string.Join(", ", others)}." : "Welcome. You're the only one online right now.";
         context.Send(new SampleFrame { IsMessage = true, Text = body, Recipients = [new SampleRecipient { User = userName }] });
-        return Task.CompletedTask;
     }
 
     /// <inheritdoc />
-    public Task OnDisconnected(INetworkDisconnectedContext<SampleFrame> context)
+    public void OnDisconnected(INetworkDisconnectedContext<SampleFrame> context)
     {
+        if (context.CurrentUser.Role == UserRole.Router) { return; }
+
         string userName = context.TargetUser;
-        foreach (UserInfo user in context.ConnectedUsers)
+        if (IsRouter(context.Users, userName)) { return; }
+
+        foreach (UserInfo user in context.ConnectedUsers.Where(u => u.Role != UserRole.Router))
         {
             context.Send(new SampleFrame { IsMessage = true, Text = $"{userName} just went offline.", Recipients = [new SampleRecipient { User = user.Name }] });
         }
-
-        return Task.CompletedTask;
     }
 
     /// <inheritdoc />
-    public Task OnReceived(INetworkReceivedContext<SampleFrame> context)
+    public void OnReceived(INetworkReceivedContext<SampleFrame> context)
     {
+        if (context.CurrentUser.Role == UserRole.Router) { return; }
+
         SampleFrame frame = context.Frame;
         if (frame.IsMessage && string.Equals(frame.Category, "PING", StringComparison.OrdinalIgnoreCase))
         {
             context.Send(new SampleFrame { IsMessage = true, Text = "PONG", Recipients = [new SampleRecipient { User = frame.Sender }] });
         }
-
-        return Task.CompletedTask;
     }
 }

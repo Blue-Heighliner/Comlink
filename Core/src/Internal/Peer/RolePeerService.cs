@@ -126,6 +126,7 @@ internal sealed class RolePeerService(IServiceProvider services, IEngineControll
         {
             UserRole.Client => ActivatorUtilities.CreateInstance<ClientPeerService>(services),
             UserRole.Server => ActivatorUtilities.CreateInstance<ServerRoutingService>(services),
+            UserRole.Router => ActivatorUtilities.CreateInstance<RouterPeerService>(services),
             _ => ActivatorUtilities.CreateInstance<PeerService>(services)
         };
         created.FrameDelivered += payload => Raise(FrameDelivered, handler => handler(payload));

@@ -20,7 +20,7 @@ internal interface IMainViewModel
     /// <summary>Gets the help ViewModel driving the help window opened from the title bar.</summary>
     IHelpViewModel Help { get; }
     /// <summary>
-    /// Gets a value indicating whether this instance is running as a <see cref="UserRole.Server"/> — a
+    /// Gets a value indicating whether this instance is running as a <see cref="UserRole.Server"/> or <see cref="UserRole.Router"/> — a
     /// routing-only node with no inbox/outbox/notes/drafts UI of its own. When <see langword="true"/>, the
     /// main window shows either <see cref="ConnectionStatus"/>'s connections table (see
     /// <see cref="ShowConnectionsTable"/>) or the activity log view (see <see cref="ShowServerActivityView"/>),
@@ -434,7 +434,7 @@ internal sealed partial class MainViewModel : ObservableObject, IMainViewModel
 
     private void ApplyRole()
     {
-        IsServerMode = engineController.Role == UserRole.Server;
+        IsServerMode = engineController.Role is UserRole.Server or UserRole.Router;
         IsClientMode = engineController.Role == UserRole.Client;
         CanRetrieve = IsClientMode && engineController.StorageServers.Count > 0;
     }

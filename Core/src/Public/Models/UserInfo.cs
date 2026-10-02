@@ -1,7 +1,7 @@
 namespace BlueHeighliner.Comlink.Models;
 
 /// <summary>Everything the engine knows about one user: who they are and, for a user that runs a node, how that node takes part in the network.</summary>
-public sealed class UserInfo
+public sealed record UserInfo
 {
     /// <summary>Canonical name of the user. By convention user names are all uppercase.</summary>
     public required string Name { get; init; }

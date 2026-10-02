@@ -75,16 +75,11 @@ internal sealed class EngineHooksService : IEngineHooksService
         return Task.CompletedTask;
     }
 
-    private void Run(Func<INetworkHandler, Task> run, string name, string subject)
+    private void Run(Action<INetworkHandler> run, string name, string subject)
     {
         if (engineController.NetworkHandler is not { } handler) { return; }
 
-        _ = Observe(run, handler, name, subject);
-    }
-
-    private async Task Observe(Func<INetworkHandler, Task> run, INetworkHandler handler, string name, string subject)
-    {
-        try { await run(handler); }
+        try { run(handler); }
         catch (Exception ex) { logger.LogError(ex, "The network processor's {Name} failed for {Subject}", name, subject); }
     }
 
@@ -99,6 +94,6 @@ internal sealed class EngineHooksService : IEngineHooksService
             userService.GetCurrentUserInfo()
                 ?? throw new InvalidOperationException("A processor ran with no installed user, which should never happen: EngineHooksService.Start only ever runs once one is installed."),
             engineController.Users,
-            engineController.UserGroups,
+            engineController.GetUserInfo,
             peerService.IsUserConnected);
 }

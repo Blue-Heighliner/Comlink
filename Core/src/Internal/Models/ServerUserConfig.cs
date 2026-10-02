@@ -1,8 +1,10 @@
 namespace BlueHeighliner.Comlink.Models;
 
-/// <summary>Describes one server user's position in a client/server hierarchy: the child client users that belong to it.</summary>
+/// <summary>Describes one server user's position in a client/server hierarchy: the child client users that belong to it, and the routers among them with the clients behind each.</summary>
 internal sealed record ServerUserConfig
 {
     /// <summary>Names of the client users that belong to this server.</summary>
     public required IReadOnlyList<string> ChildClients { get; init; }
+    /// <summary>Gets, for each router among <see cref="ChildClients"/>, the client users that sit behind it. Traffic for one of them goes to the router, which forwards it on.</summary>
+    public IReadOnlyDictionary<string, IReadOnlyList<string>> Routers { get; init; } = new Dictionary<string, IReadOnlyList<string>>();
 }

@@ -1,0 +1,34 @@
+{
+  "AuthorityCertificate": "../Root.cer",
+  "CertificateStore": ".",
+  "Users": {
+    "SERVER": {
+      "Role": "Server",
+      "PeerPort": 50321,
+      "InterfacePort": 50320,
+      "ChildClients": [ "ROUTER" ],
+      "StoresMessages": true,
+      "SecurityLevel": "RESTRICTED"
+    },
+    "ROUTER": {
+      "Role": "Router",
+      "PeerPort": 50323,
+      "InterfacePort": 50322,
+      "ChildClients": [ "CLIENT1", "CLIENT2" ],
+      "OutgoingPoints": [ { "IpAddress": "127.0.0.1", "Port": 50321 } ],
+      "SecurityLevel": "INTERNAL"
+    },
+    "CLIENT1": {
+      "Role": "Client",
+      "InterfacePort": 50324,
+      "OutgoingPoints": [ { "IpAddress": "127.0.0.1", "Port": 50323 } ],
+      "SecurityLevel": "INTERNAL"
+    },
+    "CLIENT2": {
+      "Role": "Client",
+      "InterfacePort": 50326,
+      "OutgoingPoints": [ { "IpAddress": "127.0.0.1", "Port": 50323 } ],
+      "SecurityLevel": "INTERNAL"
+    }
+  }
+}

@@ -282,6 +282,23 @@ public sealed class EngineBuilderTests
         });
     }
 
+    /// <summary>A server's topology records which of its children are routers and the clients behind each, taken from the router's own entry.</summary>
+    [Fact]
+    public void Servers_RecordTheClientsBehindEachRouter()
+    {
+        NetworkConfig network = Network(
+            ("SERVER", new NetworkUserConfig { Role = "Server", ChildClients = ["C1", "ROUTER"] }),
+            ("ROUTER", new NetworkUserConfig { Role = "Router", ChildClients = ["C2", "C3"] }));
+        (_, EngineController controller) = Build(engine => engine, "SERVER", network);
+
+        ServerUserConfig server = controller.Servers["SERVER"];
+
+        Assert.Equal(["C1", "ROUTER"], server.ChildClients);
+        Assert.Equal(["C2", "C3"], Assert.Single(server.Routers).Value);
+        Assert.Equal("ROUTER", Assert.Single(server.Routers).Key);
+        Assert.DoesNotContain("ROUTER", controller.Servers.Keys);
+    }
+
     /// <summary>Certificate settings a host states are used, including for the MSMT options when it supplies its own.</summary>
     [Fact]
     public void Stated_CertificateSettings_AreUsed()
@@ -436,30 +453,18 @@ public sealed class EngineBuilderTests
     {
         List<string> calls = [];
         Mock<INetworkProcessor<TestFrame>> processor = new();
-        processor.Setup(p => p.OnConnected(It.IsAny<INetworkConnectedContext<TestFrame>>())).Returns((INetworkConnectedContext<TestFrame> context) =>
-        {
-            calls.Add($"connected:{context.TargetUser}");
-            return Task.CompletedTask;
-        });
-        processor.Setup(p => p.OnDisconnected(It.IsAny<INetworkDisconnectedContext<TestFrame>>())).Returns((INetworkDisconnectedContext<TestFrame> context) =>
-        {
-            calls.Add($"disconnected:{context.TargetUser}");
-            return Task.CompletedTask;
-        });
-        processor.Setup(p => p.OnReceived(It.IsAny<INetworkReceivedContext<TestFrame>>())).Returns((INetworkReceivedContext<TestFrame> context) =>
-        {
-            calls.Add($"received:{context.Frame.Body}");
-            return Task.CompletedTask;
-        });
+        processor.Setup(p => p.OnConnected(It.IsAny<INetworkConnectedContext<TestFrame>>())).Callback((INetworkConnectedContext<TestFrame> context) => calls.Add($"connected:{context.TargetUser}"));
+        processor.Setup(p => p.OnDisconnected(It.IsAny<INetworkDisconnectedContext<TestFrame>>())).Callback((INetworkDisconnectedContext<TestFrame> context) => calls.Add($"disconnected:{context.TargetUser}"));
+        processor.Setup(p => p.OnReceived(It.IsAny<INetworkReceivedContext<TestFrame>>())).Callback((INetworkReceivedContext<TestFrame> context) => calls.Add($"received:{context.Frame.Body}"));
         (_, EngineController controller) = BuildWith(message => message.Processor<INetworkProcessor<TestFrame>>(), services: Services(processor.Object));
         Mock<INetworkUserContext> connection = new();
         connection.Setup(c => c.TargetUser).Returns("BOB");
         Mock<INetworkFrameContext> received = new();
         received.Setup(c => c.Frame).Returns(new TestFrame { Body = "HI" });
 
-        await controller.NetworkHandler!.OnConnected(connection.Object);
-        await controller.NetworkHandler.OnDisconnected(connection.Object);
-        await controller.NetworkHandler.OnReceived(received.Object);
+        controller.NetworkHandler!.OnConnected(connection.Object);
+        controller.NetworkHandler.OnDisconnected(connection.Object);
+        controller.NetworkHandler.OnReceived(received.Object);
 
         Assert.Equal(["connected:BOB", "disconnected:BOB", "received:HI"], calls);
     }
@@ -468,11 +473,11 @@ public sealed class EngineBuilderTests
     {
         public Dependency Dependency { get; } = dependency;
 
-        public Task OnConnected(INetworkConnectedContext<TestFrame> context) => Task.CompletedTask;
+        public void OnConnected(INetworkConnectedContext<TestFrame> context) { }
 
-        public Task OnDisconnected(INetworkDisconnectedContext<TestFrame> context) => Task.CompletedTask;
+        public void OnDisconnected(INetworkDisconnectedContext<TestFrame> context) { }
 
-        public Task OnReceived(INetworkReceivedContext<TestFrame> context) => Task.CompletedTask;
+        public void OnReceived(INetworkReceivedContext<TestFrame> context) { }
     }
 
     /// <summary>A processor type that is not registered is constructed from the container's services, so its constructor can take dependencies.</summary>

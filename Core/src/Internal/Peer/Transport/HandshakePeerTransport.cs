@@ -362,7 +362,7 @@ internal sealed class HandshakePeerTransport : IPeerTransport
 
         public IConnectionInfo Connection => owner.engineController.WithLocalUser(session.Connection.Info);
 
-        public IEngineContext Engine => owner.contexts?.Create() ?? new EngineContext(new UserInfo { Name = Connection.LocalUser ?? string.Empty }, owner.engineController.Users, owner.engineController.UserGroups, _ => false);
+        public IEngineContext Engine => owner.contexts?.Create() ?? new EngineContext(new UserInfo { Name = Connection.LocalUser ?? string.Empty }, owner.engineController.Users, owner.engineController.GetUserInfo, _ => false);
 
         public void Connected(string userName)
         {

@@ -26,7 +26,7 @@ internal sealed class HelpViewModel : IHelpViewModel
     public string AppName { get; }
 
     /// <inheritdoc />
-    public IReadOnlyList<HelpTab> Tabs => engineController.Role == UserRole.Server ? BuildServerTabs() : BuildMessagingTabs(engineController);
+    public IReadOnlyList<HelpTab> Tabs => engineController.Role is UserRole.Server or UserRole.Router ? BuildServerTabs() : BuildMessagingTabs(engineController);
 
     private static List<HelpTab> BuildServerTabs() =>
     [

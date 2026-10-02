@@ -185,7 +185,7 @@ internal sealed class ServerRoutingService : IPeerService, IConnectionStatusServ
     }
 
     private static string Describe(IReadOnlyDictionary<string, ServerUserConfig> map)
-        => string.Join(';', map.OrderBy(server => server.Key, StringComparer.OrdinalIgnoreCase).Select(server => $"{server.Key}:{string.Join(',', server.Value.ChildClients.Order(StringComparer.OrdinalIgnoreCase))}"));
+        => string.Join(';', map.OrderBy(server => server.Key, StringComparer.OrdinalIgnoreCase).Select(server => $"{server.Key}:{string.Join(',', server.Value.ChildClients.Order(StringComparer.OrdinalIgnoreCase))}|{string.Join(',', server.Value.Routers.OrderBy(router => router.Key, StringComparer.OrdinalIgnoreCase).Select(router => $"{router.Key}={string.Join('+', router.Value.Order(StringComparer.OrdinalIgnoreCase))}"))}"));
 
     private IReadOnlyList<string> GetChildNames()
         => userMap.TryGetValue(currentUserProvider.UserName ?? string.Empty, out ServerUserConfig? myConfig) ? myConfig.ChildClients : [];
@@ -350,16 +350,24 @@ internal sealed class ServerRoutingService : IPeerService, IConnectionStatusServ
         int priority = engineController.GetPriority(message);
         string myName = currentUserProvider.UserName ?? string.Empty;
 
-        if (!userMap.TryGetValue(myName, out _)) { return; }
+        if (!userMap.TryGetValue(myName, out ServerUserConfig? myConfig)) { return; }
 
         if (engineController.IsRetrieval(message))
         {
-            await RouteRetrieval(childName, message, data, addressedUsers, priority, forward: true);
+            await RouteRetrieval(myConfig.Routers.ContainsKey(childName) ? engineController.GetFromUser(message) : childName, message, data, addressedUsers, priority, forward: true);
             return;
         }
 
         await storage.Store(message);
         await RouteFromChild(message, data);
+    }
+
+    // The local users a message goes to: each addressed child client directly, and, once, each router that has an addressed client behind it, which forwards the bytes on untouched.
+    private IEnumerable<string> GetLocalTargets(ServerUserConfig config, HashSet<string> addressedUsers)
+    {
+        IEnumerable<string> direct = addressedUsers.Where(user => config.ChildClients.Contains(user, StringComparer.OrdinalIgnoreCase));
+        IEnumerable<string> viaRouters = config.Routers.Where(router => router.Value.Any(addressedUsers.Contains)).Select(router => router.Key);
+        return direct.Concat(viaRouters).Distinct(StringComparer.OrdinalIgnoreCase);
     }
 
     private async Task RouteFromChild(object message, ReadOnlyMemory<byte> data)
@@ -370,14 +378,12 @@ internal sealed class ServerRoutingService : IPeerService, IConnectionStatusServ
 
         if (!userMap.TryGetValue(myName, out ServerUserConfig? myConfig)) { return; }
 
-        List<Task> sends = [.. addressedUsers
-            .Where(user => myConfig.ChildClients.Contains(user, StringComparer.OrdinalIgnoreCase))
-            .Select(user => TrySend(user, data, priority, message))];
+        List<Task> sends = [.. GetLocalTargets(myConfig, addressedUsers).Select(user => TrySend(user, data, priority, message))];
 
         foreach ((string serverName, ServerUserConfig config) in userMap)
         {
             if (string.Equals(serverName, myName, StringComparison.OrdinalIgnoreCase)) { continue; }
-            if (config.ChildClients.Any(child => addressedUsers.Contains(child)))
+            if (config.ChildClients.Any(child => addressedUsers.Contains(child)) || config.Routers.Values.Any(clients => clients.Any(addressedUsers.Contains)))
             {
                 sends.Add(TrySend(serverName, data, priority, message));
             }
@@ -406,9 +412,7 @@ internal sealed class ServerRoutingService : IPeerService, IConnectionStatusServ
 
         await storage.Store(message);
 
-        await Task.WhenAll(addressedUsers
-            .Where(user => myConfig.ChildClients.Contains(user, StringComparer.OrdinalIgnoreCase))
-            .Select(user => TrySend(user, data, priority, message)));
+        await Task.WhenAll(GetLocalTargets(myConfig, addressedUsers).Select(user => TrySend(user, data, priority, message)));
     }
 
     // A retrieval request is addressed to a server, not to any child client, so ordinary routing would drop it: this

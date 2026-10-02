@@ -144,6 +144,9 @@ public sealed class ServerRoutingServiceTests
         => fx.Transport.Invocations.Count(i => i.Method.Name == nameof(IPeerTransport.Request)
             && ReferenceEquals(i.Arguments[0], connection) && (!real || IsRealPayload((ReadOnlyMemory<byte>)i.Arguments[1])));
 
+    private static int Requests(Mock<IPeerTransport> transport, PeerConnection connection, ReadOnlyMemory<byte> payload)
+        => transport.Invocations.Count(i => i.Method.Name == nameof(IPeerTransport.Request) && ReferenceEquals(i.Arguments[0], connection) && ((ReadOnlyMemory<byte>)i.Arguments[1]).Span.SequenceEqual(payload.Span));
+
     private static bool SentReal(Fixture fx, PeerConnection connection) => Requests(fx, connection, real: true) > 0;
 
     private static async Task Stop(Fixture fx)
@@ -342,6 +345,72 @@ public sealed class ServerRoutingServiceTests
         Assert.Equal(1, Requests(fx, clientA2, real: true));
         Assert.Equal(0, Requests(fx, serverB, real: true));
         Assert.Equal(0, Requests(fx, clientA1, real: true));
+        await Stop(fx);
+    }
+
+    private static Dictionary<string, ServerUserConfig> WithRouter() => new(StringComparer.OrdinalIgnoreCase)
+    {
+        ["ServerA"] = new ServerUserConfig { ChildClients = ["ClientA1", "RouterA"], Routers = new Dictionary<string, IReadOnlyList<string>> { ["RouterA"] = ["ClientR1", "ClientR2"] } },
+        ["ServerB"] = new ServerUserConfig { ChildClients = ["ClientB1"] }
+    };
+
+    /// <summary>A message for clients behind a router goes to that router once, as the original bytes, not to the clients themselves.</summary>
+    [Fact]
+    public async Task FromChild_AddressedToClientsBehindARouter_ForwardsToTheRouterOnce()
+    {
+        Fixture fx = await BuildStarted(userMap: WithRouter());
+        PeerConnection clientA1 = Inbound("ClientA1");
+        PeerConnection routerA = Inbound("RouterA");
+        fx.Come(clientA1);
+        fx.Come(routerA);
+        ReadOnlyMemory<byte> payload = Encode(MessageTo("ClientR1", "ClientR2"));
+
+        fx.Receive(clientA1, payload);
+
+        await WaitUntil(() => SentReal(fx, routerA), TimeSpan.FromSeconds(30));
+        await Task.Delay(100);
+        Assert.Equal(1, Requests(fx, routerA, real: true));
+        Assert.Equal(0, Requests(fx, clientA1, real: true));
+        Assert.Equal(1, Requests(fx.Transport, routerA, payload));
+        await Stop(fx);
+    }
+
+    /// <summary>A message a router forwards up from one of its clients is routed on to a client behind another router of this server.</summary>
+    [Fact]
+    public async Task FromRouter_AddressedToLocalClient_RoutesToThatClient()
+    {
+        Fixture fx = await BuildStarted(userMap: WithRouter());
+        PeerConnection clientA1 = Inbound("ClientA1");
+        PeerConnection routerA = Inbound("RouterA");
+        fx.Come(clientA1);
+        fx.Come(routerA);
+
+        fx.Receive(routerA, Encode(MessageTo("ClientA1")));
+
+        await WaitUntil(() => SentReal(fx, clientA1), TimeSpan.FromSeconds(30));
+        Assert.Equal(0, Requests(fx, routerA, real: true));
+        await Stop(fx);
+    }
+
+    /// <summary>A message for a client behind another server's router is forwarded to that server.</summary>
+    [Fact]
+    public async Task FromChild_AddressedToClientBehindARemoteServersRouter_ForwardsToThatServer()
+    {
+        Dictionary<string, ServerUserConfig> map = new(StringComparer.OrdinalIgnoreCase)
+        {
+            ["ServerA"] = new ServerUserConfig { ChildClients = ["ClientA1"] },
+            ["ServerB"] = new ServerUserConfig { ChildClients = ["RouterB"], Routers = new Dictionary<string, IReadOnlyList<string>> { ["RouterB"] = ["ClientRB1"] } }
+        };
+        Fixture fx = await BuildStarted(userMap: map);
+        PeerConnection clientA1 = Inbound("ClientA1");
+        PeerConnection serverB = Inbound("ServerB");
+        fx.Come(clientA1);
+        fx.Come(serverB);
+
+        fx.Receive(clientA1, Encode(MessageTo("ClientRB1")));
+
+        await WaitUntil(() => SentReal(fx, serverB), TimeSpan.FromSeconds(30));
+        Assert.Equal(1, Requests(fx, serverB, real: true));
         await Stop(fx);
     }
 
