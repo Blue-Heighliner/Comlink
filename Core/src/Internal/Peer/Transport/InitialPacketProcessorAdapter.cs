@@ -9,13 +9,13 @@ internal sealed class InitialPacketProcessorAdapter<TPacket>(IInitialPacketProce
     public Type ItemType { get; } = typeof(TPacket);
 
     /// <inheritdoc />
-    public Task OnConnected(IInitialSession session) => processor.OnConnected(new Context(session));
+    public void OnConnected(IInitialSession session) => processor.OnConnected(new Context(session));
 
     /// <inheritdoc />
-    public Task OnInitial(IInitialSession session, object item) => processor.OnInitial(new Context(session), (TPacket)item);
+    public void OnInitial(IInitialSession session, object item) => processor.OnInitial(new Context(session), (TPacket)item);
 
     /// <inheritdoc />
-    public Task OnReply(IInitialSession session, object item) => processor.OnReply(new Context(session), (TPacket)item);
+    public void OnReply(IInitialSession session, object item) => processor.OnReply(new Context(session), (TPacket)item);
 
     private sealed class Context(IInitialSession session) : IInitialPacketContext<TPacket>
     {
@@ -35,6 +35,6 @@ internal sealed class InitialPacketProcessorAdapter<TPacket>(IInitialPacketProce
 
         public void Disconnect() => session.Disconnect();
 
-        public Task<bool> Send(TPacket packet) => session.Send(packet);
+        public void Send(TPacket packet) => session.Send(packet);
     }
 }

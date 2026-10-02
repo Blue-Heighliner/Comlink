@@ -9,13 +9,13 @@ internal sealed class InitialFrameProcessorAdapter<TFrame>(IInitialFrameProcesso
     public Type ItemType { get; } = typeof(TFrame);
 
     /// <inheritdoc />
-    public Task OnConnected(IInitialSession session) => processor.OnConnected(new Context(session));
+    public void OnConnected(IInitialSession session) => processor.OnConnected(new Context(session));
 
     /// <inheritdoc />
-    public Task OnInitial(IInitialSession session, object item) => processor.OnInitial(new Context(session), (TFrame)item);
+    public void OnInitial(IInitialSession session, object item) => processor.OnInitial(new Context(session), (TFrame)item);
 
     /// <inheritdoc />
-    public Task OnReply(IInitialSession session, object item) => processor.OnReply(new Context(session), (TFrame)item);
+    public void OnReply(IInitialSession session, object item) => processor.OnReply(new Context(session), (TFrame)item);
 
     private sealed class Context(IInitialSession session) : IInitialFrameContext<TFrame>
     {
@@ -35,6 +35,6 @@ internal sealed class InitialFrameProcessorAdapter<TFrame>(IInitialFrameProcesso
 
         public void Disconnect() => session.Disconnect();
 
-        public Task<bool> Send(TFrame frame) => session.Send(frame);
+        public void Send(TFrame frame) => session.Send(frame);
     }
 }

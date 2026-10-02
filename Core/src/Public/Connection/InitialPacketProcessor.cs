@@ -12,15 +12,15 @@ public interface IInitialPacketProcessor<TPacket> where TPacket : class
 {
     /// <summary>Called on both nodes when the connection has formed, before anything has been received. The opening node (<see cref="IInitialPacketContext{TPacket}.IsOpener"/>) usually sends its initial packet here.</summary>
     /// <param name="context">Controls the connection.</param>
-    Task OnConnected(IInitialPacketContext<TPacket> context);
+    void OnConnected(IInitialPacketContext<TPacket> context);
 
     /// <summary>Called on the accepting node for each packet the opening node sent, while the connection is not yet marked connected.</summary>
     /// <param name="context">Controls the connection.</param>
     /// <param name="packet">What arrived.</param>
-    Task OnInitial(IInitialPacketContext<TPacket> context, TPacket packet);
+    void OnInitial(IInitialPacketContext<TPacket> context, TPacket packet);
 
     /// <summary>Called on the opening node for each packet the accepting node sent, while the connection is not yet marked connected.</summary>
     /// <param name="context">Controls the connection.</param>
     /// <param name="packet">What arrived.</param>
-    Task OnReply(IInitialPacketContext<TPacket> context, TPacket packet);
+    void OnReply(IInitialPacketContext<TPacket> context, TPacket packet);
 }

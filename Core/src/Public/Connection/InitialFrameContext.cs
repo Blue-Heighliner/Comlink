@@ -21,8 +21,7 @@ public interface IInitialFrameContext<TFrame> : IEngineContext where TFrame : cl
     /// <summary>Drops the connection.</summary>
     void Disconnect();
 
-    /// <summary>Sends <paramref name="frame"/> over the connection, serialized with the frame serializer and, when packets are configured, split into packets like any frame. It is not stored, routed or shown.</summary>
+    /// <summary>Sends <paramref name="frame"/> over the connection in the background, in order with this context's other calls (a <see cref="Connected"/> after a send takes effect once it has been sent), and dropping the connection if it cannot be sent, serialized with the frame serializer and, when packets are configured, split into packets like any frame. It is not stored, routed or shown.</summary>
     /// <param name="frame">What to send.</param>
-    /// <returns>Whether the frame was accepted for sending.</returns>
-    Task<bool> Send(TFrame frame);
+    void Send(TFrame frame);
 }

@@ -396,19 +396,14 @@ public sealed class EngineBuilderTests
         session.Setup(s => s.Engine).Returns(engine.Object);
         session.Setup(s => s.IsOpener).Returns(true);
         session.Setup(s => s.Connection).Returns(info);
-        session.Setup(s => s.Send(It.IsAny<object>())).ReturnsAsync(true);
         IInitialFrameContext<TestFrame>? seen = null;
         Mock<IInitialFrameProcessor<TestFrame>> processor = new();
-        processor.Setup(p => p.OnConnected(It.IsAny<IInitialFrameContext<TestFrame>>())).Returns((IInitialFrameContext<TestFrame> context) =>
-        {
-            seen = context;
-            return Task.CompletedTask;
-        });
+        processor.Setup(p => p.OnConnected(It.IsAny<IInitialFrameContext<TestFrame>>())).Callback((IInitialFrameContext<TestFrame> context) => seen = context);
         EngineBuilder builder = EngineBuilder.Build(new TestEngineConfiguration(false, message => message.InitialProcessor<IInitialFrameProcessor<TestFrame>>()));
         EngineController controller = new(builder, new CurrentUserProvider(), null, Services(processor.Object));
         TestFrame sent = new() { Body = "HI" };
 
-        await controller.InitialFrameProcessor!.OnConnected(session.Object);
+        controller.InitialFrameProcessor!.OnConnected(session.Object);
 
         Assert.NotNull(seen);
         Assert.True(seen.IsOpener);
@@ -416,7 +411,7 @@ public sealed class EngineBuilderTests
         Assert.True(seen.IsConnected("BOB"));
         Assert.False(seen.IsConnected("X"));
         Assert.Same(info, seen.Connection);
-        Assert.True(await seen.Send(sent));
+        seen.Send(sent);
         seen.Connected("ALICE");
         seen.Disconnect();
         session.Verify(s => s.Send(sent), Times.Once);

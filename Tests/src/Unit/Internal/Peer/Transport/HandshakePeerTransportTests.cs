@@ -13,15 +13,15 @@ public sealed class HandshakePeerTransportTests
     private sealed class Scripted : IInitialProcessor
     {
         public Type ItemType { get; init; } = typeof(TestFrame);
-        public Func<IInitialSession, Task> Connected { get; init; } = _ => Task.CompletedTask;
-        public Func<IInitialSession, object, Task> Initial { get; init; } = (_, _) => Task.CompletedTask;
-        public Func<IInitialSession, object, Task> Reply { get; init; } = (_, _) => Task.CompletedTask;
+        public Action<IInitialSession> Connected { get; init; } = _ => { };
+        public Action<IInitialSession, object> Initial { get; init; } = (_, _) => { };
+        public Action<IInitialSession, object> Reply { get; init; } = (_, _) => { };
 
-        public Task OnConnected(IInitialSession session) => Connected(session);
+        public void OnConnected(IInitialSession session) => Connected(session);
 
-        public Task OnInitial(IInitialSession session, object item) => Initial(session, item);
+        public void OnInitial(IInitialSession session, object item) => Initial(session, item);
 
-        public Task OnReply(IInitialSession session, object item) => Reply(session, item);
+        public void OnReply(IInitialSession session, object item) => Reply(session, item);
     }
 
     private sealed class End(HandshakePeerTransport transport, LoopbackPeerTransport raw)
@@ -63,20 +63,19 @@ public sealed class HandshakePeerTransportTests
     private static Scripted Introduce(string me, List<bool>? openers = null)
         => new()
         {
-            Connected = async session =>
+            Connected = session =>
             {
                 openers?.Add(session.IsOpener);
-                if (session.IsOpener) { await session.Send(Who(me)); }
+                if (session.IsOpener) { session.Send(Who(me)); }
             },
-            Initial = async (session, item) =>
+            Initial = (session, item) =>
             {
-                await session.Send(Who(me));
+                session.Send(Who(me));
                 session.Connected(((TestFrame)item).FromUser);
             },
             Reply = (session, item) =>
             {
                 session.Connected(((TestFrame)item).FromUser);
-                return Task.CompletedTask;
             }
         };
 
@@ -380,26 +379,25 @@ public sealed class HandshakePeerTransportTests
         List<string> seen = [];
         Scripted opener = new()
         {
-            Connected = async session =>
+            Connected = session =>
             {
                 if (!session.IsOpener) { return; }
-                await session.Send(Who("ONE"));
-                await session.Send(Who("TWO"));
+                session.Send(Who("ONE"));
+                session.Send(Who("TWO"));
             },
             Reply = (session, item) =>
             {
                 session.Connected("BOB");
-                return Task.CompletedTask;
             }
         };
         Scripted acceptor = new()
         {
-            Initial = async (session, item) =>
+            Initial = (session, item) =>
             {
                 seen.Add(((TestFrame)item).FromUser);
                 if (seen.Count < 2) { return; }
 
-                await session.Send(Who("DONE"));
+                session.Send(Who("DONE"));
                 session.Connected("ALICE");
             }
         };
@@ -433,7 +431,7 @@ public sealed class HandshakePeerTransportTests
     [Fact]
     public async Task Handshake_ProcessorDisconnects_DropsConnection()
     {
-        Scripted refusing = new() { Connected = session => { session.Disconnect(); return Task.CompletedTask; } };
+        Scripted refusing = new() { Connected = session => { session.Disconnect(); } };
         (End endA, _) = Pair(WithProcessor(refusing).Object, WithProcessor(Introduce("BOB")).Object);
 
         await Assert.ThrowsAsync<IOException>(() => endA.Transport.Connect(point));
@@ -485,24 +483,23 @@ public sealed class HandshakePeerTransportTests
         Scripted a = new()
         {
             ItemType = typeof(TestPacket),
-            Connected = async session =>
+            Connected = session =>
             {
-                if (session.IsOpener) { await session.Send(new TestPacket { PayloadId = 11 }); }
+                if (session.IsOpener) { session.Send(new TestPacket { PayloadId = 11 }); }
             },
             Reply = (session, item) =>
             {
                 Assert.Equal(22, ((TestPacket)item).PayloadId);
                 session.Connected("BOB");
-                return Task.CompletedTask;
             }
         };
         Scripted b = new()
         {
             ItemType = typeof(TestPacket),
-            Initial = async (session, item) =>
+            Initial = (session, item) =>
             {
                 Assert.Equal(11, ((TestPacket)item).PayloadId);
-                await session.Send(new TestPacket { PayloadId = 22 });
+                session.Send(new TestPacket { PayloadId = 22 });
                 session.Connected("ALICE");
             }
         };

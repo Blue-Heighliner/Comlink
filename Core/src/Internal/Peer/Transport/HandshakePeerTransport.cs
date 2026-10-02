@@ -152,18 +152,34 @@ internal sealed class HandshakePeerTransport : IPeerTransport
         Process(session, () => handshake!.Processor.OnConnected(session.Initial));
     }
 
-    private void Process(Session session, Func<Task> work)
+    private void Process(Session session, Action work)
     {
         lock (session.Gate) { session.Tail = Chain(session, session.Tail, work); }
     }
 
-    private async Task Chain(Session session, Task previous, Func<Task> work)
+    // What a processor asks of its session (send, connected, disconnect) runs after the handler that asked, in the order asked, and still runs once an
+    // earlier one has marked the connection connected, unlike the handlers themselves, which only run during the exchange.
+    private void Enqueue(Session session, Func<Task> action)
+    {
+        lock (session.Gate) { session.Tail = Run(session, session.Tail, action); }
+    }
+
+    private async Task Run(Session session, Task previous, Func<Task> action)
+    {
+        await previous;
+        if (session.State == SessionState.Closed) { return; }
+
+        try { await action(); }
+        catch (Exception ex) { Fail(session, $"could not complete its initial exchange: {ex.Message}"); }
+    }
+
+    private async Task Chain(Session session, Task previous, Action work)
     {
         await previous;
         await Task.Yield();
         if (session.State != SessionState.Handshaking) { return; }
 
-        try { await work(); }
+        try { work(); }
         catch (Exception ex) { Fail(session, $"could not complete its initial exchange: {ex.Message}"); }
     }
 
@@ -207,12 +223,13 @@ internal sealed class HandshakePeerTransport : IPeerTransport
         received.Publish(args);
     }
 
-    private Task OnHandshakePayload(Session session, byte[] body, object? packet)
+    private void OnHandshakePayload(Session session, byte[] body, object? packet)
     {
         object item = handshake!.Deserialize(body, packet);
         if (item.GetType() != handshake.Processor.ItemType) { throw new InvalidDataException($"expected a {handshake.Processor.ItemType.Name}"); }
 
-        return IsInitiator(session.Connection.Info) ? handshake.Processor.OnReply(session.Initial, item) : handshake.Processor.OnInitial(session.Initial, item);
+        if (IsInitiator(session.Connection.Info)) { handshake.Processor.OnReply(session.Initial, item); }
+        else { handshake.Processor.OnInitial(session.Initial, item); }
     }
 
     private void Establish(Session session)
@@ -365,13 +382,24 @@ internal sealed class HandshakePeerTransport : IPeerTransport
         public IEngineContext Engine => owner.contexts?.Create() ?? new EngineContext(new UserInfo { Name = Connection.LocalUser ?? string.Empty }, owner.engineController.Users, owner.engineController.GetUserInfo, _ => false);
 
         public void Connected(string userName)
-        {
-            session.Connection.InitialUser = userName;
-            owner.Establish(session);
-        }
+            => owner.Enqueue(session, () =>
+            {
+                session.Connection.InitialUser = userName;
+                owner.Establish(session);
+                return Task.CompletedTask;
+            });
 
-        public void Disconnect() => owner.Fail(session, "was disconnected by its initial processor");
+        public void Disconnect()
+            => owner.Enqueue(session, () =>
+            {
+                owner.Fail(session, "was disconnected by its initial processor");
+                return Task.CompletedTask;
+            });
 
-        public Task<bool> Send(object item) => owner.Send(session, item);
+        public void Send(object item)
+            => owner.Enqueue(session, async () =>
+            {
+                if (!await owner.Send(session, item)) { throw new IOException("an initial item was not accepted for sending"); }
+            });
     }
 }

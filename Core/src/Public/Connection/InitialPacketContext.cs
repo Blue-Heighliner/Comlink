@@ -21,8 +21,7 @@ public interface IInitialPacketContext<TPacket> : IEngineContext where TPacket :
     /// <summary>Drops the connection.</summary>
     void Disconnect();
 
-    /// <summary>Sends <paramref name="packet"/> over the connection, serialized with the packet serializer and sent as it is, since it is itself a packet and is not split.</summary>
+    /// <summary>Sends <paramref name="packet"/> over the connection in the background, in order with this context's other calls (a <see cref="Connected"/> after a send takes effect once it has been sent), and dropping the connection if it cannot be sent,, serialized with the packet serializer and sent as it is, since it is itself a packet and is not split.</summary>
     /// <param name="packet">What to send.</param>
-    /// <returns>Whether the packet was accepted for sending.</returns>
-    Task<bool> Send(TPacket packet);
+    void Send(TPacket packet);
 }

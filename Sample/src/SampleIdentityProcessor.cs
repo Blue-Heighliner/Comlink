@@ -8,24 +8,20 @@ namespace BlueHeighliner.Comlink.Sample;
 public sealed class SampleIdentityProcessor : IInitialPacketProcessor<SamplePacket>
 {
     /// <inheritdoc />
-    public async Task OnConnected(IInitialPacketContext<SamplePacket> context)
+    public void OnConnected(IInitialPacketContext<SamplePacket> context)
     {
-        if (context.IsOpener) { await context.Send(Announce(context)); }
+        if (context.IsOpener) { context.Send(Announce(context)); }
     }
 
     /// <inheritdoc />
-    public async Task OnInitial(IInitialPacketContext<SamplePacket> context, SamplePacket packet)
+    public void OnInitial(IInitialPacketContext<SamplePacket> context, SamplePacket packet)
     {
-        await context.Send(Announce(context));
+        context.Send(Announce(context));
         Identify(context, packet);
     }
 
     /// <inheritdoc />
-    public Task OnReply(IInitialPacketContext<SamplePacket> context, SamplePacket packet)
-    {
-        Identify(context, packet);
-        return Task.CompletedTask;
-    }
+    public void OnReply(IInitialPacketContext<SamplePacket> context, SamplePacket packet) => Identify(context, packet);
 
     private SamplePacket Announce(IInitialPacketContext<SamplePacket> context) => new() { Chunk = Encoding.UTF8.GetBytes(context.Connection.LocalUser ?? string.Empty) };
 
