@@ -190,7 +190,7 @@ public sealed class EntryBarViewModelTests
     {
         EntryBarViewModel vm = new(new Mock<IEntryService>().Object, format);
 
-        Assert.Equal(["Any", "Normal"], vm.AvailablePriorityFilters.Select(f => f.Label));
+        Assert.Equal(["Any", "NORMAL"], vm.AvailablePriorityFilters.Select(f => f.Label));
         Assert.Equal([null, 0], vm.AvailablePriorityFilters.Select(f => f.Value));
         Assert.Same(vm.AvailablePriorityFilters[0], vm.SelectedPriorityFilter);
     }
@@ -243,7 +243,7 @@ public sealed class EntryBarViewModelTests
         await vm.LoadFolder(MakeFolder("root-inbox", FolderType.Inbox));
         vm.CurrentPage = 2;
 
-        vm.SelectedPriorityFilter = vm.AvailablePriorityFilters.Single(f => f.Label == "Normal");
+        vm.SelectedPriorityFilter = vm.AvailablePriorityFilters.Single(f => f.Label == "NORMAL");
 
         Assert.Equal(1, vm.CurrentPage);
         svc.Verify(s => s.GetMessages("root-inbox", 1, new EntryFilter { Priority = 0 }), Times.Once);
@@ -321,7 +321,7 @@ public sealed class EntryBarViewModelTests
         svc.Setup(s => s.GetMessages(It.IsAny<string>(), It.IsAny<int>(), It.IsAny<EntryFilter>())).ReturnsAsync((Items: new List<MessageEntity>(), Total: 0));
         EntryBarViewModel vm = new(svc.Object, format);
         await vm.LoadFolder(MakeFolder("root-inbox", FolderType.Inbox));
-        vm.SelectedPriorityFilter = vm.AvailablePriorityFilters.Single(f => f.Label == "Normal");
+        vm.SelectedPriorityFilter = vm.AvailablePriorityFilters.Single(f => f.Label == "NORMAL");
         vm.AlertOnlyFilter = true;
         vm.DateFrom = DateTimeOffset.Now;
         vm.DateTo = DateTimeOffset.Now;

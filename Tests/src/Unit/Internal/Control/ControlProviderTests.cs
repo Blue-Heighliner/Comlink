@@ -215,14 +215,14 @@ public sealed class ControlProviderTests
         Assert.Same(fallbackInfo, controller.GetUserInfo("X"));
     }
 
-    /// <summary>The default implementation offers a single "Normal" priority level, tags enabled with label "Tag", and no blocked combinations.</summary>
+    /// <summary>The default implementation offers a single "NORMAL" priority level, tags enabled with label "Tag", and no blocked combinations.</summary>
     [Fact]
     public void EngineController_ReturnsHardcodedMessageCompositionDefaults()
     {
         TestEngineController controller = new();
 
         IReadOnlyList<MessagePriorityOption> priorities = controller.Priorities;
-        Assert.Equal(["Normal"], priorities.Select(p => p.Name).ToList());
+        Assert.Equal(["NORMAL"], priorities.Select(p => p.Name).ToList());
         Assert.Equal([0], priorities.Select(p => p.Value).ToList());
         Assert.True(controller.TagsEnabled);
         Assert.Equal("Tag", controller.TagLabel);

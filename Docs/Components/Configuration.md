@@ -197,20 +197,20 @@ Configuration for the alert-message feature in Client mode: the title bar's alar
 
 ```csharp
 engine
-    .Priorities(("Low", 0), ("High", 2))
+    .Priorities(("LOW", PriorityMode.User), ("HIGH", PriorityMode.User), ("RECEIPT", PriorityMode.System))
     .Tags(enabled: true, label: "Category")
-    .BlockTag("SPAM", null).BlockTag(null, 2);
+    .BlockTag("SPAM", null).BlockTag(null, "HIGH");
 ```
 
-How messages are composed and displayed: the set of selectable priority levels (each a display name paired with the value stored in the message's priority field and used verbatim as the MSMT send priority, larger values sent first, see [Peer.md](Peer.md)); whether message tags are shown anywhere in the UI and what the tag input's watermark says; and which tag and priority combinations are blocked outright when composing a draft (each `BlockTag` pairs an optional case-insensitive tag with an optional priority; leaving either `null` matches any value for that field).
+How messages are composed and displayed: the priority levels (listed lowest first like security levels, so a level's position is its priority and later levels are sent first on every connection, see [Peer.md](Peer.md); each is a name, uppercase by convention, and a mode: `User` priorities are offered to users composing a message, `System` priorities are assigned only by the system and never offered). A message carries the priority its user chose; the retrieval, read receipt and receive receipt handlers each state a `Priority` name, which must be one of the configured priorities, that every frame of their kind is sent with, so receipts and requests can be ordered against messages; whether message tags are shown anywhere in the UI and what the tag input's watermark says; and which tag and priority combinations are blocked outright when composing a draft (each `BlockTag` pairs an optional case-insensitive tag with an optional priority; leaving either `null` matches any value for that field).
 
 `DraftViewModel` enforces the blocked-combination rules proactively rather than only at send time: `AvailablePriorities` excludes any priority blocked for the currently-entered tag, and setting `Tag` to a value blocked for the currently-selected priority is rejected outright (the value reverts), so a blocked combination can never actually be entered in the draft editor. `SendCommand` also re-checks before sending, as a defense-in-depth safety net. See `Docs/Components/ViewModels.md`.
 
-**Default:** a single `"Normal"` (value `0`) priority level; tags on with label `"Tag"`; no blocked combinations. Stating priorities twice replaces the earlier list.
+**Default:** a single `"NORMAL"` (`User`) priority level; tags on with label `"Tag"`; no blocked combinations. Stating priorities twice replaces the earlier list.
 
 **Network file:** the current user's entry may set `MessageTagsEnabled` and `MessageTagLabel`, overriding what is stated, field by field. See [Config.md](Config.md). Priorities and blocked combinations have no field in the file.
 
-**Sample:** `SampleEngineConfiguration` states three priority levels (`"Low"`/`"Medium"`/`"High"`, values 0/1/2) instead of the default's one, and demonstrates both blocked-combination kinds: the `"SPAM"` tag is blocked regardless of priority, and `High` priority is blocked regardless of tag. Unlike Sample's other settings, the blocked combinations deliberately change default behavior from the engine's permissive "no blocks" default, since that is the only way to usefully demonstrate that part of the configuration.
+**Sample:** `SampleEngineConfiguration` states three user priority levels (`"LOW"`/`"MEDIUM"`/`"HIGH"`) and two system ones (`"RETRIEVAL"`, `"RECEIPT"`, used by its handlers) instead of the default's one, with their names held in `SamplePriorities`, and demonstrates both blocked-combination kinds: the `"SPAM"` tag is blocked regardless of priority, and `HIGH` priority is blocked regardless of tag. Unlike Sample's other settings, the blocked combinations deliberately change default behavior from the engine's permissive "no blocks" default, since that is the only way to usefully demonstrate that part of the configuration.
 
 ---
 
@@ -252,14 +252,12 @@ A destination user may only receive a message whose security level their own ass
 ### Print Policy
 
 ```csharp
-engine
-    .PrintReceived()
-    .Frames<MyFrame>(frame => frame.PrintCount(m => m.IsAlert ? 2 : 1));
+engine.PrintReceived();
 ```
 
-The print manager's automatic "print received" behavior: whether its toggle starts enabled, automatically adding every received message to the print queue from the moment the app starts (the user can still toggle it at any time), and how many times each received message is added to the print queue while it is (`0` to not print it, `1` once, `2` for two copies, and so on). Consulted once per received message via `IEntryService.MessageInserted`. `PrintCount` is stated on the message configuration, so the rule receives the frame typed; the engine casts once on the host's behalf.
+The print manager's automatic "print received" behavior: whether its toggle starts enabled, automatically adding every received message to the print queue from the moment the app starts (the user can still toggle it at any time), and how many times each received message is added to the print queue while it is (`0` to not print it, `1` once, `2` for two copies, and so on). Consulted once per received message via `IEntryService.MessageInserted`. The count is `IMessageHandler<TFrame>.GetPrintCount`, since only received messages are printed.
 
-**Default:** off / `1` for every message.
+**Default:** off.
 
 **Network file:** the current user's entry may set `PrintReceivedEnabled`, overriding what is stated. See [Config.md](Config.md). The print count has no field in the file.
 
@@ -408,7 +406,7 @@ its `Users` - each of them can open it there and maintain their own locally-save
 from freely, persisted between restarts (see `Docs/Components/ViewModels.md`, `IAutoForwardViewModel`). Whenever
 this instance receives a message its `Accepts` accepts, it is forwarded automatically, unchanged in body,
 to every user currently on that target list - no action needed from the user beyond having set the target list up
-once. `Accepts` receives the frame typed, since the controller is stated on the frame configuration like `PrintCount` (only frames the message handler recognizes are auto forwarded); it is never consulted for a user with no access to the controller, or whose target list is
+once. `Accepts` receives the frame typed, since the controller is stated on the frame configuration like the message handler (only frames the message handler recognizes are auto forwarded); it is never consulted for a user with no access to the controller, or whose target list is
 currently empty, so an inaccessible or unconfigured controller costs nothing per received message beyond that one
 check. The controller's own name is never sent as one of the forwarded message's own addresses, even if a user
 adds themselves to their own target list, avoiding a self-forward loop. Adding another controller with the same `Name`

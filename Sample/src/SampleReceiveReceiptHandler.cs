@@ -4,6 +4,9 @@ namespace BlueHeighliner.Comlink.Sample;
 public sealed class SampleReceiveReceiptHandler : IReceiveReceiptHandler<SampleFrame>
 {
     /// <inheritdoc />
+    public string Priority => SamplePriorities.Receipt;
+
+    /// <inheritdoc />
     public bool IsValid(SampleFrame frame) => frame.IsReceiveReceipt;
 
     /// <inheritdoc />

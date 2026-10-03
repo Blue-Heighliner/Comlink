@@ -18,7 +18,7 @@ public sealed class PublicApiTests
                 "DeliveryStatusChangedEvent", "DestinationStatus", "DraftExportData",
                 "Engine", "ExternalSystemBase`1", "FolderType", "FramePacketCreateContext", "FrameSerializer`2", "HdlcRemote", "IAutoForwardController`1", "IConnectionInfo", "IEngineBuilder", "IEngineConfiguration", "IEngineContext", "IExportFormat", "IExternalSystem", "IFrameBuilder`1", "IFramePacketHandler`1", "IFrameSerializer",
                 "IImportFormat", "IImportFormatContext", "IInitialFrameContext`1", "IInitialFrameProcessor`1", "IInitialPacketContext`1", "IInitialPacketProcessor`1", "IIpConnectionInfo", "IMessageHandler`1", "INetworkConnectedContext`1", "INetworkContext`1", "INetworkDisconnectedContext`1", "INetworkProcessor`1", "INetworkReceivedContext`1", "IPacketBuilder`1", "IPacketSerializer", "IReadReceiptHandler`1", "IReceiveReceiptHandler`1", "IRetrievalHandler`1", "ISerialConnectionInfo", "IServiceConnection",
-                "MessageCreateContext", "MessageDeliveryStatus", "MessageExportData", "MessageReceivedEvent", "MsmtConnectionOptions", "NoteExportData", "PacketSerializer`2", "PooledBufferWriter", "ProtobufSerializer", "ReceiptCreateContext", "RetrievalCreateContext", "SendMessageResult",
+                "MessageCreateContext", "MessageDeliveryStatus", "MessageExportData", "MessageReceivedEvent", "MsmtConnectionOptions", "NoteExportData", "PacketSerializer`2", "PooledBufferWriter", "PriorityMode", "ProtobufSerializer", "ReceiptCreateContext", "RetrievalCreateContext", "SendMessageResult",
                 "StagedSendData", "StagedSendMode", "UserDeliveryResult", "UserIdentity", "UserInfo", "UserLink", "UserRole"
             ],
             exported);

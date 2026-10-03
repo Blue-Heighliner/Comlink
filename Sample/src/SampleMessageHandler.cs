@@ -32,6 +32,9 @@ public sealed class SampleMessageHandler : IMessageHandler<SampleFrame>
     public int GetPriority(SampleFrame frame) => frame.Importance;
 
     /// <inheritdoc />
+    public int GetPrintCount(SampleFrame frame) => frame.Alert ? 2 : 1;
+
+    /// <inheritdoc />
     public string GetTag(SampleFrame frame) => frame.Category;
 
     /// <inheritdoc />

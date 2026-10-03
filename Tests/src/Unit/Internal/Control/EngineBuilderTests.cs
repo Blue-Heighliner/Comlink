@@ -100,7 +100,7 @@ public sealed class EngineBuilderTests
         Assert.Null(controller.NetworkHandler);
         Assert.Null(controller.PacketType);
         Assert.Single(controller.Priorities);
-        Assert.Equal("Normal", controller.Priorities[0].Name);
+        Assert.Equal("NORMAL", controller.Priorities[0].Name);
         Assert.Equal("USER", controller.GetCertificateName("USER"));
         Assert.True(controller.CanDelete(FolderType.Inbox));
         Assert.Equal(1, controller.GetPrintCount(new TestFrame()));
@@ -146,8 +146,8 @@ public sealed class EngineBuilderTests
     {
         (_, EngineController controller) = Build(engine => engine
             .AlertLabel("ALARM").AlarmDuration(TimeSpan.FromSeconds(5)).QuickConfirmation(false).ComposeAlerts(false)
-            .Priorities(("Low", 0), ("High", 9))
-            .Tags(false, "Category").BlockTag("SPAM", null).BlockTag(null, 9)
+            .Priorities(("LOW", PriorityMode.User), ("HIGH", PriorityMode.System))
+            .Tags(false, "Category").BlockTag("SPAM", null).BlockTag(null, "HIGH")
             .PrintReceived()
             .CanDelete(folder => folder == FolderType.Drafts));
 
@@ -155,10 +155,12 @@ public sealed class EngineBuilderTests
         Assert.Equal(TimeSpan.FromSeconds(5), controller.AlarmSoundDuration);
         Assert.False(controller.QuickConfirmationEnabled);
         Assert.False(controller.ComposeAlertsEnabled);
-        Assert.Equal(["Low", "High"], controller.Priorities.Select(p => p.Name));
+        Assert.Equal(["LOW", "HIGH"], controller.Priorities.Select(p => p.Name));
+        Assert.Equal([PriorityMode.User, PriorityMode.System], controller.Priorities.Select(p => p.Mode));
         Assert.False(controller.TagsEnabled);
         Assert.Equal("Category", controller.TagLabel);
         Assert.Equal(2, controller.BlockedCombinations.Count);
+        Assert.Equal(1, controller.BlockedCombinations[1].Priority);
         Assert.True(controller.PrintReceivedDefaultEnabled);
         Assert.True(controller.CanDelete(FolderType.Drafts));
         Assert.False(controller.CanDelete(FolderType.Inbox));
@@ -184,13 +186,42 @@ public sealed class EngineBuilderTests
         Assert.Equal([AddressType.To, AddressType.Cc, AddressType.External], controller.AddressTypes.Select(t => t.Type));
     }
 
+    /// <summary>A retrieval request, read receipt and receive receipt are sent with the priority their handler names, and a message with its own.</summary>
+    [Fact]
+    public void GetPriority_FollowsTheKindOfFrame()
+    {
+        ServiceCollection services = new();
+        services.AddSingleton(new TestRetrievalHandler { Priority = "RETRIEVAL" });
+        services.AddSingleton(new TestReadReceiptHandler { Priority = "RECEIPT" });
+        services.AddSingleton(new TestReceiveReceiptHandler { Priority = "receipt" });
+        EngineBuilder builder = EngineBuilder.Build(new Configuration(engine => engine.Priorities(("NORMAL", PriorityMode.User), ("RETRIEVAL", PriorityMode.System), ("RECEIPT", PriorityMode.System))));
+        EngineController controller = new(builder, new CurrentUserProvider(), null, services.BuildServiceProvider());
+
+        Assert.Equal(1, controller.GetPriority(new TestFrame { IsHidden = true, IsRetrieval = true }));
+        Assert.Equal(2, controller.GetPriority(new TestFrame { IsHidden = true, ReadReceiptMessageId = "M" }));
+        Assert.Equal(2, controller.GetPriority(new TestFrame { IsHidden = true, ReceiveReceiptMessageId = "M" }));
+        Assert.Equal(0, controller.GetPriority(new TestFrame()));
+    }
+
+    /// <summary>A handler naming a priority that is not configured fails loudly.</summary>
+    [Fact]
+    public void GetPriority_UnknownHandlerPriority_Throws()
+    {
+        ServiceCollection services = new();
+        services.AddSingleton(new TestRetrievalHandler { Priority = "MISSING" });
+        EngineBuilder builder = EngineBuilder.Build(new TestEngineConfiguration());
+        EngineController controller = new(builder, new CurrentUserProvider(), null, services.BuildServiceProvider());
+
+        Assert.Contains("MISSING", Assert.Throws<InvalidOperationException>(() => controller.GetPriority(new TestFrame { IsHidden = true, IsRetrieval = true })).Message);
+    }
+
     /// <summary>Stating priorities twice replaces the earlier list rather than adding to it.</summary>
     [Fact]
     public void Priorities_StatedTwice_ReplacesTheEarlierList()
     {
         (_, EngineController controller) = Build(engine => engine
-            .Priorities(("A", 1))
-            .Priorities(("B", 2)));
+            .Priorities(("A", PriorityMode.User))
+            .Priorities(("B", PriorityMode.User)));
 
         Assert.Equal("B", Assert.Single(controller.Priorities).Name);
     }
@@ -393,13 +424,13 @@ public sealed class EngineBuilderTests
         Assert.Equal(new HdlcPeerOptions(), plain.HdlcOptions);
     }
 
-    /// <summary>The print count function stated with the message is used for received messages.</summary>
+    /// <summary>The print count comes from the message handler.</summary>
     [Fact]
-    public void Stated_PrintCount_IsUsed()
+    public void PrintCount_ComesFromMessageHandler()
     {
-        (_, EngineController controller) = BuildWith(message => message.PrintCount(m => m.IsAlert ? 2 : 1));
+        (_, EngineController controller) = BuildWith();
 
-        Assert.Equal(2, controller.GetPrintCount(new TestFrame { IsAlert = true }));
+        Assert.Equal(2, controller.GetPrintCount(new TestFrame { PrintCount = 2 }));
         Assert.Equal(1, controller.GetPrintCount(new TestFrame()));
     }
 

@@ -20,6 +20,7 @@ public sealed class TestFrame
     [ProtoMember(19)] public string ReceiveReceiptMessageId { get; set; } = string.Empty;
     /// <summary>Whether this message is an alert.</summary>
     [ProtoMember(8)] public bool IsAlert { get; set; }
+    public int PrintCount { get; set; } = 1;
     /// <summary>Priority number of this message.</summary>
     [ProtoMember(9)] public int Priority { get; set; }
     /// <summary>Tag identifying the type of this message.</summary>

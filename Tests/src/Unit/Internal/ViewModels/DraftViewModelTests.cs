@@ -14,7 +14,8 @@ public sealed class DraftViewModelTests
         mock.Setup(a => a.ComposeAlertsEnabled).Returns(composeAlertsEnabled);
         mock.Setup(p => p.Priorities).Returns([
             new MessagePriorityOption { Name = "ROUTINE", Value = 0 },
-            new MessagePriorityOption { Name = "FLASH", Value = 3 }
+            new MessagePriorityOption { Name = "FLASH", Value = 3 },
+            new MessagePriorityOption { Name = "RECEIPT", Value = 9, Mode = PriorityMode.System }
         ]);
         mock.Setup(t => t.TagsEnabled).Returns(tagsEnabled);
         mock.Setup(t => t.TagLabel).Returns(tagLabel);
@@ -203,6 +204,15 @@ public sealed class DraftViewModelTests
         vm.Tag = "URGENT";
 
         Assert.Equal("URGENT", vm.Tag);
+    }
+
+    /// <summary>A system priority is never offered to the user composing a draft.</summary>
+    [Fact]
+    public void AvailablePriorities_ExcludeSystemPriorities()
+    {
+        DraftViewModel vm = Build(out _, out _);
+
+        Assert.Equal(["ROUTINE", "FLASH"], vm.AvailablePriorities.Select(p => p.Name));
     }
 
     /// <summary>Setting Tag to a value that blocks another (not currently selected) priority hides that priority from AvailablePriorities.</summary>

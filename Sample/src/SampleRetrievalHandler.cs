@@ -4,6 +4,9 @@ namespace BlueHeighliner.Comlink.Sample;
 public sealed class SampleRetrievalHandler : IRetrievalHandler<SampleFrame>
 {
     /// <inheritdoc />
+    public string Priority => SamplePriorities.Retrieval;
+
+    /// <inheritdoc />
     public bool IsValid(SampleFrame frame) => frame.IsRetrieval;
 
     /// <inheritdoc />

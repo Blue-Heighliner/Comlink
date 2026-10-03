@@ -7,6 +7,9 @@ namespace BlueHeighliner.Comlink;
 /// <typeparam name="TFrame">The host's frame type.</typeparam>
 public interface IReadReceiptHandler<TFrame> where TFrame : class
 {
+    /// <summary>Gets the name of the configured priority (see <see cref="IEngineBuilder.Priorities"/>) that read receipts are sent with, which is how they are ordered against other traffic.</summary>
+    string Priority { get; }
+
     /// <summary>Returns whether <paramref name="frame"/> is a read receipt.</summary>
     /// <param name="frame">The frame to classify.</param>
     bool IsValid(TFrame frame);

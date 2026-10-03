@@ -3,6 +3,8 @@ namespace BlueHeighliner.Comlink.Control;
 /// <summary>The engine's untyped view of the host's <see cref="IRetrievalHandler{TFrame}"/>, working on frames as <see cref="object"/>.</summary>
 internal interface IRetrievalFrameHandler
 {
+    /// <summary>Gets the name of the priority retrieval requests are sent with.</summary>
+    string Priority { get; }
     /// <summary>Returns whether <paramref name="frame"/> is a retrieval request.</summary>
     bool IsValid(object frame);
     /// <summary>Creates a retrieval request frame asking for <paramref name="context"/>.</summary>
@@ -22,6 +24,9 @@ internal interface IRetrievalFrameHandler
 /// <summary>Adapts a typed <see cref="IRetrievalHandler{TFrame}"/> to <see cref="IRetrievalFrameHandler"/>.</summary>
 internal sealed class RetrievalFrameHandler<TFrame>(IRetrievalHandler<TFrame> handler) : IRetrievalFrameHandler where TFrame : class
 {
+    /// <inheritdoc />
+    public string Priority => handler.Priority;
+
     /// <inheritdoc />
     public bool IsValid(object frame) => handler.IsValid((TFrame)frame);
 

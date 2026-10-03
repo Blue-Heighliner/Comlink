@@ -10,6 +10,8 @@ internal sealed record MessagePriorityOption
     /// the MSMT send priority (larger values are sent first — see <c>Docs/Components/Peer.md</c>).
     /// </summary>
     public required int Value { get; init; }
+    /// <summary>Gets who may assign this priority; only <see cref="PriorityMode.User"/> priorities are offered to a user composing a message.</summary>
+    public PriorityMode Mode { get; init; } = PriorityMode.User;
 }
 
 /// <summary>Extension helpers for looking up display information from a set of <see cref="MessagePriorityOption"/> values.</summary>

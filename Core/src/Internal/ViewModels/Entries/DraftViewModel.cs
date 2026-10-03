@@ -168,7 +168,7 @@ internal sealed partial class DraftViewModel : ObservableObject, IDraftViewModel
         availablePriorities = FilterPriorities(entity.Tag);
         selectedPriority = AvailablePriorities.FirstOrDefault(p => p.Value == entity.Priority)
             ?? AvailablePriorities.FirstOrDefault()
-            ?? new MessagePriorityOption { Name = "Normal", Value = 0 };
+            ?? new MessagePriorityOption { Name = "NORMAL", Value = 0 };
 
         IReadOnlyList<SecurityLevel> allSecurityLevels = engineController.SecurityLevels;
         int ownRank = allSecurityLevels.GetRank(currentSecurityLevel);
@@ -292,7 +292,7 @@ internal sealed partial class DraftViewModel : ObservableObject, IDraftViewModel
     partial void OnPlsoModeChanged(PlsoMode value) => OnPropertyChanged(nameof(PlsoButtonText));
 
     private IReadOnlyList<MessagePriorityOption> FilterPriorities(string tag)
-        => allPriorities.Where(p => !engineController.BlockedCombinations.IsBlocked(tag, p.Value)).ToList();
+        => allPriorities.Where(p => p.Mode == PriorityMode.User && !engineController.BlockedCombinations.IsBlocked(tag, p.Value)).ToList();
 
     partial void OnTagChanged(string value)
     {

@@ -12,9 +12,6 @@ internal sealed class FrameBuilder<TFrame> : IFrameBuilder<TFrame> where TFrame 
     private ServiceRegistration<IReceiptFrameHandler>? readReceipt;
     private ServiceRegistration<IReceiptFrameHandler>? receiveReceipt;
 
-    /// <summary>How many copies of a received message print, if stated.</summary>
-    public Func<object, int>? PrintCountValue { get; private set; }
-
     /// <summary>The initial message processor, if stated.</summary>
     public ServiceRegistration<IInitialProcessor>? Initial { get; private set; }
 
@@ -80,7 +77,7 @@ internal sealed class FrameBuilder<TFrame> : IFrameBuilder<TFrame> where TFrame 
         readReceipt = ServiceRegistration<IReceiptFrameHandler>.Of(typeof(THandler), instance =>
         {
             IReadReceiptHandler<TFrame> handler = (IReadReceiptHandler<TFrame>)instance;
-            return new ReceiptFrameHandler<TFrame>(handler.IsValid, handler.Create, handler.GetMessageId);
+            return new ReceiptFrameHandler<TFrame>(handler.Priority, handler.IsValid, handler.Create, handler.GetMessageId);
         });
         return this;
     }
@@ -91,7 +88,7 @@ internal sealed class FrameBuilder<TFrame> : IFrameBuilder<TFrame> where TFrame 
         receiveReceipt = ServiceRegistration<IReceiptFrameHandler>.Of(typeof(THandler), instance =>
         {
             IReceiveReceiptHandler<TFrame> handler = (IReceiveReceiptHandler<TFrame>)instance;
-            return new ReceiptFrameHandler<TFrame>(handler.IsValid, handler.Create, handler.GetMessageId);
+            return new ReceiptFrameHandler<TFrame>(handler.Priority, handler.IsValid, handler.Create, handler.GetMessageId);
         });
         return this;
     }
@@ -107,13 +104,6 @@ internal sealed class FrameBuilder<TFrame> : IFrameBuilder<TFrame> where TFrame 
     public IFrameBuilder<TFrame> Create(Func<TFrame> create)
     {
         this.create = create;
-        return this;
-    }
-
-    /// <inheritdoc />
-    public IFrameBuilder<TFrame> PrintCount(Func<TFrame, int> copies)
-    {
-        PrintCountValue = message => copies((TFrame)message);
         return this;
     }
 

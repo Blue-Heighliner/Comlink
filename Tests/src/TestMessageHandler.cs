@@ -31,6 +31,9 @@ public sealed class TestMessageHandler : IMessageHandler<TestFrame>
     public int GetPriority(TestFrame frame) => frame.Priority;
 
     /// <inheritdoc />
+    public int GetPrintCount(TestFrame frame) => frame.PrintCount;
+
+    /// <inheritdoc />
     public string GetTag(TestFrame frame) => frame.Tag;
 
     /// <inheritdoc />

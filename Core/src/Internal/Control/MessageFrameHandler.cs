@@ -15,6 +15,8 @@ internal interface IMessageFrameHandler
     bool GetIsAlert(object frame);
     /// <summary>Gets the priority number of <paramref name="frame"/>.</summary>
     int GetPriority(object frame);
+    /// <summary>Gets how many copies of <paramref name="frame"/> are printed when received.</summary>
+    int GetPrintCount(object frame);
     /// <summary>Gets the tag of <paramref name="frame"/>.</summary>
     string GetTag(object frame);
     /// <summary>Gets the security level name of <paramref name="frame"/>.</summary>
@@ -41,6 +43,9 @@ internal sealed class MessageFrameHandler<TFrame>(IMessageHandler<TFrame> handle
 
     /// <inheritdoc />
     public int GetPriority(object frame) => handler.GetPriority((TFrame)frame);
+
+    /// <inheritdoc />
+    public int GetPrintCount(object frame) => handler.GetPrintCount((TFrame)frame);
 
     /// <inheritdoc />
     public string GetTag(object frame) => handler.GetTag((TFrame)frame);

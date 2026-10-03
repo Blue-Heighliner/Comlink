@@ -4,6 +4,9 @@ namespace BlueHeighliner.Comlink.Tests;
 public sealed class TestReadReceiptHandler : IReadReceiptHandler<TestFrame>
 {
     /// <inheritdoc />
+    public string Priority { get; init; } = "NORMAL";
+
+    /// <inheritdoc />
     public bool IsValid(TestFrame frame) => !string.IsNullOrEmpty(frame.ReadReceiptMessageId);
 
     /// <inheritdoc />

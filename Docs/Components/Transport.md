@@ -31,7 +31,7 @@ The MicroGate device speaks HDLC in asynchronous balanced mode: both ends are eq
 - **Opening**: a serial link starts connecting the first time its point is connected to, which every role does at startup through the connection monitor. `Connect` fails while the link is not up (the monitor retries), and the link keeps reconnecting on its own.
 - **Framing** (`SerialFrame`): a message is split into numbered fragments (9 byte header: kind, message id, fragment index, fragment count), sent contiguously under a send lock, and reassembled on the far end. After the last fragment is delivered to `Received` subscribers the far end sends a 6 byte reply frame carrying the accept, which completes the sender's `Request`. Malformed frames, out of order fragments, and messages over 64 MiB are dropped.
 - **Request semantics**: `Request` throws `IOException` immediately when the link is down, when it drops while waiting, or when no reply arrives within a minute. `Transmitted` fires once the last fragment has been handed to the device.
-- **Ordering**: sends are serialized in call order. `PeerSendOptions.Priority` is not honored on serial, unlike over MSMT where higher priority goes first.
+- **Ordering**: sends are serialized, and when several wait the highest `PeerSendOptions.Priority` goes first (first come, first served among equals), as over MSMT. A message's fragments are sent together, so priority orders whole messages (packets, when configured, are small); acknowledgements jump the queue.
 - **Heartbeats** (the connection monitor's empty instance of the frame type) are ordinary frames and are acknowledged like any other; the receiving services ignore them.
 
 ## Configuration

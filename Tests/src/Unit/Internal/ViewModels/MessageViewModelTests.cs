@@ -312,7 +312,7 @@ public sealed class MessageViewModelTests
 
         MessageViewModel vm = new(entity, format);
 
-        Assert.Equal("Normal", vm.PriorityLabel);
+        Assert.Equal("NORMAL", vm.PriorityLabel);
         Assert.True(vm.TagsEnabled);
         Assert.Equal("URGENT", vm.Tag);
     }

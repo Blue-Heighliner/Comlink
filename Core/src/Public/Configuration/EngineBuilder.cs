@@ -76,14 +76,17 @@ public interface IEngineBuilder
     /// <summary>Sets whether the draft editor lets the user send a draft as an alert. On by default; turning it off never stops alerts from being received.</summary>
     IEngineBuilder ComposeAlerts(bool enabled = true);
 
-    /// <summary>Sets the selectable priority levels, in display order, each a display name paired with its priority number. Defaults to a single level named <c>Normal</c> with the value 0.</summary>
-    IEngineBuilder Priorities(params (string Name, int Value)[] priorities);
+    /// <summary>
+    /// Sets the priority levels, lowest first like <see cref="SecurityLevels"/>: a level's position is its priority, so later levels are sent before earlier ones. Each is a name (uppercase by convention) and who may assign it: a <see cref="PriorityMode.User"/> priority is offered to
+    /// users composing a message, a <see cref="PriorityMode.System"/> one is only assigned by the system, such as the priority a retrieval or receipt handler names. Defaults to a single user level named <c>NORMAL</c> with the value 0.
+    /// </summary>
+    IEngineBuilder Priorities(params (string Name, PriorityMode Mode)[] priorities);
 
     /// <summary>Turns message tags on or off in the user interface, and optionally renames the tag input (for example to <c>Category</c>). On by default, labelled <c>Tag</c>.</summary>
     IEngineBuilder Tags(bool enabled = true, string? label = null);
 
-    /// <summary>Blocks a tag and priority combination when composing a draft. Either may be <see langword="null"/> to match any value.</summary>
-    IEngineBuilder BlockTag(string? tag, int? priority);
+    /// <summary>Blocks a tag and priority combination when composing a draft. Either may be <see langword="null"/> to match any value; the priority is named as in <see cref="Priorities"/>.</summary>
+    IEngineBuilder BlockTag(string? tag, string? priority);
 
     /// <summary>
     /// Overrides the display label shown for an address type: in the address type picker, the per-address badge, and

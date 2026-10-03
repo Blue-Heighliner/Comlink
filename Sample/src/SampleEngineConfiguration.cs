@@ -9,7 +9,7 @@ namespace BlueHeighliner.Comlink.Sample;
 /// <item><description>home text - a product-appropriate home screen welcome text.</description></item>
 /// <item><description>window icon - Sample's own envelope icon instead of the operating system's.</description></item>
 /// <item><description>users - none stated here: every user of the network, with their role, ports, connections, security level and node settings, comes from the network configuration file (<c>--config</c>, or <c>Config.json</c> in the working directory), which each of the <c>Scripts/Scenarios/</c> scenarios supplies for its own network, and an install code is just the name of a user in it.</description></item>
-/// <item><description>priorities and blocked tags - three priority levels and both blocked-combination kinds.</description></item>
+/// <item><description>priorities and blocked tags - three user priority levels, two system ones and both blocked-combination kinds.</description></item>
 /// <item><description>print count - prints an alert message twice and every other received message once.</description></item>
 /// <item><description>deleting - only drafts and notes can be deleted; Inbox, Outbox, and Activity are protected.</description></item>
 /// <item><description>connection identification - a <see cref="SampleIdentityProcessor"/> carries out an initial packet exchange on every connection: the node that opens it sends a <see cref="SamplePacket"/> whose chunk is its user name, the accepting node answers with one carrying its own, and each marks the connection connected as the user the other named, instead of by the peer's certificate or (for a serial cable) its port. Like all traffic between nodes they are serialized instances of the packet type, nothing else.</description></item>
@@ -44,24 +44,25 @@ public sealed class SampleEngineConfiguration : IEngineConfiguration
                 .AutoForward<SampleEscalationController>()
                 .Retrieval<SampleRetrievalHandler>()
                 .ReadReceipt<SampleReadReceiptHandler>()
-                .ReceiveReceipt<SampleReceiveReceiptHandler>()
-                .PrintCount(m => m.Alert ? 2 : 1))
+                .ReceiveReceipt<SampleReceiveReceiptHandler>())
             .Packets<SamplePacket>(packet => packet
                 .InitialProcessor<SampleIdentityProcessor>()
                 .Frame<SampleFramePacketHandler>())
             .HomeText("Select a folder and entry to get started, or create a new draft or note.")
             .WindowIcon("avares://BlueHeighliner.Comlink.Sample/Assets/envelope.png")
             .Priorities(
-                ("Low", 0),
-                ("Medium", 1),
-                ("High", 2))
+                (SamplePriorities.Low, PriorityMode.User),
+                (SamplePriorities.Medium, PriorityMode.User),
+                (SamplePriorities.Retrieval, PriorityMode.System),
+                (SamplePriorities.High, PriorityMode.User),
+                (SamplePriorities.Receipt, PriorityMode.System))
             .BlockTag("SPAM", null)
-            .BlockTag(null, 2)
+            .BlockTag(null, SamplePriorities.High)
             .AddressTypeLabel(AddressType.External, "OUTSIDE")
             .SecurityLevels(
-                ("PUBLIC", "#2E7D32"),
-                ("INTERNAL", "#1565C0"),
-                ("RESTRICTED", "#C62828"))
+                (SampleSecurityLevels.Public, "#2E7D32"),
+                (SampleSecurityLevels.Internal, "#1565C0"),
+                (SampleSecurityLevels.Restricted, "#C62828"))
             .CanDelete(folder => folder is FolderType.Drafts or FolderType.Notes)
             .CommandLineOverrides(true)
             .MsmtOptions(new MsmtConnectionOptions { HandshakeTimeout = TimeSpan.FromSeconds(15), ResponseTimeout = TimeSpan.FromSeconds(60) })

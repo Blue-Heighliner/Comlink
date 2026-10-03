@@ -4,6 +4,9 @@ namespace BlueHeighliner.Comlink.Tests;
 public sealed class TestRetrievalHandler : IRetrievalHandler<TestFrame>
 {
     /// <inheritdoc />
+    public string Priority { get; init; } = "NORMAL";
+
+    /// <inheritdoc />
     public bool IsValid(TestFrame frame) => frame.IsRetrieval;
 
     /// <inheritdoc />

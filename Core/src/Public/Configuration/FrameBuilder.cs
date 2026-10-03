@@ -82,9 +82,6 @@ public interface IFrameBuilder<TFrame> where TFrame : class, new()
     /// <summary>Replaces how a new, empty frame is created. The default is <c>new TFrame()</c>.</summary>
     IFrameBuilder<TFrame> Create(Func<TFrame> create);
 
-    /// <summary>Sets how many copies of a received message are printed while "print received" is on. Defaults to one for every message.</summary>
-    IFrameBuilder<TFrame> PrintCount(Func<TFrame, int> copies);
-
     /// <summary>
     /// States the processor that runs host code in reaction to peer activity: a user connecting or disconnecting and a frame being received
     /// (see <see cref="INetworkProcessor{TFrame}"/>). None by default.

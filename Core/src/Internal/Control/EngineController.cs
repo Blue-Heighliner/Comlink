@@ -300,7 +300,7 @@ internal interface IEngineController
     bool GetIsAlert(object frame);
     /// <summary>
     /// Gets the priority number of <paramref name="frame"/>. One of the values returned by
-    /// <see cref="Priorities"/>; used verbatim as the MSMT send priority (larger values are sent first —
+    /// <see cref="Priorities"/>: a message's own, or for a retrieval request or receipt the priority its handler names; used verbatim as the MSMT send priority (larger values are sent first —
     /// see <c>Docs/Components/Peer.md</c>) whenever this frame is sent over an MSMT connection.
     /// </summary>
     int GetPriority(object frame);
@@ -449,7 +449,8 @@ internal class EngineController(EngineBuilder builder, ICurrentUserProvider curr
     private readonly Lazy<IInitialProcessor?> initialPacketProcessor = new(() => builder.InitialPacketProcessor?.Create(services));
     private readonly Lazy<IInitialProcessor?> initialMessageProcessor = new(() => builder.InitialFrameProcessor?.Create(services));
     private readonly Lazy<INetworkHandler?> networkHandler = new(() => builder.NetworkHandler?.Create(services));
-    private readonly IReadOnlyList<MessagePriorityOption> defaultPriorities = [new MessagePriorityOption { Name = "Normal", Value = 0 }];
+    private readonly IReadOnlyList<MessagePriorityOption> defaultPriorities = [new MessagePriorityOption { Name = "NORMAL", Value = 0 }];
+    private IReadOnlyList<TagPriorityBlock>? blockedCombinations;
     private readonly IReadOnlyList<AddressType> addressTypeOrder = [AddressType.To, AddressType.Cc, AddressType.External];
 
     /// <inheritdoc />
@@ -533,7 +534,7 @@ internal class EngineController(EngineBuilder builder, ICurrentUserProvider curr
     /// <inheritdoc />
     public virtual string TagLabel => builder.TagLabelValue ?? "Tag";
     /// <inheritdoc />
-    public virtual IReadOnlyList<TagPriorityBlock> BlockedCombinations => builder.BlockedCombinations;
+    public virtual IReadOnlyList<TagPriorityBlock> BlockedCombinations => blockedCombinations ??= [.. builder.BlockedTags.Select(block => new TagPriorityBlock { Tag = block.Tag, Priority = block.Priority is null ? null : PriorityValue(block.Priority) })];
     /// <inheritdoc />
     public virtual IReadOnlyList<AddressTypeOption> AddressTypes
         => [.. addressTypeOrder.Select(type => new AddressTypeOption { Type = type, Label = builder.AddressTypeLabels.TryGetValue(type, out string? label) ? label : type.ToString() })];
@@ -660,6 +661,10 @@ internal class EngineController(EngineBuilder builder, ICurrentUserProvider curr
         }
     }
 
+    private int PriorityValue(string name)
+        => Priorities.FirstOrDefault(priority => string.Equals(priority.Name, name, StringComparison.OrdinalIgnoreCase))?.Value
+            ?? throw new InvalidOperationException($"A handler names the priority '{name}', which is not one of the configured priorities: {string.Join(", ", Priorities.Select(priority => priority.Name))}");
+
     private ServerUserConfig BuildServerConfig(UserInfo server)
         => new()
         {
@@ -722,7 +727,12 @@ internal class EngineController(EngineBuilder builder, ICurrentUserProvider curr
     /// <inheritdoc />
     public virtual bool GetIsAlert(object value) => messageHandler.Value.GetIsAlert(value);
     /// <inheritdoc />
-    public virtual int GetPriority(object value) => messageHandler.Value.GetPriority(value);
+    public virtual int GetPriority(object value)
+        => IsMessage(value) ? messageHandler.Value.GetPriority(value)
+        : IsRetrieval(value) ? PriorityValue(retrievalHandler.Value.Priority)
+        : IsReadReceipt(value) ? PriorityValue(readReceiptHandler.Value.Priority)
+        : IsReceiveReceipt(value) ? PriorityValue(receiveReceiptHandler.Value.Priority)
+        : 0;
     /// <inheritdoc />
     public virtual string GetTag(object value) => messageHandler.Value.GetTag(value);
     /// <inheritdoc />
@@ -800,7 +810,7 @@ internal class EngineController(EngineBuilder builder, ICurrentUserProvider curr
     public virtual IConnectionInfo WithLocalUser(IConnectionInfo connection) => connection;
 
     /// <inheritdoc />
-    public virtual int GetPrintCount(object value) => builder.PrintCountValue?.Invoke(value) ?? 1;
+    public virtual int GetPrintCount(object value) => messageHandler.Value.GetPrintCount(value);
 
     /// <inheritdoc />
     public virtual bool CanDelete(FolderType folderType) => builder.CanDeleteValue?.Invoke(folderType) ?? true;

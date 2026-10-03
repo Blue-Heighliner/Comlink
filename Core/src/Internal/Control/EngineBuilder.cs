@@ -11,7 +11,7 @@ internal sealed class EngineBuilder : IEngineBuilder, IAsyncDisposable
     private readonly List<SecurityLevel> securityLevels = [];
     private readonly List<string> users = [];
     private readonly List<MessagePriorityOption> priorities = [];
-    private readonly List<TagPriorityBlock> blocked = [];
+    private readonly List<(string? Tag, string? Priority)> blocked = [];
     private readonly Dictionary<AddressType, string> addressTypeLabels = [];
     private readonly List<IExternalSystem> externalSystems = [];
     private readonly List<ServiceRegistration<IExportFormat>> exportFormats = [];
@@ -57,14 +57,12 @@ internal sealed class EngineBuilder : IEngineBuilder, IAsyncDisposable
     public bool? TagsEnabledValue { get; private set; }
     /// <summary>The tag label, if stated.</summary>
     public string? TagLabelValue { get; private set; }
-    /// <summary>The blocked tag and priority combinations.</summary>
-    public IReadOnlyList<TagPriorityBlock> BlockedCombinations => blocked;
+    /// <summary>The blocked tag and priority name combinations.</summary>
+    public IReadOnlyList<(string? Tag, string? Priority)> BlockedTags => blocked;
     /// <summary>The overridden address type display labels, by address type.</summary>
     public IReadOnlyDictionary<AddressType, string> AddressTypeLabels => addressTypeLabels;
     /// <summary>Whether printing received messages starts on, if stated.</summary>
     public bool? PrintReceivedValue { get; private set; }
-    /// <summary>How many copies of a received message print, if stated.</summary>
-    public Func<object, int>? PrintCountValue { get; private set; }
     /// <summary>Which folders allow deleting, if stated.</summary>
     public Func<FolderType, bool>? CanDeleteValue { get; private set; }
     /// <summary>The trusted authority certificate name, if stated.</summary>
@@ -141,7 +139,6 @@ internal sealed class EngineBuilder : IEngineBuilder, IAsyncDisposable
         FrameBuilder<TFrame> builder = new();
         map(builder);
         FrameMap = builder.Build();
-        PrintCountValue = builder.PrintCountValue;
         InitialFrameProcessor = builder.Initial;
         NetworkHandler = builder.NetworkHandler;
         autoForwardControllers.Clear();
@@ -259,10 +256,10 @@ internal sealed class EngineBuilder : IEngineBuilder, IAsyncDisposable
     }
 
     /// <inheritdoc />
-    public IEngineBuilder Priorities(params (string Name, int Value)[] priorities)
+    public IEngineBuilder Priorities(params (string Name, PriorityMode Mode)[] priorities)
     {
         this.priorities.Clear();
-        this.priorities.AddRange(priorities.Select(priority => new MessagePriorityOption { Name = priority.Name, Value = priority.Value }));
+        this.priorities.AddRange(priorities.Select((priority, index) => new MessagePriorityOption { Name = priority.Name, Value = index, Mode = priority.Mode }));
         return this;
     }
 
@@ -275,9 +272,9 @@ internal sealed class EngineBuilder : IEngineBuilder, IAsyncDisposable
     }
 
     /// <inheritdoc />
-    public IEngineBuilder BlockTag(string? tag, int? priority)
+    public IEngineBuilder BlockTag(string? tag, string? priority)
     {
-        blocked.Add(new TagPriorityBlock { Tag = tag, Priority = priority });
+        blocked.Add((tag, priority));
         return this;
     }
 

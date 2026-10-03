@@ -56,7 +56,7 @@ internal sealed class SerialLink : IAsyncDisposable
     private readonly PeerConnection connection;
     private readonly CancellationTokenSource lifetime = new();
     private readonly Task loop;
-    private readonly SemaphoreSlim sendLock = new(1, 1);
+    private readonly PriorityLock sendLock = new();
     private readonly ConcurrentDictionary<uint, TaskCompletionSource<bool>> pending = new();
     private readonly Lock reassemblyLock = new();
     private readonly Lock closeLock = new();
@@ -120,7 +120,7 @@ internal sealed class SerialLink : IAsyncDisposable
         pending[id] = reply;
         try
         {
-            await SendMessage(peer, id, data, cancellation);
+            await SendMessage(peer, id, data, options?.Priority ?? 0, cancellation);
             options?.Transmitted?.Invoke();
             return await reply.Task.WaitAsync(requestTimeout, cancellation);
         }
@@ -158,7 +158,7 @@ internal sealed class SerialLink : IAsyncDisposable
         catch { }
     }
 
-    private async Task SendMessage(IHdlcPeer peer, uint id, ReadOnlyMemory<byte> data, CancellationToken cancellation)
+    private async Task SendMessage(IHdlcPeer peer, uint id, ReadOnlyMemory<byte> data, int priority, CancellationToken cancellation)
     {
         int chunkSize = peer.MaxPayloadSize - SerialFrame.DataHeaderSize;
         int count = Math.Max(1, (data.Length + chunkSize - 1) / chunkSize);
@@ -169,18 +169,13 @@ internal sealed class SerialLink : IAsyncDisposable
 
         // Every fragment of one message is sent under the lock, so fragments of different messages never interleave
         // on the wire; the receiving side relies on this to keep only one reassembly in progress at a time.
-        await sendLock.WaitAsync(cancellation);
-        try
+        using (await sendLock.Acquire(priority, cancellation))
         {
             for (int index = 0; index < count; index++)
             {
                 ReadOnlyMemory<byte> chunk = data.Slice(index * chunkSize, Math.Min(chunkSize, data.Length - (index * chunkSize)));
                 await peer.Send(SerialFrame.EncodeData(id, (ushort)index, (ushort)count, chunk.Span), cancellation);
             }
-        }
-        finally
-        {
-            sendLock.Release();
         }
     }
 
@@ -349,9 +344,7 @@ internal sealed class SerialLink : IAsyncDisposable
 
         try
         {
-            await sendLock.WaitAsync(lifetime.Token);
-            try { await peer.Send(SerialFrame.EncodeReply(id, true), lifetime.Token); }
-            finally { sendLock.Release(); }
+            using (await sendLock.Acquire(int.MaxValue, lifetime.Token)) { await peer.Send(SerialFrame.EncodeReply(id, true), lifetime.Token); }
         }
         catch
         {

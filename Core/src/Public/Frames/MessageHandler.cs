@@ -28,6 +28,9 @@ public interface IMessageHandler<TFrame> where TFrame : class
     /// <summary>Gets the priority number of <paramref name="frame"/>, used verbatim as its send priority (larger values are sent first).</summary>
     int GetPriority(TFrame frame);
 
+    /// <summary>Gets how many copies of the received message <paramref name="frame"/> are printed while the print manager's "print received" toggle is on: <c>0</c> to not print it, <c>1</c> to print it once, and so on.</summary>
+    int GetPrintCount(TFrame frame);
+
     /// <summary>Gets the short tag identifying the type of message <paramref name="frame"/> is, or an empty string for none.</summary>
     string GetTag(TFrame frame);
 
