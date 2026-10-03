@@ -212,7 +212,8 @@ internal sealed class SerialLink : IAsyncDisposable
 
         try
         {
-            await peer.Start(point.SerialPort!, point.SerialAddress, point.RemoteSerialAddress, options, attemptToken);
+            await peer.Start(point.SerialPort!, options, attemptToken);
+            await peer.Connect((byte)point.SerialAddress, (byte)point.RemoteSerialAddress, attemptToken);
         }
         catch (OperationCanceledException)
         {

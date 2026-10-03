@@ -2,7 +2,7 @@ namespace BlueHeighliner.Comlink.Tests;
 
 /// <summary>
 /// An in-memory stand-in for a serial cable between two MicroGate devices. Each end has its own <see cref="IMicroGatePeerFactory"/>;
-/// once a peer has been started on both ends they become connected and frames sent on one arrive on the other, as with a real link.
+/// once a peer has been started and connected on both ends they become connected and frames sent on one arrive on the other, as with a real link.
 /// A peer is single use, so <see cref="Cut"/> disconnects whichever peers are attached and the next pair started reconnects.
 /// </summary>
 internal sealed class FakeMicroGateCable
@@ -33,7 +33,7 @@ internal sealed class FakeMicroGateCable
     /// <summary>Number of peers created on either end so far.</summary>
     public int PeersCreated { get; private set; }
 
-    /// <summary>The (local address, remote address, options) every <c>Start</c> on any end was given, in order.</summary>
+    /// <summary>The (local address, remote address, options) every <c>Connect</c> on any end was given, in order.</summary>
     public List<(byte Address, byte RemoteAddress, MicroGatePeerOptions Options)> Starts { get; } = [];
 
     /// <summary>Disconnects both attached peers, as if the cable were pulled.</summary>
@@ -90,10 +90,18 @@ internal sealed class FakeMicroGateCable
     private sealed class FakeMicroGatePeer(FakeMicroGateCable cable, int end) : IMicroGatePeer
     {
         private readonly TestSubject<Exception> exceptions = new();
+        private readonly TestSubject<MicroGateFrame> monitored = new();
+        private readonly TestSubject<MicroGateFrame> transmitted = new();
         private readonly TestSubject<MicroGatePeerState> stateChanged = new();
         private readonly TaskCompletionSource connected = new(TaskCreationOptions.RunContinuationsAsynchronously);
 
+        private MicroGatePeerOptions options = new();
+
         public Action<IMemoryOwner<byte>>? Receiver { get; set; }
+
+        public IObservable<MicroGateFrame> Monitored => monitored;
+
+        public IObservable<MicroGateFrame> Transmitted => transmitted;
 
         public IObservable<Exception> Exceptions => exceptions;
 
@@ -105,15 +113,22 @@ internal sealed class FakeMicroGateCable
 
         public int MaxPayloadSize => cable.MaxPayloadSize;
 
-        public async ValueTask Start(string portName, byte address, byte remoteAddress, MicroGatePeerOptions? options = null, CancellationToken cancellation = default)
+        public ValueTask Start(string portName, MicroGatePeerOptions? options = null, CancellationToken cancellation = default)
         {
-            lock (cable.gate) { cable.Starts.Add((address, remoteAddress, options ?? new())); }
-
+            this.options = options ?? new();
             if (cable.StartFailure is { } failure)
             {
                 Terminate();
                 throw failure;
             }
+
+            SetState(MicroGatePeerState.Ready);
+            return ValueTask.CompletedTask;
+        }
+
+        public async ValueTask Connect(byte address, byte remoteAddress, CancellationToken cancellation = default)
+        {
+            lock (cable.gate) { cable.Starts.Add((address, remoteAddress, options)); }
 
             SetState(MicroGatePeerState.Connecting);
             cable.Attach(end, this);
@@ -124,6 +139,8 @@ internal sealed class FakeMicroGateCable
                 throw;
             }
         }
+
+        public ValueTask Forward(ReadOnlyMemory<byte> frame, CancellationToken cancellation = default) => throw new NotSupportedException();
 
         public ValueTask Send(ReadOnlyMemory<byte> data, CancellationToken cancellation = default)
         {
@@ -154,6 +171,8 @@ internal sealed class FakeMicroGateCable
             cable.Detach(end, this);
             connected.TrySetException(new IOException("closed before connected"));
             exceptions.Complete();
+            monitored.Complete();
+            transmitted.Complete();
             stateChanged.Complete();
             remote?.Terminate();
         }

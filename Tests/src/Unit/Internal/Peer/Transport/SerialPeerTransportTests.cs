@@ -3,6 +3,12 @@ namespace BlueHeighliner.Comlink.Tests.Unit.Internal.Peer.Transport;
 /// <summary>Unit tests for <see cref="SerialPeerTransport"/> and its <see cref="SerialLink"/>, over an in-memory cable.</summary>
 public sealed class SerialPeerTransportTests
 {
+    private static async Task StartAndConnect(IMicroGatePeer peer)
+    {
+        await peer.Start("SL0");
+        await peer.Connect(255, 255);
+    }
+
     private static readonly ILogger logger = LoggerFactory.Create(_ => { }).CreateLogger("test");
     private static readonly ConnectionPoint point = new() { SerialPort = "SL0" };
     private static readonly TimeSpan timeout = TimeSpan.FromSeconds(30);
@@ -205,7 +211,7 @@ public sealed class SerialPeerTransportTests
         FakeMicroGateCable cable = new();
         await using SerialPeerTransport transport = new(cable.EndA, logger, TimeSpan.FromMilliseconds(20), TimeSpan.FromMilliseconds(100));
         IMicroGatePeer silent = cable.EndB.Create();
-        _ = silent.Start("SL0", 255, 255).AsTask();
+        _ = StartAndConnect(silent);
         Open(transport, point);
         TaskCompletionSource up = new();
         transport.Connected.Listen(_ => up.TrySetResult());
@@ -233,7 +239,7 @@ public sealed class SerialPeerTransportTests
         FakeMicroGateCable cable = new();
         await using SerialPeerTransport transport = new(cable.EndA, logger, TimeSpan.FromMilliseconds(20), TimeSpan.FromSeconds(30));
         IMicroGatePeer silent = cable.EndB.Create();
-        _ = silent.Start("SL0", 255, 255).AsTask();
+        _ = StartAndConnect(silent);
         Open(transport, point);
         TaskCompletionSource up = new();
         transport.Connected.Listen(_ => up.TrySetResult());
@@ -422,7 +428,7 @@ public sealed class SerialPeerTransportTests
         FakeMicroGateCable cable = new();
         await using SerialPeerTransport transport = new(cable.EndA, logger, TimeSpan.FromMilliseconds(20));
         IMicroGatePeer raw = cable.EndB.Create();
-        _ = raw.Start("SL0", 255, 255).AsTask();
+        _ = StartAndConnect(raw);
         Open(transport, point);
         PeerCollector received = new();
         transport.Received.Listen(args => received.AddPayload(args.Payload.ToArray()));
@@ -443,7 +449,7 @@ public sealed class SerialPeerTransportTests
         FakeMicroGateCable cable = new();
         await using SerialPeerTransport transport = new(cable.EndA, logger, TimeSpan.FromMilliseconds(20));
         IMicroGatePeer raw = cable.EndB.Create();
-        _ = raw.Start("SL0", 255, 255).AsTask();
+        _ = StartAndConnect(raw);
         Open(transport, point);
         PeerCollector received = new();
         transport.Received.Listen(args => received.AddPayload(args.Payload.ToArray()));

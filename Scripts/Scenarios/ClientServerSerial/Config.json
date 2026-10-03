@@ -6,7 +6,7 @@
       "Role": "Server",
       "PeerPort": 50321,
       "InterfacePort": 50320,
-      "OutgoingPoints": [ { "SerialPort": "ttyUSB1", "SerialAddress": 1, "RemoteSerialAddress": 2 } ],
+      "OutgoingPoints": [ { "SerialPort": "ttyUSB3", "SerialAddress": 1, "RemoteSerialAddress": 2 } ],
       "ChildClients": [ "CLIENT1", "CLIENT2" ],
       "SecurityLevel": "RESTRICTED"
     },
