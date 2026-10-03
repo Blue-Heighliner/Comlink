@@ -14,7 +14,7 @@ public enum UserRole
     Server,
     /// <summary>
     /// Hierarchical networking: sits between clients and a server as a direct network path. It forwards everything its <see cref="UserInfo.ChildClients"/> send to the server it connects to (the first of its <see cref="UserInfo.OutgoingPoints"/>),
-    /// and everything that server sends to whichever of those clients it addresses, unmodified and without receipting or storing anything. The server lists the router among its own <see cref="UserInfo.ChildClients"/>.
+    /// and everything that server sends to whichever of those clients it addresses, unmodified and without receipting or storing anything. The server lists the relay among its own <see cref="UserInfo.ChildClients"/>.
     /// </summary>
-    Router
+    Relay
 }

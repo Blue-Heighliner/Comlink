@@ -6,12 +6,12 @@
       "Role": "Server",
       "PeerPort": 50321,
       "InterfacePort": 50320,
-      "ChildClients": [ "ROUTER" ],
+      "ChildClients": [ "RELAY" ],
       "StoresMessages": true,
       "SecurityLevel": "RESTRICTED"
     },
-    "ROUTER": {
-      "Role": "Router",
+    "RELAY": {
+      "Role": "Relay",
       "PeerPort": 50323,
       "InterfacePort": 50322,
       "ChildClients": [ "CLIENT1", "CLIENT2" ],

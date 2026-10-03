@@ -34,14 +34,14 @@ public sealed class PeerNetworkTests
         private readonly CancellationTokenSource cts = new();
         private readonly Task run;
 
-        public Node(string user, X509Certificate2 identity, X509Certificate2Collection authorities, UserRole role, int peerPort, IReadOnlyList<ConnectionPoint> outgoing, IReadOnlyDictionary<string, ServerUserConfig>? servers = null, IMessageStorageService? storage = null, string[]? routerChildren = null)
+        public Node(string user, X509Certificate2 identity, X509Certificate2Collection authorities, UserRole role, int peerPort, IReadOnlyList<ConnectionPoint> outgoing, IReadOnlyDictionary<string, ServerUserConfig>? servers = null, IMessageStorageService? storage = null, string[]? relayChildren = null)
         {
             Mock<TestEngineController> controller = new() { CallBase = true };
             controller.Setup(c => c.Role).Returns(role);
             controller.Setup(c => c.PeerPort).Returns(peerPort);
             controller.Setup(c => c.OutgoingPoints).Returns(outgoing);
             controller.Setup(c => c.Servers).Returns(servers ?? new Dictionary<string, ServerUserConfig>());
-            controller.Setup(c => c.GetUserInfo(user)).Returns(new UserInfo { Name = user, Role = role, ChildClients = routerChildren ?? [] });
+            controller.Setup(c => c.GetUserInfo(user)).Returns(new UserInfo { Name = user, Role = role, ChildClients = relayChildren ?? [] });
             controller.Setup(c => c.ConnectionOptions).Returns(new MsmtSessionPeerOptions
             {
                 Credentials = new MsmtCredentials { Identity = identity, TrustedAuthorities = authorities },
@@ -55,7 +55,7 @@ public sealed class PeerNetworkTests
             {
                 UserRole.Server => Both(new ServerRoutingService(factory, controller.Object, currentUser.Object, storage ?? Mock.Of<IMessageStorageService>(), noLogger)),
                 UserRole.Client => Both(new ClientPeerService(factory, controller.Object, noLogger)),
-                UserRole.Router => Both(new RouterPeerService(factory, controller.Object, currentUser.Object, noLogger)),
+                UserRole.Relay => Both(new RelayPeerService(factory, controller.Object, currentUser.Object, noLogger)),
                 _ => (new PeerService(factory, controller.Object, noLogger), null)
             };
             Service.FrameDelivered += message => { Delivered.Enqueue((TestFrame)message); return Task.CompletedTask; };
@@ -126,35 +126,35 @@ public sealed class PeerNetworkTests
         Assert.Empty(client1.Delivered);
     }
 
-    /// <summary>A client behind a router reaches a client on the server directly and a client behind another router, and each answer comes back down the same path: the routers only forward, and the server routes by the clients behind each router.</summary>
+    /// <summary>A client behind a relay reaches a client on the server directly and a client behind another relay, and each answer comes back down the same path: the relays only forward, and the server routes by the clients behind each relay.</summary>
     [Fact]
-    public async Task ClientRouterServer_MessagesTravelThroughRoutersUnchanged()
+    public async Task ClientRelayServer_MessagesTravelThroughRelaysUnchanged()
     {
-        (Dictionary<string, X509Certificate2> certificates, X509Certificate2Collection authorities) = TestMsmtCertificates.CreateNamed("Server", "Router1", "Router2", "Client1", "Client2", "Client3");
+        (Dictionary<string, X509Certificate2> certificates, X509Certificate2Collection authorities) = TestMsmtCertificates.CreateNamed("Server", "Relay1", "Relay2", "Client1", "Client2", "Client3");
         int serverPort = FreePort();
-        int router1Port = FreePort();
-        int router2Port = FreePort();
+        int relay1Port = FreePort();
+        int relay2Port = FreePort();
         Dictionary<string, ServerUserConfig> topology = new(StringComparer.OrdinalIgnoreCase)
         {
             ["Server"] = new ServerUserConfig
             {
-                ChildClients = ["Client3", "Router1", "Router2"],
-                Routers = new Dictionary<string, IReadOnlyList<string>> { ["Router1"] = ["Client1"], ["Router2"] = ["Client2"] }
+                ChildClients = ["Client3", "Relay1", "Relay2"],
+                Relays = new Dictionary<string, IReadOnlyList<string>> { ["Relay1"] = ["Client1"], ["Relay2"] = ["Client2"] }
             }
         };
         await using Node server = new("Server", certificates["Server"], authorities, UserRole.Server, serverPort, [], topology);
-        await using Node router1 = new("Router1", certificates["Router1"], authorities, UserRole.Router, router1Port, [Local(serverPort)], routerChildren: ["Client1"]);
-        await using Node router2 = new("Router2", certificates["Router2"], authorities, UserRole.Router, router2Port, [Local(serverPort)], routerChildren: ["Client2"]);
-        await using Node client1 = new("Client1", certificates["Client1"], authorities, UserRole.Client, 0, [Local(router1Port)]);
-        await using Node client2 = new("Client2", certificates["Client2"], authorities, UserRole.Client, 0, [Local(router2Port)]);
+        await using Node relay1 = new("Relay1", certificates["Relay1"], authorities, UserRole.Relay, relay1Port, [Local(serverPort)], relayChildren: ["Client1"]);
+        await using Node relay2 = new("Relay2", certificates["Relay2"], authorities, UserRole.Relay, relay2Port, [Local(serverPort)], relayChildren: ["Client2"]);
+        await using Node client1 = new("Client1", certificates["Client1"], authorities, UserRole.Client, 0, [Local(relay1Port)]);
+        await using Node client2 = new("Client2", certificates["Client2"], authorities, UserRole.Client, 0, [Local(relay2Port)]);
         await using Node client3 = new("Client3", certificates["Client3"], authorities, UserRole.Client, 0, [Local(serverPort)]);
 
-        await WaitUntil(() => server.IsUp("Router1") && server.IsUp("Router2") && server.IsUp("Client3") && router1.IsUp("Client1") && router2.IsUp("Client2") && client1.IsUp("Router1") && client2.IsUp("Router2"), "every node to connect and be identified");
+        await WaitUntil(() => server.IsUp("Relay1") && server.IsUp("Relay2") && server.IsUp("Client3") && relay1.IsUp("Client1") && relay2.IsUp("Client2") && client1.IsUp("Relay1") && client2.IsUp("Relay2"), "every node to connect and be identified");
 
         Assert.True(await client1.Service.Send("Client2", MessageTo("Client1", "Client2", "ACROSS")));
-        await WaitUntil(() => !client2.Delivered.IsEmpty, "the message to cross both routers to Client2");
+        await WaitUntil(() => !client2.Delivered.IsEmpty, "the message to cross both relays to Client2");
         Assert.True(await client3.Service.Send("Client1", MessageTo("Client3", "Client1", "DOWN")));
-        await WaitUntil(() => !client1.Delivered.IsEmpty, "the message to reach Client1 through its router");
+        await WaitUntil(() => !client1.Delivered.IsEmpty, "the message to reach Client1 through its relay");
         Assert.True(await client1.Service.Send("Client3", MessageTo("Client1", "Client3", "UP")));
         await WaitUntil(() => !client3.Delivered.IsEmpty, "the message to reach Client3 through the server");
 
@@ -164,8 +164,8 @@ public sealed class PeerNetworkTests
         Assert.Equal(("DOWN", "Client3"), (down.MessageId, down.FromUser));
         Assert.True(client3.Delivered.TryPeek(out TestFrame? up));
         Assert.Equal(("UP", "Client1"), (up.MessageId, up.FromUser));
-        Assert.Empty(router1.Delivered);
-        Assert.Empty(router2.Delivered);
+        Assert.Empty(relay1.Delivered);
+        Assert.Empty(relay2.Delivered);
     }
 
     /// <summary>

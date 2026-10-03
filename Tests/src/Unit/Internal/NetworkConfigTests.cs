@@ -167,7 +167,7 @@ public sealed class NetworkConfigTests : IDisposable
     [Theory]
     [InlineData("server", UserRole.Server)]
     [InlineData("CLIENT", UserRole.Client)]
-    [InlineData("router", UserRole.Router)]
+    [InlineData("relay", UserRole.Relay)]
     [InlineData("Peer", UserRole.Peer)]
     [InlineData(null, null)]
     [InlineData("Bogus", null)]

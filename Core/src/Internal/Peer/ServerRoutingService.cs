@@ -185,7 +185,7 @@ internal sealed class ServerRoutingService : IPeerService, IConnectionStatusServ
     }
 
     private static string Describe(IReadOnlyDictionary<string, ServerUserConfig> map)
-        => string.Join(';', map.OrderBy(server => server.Key, StringComparer.OrdinalIgnoreCase).Select(server => $"{server.Key}:{string.Join(',', server.Value.ChildClients.Order(StringComparer.OrdinalIgnoreCase))}|{string.Join(',', server.Value.Routers.OrderBy(router => router.Key, StringComparer.OrdinalIgnoreCase).Select(router => $"{router.Key}={string.Join('+', router.Value.Order(StringComparer.OrdinalIgnoreCase))}"))}"));
+        => string.Join(';', map.OrderBy(server => server.Key, StringComparer.OrdinalIgnoreCase).Select(server => $"{server.Key}:{string.Join(',', server.Value.ChildClients.Order(StringComparer.OrdinalIgnoreCase))}|{string.Join(',', server.Value.Relays.OrderBy(relay => relay.Key, StringComparer.OrdinalIgnoreCase).Select(relay => $"{relay.Key}={string.Join('+', relay.Value.Order(StringComparer.OrdinalIgnoreCase))}"))}"));
 
     private IReadOnlyList<string> GetChildNames()
         => userMap.TryGetValue(currentUserProvider.UserName ?? string.Empty, out ServerUserConfig? myConfig) ? myConfig.ChildClients : [];
@@ -354,7 +354,7 @@ internal sealed class ServerRoutingService : IPeerService, IConnectionStatusServ
 
         if (engineController.IsRetrieval(message))
         {
-            await RouteRetrieval(myConfig.Routers.ContainsKey(childName) ? engineController.GetFromUser(message) : childName, message, data, addressedUsers, priority, forward: true);
+            await RouteRetrieval(myConfig.Relays.ContainsKey(childName) ? engineController.GetFromUser(message) : childName, message, data, addressedUsers, priority, forward: true);
             return;
         }
 
@@ -362,12 +362,12 @@ internal sealed class ServerRoutingService : IPeerService, IConnectionStatusServ
         await RouteFromChild(message, data);
     }
 
-    // The local users a message goes to: each addressed child client directly, and, once, each router that has an addressed client behind it, which forwards the bytes on untouched.
+    // The local users a message goes to: each addressed child client directly, and, once, each relay that has an addressed client behind it, which forwards the bytes on untouched.
     private IEnumerable<string> GetLocalTargets(ServerUserConfig config, HashSet<string> addressedUsers)
     {
         IEnumerable<string> direct = addressedUsers.Where(user => config.ChildClients.Contains(user, StringComparer.OrdinalIgnoreCase));
-        IEnumerable<string> viaRouters = config.Routers.Where(router => router.Value.Any(addressedUsers.Contains)).Select(router => router.Key);
-        return direct.Concat(viaRouters).Distinct(StringComparer.OrdinalIgnoreCase);
+        IEnumerable<string> viaRelays = config.Relays.Where(relay => relay.Value.Any(addressedUsers.Contains)).Select(relay => relay.Key);
+        return direct.Concat(viaRelays).Distinct(StringComparer.OrdinalIgnoreCase);
     }
 
     private async Task RouteFromChild(object message, ReadOnlyMemory<byte> data)
@@ -383,7 +383,7 @@ internal sealed class ServerRoutingService : IPeerService, IConnectionStatusServ
         foreach ((string serverName, ServerUserConfig config) in userMap)
         {
             if (string.Equals(serverName, myName, StringComparison.OrdinalIgnoreCase)) { continue; }
-            if (config.ChildClients.Any(child => addressedUsers.Contains(child)) || config.Routers.Values.Any(clients => clients.Any(addressedUsers.Contains)))
+            if (config.ChildClients.Any(child => addressedUsers.Contains(child)) || config.Relays.Values.Any(clients => clients.Any(addressedUsers.Contains)))
             {
                 sends.Add(TrySend(serverName, data, priority, message));
             }

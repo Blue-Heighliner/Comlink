@@ -282,21 +282,21 @@ public sealed class EngineBuilderTests
         });
     }
 
-    /// <summary>A server's topology records which of its children are routers and the clients behind each, taken from the router's own entry.</summary>
+    /// <summary>A server's topology records which of its children are relays and the clients behind each, taken from the relay's own entry.</summary>
     [Fact]
-    public void Servers_RecordTheClientsBehindEachRouter()
+    public void Servers_RecordTheClientsBehindEachRelay()
     {
         NetworkConfig network = Network(
-            ("SERVER", new NetworkUserConfig { Role = "Server", ChildClients = ["C1", "ROUTER"] }),
-            ("ROUTER", new NetworkUserConfig { Role = "Router", ChildClients = ["C2", "C3"] }));
+            ("SERVER", new NetworkUserConfig { Role = "Server", ChildClients = ["C1", "RELAY"] }),
+            ("RELAY", new NetworkUserConfig { Role = "Relay", ChildClients = ["C2", "C3"] }));
         (_, EngineController controller) = Build(engine => engine, "SERVER", network);
 
         ServerUserConfig server = controller.Servers["SERVER"];
 
-        Assert.Equal(["C1", "ROUTER"], server.ChildClients);
-        Assert.Equal(["C2", "C3"], Assert.Single(server.Routers).Value);
-        Assert.Equal("ROUTER", Assert.Single(server.Routers).Key);
-        Assert.DoesNotContain("ROUTER", controller.Servers.Keys);
+        Assert.Equal(["C1", "RELAY"], server.ChildClients);
+        Assert.Equal(["C2", "C3"], Assert.Single(server.Relays).Value);
+        Assert.Equal("RELAY", Assert.Single(server.Relays).Key);
+        Assert.DoesNotContain("RELAY", controller.Servers.Keys);
     }
 
     /// <summary>Certificate settings a host states are used, including for the MSMT options when it supplies its own.</summary>

@@ -93,13 +93,13 @@ These become the user's `UserInfo` (see [Configuration.md](Configuration.md#user
 
 **Type:** `string | null` | **Default:** `null` (`"Peer"`)
 
-The networking role of a node this user runs: `"Peer"`, `"Client"`, `"Server"` or `"Router"` (case-insensitive). An unrecognized value is `"Peer"`. See [Peer.md](Peer.md#user-roles).
+The networking role of a node this user runs: `"Peer"`, `"Client"`, `"Server"` or `"Relay"` (case-insensitive). An unrecognized value is `"Peer"`. See [Peer.md](Peer.md#user-roles).
 
 ### `PeerPort`
 
 **Type:** `int | null` | **Default:** `null` (`50021`)
 
-TCP port on which the node listens for IP connections opened by other nodes: peers dialing this peer, and clients, routers and other servers connecting to a server or router. A client opens its connection outward and does not listen.
+TCP port on which the node listens for IP connections opened by other nodes: peers dialing this peer, and clients, relays and other servers connecting to a server or relay. A client opens its connection outward and does not listen.
 
 ### `InterfacePort`
 
@@ -111,7 +111,7 @@ Loopback TCP port of the local interface listener, always active in every role (
 
 **Type:** `object[]` | **Default:** `[]`
 
-The points the node connects out to and keeps connected. A `"Client"` uses the first as its server, and so does a `"Router"`. Nothing here says which user is at a point; that is worked out when the connection forms (see [Identification.md](Identification.md)).
+The points the node connects out to and keeps connected. A `"Client"` uses the first as its server, and so does a `"Relay"`. Nothing here says which user is at a point; that is worked out when the connection forms (see [Identification.md](Identification.md)).
 
 | Field | Type | Description |
 |-------|------|-------------|
@@ -128,7 +128,7 @@ A serial link carries no certificate, so unless the point names its `User`, its 
 
 **Type:** `string[]` | **Default:** `[]`
 
-For a `"Server"`, the client users that belong to it, including any routers, whose own `ChildClients` are the clients behind them. For a `"Router"`, the clients that connect to it and that it forwards for. The topology a server routes with, every server of the cluster and the children each owns, is built from every `"Server"` user's entry.
+For a `"Server"`, the client users that belong to it, including any relays, whose own `ChildClients` are the clients behind them. For a `"Relay"`, the clients that connect to it and that it forwards for. The topology a server routes with, every server of the cluster and the children each owns, is built from every `"Server"` user's entry.
 
 ### `StoresMessages`
 
@@ -245,13 +245,13 @@ One server with two clients that connect to it, the server storing messages (`Sc
 }
 ```
 
-A router sits between clients and a server: the server lists it as a child, and its own `ChildClients` are the clients behind it, which point their `OutgoingPoints` at the router.
+A relay sits between clients and a server: the server lists it as a child, and its own `ChildClients` are the clients behind it, which point their `OutgoingPoints` at the relay.
 
 ```json
 {
   "Users": {
-    "SERVER":  { "Role": "Server", "PeerPort": 50121, "ChildClients": [ "CLIENT1", "ROUTER" ] },
-    "ROUTER":  { "Role": "Router", "PeerPort": 50123, "ChildClients": [ "CLIENT2" ], "OutgoingPoints": [ { "IpAddress": "127.0.0.1", "Port": 50121 } ] },
+    "SERVER":  { "Role": "Server", "PeerPort": 50121, "ChildClients": [ "CLIENT1", "RELAY" ] },
+    "RELAY":  { "Role": "Relay", "PeerPort": 50123, "ChildClients": [ "CLIENT2" ], "OutgoingPoints": [ { "IpAddress": "127.0.0.1", "Port": 50121 } ] },
     "CLIENT1": { "Role": "Client", "OutgoingPoints": [ { "IpAddress": "127.0.0.1", "Port": 50121 } ] },
     "CLIENT2": { "Role": "Client", "OutgoingPoints": [ { "IpAddress": "127.0.0.1", "Port": 50123 } ] }
   }

@@ -589,8 +589,8 @@ internal class EngineController(EngineBuilder builder, ICurrentUserProvider curr
         => new()
         {
             ChildClients = server.ChildClients,
-            Routers = server.ChildClients
-                .Where(child => GetUserInfo(child) is { Role: UserRole.Router })
+            Relays = server.ChildClients
+                .Where(child => GetUserInfo(child) is { Role: UserRole.Relay })
                 .ToDictionary(child => child, child => GetUserInfo(child).ChildClients, StringComparer.OrdinalIgnoreCase)
         };
 

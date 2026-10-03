@@ -49,16 +49,16 @@ public sealed class HelpViewModelTests
         Assert.Equal(["Overview", "Connections", "Activity"], Titles(vm));
     }
 
-    /// <summary>A router has the same tabs as a server.</summary>
+    /// <summary>A relay has the same tabs as a server.</summary>
     [Fact]
-    public void Router_HasTheServerTabs() => Assert.Equal(Titles(Build(UserRole.Server)), Titles(Build(UserRole.Router)));
+    public void Relay_HasTheServerTabs() => Assert.Equal(Titles(Build(UserRole.Server)), Titles(Build(UserRole.Relay)));
 
     /// <summary>Every tab has content, and every section has a heading and text.</summary>
     [Theory]
     [InlineData(UserRole.Peer)]
     [InlineData(UserRole.Client)]
     [InlineData(UserRole.Server)]
-    [InlineData(UserRole.Router)]
+    [InlineData(UserRole.Relay)]
     public void EveryTab_HasNonEmptySections(UserRole role)
     {
         foreach (HelpTab tab in Build(role).Tabs)

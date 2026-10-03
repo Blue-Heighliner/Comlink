@@ -1,0 +1,10 @@
+#:package Markwardt.ScriptUtilities@0.2.0
+#:property TreatWarningsAsErrors=true
+
+// Manual test scenario: two clients (Client1, Client2) behind one relay, which connects to one server. Client1 reaches the server and Client2 only through the relay. Run via Run.task, or standalone (after Build.cs) in
+// its own terminal alongside the other roles, from the repo root:
+//   dotnet run Scripts/Scenarios/ClientRelayServer/Client1.cs
+
+using Markwardt.ScriptUtilities;
+
+(await Script.Run("dotnet", "run", "--no-build", "--project", "Sample/Sample.csproj", "--", "--config", "Scripts/Scenarios/ClientRelayServer/Config.json", "--user", "CLIENT1")).Verify();

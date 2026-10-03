@@ -1,18 +1,18 @@
 namespace BlueHeighliner.Comlink.Peer;
 
 /// <summary>
-/// Implements <see cref="IPeerService"/> for <see cref="UserRole.Router"/>: a direct network path between its child clients and the one server it connects to. It listens on
+/// Implements <see cref="IPeerService"/> for <see cref="UserRole.Relay"/>: a direct network path between its child clients and the one server it connects to. It listens on
 /// <see cref="IEngineController.PeerPort"/> for connections from the clients named in the current user's <see cref="UserInfo.ChildClients"/> and keeps one connection open to the
 /// first of its <see cref="IEngineController.OutgoingPoints"/>, which is the server. Everything a child sends is forwarded to the server, and everything the server sends is forwarded
-/// to whichever of the children it addresses, as the very bytes that arrived: nothing is modified, stored, receipted or delivered locally, and the router never composes traffic of
+/// to whichever of the children it addresses, as the very bytes that arrived: nothing is modified, stored, receipted or delivered locally, and the relay never composes traffic of
 /// its own. Frames are only deserialized to read their addresses and priority, and a frame that addresses no one is not traffic and is not forwarded: the initial packet and frame exchange that introduces
-/// the two ends of a connection is point-to-point and consumed by the transport before the router sees anything, and anything of that kind that did slip through carries no addresses. Tracks connect/disconnect status for each child and the server, kept live by a
+/// the two ends of a connection is point-to-point and consumed by the transport before the relay sees anything, and anything of that kind that did slip through carries no addresses. Tracks connect/disconnect status for each child and the server, kept live by a
 /// <see cref="PeerConnectionMonitor"/> heartbeat on the server connection. See <c>Docs/Components/Peer.md</c>.
 /// </summary>
-internal sealed class RouterPeerService : IPeerService, IConnectionStatusService, IReconfigurable, IAsyncDisposable
+internal sealed class RelayPeerService : IPeerService, IConnectionStatusService, IReconfigurable, IAsyncDisposable
 {
-    /// <summary>Initializes a new <see cref="RouterPeerService"/>.</summary>
-    public RouterPeerService(IPeerTransportFactory transportFactory, IEngineController engineController, ICurrentUserProvider currentUserProvider, ILoggerFactory loggerFactory)
+    /// <summary>Initializes a new <see cref="RelayPeerService"/>.</summary>
+    public RelayPeerService(IPeerTransportFactory transportFactory, IEngineController engineController, ICurrentUserProvider currentUserProvider, ILoggerFactory loggerFactory)
     {
         this.transportFactory = transportFactory;
         this.engineController = engineController;
@@ -47,7 +47,7 @@ internal sealed class RouterPeerService : IPeerService, IConnectionStatusService
     private DateTime? serverLastDisconnectedAt;
     private int disposed;
 
-#pragma warning disable CS0067 // A router delivers nothing locally and tracks no delivery status, so these never fire.
+#pragma warning disable CS0067 // A relay delivers nothing locally and tracks no delivery status, so these never fire.
     /// <inheritdoc />
     public event Func<object, Task>? FrameDelivered;
     /// <inheritdoc />
@@ -82,7 +82,7 @@ internal sealed class RouterPeerService : IPeerService, IConnectionStatusService
         ConnectionPoint? point = engineController.OutgoingPoints.FirstOrDefault();
         if (point is null)
         {
-            logger.LogError("Router role requires an outgoing connection point to its server; none was provided");
+            logger.LogError("Relay role requires an outgoing connection point to its server; none was provided");
             return;
         }
 
@@ -120,7 +120,7 @@ internal sealed class RouterPeerService : IPeerService, IConnectionStatusService
             }
 
             ConnectionPoint? wanted = engineController.OutgoingPoints.FirstOrDefault();
-            if (wanted is null) { logger.LogError("Router role requires an outgoing connection point to its server; none is defined any more"); }
+            if (wanted is null) { logger.LogError("Relay role requires an outgoing connection point to its server; none is defined any more"); }
 
             (IReadOnlyList<ConnectionPoint> removed, IReadOnlyList<(ConnectionPoint Point, PeerLinkControl Control)> started) = points.Sync(transport, wanted is null ? [] : [wanted], lifetime, OnHeartbeatAcknowledged, startingPoint => serverPoint = startingPoint);
             if (removed.Count > 0)
@@ -186,7 +186,7 @@ internal sealed class RouterPeerService : IPeerService, IConnectionStatusService
         string name = connection.User?.Name ?? string.Empty;
         if (FindChild(name) is not { } child)
         {
-            logger.LogWarning("Rejected connection from {Name}, which is not one of this router's child clients", name);
+            logger.LogWarning("Rejected connection from {Name}, which is not one of this relay's child clients", name);
             connection.Drop();
             return;
         }

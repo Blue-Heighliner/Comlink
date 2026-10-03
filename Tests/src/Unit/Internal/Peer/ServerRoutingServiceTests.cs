@@ -348,58 +348,58 @@ public sealed class ServerRoutingServiceTests
         await Stop(fx);
     }
 
-    private static Dictionary<string, ServerUserConfig> WithRouter() => new(StringComparer.OrdinalIgnoreCase)
+    private static Dictionary<string, ServerUserConfig> WithRelay() => new(StringComparer.OrdinalIgnoreCase)
     {
-        ["ServerA"] = new ServerUserConfig { ChildClients = ["ClientA1", "RouterA"], Routers = new Dictionary<string, IReadOnlyList<string>> { ["RouterA"] = ["ClientR1", "ClientR2"] } },
+        ["ServerA"] = new ServerUserConfig { ChildClients = ["ClientA1", "RelayA"], Relays = new Dictionary<string, IReadOnlyList<string>> { ["RelayA"] = ["ClientR1", "ClientR2"] } },
         ["ServerB"] = new ServerUserConfig { ChildClients = ["ClientB1"] }
     };
 
-    /// <summary>A message for clients behind a router goes to that router once, as the original bytes, not to the clients themselves.</summary>
+    /// <summary>A message for clients behind a relay goes to that relay once, as the original bytes, not to the clients themselves.</summary>
     [Fact]
-    public async Task FromChild_AddressedToClientsBehindARouter_ForwardsToTheRouterOnce()
+    public async Task FromChild_AddressedToClientsBehindARelay_ForwardsToTheRelayOnce()
     {
-        Fixture fx = await BuildStarted(userMap: WithRouter());
+        Fixture fx = await BuildStarted(userMap: WithRelay());
         PeerConnection clientA1 = Inbound("ClientA1");
-        PeerConnection routerA = Inbound("RouterA");
+        PeerConnection relayA = Inbound("RelayA");
         fx.Come(clientA1);
-        fx.Come(routerA);
+        fx.Come(relayA);
         ReadOnlyMemory<byte> payload = Encode(MessageTo("ClientR1", "ClientR2"));
 
         fx.Receive(clientA1, payload);
 
-        await WaitUntil(() => SentReal(fx, routerA), TimeSpan.FromSeconds(30));
+        await WaitUntil(() => SentReal(fx, relayA), TimeSpan.FromSeconds(30));
         await Task.Delay(100);
-        Assert.Equal(1, Requests(fx, routerA, real: true));
+        Assert.Equal(1, Requests(fx, relayA, real: true));
         Assert.Equal(0, Requests(fx, clientA1, real: true));
-        Assert.Equal(1, Requests(fx.Transport, routerA, payload));
+        Assert.Equal(1, Requests(fx.Transport, relayA, payload));
         await Stop(fx);
     }
 
-    /// <summary>A message a router forwards up from one of its clients is routed on to a client behind another router of this server.</summary>
+    /// <summary>A message a relay forwards up from one of its clients is routed on to a client behind another relay of this server.</summary>
     [Fact]
-    public async Task FromRouter_AddressedToLocalClient_RoutesToThatClient()
+    public async Task FromRelay_AddressedToLocalClient_RoutesToThatClient()
     {
-        Fixture fx = await BuildStarted(userMap: WithRouter());
+        Fixture fx = await BuildStarted(userMap: WithRelay());
         PeerConnection clientA1 = Inbound("ClientA1");
-        PeerConnection routerA = Inbound("RouterA");
+        PeerConnection relayA = Inbound("RelayA");
         fx.Come(clientA1);
-        fx.Come(routerA);
+        fx.Come(relayA);
 
-        fx.Receive(routerA, Encode(MessageTo("ClientA1")));
+        fx.Receive(relayA, Encode(MessageTo("ClientA1")));
 
         await WaitUntil(() => SentReal(fx, clientA1), TimeSpan.FromSeconds(30));
-        Assert.Equal(0, Requests(fx, routerA, real: true));
+        Assert.Equal(0, Requests(fx, relayA, real: true));
         await Stop(fx);
     }
 
-    /// <summary>A message for a client behind another server's router is forwarded to that server.</summary>
+    /// <summary>A message for a client behind another server's relay is forwarded to that server.</summary>
     [Fact]
-    public async Task FromChild_AddressedToClientBehindARemoteServersRouter_ForwardsToThatServer()
+    public async Task FromChild_AddressedToClientBehindARemoteServersRelay_ForwardsToThatServer()
     {
         Dictionary<string, ServerUserConfig> map = new(StringComparer.OrdinalIgnoreCase)
         {
             ["ServerA"] = new ServerUserConfig { ChildClients = ["ClientA1"] },
-            ["ServerB"] = new ServerUserConfig { ChildClients = ["RouterB"], Routers = new Dictionary<string, IReadOnlyList<string>> { ["RouterB"] = ["ClientRB1"] } }
+            ["ServerB"] = new ServerUserConfig { ChildClients = ["RelayB"], Relays = new Dictionary<string, IReadOnlyList<string>> { ["RelayB"] = ["ClientRB1"] } }
         };
         Fixture fx = await BuildStarted(userMap: map);
         PeerConnection clientA1 = Inbound("ClientA1");

@@ -144,7 +144,7 @@ internal sealed class NetworkConfig
 /// <summary>Everything the network file says about one user: the parts that become their <see cref="UserInfo"/>, and settings of the node they run.</summary>
 internal sealed class NetworkUserConfig
 {
-    /// <summary>Networking role of a node this user runs: <c>"Peer"</c>, <c>"Client"</c>, <c>"Server"</c> or <c>"Router"</c> (case-insensitive). <see langword="null"/> or unrecognized is <c>"Peer"</c>.</summary>
+    /// <summary>Networking role of a node this user runs: <c>"Peer"</c>, <c>"Client"</c>, <c>"Server"</c> or <c>"Relay"</c> (case-insensitive). <see langword="null"/> or unrecognized is <c>"Peer"</c>.</summary>
     public string? Role { get; init; }
 
     /// <summary>TCP port a node this user runs listens on for IP connections. <see langword="null"/> uses the engine default (50021).</summary>

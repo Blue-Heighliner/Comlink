@@ -587,7 +587,7 @@ The processor is stated by type and instantiated through the running engine's de
 
 **Network file:** none; a processor is behavior, not a setting.
 
-**Sample:** `SampleNetworkProcessor` sends a newly connected user a welcome message naming who else is currently online (`ConnectedUsers`), tells everyone still online when someone disconnects, and auto-replies `PONG` to any received message tagged `PING` - all via `Send` with the frame made a message, and none of it on a router (`context.CurrentUser.Role`), which composes nothing, nor for a router user, which nothing can be addressed to, so every reaction shows up as an ordinary message in the recipient's Inbox rather than a log line only visible from the host process's own console.
+**Sample:** `SampleNetworkProcessor` sends a newly connected user a welcome message naming who else is currently online (`ConnectedUsers`), tells everyone still online when someone disconnects, and auto-replies `PONG` to any received message tagged `PING` - all via `Send` with the frame made a message, and none of it on a relay (`context.CurrentUser.Role`), which composes nothing, nor for a relay user, which nothing can be addressed to, so every reaction shows up as an ordinary message in the recipient's Inbox rather than a log line only visible from the host process's own console.
 
 ---
 

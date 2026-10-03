@@ -1,15 +1,15 @@
 namespace BlueHeighliner.Comlink.Tests.Unit.Internal.Peer;
 
-/// <summary>Unit tests for <see cref="RouterPeerService"/>: forwarding between its child clients and its server, connection classification and status.</summary>
-public sealed class RouterPeerServiceTests
+/// <summary>Unit tests for <see cref="RelayPeerService"/>: forwarding between its child clients and its server, connection classification and status.</summary>
+public sealed class RelayPeerServiceTests
 {
     private static readonly ILoggerFactory noLogger = LoggerFactory.Create(_ => { });
     private static readonly ConnectionPoint serverPoint = new() { IpAddress = "10.0.0.1", Port = 9000 };
     private static readonly ProtobufSerializer serializer = new();
 
-    private sealed class Fixture(RouterPeerService service, Mock<IPeerTransport> transport, TestObservable<PeerConnectionEventArgs> connected, TestObservable<PeerConnectionEventArgs> disconnected, TestObservable<PeerReceivedEventArgs> received, PeerConnection server, Task startTask, CancellationTokenSource cts)
+    private sealed class Fixture(RelayPeerService service, Mock<IPeerTransport> transport, TestObservable<PeerConnectionEventArgs> connected, TestObservable<PeerConnectionEventArgs> disconnected, TestObservable<PeerReceivedEventArgs> received, PeerConnection server, Task startTask, CancellationTokenSource cts)
     {
-        public RouterPeerService Service { get; } = service;
+        public RelayPeerService Service { get; } = service;
         public Mock<IPeerTransport> Transport { get; } = transport;
         public TestObservable<PeerConnectionEventArgs> Connected { get; } = connected;
         public TestObservable<PeerConnectionEventArgs> Disconnected { get; } = disconnected;
@@ -90,11 +90,11 @@ public sealed class RouterPeerServiceTests
         Mock<TestEngineController> engineController = new() { CallBase = true };
         engineController.Setup(p => p.OutgoingPoints).Returns([serverPoint]);
         engineController.Setup(p => p.PeerPort).Returns(9100);
-        engineController.Setup(p => p.GetUserInfo("Router1")).Returns(new UserInfo { Name = "Router1", Role = UserRole.Router, ChildClients = childNames });
+        engineController.Setup(p => p.GetUserInfo("Relay1")).Returns(new UserInfo { Name = "Relay1", Role = UserRole.Relay, ChildClients = childNames });
         Mock<ICurrentUserProvider> currentUser = new();
-        currentUser.SetupGet(p => p.UserName).Returns("Router1");
+        currentUser.SetupGet(p => p.UserName).Returns("Relay1");
 
-        RouterPeerService service = new(transportFactory.Object, engineController.Object, currentUser.Object, noLogger);
+        RelayPeerService service = new(transportFactory.Object, engineController.Object, currentUser.Object, noLogger);
         CancellationTokenSource cts = new();
         Task startTask = service.Start(cts.Token);
         Fixture fixture = new(service, transport, connected, disconnected, received, server, startTask, cts);
@@ -124,7 +124,7 @@ public sealed class RouterPeerServiceTests
         await fx.Stop();
     }
 
-    /// <summary>A frame from the server goes, unchanged, to each of the router's children it addresses and to no one else.</summary>
+    /// <summary>A frame from the server goes, unchanged, to each of the relay's children it addresses and to no one else.</summary>
     [Fact]
     public async Task FromServer_IsForwardedOnlyToAddressedChildren()
     {
@@ -146,7 +146,7 @@ public sealed class RouterPeerServiceTests
         await fx.Stop();
     }
 
-    /// <summary>The router never turns traffic around: a frame from a child addressed to a sibling goes up to the server, not across.</summary>
+    /// <summary>The relay never turns traffic around: a frame from a child addressed to a sibling goes up to the server, not across.</summary>
     [Fact]
     public async Task FromChild_AddressedToSibling_StillGoesOnlyToTheServer()
     {
@@ -199,7 +199,7 @@ public sealed class RouterPeerServiceTests
         await fx.Stop();
     }
 
-    /// <summary>The router raises no delivery events and keeps nothing: forwarded traffic is never delivered locally or receipted.</summary>
+    /// <summary>The relay raises no delivery events and keeps nothing: forwarded traffic is never delivered locally or receipted.</summary>
     [Fact]
     public async Task ForwardedTraffic_IsNeverDeliveredLocally()
     {
@@ -218,7 +218,7 @@ public sealed class RouterPeerServiceTests
         await fx.Stop();
     }
 
-    /// <summary>A connection from anyone who is not one of the router's children is dropped.</summary>
+    /// <summary>A connection from anyone who is not one of the relay's children is dropped.</summary>
     [Fact]
     public async Task OnConnected_UnknownUser_IsDropped()
     {
