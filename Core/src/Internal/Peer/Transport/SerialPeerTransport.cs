@@ -1,4 +1,4 @@
-namespace BlueHeighliner.Comlink.Peer.Transport;
+namespace BlueHeighliner.Comlink;
 
 /// <summary>
 /// The serial half of the peer transport: one persistent <see cref="SerialLink"/> per distinct serial point, created

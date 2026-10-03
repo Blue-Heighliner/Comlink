@@ -1,4 +1,4 @@
-namespace BlueHeighliner.Comlink.Control;
+namespace BlueHeighliner.Comlink;
 
 /// <summary>Handed to <see cref="INetworkProcessor{TFrame}.OnReceived"/>.</summary>
 /// <typeparam name="TFrame">The host's frame type.</typeparam>

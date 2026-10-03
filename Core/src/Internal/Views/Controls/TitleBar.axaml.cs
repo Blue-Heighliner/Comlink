@@ -1,4 +1,4 @@
-namespace BlueHeighliner.Comlink.Views.Controls;
+namespace BlueHeighliner.Comlink;
 
 /// <summary>
 /// User control for the application title bar, providing window controls, user info, and action buttons —

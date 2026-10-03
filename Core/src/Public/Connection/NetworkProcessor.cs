@@ -1,4 +1,4 @@
-namespace BlueHeighliner.Comlink.Control;
+namespace BlueHeighliner.Comlink;
 
 /// <summary>
 /// Runs host code in reaction to peer activity, independent of any UI. Each method is handed a simplified snapshot of the engine (see

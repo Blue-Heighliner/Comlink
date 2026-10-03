@@ -1,4 +1,4 @@
-namespace BlueHeighliner.Comlink.ViewModels;
+namespace BlueHeighliner.Comlink;
 
 /// <summary>How far a <see cref="StagedSendEntry"/> has gotten toward being sent.</summary>
 internal enum StagedSendStatus

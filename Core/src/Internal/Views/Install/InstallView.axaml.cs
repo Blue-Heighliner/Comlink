@@ -1,4 +1,4 @@
-namespace BlueHeighliner.Comlink.Views.Install;
+namespace BlueHeighliner.Comlink;
 
 /// <summary>User control for the initial user installation screen.</summary>
 [ExcludeFromCodeCoverage]

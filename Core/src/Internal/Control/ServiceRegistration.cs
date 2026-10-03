@@ -1,4 +1,4 @@
-namespace BlueHeighliner.Comlink.Control;
+namespace BlueHeighliner.Comlink;
 
 /// <summary>
 /// A service a host stated by type (a processor or a serializer), to be instantiated through dependency injection once the engine runs: the instance the

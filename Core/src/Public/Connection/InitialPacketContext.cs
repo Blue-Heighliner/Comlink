@@ -1,4 +1,4 @@
-namespace BlueHeighliner.Comlink.Control;
+namespace BlueHeighliner.Comlink;
 
 /// <summary>
 /// Handed to an <see cref="IInitialPacketProcessor{TPacket}"/> for one connection that has just formed, to carry out the initial packet exchange on it:

@@ -1,4 +1,4 @@
-namespace BlueHeighliner.Comlink.Peer.Transport;
+namespace BlueHeighliner.Comlink;
 
 /// <summary>
 /// The message framing carried inside each HDLC information frame of a serial link. HDLC gives an ordered,

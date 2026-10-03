@@ -1,8 +1,8 @@
 <UserControl xmlns="https://github.com/avaloniaui"
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
-             xmlns:vm="using:BlueHeighliner.Comlink.ViewModels.Entries"
-             xmlns:converters="using:BlueHeighliner.Comlink.ViewModels"
-             x:Class="BlueHeighliner.Comlink.Views.Entries.MessageView"
+             xmlns:vm="using:BlueHeighliner.Comlink"
+             xmlns:converters="using:BlueHeighliner.Comlink"
+             x:Class="BlueHeighliner.Comlink.MessageView"
              x:DataType="vm:MessageViewModel"
              Background="#1E1E1E">
 

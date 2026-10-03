@@ -1,4 +1,4 @@
-namespace BlueHeighliner.Comlink.ViewModels;
+namespace BlueHeighliner.Comlink;
 
 /// <summary>Converts a boolean value to a <see cref="FontWeight"/>, mapping <see langword="true"/> to <see cref="FontWeight.Bold"/> and <see langword="false"/> to <see cref="FontWeight.Normal"/>.</summary>
 [ExcludeFromCodeCoverage]

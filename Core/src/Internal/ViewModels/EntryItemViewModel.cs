@@ -1,4 +1,4 @@
-namespace BlueHeighliner.Comlink.ViewModels;
+namespace BlueHeighliner.Comlink;
 
 /// <summary>ViewModel representing a single row in the entry list panel.</summary>
 internal sealed partial class EntryItemViewModel : ObservableObject
@@ -46,9 +46,9 @@ internal sealed partial class EntryItemViewModel : ObservableObject
     public string Title { get; }
     /// <summary>Gets an optional secondary line of text shown below the title.</summary>
     public string? SecondaryText { get; }
-    /// <summary>Gets an optional priority label shown below <see cref="SecondaryText"/>; see <see cref="Control.IEngineController"/>.</summary>
+    /// <summary>Gets an optional priority label shown below <see cref="SecondaryText"/>; see <see cref="IEngineController"/>.</summary>
     public string? PriorityText { get; }
-    /// <summary>Gets an optional tag label shown next to <see cref="PriorityText"/>; see <see cref="Control.IEngineController"/>.</summary>
+    /// <summary>Gets an optional tag label shown next to <see cref="PriorityText"/>; see <see cref="IEngineController"/>.</summary>
     public string? TagText { get; }
     /// <summary>Gets an optional formatted timestamp string for display.</summary>
     public string? TimeText { get; }
@@ -59,7 +59,7 @@ internal sealed partial class EntryItemViewModel : ObservableObject
     /// <summary>Gets the date used for default chronological sorting.</summary>
     public DateTime SortDate { get; }
     /// <summary>
-    /// For <see cref="Data.EntryType.Message"/> entries, <see langword="true"/> when this row represents the
+    /// For <see cref="EntryType.Message"/> entries, <see langword="true"/> when this row represents the
     /// Outbox (sent) record and <see langword="false"/> when it represents the Inbox (received) record. A
     /// self-addressed message has one document of each kind sharing the same <see cref="Id"/>, so this disambiguates
     /// which document to load, move, or delete. Meaningless for other entry types.
@@ -67,15 +67,15 @@ internal sealed partial class EntryItemViewModel : ObservableObject
     public bool IsOutboundMessage { get; }
 
     /// <summary>
-    /// For <see cref="Data.EntryType.Message"/> entries, the hex color of the message's security level (see
-    /// <see cref="Control.IEngineController.SecurityLevels"/>), or <see langword="null"/> when it has none recognized -
+    /// For <see cref="EntryType.Message"/> entries, the hex color of the message's security level (see
+    /// <see cref="IEngineController.SecurityLevels"/>), or <see langword="null"/> when it has none recognized -
     /// no security levels configured, or a level name no longer among them. Renders as a colored banner atop the row.
     /// </summary>
     public string? SecurityLevelColorHex { get; }
 
     /// <summary>
-    /// Gets a value indicating whether this entry is flagged as an alert (see <see cref="Control.IEngineController.GetIsAlert"/>
-    /// for messages, or <see cref="Data.Entities.DraftEntity.IsAlert"/> for drafts). <see langword="false"/> for notes
+    /// Gets a value indicating whether this entry is flagged as an alert (see <see cref="IEngineController.GetIsAlert"/>
+    /// for messages, or <see cref="DraftEntity.IsAlert"/> for drafts). <see langword="false"/> for notes
     /// and activity log entries, which have no alert flag. Drives <see cref="TitleColorHex"/> and
     /// <see cref="SecondaryTextColorHex"/>.
     /// </summary>

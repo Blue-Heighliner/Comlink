@@ -1,4 +1,4 @@
-namespace BlueHeighliner.Comlink.Control;
+namespace BlueHeighliner.Comlink;
 
 /// <summary>How a custom import format's staged sends (see <see cref="IEngineBuilder.ImportFormat{TFormat}"/>) are sent once the user presses the staged send screen's final send button.</summary>
 public enum StagedSendMode

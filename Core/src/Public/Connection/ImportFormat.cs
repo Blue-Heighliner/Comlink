@@ -1,4 +1,4 @@
-namespace BlueHeighliner.Comlink.Control;
+namespace BlueHeighliner.Comlink;
 
 /// <summary>
 /// A custom import format, shown as an option alongside the built-in package format in the client's import screen. State one with
@@ -13,7 +13,7 @@ public interface IImportFormat
     /// <summary>Gets whether this format's staged sends, added via <see cref="IImportFormatContext.AddStagedSend"/>, are all sent at once or one at a time, once the user presses the staged send screen's final send button. One at a time unless overridden.</summary>
     StagedSendMode StagedSendMode => StagedSendMode.Sequential;
 
-    /// <summary>Gets, while <see cref="StagedSendMode"/> is <see cref="Control.StagedSendMode.Sequential"/>, an optional pause between each send. <see langword="null"/> sends the next immediately.</summary>
+    /// <summary>Gets, while <see cref="StagedSendMode"/> is <see cref="StagedSendMode.Sequential"/>, an optional pause between each send. <see langword="null"/> sends the next immediately.</summary>
     TimeSpan? StagedSendDelay => null;
 
     /// <summary>Reads one whole file the user chose, turning what it reads into new messages, drafts, notes, and staged sends through <paramref name="context"/>.</summary>

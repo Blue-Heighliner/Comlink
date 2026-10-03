@@ -1,4 +1,4 @@
-namespace BlueHeighliner.Comlink.Views;
+namespace BlueHeighliner.Comlink;
 
 /// <summary>User control for the staged send screen: every message a custom import format has prepared, reviewed and sent as a batch.</summary>
 [ExcludeFromCodeCoverage]

@@ -1,4 +1,4 @@
-namespace BlueHeighliner.Comlink.Peer;
+namespace BlueHeighliner.Comlink;
 
 /// <summary>
 /// The default <see cref="IFrameSerializer"/> and <see cref="IPacketSerializer"/>: protobuf-net, matching the frame or packet type given to

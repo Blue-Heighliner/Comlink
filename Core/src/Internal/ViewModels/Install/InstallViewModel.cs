@@ -1,4 +1,4 @@
-namespace BlueHeighliner.Comlink.ViewModels.Install;
+namespace BlueHeighliner.Comlink;
 
 /// <summary>ViewModel interface for the user-installation screen.</summary>
 internal interface IInstallViewModel

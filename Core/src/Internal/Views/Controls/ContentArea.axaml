@@ -1,10 +1,10 @@
 <UserControl xmlns="https://github.com/avaloniaui"
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
-             xmlns:vm="using:BlueHeighliner.Comlink.ViewModels"
-             xmlns:entryVm="using:BlueHeighliner.Comlink.ViewModels.Entries"
-             xmlns:entryViews="using:BlueHeighliner.Comlink.Views.Entries"
-             xmlns:views="using:BlueHeighliner.Comlink.Views"
-             x:Class="BlueHeighliner.Comlink.Views.Controls.ContentArea"
+             xmlns:vm="using:BlueHeighliner.Comlink"
+             xmlns:entryVm="using:BlueHeighliner.Comlink"
+             xmlns:entryViews="using:BlueHeighliner.Comlink"
+             xmlns:views="using:BlueHeighliner.Comlink"
+             x:Class="BlueHeighliner.Comlink.ContentArea"
              x:DataType="vm:ContentAreaViewModel"
              Background="#1E1E1E">
 

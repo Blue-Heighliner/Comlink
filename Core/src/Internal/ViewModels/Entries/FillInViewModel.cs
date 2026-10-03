@@ -1,4 +1,4 @@
-namespace BlueHeighliner.Comlink.ViewModels.Entries;
+namespace BlueHeighliner.Comlink;
 
 /// <summary>ViewModel interface for a fill-in field embedded in a draft body.</summary>
 internal interface IFillInViewModel
@@ -30,6 +30,7 @@ internal interface IFillInViewModel
 }
 
 /// <summary>ViewModel for a fill-in field embedded in a draft body, managing options and selection state.</summary>
+[ConstructedManually]
 internal sealed partial class FillInViewModel : ObservableObject, IFillInViewModel
 {
     /// <summary>Initializes a new fill-in with a generated GUID identifier and no options.</summary>

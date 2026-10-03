@@ -1,4 +1,4 @@
-namespace BlueHeighliner.Comlink.Services;
+namespace BlueHeighliner.Comlink;
 
 /// <summary>
 /// What a retrieval request asks a storage server for (see <see cref="UserInfo.StoresMessages"/>). It is read from

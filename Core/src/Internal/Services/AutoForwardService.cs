@@ -1,4 +1,4 @@
-namespace BlueHeighliner.Comlink.Services;
+namespace BlueHeighliner.Comlink;
 
 /// <summary>
 /// Runs the host's auto forward controllers (<see cref="IEngineController.AutoForwardControllers"/>) whenever

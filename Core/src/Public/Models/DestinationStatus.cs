@@ -1,9 +1,9 @@
-namespace BlueHeighliner.Comlink.Data;
+namespace BlueHeighliner.Comlink;
 
 /// <summary>
 /// Represents the delivery/read state of a message, either as its own status on an Inbox record
 /// (<see cref="Received"/>/<see cref="Read"/> only) or as the per-destination status on an Outbox
-/// record's <see cref="Entities.DeliveryStatus"/> (Sending, Sent, Received, Read or Failed; see <c>Docs/Components/Peer.md</c>).
+/// record's <see cref="DeliveryStatus"/> (Sending, Sent, Received, Read or Failed; see <c>Docs/Components/Peer.md</c>).
 /// </summary>
 public enum DestinationStatus
 {

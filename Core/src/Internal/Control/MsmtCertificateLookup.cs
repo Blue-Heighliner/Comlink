@@ -1,4 +1,4 @@
-namespace BlueHeighliner.Comlink.Control;
+namespace BlueHeighliner.Comlink;
 
 /// <summary>
 /// Shared certificate store lookup for <see cref="EngineController.ConnectionOptions"/> and

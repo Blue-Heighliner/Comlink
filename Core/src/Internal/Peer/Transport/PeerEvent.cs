@@ -1,4 +1,4 @@
-namespace BlueHeighliner.Comlink.Peer.Transport;
+namespace BlueHeighliner.Comlink;
 
 /// <summary>A minimal thread-safe hot observable: values published while nobody is subscribed are dropped.</summary>
 internal sealed class PeerEvent<T> : IObservable<T>

@@ -1,4 +1,4 @@
-namespace BlueHeighliner.Comlink.Control;
+namespace BlueHeighliner.Comlink;
 
 /// <summary>
 /// The networking topology role a running instance takes on. See <c>Docs/Components/Peer.md</c> for the full

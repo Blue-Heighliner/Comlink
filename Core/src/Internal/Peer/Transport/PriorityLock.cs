@@ -1,4 +1,4 @@
-namespace BlueHeighliner.Comlink.Peer.Transport;
+namespace BlueHeighliner.Comlink;
 
 /// <summary>An asynchronous mutual exclusion lock that hands itself to the waiter with the highest priority first, first come, first served among equals.</summary>
 internal interface IPriorityLock

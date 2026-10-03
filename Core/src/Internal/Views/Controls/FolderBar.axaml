@@ -1,7 +1,7 @@
 <UserControl xmlns="https://github.com/avaloniaui"
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
-             xmlns:vm="using:BlueHeighliner.Comlink.ViewModels"
-             x:Class="BlueHeighliner.Comlink.Views.Controls.FolderBar"
+             xmlns:vm="using:BlueHeighliner.Comlink"
+             x:Class="BlueHeighliner.Comlink.FolderBar"
              x:DataType="vm:FolderBarViewModel"
              Background="#252526"
              MinWidth="150">

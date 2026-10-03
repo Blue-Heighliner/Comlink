@@ -1,8 +1,8 @@
-namespace BlueHeighliner.Comlink.ViewModels;
+namespace BlueHeighliner.Comlink;
 
 /// <summary>
 /// ViewModel interface tracking pending (unread) alert messages and driving the title bar's alarm box
-/// and sound. See <see cref="Control.IEngineController.GetIsAlert"/> and <c>Docs/Components/ViewModels.md</c>.
+/// and sound. See <see cref="IEngineController.GetIsAlert"/> and <c>Docs/Components/ViewModels.md</c>.
 /// </summary>
 internal interface IAlertViewModel
 {

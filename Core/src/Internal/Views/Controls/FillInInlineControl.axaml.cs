@@ -1,4 +1,4 @@
-namespace BlueHeighliner.Comlink.Views.Controls;
+namespace BlueHeighliner.Comlink;
 
 /// <summary>Inline user control embedded by <see cref="FillInElementGenerator"/> to render a fill-in field within the draft body editor.</summary>
 [ExcludeFromCodeCoverage]

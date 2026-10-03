@@ -1,4 +1,4 @@
-namespace BlueHeighliner.Comlink.Control;
+namespace BlueHeighliner.Comlink;
 
 /// <summary>Implements <see cref="IFrameBuilder{TFrame}"/>, collecting the mappings and turning them into a <see cref="FrameMap"/>.</summary>
 internal sealed class FrameBuilder<TFrame> : IFrameBuilder<TFrame> where TFrame : class, new()

@@ -1,4 +1,4 @@
-namespace BlueHeighliner.Comlink.Peer.Transport;
+namespace BlueHeighliner.Comlink;
 
 /// <summary>
 /// Subscription helper that avoids the ambiguity between the MSMT package's own <c>Subscribe(Action)</c> extension and

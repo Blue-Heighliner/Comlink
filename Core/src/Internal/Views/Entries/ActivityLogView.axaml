@@ -1,7 +1,7 @@
 <UserControl xmlns="https://github.com/avaloniaui"
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
-             xmlns:vm="using:BlueHeighliner.Comlink.ViewModels.Entries"
-             x:Class="BlueHeighliner.Comlink.Views.Entries.ActivityLogView"
+             xmlns:vm="using:BlueHeighliner.Comlink"
+             x:Class="BlueHeighliner.Comlink.ActivityLogView"
              x:DataType="vm:ActivityLogViewModel"
              Background="#1E1E1E">
 

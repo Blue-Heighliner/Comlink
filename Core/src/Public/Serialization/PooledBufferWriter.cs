@@ -1,4 +1,4 @@
-namespace BlueHeighliner.Comlink.Peer;
+namespace BlueHeighliner.Comlink;
 
 /// <summary>
 /// An <see cref="IBufferWriter{T}"/> over a pooled array, for a serializer to write into so that the buffer it returns from

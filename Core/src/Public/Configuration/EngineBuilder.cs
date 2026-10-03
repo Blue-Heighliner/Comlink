@@ -57,12 +57,14 @@ public interface IEngineBuilder
     IEngineBuilder Group(string name, params string[] members);
 
     /// <summary>
-    /// Defines the ordered set of security levels a message may be sent at, from lowest to highest: each level
-    /// ranks higher than the one stated before it. Each level is a display name paired with the hex color shown
-    /// for it in the top banner. Empty (the default) turns the whole feature off: every message maps to an empty
+    /// Defines the ordered set of security levels a message may be sent at as the members of <typeparamref name="TLevel"/>, from lowest to highest: each member
+    /// ranks higher than the one declared before it. A level is named by its member name in uppercase, which is how network files and frames refer to it, and shown in the top banner
+    /// in a neutral color, unless overridden. Not stating any (the default) turns the whole feature off: every message maps to an empty
     /// security level and no destination is ever blocked for lacking one.
     /// </summary>
-    IEngineBuilder SecurityLevels(params (string Name, string Color)[] levels);
+    /// <typeparam name="TLevel">The enum whose members are the levels.</typeparam>
+    /// <param name="options">Optional per-level overrides: the member, its name (null for the member name in uppercase) and its hex banner color (null for the neutral default).</param>
+    IEngineBuilder SecurityLevels<TLevel>(params (TLevel Level, string? Label, string? Color)[] options) where TLevel : struct, Enum;
 
     /// <summary>Sets the text shown in the title bar's alert box while alarming, and the draft editor's alert checkbox label. Defaults to <c>ALERT</c>.</summary>
     IEngineBuilder AlertLabel(string label);
@@ -77,16 +79,19 @@ public interface IEngineBuilder
     IEngineBuilder ComposeAlerts(bool enabled = true);
 
     /// <summary>
-    /// Sets the priority levels, lowest first like <see cref="SecurityLevels"/>: a level's position is its priority, so later levels are sent before earlier ones. Each is a name (uppercase by convention) and who may assign it: a <see cref="PriorityMode.User"/> priority is offered to
-    /// users composing a message, a <see cref="PriorityMode.System"/> one is only assigned by the system, such as the priority a retrieval or receipt handler names. Defaults to a single user level named <c>NORMAL</c> with the value 0.
+    /// Sets the priority levels as the members of <typeparamref name="TPriority"/>, lowest first like <see cref="SecurityLevels{TLevel}"/>: a member's position is its priority, so later members are sent before earlier ones.
+    /// A level is named by its member name in uppercase unless overridden, and is a <see cref="PriorityMode.User"/> priority, offered to users composing a message, unless overridden to
+    /// <see cref="PriorityMode.System"/>, only assigned by the system, such as the priority a retrieval or receipt handler names. Defaults to a single user level named <c>NORMAL</c>, with which handler priorities are ignored.
     /// </summary>
-    IEngineBuilder Priorities(params (string Name, PriorityMode Mode)[] priorities);
+    /// <typeparam name="TPriority">The enum whose members are the levels.</typeparam>
+    /// <param name="options">Optional per-level overrides: the member, its name (null for the member name in uppercase) and its mode (null for <see cref="PriorityMode.User"/>).</param>
+    IEngineBuilder Priorities<TPriority>(params (TPriority Priority, string? Label, PriorityMode? Mode)[] options) where TPriority : struct, Enum;
 
     /// <summary>Turns message tags on or off in the user interface, and optionally renames the tag input (for example to <c>Category</c>). On by default, labelled <c>Tag</c>.</summary>
     IEngineBuilder Tags(bool enabled = true, string? label = null);
 
-    /// <summary>Blocks a tag and priority combination when composing a draft. Either may be <see langword="null"/> to match any value; the priority is named as in <see cref="Priorities"/>.</summary>
-    IEngineBuilder BlockTag(string? tag, string? priority);
+    /// <summary>Blocks a tag and priority combination when composing a draft. Either may be <see langword="null"/> to match any value; the priority is a member of the enum stated to <see cref="Priorities{TPriority}"/>.</summary>
+    IEngineBuilder BlockTag(string? tag, Enum? priority);
 
     /// <summary>
     /// Overrides the display label shown for an address type: in the address type picker, the per-address badge, and

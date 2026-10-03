@@ -188,7 +188,7 @@ public sealed class EntryBarViewModelTests
     [Fact]
     public void AvailablePriorityFilters_IsAnyFollowedByEveryConfiguredPriority()
     {
-        EntryBarViewModel vm = new(new Mock<IEntryService>().Object, format);
+        EntryBarViewModel vm = new(new Mock<IEntryService>().Object, new EngineController(EngineBuilder.Build(new TestEngineConfiguration()), new CurrentUserProvider(), null));
 
         Assert.Equal(["Any", "NORMAL"], vm.AvailablePriorityFilters.Select(f => f.Label));
         Assert.Equal([null, 0], vm.AvailablePriorityFilters.Select(f => f.Value));
@@ -802,22 +802,6 @@ public sealed class EntryBarViewModelTests
         await vm.LoadFolder(MakeFolder("root-outbox", FolderType.Outbox));
 
         Assert.Equal("Medium", vm.Entries[0].PriorityText);
-    }
-
-    /// <summary>A stored priority value with no matching option falls back to its plain numeric string.</summary>
-    [Fact]
-    public async Task LoadFolder_Inbox_PriorityWithNoMatchingOption_FallsBackToNumber()
-    {
-        Mock<TestEngineController> priorityProvider = new() { CallBase = true };
-        priorityProvider.Setup(p => p.Priorities).Returns([new MessagePriorityOption { Name = "Normal", Value = 0 }]);
-        Mock<IEntryService> svc = new();
-        svc.Setup(s => s.GetMessages(It.IsAny<string>(), It.IsAny<int>()))
-           .ReturnsAsync((Items: new List<MessageEntity> { MakeMessage("M1", priority: 99) }, Total: 1));
-        EntryBarViewModel vm = new(svc.Object, priorityProvider.Object);
-
-        await vm.LoadFolder(MakeFolder("root-inbox", FolderType.Inbox));
-
-        Assert.Equal("99", vm.Entries[0].PriorityText);
     }
 
     /// <summary>Inbox entries carry a TagText label from the message's stored tag when tags are enabled.</summary>

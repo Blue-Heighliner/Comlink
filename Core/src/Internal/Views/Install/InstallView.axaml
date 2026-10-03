@@ -1,7 +1,7 @@
 <UserControl xmlns="https://github.com/avaloniaui"
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
-             xmlns:vm="using:BlueHeighliner.Comlink.ViewModels.Install"
-             x:Class="BlueHeighliner.Comlink.Views.Install.InstallView"
+             xmlns:vm="using:BlueHeighliner.Comlink"
+             x:Class="BlueHeighliner.Comlink.InstallView"
              x:DataType="vm:InstallViewModel"
              Background="#1E1E1E">
 

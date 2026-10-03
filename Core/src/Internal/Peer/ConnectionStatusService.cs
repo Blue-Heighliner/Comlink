@@ -1,4 +1,4 @@
-namespace BlueHeighliner.Comlink.Peer;
+namespace BlueHeighliner.Comlink;
 
 /// <summary>Distinguishes the two kinds of connection a <see cref="PeerConnectionStatus"/> can describe, so the UI can group them into separate tables.</summary>
 internal enum PeerConnectionKind
@@ -27,7 +27,7 @@ internal sealed record PeerConnectionStatus
 }
 
 /// <summary>
-/// Exposes live connection status for <see cref="ViewModels.IConnectionStatusViewModel"/> — registered only
+/// Exposes live connection status for <see cref="IConnectionStatusViewModel"/> — registered only
 /// for <see cref="UserRole.Client"/> (the single connection to its server) and <see cref="UserRole.Server"/>
 /// (one entry per own child client, plus one entry per other server in the cluster); <see cref="UserRole.Peer"/>
 /// registers <see cref="NullConnectionStatusService"/> instead, since peer-to-peer connections are not

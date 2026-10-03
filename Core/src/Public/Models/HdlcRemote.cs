@@ -1,4 +1,4 @@
-namespace BlueHeighliner.Comlink.Models;
+namespace BlueHeighliner.Comlink;
 
 /// <summary>A user that may be at the other end of an HDLC serial point, and the station address it answers to.</summary>
 /// <param name="User">The user's name.</param>

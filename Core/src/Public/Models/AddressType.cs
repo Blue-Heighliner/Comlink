@@ -1,4 +1,4 @@
-namespace BlueHeighliner.Comlink.Data;
+namespace BlueHeighliner.Comlink;
 
 /// <summary>Specifies the role of a recipient address on a message or draft.</summary>
 public enum AddressType

@@ -1,4 +1,4 @@
-namespace BlueHeighliner.Comlink.Models;
+namespace BlueHeighliner.Comlink;
 
 /// <summary>
 /// What is known about a connection that has just formed, handed to <see cref="IEngineBuilder.Identify"/>

@@ -1,4 +1,4 @@
-namespace BlueHeighliner.Comlink.Control;
+namespace BlueHeighliner.Comlink;
 
 /// <summary>
 /// Handed to a custom import format's reader (see <see cref="IEngineBuilder.ImportFormat{TFormat}"/>) to turn what it

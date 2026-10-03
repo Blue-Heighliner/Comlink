@@ -1,4 +1,4 @@
-namespace BlueHeighliner.Comlink.Control;
+namespace BlueHeighliner.Comlink;
 
 /// <summary>
 /// Implements <see cref="IEngineBuilder"/>: collects everything a host states in <see cref="IEngineConfiguration.Configure"/>.
@@ -11,7 +11,7 @@ internal sealed class EngineBuilder : IEngineBuilder, IAsyncDisposable
     private readonly List<SecurityLevel> securityLevels = [];
     private readonly List<string> users = [];
     private readonly List<MessagePriorityOption> priorities = [];
-    private readonly List<(string? Tag, string? Priority)> blocked = [];
+    private readonly List<(string? Tag, Enum? Priority)> blocked = [];
     private readonly Dictionary<AddressType, string> addressTypeLabels = [];
     private readonly List<IExternalSystem> externalSystems = [];
     private readonly List<ServiceRegistration<IExportFormat>> exportFormats = [];
@@ -58,7 +58,7 @@ internal sealed class EngineBuilder : IEngineBuilder, IAsyncDisposable
     /// <summary>The tag label, if stated.</summary>
     public string? TagLabelValue { get; private set; }
     /// <summary>The blocked tag and priority name combinations.</summary>
-    public IReadOnlyList<(string? Tag, string? Priority)> BlockedTags => blocked;
+    public IReadOnlyList<(string? Tag, Enum? Priority)> BlockedTags => blocked;
     /// <summary>The overridden address type display labels, by address type.</summary>
     public IReadOnlyDictionary<AddressType, string> AddressTypeLabels => addressTypeLabels;
     /// <summary>Whether printing received messages starts on, if stated.</summary>
@@ -220,10 +220,14 @@ internal sealed class EngineBuilder : IEngineBuilder, IAsyncDisposable
     }
 
     /// <inheritdoc />
-    public IEngineBuilder SecurityLevels(params (string Name, string Color)[] levels)
+    public IEngineBuilder SecurityLevels<TLevel>(params (TLevel Level, string? Label, string? Color)[] options) where TLevel : struct, Enum
     {
         securityLevels.Clear();
-        securityLevels.AddRange(levels.Select(level => new SecurityLevel { Name = level.Name, Color = level.Color }));
+        securityLevels.AddRange(Enum.GetValues<TLevel>().Select(level =>
+        {
+            (TLevel Level, string? Label, string? Color) option = options.FirstOrDefault(o => EqualityComparer<TLevel>.Default.Equals(o.Level, level));
+            return new SecurityLevel { Name = option.Label ?? level.ToString().ToUpperInvariant(), Color = option.Color ?? "#5A5A5A" };
+        }));
         return this;
     }
 
@@ -256,10 +260,14 @@ internal sealed class EngineBuilder : IEngineBuilder, IAsyncDisposable
     }
 
     /// <inheritdoc />
-    public IEngineBuilder Priorities(params (string Name, PriorityMode Mode)[] priorities)
+    public IEngineBuilder Priorities<TPriority>(params (TPriority Priority, string? Label, PriorityMode? Mode)[] options) where TPriority : struct, Enum
     {
-        this.priorities.Clear();
-        this.priorities.AddRange(priorities.Select((priority, index) => new MessagePriorityOption { Name = priority.Name, Value = index, Mode = priority.Mode }));
+        priorities.Clear();
+        priorities.AddRange(Enum.GetValues<TPriority>().Select((priority, index) =>
+        {
+            (TPriority Priority, string? Label, PriorityMode? Mode) option = options.FirstOrDefault(o => EqualityComparer<TPriority>.Default.Equals(o.Priority, priority));
+            return new MessagePriorityOption { Name = option.Label ?? priority.ToString().ToUpperInvariant(), Value = index, Mode = option.Mode ?? PriorityMode.User, Key = priority };
+        }));
         return this;
     }
 
@@ -272,7 +280,7 @@ internal sealed class EngineBuilder : IEngineBuilder, IAsyncDisposable
     }
 
     /// <inheritdoc />
-    public IEngineBuilder BlockTag(string? tag, string? priority)
+    public IEngineBuilder BlockTag(string? tag, Enum? priority)
     {
         blocked.Add((tag, priority));
         return this;

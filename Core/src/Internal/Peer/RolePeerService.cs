@@ -1,4 +1,4 @@
-namespace BlueHeighliner.Comlink.Peer;
+namespace BlueHeighliner.Comlink;
 
 /// <summary>The one <see cref="IPeerService"/> the engine depends on, whose role-specific implementation can be replaced while it runs.</summary>
 internal interface IRolePeerService : IPeerService

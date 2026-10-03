@@ -1,12 +1,12 @@
-namespace BlueHeighliner.Comlink.Devices;
+namespace BlueHeighliner.Comlink;
 
 /// <summary>
-/// Plays and stops the alarm sound while one or more alerts are pending (see <see cref="ViewModels.IAlertViewModel"/>).
+/// Plays and stops the alarm sound while one or more alerts are pending (see <see cref="IAlertViewModel"/>).
 /// This is real OS-level audio playback, not configuration — see <see cref="IEngineController"/> for the
 /// configurable alarm text/duration. Not a control interface: the engine always provides real behavior for
 /// this directly, the same way it always provides real behavior for printer discovery/driving
 /// (see <see cref="IPrintDriver"/>) rather than leaving either to a host. Public only because it
-/// is a constructor dependency of the public <see cref="ViewModels.AlertViewModel"/> — not meant to be
+/// is a constructor dependency of the public <see cref="AlertViewModel"/> — not meant to be
 /// overridden by a host the way control interfaces are.
 /// </summary>
 internal interface IAlertSoundPlayer

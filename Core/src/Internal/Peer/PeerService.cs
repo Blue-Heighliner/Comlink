@@ -1,4 +1,4 @@
-namespace BlueHeighliner.Comlink.Peer;
+namespace BlueHeighliner.Comlink;
 
 /// <summary>Manages inbound and outbound peer connections and exposes Engine-level delivery events.</summary>
 internal interface IPeerService
@@ -177,7 +177,7 @@ internal sealed class PeerService : IPeerService, IReconfigurable, IAsyncDisposa
         try
         {
             using IMemoryOwner<byte> buf = engineController.PacketSerializer!.Serialize(packet, null);
-            return await transport.Request(connection, buf.Memory, new PeerSendOptions { Priority = 0 }, cancellation);
+            return await transport.Request(connection, buf.Memory, new PeerSendOptions { Priority = engineController.LowestPriority }, cancellation);
         }
         catch
         {

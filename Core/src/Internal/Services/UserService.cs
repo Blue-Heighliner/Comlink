@@ -1,4 +1,4 @@
-namespace BlueHeighliner.Comlink.Services;
+namespace BlueHeighliner.Comlink;
 
 /// <summary>Manages the local user identity: loading persisted state, applying debug overrides, and installing a new user.</summary>
 internal interface IUserService

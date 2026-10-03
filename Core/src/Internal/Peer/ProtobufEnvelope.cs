@@ -1,4 +1,4 @@
-namespace BlueHeighliner.Comlink.Peer;
+namespace BlueHeighliner.Comlink;
 
 /// <summary>
 /// The fixed outer wire shape every <see cref="ProtobufSerializer"/> payload is wrapped in: the

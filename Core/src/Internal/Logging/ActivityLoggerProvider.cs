@@ -1,4 +1,4 @@
-namespace BlueHeighliner.Comlink.Logging;
+namespace BlueHeighliner.Comlink;
 
 /// <summary>Logger provider that routes ACTIVITY-category log entries into the <see cref="ActivityLogRepository"/>.</summary>
 internal sealed class ActivityLoggerProvider : ILoggerProvider

@@ -1,4 +1,4 @@
-namespace BlueHeighliner.Comlink.ViewModels;
+namespace BlueHeighliner.Comlink;
 
 /// <summary>
 /// ViewModel interface for the connection status display: two tables — one for connections to other

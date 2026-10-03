@@ -1,4 +1,4 @@
-namespace BlueHeighliner.Comlink.Views.Controls;
+namespace BlueHeighliner.Comlink;
 
 /// <summary>Modal dialog that prompts the user for a new folder name.</summary>
 [ExcludeFromCodeCoverage]

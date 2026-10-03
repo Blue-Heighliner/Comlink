@@ -1,4 +1,4 @@
-namespace BlueHeighliner.Comlink.Control;
+namespace BlueHeighliner.Comlink;
 
 /// <summary>A custom auto forward controller added via <see cref="IFrameBuilder{TFrame}.AutoForward{TController}"/>.</summary>
 internal sealed record AutoForwardControllerDefinition

@@ -1,4 +1,4 @@
-namespace BlueHeighliner.Comlink.ViewModels.Entries;
+namespace BlueHeighliner.Comlink;
 
 /// <summary>The three states of PLSO (Phonetic Language Spell Out) mode in the draft body editor.</summary>
 internal enum PlsoMode

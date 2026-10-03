@@ -1,4 +1,4 @@
-namespace BlueHeighliner.Comlink.ViewModels;
+namespace BlueHeighliner.Comlink;
 
 /// <summary>
 /// Runs work that touches bound ViewModel state on the UI thread. Network and storage events are raised on background

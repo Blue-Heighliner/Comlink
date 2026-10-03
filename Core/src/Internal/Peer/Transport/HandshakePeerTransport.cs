@@ -1,4 +1,4 @@
-namespace BlueHeighliner.Comlink.Peer.Transport;
+namespace BlueHeighliner.Comlink;
 
 /// <summary>
 /// Wraps another <see cref="IPeerTransport"/> so that a connection is only published, and only usable, once its initial exchange has completed and,
@@ -186,7 +186,7 @@ internal sealed class HandshakePeerTransport : IPeerTransport
     private async Task<bool> Send(Session session, object item)
     {
         using IMemoryOwner<byte> body = handshake!.Serialize(item);
-        return await inner.Request(session.Connection, body.Memory, new PeerSendOptions { Priority = int.MaxValue, Frame = handshake.CarriesFrames ? item : null }, session.Aborted.Token);
+        return await inner.Request(session.Connection, body.Memory, new PeerSendOptions { Priority = engineController.HighestPriority, Frame = handshake.CarriesFrames ? item : null }, session.Aborted.Token);
     }
 
     private void OnReceived(PeerReceivedEventArgs args)

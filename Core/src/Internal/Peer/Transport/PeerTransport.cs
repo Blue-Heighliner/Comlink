@@ -1,4 +1,4 @@
-namespace BlueHeighliner.Comlink.Peer.Transport;
+namespace BlueHeighliner.Comlink;
 
 /// <summary>
 /// Moves opaque messages between this node and remote nodes over IP or serial, hiding which one a connection uses.

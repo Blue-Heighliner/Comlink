@@ -1,8 +1,8 @@
 <UserControl xmlns="https://github.com/avaloniaui"
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
-             xmlns:vm="using:BlueHeighliner.Comlink.ViewModels"
-             xmlns:svc="using:BlueHeighliner.Comlink.Services"
-             x:Class="BlueHeighliner.Comlink.Views.ImportView"
+             xmlns:vm="using:BlueHeighliner.Comlink"
+             xmlns:svc="using:BlueHeighliner.Comlink"
+             x:Class="BlueHeighliner.Comlink.ImportView"
              x:DataType="vm:ImportViewModel"
              Background="#1E1E1E">
 

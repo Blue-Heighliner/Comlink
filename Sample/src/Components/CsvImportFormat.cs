@@ -1,7 +1,7 @@
 namespace BlueHeighliner.Comlink.Sample;
 
 /// <summary>A CSV reader that stages one send per <c>User,Body</c> line for the user to review and send from the staged send screen, one at a time a second apart.</summary>
-public sealed class SampleCsvImportFormat : IImportFormat
+public sealed class CsvImportFormat : IImportFormat
 {
     /// <inheritdoc />
     public string Name { get; } = "CSV";

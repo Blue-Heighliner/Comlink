@@ -1,4 +1,4 @@
-namespace BlueHeighliner.Comlink.Peer.Transport;
+namespace BlueHeighliner.Comlink;
 
 /// <summary>
 /// Presents the IP and serial transports as one: each connect goes to whichever transport the point belongs to, and each request to the one its connection runs over,

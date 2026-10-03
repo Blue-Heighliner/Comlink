@@ -1,4 +1,4 @@
-namespace BlueHeighliner.Comlink.Control;
+namespace BlueHeighliner.Comlink;
 
 /// <summary>A single selectable message priority level: a display name paired with its wire priority number.</summary>
 internal sealed record MessagePriorityOption
@@ -12,6 +12,8 @@ internal sealed record MessagePriorityOption
     public required int Value { get; init; }
     /// <summary>Gets who may assign this priority; only <see cref="PriorityMode.User"/> priorities are offered to a user composing a message.</summary>
     public PriorityMode Mode { get; init; } = PriorityMode.User;
+    /// <summary>Gets the enum member this level was declared from, which is how handlers and blocked combinations name it, or <see langword="null"/> for the default level.</summary>
+    public Enum? Key { get; init; }
 }
 
 /// <summary>Extension helpers for looking up display information from a set of <see cref="MessagePriorityOption"/> values.</summary>

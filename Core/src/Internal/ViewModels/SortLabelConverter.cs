@@ -1,4 +1,4 @@
-namespace BlueHeighliner.Comlink.ViewModels;
+namespace BlueHeighliner.Comlink;
 
 /// <summary>Provides sort label text for the sort toggle button.</summary>
 internal sealed class SortLabelConverter

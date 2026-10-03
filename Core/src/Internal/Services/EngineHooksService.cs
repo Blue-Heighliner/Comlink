@@ -1,4 +1,4 @@
-namespace BlueHeighliner.Comlink.Services;
+namespace BlueHeighliner.Comlink;
 
 /// <summary>
 /// Runs the host's <see cref="IEngineController.NetworkHandler"/> whenever <see cref="IPeerService"/> raises the

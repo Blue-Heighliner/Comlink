@@ -1,4 +1,4 @@
-namespace BlueHeighliner.Comlink.Peer;
+namespace BlueHeighliner.Comlink;
 
 /// <summary>
 /// Handle on one <see cref="PeerConnectionMonitor"/> loop, letting a service pause it (closed: no heartbeats, so nothing

@@ -1,4 +1,4 @@
-namespace BlueHeighliner.Comlink.Devices;
+namespace BlueHeighliner.Comlink;
 
 /// <summary>Describes a single external drive available as an export destination or import source.</summary>
 internal sealed record ExternalDriveInfo
@@ -13,7 +13,7 @@ internal sealed record ExternalDriveInfo
 /// Enumerates the external (removable/optical) drives currently connected, ready, and writable — used as a
 /// destination for the export feature or a source for the import feature (see <c>Docs/Components/ViewModels.md</c>,
 /// <c>IExportViewModel</c>/<c>IImportViewModel</c>). This is real OS-level behavior, not configuration or
-/// rules, so it does not live on <see cref="Control.IEngineController"/> and is not registered/overridable
+/// rules, so it does not live on <see cref="IEngineController"/> and is not registered/overridable
 /// the way control interfaces are — Engine always provides real behavior for it directly, the same way it
 /// always provides real behavior for alarm sound playback (see <see cref="IAlertSoundPlayer"/>) and
 /// printer discovery/driving (see <see cref="IPrintDriver"/>).

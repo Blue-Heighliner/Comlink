@@ -1,4 +1,4 @@
-namespace BlueHeighliner.Comlink.Peer;
+namespace BlueHeighliner.Comlink;
 
 /// <summary>
 /// The points a client or relay dials to reach its parent and the heartbeat controls of their monitors. An MSMT parent is one point; an HDLC parent is one per port the node opens, since

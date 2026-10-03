@@ -1,6 +1,6 @@
-namespace BlueHeighliner.Comlink.Services;
+namespace BlueHeighliner.Comlink;
 
-/// <summary>Builds the reference list for a full export and writes selected entries to a zip archive, in the built-in JSON format or a custom one (see <see cref="Control.IEngineController.ExportFormats"/>).</summary>
+/// <summary>Builds the reference list for a full export and writes selected entries to a zip archive, in the built-in JSON format or a custom one (see <see cref="IEngineController.ExportFormats"/>).</summary>
 internal interface IExportService
 {
     /// <summary>
@@ -15,7 +15,7 @@ internal interface IExportService
     /// Writes each referenced entry to <paramref name="zipPath"/> as one file per entry inside a new zip archive,
     /// using <paramref name="format"/>'s serializer, or the engine's own built-in JSON serializer when
     /// <paramref name="format"/> is <see langword="null"/>. An entry whose root folder type <paramref name="format"/>
-    /// does not accept (see <see cref="Control.ExportFormatDefinition.AllowedTypes"/>) is left out, the same as one
+    /// does not accept (see <see cref="ExportFormatDefinition.AllowedTypes"/>) is left out, the same as one
     /// whose entity no longer exists. If <paramref name="cancellation"/> is triggered, or the write otherwise
     /// fails, the partially written zip file at <paramref name="zipPath"/> is deleted before the exception propagates.
     /// </summary>

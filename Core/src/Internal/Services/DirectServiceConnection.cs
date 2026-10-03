@@ -1,4 +1,4 @@
-namespace BlueHeighliner.Comlink.Services;
+namespace BlueHeighliner.Comlink;
 
 /// <summary>In-process <see cref="IServiceConnection"/> implementation that wires directly to engine services without a network hop.</summary>
 internal sealed class DirectServiceConnection : IServiceConnection

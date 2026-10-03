@@ -1,4 +1,4 @@
-namespace BlueHeighliner.Comlink.Control;
+namespace BlueHeighliner.Comlink;
 
 /// <summary>The engine's untyped view of the host's <see cref="IMessageHandler{TFrame}"/>, working on frames as <see cref="object"/>.</summary>
 internal interface IMessageFrameHandler

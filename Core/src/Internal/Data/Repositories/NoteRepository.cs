@@ -1,4 +1,4 @@
-namespace BlueHeighliner.Comlink.Data.Repositories;
+namespace BlueHeighliner.Comlink;
 
 /// <summary>Provides data-access operations for <see cref="NoteEntity"/> documents.</summary>
 internal interface INoteRepository

@@ -1,4 +1,4 @@
-namespace BlueHeighliner.Comlink.ViewModels;
+namespace BlueHeighliner.Comlink;
 
 /// <summary>A single entry queued for printing, next-to-print ordering handled by <see cref="IPrintManagerViewModel"/>.</summary>
 internal sealed record PrintQueueEntry
@@ -9,7 +9,7 @@ internal sealed record PrintQueueEntry
     public required string EntryId { get; init; }
     /// <summary>The kind of entry this queue entry prints.</summary>
     public required EntryType EntryType { get; init; }
-    /// <summary>For <see cref="Data.EntryType.Message"/> entries, disambiguates the Outbox (sent) record from the Inbox (received) record.</summary>
+    /// <summary>For <see cref="EntryType.Message"/> entries, disambiguates the Outbox (sent) record from the Inbox (received) record.</summary>
     public bool IsOutboundMessage { get; init; }
     /// <summary>Display title shown in the print queue.</summary>
     public required string Title { get; init; }
@@ -20,7 +20,7 @@ internal sealed record PrintQueueEntry
     public required bool IsManual { get; init; }
     /// <summary>
     /// For automatically-queued received messages, the message's priority value (see
-    /// <see cref="Control.IEngineController"/>) — higher prints first among other automatically-queued
+    /// <see cref="IEngineController"/>) — higher prints first among other automatically-queued
     /// entries. Unused (and irrelevant to ordering) for manual entries.
     /// </summary>
     public required int Priority { get; init; }
@@ -42,10 +42,10 @@ internal interface IPrintManagerViewModel
     ObservableCollection<PrintQueueEntry> Queue { get; }
     /// <summary>
     /// Gets or sets whether every received message is automatically added to the print queue (the number of
-    /// copies decided by <see cref="Control.IEngineController"/>). Off by default; see <see cref="Control.IEngineController"/>.
+    /// copies decided by <see cref="IEngineController"/>). Off by default; see <see cref="IEngineController"/>.
     /// </summary>
     bool PrintReceivedEnabled { get; set; }
-    /// <summary>Gets the printers available on this computer; see <see cref="Control.IEngineController"/>.</summary>
+    /// <summary>Gets the printers available on this computer; see <see cref="IEngineController"/>.</summary>
     IReadOnlyList<string> AvailablePrinters { get; }
     /// <summary>Gets or sets the printer the queue prints to. Initializes to this computer's default printer.</summary>
     string? SelectedPrinter { get; set; }

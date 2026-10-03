@@ -1,6 +1,6 @@
 <Window xmlns="https://github.com/avaloniaui"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
-        x:Class="BlueHeighliner.Comlink.Views.Controls.ConfirmDialog"
+        x:Class="BlueHeighliner.Comlink.ConfirmDialog"
         Width="320"
         SizeToContent="Height"
         CanResize="False"

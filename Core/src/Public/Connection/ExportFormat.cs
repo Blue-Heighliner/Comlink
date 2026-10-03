@@ -1,4 +1,4 @@
-namespace BlueHeighliner.Comlink.Control;
+namespace BlueHeighliner.Comlink;
 
 /// <summary>
 /// A custom export format, shown as an option alongside the built-in JSON format in the client's export screen. State one with

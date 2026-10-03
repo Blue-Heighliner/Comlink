@@ -1,4 +1,4 @@
-namespace BlueHeighliner.Comlink.Logging;
+namespace BlueHeighliner.Comlink;
 
 /// <summary>Logger provider that writes log lines to a daily rolling file under the application data directory.</summary>
 [ExcludeFromCodeCoverage]

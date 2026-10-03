@@ -2,7 +2,7 @@
 
 The ViewModel layer is active in `Client` mode only. All ViewModels use CommunityToolkit.Mvvm (`ObservableObject`, `RelayCommand`).
 
-ViewModels and their interfaces live in `Core/src/Internal/ViewModels/` and are themselves Avalonia-agnostic (primitive types, custom interfaces) even though Views, Themes, and Avalonia-specific helpers live in the same `Core` assembly under `Core/src/Internal/Views/` and `Core/src/Internal/Themes/`. The convention scanner auto-registers all `IFoo → Foo` pairs as singletons from the `Core` assembly, except for entry ViewModels (in `BlueHeighliner.Comlink.ViewModels.Entries`) which are constructed with `new()` per-entry using entity arguments and cannot be DI-resolved.
+ViewModels and their interfaces live in `Core/src/Internal/ViewModels/` and are themselves Avalonia-agnostic (primitive types, custom interfaces) even though Views, Themes, and Avalonia-specific helpers live in the same `Core` assembly under `Core/src/Internal/Views/` and `Core/src/Internal/Themes/`. The convention scanner auto-registers all `IFoo → Foo` pairs as singletons from the `Core` assembly, except for entry ViewModels (marked `[ConstructedManually]`) which are constructed with `new()` per-entry using entity arguments and cannot be DI-resolved.
 
 Call `builder.UseEngine(EngineMode.Client).UseEngineUi()` — `UseEngineUi()` (from `EngineUiExtensions`) registers `MainWindow` and overrides the default `IBodyDocumentFactory` with `TextDocumentBodyDocumentFactory` so drafts receive a live `TextDocument`.
 
@@ -89,7 +89,7 @@ Middle-column paginated entry list. Registered as `IEntryBarViewModel → EntryB
 
 **Properties**: `SelectedEntry (EntryItemViewModel?)`, `Entries (ObservableCollection<EntryItemViewModel>)`, `CurrentPage`, `TotalPages`, `IsAlphabeticalSort`, `CanGoNext`, `CanGoPrev`, `ShowSortToggle`, `CanDeleteEntries` — set by `LoadFolder` from `IEngineController.CanDelete(folder.RootType)` (see `Docs/Components/Configuration.md`); drives the visibility of the entry list's right-click "Delete" context menu item. `SearchText (string)`, `ShowSearch (bool)`, `DateFrom (DateTimeOffset?)`, `TimeFrom (TimeSpan?)`, `DateTo (DateTimeOffset?)`, `TimeTo (TimeSpan?)`, `AvailableSecurityLevelFilters (IReadOnlyList<SecurityLevelFilterOption>)`, `SelectedSecurityLevelFilter (SecurityLevelFilterOption)`, `AvailablePriorityFilters (IReadOnlyList<PriorityFilterOption>)`, `SelectedPriorityFilter (PriorityFilterOption)`, `AlertOnlyFilter (bool)`, `AuthorFilter (string)`, `DestinationFilter (string)`, `ShowAuthorFilter (bool)`, `ShowDestinationFilter (bool)`, `ShowSecurityLevelFilter (bool)`, `ShowPriorityFilter (bool)`, `ShowAlertFilter (bool)`, `IsFiltersExpanded (bool)`, `FiltersExpandIndicator (string)`, `ActiveFilterCount (int)`, `HasActiveFilters (bool)`.
 
-Every filter control shares the same behavior: setting it resets `CurrentPage` to 1 and reloads. Internally they combine into one `Services.EntryFilter` (search text, date range, security level, priority, alert-only), built fresh from the current property values and passed to `IEntryService.GetMessages`/`GetDrafts`/`GetNotes`; `null` when every criterion is unset, which skips filtering server-side entirely rather than passing an empty filter through. Since exactly one `EntryFilter` carries every criterion at once, search always runs against the same already-filtered set - it can only narrow what the date range/security level/priority/alert-only criteria already allow, never restore something they exclude. Matching is entry-type-specific: a message matches search on body, sender, destinations, tag, priority label, or security level name, and matches date/security level/priority/alert-only against its own decoded fields; a draft matches search on body or tag and the rest directly against its own stored fields (security level, priority and alert flag all live as plain fields on `DraftEntity`, unlike a message's, which are read through `IEngineController`); a note matches only search (on body text) and date range, since it has no security level, priority, or alert flag.
+Every filter control shares the same behavior: setting it resets `CurrentPage` to 1 and reloads. Internally they combine into one `EntryFilter` (search text, date range, security level, priority, alert-only), built fresh from the current property values and passed to `IEntryService.GetMessages`/`GetDrafts`/`GetNotes`; `null` when every criterion is unset, which skips filtering server-side entirely rather than passing an empty filter through. Since exactly one `EntryFilter` carries every criterion at once, search always runs against the same already-filtered set - it can only narrow what the date range/security level/priority/alert-only criteria already allow, never restore something they exclude. Matching is entry-type-specific: a message matches search on body, sender, destinations, tag, priority label, or security level name, and matches date/security level/priority/alert-only against its own decoded fields; a draft matches search on body or tag and the rest directly against its own stored fields (security level, priority and alert flag all live as plain fields on `DraftEntity`, unlike a message's, which are read through `IEngineController`); a note matches only search (on body text) and date range, since it has no security level, priority, or alert flag.
 
 `DateFrom`/`DateTo` (the calendar date, from a `DatePicker`) and `TimeFrom`/`TimeTo` (the time of day, from a paired `TimePicker`) combine into one exact instant per bound: `DateFrom.Date + (TimeFrom ?? midnight)`, `DateTo.Date + (TimeTo ?? 23:59:59.999)`. Picking only a date and leaving its time unset therefore still covers that entire calendar day, while an explicit time narrows the bound to that instant; either combined value is `null` when no date is set, regardless of whether a time is. `EntryFilter.DateFrom`/`DateTo` themselves are exact instants with no special "whole day" handling - that convenience lives here, not in `IEntryService`. Every picker shows dates as `DD MMM YYYY` with an uppercase month and times as 24 hour `HH mm` with no AM/PM, all zero padded, with each cell centered and the control able to shrink to the narrow column; the theme sets the picker formats and `PickerFormatting` (applied with the styles) supplies what properties cannot: uppercase month names for the current culture, zero padded hours, and centered flyout items.
 
@@ -165,7 +165,7 @@ Editable draft with fill-in support. Constructed with `new DraftViewModel(entity
 
 `PlsoMode` is editor-session-only UI state, cycled by the "PLSO" button (`OFF` → `ON` → `SPACES` → `OFF`, `PlsoButtonText` displays the current state) in `DraftEditor.axaml`'s toolbar — never read from or written to `DraftEntity`, so it resets to `PlsoMode.Off` whenever a draft is reopened.
 
-**IBodyDocument** — framework-agnostic body document abstraction in `Engine.ViewModels.Entries`. `BodyDocumentFactory` provides the default `StringBodyDocument` (plain string, used in tests and Headless mode). `TextDocumentBodyDocumentFactory` provides `TextDocumentBodyDocument` (wraps AvaloniaEdit's `TextDocument`) for Client mode. `DraftEditor.axaml.cs` casts to `TextDocumentBodyDocument` to bind the editor. `IBodyDocumentFactory` controls which implementation is created; `UseEngineUi()` overrides the default with `TextDocumentBodyDocumentFactory`.
+**IBodyDocument** — framework-agnostic body document abstraction in `Core/src/Internal/ViewModels/Entries/`. `BodyDocumentFactory` provides the default `StringBodyDocument` (plain string, used in tests and Headless mode). `TextDocumentBodyDocumentFactory` provides `TextDocumentBodyDocument` (wraps AvaloniaEdit's `TextDocument`) for Client mode. `DraftEditor.axaml.cs` casts to `TextDocumentBodyDocument` to bind the editor. `IBodyDocumentFactory` controls which implementation is created; `UseEngineUi()` overrides the default with `TextDocumentBodyDocumentFactory`.
 
 **Events**: `DraftSent (Func<IDraftViewModel, MessageEntity, Task>)`; `Deleted (Func<Task>)`.
 
@@ -384,7 +384,7 @@ The two title bar buttons live in `TitleBar`, immediately left of the window con
 ## IConnectionStatusViewModel / ConnectionStatusViewModel
 
 Drives the connection status display described above: `MainViewModel.ConnectionStatus`'s two row
-collections, split by `Peer.PeerConnectionKind` — one per configured peer connection. Registered as
+collections, split by `PeerConnectionKind` — one per configured peer connection. Registered as
 `IConnectionStatusViewModel → ConnectionStatusViewModel` singleton (`ConnectionStatusViewModel` itself is
 `internal` — only the interface is `public`, since it is exposed through `IMainViewModel.ConnectionStatus`);
 like `PrintManagerViewModel`, it does real work regardless of whether it is currently shown, subscribing
@@ -396,12 +396,12 @@ directly in its constructor.
 - `HasServerRows`/`HasClientRows (bool)` — `true` while the corresponding collection is non-empty; `MainWindow.axaml` binds each table's visibility to these, so a table with nothing to show (e.g. a server configured with no children) is hidden outright rather than rendered empty.
 
 Both collections are rebuilt from scratch (clear, then re-add, split by `status.Kind`) every time the
-underlying `Peer.IConnectionStatusService.StatusesChanged` fires, from that same service's `GetStatuses()`
+underlying `IConnectionStatusService.StatusesChanged` fires, from that same service's `GetStatuses()`
 snapshot — always marshaled onto the UI thread first (`Dispatcher.UIThread`), since `StatusesChanged` can
 fire from a background connection thread but these collections are bound to a live Avalonia `ItemsControl`.
-`Peer.IConnectionStatusService` is registered per `UserRole` (see `Docs/Components/Peer.md#user-roles`): for
+`IConnectionStatusService` is registered per `UserRole` (see `Docs/Components/Peer.md#user-roles`): for
 `UserRole.Client`, `ClientPeerService` itself implements it; for `UserRole.Server`, `ServerRoutingService`
-itself implements it; for `UserRole.Peer`, `Peer.NullConnectionStatusService` is registered instead (always
+itself implements it; for `UserRole.Peer`, `NullConnectionStatusService` is registered instead (always
 an empty list), since peer-to-peer connections are not configured, long-term links worth showing a status
 row for.
 

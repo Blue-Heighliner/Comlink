@@ -1,4 +1,4 @@
-namespace BlueHeighliner.Comlink.Views.Controls;
+namespace BlueHeighliner.Comlink;
 
 /// <summary>User control that hosts the active entry view or the home screen.</summary>
 [ExcludeFromCodeCoverage]

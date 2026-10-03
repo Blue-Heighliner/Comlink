@@ -1,4 +1,4 @@
-namespace BlueHeighliner.Comlink.Control;
+namespace BlueHeighliner.Comlink;
 
 /// <summary>The engine-side form of a frame mapping: every accessor takes the frame as an <see cref="object"/>, since the engine works with the host's frame type only through <see cref="IEngineController"/>.</summary>
 internal sealed class FrameMap

@@ -1,4 +1,4 @@
-namespace BlueHeighliner.Comlink.ViewModels.Entries;
+namespace BlueHeighliner.Comlink;
 
 /// <summary>
 /// Two-press confirmation for deleting an entry from its editor: the first <see cref="Confirm"/> arms it, and a second

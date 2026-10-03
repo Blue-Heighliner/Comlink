@@ -1,4 +1,4 @@
-namespace BlueHeighliner.Comlink.Models;
+namespace BlueHeighliner.Comlink;
 
 /// <summary>Everything the engine knows about one user: who they are and, for a user that runs a node, how that node takes part in the network.</summary>
 public sealed record UserInfo

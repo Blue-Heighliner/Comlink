@@ -1,4 +1,4 @@
-namespace BlueHeighliner.Comlink.Services;
+namespace BlueHeighliner.Comlink;
 
 /// <summary>Request payload for routing a message to one or more addressed users via <see cref="IMessageRoutingService.Route"/>.</summary>
 internal sealed class SendMessagePayload
@@ -7,13 +7,13 @@ internal sealed class SendMessagePayload
     public string Body { get; set; } = string.Empty;
     /// <summary>List of recipient addresses for this message.</summary>
     public List<AddressPayload> Addresses { get; set; } = [];
-    /// <summary>Whether this message is an alert; see <see cref="Control.IEngineController.GetIsAlert"/>.</summary>
+    /// <summary>Whether this message is an alert; see <see cref="IEngineController.GetIsAlert"/>.</summary>
     public bool IsAlert { get; set; }
-    /// <summary>Priority number of this message; see <see cref="Control.IEngineController.GetPriority"/>.</summary>
+    /// <summary>Priority number of this message; see <see cref="IEngineController.GetPriority"/>.</summary>
     public int Priority { get; set; }
-    /// <summary>Tag identifying the type of this message; see <see cref="Control.IEngineController.GetTag"/>.</summary>
+    /// <summary>Tag identifying the type of this message; see <see cref="IEngineController.GetTag"/>.</summary>
     public string Tag { get; set; } = string.Empty;
-    /// <summary>Security level name this message is sent at; see <see cref="Control.IEngineController.GetSecurityLevel"/>.</summary>
+    /// <summary>Security level name this message is sent at; see <see cref="IEngineController.GetSecurityLevel"/>.</summary>
     public string SecurityLevel { get; set; } = string.Empty;
 }
 

@@ -68,13 +68,12 @@ internal static class EngineExtensions
             {
                 continue;
             }
-            // Exclude entry ViewModels: constructed with new() using entity arguments, not resolvable from DI
-            if (type.Namespace == "BlueHeighliner.Comlink.ViewModels.Entries")
+            if (type.IsDefined(typeof(ConstructedManuallyAttribute), false))
             {
                 continue;
             }
             Type? iface = type.GetInterfaces()
-                .FirstOrDefault(i => i.Name == $"I{type.Name}" && i.Namespace == type.Namespace);
+                .FirstOrDefault(i => i.Name == $"I{type.Name}");
             if (iface is null)
             {
                 continue;

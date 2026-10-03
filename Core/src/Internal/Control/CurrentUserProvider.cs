@@ -1,4 +1,4 @@
-namespace BlueHeighliner.Comlink.Control;
+namespace BlueHeighliner.Comlink;
 
 /// <summary>Exposes the mutable user name of the currently running instance.</summary>
 internal interface ICurrentUserProvider

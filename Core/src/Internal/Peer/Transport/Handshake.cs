@@ -1,4 +1,4 @@
-namespace BlueHeighliner.Comlink.Peer.Transport;
+namespace BlueHeighliner.Comlink;
 
 /// <summary>
 /// One initial exchange a <see cref="HandshakePeerTransport"/> carries out on a new connection: a host's processor, told when the connection forms and given

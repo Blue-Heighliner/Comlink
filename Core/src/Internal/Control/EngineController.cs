@@ -1,4 +1,4 @@
-namespace BlueHeighliner.Comlink.Control;
+namespace BlueHeighliner.Comlink;
 
 /// <summary>
 /// Single control interface consolidating every extension point through which a host application
@@ -9,8 +9,8 @@ namespace BlueHeighliner.Comlink.Control;
 /// topology, the points this node connects out to, how the user on the other end of a connection is identified
 /// (optionally after an initial packet and message exchange), the external systems this instance communicates with, the
 /// hooks run on connection and message activity, and whether command-line arguments may override the network configuration file and user. External drive discovery and printer discovery/driving are real
-/// OS-level behavior, not configuration or rules, so they live on <see cref="Devices.IExternalDriveProvider"/>
-/// and <see cref="Devices.IPrintDriver"/> instead. See <c>Docs/Components/Configuration.md</c>.
+/// OS-level behavior, not configuration or rules, so they live on <see cref="IExternalDriveProvider"/>
+/// and <see cref="IPrintDriver"/> instead. See <c>Docs/Components/Configuration.md</c>.
 /// </summary>
 internal interface IEngineController
 {
@@ -160,7 +160,7 @@ internal interface IEngineController
     string GetUserSecurityLevel(string userName);
 
     /// <summary>
-    /// When <see langword="true"/>, the print manager's "print received" toggle (<see cref="ViewModels.IPrintManagerViewModel.PrintReceivedEnabled"/>)
+    /// When <see langword="true"/>, the print manager's "print received" toggle (<see cref="IPrintManagerViewModel.PrintReceivedEnabled"/>)
     /// starts enabled, so every received message is automatically added to the print queue from the moment
     /// the app starts. The user can still toggle it off at any time.
     /// </summary>
@@ -300,10 +300,17 @@ internal interface IEngineController
     bool GetIsAlert(object frame);
     /// <summary>
     /// Gets the priority number of <paramref name="frame"/>. One of the values returned by
-    /// <see cref="Priorities"/>: a message's own, or for a retrieval request or receipt the priority its handler names; used verbatim as the MSMT send priority (larger values are sent first —
-    /// see <c>Docs/Components/Peer.md</c>) whenever this frame is sent over an MSMT connection.
+    /// <see cref="Priorities"/>: a message's own (brought within the configured levels by <see cref="ResolvePriority"/>), or for a retrieval request or receipt the priority its handler names; used as the send priority (larger values are sent first —
+    /// see <c>Docs/Components/Peer.md</c>) whenever this frame is sent.
     /// </summary>
     int GetPriority(object frame);
+    /// <summary>Gets the lowest priority anything is sent with, <c>0</c>: the first configured level, and the only one when none are configured. Used for traffic that should yield to everything else, such as heartbeats.</summary>
+    int LowestPriority { get; }
+    /// <summary>Gets the highest priority anything is sent with: that of the last configured level, or <c>0</c> when none are configured. Used for traffic that must not wait behind anything else, such as the exchange that identifies a connection.</summary>
+    int HighestPriority { get; }
+    /// <summary>Brings <paramref name="priority"/> within the configured levels, from <see cref="LowestPriority"/> to <see cref="HighestPriority"/>, so nothing is ever sent with a priority the configuration does not define.</summary>
+    /// <param name="priority">The priority to bring within range.</param>
+    int ResolvePriority(int priority);
     /// <summary>
     /// Gets the short, user-inputted tag identifying the type of message this frame is, or an empty string if
     /// none was set. See <see cref="BlockedCombinations"/>.
@@ -374,7 +381,7 @@ internal interface IEngineController
 
     /// <summary>
     /// Returns whether the user can delete entries in the given root folder type. Consulted by
-    /// <see cref="ViewModels.IEntryBarViewModel.DeleteEntry"/> before deleting; when <see langword="false"/>,
+    /// <see cref="IEntryBarViewModel.DeleteEntry"/> before deleting; when <see langword="false"/>,
     /// the delete is silently skipped.
     /// </summary>
     /// <param name="folderType">The root folder type the entry being deleted belongs to.</param>
@@ -661,9 +668,10 @@ internal class EngineController(EngineBuilder builder, ICurrentUserProvider curr
         }
     }
 
-    private int PriorityValue(string name)
-        => Priorities.FirstOrDefault(priority => string.Equals(priority.Name, name, StringComparison.OrdinalIgnoreCase))?.Value
-            ?? throw new InvalidOperationException($"A handler names the priority '{name}', which is not one of the configured priorities: {string.Join(", ", Priorities.Select(priority => priority.Name))}");
+    private int PriorityValue(Enum key)
+        => builder.PriorityOptions.Count == 0 ? 0
+        : Priorities.FirstOrDefault(priority => key.Equals(priority.Key))?.Value
+            ?? throw new InvalidOperationException($"A priority of {key.GetType().Name}.{key} is used, which is not one of the configured priorities: {string.Join(", ", Priorities.Select(priority => priority.Name))}");
 
     private ServerUserConfig BuildServerConfig(UserInfo server)
         => new()
@@ -721,14 +729,20 @@ internal class EngineController(EngineBuilder builder, ICurrentUserProvider curr
     /// <inheritdoc />
     public virtual bool IsMessage(object value) => messageHandler.Value.IsValid(value);
     /// <inheritdoc />
-    public virtual object CreateMessage(MessageCreateContext context) => messageHandler.Value.Create(context);
+    public virtual object CreateMessage(MessageCreateContext context) => messageHandler.Value.Create(context with { Priority = ResolvePriority(context.Priority) });
     /// <inheritdoc />
     public virtual string GetBody(object value) => messageHandler.Value.GetBody(value);
     /// <inheritdoc />
     public virtual bool GetIsAlert(object value) => messageHandler.Value.GetIsAlert(value);
     /// <inheritdoc />
+    public virtual int LowestPriority => 0;
+    /// <inheritdoc />
+    public virtual int HighestPriority => Priorities.Max(priority => priority.Value);
+    /// <inheritdoc />
+    public virtual int ResolvePriority(int priority) => Math.Clamp(priority, LowestPriority, HighestPriority);
+    /// <inheritdoc />
     public virtual int GetPriority(object value)
-        => IsMessage(value) ? messageHandler.Value.GetPriority(value)
+        => IsMessage(value) ? ResolvePriority(messageHandler.Value.GetPriority(value))
         : IsRetrieval(value) ? PriorityValue(retrievalHandler.Value.Priority)
         : IsReadReceipt(value) ? PriorityValue(readReceiptHandler.Value.Priority)
         : IsReceiveReceipt(value) ? PriorityValue(receiveReceiptHandler.Value.Priority)

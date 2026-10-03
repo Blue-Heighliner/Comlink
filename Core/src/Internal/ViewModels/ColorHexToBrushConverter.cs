@@ -1,4 +1,4 @@
-namespace BlueHeighliner.Comlink.ViewModels;
+namespace BlueHeighliner.Comlink;
 
 /// <summary>Converts a hex color string (e.g., <c>"#98C379"</c>) to a <see cref="SolidColorBrush"/>.</summary>
 [ExcludeFromCodeCoverage]

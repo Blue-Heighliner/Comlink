@@ -1,4 +1,4 @@
-namespace BlueHeighliner.Comlink.Peer;
+namespace BlueHeighliner.Comlink;
 
 /// <summary>Reassembles the packets one remote sender sent into whole payloads. Packets may arrive in any order and interleaved with the packets of other payloads, and <see cref="Add"/> may be called concurrently.</summary>
 internal interface IPacketAssembler : IDisposable

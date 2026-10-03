@@ -74,4 +74,7 @@ internal class TestEngineController : EngineController
         : base(EngineBuilder.Build(new TestEngineConfiguration()), new CurrentUserProvider(), network)
     {
     }
+
+    /// <summary>Gets ten priority levels, so tests may use any priority from 0 to 9 without it being brought within range.</summary>
+    public override IReadOnlyList<MessagePriorityOption> Priorities { get; } = [.. Enumerable.Range(0, 10).Select(value => new MessagePriorityOption { Name = value == 0 ? "NORMAL" : $"LEVEL{value}", Value = value })];
 }

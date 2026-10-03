@@ -1,9 +1,9 @@
-namespace BlueHeighliner.Comlink.Devices;
+namespace BlueHeighliner.Comlink;
 
 /// <summary>
 /// Discovers printers and drives raw line printing via the operating system's own printing facilities —
 /// Windows Print Spooler (WinSpool) on Windows, CUPS (<c>lp</c>/<c>lpstat</c>) on Linux. This is real
-/// OS-level behavior, not configuration or rules, so it does not live on <see cref="Control.IEngineController"/>
+/// OS-level behavior, not configuration or rules, so it does not live on <see cref="IEngineController"/>
 /// and is not registered/overridable the way control interfaces are — Engine always provides real behavior
 /// for it directly, the same way it always provides real behavior for alarm sound playback (see
 /// <see cref="IAlertSoundPlayer"/>). Printer discovery is best-effort (see <see cref="GetAvailablePrinters"/>);

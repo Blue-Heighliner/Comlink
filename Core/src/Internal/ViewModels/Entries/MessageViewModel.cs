@@ -1,4 +1,4 @@
-namespace BlueHeighliner.Comlink.ViewModels.Entries;
+namespace BlueHeighliner.Comlink;
 
 /// <summary>ViewModel interface for displaying a received or sent message and its per-user delivery statuses.</summary>
 internal interface IMessageViewModel
@@ -89,6 +89,7 @@ internal sealed partial class DeliveryStatusRow : ObservableObject
 }
 
 /// <summary>ViewModel for displaying a received or sent message and its per-user delivery statuses.</summary>
+[ConstructedManually]
 internal sealed partial class MessageViewModel : ObservableObject, IMessageViewModel
 {
     private static string Describe(List<MessageAddress> addresses, AddressType type)

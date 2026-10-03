@@ -1,7 +1,7 @@
-namespace BlueHeighliner.Comlink.Views.Controls;
+namespace BlueHeighliner.Comlink;
 
 /// <summary>
-/// Displays one row of a <see cref="ViewModels.ConnectionRowViewModel"/>: user name, UP/DN status, and
+/// Displays one row of a <see cref="ConnectionRowViewModel"/>: user name, UP/DN status, and
 /// last-connected/last-disconnected timestamps, with the row background colored by connection status.
 /// Used both for each row of the Server mode connections table and for the single row pinned to the bottom
 /// of the window in Client mode.

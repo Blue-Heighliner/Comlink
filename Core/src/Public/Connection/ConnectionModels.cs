@@ -1,4 +1,4 @@
-namespace BlueHeighliner.Comlink.Services;
+namespace BlueHeighliner.Comlink;
 
 /// <summary>Data carried by the message-received event raised when a peer delivers an inbound message.</summary>
 public sealed class MessageReceivedEvent

@@ -1,4 +1,4 @@
-namespace BlueHeighliner.Comlink.ExternalSystems;
+namespace BlueHeighliner.Comlink;
 
 /// <summary>
 /// A conduit between this system and one external system outside Comlink — not generic over the frame

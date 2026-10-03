@@ -1,4 +1,4 @@
-namespace BlueHeighliner.Comlink.Data.Repositories;
+namespace BlueHeighliner.Comlink;
 
 /// <summary>Provides data-access operations for a storage server's <see cref="StoredMessageEntity"/> documents.</summary>
 internal interface IStoredMessageRepository

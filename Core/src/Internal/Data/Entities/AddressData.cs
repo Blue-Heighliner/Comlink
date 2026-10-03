@@ -1,4 +1,4 @@
-namespace BlueHeighliner.Comlink.Data.Entities;
+namespace BlueHeighliner.Comlink;
 
 /// <summary>Persisted address entry on a message or draft, recording a recipient user and address type.</summary>
 internal sealed class AddressData

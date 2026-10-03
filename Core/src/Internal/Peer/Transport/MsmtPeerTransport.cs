@@ -1,4 +1,4 @@
-namespace BlueHeighliner.Comlink.Peer.Transport;
+namespace BlueHeighliner.Comlink;
 
 /// <summary>
 /// The IP half of the peer transport: adapts an <see cref="IMsmtSessionPeer"/> (mutually authenticated TLS

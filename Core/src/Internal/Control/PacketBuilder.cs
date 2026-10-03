@@ -1,4 +1,4 @@
-namespace BlueHeighliner.Comlink.Control;
+namespace BlueHeighliner.Comlink;
 
 /// <summary>Implements <see cref="IPacketBuilder{TPacket}"/>, collecting the mappings and turning them into a <see cref="PacketMap"/>.</summary>
 internal sealed class PacketBuilder<TPacket> : IPacketBuilder<TPacket> where TPacket : class, new()

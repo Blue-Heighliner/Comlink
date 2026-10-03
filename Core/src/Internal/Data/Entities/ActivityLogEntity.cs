@@ -1,4 +1,4 @@
-namespace BlueHeighliner.Comlink.Data.Entities;
+namespace BlueHeighliner.Comlink;
 
 /// <summary>LiteDB document representing a single day's activity log.</summary>
 internal sealed class ActivityLogEntity

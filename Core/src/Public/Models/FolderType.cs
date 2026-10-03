@@ -1,4 +1,4 @@
-namespace BlueHeighliner.Comlink.Data;
+namespace BlueHeighliner.Comlink;
 
 /// <summary>Identifies the content category that a root folder holds.</summary>
 public enum FolderType

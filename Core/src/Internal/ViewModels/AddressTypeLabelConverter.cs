@@ -1,4 +1,4 @@
-namespace BlueHeighliner.Comlink.ViewModels;
+namespace BlueHeighliner.Comlink;
 
 /// <summary>
 /// Converts an address's stored canonical type name (<c>"To"</c>, <c>"Cc"</c> or <c>"External"</c>) and the current

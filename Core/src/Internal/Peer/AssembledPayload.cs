@@ -1,4 +1,4 @@
-namespace BlueHeighliner.Comlink.Peer;
+namespace BlueHeighliner.Comlink;
 
 /// <summary>A payload an <see cref="IPacketAssembler"/> has put back together, with the first packet that carried it.</summary>
 /// <param name="Payload">The complete payload, which the owner must dispose.</param>

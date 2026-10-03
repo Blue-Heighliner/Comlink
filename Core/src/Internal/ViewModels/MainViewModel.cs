@@ -1,4 +1,4 @@
-namespace BlueHeighliner.Comlink.ViewModels;
+namespace BlueHeighliner.Comlink;
 
 /// <summary>ViewModel interface for the main application window.</summary>
 internal interface IMainViewModel
@@ -9,7 +9,7 @@ internal interface IMainViewModel
     bool IsKioskMode { get; set; }
     /// <summary>Gets or sets the local user name displayed in the title bar.</summary>
     string UserName { get; set; }
-    /// <summary>Gets or sets the current user's security level name displayed in the title bar banner; see <see cref="Control.IEngineController.GetUserSecurityLevel"/>.</summary>
+    /// <summary>Gets or sets the current user's security level name displayed in the title bar banner; see <see cref="IEngineController.GetUserSecurityLevel"/>.</summary>
     string SecurityLevelName { get; set; }
     /// <summary>Gets or sets the current user's security level accent color as a hex string.</summary>
     string SecurityLevelColor { get; set; }
@@ -382,7 +382,7 @@ internal sealed partial class MainViewModel : ObservableObject, IMainViewModel
 
             MessageEntity entity = await entryService.StoreIncomingMessage(
                 evt.MessageId, evt.FromUser, evt.Body,
-                evt.Addresses.Select(a => new Data.Entities.AddressData { UserName = a.UserName, Type = a.Type, Information = a.Information }).ToList(),
+                evt.Addresses.Select(a => new AddressData { UserName = a.UserName, Type = a.Type, Information = a.Information }).ToList(),
                 evt.SentAt, evt.IsAlert, evt.Priority, evt.Tag, evt.SecurityLevel);
 
             FolderItemViewModel? inboxFolder = folderBar.RootFolders.FirstOrDefault(f => f.RootType == FolderType.Inbox);
@@ -483,10 +483,10 @@ internal sealed partial class MainViewModel : ObservableObject, IMainViewModel
         DraftEntity entity = await entryService.CreateDraft();
         List<string> userNames = await connection.GetUserNames();
         string currentSecurityLevel = engineController.GetUserSecurityLevel(currentUserProvider.UserName ?? string.Empty);
-        Entries.DraftViewModel vm = new(entity, entryService, connection, userNames, loggerFactory, engineController, bodyDocumentFactory.Create(), currentSecurityLevel: currentSecurityLevel);
+        DraftViewModel vm = new(entity, entryService, connection, userNames, loggerFactory, engineController, bodyDocumentFactory.Create(), currentSecurityLevel: currentSecurityLevel);
         vm.DraftSent += async (IDraftViewModel _, MessageEntity msg) =>
         {
-            contentArea.ShowEntry(new Entries.MessageViewModel(msg, engineController));
+            contentArea.ShowEntry(new MessageViewModel(msg, engineController));
             await HandleDraftSent(msg);
         };
         vm.Deleted += HandleEntryDeleted;
@@ -497,7 +497,7 @@ internal sealed partial class MainViewModel : ObservableObject, IMainViewModel
     private async Task CreateNote()
     {
         NoteEntity entity = await entryService.CreateNote();
-        Entries.NoteViewModel vm = new(entity, entryService, engineController.CanDelete(FolderType.Notes));
+        NoteViewModel vm = new(entity, entryService, engineController.CanDelete(FolderType.Notes));
         vm.Deleted += HandleEntryDeleted;
         contentArea.ShowEntry(vm);
     }

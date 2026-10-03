@@ -1,4 +1,4 @@
-namespace BlueHeighliner.Comlink.ViewModels;
+namespace BlueHeighliner.Comlink;
 
 /// <summary>ViewModel interface for the main content area that displays the active entry or home screen.</summary>
 internal interface IContentAreaViewModel

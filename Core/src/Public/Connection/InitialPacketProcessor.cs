@@ -1,4 +1,4 @@
-namespace BlueHeighliner.Comlink.Control;
+namespace BlueHeighliner.Comlink;
 
 /// <summary>
 /// Carries out an initial packet exchange on every new connection, so nodes can introduce themselves with packets, beneath the packetizer and before any initial message exchange: the host decides what to send, what

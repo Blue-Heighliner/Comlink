@@ -1,4 +1,4 @@
-namespace BlueHeighliner.Comlink.ViewModels;
+namespace BlueHeighliner.Comlink;
 
 /// <summary>ViewModel interface for the entry list panel.</summary>
 internal interface IEntryBarViewModel
@@ -28,7 +28,7 @@ internal interface IEntryBarViewModel
     bool CanDeleteEntries { get; set; }
     /// <summary>
     /// Gets or sets the search text filtering the current folder's entries, matched case-insensitively against
-    /// fields specific to each entry type (see <see cref="Services.IEntryService.GetMessages"/>). Setting it resets
+    /// fields specific to each entry type (see <see cref="IEntryService.GetMessages"/>). Setting it resets
     /// to the first page and reloads. Empty (the default) shows every entry, unfiltered.
     /// </summary>
     string SearchText { get; set; }
@@ -70,7 +70,7 @@ internal interface IEntryBarViewModel
     /// Gets or sets a value indicating whether the collapsible filter section (date range, author/destination, security level,
     /// priority, alert-only) is expanded. Collapsed by default. Collapsing only hides the controls - it never clears or disables
     /// the filters themselves, so search continues to run against the same already-filtered set either way; see
-    /// <see cref="Services.EntryFilter"/>.
+    /// <see cref="EntryFilter"/>.
     /// </summary>
     bool IsFiltersExpanded { get; set; }
     /// <summary>Gets the expand/collapse indicator glyph for the filter section.</summary>
@@ -185,7 +185,7 @@ internal sealed partial class EntryBarViewModel : ObservableObject, IEntryBarVie
     /// <summary>The last instant of a day (23:59:59.999), paired with an unset <see cref="TimeTo"/> so picking only a date still covers that whole day.</summary>
     private readonly TimeSpan endOfDay = new(0, 23, 59, 59, 999);
 
-    /// <summary>The search text normalized for <see cref="Services.IEntryService"/> calls: <see langword="null"/> (no filtering) rather than empty or whitespace-only.</summary>
+    /// <summary>The search text normalized for <see cref="IEntryService"/> calls: <see langword="null"/> (no filtering) rather than empty or whitespace-only.</summary>
     private string? Search => string.IsNullOrWhiteSpace(SearchText) ? null : SearchText;
 
     /// <summary><see cref="DateFrom"/> combined with <see cref="TimeFrom"/> (defaulting to midnight) into one instant, or <see langword="null"/> when no date is set.</summary>

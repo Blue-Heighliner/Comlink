@@ -1,4 +1,4 @@
-namespace BlueHeighliner.Comlink.ViewModels.Entries;
+namespace BlueHeighliner.Comlink;
 
 /// <summary>ViewModel interface for a daily activity log entry.</summary>
 internal interface IActivityLogViewModel
@@ -26,6 +26,7 @@ internal sealed class ActivityEventRow
 }
 
 /// <summary>ViewModel for an activity log entry, exposing a date and an ordered list of event rows.</summary>
+[ConstructedManually]
 internal sealed partial class ActivityLogViewModel : ObservableObject, IActivityLogViewModel
 {
     /// <summary>Initializes the ViewModel from the given entity, merging legacy and structured event data.</summary>

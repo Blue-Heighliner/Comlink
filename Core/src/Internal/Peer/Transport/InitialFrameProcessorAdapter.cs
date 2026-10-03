@@ -1,4 +1,4 @@
-namespace BlueHeighliner.Comlink.Peer.Transport;
+namespace BlueHeighliner.Comlink;
 
 /// <summary>Presents a host's <see cref="IInitialFrameProcessor{TFrame}"/> as an <see cref="IInitialProcessor"/>.</summary>
 /// <typeparam name="TFrame">The host's frame type.</typeparam>

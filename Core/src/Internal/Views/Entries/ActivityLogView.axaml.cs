@@ -1,4 +1,4 @@
-namespace BlueHeighliner.Comlink.Views.Entries;
+namespace BlueHeighliner.Comlink;
 
 /// <summary>User control that displays an activity log entry with its event list.</summary>
 [ExcludeFromCodeCoverage]

@@ -1,4 +1,4 @@
-namespace BlueHeighliner.Comlink.Peer;
+namespace BlueHeighliner.Comlink;
 
 /// <summary>
 /// Keeps the set of outgoing points a service maintains connections to in line with the configuration as it changes: a point that is newly defined gets a

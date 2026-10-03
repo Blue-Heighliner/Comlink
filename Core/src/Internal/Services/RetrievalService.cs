@@ -1,4 +1,4 @@
-namespace BlueHeighliner.Comlink.Services;
+namespace BlueHeighliner.Comlink;
 
 /// <summary>Asks a storage server (see <see cref="UserInfo.StoresMessages"/>) for copies of the messages it stored that fit some criteria.</summary>
 internal interface IRetrievalService

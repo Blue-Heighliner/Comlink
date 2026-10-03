@@ -1,4 +1,4 @@
-namespace BlueHeighliner.Comlink.Peer;
+namespace BlueHeighliner.Comlink;
 
 /// <summary>
 /// Shared fire-and-forget dispatch for <see cref="IPeerService.UserConnected"/>/<see cref="IPeerService.UserDisconnected"/>:

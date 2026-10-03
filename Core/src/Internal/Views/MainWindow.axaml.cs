@@ -1,4 +1,4 @@
-namespace BlueHeighliner.Comlink.Views;
+namespace BlueHeighliner.Comlink;
 
 /// <summary>The application's main window, wired to <see cref="MainViewModel"/> and maximized on load.</summary>
 [ExcludeFromCodeCoverage]

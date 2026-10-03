@@ -1,4 +1,4 @@
-namespace BlueHeighliner.Comlink.Services;
+namespace BlueHeighliner.Comlink;
 
 /// <summary>The engine's view of a host's <see cref="INetworkProcessor{TFrame}"/>, with messages as plain objects since the engine does not know the host's type at compile time.</summary>
 internal interface INetworkHandler

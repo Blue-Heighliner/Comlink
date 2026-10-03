@@ -1,4 +1,4 @@
-namespace BlueHeighliner.Comlink.Views.Controls;
+namespace BlueHeighliner.Comlink;
 
 /// <summary>Modal dialog that asks the user to confirm an action; closes with <see langword="true"/> only when confirmed.</summary>
 [ExcludeFromCodeCoverage]

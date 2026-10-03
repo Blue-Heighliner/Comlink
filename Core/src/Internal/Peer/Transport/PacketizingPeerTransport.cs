@@ -1,4 +1,4 @@
-namespace BlueHeighliner.Comlink.Peer.Transport;
+namespace BlueHeighliner.Comlink;
 
 /// <summary>
 /// Wraps another <see cref="IPeerTransport"/> so that payloads travel as the prioritized packets an <see cref="IPacketizer"/>

@@ -1,4 +1,4 @@
-namespace BlueHeighliner.Comlink.Services;
+namespace BlueHeighliner.Comlink;
 
 /// <summary>Lists export packages on a drive and restores their entries into the local database.</summary>
 internal interface IImportService

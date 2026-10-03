@@ -1,4 +1,4 @@
-namespace BlueHeighliner.Comlink.Views;
+namespace BlueHeighliner.Comlink;
 
 /// <summary>The help window: a tabbed guide to using the application, driven by <see cref="IHelpViewModel"/>.</summary>
 [ExcludeFromCodeCoverage]

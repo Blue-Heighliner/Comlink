@@ -1,4 +1,4 @@
-namespace BlueHeighliner.Comlink.ViewModels;
+namespace BlueHeighliner.Comlink;
 
 /// <summary>
 /// ViewModel for the export screen: choosing a destination drive, a package file name, a format, and either all

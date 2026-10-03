@@ -1,4 +1,4 @@
-namespace BlueHeighliner.Comlink.Views.Entries;
+namespace BlueHeighliner.Comlink;
 
 /// <summary>User control that displays a received or sent message with its delivery status.</summary>
 [ExcludeFromCodeCoverage]

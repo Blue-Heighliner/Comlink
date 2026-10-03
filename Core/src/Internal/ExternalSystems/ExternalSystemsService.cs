@@ -1,11 +1,11 @@
-namespace BlueHeighliner.Comlink.ExternalSystems;
+namespace BlueHeighliner.Comlink;
 
 /// <summary>
-/// Coordinates every configured <see cref="IExternalSystem"/> (see <see cref="Control.IEngineController.ExternalSystems"/>):
+/// Coordinates every configured <see cref="IExternalSystem"/> (see <see cref="IEngineController.ExternalSystems"/>):
 /// runs each one's own connect/poll/disconnect lifecycle, routes every message the app receives (from a
 /// peer, or from any other external system) out to other external systems, and processes every message
 /// received from an external system exactly like an ordinary received message — see
-/// <c>Docs/Components/ExternalSystems.md</c>. When <see cref="Control.IEngineController.ExternalServer"/> is set, a
+/// <c>Docs/Components/ExternalSystems.md</c>. When <see cref="IEngineController.ExternalServer"/> is set, a
 /// message not received from it is instead sent exclusively to it; a message received from it is routed
 /// to every other external system exactly as it would be without one configured.
 /// </summary>

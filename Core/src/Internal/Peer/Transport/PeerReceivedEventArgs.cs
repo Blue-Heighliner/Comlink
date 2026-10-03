@@ -1,4 +1,4 @@
-namespace BlueHeighliner.Comlink.Peer.Transport;
+namespace BlueHeighliner.Comlink;
 
 /// <summary>Published for every message received on any connection. The message is acknowledged to the sender once every subscriber has returned.</summary>
 internal sealed record PeerReceivedEventArgs

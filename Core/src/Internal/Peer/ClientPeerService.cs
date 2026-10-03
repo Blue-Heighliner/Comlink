@@ -1,4 +1,4 @@
-namespace BlueHeighliner.Comlink.Peer;
+namespace BlueHeighliner.Comlink;
 
 /// <summary>
 /// Implements <see cref="IPeerService"/> for <see cref="UserRole.Client"/>: sends every outbound message
@@ -236,7 +236,7 @@ internal sealed class ClientPeerService : IPeerService, IConnectionStatusService
         try
         {
             using IMemoryOwner<byte> buf = engineController.PacketSerializer!.Serialize(packet, null);
-            return await transport.Request(connection, buf.Memory, new PeerSendOptions { Priority = 0 }, cancellation);
+            return await transport.Request(connection, buf.Memory, new PeerSendOptions { Priority = engineController.LowestPriority }, cancellation);
         }
         catch
         {

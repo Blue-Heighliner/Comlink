@@ -1,4 +1,4 @@
-namespace BlueHeighliner.Comlink.Control;
+namespace BlueHeighliner.Comlink;
 
 /// <summary>
 /// Turns a property or field access such as <c>m => m.Id</c> into the getter and setter pair the message and packet

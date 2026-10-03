@@ -1,4 +1,4 @@
-namespace BlueHeighliner.Comlink.Peer;
+namespace BlueHeighliner.Comlink;
 
 /// <summary>
 /// Proactively opens, and continuously maintains, the connection to one of this node's outgoing
@@ -62,7 +62,7 @@ internal sealed class PeerConnectionMonitor(IEngineController engineController, 
                     object frame = Heartbeat();
                     byte[] heartbeat;
                     using (IMemoryOwner<byte> owner = engineController.FrameSerializer.Serialize(frame)) { heartbeat = owner.Memory.ToArray(); }
-                    connected = await transport.Request(connection, heartbeat, new PeerSendOptions { Priority = int.MinValue, Frame = frame }, cancellation);
+                    connected = await transport.Request(connection, heartbeat, new PeerSendOptions { Priority = engineController.LowestPriority, Frame = frame }, cancellation);
                 }
                 catch
                 {

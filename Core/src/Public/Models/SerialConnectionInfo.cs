@@ -1,4 +1,4 @@
-namespace BlueHeighliner.Comlink.Models;
+namespace BlueHeighliner.Comlink;
 
 /// <summary>A connection over a MicroGate serial port: the port and the station addresses of both ends.</summary>
 public interface ISerialConnectionInfo : IConnectionInfo

@@ -1,4 +1,4 @@
-namespace BlueHeighliner.Comlink.Services;
+namespace BlueHeighliner.Comlink;
 
 /// <summary>Routes outbound messages to peer users and surfaces their delivery status.</summary>
 internal interface IMessageRoutingService
@@ -16,9 +16,9 @@ internal interface IMessageRoutingService
 
     /// <summary>
     /// The same as <see cref="Route"/>, except every field this reads (addresses, security level) comes straight from
-    /// <paramref name="message"/> itself, via <see cref="Control.IEngineController"/>'s Get accessors, rather than
+    /// <paramref name="message"/> itself, via <see cref="IEngineController"/>'s Get accessors, rather than
     /// from a <see cref="SendMessagePayload"/> - so the caller builds the whole message (an instance of
-    /// <see cref="Control.IEngineController.FrameType"/>) itself instead of stating loose fields. Its message ID
+    /// <see cref="IEngineController.FrameType"/>) itself instead of stating loose fields. Its message ID
     /// and sender are still overwritten with a freshly generated ID and <paramref name="fromUser"/>, exactly as <see cref="Route"/> also does,
     /// so a caller only needs to set the content fields, including the sent time when the frame is a message.
     /// </summary>
@@ -199,7 +199,7 @@ internal sealed class MessageRoutingService : IMessageRoutingService
     /// <summary>
     /// Sends <paramref name="message"/> once to <paramref name="externalServer"/> — regardless of how many
     /// remote users it is addressed to — instead of dialing each one individually over the peer network,
-    /// since <see cref="Control.IEngineController.ExternalServer"/> designates it as the exclusive upstream
+    /// since <see cref="IEngineController.ExternalServer"/> designates it as the exclusive upstream
     /// hub for every message this instance sends. Every remote recipient shares that single send's outcome.
     /// </summary>
     private async Task<UserDeliveryResult[]> RouteToExternalServer(IExternalSystem externalServer, string messageId, object message, List<string> remoteUsers, Dictionary<string, List<string>> userAddressedVia)

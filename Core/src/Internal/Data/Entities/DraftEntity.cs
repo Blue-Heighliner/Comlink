@@ -1,4 +1,4 @@
-namespace BlueHeighliner.Comlink.Data.Entities;
+namespace BlueHeighliner.Comlink;
 
 /// <summary>LiteDB document representing a draft message.</summary>
 internal sealed class DraftEntity

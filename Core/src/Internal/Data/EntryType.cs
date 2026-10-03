@@ -1,4 +1,4 @@
-namespace BlueHeighliner.Comlink.Data;
+namespace BlueHeighliner.Comlink;
 
 /// <summary>Identifies the kind of entry stored in a folder.</summary>
 internal enum EntryType

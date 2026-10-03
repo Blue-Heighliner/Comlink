@@ -1,4 +1,4 @@
-namespace BlueHeighliner.Comlink.Peer.Transport;
+namespace BlueHeighliner.Comlink;
 
 /// <summary>
 /// One persistent point-to-point link to a remote node over a MicroGate serial port. A HDLC peer is single

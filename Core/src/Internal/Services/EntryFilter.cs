@@ -1,4 +1,4 @@
-namespace BlueHeighliner.Comlink.Services;
+namespace BlueHeighliner.Comlink;
 
 /// <summary>
 /// Optional entry-listing filter criteria for <see cref="IEntryService.GetMessages"/>/<see cref="IEntryService.GetDrafts"/>/<see cref="IEntryService.GetNotes"/>.

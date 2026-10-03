@@ -1,4 +1,4 @@
-namespace BlueHeighliner.Comlink.Peer.Transport;
+namespace BlueHeighliner.Comlink;
 
 /// <summary>
 /// Hands the packets queued for one connection to the wrapped transport, at most a window's worth at a time, always

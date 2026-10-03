@@ -1,4 +1,4 @@
-namespace BlueHeighliner.Comlink.Views.Controls;
+namespace BlueHeighliner.Comlink;
 
 /// <summary>User control that displays a colored security level banner with a title and supports window drag.</summary>
 [ExcludeFromCodeCoverage]

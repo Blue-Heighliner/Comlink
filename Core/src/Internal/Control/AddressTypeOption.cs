@@ -1,4 +1,4 @@
-namespace BlueHeighliner.Comlink.Control;
+namespace BlueHeighliner.Comlink;
 
 /// <summary>A single address type paired with its display label.</summary>
 internal sealed record AddressTypeOption

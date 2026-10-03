@@ -1,4 +1,4 @@
-namespace BlueHeighliner.Comlink.Themes;
+namespace BlueHeighliner.Comlink;
 
 /// <summary>Avalonia styles that define the application dark theme.</summary>
 [ExcludeFromCodeCoverage]

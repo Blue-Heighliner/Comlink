@@ -1,9 +1,9 @@
 <UserControl xmlns="https://github.com/avaloniaui"
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
-             xmlns:vm="using:BlueHeighliner.Comlink.ViewModels.Entries"
-             xmlns:converters="using:BlueHeighliner.Comlink.ViewModels"
+             xmlns:vm="using:BlueHeighliner.Comlink"
+             xmlns:converters="using:BlueHeighliner.Comlink"
              xmlns:avaloniaEdit="clr-namespace:AvaloniaEdit;assembly=AvaloniaEdit"
-             x:Class="BlueHeighliner.Comlink.Views.Entries.DraftEditor"
+             x:Class="BlueHeighliner.Comlink.DraftEditor"
              x:DataType="vm:DraftViewModel"
              Background="#1E1E1E">
 

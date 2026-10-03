@@ -1,7 +1,7 @@
 namespace BlueHeighliner.Comlink.Sample;
 
 /// <summary>A plain-text alternative to the built-in JSON export, restricted to messages, drafts, and notes (an activity log's structured entries don't read naturally as prose).</summary>
-public sealed class SampleTextExportFormat : IExportFormat
+public sealed class TextExportFormat : IExportFormat
 {
     /// <inheritdoc />
     public string Name { get; } = "Text";

@@ -1,4 +1,4 @@
-namespace BlueHeighliner.Comlink.ViewModels;
+namespace BlueHeighliner.Comlink;
 
 /// <summary>A headed paragraph within a <see cref="HelpTab"/>.</summary>
 /// <param name="Heading">The short heading shown above the paragraph.</param>

@@ -1,4 +1,4 @@
-namespace BlueHeighliner.Comlink.Services;
+namespace BlueHeighliner.Comlink;
 
 /// <summary>Re-reads the network configuration file while the engine runs and applies what changed.</summary>
 internal interface INetworkReloadService

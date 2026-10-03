@@ -1,4 +1,4 @@
-namespace BlueHeighliner.Comlink.ViewModels;
+namespace BlueHeighliner.Comlink;
 
 /// <summary>Converts a <see cref="DestinationStatus"/> value to a colored brush for status text display.</summary>
 [ExcludeFromCodeCoverage]

@@ -1,4 +1,4 @@
-namespace BlueHeighliner.Comlink.Peer;
+namespace BlueHeighliner.Comlink;
 
 /// <summary>Helpers for reading a remote node's name out of its certificate subject.</summary>
 internal static class PeerIdentity

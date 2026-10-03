@@ -1,4 +1,4 @@
-namespace BlueHeighliner.Comlink.Views;
+namespace BlueHeighliner.Comlink;
 
 /// <summary>User control for the print manager screen: printer selection, the "print received" toggle, and the print queue.</summary>
 [ExcludeFromCodeCoverage]

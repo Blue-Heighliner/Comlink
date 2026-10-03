@@ -1,4 +1,4 @@
-namespace BlueHeighliner.Comlink.Models;
+namespace BlueHeighliner.Comlink;
 
 /// <summary>A node in the folder hierarchy exposed to the application layer.</summary>
 internal sealed class Folder

@@ -1,4 +1,4 @@
-namespace BlueHeighliner.Comlink.ViewModels;
+namespace BlueHeighliner.Comlink;
 
 /// <summary>ViewModel interface for the help window: a tabbed guide to using the application in its different ways.</summary>
 internal interface IHelpViewModel

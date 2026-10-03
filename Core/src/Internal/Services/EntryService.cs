@@ -1,4 +1,4 @@
-namespace BlueHeighliner.Comlink.Services;
+namespace BlueHeighliner.Comlink;
 
 /// <summary>Provides CRUD operations for messages, drafts, notes, and activity log entries stored in the local database.</summary>
 internal interface IEntryService

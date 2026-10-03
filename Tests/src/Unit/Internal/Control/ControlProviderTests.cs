@@ -219,7 +219,7 @@ public sealed class ControlProviderTests
     [Fact]
     public void EngineController_ReturnsHardcodedMessageCompositionDefaults()
     {
-        TestEngineController controller = new();
+        EngineController controller = new(EngineBuilder.Build(new TestEngineConfiguration()), new CurrentUserProvider(), null);
 
         IReadOnlyList<MessagePriorityOption> priorities = controller.Priorities;
         Assert.Equal(["NORMAL"], priorities.Select(p => p.Name).ToList());

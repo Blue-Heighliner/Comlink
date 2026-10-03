@@ -1,4 +1,4 @@
-namespace BlueHeighliner.Comlink.Control;
+namespace BlueHeighliner.Comlink;
 
 /// <summary>
 /// Simplified, synchronous snapshot of the engine handed to every processor method, exposing only what a processor needs rather than the full

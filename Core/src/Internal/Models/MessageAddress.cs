@@ -1,4 +1,4 @@
-namespace BlueHeighliner.Comlink.Models;
+namespace BlueHeighliner.Comlink;
 
 /// <summary>Identifies a recipient user and its address role on a message or draft.</summary>
 internal sealed class MessageAddress

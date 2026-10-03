@@ -1,4 +1,4 @@
-namespace BlueHeighliner.Comlink.ViewModels.Entries;
+namespace BlueHeighliner.Comlink;
 
 /// <summary>
 /// Standard phonetic spelling alphabet and spelled-out digit lookup, used by the draft body editor's PLSO

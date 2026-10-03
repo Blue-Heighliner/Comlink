@@ -1,4 +1,4 @@
-namespace BlueHeighliner.Comlink.Services;
+namespace BlueHeighliner.Comlink;
 
 /// <summary>
 /// Handed by <see cref="ImportService.Import"/> to a custom import format's reader for the lifetime of a single

@@ -1,4 +1,4 @@
-namespace BlueHeighliner.Comlink.Models;
+namespace BlueHeighliner.Comlink;
 
 /// <summary>How a node forms the connection of one link to its parent or one of its children. See <see cref="UserLink"/>.</summary>
 public enum ConnectionMode

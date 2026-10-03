@@ -1,4 +1,4 @@
-namespace BlueHeighliner.Comlink.Peer.Transport;
+namespace BlueHeighliner.Comlink;
 
 /// <summary>One live connection to a remote node, over IP or serial, as seen by the peer services.</summary>
 internal sealed class PeerConnection(ConnectionPoint? point, ConnectionInfo info, Action drop)

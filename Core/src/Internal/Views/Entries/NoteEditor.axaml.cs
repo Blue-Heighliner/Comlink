@@ -1,4 +1,4 @@
-namespace BlueHeighliner.Comlink.Views.Entries;
+namespace BlueHeighliner.Comlink;
 
 /// <summary>User control for editing and saving a plain-text note.</summary>
 [ExcludeFromCodeCoverage]

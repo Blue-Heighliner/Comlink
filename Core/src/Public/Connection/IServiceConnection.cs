@@ -1,4 +1,4 @@
-namespace BlueHeighliner.Comlink.Control;
+namespace BlueHeighliner.Comlink;
 
 /// <summary>High-level client API for interacting with a running Engine service instance.</summary>
 public interface IServiceConnection

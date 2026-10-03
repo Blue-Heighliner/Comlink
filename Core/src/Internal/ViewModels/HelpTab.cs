@@ -1,4 +1,4 @@
-namespace BlueHeighliner.Comlink.ViewModels;
+namespace BlueHeighliner.Comlink;
 
 /// <summary>One tab of the help guide, covering one way of using the application.</summary>
 /// <param name="Title">The tab header.</param>

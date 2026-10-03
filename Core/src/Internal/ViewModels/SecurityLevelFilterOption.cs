@@ -1,4 +1,4 @@
-namespace BlueHeighliner.Comlink.ViewModels;
+namespace BlueHeighliner.Comlink;
 
 /// <summary>A selectable security level in the entry list's filter panel, including the leading "Any" (no filter) option.</summary>
 internal sealed record SecurityLevelFilterOption

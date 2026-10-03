@@ -1,4 +1,4 @@
-namespace BlueHeighliner.Comlink.Views.Entries;
+namespace BlueHeighliner.Comlink;
 
 /// <summary>User control for composing a draft message, including an AvaloniaEdit body editor with fill-in support.</summary>
 [ExcludeFromCodeCoverage]

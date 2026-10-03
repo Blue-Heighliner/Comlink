@@ -1,4 +1,4 @@
-namespace BlueHeighliner.Comlink.ViewModels.Entries;
+namespace BlueHeighliner.Comlink;
 
 /// <summary>ViewModel interface for editing and saving a plain-text note entry.</summary>
 internal interface INoteViewModel
@@ -26,6 +26,7 @@ internal interface INoteViewModel
 }
 
 /// <summary>ViewModel for editing and saving a plain-text note entry.</summary>
+[ConstructedManually]
 internal sealed partial class NoteViewModel : ObservableObject, INoteViewModel
 {
     /// <summary>Initializes a new <see cref="NoteViewModel"/> for the given note entity.</summary>

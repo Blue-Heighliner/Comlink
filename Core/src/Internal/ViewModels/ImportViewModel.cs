@@ -1,4 +1,4 @@
-namespace BlueHeighliner.Comlink.ViewModels;
+namespace BlueHeighliner.Comlink;
 
 /// <summary>
 /// ViewModel for the import screen: choosing a source drive, a format, then a file found on that drive by the

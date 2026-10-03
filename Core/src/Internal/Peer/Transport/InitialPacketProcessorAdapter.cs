@@ -1,4 +1,4 @@
-namespace BlueHeighliner.Comlink.Peer.Transport;
+namespace BlueHeighliner.Comlink;
 
 /// <summary>Presents a host's <see cref="IInitialPacketProcessor{TPacket}"/> as an <see cref="IInitialProcessor"/>.</summary>
 /// <typeparam name="TPacket">The host's packet type.</typeparam>

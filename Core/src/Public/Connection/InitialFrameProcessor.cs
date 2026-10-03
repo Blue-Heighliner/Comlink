@@ -1,4 +1,4 @@
-namespace BlueHeighliner.Comlink.Control;
+namespace BlueHeighliner.Comlink;
 
 /// <summary>
 /// Carries out an initial frame exchange on every new connection, so nodes can introduce themselves with frames: the host decides what to send, what

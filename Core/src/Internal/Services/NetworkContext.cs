@@ -1,4 +1,4 @@
-namespace BlueHeighliner.Comlink.Services;
+namespace BlueHeighliner.Comlink;
 
 /// <summary>What every network processor context knows, with frames as plain objects since the engine does not know the host's frame type at compile time. The host's processor sees it through <see cref="INetworkContext{TFrame}"/>.</summary>
 internal interface INetworkEngineContext : IEngineContext

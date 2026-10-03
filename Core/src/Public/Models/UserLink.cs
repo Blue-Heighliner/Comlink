@@ -1,4 +1,4 @@
-namespace BlueHeighliner.Comlink.Models;
+namespace BlueHeighliner.Comlink;
 
 /// <summary>
 /// One connection between a user and its parent or one of its children. By default a user opens an outgoing connection to its parent and listens for incoming

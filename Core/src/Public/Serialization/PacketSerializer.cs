@@ -1,4 +1,4 @@
-namespace BlueHeighliner.Comlink.Peer;
+namespace BlueHeighliner.Comlink;
 
 /// <summary>
 /// Serializes and deserializes instances of the host's packet type (see <see cref="IEngineBuilder.Packets{TPacket}"/>) to and from the bytes sent across

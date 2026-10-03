@@ -1,4 +1,4 @@
-namespace BlueHeighliner.Comlink.Data;
+namespace BlueHeighliner.Comlink;
 
 /// <summary>Provides access to the LiteDB database and all typed entity collections.</summary>
 internal interface ILiteDbContext : IDisposable

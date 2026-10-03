@@ -1,4 +1,4 @@
-namespace BlueHeighliner.Comlink.Services;
+namespace BlueHeighliner.Comlink;
 
 /// <summary>Creates the <see cref="IEngineContext"/> handed to a host's processors, once a user is installed.</summary>
 internal interface IEngineContextFactory

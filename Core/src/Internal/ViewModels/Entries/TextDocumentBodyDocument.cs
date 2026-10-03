@@ -1,4 +1,4 @@
-namespace BlueHeighliner.Comlink.ViewModels.Entries;
+namespace BlueHeighliner.Comlink;
 
 /// <summary>AvaloniaEdit <see cref="TextDocument"/>-backed implementation of <see cref="IBodyDocument"/> for use in the draft editor UI.</summary>
 internal sealed class TextDocumentBodyDocument : IBodyDocument

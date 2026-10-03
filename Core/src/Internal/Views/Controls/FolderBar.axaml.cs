@@ -1,4 +1,4 @@
-namespace BlueHeighliner.Comlink.Views.Controls;
+namespace BlueHeighliner.Comlink;
 
 /// <summary>User control for the folder tree panel, handling selection, context menus, and drop targets for entry moves.</summary>
 [ExcludeFromCodeCoverage]

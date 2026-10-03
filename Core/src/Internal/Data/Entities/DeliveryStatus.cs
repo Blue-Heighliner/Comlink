@@ -1,4 +1,4 @@
-namespace BlueHeighliner.Comlink.Data.Entities;
+namespace BlueHeighliner.Comlink;
 
 /// <summary>Persisted delivery outcome for a single recipient user on an outbound message.</summary>
 internal sealed class DeliveryStatus

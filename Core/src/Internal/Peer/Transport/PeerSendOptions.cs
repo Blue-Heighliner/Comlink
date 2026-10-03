@@ -1,4 +1,4 @@
-namespace BlueHeighliner.Comlink.Peer.Transport;
+namespace BlueHeighliner.Comlink;
 
 /// <summary>Per-send settings for <see cref="IPeerTransport.Request"/>.</summary>
 internal sealed record PeerSendOptions

@@ -1,4 +1,4 @@
-namespace BlueHeighliner.Comlink.Control;
+namespace BlueHeighliner.Comlink;
 
 /// <summary>The engine-side form of a packet mapping: every accessor takes the packet as an <see cref="object"/>.</summary>
 internal sealed class PacketMap

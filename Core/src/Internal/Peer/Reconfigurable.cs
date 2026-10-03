@@ -1,4 +1,4 @@
-namespace BlueHeighliner.Comlink.Peer;
+namespace BlueHeighliner.Comlink;
 
 /// <summary>A running peer service that can bring itself in line with the configuration as it is now without being restarted, touching only what changed.</summary>
 internal interface IReconfigurable

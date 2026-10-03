@@ -1,4 +1,4 @@
-namespace BlueHeighliner.Comlink.Peer.Transport;
+namespace BlueHeighliner.Comlink;
 
 /// <summary>Published when a connection is established or lost.</summary>
 internal sealed record PeerConnectionEventArgs

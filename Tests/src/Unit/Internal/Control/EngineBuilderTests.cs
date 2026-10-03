@@ -146,8 +146,8 @@ public sealed class EngineBuilderTests
     {
         (_, EngineController controller) = Build(engine => engine
             .AlertLabel("ALARM").AlarmDuration(TimeSpan.FromSeconds(5)).QuickConfirmation(false).ComposeAlerts(false)
-            .Priorities(("LOW", PriorityMode.User), ("HIGH", PriorityMode.System))
-            .Tags(false, "Category").BlockTag("SPAM", null).BlockTag(null, "HIGH")
+            .Priorities<TestLevel>((TestLevel.High, "TOP", PriorityMode.System))
+            .Tags(false, "Category").BlockTag("SPAM", null).BlockTag(null, TestLevel.High)
             .PrintReceived()
             .CanDelete(folder => folder == FolderType.Drafts));
 
@@ -155,7 +155,7 @@ public sealed class EngineBuilderTests
         Assert.Equal(TimeSpan.FromSeconds(5), controller.AlarmSoundDuration);
         Assert.False(controller.QuickConfirmationEnabled);
         Assert.False(controller.ComposeAlertsEnabled);
-        Assert.Equal(["LOW", "HIGH"], controller.Priorities.Select(p => p.Name));
+        Assert.Equal(["LOW", "TOP"], controller.Priorities.Select(p => p.Name));
         Assert.Equal([PriorityMode.User, PriorityMode.System], controller.Priorities.Select(p => p.Mode));
         Assert.False(controller.TagsEnabled);
         Assert.Equal("Category", controller.TagLabel);
@@ -191,10 +191,10 @@ public sealed class EngineBuilderTests
     public void GetPriority_FollowsTheKindOfFrame()
     {
         ServiceCollection services = new();
-        services.AddSingleton(new TestRetrievalHandler { Priority = "RETRIEVAL" });
-        services.AddSingleton(new TestReadReceiptHandler { Priority = "RECEIPT" });
-        services.AddSingleton(new TestReceiveReceiptHandler { Priority = "receipt" });
-        EngineBuilder builder = EngineBuilder.Build(new Configuration(engine => engine.Priorities(("NORMAL", PriorityMode.User), ("RETRIEVAL", PriorityMode.System), ("RECEIPT", PriorityMode.System))));
+        services.AddSingleton(new TestRetrievalHandler { Priority = TestPriority.Retrieval });
+        services.AddSingleton(new TestReadReceiptHandler { Priority = TestPriority.Receipt });
+        services.AddSingleton(new TestReceiveReceiptHandler { Priority = TestPriority.Receipt });
+        EngineBuilder builder = EngineBuilder.Build(new Configuration(engine => engine.Priorities<TestPriority>((TestPriority.Retrieval, null, PriorityMode.System), (TestPriority.Receipt, null, PriorityMode.System))));
         EngineController controller = new(builder, new CurrentUserProvider(), null, services.BuildServiceProvider());
 
         Assert.Equal(1, controller.GetPriority(new TestFrame { IsHidden = true, IsRetrieval = true }));
@@ -208,11 +208,27 @@ public sealed class EngineBuilderTests
     public void GetPriority_UnknownHandlerPriority_Throws()
     {
         ServiceCollection services = new();
-        services.AddSingleton(new TestRetrievalHandler { Priority = "MISSING" });
-        EngineBuilder builder = EngineBuilder.Build(new TestEngineConfiguration());
+        services.AddSingleton(new TestRetrievalHandler { Priority = TestPriority.Retrieval });
+        EngineBuilder builder = EngineBuilder.Build(new Configuration(engine => engine.Priorities<TestLevel>()));
         EngineController controller = new(builder, new CurrentUserProvider(), null, services.BuildServiceProvider());
 
-        Assert.Contains("MISSING", Assert.Throws<InvalidOperationException>(() => controller.GetPriority(new TestFrame { IsHidden = true, IsRetrieval = true })).Message);
+        Assert.Contains("TestPriority.Retrieval", Assert.Throws<InvalidOperationException>(() => controller.GetPriority(new TestFrame { IsHidden = true, IsRetrieval = true })).Message);
+    }
+
+    /// <summary>With no priorities configured everything goes at priority 0, and with some configured nothing goes outside their range.</summary>
+    [Fact]
+    public void ResolvePriority_StaysWithinTheConfiguredLevels()
+    {
+        (_, EngineController unconfigured) = Build(engine => engine);
+        (_, EngineController configured) = Build(engine => engine.Priorities<TestPriority>());
+
+        Assert.Equal([0, 0, 0], [unconfigured.ResolvePriority(-5), unconfigured.ResolvePriority(1), unconfigured.ResolvePriority(99)]);
+        Assert.Equal(0, unconfigured.HighestPriority);
+        Assert.Equal([0, 1, 2, 2], [configured.ResolvePriority(-5), configured.ResolvePriority(1), configured.ResolvePriority(2), configured.ResolvePriority(99)]);
+        Assert.Equal(2, configured.HighestPriority);
+        Assert.Equal(2, configured.GetPriority(new TestFrame { Priority = 99 }));
+        Assert.Equal(0, unconfigured.GetPriority(new TestFrame { Priority = 99 }));
+        Assert.Equal(2, ((TestFrame)configured.CreateMessage(new MessageCreateContext { SentAt = DateTime.UtcNow, Body = "B", IsAlert = false, Priority = 99, Tag = "", SecurityLevel = "" })).Priority);
     }
 
     /// <summary>Stating priorities twice replaces the earlier list rather than adding to it.</summary>
@@ -220,10 +236,10 @@ public sealed class EngineBuilderTests
     public void Priorities_StatedTwice_ReplacesTheEarlierList()
     {
         (_, EngineController controller) = Build(engine => engine
-            .Priorities(("A", PriorityMode.User))
-            .Priorities(("B", PriorityMode.User)));
+            .Priorities<TestLevel>()
+            .Priorities<TestPriority>());
 
-        Assert.Equal("B", Assert.Single(controller.Priorities).Name);
+        Assert.Equal(["NORMAL", "RETRIEVAL", "RECEIPT"], controller.Priorities.Select(p => p.Name));
     }
 
     /// <summary>Users and groups from the host and the network file are merged, with the file winning for a group of the same name, and the data attached to a user comes from their entry.</summary>
@@ -721,12 +737,22 @@ public sealed class EngineBuilderTests
         Assert.Equal(["Server1", "Server3"], controller.StorageServers);
     }
 
+    /// <summary>Levels take their order from the enum, their name from the member (or an override) and a neutral color unless stated.</summary>
+    [Fact]
+    public void SecurityLevels_FollowEnumOrderWithOverrides()
+    {
+        (_, EngineController controller) = Build(engine => engine.SecurityLevels<TestLevel>((TestLevel.High, "TOP", "#222222")));
+
+        Assert.Equal(["LOW", "TOP"], controller.SecurityLevels.Select(l => l.Name));
+        Assert.Equal(["#5A5A5A", "#222222"], controller.SecurityLevels.Select(l => l.Color));
+    }
+
     /// <summary>A user's security level is the one on their entry, or the lowest configured level when none is stated.</summary>
     [Fact]
     public void GetUserSecurityLevel_UsesTheEntryElseTheLowestLevel()
     {
         (_, EngineController controller) = Build(
-            engine => engine.SecurityLevels(("LOW", "#111111"), ("HIGH", "#222222")),
+            engine => engine.SecurityLevels<TestLevel>((TestLevel.Low, null, "#111111"), (TestLevel.High, null, "#222222")),
             network: Network(("ALICE", new NetworkUserConfig { SecurityLevel = "HIGH" })));
 
         Assert.Equal("HIGH", controller.GetUserSecurityLevel("ALICE"));

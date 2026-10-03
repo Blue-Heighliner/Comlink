@@ -1,4 +1,4 @@
-namespace BlueHeighliner.Comlink.Models;
+namespace BlueHeighliner.Comlink;
 
 /// <summary>A connection over IP: the remote host, port and the names in its certificate.</summary>
 public interface IIpConnectionInfo : IConnectionInfo

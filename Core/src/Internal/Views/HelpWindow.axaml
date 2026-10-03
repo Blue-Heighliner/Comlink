@@ -1,6 +1,6 @@
 <Window xmlns="https://github.com/avaloniaui"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
-        x:Class="BlueHeighliner.Comlink.Views.HelpWindow"
+        x:Class="BlueHeighliner.Comlink.HelpWindow"
         Title="{Binding AppName, StringFormat='{}{0} Help'}"
         Width="760"
         Height="540"

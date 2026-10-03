@@ -1,4 +1,4 @@
-namespace BlueHeighliner.Comlink.Views;
+namespace BlueHeighliner.Comlink;
 
 /// <summary>User control for the import screen: source drive, available packages, and the draft/note conflict prompt.</summary>
 [ExcludeFromCodeCoverage]

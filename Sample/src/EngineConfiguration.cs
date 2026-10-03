@@ -1,8 +1,8 @@
 namespace BlueHeighliner.Comlink.Sample;
 
 /// <summary>
-/// Sample <see cref="IEngineConfiguration"/>: maps the engine's logical frame fields onto <see cref="SampleFrame"/> (including whether a frame is a message, which is what the user sees and what is stored) and
-/// the packet fields onto <see cref="SamplePacket"/>, and states every other setting Sample has distinct, non-network-file
+/// Sample <see cref="IEngineConfiguration"/>: maps the engine's logical frame fields onto <see cref="Frame"/> (including whether a frame is a message, which is what the user sees and what is stored) and
+/// the packet fields onto <see cref="Packet"/>, and states every other setting Sample has distinct, non-network-file
 /// behavior worth showing. Everything left unstated uses the engine's default, with the network configuration file applied on top
 /// automatically (see <c>Docs/Components/Configuration.md</c>):
 /// <list type="bullet">
@@ -12,13 +12,13 @@ namespace BlueHeighliner.Comlink.Sample;
 /// <item><description>priorities and blocked tags - three user priority levels, two system ones and both blocked-combination kinds.</description></item>
 /// <item><description>print count - prints an alert message twice and every other received message once.</description></item>
 /// <item><description>deleting - only drafts and notes can be deleted; Inbox, Outbox, and Activity are protected.</description></item>
-/// <item><description>connection identification - a <see cref="SampleIdentityProcessor"/> carries out an initial packet exchange on every connection: the node that opens it sends a <see cref="SamplePacket"/> whose chunk is its user name, the accepting node answers with one carrying its own, and each marks the connection connected as the user the other named, instead of by the peer's certificate or (for a serial cable) its port. Like all traffic between nodes they are serialized instances of the packet type, nothing else.</description></item>
+/// <item><description>connection identification - a <see cref="IdentityProcessor"/> carries out an initial packet exchange on every connection: the node that opens it sends a <see cref="Packet"/> whose chunk is its user name, the accepting node answers with one carrying its own, and each marks the connection connected as the user the other named, instead of by the peer's certificate or (for a serial cable) its port. Like all traffic between nodes they are serialized instances of the packet type, nothing else.</description></item>
 /// <item><description>command-line overrides - allowed, so Sample honors <c>--config</c> and <c>--user</c> (which its scenario scripts pass), unlike the engine default.</description></item>
-/// <item><description>packetization - enabled with <see cref="SamplePacket"/>, using the default packet size, window and serializer.</description></item>
-/// <item><description>address type labels - renames the <see cref="AddressType.External"/> label to <c>OUTSIDE</c>, matching the <c>Kind</c> vocabulary <see cref="SampleRecipient"/> already uses for it.</description></item>
+/// <item><description>packetization - enabled with <see cref="Packet"/>, using the default packet size, window and serializer.</description></item>
+/// <item><description>address type labels - renames the <see cref="AddressType.External"/> label to <c>OUTSIDE</c>, matching the <c>Kind</c> vocabulary <see cref="Recipient"/> already uses for it.</description></item>
 /// <item><description>security levels - three placeholder levels (<c>PUBLIC</c>, <c>INTERNAL</c>, <c>RESTRICTED</c>), assigned to users in each scenario's network configuration; the <c>Peer</c> scenario's sites run at <c>PUBLIC</c>, the <c>ClientServer</c>/<c>ServerCluster</c> scenarios' clients at <c>INTERNAL</c>, and their servers at <c>RESTRICTED</c>.</description></item>
-/// <item><description>custom frame serialization - <see cref="SampleJsonSerializer"/> sends every <see cref="SampleFrame"/> across the network as JSON instead of the default protobuf-net.</description></item>
-/// <item><description>a <see cref="SampleNetworkProcessor"/> reacting to peer activity - a newly connected user is welcomed with who else is currently online (<see cref="IEngineContext.ConnectedUsers"/>), everyone still online is told when someone disconnects, and any received message tagged <c>PING</c> gets an automatic <c>PONG</c> reply (all via <see cref="INetworkContext{TFrame}.Send"/>).</description></item>
+/// <item><description>custom frame serialization - <see cref="JsonSerializer"/> sends every <see cref="Frame"/> across the network as JSON instead of the default protobuf-net.</description></item>
+/// <item><description>a <see cref="NetworkProcessor"/> reacting to peer activity - a newly connected user is welcomed with who else is currently online (<see cref="IEngineContext.ConnectedUsers"/>), everyone still online is told when someone disconnects, and any received message tagged <c>PING</c> gets an automatic <c>PONG</c> reply (all via <see cref="INetworkContext{TFrame}.Send"/>).</description></item>
 /// <item><description>export formats - a plain-text alternative to the built-in JSON export, restricted to messages, drafts, and notes (an activity log's structured entries don't read naturally as prose).</description></item>
 /// <item><description>import formats - a CSV reader that stages one send per <c>User,Body</c> line for the user to review and send from the staged send screen, one at a time a second apart.</description></item>
 /// <item><description>server storage - <c>Server</c> (ClientServer scenario) and <c>Server1</c> (ServerCluster scenario) (<c>StoresMessages</c> in the network configuration) keep a copy of every message they route and answer a client's RETRIEVE request; <c>Server2</c> does not.</description></item>
@@ -27,46 +27,48 @@ namespace BlueHeighliner.Comlink.Sample;
 /// Actual alarm sound playback and printer discovery and driving are real platform behavior always provided by the
 /// engine itself, not something Sample states here.
 /// </summary>
-public sealed class SampleEngineConfiguration : IEngineConfiguration
+public sealed class EngineConfiguration : IEngineConfiguration
 {
+    /// <summary>Application entry point; starts the engine with this configuration.</summary>
+    [STAThread]
+    public static async Task Main(string[] args)
+        => await Engine.Start<EngineConfiguration>(args);
+
     /// <inheritdoc />
     public IEngineBuilder Configure(IEngineBuilder engine)
         => engine
-            .Frames<SampleFrame>(frame => frame
-                .Serializer<SampleJsonSerializer>()
-                .Processor<SampleNetworkProcessor>()
+            .Frames<Frame>(frame => frame
+                .Serializer<JsonSerializer>()
+                .Processor<NetworkProcessor>()
                 .Id(m => m.Id)
                 .Sender(m => m.Sender)
                 .Addresses(
                     m => m.Recipients.Select(r => (r.User, r.Kind switch { "CC" => AddressType.Cc, "OUTSIDE" => AddressType.External, _ => AddressType.To }, r.Note)),
-                    (m, value) => m.Recipients = [.. value.Select(a => new SampleRecipient { User = a.Name, Kind = a.Type switch { AddressType.Cc => "CC", AddressType.External => "OUTSIDE", _ => "TO" }, Note = a.Information })])
-                .Message<SampleMessageHandler>()
-                .AutoForward<SampleEscalationController>()
-                .Retrieval<SampleRetrievalHandler>()
-                .ReadReceipt<SampleReadReceiptHandler>()
-                .ReceiveReceipt<SampleReceiveReceiptHandler>())
-            .Packets<SamplePacket>(packet => packet
-                .InitialProcessor<SampleIdentityProcessor>()
-                .Frame<SampleFramePacketHandler>())
+                    (m, value) => m.Recipients = [.. value.Select(a => new Recipient { User = a.Name, Kind = a.Type switch { AddressType.Cc => "CC", AddressType.External => "OUTSIDE", _ => "TO" }, Note = a.Information })])
+                .Message<MessageHandler>()
+                .AutoForward<EscalationController>()
+                .Retrieval<RetrievalHandler>()
+                .ReadReceipt<ReadReceiptHandler>()
+                .ReceiveReceipt<ReceiveReceiptHandler>())
+            .Packets<Packet>(packet => packet
+                .InitialProcessor<IdentityProcessor>()
+                .Frame<FramePacketHandler>())
             .HomeText("Select a folder and entry to get started, or create a new draft or note.")
             .WindowIcon("avares://BlueHeighliner.Comlink.Sample/Assets/envelope.png")
-            .Priorities(
-                (SamplePriorities.Low, PriorityMode.User),
-                (SamplePriorities.Medium, PriorityMode.User),
-                (SamplePriorities.Retrieval, PriorityMode.System),
-                (SamplePriorities.High, PriorityMode.User),
-                (SamplePriorities.Receipt, PriorityMode.System))
+            .Priorities<MessagePriority>(
+                (MessagePriority.Retrieval, null, PriorityMode.System),
+                (MessagePriority.Receipt, null, PriorityMode.System))
             .BlockTag("SPAM", null)
-            .BlockTag(null, SamplePriorities.High)
+            .BlockTag(null, MessagePriority.High)
             .AddressTypeLabel(AddressType.External, "OUTSIDE")
-            .SecurityLevels(
-                (SampleSecurityLevels.Public, "#2E7D32"),
-                (SampleSecurityLevels.Internal, "#1565C0"),
-                (SampleSecurityLevels.Restricted, "#C62828"))
+            .SecurityLevels<SecurityLevel>(
+                (SecurityLevel.Public, null, "#2E7D32"),
+                (SecurityLevel.Internal, null, "#1565C0"),
+                (SecurityLevel.Restricted, null, "#C62828"))
             .CanDelete(folder => folder is FolderType.Drafts or FolderType.Notes)
             .CommandLineOverrides(true)
             .MsmtOptions(new MsmtConnectionOptions { HandshakeTimeout = TimeSpan.FromSeconds(15), ResponseTimeout = TimeSpan.FromSeconds(60) })
             .HdlcOptions(new HdlcPeerOptions { MaxInfoField = 1024, TransmitWindow = 4 })
-            .ExportFormat<SampleTextExportFormat>()
-            .ImportFormat<SampleCsvImportFormat>();
+            .ExportFormat<TextExportFormat>()
+            .ImportFormat<CsvImportFormat>();
 }

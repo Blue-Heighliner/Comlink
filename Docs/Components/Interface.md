@@ -55,7 +55,7 @@ IMsmtConnection connection = client.Connect(new MsmtNameTarget { Host = "127.0.0
 await connection.Wait();
 
 // Anything sent here, serialized the way the running engine's FrameSerializer does it for the message
-// type its host registered (SampleFrame in the Sample host), is routed out to peers as if this user
+// type its host registered (Frame in the Sample host), is routed out to peers as if this user
 // sent it.
 connection.Send(messageBytes);
 ```

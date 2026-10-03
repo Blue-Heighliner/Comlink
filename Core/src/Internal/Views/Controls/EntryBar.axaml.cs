@@ -1,4 +1,4 @@
-namespace BlueHeighliner.Comlink.Views.Controls;
+namespace BlueHeighliner.Comlink;
 
 /// <summary>User control for the entry list panel, including drag-and-drop initiation for moving entries between folders.</summary>
 [ExcludeFromCodeCoverage]

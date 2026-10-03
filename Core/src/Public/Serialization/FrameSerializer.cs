@@ -1,4 +1,4 @@
-namespace BlueHeighliner.Comlink.Peer;
+namespace BlueHeighliner.Comlink;
 
 /// <summary>
 /// Serializes and deserializes instances of the host's frame type (see <see cref="IEngineBuilder.Frames{TFrame}"/>) to and from the bytes sent across

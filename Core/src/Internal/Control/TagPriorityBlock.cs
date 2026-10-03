@@ -1,4 +1,4 @@
-namespace BlueHeighliner.Comlink.Control;
+namespace BlueHeighliner.Comlink;
 
 /// <summary>
 /// A single blocked message tag/priority combination. Either field may be left <see langword="null"/> to

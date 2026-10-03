@@ -1,4 +1,4 @@
-namespace BlueHeighliner.Comlink.Services;
+namespace BlueHeighliner.Comlink;
 
 /// <summary>
 /// The storage half of a storage server (see <see cref="UserInfo.StoresMessages"/>): keeps a copy of each

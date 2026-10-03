@@ -1,4 +1,4 @@
-namespace BlueHeighliner.Comlink.Views;
+namespace BlueHeighliner.Comlink;
 
 /// <summary>User control for the auto forward screen: choosing a controller and maintaining its locally-saved target list.</summary>
 [ExcludeFromCodeCoverage]

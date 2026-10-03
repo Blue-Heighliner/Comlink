@@ -1,4 +1,4 @@
-namespace BlueHeighliner.Comlink.ViewModels.Entries;
+namespace BlueHeighliner.Comlink;
 
 /// <summary>Abstraction over body text storage for a draft message, independent of any specific UI framework.</summary>
 internal interface IBodyDocument

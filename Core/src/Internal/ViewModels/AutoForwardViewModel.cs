@@ -1,4 +1,4 @@
-namespace BlueHeighliner.Comlink.ViewModels;
+namespace BlueHeighliner.Comlink;
 
 /// <summary>
 /// ViewModel for the auto forward screen: choosing one of the auto forward controllers this instance's own

@@ -1,4 +1,4 @@
-namespace BlueHeighliner.Comlink.Control;
+namespace BlueHeighliner.Comlink;
 
 /// <summary>
 /// Engine-level decorator applying the network configuration file's node settings for the user this process runs as, over
@@ -90,6 +90,12 @@ internal sealed class ConfiguredEngineController : IEngineController
     public bool GetIsAlert(object frame) => fallback.GetIsAlert(frame);
     /// <inheritdoc />
     public int GetPriority(object frame) => fallback.GetPriority(frame);
+    /// <inheritdoc />
+    public int LowestPriority => fallback.LowestPriority;
+    /// <inheritdoc />
+    public int HighestPriority => fallback.HighestPriority;
+    /// <inheritdoc />
+    public int ResolvePriority(int priority) => fallback.ResolvePriority(priority);
     /// <inheritdoc />
     public string GetTag(object frame) => fallback.GetTag(frame);
     /// <inheritdoc />

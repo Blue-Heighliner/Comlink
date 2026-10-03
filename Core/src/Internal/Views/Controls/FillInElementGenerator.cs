@@ -1,4 +1,4 @@
-namespace BlueHeighliner.Comlink.Views.Controls;
+namespace BlueHeighliner.Comlink;
 
 /// <summary>AvaloniaEdit element generator that replaces fill-in sentinel markers with inline button controls.</summary>
 [ExcludeFromCodeCoverage]

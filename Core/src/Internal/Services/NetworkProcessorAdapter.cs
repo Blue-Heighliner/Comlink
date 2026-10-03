@@ -1,4 +1,4 @@
-namespace BlueHeighliner.Comlink.Services;
+namespace BlueHeighliner.Comlink;
 
 /// <summary>Presents a host's <see cref="INetworkProcessor{TFrame}"/> as an <see cref="INetworkHandler"/>.</summary>
 /// <typeparam name="TFrame">The host's frame type.</typeparam>

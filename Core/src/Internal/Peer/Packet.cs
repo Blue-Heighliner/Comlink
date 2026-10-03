@@ -1,4 +1,4 @@
-namespace BlueHeighliner.Comlink.Peer;
+namespace BlueHeighliner.Comlink;
 
 /// <summary>One packet a payload was broken into by an <see cref="IPacketizer"/>: the serialized bytes to put on the wire, and the priority to send them at.</summary>
 internal sealed record Packet : IDisposable

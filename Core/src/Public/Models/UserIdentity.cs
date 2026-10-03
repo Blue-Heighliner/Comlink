@@ -1,4 +1,4 @@
-namespace BlueHeighliner.Comlink.Models;
+namespace BlueHeighliner.Comlink;
 
 /// <summary>Who a connection's remote node is: a user name plus any app-specific information attached to that user.</summary>
 public sealed record UserIdentity

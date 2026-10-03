@@ -1,4 +1,4 @@
-namespace BlueHeighliner.Comlink.ViewModels.Entries;
+namespace BlueHeighliner.Comlink;
 
 /// <summary>ViewModel interface for composing and sending a draft message.</summary>
 internal interface IDraftViewModel
@@ -56,9 +56,9 @@ internal interface IDraftViewModel
     string TagLabel { get; }
     /// <summary>
     /// Gets or sets the PLSO (Phonetic Language Spell Out) mode active in the body editor: when not
-    /// <see cref="Entries.PlsoMode.Off"/>, typing a letter or digit inserts its phonetic word (see
+    /// <see cref="PlsoMode.Off"/>, typing a letter or digit inserts its phonetic word (see
     /// <see cref="PhoneticAlphabet"/>) instead of the character itself, with a trailing space added
-    /// after each word when <see cref="Entries.PlsoMode.Spaces"/>. Editor-session-only UI state — not
+    /// after each word when <see cref="PlsoMode.Spaces"/>. Editor-session-only UI state — not
     /// persisted with the draft.
     /// </summary>
     PlsoMode PlsoMode { get; set; }
@@ -102,6 +102,7 @@ internal interface IDraftViewModel
 }
 
 /// <summary>ViewModel for composing and sending a draft message, including fill-in field management.</summary>
+[ConstructedManually]
 internal sealed partial class DraftViewModel : ObservableObject, IDraftViewModel
 {
     private const int FillInIdLength = 8;

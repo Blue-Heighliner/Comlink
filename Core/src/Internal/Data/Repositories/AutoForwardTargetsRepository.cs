@@ -1,4 +1,4 @@
-namespace BlueHeighliner.Comlink.Data.Repositories;
+namespace BlueHeighliner.Comlink;
 
 /// <summary>Provides data-access operations for a controller's <see cref="AutoForwardTargetsEntity"/> document.</summary>
 internal interface IAutoForwardTargetsRepository

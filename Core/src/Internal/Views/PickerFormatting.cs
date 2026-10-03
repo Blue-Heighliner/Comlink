@@ -1,4 +1,4 @@
-namespace BlueHeighliner.Comlink.Views;
+namespace BlueHeighliner.Comlink;
 
 /// <summary>Makes Avalonia's date and time pickers follow the application's date and time conventions where their own properties and styles cannot reach.</summary>
 internal interface IPickerFormatting

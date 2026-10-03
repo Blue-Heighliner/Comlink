@@ -13,7 +13,7 @@ public sealed class UserServiceTests : IDisposable
     private readonly Mock<IEngineController> engineControllerMock = new();
 
     private UserService CreateService()
-        => new(engineControllerMock.Object, new BlueHeighliner.Comlink.Control.CurrentUserProvider(), LoggerFactory.Create(_ => { }));
+        => new(engineControllerMock.Object, new CurrentUserProvider(), LoggerFactory.Create(_ => { }));
 
     /// <summary>Verifies that GetCurrentUserInfo returns null when the user has not been installed.</summary>
     [Fact]

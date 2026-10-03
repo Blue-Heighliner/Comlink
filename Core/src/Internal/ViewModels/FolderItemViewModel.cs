@@ -1,4 +1,4 @@
-namespace BlueHeighliner.Comlink.ViewModels;
+namespace BlueHeighliner.Comlink;
 
 /// <summary>ViewModel representing a single folder node in the folder tree.</summary>
 internal sealed partial class FolderItemViewModel : ObservableObject

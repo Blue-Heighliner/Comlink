@@ -1,4 +1,4 @@
-namespace BlueHeighliner.Comlink.Peer.Transport;
+namespace BlueHeighliner.Comlink;
 
 /// <summary>The implementation behind <see cref="IConnectionInfo"/>, copied with updated values as the initial exchange fills it in.</summary>
 internal abstract record ConnectionInfo : IConnectionInfo

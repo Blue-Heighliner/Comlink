@@ -1,4 +1,4 @@
-namespace BlueHeighliner.Comlink.ViewModels;
+namespace BlueHeighliner.Comlink;
 
 /// <summary>
 /// ViewModel for the retrieve screen: asking a storage server (see <see cref="UserInfo.StoresMessages"/>) to send

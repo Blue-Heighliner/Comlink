@@ -14,7 +14,7 @@ public sealed class EntryServiceTests : IDisposable
         NoteRepository notes = new(ctx);
         ActivityLogRepository activityLogs = new(ctx);
         FolderRepository folders = new(ctx);
-        service = new EntryService(messages, drafts, notes, activityLogs, folders, new BlueHeighliner.Comlink.Control.CurrentUserProvider(), format);
+        service = new EntryService(messages, drafts, notes, activityLogs, folders, new CurrentUserProvider(), format);
     }
 
     private readonly IEngineController format = new TestEngineController();

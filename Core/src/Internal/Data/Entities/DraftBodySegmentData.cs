@@ -1,4 +1,4 @@
-namespace BlueHeighliner.Comlink.Data.Entities;
+namespace BlueHeighliner.Comlink;
 
 /// <summary>A single segment within a draft body, representing either static text or a fill-in field.</summary>
 internal sealed class DraftBodySegmentData

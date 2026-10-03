@@ -1,4 +1,4 @@
-namespace BlueHeighliner.Comlink.ViewModels;
+namespace BlueHeighliner.Comlink;
 
 /// <summary>ViewModel interface for the folder tree panel.</summary>
 internal interface IFolderBarViewModel
@@ -179,7 +179,7 @@ internal sealed partial class FolderBarViewModel : ObservableObject, IFolderBarV
     {
         if (parent.RootType == FolderType.Activity) { return; }
 
-        Data.Entities.FolderEntity entity = new()
+        FolderEntity entity = new()
         {
             Id = Guid.NewGuid().ToString(),
             Name = name,

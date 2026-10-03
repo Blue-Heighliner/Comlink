@@ -1,4 +1,4 @@
-namespace BlueHeighliner.Comlink.ViewModels;
+namespace BlueHeighliner.Comlink;
 
 /// <summary>Converts a boolean sort flag to a human-readable label for the sort toggle button.</summary>
 [ExcludeFromCodeCoverage]

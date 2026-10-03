@@ -1,4 +1,4 @@
-namespace BlueHeighliner.Comlink.Models;
+namespace BlueHeighliner.Comlink;
 
 /// <summary>
 /// A place this node connects out to: either an IP host and TCP port, or a MicroGate serial port name and HDLC

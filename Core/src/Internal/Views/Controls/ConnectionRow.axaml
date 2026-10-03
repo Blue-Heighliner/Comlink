@@ -1,7 +1,7 @@
 <UserControl xmlns="https://github.com/avaloniaui"
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
-             xmlns:vm="using:BlueHeighliner.Comlink.ViewModels"
-             x:Class="BlueHeighliner.Comlink.Views.Controls.ConnectionRow"
+             xmlns:vm="using:BlueHeighliner.Comlink"
+             x:Class="BlueHeighliner.Comlink.ConnectionRow"
              x:DataType="vm:ConnectionRowViewModel">
 
   <Border Background="{Binding StatusColorHex}" Padding="12,8">

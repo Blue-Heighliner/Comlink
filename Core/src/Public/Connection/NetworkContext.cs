@@ -1,4 +1,4 @@
-namespace BlueHeighliner.Comlink.Control;
+namespace BlueHeighliner.Comlink;
 
 /// <summary>What every <see cref="INetworkProcessor{TFrame}"/> method is handed: the engine, and a way to originate a new frame.</summary>
 /// <typeparam name="TFrame">The host's frame type.</typeparam>

@@ -1,4 +1,4 @@
-namespace BlueHeighliner.Comlink.Services;
+namespace BlueHeighliner.Comlink;
 
 /// <summary>Describes a single export package (<c>.export.zip</c>) found on a drive, available to import.</summary>
 internal sealed record ImportPackageInfo
@@ -15,7 +15,7 @@ internal sealed record ImportPackageInfo
 /// </summary>
 internal sealed record ImportConflict
 {
-    /// <summary>Gets the type of the conflicting entry — always <see cref="Data.EntryType.Draft"/> or <see cref="Data.EntryType.Note"/>.</summary>
+    /// <summary>Gets the type of the conflicting entry — always <see cref="EntryType.Draft"/> or <see cref="EntryType.Note"/>.</summary>
     public required EntryType EntryType { get; init; }
     /// <summary>Gets the matching name — the first line of the draft's or note's body.</summary>
     public required string Name { get; init; }

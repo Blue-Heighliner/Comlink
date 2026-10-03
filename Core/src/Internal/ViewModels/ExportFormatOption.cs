@@ -1,4 +1,4 @@
-namespace BlueHeighliner.Comlink.ViewModels;
+namespace BlueHeighliner.Comlink;
 
 /// <summary>A selectable export format in the export screen's format picker, including the leading built-in JSON option.</summary>
 internal sealed record ExportFormatOption

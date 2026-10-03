@@ -1,4 +1,4 @@
-namespace BlueHeighliner.Comlink.ViewModels.Entries;
+namespace BlueHeighliner.Comlink;
 
 /// <summary>Represents a single selectable option within a fill-in field.</summary>
 internal sealed partial class FillInOptionViewModel : ObservableObject

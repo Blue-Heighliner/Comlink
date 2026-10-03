@@ -1,4 +1,4 @@
-namespace BlueHeighliner.Comlink.ViewModels;
+namespace BlueHeighliner.Comlink;
 
 /// <summary>A selectable import format in the import screen's format picker, including the leading built-in package option.</summary>
 internal sealed record ImportFormatOption

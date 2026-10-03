@@ -1,4 +1,4 @@
-namespace BlueHeighliner.Comlink.Models;
+namespace BlueHeighliner.Comlink;
 
 /// <summary>Mutable snapshot of the local user's installation state read from persistent storage.</summary>
 internal sealed class UserState

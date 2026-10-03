@@ -1,6 +1,6 @@
 <UserControl xmlns="https://github.com/avaloniaui"
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
-             x:Class="BlueHeighliner.Comlink.Views.Controls.TitleBar"
+             x:Class="BlueHeighliner.Comlink.TitleBar"
              Background="#2D2D30"
              Height="32">
 

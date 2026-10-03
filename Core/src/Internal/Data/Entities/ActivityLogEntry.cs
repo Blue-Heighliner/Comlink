@@ -1,4 +1,4 @@
-namespace BlueHeighliner.Comlink.Data.Entities;
+namespace BlueHeighliner.Comlink;
 
 /// <summary>A single timestamped event within an <see cref="ActivityLogEntity"/>.</summary>
 internal sealed class ActivityLogEntry

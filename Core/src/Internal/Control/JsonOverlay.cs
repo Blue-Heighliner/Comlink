@@ -1,4 +1,4 @@
-namespace BlueHeighliner.Comlink.Control;
+namespace BlueHeighliner.Comlink;
 
 /// <summary>Lays the options a network configuration file states over a complete set of options, leaving everything it does not state as it was.</summary>
 internal static class JsonOverlay

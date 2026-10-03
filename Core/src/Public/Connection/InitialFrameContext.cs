@@ -1,4 +1,4 @@
-namespace BlueHeighliner.Comlink.Control;
+namespace BlueHeighliner.Comlink;
 
 /// <summary>
 /// Handed to an <see cref="IInitialFrameProcessor{TFrame}"/> for one connection that has just formed, to carry out the initial frame exchange on it:

@@ -1,4 +1,4 @@
-namespace BlueHeighliner.Comlink.Peer.Transport;
+namespace BlueHeighliner.Comlink;
 
 /// <summary>The implementation behind <see cref="IIpConnectionInfo"/>.</summary>
 internal sealed record IpConnectionInfo : ConnectionInfo, IIpConnectionInfo

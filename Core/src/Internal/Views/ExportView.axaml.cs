@@ -1,4 +1,4 @@
-namespace BlueHeighliner.Comlink.Views;
+namespace BlueHeighliner.Comlink;
 
 /// <summary>User control for the export screen: destination drive, file name, scope, and the collected entry list.</summary>
 [ExcludeFromCodeCoverage]
