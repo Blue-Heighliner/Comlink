@@ -2,9 +2,9 @@ namespace BlueHeighliner.Comlink.Peer;
 
 /// <summary>
 /// Implements <see cref="IPeerService"/> for <see cref="UserRole.Client"/>: sends every outbound message
-/// over its one long-term connection to the server (the first of <see cref="IEngineController.OutgoingPoints"/>),
+/// over its one long-term connection to the server (its parent, see <see cref="IEngineController.ParentPoint"/>),
 /// regardless of addressee - the server performs the actual user-to-connection routing. Connections are
-/// bidirectional, so the server delivers messages back down the same connection and the client never listens.
+/// bidirectional, so the server delivers messages back down the same connection. The client only listens when its parent's link is forced to listen mode, in which case the server connects to it.
 /// A background <see cref="PeerConnectionMonitor"/> proactively opens and maintains that connection with a
 /// recurring heartbeat, independent of whether any real message is being sent, so <see cref="GetStatuses"/> reflects
 /// the connection's live state continuously rather than only the moment a message last happened to flow. Who the
@@ -39,6 +39,7 @@ internal sealed class ClientPeerService : IPeerService, IConnectionStatusService
     private volatile bool isClosed;
     private CancellationToken lifetime;
     private volatile string serverName = string.Empty;
+    private int listenPort;
     private readonly Lock statusLock = new();
     private bool isConnected;
     private DateTime? lastConnectedAt;
@@ -81,10 +82,10 @@ internal sealed class ClientPeerService : IPeerService, IConnectionStatusService
     /// <inheritdoc />
     public async Task Start(CancellationToken cancellation)
     {
-        ConnectionPoint? point = engineController.OutgoingPoints.FirstOrDefault();
-        if (point is null)
+        ConnectionPoint? point = engineController.ParentPoint;
+        if (point is null && engineController.ParentUser is null)
         {
-            logger.LogError("Client role requires an outgoing connection point to its server; none was provided");
+            logger.LogError("Client role requires a parent (its server); none was provided");
             return;
         }
 
@@ -95,9 +96,18 @@ internal sealed class ClientPeerService : IPeerService, IConnectionStatusService
         lock (reconfigureLock)
         {
             lifetime = cancellation;
-            (_, IReadOnlyList<(ConnectionPoint Point, PeerLinkControl Control)> started) = points.Sync(transport, [point], lifetime, OnHeartbeatAcknowledged, startingPoint => serverPoint = startingPoint);
-            serverPoint = started[0].Point;
-            serverLink = started[0].Control;
+            if (point is null)
+            {
+                serverName = engineController.ParentUser!;
+                listenPort = engineController.PeerPort;
+                transport.StartListener(listenPort);
+            }
+            else
+            {
+                (_, IReadOnlyList<(ConnectionPoint Point, PeerLinkControl Control)> started) = points.Sync(transport, [point], lifetime, OnHeartbeatAcknowledged, startingPoint => serverPoint = startingPoint);
+                serverPoint = started[0].Point;
+                serverLink = started[0].Control;
+            }
         }
 
         try { await Task.Delay(Timeout.Infinite, cancellation); }
@@ -145,8 +155,14 @@ internal sealed class ClientPeerService : IPeerService, IConnectionStatusService
         {
             if (transport is null || lifetime == default) { return; }
 
-            ConnectionPoint? wanted = engineController.OutgoingPoints.FirstOrDefault();
-            if (wanted is null) { logger.LogError("Client role requires an outgoing connection point to its server; none is defined any more"); }
+            ConnectionPoint? wanted = engineController.ParentPoint;
+            if (wanted is null && engineController.ParentUser is null) { logger.LogError("Client role requires a parent (its server); none is defined any more"); }
+            if (wanted is null && engineController.ParentUser is not null && engineController.PeerPort != listenPort)
+            {
+                transport.StopListener();
+                listenPort = engineController.PeerPort;
+                transport.StartListener(listenPort);
+            }
 
             (IReadOnlyList<ConnectionPoint> removed, IReadOnlyList<(ConnectionPoint Point, PeerLinkControl Control)> started) = points.Sync(transport, wanted is null ? [] : [wanted], lifetime, OnHeartbeatAcknowledged, startingPoint => serverPoint = startingPoint);
             if (removed.Count == 0 && started.Count == 0) { return; }
@@ -173,19 +189,19 @@ internal sealed class ClientPeerService : IPeerService, IConnectionStatusService
     /// <inheritdoc />
     public void SetClosed(PeerConnectionKind kind, string userName, bool closed)
     {
-        if (kind != PeerConnectionKind.Server || transport is null || serverPoint is null || serverLink is null || isClosed == closed) { return; }
+        if (kind != PeerConnectionKind.Server || transport is null || isClosed == closed) { return; }
 
         isClosed = closed;
-        transport.SetClosed(serverPoint, closed);
+        if (serverPoint is not null) { transport.SetClosed(serverPoint, closed); }
         if (closed)
         {
-            serverLink.Close();
+            serverLink?.Close();
             serverConnection?.Drop();
             UpdateConnectionStatus(false);
         }
         else
         {
-            serverLink.Open();
+            serverLink?.Open();
         }
 
         StatusesChanged?.Invoke();
@@ -194,7 +210,13 @@ internal sealed class ClientPeerService : IPeerService, IConnectionStatusService
     /// <inheritdoc />
     public void Refresh(PeerConnectionKind kind, string userName)
     {
-        if (kind != PeerConnectionKind.Server || transport is null || serverPoint is null || serverLink is null || isClosed) { return; }
+        if (kind != PeerConnectionKind.Server || transport is null || isClosed) { return; }
+
+        if (serverPoint is null || serverLink is null)
+        {
+            serverConnection?.Drop();
+            return;
+        }
 
         transport.Reset(serverPoint);
         serverLink.Refresh();
@@ -258,7 +280,7 @@ internal sealed class ClientPeerService : IPeerService, IConnectionStatusService
 
         // An IP connection only counts as up once a heartbeat is acknowledged (see OnHeartbeatAcknowledged); a serial
         // link is cabled to exactly one node and only ever comes up when that node answers, so it is up immediately.
-        if (connection.IsSerial)
+        if (connection.IsSerial || connection.IsInbound)
         {
             UpdateConnectionStatus(true);
         }
@@ -301,7 +323,9 @@ internal sealed class ClientPeerService : IPeerService, IConnectionStatusService
     }
 
     private bool IsServerConnection(PeerConnection connection)
-        => !connection.IsInbound && serverPoint is { } expected && expected.Equals(connection.Point);
+        => connection.IsInbound
+            ? engineController.ParentUser is { } parent && string.Equals(connection.User?.Name, parent, StringComparison.OrdinalIgnoreCase)
+            : serverPoint is { } expected && expected.Equals(connection.Point);
 
     private void OnReceived(PeerReceivedEventArgs args)
     {

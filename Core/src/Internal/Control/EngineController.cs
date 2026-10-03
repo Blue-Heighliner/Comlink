@@ -92,7 +92,7 @@ internal interface IEngineController
     /// <summary>Every defined group as a map of group name to member names (which may be user names or other group names).</summary>
     IReadOnlyDictionary<string, IReadOnlyList<string>> UserGroups { get; }
 
-    /// <summary>Port for the inbound peer-to-peer listener.</summary>
+    /// <summary>Port for the inbound IP listener: the port of the current user's <see cref="UserInfo.PeerPoint"/>, 50021 by default.</summary>
     int PeerPort { get; }
     /// <summary>Port for the inbound interface listener. Always active, regardless of mode.</summary>
     int InterfacePort { get; }
@@ -178,16 +178,20 @@ internal interface IEngineController
     /// <summary>The configured role for this instance.</summary>
     UserRole Role { get; }
     /// <summary>
-    /// The points this node connects out to, and keeps connected: IP hosts and ports of other nodes to dial, and
-    /// serial ports to open. A node configures only where it connects and listens (see <see cref="PeerPort"/>),
-    /// never which users it expects there: who is on the other end of a connection is worked out when it forms, by
-    /// <see cref="IdentifyConnection"/>. A serial cable joins two nodes and is opened from both ends, so a serial
-    /// port is listed here on each. A <see cref="UserRole.Client"/> connects to the first point only.
+    /// The points this node connects out to, and keeps connected, worked out from its links: for each link to its parent or a child whose mode is
+    /// <see cref="ConnectionMode.MsmtConnect"/>, the other user's <see cref="UserInfo.PeerPoint"/>, and for each <see cref="ConnectionMode.SyncSerial"/> link its serial port
+    /// (a serial cable joins two nodes and is opened from both ends, so the port is listed on each); the parent's comes first. A <see cref="UserRole.Peer"/> also dials every other peer that states a
+    /// <see cref="UserInfo.PeerPoint"/>, unless both have one and the other's name sorts first, so a pair never connects both ways. Who is on the other end of a connection is still worked out
+    /// when it forms, by <see cref="IdentifyConnection"/>.
     /// </summary>
     IReadOnlyList<ConnectionPoint> OutgoingPoints { get; }
+    /// <summary>The name of the current user's parent, or <see langword="null"/> for none.</summary>
+    string? ParentUser { get; }
+    /// <summary>The point this node dials to reach its parent, or <see langword="null"/> when it has no parent or the parent's link is <see cref="ConnectionMode.MsmtListen"/> (the parent connects instead).</summary>
+    ConnectionPoint? ParentPoint { get; }
     /// <summary>
     /// The server topology a <see cref="UserRole.Server"/> instance routes with, keyed by server user name
-    /// (case-insensitive): every server in the cluster, not just the local one, and the child clients each owns. It
+    /// (case-insensitive): every server in the cluster, not just the local one, and the children each owns. It
     /// says who belongs where, not how to reach them, so a connection is matched to a server or child by the identity
     /// <see cref="IdentifyConnection"/> gives it. Unused outside <see cref="UserRole.Server"/>.
     /// </summary>
@@ -507,7 +511,7 @@ internal class EngineController(EngineBuilder builder, ICurrentUserProvider curr
     }
 
     /// <inheritdoc />
-    public virtual int PeerPort => CurrentUserInfo?.PeerPort ?? 50021;
+    public virtual int PeerPort => CurrentUserInfo?.PeerPoint?.Port ?? new PeerPoint().Port;
     /// <inheritdoc />
     public virtual int InterfacePort => CurrentUserInfo?.InterfacePort ?? 50020;
 
@@ -569,7 +573,44 @@ internal class EngineController(EngineBuilder builder, ICurrentUserProvider curr
     /// <inheritdoc />
     public virtual UserRole Role => CurrentUserInfo?.Role ?? UserRole.Peer;
     /// <inheritdoc />
-    public virtual IReadOnlyList<ConnectionPoint> OutgoingPoints => CurrentUserInfo?.OutgoingPoints ?? [];
+    public virtual IReadOnlyList<ConnectionPoint> OutgoingPoints
+    {
+        get
+        {
+            if (CurrentUserInfo is not { } current) { return []; }
+
+            List<ConnectionPoint> points = [];
+            if (current.Parent is { } parent && DialPoint(parent, isParent: true) is { } parentPoint) { points.Add(parentPoint); }
+            points.AddRange(current.Children.Select(child => DialPoint(child, isParent: false)).OfType<ConnectionPoint>());
+            if ((current.Role ?? UserRole.Peer) == UserRole.Peer)
+            {
+                points.AddRange(Users
+                    .Select(GetUserInfo)
+                    .Where(other => (other.Role ?? UserRole.Peer) == UserRole.Peer && other.PeerPoint is not null && !string.Equals(other.Name, current.Name, StringComparison.OrdinalIgnoreCase)
+                        && (current.PeerPoint is null || string.Compare(current.Name, other.Name, StringComparison.OrdinalIgnoreCase) < 0))
+                    .Select(other => new ConnectionPoint { IpAddress = other.PeerPoint!.Host, Port = other.PeerPoint.Port }));
+            }
+
+            return [.. points.DistinctBy(point => point.Key)];
+        }
+    }
+    /// <inheritdoc />
+    public virtual string? ParentUser => CurrentUserInfo?.Parent?.User;
+    /// <inheritdoc />
+    public virtual ConnectionPoint? ParentPoint => CurrentUserInfo?.Parent is { } parent ? DialPoint(parent, isParent: true) : null;
+
+    private static ConnectionMode ModeOf(UserLink link, bool isParent)
+        => link.Mode ?? (!string.IsNullOrEmpty(link.SerialPort) ? ConnectionMode.SyncSerial : isParent ? ConnectionMode.MsmtConnect : ConnectionMode.MsmtListen);
+
+    private ConnectionPoint? DialPoint(UserLink link, bool isParent)
+        => ModeOf(link, isParent) switch
+        {
+            ConnectionMode.MsmtConnect => GetUserInfo(link.User).PeerPoint is { } point
+                ? new ConnectionPoint { IpAddress = point.Host, Port = point.Port }
+                : new ConnectionPoint { IpAddress = new PeerPoint().Host, Port = new PeerPoint().Port },
+            ConnectionMode.SyncSerial when !string.IsNullOrEmpty(link.SerialPort) => new ConnectionPoint { SerialPort = link.SerialPort, SerialAddress = link.SerialAddress, RemoteSerialAddress = link.RemoteSerialAddress, User = link.User },
+            _ => null
+        };
     /// <inheritdoc />
     public virtual IReadOnlyDictionary<string, ServerUserConfig> Servers
     {
@@ -588,10 +629,10 @@ internal class EngineController(EngineBuilder builder, ICurrentUserProvider curr
     private ServerUserConfig BuildServerConfig(UserInfo server)
         => new()
         {
-            ChildClients = server.ChildClients,
-            Relays = server.ChildClients
-                .Where(child => GetUserInfo(child) is { Role: UserRole.Relay })
-                .ToDictionary(child => child, child => GetUserInfo(child).ChildClients, StringComparer.OrdinalIgnoreCase)
+            Children = [.. server.Children.Select(child => child.User)],
+            Relays = server.Children
+                .Where(child => GetUserInfo(child.User) is { Role: UserRole.Relay })
+                .ToDictionary(child => child.User, child => (IReadOnlyList<string>)[.. GetUserInfo(child.User).Children.Select(link => link.User)], StringComparer.OrdinalIgnoreCase)
         };
 
     /// <inheritdoc />

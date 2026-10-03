@@ -36,4 +36,4 @@ The MicroGate device speaks HDLC in asynchronous balanced mode: both ends are eq
 
 ## Configuration
 
-Serial points are configured wherever an IP point is: `OutgoingPoints` entries take `SerialPort` (and optionally `SerialAddress`, `RemoteSerialAddress` and `User`) in place of `IpAddress`/`Port`. A serial port is listed on both nodes that share the cable, and, because the one cable already carries both directions, a client whose server is serial needs nothing more. Because each node has its own configuration, the same server can be an IP point on one node and a serial point on another.
+Serial points come from links: a `Parent` or `Children` entry written as an object with `Mode` `SyncSerial` and a `SerialPort` (and optionally `SerialAddress` and `RemoteSerialAddress`); the user it names is the user the connection is identified as. The link is stated on both nodes that share the cable, and, because the one cable already carries both directions, a client whose server is serial needs nothing more. Because each node has its own configuration, the same server can be an IP point on one node and a serial point on another.

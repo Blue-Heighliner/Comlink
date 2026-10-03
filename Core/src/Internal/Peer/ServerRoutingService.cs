@@ -185,10 +185,10 @@ internal sealed class ServerRoutingService : IPeerService, IConnectionStatusServ
     }
 
     private static string Describe(IReadOnlyDictionary<string, ServerUserConfig> map)
-        => string.Join(';', map.OrderBy(server => server.Key, StringComparer.OrdinalIgnoreCase).Select(server => $"{server.Key}:{string.Join(',', server.Value.ChildClients.Order(StringComparer.OrdinalIgnoreCase))}|{string.Join(',', server.Value.Relays.OrderBy(relay => relay.Key, StringComparer.OrdinalIgnoreCase).Select(relay => $"{relay.Key}={string.Join('+', relay.Value.Order(StringComparer.OrdinalIgnoreCase))}"))}"));
+        => string.Join(';', map.OrderBy(server => server.Key, StringComparer.OrdinalIgnoreCase).Select(server => $"{server.Key}:{string.Join(',', server.Value.Children.Order(StringComparer.OrdinalIgnoreCase))}|{string.Join(',', server.Value.Relays.OrderBy(relay => relay.Key, StringComparer.OrdinalIgnoreCase).Select(relay => $"{relay.Key}={string.Join('+', relay.Value.Order(StringComparer.OrdinalIgnoreCase))}"))}"));
 
     private IReadOnlyList<string> GetChildNames()
-        => userMap.TryGetValue(currentUserProvider.UserName ?? string.Empty, out ServerUserConfig? myConfig) ? myConfig.ChildClients : [];
+        => userMap.TryGetValue(currentUserProvider.UserName ?? string.Empty, out ServerUserConfig? myConfig) ? myConfig.Children : [];
 
     private string? FindChild(string name) => GetChildNames().FirstOrDefault(child => string.Equals(child, name, StringComparison.OrdinalIgnoreCase));
 
@@ -365,7 +365,7 @@ internal sealed class ServerRoutingService : IPeerService, IConnectionStatusServ
     // The local users a message goes to: each addressed child client directly, and, once, each relay that has an addressed client behind it, which forwards the bytes on untouched.
     private IEnumerable<string> GetLocalTargets(ServerUserConfig config, HashSet<string> addressedUsers)
     {
-        IEnumerable<string> direct = addressedUsers.Where(user => config.ChildClients.Contains(user, StringComparer.OrdinalIgnoreCase));
+        IEnumerable<string> direct = addressedUsers.Where(user => config.Children.Contains(user, StringComparer.OrdinalIgnoreCase));
         IEnumerable<string> viaRelays = config.Relays.Where(relay => relay.Value.Any(addressedUsers.Contains)).Select(relay => relay.Key);
         return direct.Concat(viaRelays).Distinct(StringComparer.OrdinalIgnoreCase);
     }
@@ -383,7 +383,7 @@ internal sealed class ServerRoutingService : IPeerService, IConnectionStatusServ
         foreach ((string serverName, ServerUserConfig config) in userMap)
         {
             if (string.Equals(serverName, myName, StringComparison.OrdinalIgnoreCase)) { continue; }
-            if (config.ChildClients.Any(child => addressedUsers.Contains(child)) || config.Relays.Values.Any(clients => clients.Any(addressedUsers.Contains)))
+            if (config.Children.Any(child => addressedUsers.Contains(child)) || config.Relays.Values.Any(clients => clients.Any(addressedUsers.Contains)))
             {
                 sends.Add(TrySend(serverName, data, priority, message));
             }
@@ -525,7 +525,7 @@ internal sealed class ServerRoutingService : IPeerService, IConnectionStatusServ
 
         if (userMap.TryGetValue(myName, out ServerUserConfig? myConfig))
         {
-            foreach (string childName in myConfig.ChildClients)
+            foreach (string childName in myConfig.Children)
             {
                 statuses.Add(new PeerConnectionStatus
                 {

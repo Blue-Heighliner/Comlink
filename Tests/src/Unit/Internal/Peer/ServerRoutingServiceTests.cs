@@ -68,8 +68,8 @@ public sealed class ServerRoutingServiceTests
     {
         userMap ??= new Dictionary<string, ServerUserConfig>(StringComparer.OrdinalIgnoreCase)
         {
-            ["ServerA"] = new ServerUserConfig { ChildClients = ["ClientA1", "ClientA2"] },
-            ["ServerB"] = new ServerUserConfig { ChildClients = ["ClientB1", "ClientB2"] }
+            ["ServerA"] = new ServerUserConfig { Children = ["ClientA1", "ClientA2"] },
+            ["ServerB"] = new ServerUserConfig { Children = ["ClientB1", "ClientB2"] }
         };
 
         Mock<IPeerTransport> transport = new();
@@ -280,8 +280,8 @@ public sealed class ServerRoutingServiceTests
     {
         Dictionary<string, ServerUserConfig> userMap = new(StringComparer.OrdinalIgnoreCase)
         {
-            ["ServerA"] = new ServerUserConfig { ChildClients = ["ClientA1", "ClientA2"] },
-            ["ServerB"] = new ServerUserConfig { ChildClients = ["ClientB1"] }
+            ["ServerA"] = new ServerUserConfig { Children = ["ClientA1", "ClientA2"] },
+            ["ServerB"] = new ServerUserConfig { Children = ["ClientB1"] }
         };
         Fixture fx = await BuildStarted(userMap: userMap);
         int removedDrops = 0;
@@ -290,7 +290,7 @@ public sealed class ServerRoutingServiceTests
         fx.Come(Inbound("ClientA2", () => keptDrops++));
         int statusChanges = 0;
         fx.Service.StatusesChanged += () => statusChanges++;
-        userMap["ServerA"] = new ServerUserConfig { ChildClients = ["ClientA2", "ClientA3"] };
+        userMap["ServerA"] = new ServerUserConfig { Children = ["ClientA2", "ClientA3"] };
 
         fx.Service.Reconfigure();
 
@@ -350,8 +350,8 @@ public sealed class ServerRoutingServiceTests
 
     private static Dictionary<string, ServerUserConfig> WithRelay() => new(StringComparer.OrdinalIgnoreCase)
     {
-        ["ServerA"] = new ServerUserConfig { ChildClients = ["ClientA1", "RelayA"], Relays = new Dictionary<string, IReadOnlyList<string>> { ["RelayA"] = ["ClientR1", "ClientR2"] } },
-        ["ServerB"] = new ServerUserConfig { ChildClients = ["ClientB1"] }
+        ["ServerA"] = new ServerUserConfig { Children = ["ClientA1", "RelayA"], Relays = new Dictionary<string, IReadOnlyList<string>> { ["RelayA"] = ["ClientR1", "ClientR2"] } },
+        ["ServerB"] = new ServerUserConfig { Children = ["ClientB1"] }
     };
 
     /// <summary>A message for clients behind a relay goes to that relay once, as the original bytes, not to the clients themselves.</summary>
@@ -398,8 +398,8 @@ public sealed class ServerRoutingServiceTests
     {
         Dictionary<string, ServerUserConfig> map = new(StringComparer.OrdinalIgnoreCase)
         {
-            ["ServerA"] = new ServerUserConfig { ChildClients = ["ClientA1"] },
-            ["ServerB"] = new ServerUserConfig { ChildClients = ["RelayB"], Relays = new Dictionary<string, IReadOnlyList<string>> { ["RelayB"] = ["ClientRB1"] } }
+            ["ServerA"] = new ServerUserConfig { Children = ["ClientA1"] },
+            ["ServerB"] = new ServerUserConfig { Children = ["RelayB"], Relays = new Dictionary<string, IReadOnlyList<string>> { ["RelayB"] = ["ClientRB1"] } }
         };
         Fixture fx = await BuildStarted(userMap: map);
         PeerConnection clientA1 = Inbound("ClientA1");

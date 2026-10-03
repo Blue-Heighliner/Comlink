@@ -35,11 +35,11 @@ public sealed class NetworkConfigTests : IDisposable
     [Fact]
     public void Load_NoArgument_UsesConfigJsonInTheWorkingDirectory()
     {
-        Write("Config.json", """{ "Users": { "ALICE": { "PeerPort": 1234 } } }""");
+        Write("Config.json", """{ "Users": { "ALICE": { "PeerPoint": { "Host": "10.0.0.5", "Port": 1234 } } } }""");
 
         NetworkConfig config = NetworkConfig.Load([], directory);
 
-        Assert.Equal(1234, config.Find("ALICE")!.PeerPort);
+        Assert.Equal(("10.0.0.5", 1234), (config.Find("ALICE")!.PeerPoint!.Host, config.Find("ALICE")!.PeerPoint!.Port));
     }
 
     /// <summary>--config names the file to use, even when Config.json exists, and --user names the user the process runs as.</summary>
@@ -76,7 +76,7 @@ public sealed class NetworkConfigTests : IDisposable
     [Fact]
     public void Reload_ReplacesWhatTheFileSays_KeepsTheRunningUser_AndSurvivesABrokenFile()
     {
-        Write("Config.json", """{ "CertificateStore": "a", "UserGroups": { "G": [ "A" ] }, "Users": { "A": { "PeerPort": 1 } } }""");
+        Write("Config.json", """{ "CertificateStore": "a", "UserGroups": { "G": [ "A" ] }, "Users": { "A": { "PeerPoint": { "Port": 1 } } } }""");
         NetworkConfig config = NetworkConfig.Load(["--user", "A"], directory);
 
         Write("Config.json", """{ "CertificateStore": "b", "AuthorityCertificate": "root.cer", "UserGroups": { "H": [ "B" ] }, "Users": { "B": { "PeerPort": 2 } } }""");
@@ -106,9 +106,10 @@ public sealed class NetworkConfigTests : IDisposable
               "UserGroups": { "OPS": [ "alice", "BOB" ] },
               "Users": {
                 "ALICE": {
-                  "Role": "server", "PeerPort": 1, "InterfacePort": 2,
-                  "OutgoingPoints": [ { "IpAddress": "10.0.0.1", "Port": 3 }, { "SerialPort": "SL0", "SerialAddress": 5 } ],
-                  "ChildClients": [ "BOB" ], "StoresMessages": true, "SecurityLevel": "HIGH", "CertificateName": "CN-ALICE",
+                  "Role": "server", "PeerPoint": { "Host": "10.0.0.1", "Port": 1 }, "InterfacePort": 2,
+                  "Parent": { "User": "ROOT", "Mode": "MsmtListen" },
+                  "Children": [ "BOB", { "User": "CAROL", "Mode": "SyncSerial", "SerialPort": "SL0", "SerialAddress": 5, "RemoteSerialAddress": 6 }, { "user": "DAN", "mode": "msmtconnect" } ],
+                  "StoresMessages": true, "SecurityLevel": "HIGH", "CertificateName": "CN-ALICE",
                   "Data": { "desk": "4" },
                   "Headless": true, "AlertText": "HEY", "AlarmSoundSeconds": 5.5,
                   "QuickConfirmationEnabled": false, "ComposeAlertsEnabled": false, "MessageTagsEnabled": false, "MessageTagLabel": "Kind", "PrintReceivedEnabled": true
@@ -123,15 +124,17 @@ public sealed class NetworkConfigTests : IDisposable
 
         Assert.Equal("ROOT", config.TrustedAuthorityCertificateName);
         Assert.Equal("ALICE", info.Name);
-        Assert.Equal((UserRole.Server, 1, 2), (info.Role, info.PeerPort, info.InterfacePort));
-        Assert.Equal([new ConnectionPoint { IpAddress = "10.0.0.1", Port = 3 }, new ConnectionPoint { SerialPort = "SL0", SerialAddress = 5 }], info.OutgoingPoints);
-        Assert.Equal(["BOB"], info.ChildClients);
+        Assert.Equal((UserRole.Server, 2), (info.Role, info.InterfacePort));
+        Assert.Equal(new PeerPoint { Host = "10.0.0.1", Port = 1 }, info.PeerPoint);
+        Assert.Equal(new UserLink { User = "ROOT", Mode = ConnectionMode.MsmtListen }, info.Parent);
+        Assert.Equal(
+            [new UserLink { User = "BOB" }, new UserLink { User = "CAROL", Mode = ConnectionMode.SyncSerial, SerialPort = "SL0", SerialAddress = 5, RemoteSerialAddress = 6 }, new UserLink { User = "DAN", Mode = ConnectionMode.MsmtConnect }],
+            info.Children);
         Assert.True(info.StoresMessages);
         Assert.Equal(("HIGH", "CN-ALICE"), (info.SecurityLevel, info.CertificateName));
         Assert.Equal("4", info.Data["desk"]);
         Assert.Equal(["OPS"], info.Groups);
         Assert.Equal((true, "HEY", 5.5), (node.Headless, node.AlertText, node.AlarmSoundSeconds));
-        Assert.Equal("SERVER", ((ConnectionPointConfig)new ConnectionPointConfig { SerialPort = "SL0", User = "SERVER" }).ToPoint().User);
         Assert.Equal((false, false, false, "Kind", true), (node.QuickConfirmationEnabled, node.ComposeAlertsEnabled, node.MessageTagsEnabled, node.MessageTagLabel, node.PrintReceivedEnabled));
     }
 
@@ -173,11 +176,17 @@ public sealed class NetworkConfigTests : IDisposable
     [InlineData("Bogus", null)]
     public void GetRole_ParsesRecognizedNamesOnly(string? role, UserRole? expected) => Assert.Equal(expected, new NetworkUserConfig { Role = role }.GetRole());
 
-    /// <summary>Serial and IP points convert to the engine's connection point model.</summary>
+    /// <summary>A link written as a plain name or an object both read, with the object form carrying the mode and serial settings, and an unrecognized mode is the default.</summary>
     [Fact]
-    public void ConnectionPointConfig_ConvertsToAPoint()
+    public void Links_ReadFromANameOrAnObject()
     {
-        Assert.Equal(new ConnectionPoint { SerialPort = "SL0", SerialAddress = 5 }, new ConnectionPointConfig { SerialPort = "SL0", SerialAddress = 5 }.ToPoint());
-        Assert.Equal(new ConnectionPoint { IpAddress = "10.0.0.9", Port = 7 }, new ConnectionPointConfig { IpAddress = "10.0.0.9", Port = 7 }.ToPoint());
+        string path = Write("Links.json", """
+            { "Users": { "A": { "Parent": "B", "Children": [ "C", { "User": "D", "Mode": "bogus" }, { "User": "E", "Mode": "SyncSerial", "SerialPort": "SL1" } ] } } }
+            """);
+
+        UserInfo info = NetworkConfig.Load(["--config", path]).GetUserInfo("A")!;
+
+        Assert.Equal(new UserLink { User = "B" }, info.Parent);
+        Assert.Equal([new UserLink { User = "C" }, new UserLink { User = "D" }, new UserLink { User = "E", Mode = ConnectionMode.SyncSerial, SerialPort = "SL1" }], info.Children);
     }
 }

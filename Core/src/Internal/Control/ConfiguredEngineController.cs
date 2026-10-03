@@ -138,6 +138,10 @@ internal sealed class ConfiguredEngineController : IEngineController
     /// <inheritdoc />
     public IReadOnlyList<ConnectionPoint> OutgoingPoints => fallback.OutgoingPoints;
     /// <inheritdoc />
+    public string? ParentUser => fallback.ParentUser;
+    /// <inheritdoc />
+    public ConnectionPoint? ParentPoint => fallback.ParentPoint;
+    /// <inheritdoc />
     public IReadOnlyDictionary<string, ServerUserConfig> Servers => fallback.Servers;
     /// <inheritdoc />
     public IReadOnlyDictionary<string, string> GetUserData(string userName) => fallback.GetUserData(userName);

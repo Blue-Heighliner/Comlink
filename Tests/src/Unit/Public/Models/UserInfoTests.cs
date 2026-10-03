@@ -16,8 +16,9 @@ public sealed class UserInfoTests
         Assert.Null(info.Role);
         Assert.Null(info.SecurityLevel);
         Assert.False(info.StoresMessages);
-        Assert.Empty(info.OutgoingPoints);
-        Assert.Empty(info.ChildClients);
+        Assert.Null(info.PeerPoint);
+        Assert.Null(info.Parent);
+        Assert.Empty(info.Children);
         Assert.Empty(info.Data);
     }
 

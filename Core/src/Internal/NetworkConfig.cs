@@ -119,10 +119,10 @@ internal sealed class NetworkConfig
             {
                 Name = Users.Keys.First(key => string.Equals(key, userName, StringComparison.OrdinalIgnoreCase)),
                 Role = user.GetRole(),
-                PeerPort = user.PeerPort,
+                PeerPoint = user.PeerPoint?.ToPoint(),
                 InterfacePort = user.InterfacePort,
-                OutgoingPoints = [.. user.OutgoingPoints.Select(point => point.ToPoint())],
-                ChildClients = user.ChildClients,
+                Parent = user.Parent?.ToLink(),
+                Children = [.. user.Children.Select(child => child.ToLink())],
                 StoresMessages = user.StoresMessages,
                 SecurityLevel = user.SecurityLevel,
                 CertificateName = user.CertificateName,
@@ -147,17 +147,17 @@ internal sealed class NetworkUserConfig
     /// <summary>Networking role of a node this user runs: <c>"Peer"</c>, <c>"Client"</c>, <c>"Server"</c> or <c>"Relay"</c> (case-insensitive). <see langword="null"/> or unrecognized is <c>"Peer"</c>.</summary>
     public string? Role { get; init; }
 
-    /// <summary>TCP port a node this user runs listens on for IP connections. <see langword="null"/> uses the engine default (50021).</summary>
-    public int? PeerPort { get; init; }
+    /// <summary>Where other nodes reach a node this user runs over IP, and the port it listens on. <see langword="null"/> is the default <see cref="PeerPoint"/>.</summary>
+    public PeerPointConfig? PeerPoint { get; init; }
 
     /// <summary>Loopback TCP port of the local interface listener. <see langword="null"/> uses the engine default (50020).</summary>
     public int? InterfacePort { get; init; }
 
-    /// <summary>The points a node this user runs connects out to and keeps connected: IP hosts and ports to dial, serial ports to open. A client uses the first as its server.</summary>
-    public List<ConnectionPointConfig> OutgoingPoints { get; init; } = [];
+    /// <summary>The user's parent: a user name, or an object that also forces the connection mode. <see langword="null"/> for none.</summary>
+    public NetworkLinkConfig? Parent { get; init; }
 
-    /// <summary>For a server, the client users that belong to it.</summary>
-    public List<string> ChildClients { get; init; } = [];
+    /// <summary>The user's children: each a user name, or an object that also forces the connection mode.</summary>
+    public List<NetworkLinkConfig> Children { get; init; } = [];
 
     /// <summary>For a server, whether it stores the messages it routes and answers retrieval requests.</summary>
     public bool StoresMessages { get; init; }
@@ -199,22 +199,93 @@ internal sealed class NetworkUserConfig
     public UserRole? GetRole() => Enum.TryParse(Role, ignoreCase: true, out UserRole role) ? role : null;
 }
 
-/// <summary>JSON deserialization shape for an outgoing connection point in the network file.</summary>
-internal sealed class ConnectionPointConfig
+/// <summary>The <c>PeerPoint</c> of a user in the network configuration file: <c>Host</c> and <c>Port</c>.</summary>
+internal sealed class PeerPointConfig
 {
-    /// <summary>IPv4 or IPv6 address of the remote node. Ignored when <see cref="SerialPort"/> is set.</summary>
-    public string IpAddress { get; init; } = string.Empty;
-    /// <summary>TCP port of the remote node's listener. Ignored when <see cref="SerialPort"/> is set.</summary>
-    public int Port { get; init; }
-    /// <summary>Name of the local MicroGate serial port cabled to the remote node; when set, this point is reached over serial instead of IP.</summary>
-    public string? SerialPort { get; init; }
-    /// <summary>HDLC station address of this node on the serial link. Defaults to 255 (0xFF). Must differ from <see cref="RemoteSerialAddress"/>; the other end of the cable uses the two values the other way round.</summary>
-    public byte SerialAddress { get; init; } = 0xFF;
-    /// <summary>HDLC station address of the node at the other end of the serial link. Defaults to 254 (0xFE). Must differ from <see cref="SerialAddress"/>.</summary>
-    public byte RemoteSerialAddress { get; init; } = 0xFE;
-    /// <summary>For a serial point, the user at the other end of the cable. <see langword="null"/> names the user after the port.</summary>
-    public string? User { get; init; }
+    /// <summary>Gets the host or IP address other nodes use to reach the node.</summary>
+    public string Host { get; init; } = "127.0.0.1";
 
-    /// <summary>Converts this entry to the engine's connection point model.</summary>
-    public ConnectionPoint ToPoint() => new() { IpAddress = IpAddress, Port = Port, SerialPort = SerialPort, SerialAddress = SerialAddress, RemoteSerialAddress = RemoteSerialAddress, User = User };
+    /// <summary>Gets the TCP port the node listens on and other nodes connect to.</summary>
+    public int Port { get; init; } = 50021;
+
+    /// <summary>Converts to the engine's model.</summary>
+    public PeerPoint ToPoint() => new() { Host = Host, Port = Port };
+}
+
+/// <summary>
+/// A <c>Parent</c> or one entry of <c>Children</c> in the network configuration file: written as just the other user's name, or as an object that also forces the connection mode.
+/// </summary>
+[JsonConverter(typeof(NetworkLinkConfigConverter))]
+internal sealed class NetworkLinkConfig
+{
+    /// <summary>Gets the name of the user at the other end of the link.</summary>
+    public string User { get; init; } = string.Empty;
+
+    /// <summary>Gets the forced connection mode (<c>MsmtListen</c>, <c>MsmtConnect</c> or <c>SyncSerial</c>, case-insensitive), or <see langword="null"/> for the default.</summary>
+    public string? Mode { get; init; }
+
+    /// <summary>Gets the local serial port for <c>SyncSerial</c>.</summary>
+    public string? SerialPort { get; init; }
+
+    /// <summary>Gets this node's HDLC station address for <c>SyncSerial</c>.</summary>
+    public byte SerialAddress { get; init; } = 0xFF;
+
+    /// <summary>Gets the other end's HDLC station address for <c>SyncSerial</c>.</summary>
+    public byte RemoteSerialAddress { get; init; } = 0xFE;
+
+    /// <summary>Reads a plain user name as a link with the default mode.</summary>
+    /// <param name="user">The name of the user at the other end.</param>
+    public static implicit operator NetworkLinkConfig(string user) => new() { User = user };
+
+    /// <summary>Converts to the engine's model. An unrecognized mode is the default.</summary>
+    public UserLink ToLink()
+        => new()
+        {
+            User = User,
+            Mode = Enum.TryParse(Mode, ignoreCase: true, out ConnectionMode mode) ? mode : null,
+            SerialPort = SerialPort,
+            SerialAddress = SerialAddress,
+            RemoteSerialAddress = RemoteSerialAddress
+        };
+}
+
+/// <summary>Reads a <see cref="NetworkLinkConfig"/> from either a plain user name or an object.</summary>
+internal sealed class NetworkLinkConfigConverter : JsonConverter<NetworkLinkConfig>
+{
+    /// <inheritdoc />
+    public override NetworkLinkConfig Read(ref Utf8JsonReader reader, Type typeToConvert, JsonSerializerOptions options)
+    {
+        if (reader.TokenType == JsonTokenType.String) { return new NetworkLinkConfig { User = reader.GetString() ?? string.Empty }; }
+
+        using JsonDocument document = JsonDocument.ParseValue(ref reader);
+        JsonElement element = document.RootElement;
+        string? Text(string name) => element.EnumerateObject().FirstOrDefault(property => string.Equals(property.Name, name, StringComparison.OrdinalIgnoreCase)).Value is { ValueKind: JsonValueKind.String } value ? value.GetString() : null;
+        byte Address(string name, byte fallback) => element.EnumerateObject().FirstOrDefault(property => string.Equals(property.Name, name, StringComparison.OrdinalIgnoreCase)).Value is { ValueKind: JsonValueKind.Number } value && value.TryGetByte(out byte address) ? address : fallback;
+        return new NetworkLinkConfig
+        {
+            User = Text("User") ?? string.Empty,
+            Mode = Text("Mode"),
+            SerialPort = Text("SerialPort"),
+            SerialAddress = Address("SerialAddress", 0xFF),
+            RemoteSerialAddress = Address("RemoteSerialAddress", 0xFE)
+        };
+    }
+
+    /// <inheritdoc />
+    public override void Write(Utf8JsonWriter writer, NetworkLinkConfig value, JsonSerializerOptions options)
+    {
+        if (value.Mode is null && value.SerialPort is null) { writer.WriteStringValue(value.User); return; }
+
+        writer.WriteStartObject();
+        writer.WriteString("User", value.User);
+        if (value.Mode is not null) { writer.WriteString("Mode", value.Mode); }
+        if (value.SerialPort is not null)
+        {
+            writer.WriteString("SerialPort", value.SerialPort);
+            writer.WriteNumber("SerialAddress", value.SerialAddress);
+            writer.WriteNumber("RemoteSerialAddress", value.RemoteSerialAddress);
+        }
+
+        writer.WriteEndObject();
+    }
 }

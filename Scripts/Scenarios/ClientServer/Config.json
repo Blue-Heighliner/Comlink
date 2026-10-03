@@ -4,22 +4,22 @@
   "Users": {
     "SERVER": {
       "Role": "Server",
-      "PeerPort": 50121,
+      "PeerPoint": { "Host": "127.0.0.1", "Port": 50121 },
       "InterfacePort": 50120,
-      "ChildClients": [ "CLIENT1", "CLIENT2" ],
+      "Children": [ "CLIENT1", "CLIENT2" ],
       "StoresMessages": true,
       "SecurityLevel": "RESTRICTED"
     },
     "CLIENT1": {
       "Role": "Client",
       "InterfacePort": 50122,
-      "OutgoingPoints": [ { "IpAddress": "127.0.0.1", "Port": 50121 } ],
+      "Parent": "SERVER",
       "SecurityLevel": "INTERNAL"
     },
     "CLIENT2": {
       "Role": "Client",
       "InterfacePort": 50124,
-      "OutgoingPoints": [ { "IpAddress": "127.0.0.1", "Port": 50121 } ],
+      "Parent": "SERVER",
       "SecurityLevel": "INTERNAL"
     }
   }

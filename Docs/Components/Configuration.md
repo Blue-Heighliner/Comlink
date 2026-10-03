@@ -126,8 +126,8 @@ When a message is sent to a group, the Engine records which addressed groups eac
 
 ```json
 "Users": {
-  "SERVER1": { "Role": "Server", "PeerPort": 50221, "InterfacePort": 50220,
-    "OutgoingPoints": [ { "IpAddress": "10.0.0.2", "Port": 50223 } ], "ChildClients": [ "CLIENT1" ],
+  "SERVER1": { "Role": "Server", "PeerPoint": { "Host": "10.0.0.1", "Port": 50221 }, "InterfacePort": 50220,
+    "Parent": "SERVER2", "Children": [ "CLIENT1" ],
     "StoresMessages": true, "SecurityLevel": "RESTRICTED" }
 }
 ```
@@ -136,23 +136,23 @@ Everything about one user is stated on that user's entry in the [network configu
 
 | Field | Meaning | Default |
 |-------|---------|---------|
-| `Role` | The [networking role](Peer.md#user-roles) of a node this user runs: `Peer`, `Client` or `Server` | `Peer` |
-| `PeerPort` | TCP port the node listens on for IP connections from other nodes | `50021` |
+| `Role` | The [networking role](Peer.md#user-roles) of a node this user runs: `Peer`, `Client`, `Server` or `Relay` | `Peer` |
+| `PeerPoint` | `Host` and `Port` other nodes use to reach the node over IP, and the port it listens on | `127.0.0.1`, `50021` |
 | `InterfacePort` | Loopback TCP port of the local interface listener, always active in every role (see [Interface.md](Interface.md)) | `50020` |
-| `OutgoingPoints` | IP hosts and ports the node dials, and serial ports it opens, each kept connected by a heartbeat; a `Client` connects to the first only | none |
-| `ChildClients` | For a `Server`, the client users that belong to it | none |
+| `Parent` | The user above this one in a hierarchy, by name or as an object forcing the connection mode (`MsmtListen`, `MsmtConnect` or `SyncSerial`); by default the node dials it | none |
+| `Children` | The users below this one, for a `Server` or `Relay`, each by name or as an object forcing the connection mode; by default the node listens for them | none |
 | `StoresMessages` | For a `Server`, whether it stores the messages it routes and answers retrieval requests (see [Server Storage](#server-storage)) | `false` |
 | `SecurityLevel` | The name of the level the user runs at (see [Security Levels](#security-levels)) | the lowest configured level |
 | `CertificateName` | The certificate subject name of the user: the identity certificate to look up for the local user, and the name others' certificates must carry (see [MSMT Certificates](#msmt-certificates)) | the user name |
 | `Data` | App-specific string keys and values; the engine does not interpret them, they travel with the user's `UserIdentity` | none |
 
-The current user's info is what decides how this node behaves, so it is read once a user is installed (or named by `--user`), not when the engine starts: until then the node is a `Peer` with the default ports and nothing connected, showing only the install screen. The topology a `Server` routes with, every server in the cluster and the child clients each owns, is every user in the [directory](#user-directory) whose role is `Server`, with its `ChildClients`. Every node on a network uses the same file, since a node learns about other users, such as which servers store messages, from it.
+The current user's info is what decides how this node behaves, so it is read once a user is installed (or named by `--user`), not when the engine starts: until then the node is a `Peer` with the default ports and nothing connected, showing only the install screen. The topology a `Server` routes with, every server in the cluster and the children each owns, is every user in the [directory](#user-directory) whose role is `Server`, with its `Children`. Every node on a network uses the same file, since a node learns about other users, such as which servers store messages, from it.
 
 **Default:** a user with nothing stated is a `Peer` on the default ports that connects nowhere.
 
 **Network file:** this is the file; each field above has the same name in a user's entry (see [Config.md](Config.md)), and the entry also carries the settings of the node that user runs.
 
-**Sample:** each scenario under `Scripts/Scenarios/` (`Peer`, `ClientServer`, `ServerCluster`) has its own `Config.json` describing its whole network: role, ports, outgoing points, child clients, security level, storage, and certificate file for each of its users. Each scenario script passes it with `--config` and names its user with `--user`.
+**Sample:** each scenario under `Scripts/Scenarios/` (`Peer`, `ClientServer`, `ServerCluster`, `ClientRelayServer`) has its own `Config.json` describing its whole network: role, peer point, parent and children, security level, storage, and certificate file for each of its users. Each scenario script passes it with `--config` and names its user with `--user`.
 
 ---
 
@@ -426,7 +426,7 @@ or `URGENT`-tagged message.
 ### Server Storage
 
 ```csharp
-new UserInfo { Name = "SERVER1", Role = UserRole.Server, ChildClients = ["CLIENT1", "CLIENT2"], StoresMessages = true };
+new UserInfo { Name = "SERVER1", Role = UserRole.Server, Children = ["CLIENT1", "CLIENT2"], StoresMessages = true };
 ```
 
 A server user whose [user info](#user-info) sets `StoresMessages` stores messages: each keeps a copy of every message it routes (a message from one of its
@@ -505,13 +505,13 @@ engine.MsmtOptions(new MsmtConnectionOptions { HandshakeTimeout = TimeSpan.FromS
 
 ### Network Topology
 
-This instance's place in the peer/client/server networking topology, see [Peer.md](Peer.md#user-roles), is not stated on its own: it comes from the current user's [user info](#user-info) (`Role`, `PeerPort`, `OutgoingPoints`, and for a `Server` its `ChildClients`, with the topology of every server in the cluster built from every `Server` user's info). A node is configured only with where it connects and listens, never which users it expects there; who is on the other end of a connection is worked out when it forms (see [Identification.md](Identification.md)).
+This instance's place in the peer/client/server networking topology, see [Peer.md](Peer.md#user-roles), is not stated on its own: it comes from the current user's [user info](#user-info) (`Role`, `PeerPoint`, `Parent`, and for a `Server` or `Relay` its `Children`, with the topology of every server in the cluster built from every `Server` user's info). A node is configured only with where it connects and listens, never which users it expects there; who is on the other end of a connection is worked out when it forms (see [Identification.md](Identification.md)).
 
-The role selects the `IPeerService` implementation (`PeerService`/`ClientPeerService`/`ServerRoutingService`). `RolePeerService` is the one service the engine depends on; it creates that implementation when networking starts, after a user is installed, and forwards its events. `Restart()` (used when the network file is reloaded, see [Services.md](Services.md#networkreloadservice)) cancels and disposes the running implementation and creates another from the role as it is then, so a changed role takes effect without restarting the application; a changed port or set of outgoing points is applied in place by `Reconfigure()`, which leaves connections to unchanged points alone.
+The role selects the `IPeerService` implementation (`PeerService`/`ClientPeerService`/`ServerRoutingService`/`RelayPeerService`). `RolePeerService` is the one service the engine depends on; it creates that implementation when networking starts, after a user is installed, and forwards its events. `Restart()` (used when the network file is reloaded, see [Services.md](Services.md#networkreloadservice)) cancels and disposes the running implementation and creates another from the role as it is then, so a changed role takes effect without restarting the application; a changed port or set of outgoing points is applied in place by `Reconfigure()`, which leaves connections to unchanged points alone.
 
-**Default:** `UserRole.Peer`, no outgoing points, no server users.
+**Default:** `UserRole.Peer`, no links, no server users.
 
-**Network file:** none of its own; the role, ports, outgoing points and topology come from the users' entries. See [User Info](#user-info).
+**Network file:** none of its own; the role, peer point, links and topology come from the users' entries. See [User Info](#user-info).
 
 **Sample:** the roles, ports and points are on each site's user info; see [User Info](#user-info).
 

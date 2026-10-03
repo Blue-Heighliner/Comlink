@@ -135,7 +135,7 @@ public sealed class HandshakePeerTransportTests
     public async Task Connect_MatchesTopologyUsers()
     {
         Mock<TestEngineController> a = Controller();
-        a.Setup(c => c.Servers).Returns(new Dictionary<string, ServerUserConfig> { ["Server1"] = new ServerUserConfig { ChildClients = ["Client1"] } });
+        a.Setup(c => c.Servers).Returns(new Dictionary<string, ServerUserConfig> { ["Server1"] = new ServerUserConfig { Children = ["Client1"] } });
         (End endA, _) = Pair(a.Object, Controller().Object, bNames: ["cert-Client1"]);
 
         PeerConnection connection = await endA.Transport.Connect(point);

@@ -24,10 +24,10 @@ The file is read again while the application runs when the user right-clicks the
   "Users": {
     "USER-A": {
       "Role": "Peer",
-      "PeerPort": 50021,
+      "PeerPoint": { "Host": "10.0.0.2", "Port": 50021 },
       "InterfacePort": 50020,
-      "OutgoingPoints": [ { "IpAddress": "10.0.0.1", "Port": 50021 } ],
-      "ChildClients": [],
+      "Parent": null,
+      "Children": [],
       "StoresMessages": false,
       "SecurityLevel": null,
       "CertificateName": null,
@@ -95,11 +95,16 @@ These become the user's `UserInfo` (see [Configuration.md](Configuration.md#user
 
 The networking role of a node this user runs: `"Peer"`, `"Client"`, `"Server"` or `"Relay"` (case-insensitive). An unrecognized value is `"Peer"`. See [Peer.md](Peer.md#user-roles).
 
-### `PeerPort`
+### `PeerPoint`
 
-**Type:** `int | null` | **Default:** `null` (`50021`)
+**Type:** `object | null` | **Default:** `null` (host `127.0.0.1`, port `50021`)
 
-TCP port on which the node listens for IP connections opened by other nodes: peers dialing this peer, and clients, relays and other servers connecting to a server or relay. A client opens its connection outward and does not listen.
+How other nodes reach this node over IP, and the port it listens on. `Host` is the host name or IP address others dial, and `Port` the TCP port the node listens on for IP connections opened by other nodes: peers dialing this peer, and clients, relays and other servers connecting to a server or relay. A user that nobody dials need not state one. Where one user dials another (a peer dialing a peer, a node dialing its parent, a parent dialing a child whose link is forced to `MsmtConnect`), it uses the other user's `PeerPoint`.
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `Host` | `string` | Host name or IP address other nodes use to reach this node (default `127.0.0.1`) |
+| `Port` | `int` | TCP port this node listens on and others connect to (default `50021`) |
 
 ### `InterfacePort`
 
@@ -107,28 +112,27 @@ TCP port on which the node listens for IP connections opened by other nodes: pee
 
 Loopback TCP port of the local interface listener, always active in every role (see [Interface.md](Interface.md)).
 
-### `OutgoingPoints`
+### `Parent` and `Children`
 
-**Type:** `object[]` | **Default:** `[]`
+**Type:** `string | object | null` and `(string | object)[]` | **Default:** none
 
-The points the node connects out to and keeps connected. A `"Client"` uses the first as its server, and so does a `"Relay"`. Nothing here says which user is at a point; that is worked out when the connection forms (see [Identification.md](Identification.md)).
+The links between this user and the users it is connected to in a hierarchy. A `"Client"` or `"Relay"` names its `Parent`, the server or relay above it; a `"Server"` or `"Relay"` lists its `Children`, the clients and relays below it. A server may also name another server as its `Parent` to join a cluster. By default a user opens an outgoing connection to its parent, at the parent's `PeerPoint`, and listens on its own `PeerPoint` for incoming connections from its children, so naming the other user is enough. A user listed in `Children` is also the only kind of user a server or relay accepts connections from (apart from other servers), and a server routes by them (see [Peer.md](Peer.md#user-roles)). A relay's own `Children` are the clients behind it, which the server learns from the relay's entry.
+
+Instead of a plain user name, a link may be an object that forces how the connection forms. The other end of the link states the matching mode (a child forced to `MsmtConnect` is dialed by its parent, so that child states its `Parent` with `MsmtListen`; both ends of a serial cable state `SyncSerial`).
 
 | Field | Type | Description |
 |-------|------|-------------|
-| `IpAddress` | `string` | IPv4 or IPv6 address of the remote node |
-| `Port` | `int` | TCP port the remote node listens on |
-| `SerialPort` | `string` | Name of the local MicroGate serial port cabled to the remote node. When set, `IpAddress` and `Port` are ignored and the point is reached over serial. List the port on both nodes that share the cable |
-| `SerialAddress` | `int` | This node's HDLC station address on the serial link (0-255, default 255). Must differ from `RemoteSerialAddress` |
-| `RemoteSerialAddress` | `int` | HDLC station address of the node at the other end of the cable (0-255, default 254). The other end lists the two addresses the other way round |
-| `User` | `string` | For a serial point, the user at the other end of the cable, which the connection is identified as |
+| `User` | `string` | The user at the other end of the link |
+| `Mode` | `string` | `MsmtListen` (listen for an incoming MSMT connection from that user), `MsmtConnect` (open an outgoing MSMT connection to that user's `PeerPoint`) or `SyncSerial` (form a MicroGate peer connection over a serial port). Default: `MsmtConnect` for a parent, `MsmtListen` for a child, and `SyncSerial` when `SerialPort` is given |
+| `SerialPort` | `string` | For `SyncSerial`, the name of the local MicroGate serial port cabled to that user |
+| `SerialAddress` | `int` | For `SyncSerial`, this node's HDLC station address on the serial link (0-255, default 255). Must differ from `RemoteSerialAddress` |
+| `RemoteSerialAddress` | `int` | For `SyncSerial`, the HDLC station address of the user at the other end of the cable (0-255, default 254). The other end states the two addresses the other way round |
 
-A serial link carries no certificate, so unless the point names its `User`, its user is named after the port; override `Identify` or configure an initial packet or message for anything more elaborate.
+```json
+"CLIENT1": { "Role": "Client", "Parent": { "User": "SERVER", "Mode": "SyncSerial", "SerialPort": "ttyUSB0", "SerialAddress": 2, "RemoteSerialAddress": 1 } }
+```
 
-### `ChildClients`
-
-**Type:** `string[]` | **Default:** `[]`
-
-For a `"Server"`, the client users that belong to it, including any relays, whose own `ChildClients` are the clients behind them. For a `"Relay"`, the clients that connect to it and that it forwards for. The topology a server routes with, every server of the cluster and the children each owns, is built from every `"Server"` user's entry.
+A serial link carries no certificate, so the connection is identified as the user the link names; override `Identify` or configure an initial packet or message for anything more elaborate. Peers have no parent or children: a `"Peer"` dials every other peer that states a `PeerPoint`, except that when both state one only the one whose name sorts first dials, so a pair is never connected both ways, and a peer with none dials all of them.
 
 ### `StoresMessages`
 
@@ -210,7 +214,7 @@ Whether the print manager's "print received" toggle starts enabled, automaticall
 
 ### A peer network
 
-Two peers that dial each other, sharing one machine (`Scripts/Scenarios/Peer/Config.json`):
+Two peers sharing one machine, the one whose name sorts first dialing the other (`Scripts/Scenarios/Peer/Config.json`):
 
 ```json
 {
@@ -218,8 +222,8 @@ Two peers that dial each other, sharing one machine (`Scripts/Scenarios/Peer/Con
   "CertificateStore": ".",
   "UserGroups": { "TEST": [ "PEER1", "PEER2" ] },
   "Users": {
-    "PEER1": { "PeerPort": 50021, "InterfacePort": 50020, "OutgoingPoints": [ { "IpAddress": "127.0.0.1", "Port": 50023 } ], "SecurityLevel": "PUBLIC" },
-    "PEER2": { "PeerPort": 50023, "InterfacePort": 50022, "OutgoingPoints": [ { "IpAddress": "127.0.0.1", "Port": 50021 } ], "SecurityLevel": "PUBLIC" }
+    "PEER1": { "PeerPoint": { "Host": "127.0.0.1", "Port": 50021 }, "InterfacePort": 50020, "SecurityLevel": "PUBLIC" },
+    "PEER2": { "PeerPoint": { "Host": "127.0.0.1", "Port": 50023 }, "InterfacePort": 50022, "SecurityLevel": "PUBLIC" }
   }
 }
 ```
@@ -231,29 +235,29 @@ Sample.exe --config Scripts/Scenarios/Peer/Config.json --user PEER2
 
 ### A client/server hierarchy
 
-One server with two clients that connect to it, the server storing messages (`Scripts/Scenarios/ClientServer/Config.json`):
+One server with two clients that each name it as their parent, the server storing messages (`Scripts/Scenarios/ClientServer/Config.json`):
 
 ```json
 {
   "AuthorityCertificate": "../Root.cer",
   "CertificateStore": ".",
   "Users": {
-    "SERVER":  { "Role": "Server", "PeerPort": 50121, "InterfacePort": 50120, "ChildClients": [ "CLIENT1", "CLIENT2" ], "StoresMessages": true, "SecurityLevel": "RESTRICTED" },
-    "CLIENT1": { "Role": "Client", "InterfacePort": 50122, "OutgoingPoints": [ { "IpAddress": "127.0.0.1", "Port": 50121 } ], "SecurityLevel": "INTERNAL" },
-    "CLIENT2": { "Role": "Client", "InterfacePort": 50124, "OutgoingPoints": [ { "IpAddress": "127.0.0.1", "Port": 50121 } ], "SecurityLevel": "INTERNAL" }
+    "SERVER":  { "Role": "Server", "PeerPoint": { "Host": "127.0.0.1", "Port": 50121 }, "InterfacePort": 50120, "Children": [ "CLIENT1", "CLIENT2" ], "StoresMessages": true, "SecurityLevel": "RESTRICTED" },
+    "CLIENT1": { "Role": "Client", "InterfacePort": 50122, "Parent": "SERVER", "SecurityLevel": "INTERNAL" },
+    "CLIENT2": { "Role": "Client", "InterfacePort": 50124, "Parent": "SERVER", "SecurityLevel": "INTERNAL" }
   }
 }
 ```
 
-A relay sits between clients and a server: the server lists it as a child, and its own `ChildClients` are the clients behind it, which point their `OutgoingPoints` at the relay.
+A relay sits between clients and a server: the server lists it as a child, the relay names the server as its parent and lists the clients behind it as its children, and those clients name the relay as their parent (`Scripts/Scenarios/ClientRelayServer/Config.json`).
 
 ```json
 {
   "Users": {
-    "SERVER":  { "Role": "Server", "PeerPort": 50121, "ChildClients": [ "CLIENT1", "RELAY" ] },
-    "RELAY":  { "Role": "Relay", "PeerPort": 50123, "ChildClients": [ "CLIENT2" ], "OutgoingPoints": [ { "IpAddress": "127.0.0.1", "Port": 50121 } ] },
-    "CLIENT1": { "Role": "Client", "OutgoingPoints": [ { "IpAddress": "127.0.0.1", "Port": 50121 } ] },
-    "CLIENT2": { "Role": "Client", "OutgoingPoints": [ { "IpAddress": "127.0.0.1", "Port": 50123 } ] }
+    "SERVER":  { "Role": "Server", "PeerPoint": { "Host": "127.0.0.1", "Port": 50121 }, "Children": [ "CLIENT1", "RELAY" ] },
+    "RELAY":   { "Role": "Relay", "PeerPoint": { "Host": "127.0.0.1", "Port": 50123 }, "Parent": "SERVER", "Children": [ "CLIENT2" ] },
+    "CLIENT1": { "Role": "Client", "Parent": "SERVER" },
+    "CLIENT2": { "Role": "Client", "Parent": "RELAY" }
   }
 }
 ```

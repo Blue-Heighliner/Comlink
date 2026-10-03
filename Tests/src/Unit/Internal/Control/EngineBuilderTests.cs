@@ -255,31 +255,71 @@ public sealed class EngineBuilderTests
         Assert.Null(other.Role);
     }
 
-    /// <summary>The current user's role, ports, outgoing points and child clients come from that user's entry, with defaults before a user exists or when none is listed.</summary>
+    /// <summary>The current user's role, ports, links and connection points come from that user's entry, with defaults before a user exists or when none is listed.</summary>
     [Fact]
     public void CurrentUserInfo_DecidesRolePortsAndConnections()
     {
         NetworkConfig network = Network(("SERVER", new NetworkUserConfig
         {
             Role = "Server",
-            PeerPort = 1234,
+            PeerPoint = new PeerPointConfig { Host = "10.0.0.9", Port = 1234 },
             InterfacePort = 5678,
-            ChildClients = ["C1"],
-            OutgoingPoints = [new ConnectionPointConfig { IpAddress = "10.0.0.1", Port = 1 }]
-        }));
+            Parent = "UPSTREAM",
+            Children = ["C1", new NetworkLinkConfig { User = "C2", Mode = "MsmtConnect" }, new NetworkLinkConfig { User = "C3", Mode = "SyncSerial", SerialPort = "SL0", SerialAddress = 1, RemoteSerialAddress = 2 }]
+        }),
+        ("UPSTREAM", new NetworkUserConfig { Role = "Server", PeerPoint = new PeerPointConfig { Host = "10.0.0.1", Port = 1 } }),
+        ("C2", new NetworkUserConfig { Role = "Client", PeerPoint = new PeerPointConfig { Host = "10.0.0.2", Port = 2 } }));
         (_, EngineController server) = Build(engine => engine, "SERVER", network);
         (_, EngineController noInfo) = Build(engine => engine, "OTHER", network);
         (_, EngineController noUser) = Build(engine => engine, network: network);
 
         Assert.Equal((UserRole.Server, 1234, 5678), (server.Role, server.PeerPort, server.InterfacePort));
-        Assert.Equal([new ConnectionPoint { IpAddress = "10.0.0.1", Port = 1 }], server.OutgoingPoints);
-        Assert.Equal(["C1"], server.Servers["server"].ChildClients);
+        Assert.Equal(
+            [new ConnectionPoint { IpAddress = "10.0.0.1", Port = 1 }, new ConnectionPoint { IpAddress = "10.0.0.2", Port = 2 }, new ConnectionPoint { SerialPort = "SL0", SerialAddress = 1, RemoteSerialAddress = 2, User = "C3" }],
+            server.OutgoingPoints);
+        Assert.Equal(("UPSTREAM", new ConnectionPoint { IpAddress = "10.0.0.1", Port = 1 }), (server.ParentUser, server.ParentPoint));
+        Assert.Equal(["C1", "C2", "C3"], server.Servers["server"].Children);
         Assert.All([noInfo, noUser], controller =>
         {
             Assert.Equal((UserRole.Peer, 50021, 50020), (controller.Role, controller.PeerPort, controller.InterfacePort));
             Assert.Empty(controller.OutgoingPoints);
-            Assert.Single(controller.Servers);
+            Assert.Equal(2, controller.Servers.Count);
         });
+    }
+
+    /// <summary>A peer dials every other peer that states a peer point, but when both state one only the lower name dials, so a pair never connects both ways; a peer with no peer point dials all of them.</summary>
+    [Fact]
+    public void Peers_DialEachOthersPeerPoints_OnlyOneWay()
+    {
+        NetworkConfig network = Network(
+            ("ALICE", new NetworkUserConfig { PeerPoint = new PeerPointConfig { Host = "10.0.0.1", Port = 1 } }),
+            ("BOB", new NetworkUserConfig { PeerPoint = new PeerPointConfig { Host = "10.0.0.2", Port = 2 } }),
+            ("CAROL", new NetworkUserConfig()),
+            ("SERVER", new NetworkUserConfig { Role = "Server", PeerPoint = new PeerPointConfig { Host = "10.0.0.9", Port = 9 } }));
+        (_, EngineController alice) = Build(engine => engine, "ALICE", network);
+        (_, EngineController bob) = Build(engine => engine, "BOB", network);
+        (_, EngineController carol) = Build(engine => engine, "CAROL", network);
+
+        Assert.Equal([new ConnectionPoint { IpAddress = "10.0.0.2", Port = 2 }], alice.OutgoingPoints);
+        Assert.Empty(bob.OutgoingPoints);
+        Assert.Equal([new ConnectionPoint { IpAddress = "10.0.0.1", Port = 1 }, new ConnectionPoint { IpAddress = "10.0.0.2", Port = 2 }], carol.OutgoingPoints);
+    }
+
+    /// <summary>A parent is dialed by default and a child listened for; a forced mode reverses that, and listening for a parent leaves no point to dial.</summary>
+    [Fact]
+    public void Links_DefaultToConnectingToParentsAndListeningForChildren_UnlessForced()
+    {
+        NetworkConfig network = Network(
+            ("PARENT", new NetworkUserConfig { Role = "Server", PeerPoint = new PeerPointConfig { Host = "10.0.0.1", Port = 1 } }),
+            ("CHILD", new NetworkUserConfig { Role = "Client", PeerPoint = new PeerPointConfig { Host = "10.0.0.2", Port = 2 }, Parent = "PARENT" }),
+            ("LISTENER", new NetworkUserConfig { Role = "Client", Parent = new NetworkLinkConfig { User = "PARENT", Mode = "MsmtListen" } }));
+        (_, EngineController child) = Build(engine => engine, "CHILD", network);
+        (_, EngineController listener) = Build(engine => engine, "LISTENER", network);
+
+        Assert.Equal(new ConnectionPoint { IpAddress = "10.0.0.1", Port = 1 }, child.ParentPoint);
+        Assert.Equal("PARENT", listener.ParentUser);
+        Assert.Null(listener.ParentPoint);
+        Assert.Empty(listener.OutgoingPoints);
     }
 
     /// <summary>A server's topology records which of its children are relays and the clients behind each, taken from the relay's own entry.</summary>
@@ -287,13 +327,13 @@ public sealed class EngineBuilderTests
     public void Servers_RecordTheClientsBehindEachRelay()
     {
         NetworkConfig network = Network(
-            ("SERVER", new NetworkUserConfig { Role = "Server", ChildClients = ["C1", "RELAY"] }),
-            ("RELAY", new NetworkUserConfig { Role = "Relay", ChildClients = ["C2", "C3"] }));
+            ("SERVER", new NetworkUserConfig { Role = "Server", Children = ["C1", "RELAY"] }),
+            ("RELAY", new NetworkUserConfig { Role = "Relay", Children = ["C2", "C3"] }));
         (_, EngineController controller) = Build(engine => engine, "SERVER", network);
 
         ServerUserConfig server = controller.Servers["SERVER"];
 
-        Assert.Equal(["C1", "RELAY"], server.ChildClients);
+        Assert.Equal(["C1", "RELAY"], server.Children);
         Assert.Equal(["C2", "C3"], Assert.Single(server.Relays).Value);
         Assert.Equal("RELAY", Assert.Single(server.Relays).Key);
         Assert.DoesNotContain("RELAY", controller.Servers.Keys);

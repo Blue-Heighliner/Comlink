@@ -27,12 +27,12 @@ public sealed record UserInfo
     public IReadOnlyList<string> Groups { get; init; } = [];
     /// <summary>The networking role of a node this user runs. <see langword="null"/> (the default) is <see cref="UserRole.Peer"/>.</summary>
     public UserRole? Role { get; init; }
-    /// <summary>The TCP port a node this user runs listens on for IP connections from other nodes. <see langword="null"/> (the default) is 50021.</summary>
-    public int? PeerPort { get; init; }
+    /// <summary>Where other nodes reach a node this user runs over IP, and the port it listens on. <see langword="null"/> (the default) is the default <see cref="Models.PeerPoint"/>.</summary>
+    public PeerPoint? PeerPoint { get; init; }
     /// <summary>The loopback TCP port a node this user runs uses for its local interface listener. <see langword="null"/> (the default) is 50020.</summary>
     public int? InterfacePort { get; init; }
-    /// <summary>The points a node this user runs connects out to and keeps connected: IP hosts and ports to dial, serial ports to open. A <see cref="UserRole.Client"/> connects to the first only. None by default.</summary>
-    public IReadOnlyList<ConnectionPoint> OutgoingPoints { get; init; } = [];
-    /// <summary>For a <see cref="UserRole.Server"/> user, the client users that belong to it. Empty by default.</summary>
-    public IReadOnlyList<string> ChildClients { get; init; } = [];
+    /// <summary>The link to this user's parent: the user it forms an outgoing connection with by default. <see langword="null"/> (the default) for a user with no parent.</summary>
+    public UserLink? Parent { get; init; }
+    /// <summary>The links to this user's children, the users it listens for by default. For a <see cref="UserRole.Server"/> they are its clients and relays, and for a <see cref="UserRole.Relay"/> the clients behind it. Empty by default.</summary>
+    public IReadOnlyList<UserLink> Children { get; init; } = [];
 }

@@ -344,7 +344,7 @@ internal sealed class HandshakePeerTransport : IPeerTransport
         foreach ((string server, ServerUserConfig config) in engineController.Servers)
         {
             names.Add(server);
-            names.UnionWith(config.ChildClients);
+            names.UnionWith(config.Children);
         }
 
         return names;

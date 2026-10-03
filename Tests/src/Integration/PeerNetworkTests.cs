@@ -40,8 +40,10 @@ public sealed class PeerNetworkTests
             controller.Setup(c => c.Role).Returns(role);
             controller.Setup(c => c.PeerPort).Returns(peerPort);
             controller.Setup(c => c.OutgoingPoints).Returns(outgoing);
+            controller.Setup(c => c.ParentPoint).Returns(role is UserRole.Client or UserRole.Relay ? outgoing.FirstOrDefault() : null);
+            controller.Setup(c => c.ParentUser).Returns(role is UserRole.Client or UserRole.Relay ? "Server" : null);
             controller.Setup(c => c.Servers).Returns(servers ?? new Dictionary<string, ServerUserConfig>());
-            controller.Setup(c => c.GetUserInfo(user)).Returns(new UserInfo { Name = user, Role = role, ChildClients = relayChildren ?? [] });
+            controller.Setup(c => c.GetUserInfo(user)).Returns(new UserInfo { Name = user, Role = role, Children = [.. (relayChildren ?? []).Select(name => (UserLink)name)] });
             controller.Setup(c => c.ConnectionOptions).Returns(new MsmtSessionPeerOptions
             {
                 Credentials = new MsmtCredentials { Identity = identity, TrustedAuthorities = authorities },
@@ -103,7 +105,7 @@ public sealed class PeerNetworkTests
     }
 
     private static Dictionary<string, ServerUserConfig> OneServer(params string[] children)
-        => new(StringComparer.OrdinalIgnoreCase) { ["Server"] = new ServerUserConfig { ChildClients = children } };
+        => new(StringComparer.OrdinalIgnoreCase) { ["Server"] = new ServerUserConfig { Children = children } };
 
     /// <summary>A server that only listens routes a message between two clients that only connect out: it is pushed to the recipient over the connection the recipient opened, and the rows on both sides are named from the certificates.</summary>
     [Fact]
@@ -138,7 +140,7 @@ public sealed class PeerNetworkTests
         {
             ["Server"] = new ServerUserConfig
             {
-                ChildClients = ["Client3", "Relay1", "Relay2"],
+                Children = ["Client3", "Relay1", "Relay2"],
                 Relays = new Dictionary<string, IReadOnlyList<string>> { ["Relay1"] = ["Client1"], ["Relay2"] = ["Client2"] }
             }
         };
@@ -270,8 +272,8 @@ public sealed class PeerNetworkTests
         int port2 = FreePort();
         Dictionary<string, ServerUserConfig> topology = new(StringComparer.OrdinalIgnoreCase)
         {
-            ["Server1"] = new ServerUserConfig { ChildClients = ["Client1"] },
-            ["Server2"] = new ServerUserConfig { ChildClients = ["Client2"] }
+            ["Server1"] = new ServerUserConfig { Children = ["Client1"] },
+            ["Server2"] = new ServerUserConfig { Children = ["Client2"] }
         };
         await using Node server2 = new("Server2", certificates["Server2"], authorities, UserRole.Server, port2, [], topology);
         await using Node server1 = new("Server1", certificates["Server1"], authorities, UserRole.Server, port1, [Local(port2)], topology);

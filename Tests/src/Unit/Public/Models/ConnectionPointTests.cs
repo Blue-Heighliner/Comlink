@@ -56,26 +56,4 @@ public sealed class ConnectionPointTests
         Assert.Equal("10.0.0.1:50021", new ConnectionPoint { IpAddress = "10.0.0.1", Port = 50021 }.ToString());
         Assert.Equal("SL0 (address 7)", new ConnectionPoint { SerialPort = "SL0", SerialAddress = 7 }.ToString());
     }
-
-    /// <summary>A config entry with a serial port converts to a serial point carrying its address.</summary>
-    [Fact]
-    public void ConnectionPointConfig_Serial_ConvertsToSerialPoint()
-    {
-        ConnectionPoint point = new ConnectionPointConfig { SerialPort = "SL2", SerialAddress = 9 }.ToPoint();
-
-        Assert.True(point.IsSerial);
-        Assert.Equal("SL2", point.SerialPort);
-        Assert.Equal(9, point.SerialAddress);
-    }
-
-    /// <summary>A config entry with only an IP address and port converts to an IP point, as before.</summary>
-    [Fact]
-    public void ConnectionPointConfig_Ip_ConvertsToIpPoint()
-    {
-        ConnectionPoint point = new ConnectionPointConfig { IpAddress = "10.1.1.1", Port = 8 }.ToPoint();
-
-        Assert.False(point.IsSerial);
-        Assert.Equal("10.1.1.1", point.IpAddress);
-        Assert.Equal(8, point.Port);
-    }
 }

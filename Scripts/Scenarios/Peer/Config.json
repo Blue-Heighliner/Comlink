@@ -6,15 +6,13 @@
   },
   "Users": {
     "PEER1": {
-      "PeerPort": 50021,
+      "PeerPoint": { "Host": "127.0.0.1", "Port": 50021 },
       "InterfacePort": 50020,
-      "OutgoingPoints": [ { "IpAddress": "127.0.0.1", "Port": 50023 } ],
       "SecurityLevel": "PUBLIC"
     },
     "PEER2": {
-      "PeerPort": 50023,
+      "PeerPoint": { "Host": "127.0.0.1", "Port": 50023 },
       "InterfacePort": 50022,
-      "OutgoingPoints": [ { "IpAddress": "127.0.0.1", "Port": 50021 } ],
       "SecurityLevel": "PUBLIC"
     }
   }

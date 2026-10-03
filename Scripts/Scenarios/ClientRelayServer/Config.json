@@ -4,30 +4,30 @@
   "Users": {
     "SERVER": {
       "Role": "Server",
-      "PeerPort": 50321,
+      "PeerPoint": { "Host": "127.0.0.1", "Port": 50321 },
       "InterfacePort": 50320,
-      "ChildClients": [ "RELAY" ],
+      "Children": [ "RELAY" ],
       "StoresMessages": true,
       "SecurityLevel": "RESTRICTED"
     },
     "RELAY": {
       "Role": "Relay",
-      "PeerPort": 50323,
+      "PeerPoint": { "Host": "127.0.0.1", "Port": 50323 },
       "InterfacePort": 50322,
-      "ChildClients": [ "CLIENT1", "CLIENT2" ],
-      "OutgoingPoints": [ { "IpAddress": "127.0.0.1", "Port": 50321 } ],
+      "Parent": "SERVER",
+      "Children": [ "CLIENT1", "CLIENT2" ],
       "SecurityLevel": "INTERNAL"
     },
     "CLIENT1": {
       "Role": "Client",
       "InterfacePort": 50324,
-      "OutgoingPoints": [ { "IpAddress": "127.0.0.1", "Port": 50323 } ],
+      "Parent": "RELAY",
       "SecurityLevel": "INTERNAL"
     },
     "CLIENT2": {
       "Role": "Client",
       "InterfacePort": 50326,
-      "OutgoingPoints": [ { "IpAddress": "127.0.0.1", "Port": 50323 } ],
+      "Parent": "RELAY",
       "SecurityLevel": "INTERNAL"
     }
   }

@@ -49,7 +49,8 @@ public sealed class ClientPeerServiceTests
 
         ConnectionPoint target = point ?? serverPoint;
         Mock<TestEngineController> engineController = new() { CallBase = true };
-        engineController.Setup(p => p.OutgoingPoints).Returns(pointConfigured ? [target] : []);
+        engineController.Setup(p => p.ParentPoint).Returns(pointConfigured ? target : null);
+        engineController.Setup(p => p.ParentUser).Returns(pointConfigured ? "Server1" : null);
 
         ClientPeerService service = new(transportFactory.Object, engineController.Object, noLogger);
         Fixture fixture = new(service, transport, connected, disconnected, received, ServerConnection(target, serverName));
@@ -150,7 +151,8 @@ public sealed class ClientPeerServiceTests
         Mock<IPeerTransportFactory> factory = new();
         factory.Setup(f => f.Create()).Returns(transport.Object);
         Mock<TestEngineController> engineController = new() { CallBase = true };
-        engineController.Setup(p => p.OutgoingPoints).Returns(() => outgoing);
+        engineController.Setup(p => p.ParentPoint).Returns(() => outgoing.FirstOrDefault());
+        engineController.Setup(p => p.ParentUser).Returns("Server1");
         ClientPeerService service = new(factory.Object, engineController.Object, noLogger);
         int statusChanges = 0;
         service.StatusesChanged += () => statusChanges++;
@@ -173,9 +175,9 @@ public sealed class ClientPeerServiceTests
         await startTask;
     }
 
-    /// <summary>Only the first outgoing point is the server: a client has one long-term connection.</summary>
+    /// <summary>Only the parent's point is the server: a client has one long-term connection, whatever else its links would dial.</summary>
     [Fact]
-    public async Task Start_SeveralPoints_ConnectsToTheFirstOnly()
+    public async Task Start_SeveralPoints_ConnectsToTheParentOnly()
     {
         ConnectionPoint other = new() { IpAddress = "10.0.0.2", Port = 9000 };
         Mock<IPeerTransport> transport = new();
@@ -187,6 +189,8 @@ public sealed class ClientPeerServiceTests
         factory.Setup(f => f.Create()).Returns(transport.Object);
         Mock<TestEngineController> engineController = new() { CallBase = true };
         engineController.Setup(p => p.OutgoingPoints).Returns([serverPoint, other]);
+        engineController.Setup(p => p.ParentPoint).Returns(serverPoint);
+        engineController.Setup(p => p.ParentUser).Returns("Server1");
         ClientPeerService service = new(factory.Object, engineController.Object, noLogger);
         using CancellationTokenSource cts = new();
 
@@ -302,6 +306,47 @@ public sealed class ClientPeerServiceTests
         await Task.Delay(100);
 
         Assert.False(delivered);
+
+        cts.Cancel();
+        await startTask;
+    }
+
+    /// <summary>A parent whose link is forced to listen mode has no point to dial: the client listens instead and treats the connection that parent opens as its server.</summary>
+    [Fact]
+    public async Task Start_ParentInListenMode_ListensAndAcceptsTheParentsConnection()
+    {
+        Mock<IPeerTransport> transport = new();
+        TestObservable<PeerConnectionEventArgs> connected = new();
+        TestObservable<PeerReceivedEventArgs> received = new();
+        transport.SetupGet(p => p.Connected).Returns(connected);
+        transport.SetupGet(p => p.Disconnected).Returns(new TestObservable<PeerConnectionEventArgs>());
+        transport.SetupGet(p => p.Received).Returns(received);
+        transport.Setup(p => p.Request(It.IsAny<PeerConnection>(), It.IsAny<ReadOnlyMemory<byte>>(), It.IsAny<PeerSendOptions>(), It.IsAny<CancellationToken>())).ReturnsAsync(true);
+        Mock<IPeerTransportFactory> factory = new();
+        factory.Setup(f => f.Create()).Returns(transport.Object);
+        Mock<TestEngineController> engineController = new() { CallBase = true };
+        engineController.Setup(p => p.ParentPoint).Returns((ConnectionPoint?)null);
+        engineController.Setup(p => p.ParentUser).Returns("Server1");
+        engineController.Setup(p => p.PeerPort).Returns(9500);
+        ClientPeerService service = new(factory.Object, engineController.Object, noLogger);
+        using CancellationTokenSource cts = new();
+        TaskCompletionSource<object> delivered = new();
+        service.FrameDelivered += message => { delivered.TrySetResult(message); return Task.CompletedTask; };
+
+        Task startTask = service.Start(cts.Token);
+        await WaitUntil(() => transport.Invocations.Any(i => i.Method.Name == nameof(IPeerTransport.StartListener)), TimeSpan.FromSeconds(30));
+        PeerConnection stranger = new(null, new IpConnectionInfo { IsInbound = true }, () => { }) { User = new UserIdentity { Name = "Stranger" } };
+        connected.Publish(new PeerConnectionEventArgs { Connection = stranger });
+        Assert.False(service.GetStatuses().Single().IsConnected);
+        PeerConnection parent = new(null, new IpConnectionInfo { IsInbound = true }, () => { }) { User = new UserIdentity { Name = "Server1" } };
+        connected.Publish(new PeerConnectionEventArgs { Connection = parent });
+
+        Assert.True(service.GetStatuses().Single().IsConnected);
+        transport.Verify(p => p.StartListener(9500), Times.Once);
+        transport.Verify(p => p.Connect(It.IsAny<ConnectionPoint>(), It.IsAny<CancellationToken>()), Times.Never);
+        received.Publish(new PeerReceivedEventArgs { Connection = parent, Payload = Encode(new TestFrame { MessageId = "MSG1", FromUser = "REMOTE" }) });
+        TestFrame message = Assert.IsType<TestFrame>(await delivered.Task.WaitAsync(TimeSpan.FromSeconds(30)));
+        Assert.Equal("MSG1", message.MessageId);
 
         cts.Cancel();
         await startTask;
