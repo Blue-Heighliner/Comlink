@@ -3,7 +3,7 @@ namespace BlueHeighliner.Comlink.Peer;
 /// <summary>
 /// Implements <see cref="IPeerService"/> for <see cref="UserRole.Relay"/>: a direct network path between its child clients and the one server it is linked to. It listens on
 /// <see cref="IEngineController.PeerPort"/>, accepts the clients named in the current user's <see cref="UserInfo.Children"/> (or dials those whose link says so) and keeps a connection open to
-/// its parent, the server (see <see cref="IEngineController.ParentPoint"/>). Everything a child sends is forwarded to the server, and everything the server sends is forwarded
+/// its parent, the server (see <see cref="IEngineController.ParentPoints"/>). Everything a child sends is forwarded to the server, and everything the server sends is forwarded
 /// to whichever of the children it addresses, as the very bytes that arrived: nothing is modified, stored, receipted or delivered locally, and the relay never composes traffic of
 /// its own. Frames are only deserialized to read their addresses and priority, and a frame that addresses no one is not traffic and is not forwarded: the initial packet and frame exchange that introduces
 /// the two ends of a connection is point-to-point and consumed by the transport before the relay sees anything, and anything of that kind that did slip through carries no addresses. Tracks connect/disconnect status for each child and the server, kept live by a
@@ -35,9 +35,8 @@ internal sealed class RelayPeerService : IPeerService, IConnectionStatusService,
     private readonly ConcurrentDictionary<string, bool> closedChildren = new(StringComparer.OrdinalIgnoreCase);
 
     private IPeerTransport? transport;
-    private ConnectionPoint? serverPoint;
+    private readonly ParentLinkSet parentLinks = new();
     private PeerConnection? serverConnection;
-    private PeerLinkControl? serverLink;
     private volatile bool isServerClosed;
     private CancellationToken lifetime;
     private int listenPort;
@@ -95,9 +94,9 @@ internal sealed class RelayPeerService : IPeerService, IConnectionStatusService,
             listenPort = engineController.PeerPort;
             transport.StartListener(listenPort);
             serverName = engineController.ParentUser;
-            serverPoint = engineController.ParentPoint;
-            (_, IReadOnlyList<(ConnectionPoint Point, PeerLinkControl Control)> started) = points.Sync(transport, engineController.OutgoingPoints, lifetime, OnHeartbeatAcknowledged);
-            serverLink = started.FirstOrDefault(entry => entry.Point.Equals(serverPoint)).Control;
+            HashSet<string> parentKeys = [.. engineController.ParentPoints.Select(point => point.Key)];
+            (_, IReadOnlyList<(ConnectionPoint Point, PeerLinkControl Control)> started) = points.Sync(transport, engineController.OutgoingPoints, lifetime, OnHeartbeatAcknowledged, point => { if (parentKeys.Contains(point.Key)) { parentLinks.Track(point); } });
+            parentLinks.Attach(started.Where(entry => parentKeys.Contains(entry.Point.Key)));
         }
 
         try { await Task.Delay(Timeout.Infinite, cancellation); }
@@ -121,19 +120,18 @@ internal sealed class RelayPeerService : IPeerService, IConnectionStatusService,
 
             if (engineController.ParentUser is null) { logger.LogError("Relay role requires a parent (its server); none is defined any more"); }
 
-            ConnectionPoint? wantedParent = engineController.ParentPoint;
-            (IReadOnlyList<ConnectionPoint> removed, IReadOnlyList<(ConnectionPoint Point, PeerLinkControl Control)> started) = points.Sync(transport, engineController.OutgoingPoints, lifetime, OnHeartbeatAcknowledged);
-            if (!Equals(wantedParent, serverPoint) || removed.Any(point => point.Equals(serverPoint)))
+            HashSet<string> parentKeys = [.. engineController.ParentPoints.Select(point => point.Key)];
+            (IReadOnlyList<ConnectionPoint> removed, IReadOnlyList<(ConnectionPoint Point, PeerLinkControl Control)> started) = points.Sync(transport, engineController.OutgoingPoints, lifetime, OnHeartbeatAcknowledged, point => { if (parentKeys.Contains(point.Key)) { parentLinks.Track(point); } });
+            if (removed.Any(point => parentLinks.Contains(point)) || !string.Equals(serverName, engineController.ParentUser, StringComparison.OrdinalIgnoreCase))
             {
                 serverConnection?.Drop();
                 UpdateServerStatus(false);
-                serverPoint = wantedParent;
-                serverLink = null;
+                parentLinks.Remove(removed);
                 isServerClosed = false;
                 serverName = engineController.ParentUser ?? string.Empty;
             }
 
-            if (started.FirstOrDefault(entry => entry.Point.Equals(serverPoint)) is { Point: not null } parentLink) { serverLink = parentLink.Control; }
+            parentLinks.Attach(started.Where(entry => parentKeys.Contains(entry.Point.Key)));
 
             if (changed || removed.Count > 0 || started.Count > 0) { StatusesChanged?.Invoke(); }
         }
@@ -162,7 +160,9 @@ internal sealed class RelayPeerService : IPeerService, IConnectionStatusService,
     private bool IsServerConnection(PeerConnection connection)
         => connection.IsInbound
             ? engineController.ParentUser is { } parent && string.Equals(connection.User?.Name, parent, StringComparison.OrdinalIgnoreCase)
-            : serverPoint is { } expected && expected.Equals(connection.Point);
+            : connection.IsSerial
+                ? engineController.ParentUser is { } serialParent && string.Equals(connection.User?.Name, serialParent, StringComparison.OrdinalIgnoreCase)
+                : parentLinks.Contains(connection.Point);
 
     private void OnConnected(PeerConnectionEventArgs args)
     {
@@ -221,7 +221,7 @@ internal sealed class RelayPeerService : IPeerService, IConnectionStatusService,
         {
             serverConnection = null;
             UpdateServerStatus(false);
-            serverLink?.NotifyLost();
+            parentLinks.NotifyLost();
             return;
         }
 
@@ -396,19 +396,14 @@ internal sealed class RelayPeerService : IPeerService, IConnectionStatusService,
 
         if (kind == PeerConnectionKind.Server)
         {
-            if (serverPoint is null || serverLink is null || isServerClosed == closed) { return; }
+            if (isServerClosed == closed) { return; }
 
             isServerClosed = closed;
-            transport.SetClosed(serverPoint, closed);
+            parentLinks.SetClosed(transport, closed);
             if (closed)
             {
-                serverLink.Close();
                 serverConnection?.Drop();
                 UpdateServerStatus(false);
-            }
-            else
-            {
-                serverLink.Open();
             }
 
             StatusesChanged?.Invoke();
@@ -438,10 +433,10 @@ internal sealed class RelayPeerService : IPeerService, IConnectionStatusService,
 
         if (kind == PeerConnectionKind.Server)
         {
-            if (serverPoint is null || serverLink is null || isServerClosed) { return; }
+            if (isServerClosed) { return; }
 
-            transport.Reset(serverPoint);
-            serverLink.Refresh();
+            if (!parentLinks.HasPoints) { serverConnection?.Drop(); }
+            else { parentLinks.Refresh(transport); }
             return;
         }
 

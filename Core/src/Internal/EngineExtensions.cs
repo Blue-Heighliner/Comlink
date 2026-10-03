@@ -33,7 +33,7 @@ internal static class EngineExtensions
 
             services.AddConventionSingletons();
             services.AddMsmt();
-            services.TryAddSingleton<IMicroGatePeerFactory, MicroGatePeerFactory>();
+            services.TryAddSingleton<IHdlcPeerFactory, HdlcPeerFactory>();
 
             services.AddSingleton<IServiceConnection, DirectServiceConnection>();
             if (mode == EngineMode.Client)

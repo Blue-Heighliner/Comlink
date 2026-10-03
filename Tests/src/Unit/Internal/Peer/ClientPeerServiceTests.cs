@@ -49,8 +49,8 @@ public sealed class ClientPeerServiceTests
 
         ConnectionPoint target = point ?? serverPoint;
         Mock<TestEngineController> engineController = new() { CallBase = true };
-        engineController.Setup(p => p.ParentPoint).Returns(pointConfigured ? target : null);
-        engineController.Setup(p => p.ParentUser).Returns(pointConfigured ? "Server1" : null);
+        engineController.Setup(p => p.ParentPoints).Returns(pointConfigured ? [target] : []);
+        engineController.Setup(p => p.ParentUser).Returns(pointConfigured ? serverName : null);
 
         ClientPeerService service = new(transportFactory.Object, engineController.Object, noLogger);
         Fixture fixture = new(service, transport, connected, disconnected, received, ServerConnection(target, serverName));
@@ -151,7 +151,7 @@ public sealed class ClientPeerServiceTests
         Mock<IPeerTransportFactory> factory = new();
         factory.Setup(f => f.Create()).Returns(transport.Object);
         Mock<TestEngineController> engineController = new() { CallBase = true };
-        engineController.Setup(p => p.ParentPoint).Returns(() => outgoing.FirstOrDefault());
+        engineController.Setup(p => p.ParentPoints).Returns(() => [.. outgoing.Take(1)]);
         engineController.Setup(p => p.ParentUser).Returns("Server1");
         ClientPeerService service = new(factory.Object, engineController.Object, noLogger);
         int statusChanges = 0;
@@ -189,7 +189,7 @@ public sealed class ClientPeerServiceTests
         factory.Setup(f => f.Create()).Returns(transport.Object);
         Mock<TestEngineController> engineController = new() { CallBase = true };
         engineController.Setup(p => p.OutgoingPoints).Returns([serverPoint, other]);
-        engineController.Setup(p => p.ParentPoint).Returns(serverPoint);
+        engineController.Setup(p => p.ParentPoints).Returns([serverPoint]);
         engineController.Setup(p => p.ParentUser).Returns("Server1");
         ClientPeerService service = new(factory.Object, engineController.Object, noLogger);
         using CancellationTokenSource cts = new();
@@ -325,7 +325,7 @@ public sealed class ClientPeerServiceTests
         Mock<IPeerTransportFactory> factory = new();
         factory.Setup(f => f.Create()).Returns(transport.Object);
         Mock<TestEngineController> engineController = new() { CallBase = true };
-        engineController.Setup(p => p.ParentPoint).Returns((ConnectionPoint?)null);
+        engineController.Setup(p => p.ParentPoints).Returns([]);
         engineController.Setup(p => p.ParentUser).Returns("Server1");
         engineController.Setup(p => p.PeerPort).Returns(9500);
         ClientPeerService service = new(factory.Object, engineController.Object, noLogger);

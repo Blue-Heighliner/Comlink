@@ -40,7 +40,7 @@ public sealed class PeerNetworkTests
             controller.Setup(c => c.Role).Returns(role);
             controller.Setup(c => c.PeerPort).Returns(peerPort);
             controller.Setup(c => c.OutgoingPoints).Returns(outgoing);
-            controller.Setup(c => c.ParentPoint).Returns(role is UserRole.Client or UserRole.Relay ? outgoing.FirstOrDefault() : null);
+            controller.Setup(c => c.ParentPoints).Returns(role is UserRole.Client or UserRole.Relay ? [.. outgoing.Take(1)] : []);
             controller.Setup(c => c.ParentUser).Returns(role is UserRole.Client or UserRole.Relay ? "Server" : null);
             controller.Setup(c => c.Servers).Returns(servers ?? new Dictionary<string, ServerUserConfig>());
             controller.Setup(c => c.GetUserInfo(user)).Returns(new UserInfo { Name = user, Role = role, Children = [.. (relayChildren ?? []).Select(name => (UserLink)name)] });
@@ -51,7 +51,7 @@ public sealed class PeerNetworkTests
             });
             Mock<ICurrentUserProvider> currentUser = new();
             currentUser.SetupGet(p => p.UserName).Returns(user);
-            PeerTransportFactory factory = new(new IMsmtSessionPeer.Factory(), Mock.Of<IMicroGatePeerFactory>(), controller.Object, noLogger);
+            PeerTransportFactory factory = new(new IMsmtSessionPeer.Factory(), Mock.Of<IHdlcPeerFactory>(), controller.Object, noLogger);
 
             (Service, Status) = role switch
             {

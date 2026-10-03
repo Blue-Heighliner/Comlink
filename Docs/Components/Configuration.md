@@ -126,7 +126,7 @@ When a message is sent to a group, the Engine records which addressed groups eac
 
 ```json
 "Users": {
-  "SERVER1": { "Role": "Server", "PeerPoint": { "Host": "10.0.0.1", "Port": 50221 }, "InterfacePort": 50220,
+  "SERVER1": { "Role": "Server", "IpHost": "10.0.0.1", "Msmt": { "Port": 50221 }, "InterfacePort": 50220,
     "Parent": "SERVER2", "Children": [ "CLIENT1" ],
     "StoresMessages": true, "SecurityLevel": "RESTRICTED" }
 }
@@ -137,9 +137,11 @@ Everything about one user is stated on that user's entry in the [network configu
 | Field | Meaning | Default |
 |-------|---------|---------|
 | `Role` | The [networking role](Peer.md#user-roles) of a node this user runs: `Peer`, `Client`, `Server` or `Relay` | `Peer` |
-| `PeerPoint` | `Host` and `Port` other nodes use to reach the node over IP, and the port it listens on | `127.0.0.1`, `50021` |
+| `IpHost` | The IP address or host name other nodes use to reach the node over IP | none |
+| `Msmt` | MSMT options by name, and `Port`, the port the node listens on | the MSMT defaults, port `50021` |
+| `Hdlc` | HDLC options by name, `Address`, the station address, and `Ports`, the MicroGate ports to open (or `*` for all) | the HDLC defaults, address `1`, no ports |
 | `InterfacePort` | Loopback TCP port of the local interface listener, always active in every role (see [Interface.md](Interface.md)) | `50020` |
-| `Parent` | The user above this one in a hierarchy, by name or as an object forcing the connection mode (`MsmtListen`, `MsmtConnect` or `SyncSerial`); by default the node dials it | none |
+| `Parent` | The user above this one in a hierarchy, by name or as an object forcing the connection mode (`MsmtListen`, `MsmtConnect` or `Hdlc`); by default the node dials it | none |
 | `Children` | The users below this one, for a `Server` or `Relay`, each by name or as an object forcing the connection mode; by default the node listens for them | none |
 | `StoresMessages` | For a `Server`, whether it stores the messages it routes and answers retrieval requests (see [Server Storage](#server-storage)) | `false` |
 | `SecurityLevel` | The name of the level the user runs at (see [Security Levels](#security-levels)) | the lowest configured level |
@@ -152,7 +154,7 @@ The current user's info is what decides how this node behaves, so it is read onc
 
 **Network file:** this is the file; each field above has the same name in a user's entry (see [Config.md](Config.md)), and the entry also carries the settings of the node that user runs.
 
-**Sample:** each scenario under `Scripts/Scenarios/` (`Peer`, `ClientServer`, `ServerCluster`, `ClientRelayServer`) has its own `Config.json` describing its whole network: role, peer point, parent and children, security level, storage, and certificate file for each of its users. Each scenario script passes it with `--config` and names its user with `--user`.
+**Sample:** each scenario under `Scripts/Scenarios/` (`Peer`, `ClientServer`, `ServerCluster`, `ClientRelayServer`) has its own `Config.json` describing its whole network: role, IP host, parent and children, security level, storage, and certificate file for each of its users. Each scenario script passes it with `--config` and names its user with `--user`.
 
 ---
 
@@ -465,15 +467,15 @@ and stores nothing.
 
 ---
 
-### MicroGate Options
+### HDLC Options
 
 ```csharp
-engine.MicroGateOptions(new MicroGatePeerOptions { MaxInfoField = 1024, Link = new MicroGatePeerOptions().Link with { Crc = MicroGateCrc.Crc32Ccitt } });
+engine.HdlcOptions(new HdlcPeerOptions { MaxInfoField = 1024, Link = new HdlcPeerOptions().Link with { Crc = HdlcCrc.Crc32Ccitt } });
 ```
 
-The options every serial connection starts its MicroGate peer with: line encoding, CRC and clocking (`Link`, which must match the station at the far end of the cable), frame size, transmit window and retransmission timing. The options object is the MicroGate package's `MicroGatePeerOptions`, defaulting to the package defaults. The HDLC address is not an option; each serial `ConnectionPoint` supplies it, used as both this station's and the remote station's address.
+The options every serial connection starts its HDLC peer with: line encoding, CRC and clocking (`Link`, which must match the station at the far end of the cable), frame size, transmit window and retransmission timing. The options object is the MicroGate package's `HdlcPeerOptions`, defaulting to the package defaults. The HDLC address is not an option; each serial `ConnectionPoint` supplies it, used as both this station's and the remote station's address.
 
-**Default:** the MicroGate package defaults.
+**Default:** the MicroGate package's HDLC peer defaults.
 
 **Sample:** caps frames at 1024 bytes and the transmit window at 4 (a smaller frame is always safe with any remote station); see the MSMT section for its timeout adjustment.
 
@@ -505,13 +507,13 @@ engine.MsmtOptions(new MsmtConnectionOptions { HandshakeTimeout = TimeSpan.FromS
 
 ### Network Topology
 
-This instance's place in the peer/client/server networking topology, see [Peer.md](Peer.md#user-roles), is not stated on its own: it comes from the current user's [user info](#user-info) (`Role`, `PeerPoint`, `Parent`, and for a `Server` or `Relay` its `Children`, with the topology of every server in the cluster built from every `Server` user's info). A node is configured only with where it connects and listens, never which users it expects there; who is on the other end of a connection is worked out when it forms (see [Identification.md](Identification.md)).
+This instance's place in the peer/client/server networking topology, see [Peer.md](Peer.md#user-roles), is not stated on its own: it comes from the current user's [user info](#user-info) (`Role`, `IpHost`, `Parent`, and for a `Server` or `Relay` its `Children`, with the topology of every server in the cluster built from every `Server` user's info). A node is configured only with where it connects and listens, never which users it expects there; who is on the other end of a connection is worked out when it forms (see [Identification.md](Identification.md)).
 
 The role selects the `IPeerService` implementation (`PeerService`/`ClientPeerService`/`ServerRoutingService`/`RelayPeerService`). `RolePeerService` is the one service the engine depends on; it creates that implementation when networking starts, after a user is installed, and forwards its events. `Restart()` (used when the network file is reloaded, see [Services.md](Services.md#networkreloadservice)) cancels and disposes the running implementation and creates another from the role as it is then, so a changed role takes effect without restarting the application; a changed port or set of outgoing points is applied in place by `Reconfigure()`, which leaves connections to unchanged points alone.
 
 **Default:** `UserRole.Peer`, no links, no server users.
 
-**Network file:** none of its own; the role, peer point, links and topology come from the users' entries. See [User Info](#user-info).
+**Network file:** none of its own; the role, IP host, links and topology come from the users' entries. See [User Info](#user-info).
 
 **Sample:** the roles, ports and points are on each site's user info; see [User Info](#user-info).
 

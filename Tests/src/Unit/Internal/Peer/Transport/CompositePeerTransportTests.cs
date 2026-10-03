@@ -176,7 +176,7 @@ public sealed class CompositePeerTransportTests
         peer.Setup(p => p.Connect(It.IsAny<MsmtNameTarget>())).Returns(connection.Object);
         Mock<IMsmtSessionPeer.IFactory> msmtFactory = new();
         msmtFactory.Setup(f => f.Create(It.IsAny<MsmtSessionPeerOptions>())).Returns(peer.Object);
-        return (new PeerTransportFactory(msmtFactory.Object, Mock.Of<IMicroGatePeerFactory>(), controller, LoggerFactory.Create(_ => { })), msmtFactory, sent);
+        return (new PeerTransportFactory(msmtFactory.Object, Mock.Of<IHdlcPeerFactory>(), controller, LoggerFactory.Create(_ => { })), msmtFactory, sent);
     }
 
     /// <summary>With an identity certificate available the factory builds an IP transport as well as the serial one.</summary>
@@ -231,7 +231,7 @@ public sealed class CompositePeerTransportTests
         Mock<TestEngineController> controller = new() { CallBase = true };
         controller.Setup(c => c.InitialPacketProcessor).Returns(Mock.Of<IInitialProcessor>());
         controller.Setup(c => c.ConnectionOptions).Throws(new InvalidOperationException("no current user"));
-        PeerTransportFactory factory = new(Mock.Of<IMsmtSessionPeer.IFactory>(), Mock.Of<IMicroGatePeerFactory>(), controller.Object, LoggerFactory.Create(_ => { }));
+        PeerTransportFactory factory = new(Mock.Of<IMsmtSessionPeer.IFactory>(), Mock.Of<IHdlcPeerFactory>(), controller.Object, LoggerFactory.Create(_ => { }));
 
         Assert.Throws<InvalidOperationException>(() => factory.Create());
     }
@@ -242,7 +242,7 @@ public sealed class CompositePeerTransportTests
     {
         Mock<TestEngineController> controller = new() { CallBase = true };
         controller.Setup(c => c.ConnectionOptions).Throws(new InvalidOperationException("no current user"));
-        PeerTransportFactory factory = new(Mock.Of<IMsmtSessionPeer.IFactory>(), Mock.Of<IMicroGatePeerFactory>(), controller.Object, LoggerFactory.Create(_ => { }));
+        PeerTransportFactory factory = new(Mock.Of<IMsmtSessionPeer.IFactory>(), Mock.Of<IHdlcPeerFactory>(), controller.Object, LoggerFactory.Create(_ => { }));
 
         await using IPeerTransport transport = factory.Create();
 
@@ -258,7 +258,7 @@ public sealed class CompositePeerTransportTests
         Mock<TestPacketEngineController> controller = new() { CallBase = true };
         controller.Setup(c => c.PacketSize).Returns(packetSize);
         controller.Setup(c => c.PacketWindow).Returns(window);
-        PeerTransportFactory factory = new(Mock.Of<IMsmtSessionPeer.IFactory>(), Mock.Of<IMicroGatePeerFactory>(), controller.Object, LoggerFactory.Create(_ => { }));
+        PeerTransportFactory factory = new(Mock.Of<IMsmtSessionPeer.IFactory>(), Mock.Of<IHdlcPeerFactory>(), controller.Object, LoggerFactory.Create(_ => { }));
 
         Assert.Throws<InvalidOperationException>(() => factory.Create());
     }
@@ -271,7 +271,7 @@ public sealed class CompositePeerTransportTests
         controller.Setup(c => c.PacketSize).Returns(1);
         controller.Setup(c => c.PacketWindow).Returns(0);
         controller.Setup(c => c.ConnectionOptions).Throws(new InvalidOperationException("no current user"));
-        PeerTransportFactory factory = new(Mock.Of<IMsmtSessionPeer.IFactory>(), Mock.Of<IMicroGatePeerFactory>(), controller.Object, LoggerFactory.Create(_ => { }));
+        PeerTransportFactory factory = new(Mock.Of<IMsmtSessionPeer.IFactory>(), Mock.Of<IHdlcPeerFactory>(), controller.Object, LoggerFactory.Create(_ => { }));
 
         await using IPeerTransport transport = factory.Create();
 
@@ -285,7 +285,7 @@ public sealed class CompositePeerTransportTests
         Mock<IMsmtSessionPeer.IFactory> msmtFactory = new();
         Mock<TestEngineController> controller = new() { CallBase = true };
         controller.Setup(c => c.ConnectionOptions).Throws(new InvalidOperationException("no current user"));
-        PeerTransportFactory factory = new(msmtFactory.Object, Mock.Of<IMicroGatePeerFactory>(), controller.Object, LoggerFactory.Create(_ => { }));
+        PeerTransportFactory factory = new(msmtFactory.Object, Mock.Of<IHdlcPeerFactory>(), controller.Object, LoggerFactory.Create(_ => { }));
 
         await using IPeerTransport transport = factory.Create();
 

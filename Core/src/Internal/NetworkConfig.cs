@@ -119,7 +119,10 @@ internal sealed class NetworkConfig
             {
                 Name = Users.Keys.First(key => string.Equals(key, userName, StringComparison.OrdinalIgnoreCase)),
                 Role = user.GetRole(),
-                PeerPoint = user.PeerPoint?.ToPoint(),
+                IpHost = user.IpHost,
+                MsmtPort = user.GetMsmtPort(),
+                HdlcAddress = user.GetHdlcAddress(),
+                HdlcPorts = user.GetHdlcPorts(),
                 InterfacePort = user.InterfacePort,
                 Parent = user.Parent?.ToLink(),
                 Children = [.. user.Children.Select(child => child.ToLink())],
@@ -147,8 +150,14 @@ internal sealed class NetworkUserConfig
     /// <summary>Networking role of a node this user runs: <c>"Peer"</c>, <c>"Client"</c>, <c>"Server"</c> or <c>"Relay"</c> (case-insensitive). <see langword="null"/> or unrecognized is <c>"Peer"</c>.</summary>
     public string? Role { get; init; }
 
-    /// <summary>Where other nodes reach a node this user runs over IP, and the port it listens on. <see langword="null"/> is the default <see cref="PeerPoint"/>.</summary>
-    public PeerPointConfig? PeerPoint { get; init; }
+    /// <summary>The IP address or host name others connect to in order to reach a node this user runs. <see langword="null"/> when it is not reachable that way.</summary>
+    public string? IpHost { get; init; }
+
+    /// <summary>The user's MSMT settings: any option of <see cref="MsmtConnectionOptions"/> by name, overriding its default, and <c>Port</c>, the port MSMT listens on.</summary>
+    public JsonElement? Msmt { get; init; }
+
+    /// <summary>The user's HDLC settings: any option of the HDLC peer options by name, overriding its default, <c>Address</c>, the local station address (and the remote address others connect to it with), and <c>Ports</c>, an array of MicroGate port names to open or <c>"*"</c> for all.</summary>
+    public JsonElement? Hdlc { get; init; }
 
     /// <summary>Loopback TCP port of the local interface listener. <see langword="null"/> uses the engine default (50020).</summary>
     public int? InterfacePort { get; init; }
@@ -195,21 +204,26 @@ internal sealed class NetworkUserConfig
     /// <summary>Whether the print manager's "print received" toggle starts enabled. <see langword="null"/> uses the engine default (<see langword="false"/>).</summary>
     public bool? PrintReceivedEnabled { get; init; }
 
+    /// <summary>The MSMT listen port, or <see langword="null"/> when not stated.</summary>
+    public int? GetMsmtPort() => Read(Msmt, "Port") is { ValueKind: JsonValueKind.Number } port && port.TryGetInt32(out int value) ? value : null;
+
+    /// <summary>The local HDLC station address, or <see langword="null"/> when not stated.</summary>
+    public byte? GetHdlcAddress() => Read(Hdlc, "Address") is { ValueKind: JsonValueKind.Number } address && address.TryGetByte(out byte value) ? value : null;
+
+    /// <summary>The HDLC ports to open: the named ports, a single <c>*</c> for all, or none.</summary>
+    public IReadOnlyList<string> GetHdlcPorts()
+        => Read(Hdlc, "Ports") switch
+        {
+            { ValueKind: JsonValueKind.String } all => [all.GetString() ?? string.Empty],
+            { ValueKind: JsonValueKind.Array } ports => [.. ports.EnumerateArray().Where(port => port.ValueKind == JsonValueKind.String).Select(port => port.GetString()!)],
+            _ => []
+        };
+
+    private static JsonElement? Read(JsonElement? section, string name)
+        => section is { ValueKind: JsonValueKind.Object } value && value.EnumerateObject().FirstOrDefault(property => string.Equals(property.Name, name, StringComparison.OrdinalIgnoreCase)) is { Value.ValueKind: not JsonValueKind.Undefined } property ? property.Value : null;
+
     /// <summary>Parses <see cref="Role"/>, or <see langword="null"/> when unset or unrecognized.</summary>
     public UserRole? GetRole() => Enum.TryParse(Role, ignoreCase: true, out UserRole role) ? role : null;
-}
-
-/// <summary>The <c>PeerPoint</c> of a user in the network configuration file: <c>Host</c> and <c>Port</c>.</summary>
-internal sealed class PeerPointConfig
-{
-    /// <summary>Gets the host or IP address other nodes use to reach the node.</summary>
-    public string Host { get; init; } = "127.0.0.1";
-
-    /// <summary>Gets the TCP port the node listens on and other nodes connect to.</summary>
-    public int Port { get; init; } = 50021;
-
-    /// <summary>Converts to the engine's model.</summary>
-    public PeerPoint ToPoint() => new() { Host = Host, Port = Port };
 }
 
 /// <summary>
@@ -218,35 +232,18 @@ internal sealed class PeerPointConfig
 [JsonConverter(typeof(NetworkLinkConfigConverter))]
 internal sealed class NetworkLinkConfig
 {
-    /// <summary>Gets the name of the user at the other end of the link.</summary>
-    public string User { get; init; } = string.Empty;
-
-    /// <summary>Gets the forced connection mode (<c>MsmtListen</c>, <c>MsmtConnect</c> or <c>SyncSerial</c>, case-insensitive), or <see langword="null"/> for the default.</summary>
-    public string? Mode { get; init; }
-
-    /// <summary>Gets the local serial port for <c>SyncSerial</c>.</summary>
-    public string? SerialPort { get; init; }
-
-    /// <summary>Gets this node's HDLC station address for <c>SyncSerial</c>.</summary>
-    public byte SerialAddress { get; init; } = 0xFF;
-
-    /// <summary>Gets the other end's HDLC station address for <c>SyncSerial</c>.</summary>
-    public byte RemoteSerialAddress { get; init; } = 0xFE;
-
     /// <summary>Reads a plain user name as a link with the default mode.</summary>
     /// <param name="user">The name of the user at the other end.</param>
     public static implicit operator NetworkLinkConfig(string user) => new() { User = user };
 
+    /// <summary>Gets the name of the user at the other end of the link.</summary>
+    public string User { get; init; } = string.Empty;
+
+    /// <summary>Gets the forced connection mode (<c>MsmtListen</c>, <c>MsmtConnect</c> or <c>Hdlc</c>, case-insensitive), or <see langword="null"/> for the default.</summary>
+    public string? Mode { get; init; }
+
     /// <summary>Converts to the engine's model. An unrecognized mode is the default.</summary>
-    public UserLink ToLink()
-        => new()
-        {
-            User = User,
-            Mode = Enum.TryParse(Mode, ignoreCase: true, out ConnectionMode mode) ? mode : null,
-            SerialPort = SerialPort,
-            SerialAddress = SerialAddress,
-            RemoteSerialAddress = RemoteSerialAddress
-        };
+    public UserLink ToLink() => new() { User = User, Mode = Enum.TryParse(Mode, ignoreCase: true, out ConnectionMode mode) ? mode : null };
 }
 
 /// <summary>Reads a <see cref="NetworkLinkConfig"/> from either a plain user name or an object.</summary>
@@ -260,32 +257,17 @@ internal sealed class NetworkLinkConfigConverter : JsonConverter<NetworkLinkConf
         using JsonDocument document = JsonDocument.ParseValue(ref reader);
         JsonElement element = document.RootElement;
         string? Text(string name) => element.EnumerateObject().FirstOrDefault(property => string.Equals(property.Name, name, StringComparison.OrdinalIgnoreCase)).Value is { ValueKind: JsonValueKind.String } value ? value.GetString() : null;
-        byte Address(string name, byte fallback) => element.EnumerateObject().FirstOrDefault(property => string.Equals(property.Name, name, StringComparison.OrdinalIgnoreCase)).Value is { ValueKind: JsonValueKind.Number } value && value.TryGetByte(out byte address) ? address : fallback;
-        return new NetworkLinkConfig
-        {
-            User = Text("User") ?? string.Empty,
-            Mode = Text("Mode"),
-            SerialPort = Text("SerialPort"),
-            SerialAddress = Address("SerialAddress", 0xFF),
-            RemoteSerialAddress = Address("RemoteSerialAddress", 0xFE)
-        };
+        return new NetworkLinkConfig { User = Text("User") ?? string.Empty, Mode = Text("Mode") };
     }
 
     /// <inheritdoc />
     public override void Write(Utf8JsonWriter writer, NetworkLinkConfig value, JsonSerializerOptions options)
     {
-        if (value.Mode is null && value.SerialPort is null) { writer.WriteStringValue(value.User); return; }
+        if (value.Mode is null) { writer.WriteStringValue(value.User); return; }
 
         writer.WriteStartObject();
         writer.WriteString("User", value.User);
-        if (value.Mode is not null) { writer.WriteString("Mode", value.Mode); }
-        if (value.SerialPort is not null)
-        {
-            writer.WriteString("SerialPort", value.SerialPort);
-            writer.WriteNumber("SerialAddress", value.SerialAddress);
-            writer.WriteNumber("RemoteSerialAddress", value.RemoteSerialAddress);
-        }
-
+        writer.WriteString("Mode", value.Mode);
         writer.WriteEndObject();
     }
 }

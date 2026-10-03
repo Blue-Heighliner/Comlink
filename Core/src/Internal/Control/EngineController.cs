@@ -92,7 +92,7 @@ internal interface IEngineController
     /// <summary>Every defined group as a map of group name to member names (which may be user names or other group names).</summary>
     IReadOnlyDictionary<string, IReadOnlyList<string>> UserGroups { get; }
 
-    /// <summary>Port for the inbound IP listener: the port of the current user's <see cref="UserInfo.PeerPoint"/>, 50021 by default.</summary>
+    /// <summary>Port for the inbound IP listener: the MSMT port of the current user (see <see cref="UserInfo.MsmtPort"/>), 50021 by default.</summary>
     int PeerPort { get; }
     /// <summary>Port for the inbound interface listener. Always active, regardless of mode.</summary>
     int InterfacePort { get; }
@@ -172,23 +172,23 @@ internal interface IEngineController
     /// <summary>Applies the host's adjustment of the MSMT options (see <see cref="IEngineBuilder.MsmtOptions"/>) to <paramref name="options"/>, returning them unchanged if none was stated.</summary>
     MsmtSessionPeerOptions ConfigureConnectionOptions(MsmtSessionPeerOptions options);
 
-    /// <summary>The options used for every MicroGate serial connection, after the host's adjustment (see <see cref="IEngineBuilder.MicroGateOptions"/>).</summary>
-    MicroGatePeerOptions MicroGateOptions { get; }
+    /// <summary>The options used for every MicroGate serial connection, after the host's adjustment (see <see cref="IEngineBuilder.HdlcOptions"/>).</summary>
+    HdlcPeerOptions HdlcOptions { get; }
 
     /// <summary>The configured role for this instance.</summary>
     UserRole Role { get; }
     /// <summary>
     /// The points this node connects out to, and keeps connected, worked out from its links: for each link to its parent or a child whose mode is
-    /// <see cref="ConnectionMode.MsmtConnect"/>, the other user's <see cref="UserInfo.PeerPoint"/>, and for each <see cref="ConnectionMode.SyncSerial"/> link its serial port
-    /// (a serial cable joins two nodes and is opened from both ends, so the port is listed on each); the parent's comes first. A <see cref="UserRole.Peer"/> also dials every other peer that states a
-    /// <see cref="UserInfo.PeerPoint"/>, unless both have one and the other's name sorts first, so a pair never connects both ways. Who is on the other end of a connection is still worked out
+    /// <see cref="ConnectionMode.MsmtConnect"/>, the other user's <see cref="UserInfo.IpHost"/> and <see cref="UserInfo.MsmtPort"/>, and for the <see cref="ConnectionMode.Hdlc"/> links together one point per HDLC port
+    /// the node opens (a serial cable joins two nodes and is opened from both ends); the parent's comes first. A <see cref="UserRole.Peer"/> also dials every other peer that states an
+    /// <see cref="UserInfo.IpHost"/>, unless both have one and the other's name sorts first, so a pair never connects both ways. Who is on the other end of a connection is still worked out
     /// when it forms, by <see cref="IdentifyConnection"/>.
     /// </summary>
     IReadOnlyList<ConnectionPoint> OutgoingPoints { get; }
     /// <summary>The name of the current user's parent, or <see langword="null"/> for none.</summary>
     string? ParentUser { get; }
-    /// <summary>The point this node dials to reach its parent, or <see langword="null"/> when it has no parent or the parent's link is <see cref="ConnectionMode.MsmtListen"/> (the parent connects instead).</summary>
-    ConnectionPoint? ParentPoint { get; }
+    /// <summary>The points this node dials to reach its parent: the parent's IP host and MSMT port, or one per HDLC port this node opens. Empty when it has no parent or the parent's link is <see cref="ConnectionMode.MsmtListen"/> (the parent connects instead).</summary>
+    IReadOnlyList<ConnectionPoint> ParentPoints { get; }
     /// <summary>
     /// The server topology a <see cref="UserRole.Server"/> instance routes with, keyed by server user name
     /// (case-insensitive): every server in the cluster, not just the local one, and the children each owns. It
@@ -410,6 +410,8 @@ internal interface IEngineController
 /// <param name="services">The running engine's container, which instantiates the host's processors; <see langword="null"/> for one with no services.</param>
 internal class EngineController(EngineBuilder builder, ICurrentUserProvider currentUserProvider, NetworkConfig? networkConfig = null, IServiceProvider? services = null) : IEngineController
 {
+    private readonly IMicroGatePortSource portSource = services?.GetService<IMicroGatePortSource>() ?? new MicroGatePortSource();
+
     private static IReadOnlyList<TDefinition> Replacing<TFormat, TDefinition>(IEnumerable<TFormat> formats, Func<TFormat, TDefinition> define, Func<TDefinition, string> name)
     {
         List<TDefinition> definitions = [];
@@ -511,7 +513,7 @@ internal class EngineController(EngineBuilder builder, ICurrentUserProvider curr
     }
 
     /// <inheritdoc />
-    public virtual int PeerPort => CurrentUserInfo?.PeerPoint?.Port ?? new PeerPoint().Port;
+    public virtual int PeerPort => CurrentUserInfo?.MsmtPort ?? 50021;
     /// <inheritdoc />
     public virtual int InterfacePort => CurrentUserInfo?.InterfacePort ?? 50020;
 
@@ -568,7 +570,7 @@ internal class EngineController(EngineBuilder builder, ICurrentUserProvider curr
         : options;
 
     /// <inheritdoc />
-    public virtual MicroGatePeerOptions MicroGateOptions => builder.MicroGateOptionsValue ?? new();
+    public virtual HdlcPeerOptions HdlcOptions => builder.HdlcOptionsValue ?? new();
 
     /// <inheritdoc />
     public virtual UserRole Role => CurrentUserInfo?.Role ?? UserRole.Peer;
@@ -579,16 +581,15 @@ internal class EngineController(EngineBuilder builder, ICurrentUserProvider curr
         {
             if (CurrentUserInfo is not { } current) { return []; }
 
-            List<ConnectionPoint> points = [];
-            if (current.Parent is { } parent && DialPoint(parent, isParent: true) is { } parentPoint) { points.Add(parentPoint); }
-            points.AddRange(current.Children.Select(child => DialPoint(child, isParent: false)).OfType<ConnectionPoint>());
+            List<(UserLink Link, bool IsParent)> links = [.. current.Parent is { } parent ? [(parent, true)] : Array.Empty<(UserLink, bool)>(), .. current.Children.Select(child => (child, false))];
+            List<ConnectionPoint> points = [.. LinkPoints(current, links)];
             if ((current.Role ?? UserRole.Peer) == UserRole.Peer)
             {
                 points.AddRange(Users
                     .Select(GetUserInfo)
-                    .Where(other => (other.Role ?? UserRole.Peer) == UserRole.Peer && other.PeerPoint is not null && !string.Equals(other.Name, current.Name, StringComparison.OrdinalIgnoreCase)
-                        && (current.PeerPoint is null || string.Compare(current.Name, other.Name, StringComparison.OrdinalIgnoreCase) < 0))
-                    .Select(other => new ConnectionPoint { IpAddress = other.PeerPoint!.Host, Port = other.PeerPoint.Port }));
+                    .Where(other => (other.Role ?? UserRole.Peer) == UserRole.Peer && other.IpHost is not null && !string.Equals(other.Name, current.Name, StringComparison.OrdinalIgnoreCase)
+                        && (current.IpHost is null || string.Compare(current.Name, other.Name, StringComparison.OrdinalIgnoreCase) < 0))
+                    .Select(other => new ConnectionPoint { IpAddress = other.IpHost!, Port = other.MsmtPort ?? 50021 }));
             }
 
             return [.. points.DistinctBy(point => point.Key)];
@@ -597,20 +598,53 @@ internal class EngineController(EngineBuilder builder, ICurrentUserProvider curr
     /// <inheritdoc />
     public virtual string? ParentUser => CurrentUserInfo?.Parent?.User;
     /// <inheritdoc />
-    public virtual ConnectionPoint? ParentPoint => CurrentUserInfo?.Parent is { } parent ? DialPoint(parent, isParent: true) : null;
+    public virtual IReadOnlyList<ConnectionPoint> ParentPoints => CurrentUserInfo is { Parent: { } parent } current ? LinkPoints(current, [(parent, true)]) : [];
 
-    private static ConnectionMode ModeOf(UserLink link, bool isParent)
-        => link.Mode ?? (!string.IsNullOrEmpty(link.SerialPort) ? ConnectionMode.SyncSerial : isParent ? ConnectionMode.MsmtConnect : ConnectionMode.MsmtListen);
+    private static ConnectionMode ModeOf(UserLink link, bool isParent) => link.Mode ?? (isParent ? ConnectionMode.MsmtConnect : ConnectionMode.MsmtListen);
 
-    private ConnectionPoint? DialPoint(UserLink link, bool isParent)
-        => ModeOf(link, isParent) switch
+    // The points a node dials for some of its links: for each MsmtConnect link the other user's IP host and MSMT port, and, for all its Hdlc links together, one point
+    // per HDLC port the node opens, which tries each of those links' users in turn since nothing says which port is cabled to whom.
+    private List<ConnectionPoint> LinkPoints(UserInfo current, IEnumerable<(UserLink Link, bool IsParent)> links)
+    {
+        List<ConnectionPoint> points = [];
+        List<HdlcRemote> remotes = [];
+        foreach ((UserLink link, bool isParent) in links)
         {
-            ConnectionMode.MsmtConnect => GetUserInfo(link.User).PeerPoint is { } point
-                ? new ConnectionPoint { IpAddress = point.Host, Port = point.Port }
-                : new ConnectionPoint { IpAddress = new PeerPoint().Host, Port = new PeerPoint().Port },
-            ConnectionMode.SyncSerial when !string.IsNullOrEmpty(link.SerialPort) => new ConnectionPoint { SerialPort = link.SerialPort, SerialAddress = link.SerialAddress, RemoteSerialAddress = link.RemoteSerialAddress, User = link.User },
-            _ => null
-        };
+            switch (ModeOf(link, isParent))
+            {
+                case ConnectionMode.MsmtConnect:
+                    UserInfo target = GetUserInfo(link.User);
+                    points.Add(new ConnectionPoint { IpAddress = target.IpHost ?? "127.0.0.1", Port = target.MsmtPort ?? 50021 });
+                    break;
+                case ConnectionMode.Hdlc:
+                    remotes.Add(new HdlcRemote(link.User, GetUserInfo(link.User).HdlcAddress ?? 1));
+                    break;
+            }
+        }
+
+        if (remotes.Count > 0)
+        {
+            points.AddRange(HdlcPortNames(current).Select(port => new ConnectionPoint
+            {
+                SerialPort = port,
+                SerialAddress = current.HdlcAddress ?? 1,
+                RemoteSerialAddress = remotes[0].Address,
+                User = remotes[0].User,
+                OtherRemotes = [.. remotes.Skip(1)]
+            }));
+        }
+
+        return points;
+    }
+
+    private IReadOnlyList<string> HdlcPortNames(UserInfo current)
+    {
+        if (current.HdlcPorts is not ["*"]) { return current.HdlcPorts; }
+
+        // IEngineController.OutgoingPoints is a plain property that the peer services read from their synchronous reconfigure, so the one asynchronous port lookup is run to completion here.
+        return Task.Run(async () => await portSource.GetPorts(CancellationToken.None)).GetAwaiter().GetResult();
+    }
+
     /// <inheritdoc />
     public virtual IReadOnlyDictionary<string, ServerUserConfig> Servers
     {

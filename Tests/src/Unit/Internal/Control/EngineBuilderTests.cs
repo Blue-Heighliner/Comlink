@@ -36,6 +36,8 @@ public sealed class EngineBuilderTests
         return (builder, new EngineController(builder, new CurrentUserProvider { UserName = currentUser }, network));
     }
 
+    private static JsonElement Json(string text) => JsonDocument.Parse(text).RootElement.Clone();
+
     private static NetworkConfig Network(params (string Name, NetworkUserConfig User)[] users)
         => new() { Users = users.ToDictionary(user => user.Name, user => user.User) };
 
@@ -262,23 +264,31 @@ public sealed class EngineBuilderTests
         NetworkConfig network = Network(("SERVER", new NetworkUserConfig
         {
             Role = "Server",
-            PeerPoint = new PeerPointConfig { Host = "10.0.0.9", Port = 1234 },
+            IpHost = "10.0.0.9",
+            Msmt = Json("""{ "Port": 1234 }"""),
+            Hdlc = Json("""{ "Address": 1, "Ports": [ "SL0", "SL1" ] }"""),
             InterfacePort = 5678,
             Parent = "UPSTREAM",
-            Children = ["C1", new NetworkLinkConfig { User = "C2", Mode = "MsmtConnect" }, new NetworkLinkConfig { User = "C3", Mode = "SyncSerial", SerialPort = "SL0", SerialAddress = 1, RemoteSerialAddress = 2 }]
+            Children = ["C1", new NetworkLinkConfig { User = "C2", Mode = "MsmtConnect" }, new NetworkLinkConfig { User = "C3", Mode = "Hdlc" }, new NetworkLinkConfig { User = "C4", Mode = "Hdlc" }]
         }),
-        ("UPSTREAM", new NetworkUserConfig { Role = "Server", PeerPoint = new PeerPointConfig { Host = "10.0.0.1", Port = 1 } }),
-        ("C2", new NetworkUserConfig { Role = "Client", PeerPoint = new PeerPointConfig { Host = "10.0.0.2", Port = 2 } }));
+        ("UPSTREAM", new NetworkUserConfig { Role = "Server", IpHost = "10.0.0.1", Msmt = Json("""{ "Port": 1 }""") }),
+        ("C2", new NetworkUserConfig { Role = "Client", IpHost = "10.0.0.2", Msmt = Json("""{ "Port": 2 }""") }),
+        ("C3", new NetworkUserConfig { Role = "Client", Hdlc = Json("""{ "Address": 2 }""") }),
+        ("C4", new NetworkUserConfig { Role = "Client", Hdlc = Json("""{ "Address": 4 }""") }));
         (_, EngineController server) = Build(engine => engine, "SERVER", network);
         (_, EngineController noInfo) = Build(engine => engine, "OTHER", network);
         (_, EngineController noUser) = Build(engine => engine, network: network);
 
         Assert.Equal((UserRole.Server, 1234, 5678), (server.Role, server.PeerPort, server.InterfacePort));
         Assert.Equal(
-            [new ConnectionPoint { IpAddress = "10.0.0.1", Port = 1 }, new ConnectionPoint { IpAddress = "10.0.0.2", Port = 2 }, new ConnectionPoint { SerialPort = "SL0", SerialAddress = 1, RemoteSerialAddress = 2, User = "C3" }],
+            [new ConnectionPoint { IpAddress = "10.0.0.1", Port = 1 }, new ConnectionPoint { IpAddress = "10.0.0.2", Port = 2 }, new ConnectionPoint { SerialPort = "SL0", SerialAddress = 1, RemoteSerialAddress = 2, User = "C3" }, new ConnectionPoint { SerialPort = "SL1", SerialAddress = 1, RemoteSerialAddress = 2, User = "C3" }],
             server.OutgoingPoints);
-        Assert.Equal(("UPSTREAM", new ConnectionPoint { IpAddress = "10.0.0.1", Port = 1 }), (server.ParentUser, server.ParentPoint));
-        Assert.Equal(["C1", "C2", "C3"], server.Servers["server"].Children);
+        Assert.Equal([new HdlcRemote("C4", 4)], server.OutgoingPoints.Last().OtherRemotes);
+        Assert.Equal("C4", server.OutgoingPoints.Last().UserAt(4));
+        Assert.Equal("C3", server.OutgoingPoints.Last().UserAt(2));
+        Assert.Equal("UPSTREAM", server.ParentUser);
+        Assert.Equal([new ConnectionPoint { IpAddress = "10.0.0.1", Port = 1 }], server.ParentPoints);
+        Assert.Equal(["C1", "C2", "C3", "C4"], server.Servers["server"].Children);
         Assert.All([noInfo, noUser], controller =>
         {
             Assert.Equal((UserRole.Peer, 50021, 50020), (controller.Role, controller.PeerPort, controller.InterfacePort));
@@ -287,15 +297,15 @@ public sealed class EngineBuilderTests
         });
     }
 
-    /// <summary>A peer dials every other peer that states a peer point, but when both state one only the lower name dials, so a pair never connects both ways; a peer with no peer point dials all of them.</summary>
+    /// <summary>A peer dials every other peer that states an IP host, but when both state one only the lower name dials, so a pair never connects both ways; a peer with none dials all of them.</summary>
     [Fact]
-    public void Peers_DialEachOthersPeerPoints_OnlyOneWay()
+    public void Peers_DialEachOthersIpHosts_OnlyOneWay()
     {
         NetworkConfig network = Network(
-            ("ALICE", new NetworkUserConfig { PeerPoint = new PeerPointConfig { Host = "10.0.0.1", Port = 1 } }),
-            ("BOB", new NetworkUserConfig { PeerPoint = new PeerPointConfig { Host = "10.0.0.2", Port = 2 } }),
+            ("ALICE", new NetworkUserConfig { IpHost = "10.0.0.1", Msmt = Json("""{ "Port": 1 }""") }),
+            ("BOB", new NetworkUserConfig { IpHost = "10.0.0.2", Msmt = Json("""{ "Port": 2 }""") }),
             ("CAROL", new NetworkUserConfig()),
-            ("SERVER", new NetworkUserConfig { Role = "Server", PeerPoint = new PeerPointConfig { Host = "10.0.0.9", Port = 9 } }));
+            ("SERVER", new NetworkUserConfig { Role = "Server", IpHost = "10.0.0.9", Msmt = Json("""{ "Port": 9 }""") }));
         (_, EngineController alice) = Build(engine => engine, "ALICE", network);
         (_, EngineController bob) = Build(engine => engine, "BOB", network);
         (_, EngineController carol) = Build(engine => engine, "CAROL", network);
@@ -310,15 +320,15 @@ public sealed class EngineBuilderTests
     public void Links_DefaultToConnectingToParentsAndListeningForChildren_UnlessForced()
     {
         NetworkConfig network = Network(
-            ("PARENT", new NetworkUserConfig { Role = "Server", PeerPoint = new PeerPointConfig { Host = "10.0.0.1", Port = 1 } }),
-            ("CHILD", new NetworkUserConfig { Role = "Client", PeerPoint = new PeerPointConfig { Host = "10.0.0.2", Port = 2 }, Parent = "PARENT" }),
+            ("PARENT", new NetworkUserConfig { Role = "Server", IpHost = "10.0.0.1", Msmt = Json("""{ "Port": 1 }""") }),
+            ("CHILD", new NetworkUserConfig { Role = "Client", IpHost = "10.0.0.2", Msmt = Json("""{ "Port": 2 }"""), Parent = "PARENT" }),
             ("LISTENER", new NetworkUserConfig { Role = "Client", Parent = new NetworkLinkConfig { User = "PARENT", Mode = "MsmtListen" } }));
         (_, EngineController child) = Build(engine => engine, "CHILD", network);
         (_, EngineController listener) = Build(engine => engine, "LISTENER", network);
 
-        Assert.Equal(new ConnectionPoint { IpAddress = "10.0.0.1", Port = 1 }, child.ParentPoint);
+        Assert.Equal([new ConnectionPoint { IpAddress = "10.0.0.1", Port = 1 }], child.ParentPoints);
         Assert.Equal("PARENT", listener.ParentUser);
-        Assert.Null(listener.ParentPoint);
+        Assert.Empty(listener.ParentPoints);
         Assert.Empty(listener.OutgoingPoints);
     }
 
@@ -372,15 +382,15 @@ public sealed class EngineBuilderTests
 
     /// <summary>The stated MicroGate options are used, and the defaults when none are stated.</summary>
     [Fact]
-    public void Stated_MicroGateOptions_ReplaceTheDefaults()
+    public void Stated_HdlcOptions_ReplaceTheDefaults()
     {
         (_, EngineController adjusted) = Build(engine => engine
-            .MicroGateOptions(new MicroGatePeerOptions { MaxInfoField = 512, Link = new MicroGatePeerOptions().Link with { Crc = MicroGateCrc.Crc32Ccitt } }));
+            .HdlcOptions(new HdlcPeerOptions { MaxInfoField = 512, Link = new HdlcPeerOptions().Link with { Crc = HdlcCrc.Crc32Ccitt } }));
         (_, EngineController plain) = Build(engine => engine);
 
-        Assert.Equal(512, adjusted.MicroGateOptions.MaxInfoField);
-        Assert.Equal(MicroGateCrc.Crc32Ccitt, adjusted.MicroGateOptions.Link.Crc);
-        Assert.Equal(new MicroGatePeerOptions(), plain.MicroGateOptions);
+        Assert.Equal(512, adjusted.HdlcOptions.MaxInfoField);
+        Assert.Equal(HdlcCrc.Crc32Ccitt, adjusted.HdlcOptions.Link.Crc);
+        Assert.Equal(new HdlcPeerOptions(), plain.HdlcOptions);
     }
 
     /// <summary>The print count function stated with the message is used for received messages.</summary>

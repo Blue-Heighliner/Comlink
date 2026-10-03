@@ -1,7 +1,7 @@
 namespace BlueHeighliner.Comlink.Peer.Transport;
 
 /// <summary>
-/// One persistent point-to-point link to a remote node over a MicroGate serial port. A MicroGate peer is single
+/// One persistent point-to-point link to a remote node over a MicroGate serial port. A HDLC peer is single
 /// use, so this owns the loop that creates a new one, waits for the remote end to answer, and brings the link back up
 /// whenever it is lost. Messages are fragmented into HDLC frames and answered with an accept or reject, giving the
 /// same send-then-acknowledge contract as an IP connection.
@@ -13,15 +13,16 @@ internal sealed class SerialLink : IAsyncDisposable
     /// <summary>Starts connecting to <paramref name="point"/> in the background and keeps trying until disposed.</summary>
     public SerialLink(
         ConnectionPoint point,
-        IMicroGatePeerFactory peerFactory,
-        MicroGatePeerOptions options,
+        IHdlcPeerFactory peerFactory,
+        HdlcPeerOptions options,
         ILogger logger,
         PeerEvent<PeerReceivedEventArgs> received,
         PeerEvent<PeerConnectionEventArgs> connected,
         PeerEvent<PeerConnectionEventArgs> disconnected,
         TimeSpan? reconnectDelay = null,
         TimeSpan? requestTimeout = null,
-        bool startClosed = false)
+        bool startClosed = false,
+        TimeSpan? candidateTimeout = null)
     {
         this.point = point;
         this.peerFactory = peerFactory;
@@ -32,6 +33,8 @@ internal sealed class SerialLink : IAsyncDisposable
         this.disconnected = disconnected;
         this.reconnectDelay = reconnectDelay ?? TimeSpan.FromSeconds(2);
         this.requestTimeout = requestTimeout ?? TimeSpan.FromSeconds(60);
+        this.candidateTimeout = candidateTimeout ?? TimeSpan.FromSeconds(4);
+        remotes = [point.RemoteSerialAddress, .. point.OtherRemotes.Select(remote => remote.Address)];
         connection = new PeerConnection(point, new SerialConnectionInfo { SerialPort = point.SerialPort!, SerialAddress = point.SerialAddress, RemoteSerialAddress = point.RemoteSerialAddress }, () => DropPeer(current));
         isClosed = startClosed;
         if (!startClosed) { openGate.TrySetResult(); }
@@ -39,14 +42,17 @@ internal sealed class SerialLink : IAsyncDisposable
     }
 
     private readonly ConnectionPoint point;
-    private readonly IMicroGatePeerFactory peerFactory;
-    private readonly MicroGatePeerOptions options;
+    private readonly IHdlcPeerFactory peerFactory;
+    private readonly HdlcPeerOptions options;
     private readonly ILogger logger;
     private readonly PeerEvent<PeerReceivedEventArgs> received;
     private readonly PeerEvent<PeerConnectionEventArgs> connected;
     private readonly PeerEvent<PeerConnectionEventArgs> disconnected;
     private readonly TimeSpan reconnectDelay;
     private readonly TimeSpan requestTimeout;
+    private readonly TimeSpan candidateTimeout;
+    private readonly byte[] remotes;
+    private int nextRemote;
     private readonly PeerConnection connection;
     private readonly CancellationTokenSource lifetime = new();
     private readonly Task loop;
@@ -56,7 +62,7 @@ internal sealed class SerialLink : IAsyncDisposable
     private readonly Lock closeLock = new();
     private TaskCompletionSource openGate = new(TaskCreationOptions.RunContinuationsAsynchronously);
 
-    private volatile IMicroGatePeer? current;
+    private volatile IHdlcPeer? current;
     private volatile bool isClosed;
     private CancellationTokenSource? attempt;
     private Reassembly? reassembly;
@@ -79,7 +85,7 @@ internal sealed class SerialLink : IAsyncDisposable
     /// </summary>
     public void SetClosed(bool closed)
     {
-        IMicroGatePeer? toDrop = null;
+        IHdlcPeer? toDrop = null;
         lock (closeLock)
         {
             isClosed = closed;
@@ -108,7 +114,7 @@ internal sealed class SerialLink : IAsyncDisposable
     /// <exception cref="IOException">The link is down, dropped while waiting, or the remote node did not answer in time.</exception>
     public async Task<bool> Request(ReadOnlyMemory<byte> data, PeerSendOptions? options, CancellationToken cancellation)
     {
-        IMicroGatePeer peer = current ?? throw new IOException(isClosed ? $"Serial link to {point} is closed" : $"Serial link to {point} is not connected");
+        IHdlcPeer peer = current ?? throw new IOException(isClosed ? $"Serial link to {point} is closed" : $"Serial link to {point} is not connected");
         uint id = Interlocked.Increment(ref nextId);
         TaskCompletionSource<bool> reply = new(TaskCreationOptions.RunContinuationsAsynchronously);
         pending[id] = reply;
@@ -139,20 +145,20 @@ internal sealed class SerialLink : IAsyncDisposable
         lifetime.Dispose();
     }
 
-    // Disposing a MicroGate peer sends a disconnect frame and can wait several seconds for it, so it never runs on
+    // Disposing a HDLC peer sends a disconnect frame and can wait several seconds for it, so it never runs on
     // the caller's thread, which is the UI thread when a user closes or refreshes a connection.
-    private static void DropPeer(IMicroGatePeer? peer)
+    private static void DropPeer(IHdlcPeer? peer)
     {
         if (peer is not null) { _ = Task.Run(() => DisposeQuietly(peer)); }
     }
 
-    private static async Task DisposeQuietly(IMicroGatePeer peer)
+    private static async Task DisposeQuietly(IHdlcPeer peer)
     {
         try { await peer.DisposeAsync(); }
         catch { }
     }
 
-    private async Task SendMessage(IMicroGatePeer peer, uint id, ReadOnlyMemory<byte> data, CancellationToken cancellation)
+    private async Task SendMessage(IHdlcPeer peer, uint id, ReadOnlyMemory<byte> data, CancellationToken cancellation)
     {
         int chunkSize = peer.MaxPayloadSize - SerialFrame.DataHeaderSize;
         int count = Math.Max(1, (data.Length + chunkSize - 1) / chunkSize);
@@ -204,20 +210,26 @@ internal sealed class SerialLink : IAsyncDisposable
 
     private async Task RunOnce(CancellationToken attemptToken)
     {
-        IMicroGatePeer peer = peerFactory.Create();
+        IHdlcPeer peer = peerFactory.Create();
         TaskCompletionSource ended = new(TaskCreationOptions.RunContinuationsAsynchronously);
         peer.Receiver = OnFrame;
         peer.Exceptions.Listen(ex => logger.LogWarning("Serial link to {Point} met an error: {Message}", point, ex.Message));
-        peer.StateChanged.Listen(state => { if (state == MicroGatePeerState.Disconnected) { ended.TrySetResult(); } }, () => ended.TrySetResult());
+        peer.StateChanged.Listen(state => { if (state == HdlcPeerState.Disconnected) { ended.TrySetResult(); } }, () => ended.TrySetResult());
+
+        // With several users that may be at the other end of the cable, each is tried in turn for a while, since the far end answers only the address it is given.
+        byte remote = remotes[nextRemote % remotes.Length];
+        using CancellationTokenSource candidate = CancellationTokenSource.CreateLinkedTokenSource(attemptToken);
+        if (remotes.Length > 1) { candidate.CancelAfter(candidateTimeout); }
 
         try
         {
             await peer.Start(point.SerialPort!, options, attemptToken);
-            await peer.Connect((byte)point.SerialAddress, (byte)point.RemoteSerialAddress, attemptToken);
+            await peer.Connect(point.SerialAddress, remote, candidate.Token);
         }
         catch (OperationCanceledException)
         {
             await DisposeQuietly(peer);
+            if (!attemptToken.IsCancellationRequested) { nextRemote++; }
             return;
         }
         catch (Exception ex)
@@ -234,6 +246,7 @@ internal sealed class SerialLink : IAsyncDisposable
         }
 
         failureLogged = false;
+        ((SerialConnectionInfo)connection.Info).RemoteSerialAddress = remote;
         bool closedMeanwhile;
         lock (closeLock)
         {
@@ -331,7 +344,7 @@ internal sealed class SerialLink : IAsyncDisposable
     {
         received.Publish(new PeerReceivedEventArgs { Connection = connection, Payload = message });
 
-        IMicroGatePeer? peer = current;
+        IHdlcPeer? peer = current;
         if (peer is null) { return; }
 
         try

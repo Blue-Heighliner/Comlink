@@ -16,7 +16,10 @@ public sealed class UserInfoTests
         Assert.Null(info.Role);
         Assert.Null(info.SecurityLevel);
         Assert.False(info.StoresMessages);
-        Assert.Null(info.PeerPoint);
+        Assert.Null(info.IpHost);
+        Assert.Null(info.MsmtPort);
+        Assert.Null(info.HdlcAddress);
+        Assert.Empty(info.HdlcPorts);
         Assert.Null(info.Parent);
         Assert.Empty(info.Children);
         Assert.Empty(info.Data);

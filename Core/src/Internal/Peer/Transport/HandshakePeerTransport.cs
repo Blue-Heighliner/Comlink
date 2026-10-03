@@ -323,8 +323,8 @@ internal sealed class HandshakePeerTransport : IPeerTransport
     }
 
     private string? SerialUser(SerialConnectionInfo info)
-        => engineController.OutgoingPoints.FirstOrDefault(point => point.IsSerial && point.User is not null
-            && string.Equals(point.SerialPort, info.SerialPort, StringComparison.OrdinalIgnoreCase) && point.SerialAddress == info.SerialAddress)?.User
+        => engineController.OutgoingPoints.Where(point => point.IsSerial && string.Equals(point.SerialPort, info.SerialPort, StringComparison.OrdinalIgnoreCase) && point.SerialAddress == info.SerialAddress)
+            .Select(point => point.UserAt(info.RemoteSerialAddress)).FirstOrDefault(user => user is not null)
             ?? info.SerialPort;
 
     private string? MatchCertificate(IReadOnlyList<string> certificateNames)

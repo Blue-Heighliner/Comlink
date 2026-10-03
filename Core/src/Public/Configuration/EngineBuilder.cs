@@ -114,10 +114,10 @@ public interface IEngineBuilder
     /// <summary>
     /// States the MicroGate options used for every serial connection: line encoding, CRC, clocking, frame size, windowing and
     /// retransmission, which must match the station at the other end of the cable. The HDLC address is not an option; it comes from each serial
-    /// connection point. Defaults to the MicroGate defaults.
+    /// connection point. Defaults to the HDLC peer defaults.
     /// </summary>
     /// <param name="options">The options to use.</param>
-    IEngineBuilder MicroGateOptions(MicroGatePeerOptions options);
+    IEngineBuilder HdlcOptions(HdlcPeerOptions options);
 
     /// <summary>
     /// Sets who is on the other end of a connection that has just formed, by user name. Return <see langword="null"/> to leave it to the engine, which names an

@@ -24,7 +24,9 @@ The file is read again while the application runs when the user right-clicks the
   "Users": {
     "USER-A": {
       "Role": "Peer",
-      "PeerPoint": { "Host": "10.0.0.2", "Port": 50021 },
+      "IpHost": "10.0.0.2",
+      "Msmt": { "Port": 50021, "HandshakeTimeout": "00:00:30" },
+      "Hdlc": { "Address": 1, "Ports": [ "ttyUSB0" ], "MaxInfoField": 1024 },
       "InterfacePort": 50020,
       "Parent": null,
       "Children": [],
@@ -95,16 +97,41 @@ These become the user's `UserInfo` (see [Configuration.md](Configuration.md#user
 
 The networking role of a node this user runs: `"Peer"`, `"Client"`, `"Server"` or `"Relay"` (case-insensitive). An unrecognized value is `"Peer"`. See [Peer.md](Peer.md#user-roles).
 
-### `PeerPoint`
+### `IpHost`
 
-**Type:** `object | null` | **Default:** `null` (host `127.0.0.1`, port `50021`)
+**Type:** `string | null` | **Default:** `null`
 
-How other nodes reach this node over IP, and the port it listens on. `Host` is the host name or IP address others dial, and `Port` the TCP port the node listens on for IP connections opened by other nodes: peers dialing this peer, and clients, relays and other servers connecting to a server or relay. A user that nobody dials need not state one. Where one user dials another (a peer dialing a peer, a node dialing its parent, a parent dialing a child whose link is forced to `MsmtConnect`), it uses the other user's `PeerPoint`.
+The IP address or host name that other nodes connect to in order to reach this user over IP. A user that nobody dials need not state one. Where one user dials another (a peer dialing a peer, a node dialing its parent, a parent dialing a child whose link is forced to `MsmtConnect`), it uses the other user's `IpHost` (the loopback address when the other user states none) and `Msmt.Port`.
 
-| Field | Type | Description |
-|-------|------|-------------|
-| `Host` | `string` | Host name or IP address other nodes use to reach this node (default `127.0.0.1`) |
-| `Port` | `int` | TCP port this node listens on and others connect to (default `50021`) |
+### `Msmt`
+
+**Type:** `object | null` | **Default:** `null` (the MSMT defaults)
+
+The user's MSMT settings. Every option of the MSMT connection is a key, each overriding its default, anything not stated keeping the value the host stated in code (`MsmtOptions`) or else the default; `Port` also sets the TCP port MSMT listens on. Timeouts and intervals are `hh:mm:ss` strings, and `null` disables a timeout that can be disabled. The options apply to every IP connection of the node, inbound and outbound, including the interface listener.
+
+| Key | Type | Description |
+|-----|------|-------------|
+| `Port` | `int` | TCP port the node listens on for MSMT connections, and that nodes dialing it connect to (default `50021`) |
+| `HandshakeTimeout` | `timespan \| null` | How long a TCP connection attempt and its TLS handshake may take (default 30 s) |
+| `StallTimeout` | `timespan \| null` | How long a message transfer may make no progress before the connection is dropped (default 30 s) |
+| `ResponseTimeout` | `timespan \| null` | How long to wait for the acknowledgement of a message sent (default 2 min) |
+| `TcpKeepAliveTime` | `timespan \| null` | How long a connection may be silent before the operating system probes it (default 1 min) |
+| `MaximumSessionLifetime` | `timespan` | The cap on a connecting client's proposed session lifetime (default 10 min) |
+| `SessionLifetime` | `timespan` | The maximum connection lifetime proposed when opening a connection (default 10 min) |
+| `KeepAliveMinInterval` / `KeepAliveMaxInterval` | `timespan` | The shortest and longest idle time before a keep-alive (default 3 and 5 min) |
+
+### `Hdlc`
+
+**Type:** `object | null` | **Default:** `null` (the HDLC defaults, no ports)
+
+The user's HDLC settings. Every option of the HDLC peer is a key (`AcknowledgeDelay`, `DisablePollFinalBit`, `EnableMonitor`, `IdlePattern`, `Loopback`, `MaxInfoField`, `MaxRetransmissions`, `PreambleLength`, `PreamblePattern`, `RetransmitInterval`, `RetryInterval`, `TransmitWindow`, `UnderrunAction`, and `Link` with `Crc`, `ClockSpeed`, `Encoding`, `PhaseLockedLoopDivisor`, `ReceiveClockSource` and `TransmitClockSource`), each overriding its default, anything not stated keeping the value the host stated in code (`HdlcOptions`) or else the default; enums are written by name. These keys must match the station at the far end of the cable. Two more keys are not options:
+
+| Key | Type | Description |
+|-----|------|-------------|
+| `Address` | `int` | The HDLC station address of this user (0-255, default `1`): the local address its node uses, and the remote address other nodes use to connect to it. Users that are linked by HDLC need distinct addresses |
+| `Ports` | `string[] \| "*"` | The MicroGate ports the node opens to form HDLC connections: an array of port names, or the string `"*"` for every port available on the machine. None by default |
+
+A node opens its ports only when it has a link in `Hdlc` mode. Nothing says which port is cabled to which user, so every opened port tries the address of each HDLC-linked user in turn until the far end answers, and the connection is identified as the user at that address. A serial link carries no certificate; override `Identify` or configure an initial packet or message for anything more elaborate.
 
 ### `InterfacePort`
 
@@ -116,23 +143,21 @@ Loopback TCP port of the local interface listener, always active in every role (
 
 **Type:** `string | object | null` and `(string | object)[]` | **Default:** none
 
-The links between this user and the users it is connected to in a hierarchy. A `"Client"` or `"Relay"` names its `Parent`, the server or relay above it; a `"Server"` or `"Relay"` lists its `Children`, the clients and relays below it. A server may also name another server as its `Parent` to join a cluster. By default a user opens an outgoing connection to its parent, at the parent's `PeerPoint`, and listens on its own `PeerPoint` for incoming connections from its children, so naming the other user is enough. A user listed in `Children` is also the only kind of user a server or relay accepts connections from (apart from other servers), and a server routes by them (see [Peer.md](Peer.md#user-roles)). A relay's own `Children` are the clients behind it, which the server learns from the relay's entry.
+The links between this user and the users it is connected to in a hierarchy. A `"Client"` or `"Relay"` names its `Parent`, the server or relay above it; a `"Server"` or `"Relay"` lists its `Children`, the clients and relays below it. A server may also name another server as its `Parent` to join a cluster. By default a user opens an outgoing MSMT connection to its parent, at the parent's `IpHost` and `Msmt.Port`, and listens on its own `Msmt.Port` for incoming connections from its children, so naming the other user is enough. A user listed in `Children` is also the only kind of user a server or relay accepts connections from (apart from other servers), and a server routes by them (see [Peer.md](Peer.md#user-roles)). A relay's own `Children` are the clients behind it, which the server learns from the relay's entry.
 
-Instead of a plain user name, a link may be an object that forces how the connection forms. The other end of the link states the matching mode (a child forced to `MsmtConnect` is dialed by its parent, so that child states its `Parent` with `MsmtListen`; both ends of a serial cable state `SyncSerial`).
+Instead of a plain user name, a link may be an object that forces how the connection forms. Only `User` and `Mode` are used; where and how each user is reached is stated on the users themselves (`IpHost`, `Msmt`, `Hdlc`). The other end of the link states the matching mode (a child forced to `MsmtConnect` is dialed by its parent, so that child states its `Parent` with `MsmtListen`; both ends of an HDLC cable state `Hdlc`).
 
 | Field | Type | Description |
 |-------|------|-------------|
 | `User` | `string` | The user at the other end of the link |
-| `Mode` | `string` | `MsmtListen` (listen for an incoming MSMT connection from that user), `MsmtConnect` (open an outgoing MSMT connection to that user's `PeerPoint`) or `SyncSerial` (form a MicroGate peer connection over a serial port). Default: `MsmtConnect` for a parent, `MsmtListen` for a child, and `SyncSerial` when `SerialPort` is given |
-| `SerialPort` | `string` | For `SyncSerial`, the name of the local MicroGate serial port cabled to that user |
-| `SerialAddress` | `int` | For `SyncSerial`, this node's HDLC station address on the serial link (0-255, default 255). Must differ from `RemoteSerialAddress` |
-| `RemoteSerialAddress` | `int` | For `SyncSerial`, the HDLC station address of the user at the other end of the cable (0-255, default 254). The other end states the two addresses the other way round |
+| `Mode` | `string` | `MsmtListen` (listen for an incoming MSMT connection from that user), `MsmtConnect` (open an outgoing MSMT connection to that user) or `Hdlc` (form an HDLC peer connection over the node's HDLC ports, using the two users' `Hdlc.Address`). Default: `MsmtConnect` for a parent, `MsmtListen` for a child |
 
 ```json
-"CLIENT1": { "Role": "Client", "Parent": { "User": "SERVER", "Mode": "SyncSerial", "SerialPort": "ttyUSB0", "SerialAddress": 2, "RemoteSerialAddress": 1 } }
+"SERVER":  { "Role": "Server", "Hdlc": { "Address": 1, "Ports": [ "ttyUSB3" ] }, "Children": [ { "User": "CLIENT1", "Mode": "Hdlc" }, "CLIENT2" ] },
+"CLIENT1": { "Role": "Client", "Hdlc": { "Address": 2, "Ports": [ "ttyUSB0" ] }, "Parent": { "User": "SERVER", "Mode": "Hdlc" } }
 ```
 
-A serial link carries no certificate, so the connection is identified as the user the link names; override `Identify` or configure an initial packet or message for anything more elaborate. Peers have no parent or children: a `"Peer"` dials every other peer that states a `PeerPoint`, except that when both state one only the one whose name sorts first dials, so a pair is never connected both ways, and a peer with none dials all of them.
+Peers have no parent or children: a `"Peer"` dials every other peer that states an `IpHost`, except that when both state one only the one whose name sorts first dials, so a pair is never connected both ways, and a peer with none dials all of them.
 
 ### `StoresMessages`
 
@@ -222,8 +247,8 @@ Two peers sharing one machine, the one whose name sorts first dialing the other 
   "CertificateStore": ".",
   "UserGroups": { "TEST": [ "PEER1", "PEER2" ] },
   "Users": {
-    "PEER1": { "PeerPoint": { "Host": "127.0.0.1", "Port": 50021 }, "InterfacePort": 50020, "SecurityLevel": "PUBLIC" },
-    "PEER2": { "PeerPoint": { "Host": "127.0.0.1", "Port": 50023 }, "InterfacePort": 50022, "SecurityLevel": "PUBLIC" }
+    "PEER1": { "IpHost": "127.0.0.1", "Msmt": { "Port": 50021 }, "InterfacePort": 50020, "SecurityLevel": "PUBLIC" },
+    "PEER2": { "IpHost": "127.0.0.1", "Msmt": { "Port": 50023 }, "InterfacePort": 50022, "SecurityLevel": "PUBLIC" }
   }
 }
 ```
@@ -242,7 +267,7 @@ One server with two clients that each name it as their parent, the server storin
   "AuthorityCertificate": "../Root.cer",
   "CertificateStore": ".",
   "Users": {
-    "SERVER":  { "Role": "Server", "PeerPoint": { "Host": "127.0.0.1", "Port": 50121 }, "InterfacePort": 50120, "Children": [ "CLIENT1", "CLIENT2" ], "StoresMessages": true, "SecurityLevel": "RESTRICTED" },
+    "SERVER":  { "Role": "Server", "IpHost": "127.0.0.1", "Msmt": { "Port": 50121 }, "InterfacePort": 50120, "Children": [ "CLIENT1", "CLIENT2" ], "StoresMessages": true, "SecurityLevel": "RESTRICTED" },
     "CLIENT1": { "Role": "Client", "InterfacePort": 50122, "Parent": "SERVER", "SecurityLevel": "INTERNAL" },
     "CLIENT2": { "Role": "Client", "InterfacePort": 50124, "Parent": "SERVER", "SecurityLevel": "INTERNAL" }
   }
@@ -254,8 +279,8 @@ A relay sits between clients and a server: the server lists it as a child, the r
 ```json
 {
   "Users": {
-    "SERVER":  { "Role": "Server", "PeerPoint": { "Host": "127.0.0.1", "Port": 50121 }, "Children": [ "CLIENT1", "RELAY" ] },
-    "RELAY":   { "Role": "Relay", "PeerPoint": { "Host": "127.0.0.1", "Port": 50123 }, "Parent": "SERVER", "Children": [ "CLIENT2" ] },
+    "SERVER":  { "Role": "Server", "IpHost": "127.0.0.1", "Msmt": { "Port": 50121 }, "Children": [ "CLIENT1", "RELAY" ] },
+    "RELAY":   { "Role": "Relay", "IpHost": "127.0.0.1", "Msmt": { "Port": 50123 }, "Parent": "SERVER", "Children": [ "CLIENT2" ] },
     "CLIENT1": { "Role": "Client", "Parent": "SERVER" },
     "CLIENT2": { "Role": "Client", "Parent": "RELAY" }
   }

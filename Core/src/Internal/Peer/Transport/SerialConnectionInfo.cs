@@ -10,5 +10,5 @@ internal sealed record SerialConnectionInfo : ConnectionInfo, ISerialConnectionI
     public byte SerialAddress { get; init; }
 
     /// <inheritdoc />
-    public byte RemoteSerialAddress { get; init; }
+    public byte RemoteSerialAddress { get; set; }
 }

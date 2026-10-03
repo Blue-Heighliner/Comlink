@@ -27,8 +27,14 @@ public sealed record UserInfo
     public IReadOnlyList<string> Groups { get; init; } = [];
     /// <summary>The networking role of a node this user runs. <see langword="null"/> (the default) is <see cref="UserRole.Peer"/>.</summary>
     public UserRole? Role { get; init; }
-    /// <summary>Where other nodes reach a node this user runs over IP, and the port it listens on. <see langword="null"/> (the default) is the default <see cref="Models.PeerPoint"/>.</summary>
-    public PeerPoint? PeerPoint { get; init; }
+    /// <summary>The IP address or host name other nodes connect to in order to reach a node this user runs. <see langword="null"/> (the default) when it is not reachable that way, so no one dials it unless a link says to, and then at the loopback address.</summary>
+    public string? IpHost { get; init; }
+    /// <summary>The TCP port a node this user runs listens on for MSMT connections, and that nodes dialing it connect to. <see langword="null"/> (the default) is 50021.</summary>
+    public int? MsmtPort { get; init; }
+    /// <summary>The HDLC station address of a node this user runs: the local address it uses, and the remote address other nodes use to connect to it. <see langword="null"/> (the default) is 1. Users that are HDLC-linked need distinct addresses.</summary>
+    public byte? HdlcAddress { get; init; }
+    /// <summary>The names of the MicroGate ports a node this user runs opens to form HDLC connections, or a single <c>*</c> for every port available on the machine. Empty (the default) for none.</summary>
+    public IReadOnlyList<string> HdlcPorts { get; init; } = [];
     /// <summary>The loopback TCP port a node this user runs uses for its local interface listener. <see langword="null"/> (the default) is 50020.</summary>
     public int? InterfacePort { get; init; }
     /// <summary>The link to this user's parent: the user it forms an outgoing connection with by default. <see langword="null"/> (the default) for a user with no parent.</summary>

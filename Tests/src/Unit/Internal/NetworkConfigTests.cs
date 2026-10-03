@@ -35,11 +35,11 @@ public sealed class NetworkConfigTests : IDisposable
     [Fact]
     public void Load_NoArgument_UsesConfigJsonInTheWorkingDirectory()
     {
-        Write("Config.json", """{ "Users": { "ALICE": { "PeerPoint": { "Host": "10.0.0.5", "Port": 1234 } } } }""");
+        Write("Config.json", """{ "Users": { "ALICE": { "IpHost": "10.0.0.5", "Msmt": { "Port": 1234 } } } }""");
 
         NetworkConfig config = NetworkConfig.Load([], directory);
 
-        Assert.Equal(("10.0.0.5", 1234), (config.Find("ALICE")!.PeerPoint!.Host, config.Find("ALICE")!.PeerPoint!.Port));
+        Assert.Equal(("10.0.0.5", 1234), (config.Find("ALICE")!.IpHost, config.Find("ALICE")!.GetMsmtPort()));
     }
 
     /// <summary>--config names the file to use, even when Config.json exists, and --user names the user the process runs as.</summary>
@@ -76,7 +76,7 @@ public sealed class NetworkConfigTests : IDisposable
     [Fact]
     public void Reload_ReplacesWhatTheFileSays_KeepsTheRunningUser_AndSurvivesABrokenFile()
     {
-        Write("Config.json", """{ "CertificateStore": "a", "UserGroups": { "G": [ "A" ] }, "Users": { "A": { "PeerPoint": { "Port": 1 } } } }""");
+        Write("Config.json", """{ "CertificateStore": "a", "UserGroups": { "G": [ "A" ] }, "Users": { "A": { "Msmt": { "Port": 1 } } } }""");
         NetworkConfig config = NetworkConfig.Load(["--user", "A"], directory);
 
         Write("Config.json", """{ "CertificateStore": "b", "AuthorityCertificate": "root.cer", "UserGroups": { "H": [ "B" ] }, "Users": { "B": { "PeerPort": 2 } } }""");
@@ -106,9 +106,9 @@ public sealed class NetworkConfigTests : IDisposable
               "UserGroups": { "OPS": [ "alice", "BOB" ] },
               "Users": {
                 "ALICE": {
-                  "Role": "server", "PeerPoint": { "Host": "10.0.0.1", "Port": 1 }, "InterfacePort": 2,
+                  "Role": "server", "IpHost": "10.0.0.1", "Msmt": { "Port": 1, "HandshakeTimeout": "00:00:07" }, "Hdlc": { "Address": 3, "Ports": [ "SL0", "SL1" ], "MaxInfoField": 512 }, "InterfacePort": 2,
                   "Parent": { "User": "ROOT", "Mode": "MsmtListen" },
-                  "Children": [ "BOB", { "User": "CAROL", "Mode": "SyncSerial", "SerialPort": "SL0", "SerialAddress": 5, "RemoteSerialAddress": 6 }, { "user": "DAN", "mode": "msmtconnect" } ],
+                  "Children": [ "BOB", { "User": "CAROL", "Mode": "Hdlc", "Port": "ignored", "Address": 5 }, { "user": "DAN", "mode": "msmtconnect" } ],
                   "StoresMessages": true, "SecurityLevel": "HIGH", "CertificateName": "CN-ALICE",
                   "Data": { "desk": "4" },
                   "Headless": true, "AlertText": "HEY", "AlarmSoundSeconds": 5.5,
@@ -125,10 +125,12 @@ public sealed class NetworkConfigTests : IDisposable
         Assert.Equal("ROOT", config.TrustedAuthorityCertificateName);
         Assert.Equal("ALICE", info.Name);
         Assert.Equal((UserRole.Server, 2), (info.Role, info.InterfacePort));
-        Assert.Equal(new PeerPoint { Host = "10.0.0.1", Port = 1 }, info.PeerPoint);
+        Assert.Equal(("10.0.0.1", 1, (byte)3), (info.IpHost, info.MsmtPort, info.HdlcAddress));
+        Assert.Equal(["SL0", "SL1"], info.HdlcPorts);
+        Assert.Equal(512, node.Hdlc!.Value.GetProperty("MaxInfoField").GetInt32());
         Assert.Equal(new UserLink { User = "ROOT", Mode = ConnectionMode.MsmtListen }, info.Parent);
         Assert.Equal(
-            [new UserLink { User = "BOB" }, new UserLink { User = "CAROL", Mode = ConnectionMode.SyncSerial, SerialPort = "SL0", SerialAddress = 5, RemoteSerialAddress = 6 }, new UserLink { User = "DAN", Mode = ConnectionMode.MsmtConnect }],
+            [new UserLink { User = "BOB" }, new UserLink { User = "CAROL", Mode = ConnectionMode.Hdlc }, new UserLink { User = "DAN", Mode = ConnectionMode.MsmtConnect }],
             info.Children);
         Assert.True(info.StoresMessages);
         Assert.Equal(("HIGH", "CN-ALICE"), (info.SecurityLevel, info.CertificateName));
@@ -181,12 +183,29 @@ public sealed class NetworkConfigTests : IDisposable
     public void Links_ReadFromANameOrAnObject()
     {
         string path = Write("Links.json", """
-            { "Users": { "A": { "Parent": "B", "Children": [ "C", { "User": "D", "Mode": "bogus" }, { "User": "E", "Mode": "SyncSerial", "SerialPort": "SL1" } ] } } }
+            { "Users": { "A": { "Parent": "B", "Children": [ "C", { "User": "D", "Mode": "bogus" }, { "User": "E", "Mode": "Hdlc" } ] } } }
             """);
 
         UserInfo info = NetworkConfig.Load(["--config", path]).GetUserInfo("A")!;
 
         Assert.Equal(new UserLink { User = "B" }, info.Parent);
-        Assert.Equal([new UserLink { User = "C" }, new UserLink { User = "D" }, new UserLink { User = "E", Mode = ConnectionMode.SyncSerial, SerialPort = "SL1" }], info.Children);
+        Assert.Equal([new UserLink { User = "C" }, new UserLink { User = "D" }, new UserLink { User = "E", Mode = ConnectionMode.Hdlc }], info.Children);
+    }
+
+    /// <summary>The HDLC ports are the named ports, a single <c>*</c> for every port, or none, and the address and port are read only when numbers.</summary>
+    [Fact]
+    public void HdlcPortsAndAddress_AreReadFromTheHdlcSection()
+    {
+        string path = Write("Hdlc.json", """
+            { "Users": { "ALL": { "Hdlc": { "Ports": "*" } }, "SOME": { "Hdlc": { "Address": 9, "Ports": [ "A", "B" ] } }, "NONE": { "Hdlc": { "Address": "x" } }, "BARE": {} } }
+            """);
+
+        NetworkConfig config = NetworkConfig.Load(["--config", path]);
+
+        Assert.Equal(["*"], config.GetUserInfo("ALL")!.HdlcPorts);
+        Assert.Equal(["A", "B"], config.GetUserInfo("SOME")!.HdlcPorts);
+        Assert.Equal((byte?)9, config.GetUserInfo("SOME")!.HdlcAddress);
+        Assert.Equal(((byte?)null, 0), (config.GetUserInfo("NONE")!.HdlcAddress, config.GetUserInfo("NONE")!.HdlcPorts.Count));
+        Assert.Equal(((byte?)null, (int?)null, 0), (config.GetUserInfo("BARE")!.HdlcAddress, config.GetUserInfo("BARE")!.MsmtPort, config.GetUserInfo("BARE")!.HdlcPorts.Count));
     }
 }

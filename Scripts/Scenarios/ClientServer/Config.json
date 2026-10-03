@@ -4,7 +4,8 @@
   "Users": {
     "SERVER": {
       "Role": "Server",
-      "PeerPoint": { "Host": "127.0.0.1", "Port": 50121 },
+      "IpHost": "127.0.0.1",
+      "Msmt": { "Port": 50121 },
       "InterfacePort": 50120,
       "Children": [ "CLIENT1", "CLIENT2" ],
       "StoresMessages": true,

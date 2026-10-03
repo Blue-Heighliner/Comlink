@@ -10,7 +10,7 @@ internal interface IPeerTransportFactory
 /// <summary>Builds a <see cref="CompositePeerTransport"/> of MSMT (IP) and MicroGate (serial), leaving out IP when no identity certificate is available, wraps it in a <see cref="PacketizingPeerTransport"/> when <see cref="IEngineController.PacketType"/> is set, and finally in a <see cref="HandshakePeerTransport"/> that carries out the initial message exchange and identifies each connection. An initial packet exchange, when configured, is carried out by another <see cref="HandshakePeerTransport"/> beneath the packetizer.</summary>
 internal sealed class PeerTransportFactory(
     IMsmtSessionPeer.IFactory msmtFactory,
-    IMicroGatePeerFactory microGateFactory,
+    IHdlcPeerFactory microGateFactory,
     IEngineController engineController,
     ILoggerFactory loggerFactory,
     IEngineContextFactory? contexts = null) : IPeerTransportFactory
@@ -31,7 +31,7 @@ internal sealed class PeerTransportFactory(
             logger.LogWarning("IP connections are unavailable: {Message}", ex.Message);
         }
 
-        IPeerTransport transport = new CompositePeerTransport(ip, new SerialPeerTransport(microGateFactory, logger, options: engineController.MicroGateOptions));
+        IPeerTransport transport = new CompositePeerTransport(ip, new SerialPeerTransport(microGateFactory, logger, options: engineController.HdlcOptions));
         try
         {
             // The initial packet travels as a packet of its own, so its exchange happens beneath the packetizer; the initial frame is a frame like

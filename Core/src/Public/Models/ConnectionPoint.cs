@@ -25,6 +25,12 @@ public sealed class ConnectionPoint : IEquatable<ConnectionPoint>
     /// </summary>
     public string? User { get; init; }
 
+    /// <summary>
+    /// For a serial point reached by a node with several HDLC links, the other users it may be cabled to besides <see cref="User"/> at <see cref="RemoteSerialAddress"/>: a link tries each in turn
+    /// until the one at the other end of the cable answers. Empty (the default) for a point with a single known remote. Unused for an IP point.
+    /// </summary>
+    public IReadOnlyList<HdlcRemote> OtherRemotes { get; init; } = [];
+
     /// <summary>Whether this point is reached over a MicroGate serial port rather than IP.</summary>
     public bool IsSerial => !string.IsNullOrEmpty(SerialPort);
 
@@ -32,6 +38,11 @@ public sealed class ConnectionPoint : IEquatable<ConnectionPoint>
     public string Key => IsSerial
         ? $"serial:{SerialPort!.ToUpperInvariant()}:{SerialAddress}"
         : $"ip:{IpAddress.ToUpperInvariant()}:{Port}";
+
+    /// <summary>Returns the user known to be at HDLC station address <paramref name="remoteAddress"/> at the other end of this serial point, or <see langword="null"/> when none is.</summary>
+    /// <param name="remoteAddress">The remote station address a connection formed with.</param>
+    public string? UserAt(byte remoteAddress)
+        => remoteAddress == RemoteSerialAddress ? User : OtherRemotes.FirstOrDefault(remote => remote.Address == remoteAddress)?.User;
 
     /// <inheritdoc />
     public bool Equals(ConnectionPoint? other) => other is not null && Key == other.Key;

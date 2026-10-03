@@ -73,8 +73,8 @@ internal sealed class EngineBuilder : IEngineBuilder, IAsyncDisposable
     public Func<MsmtSessionPeerOptions>? ConnectionOptionsValue { get; private set; }
     /// <summary>How the MSMT peer options are adjusted, if stated.</summary>
     public MsmtConnectionOptions? MsmtOptionsValue { get; private set; }
-    /// <summary>How the MicroGate peer options are adjusted, if stated.</summary>
-    public MicroGatePeerOptions? MicroGateOptionsValue { get; private set; }
+    /// <summary>How the HDLC peer options are adjusted, if stated.</summary>
+    public HdlcPeerOptions? HdlcOptionsValue { get; private set; }
     /// <summary>How connections are identified, if stated.</summary>
     public Func<IConnectionInfo, string?>? IdentifyValue { get; private set; }
     /// <summary>The initial packet processor, if stated.</summary>
@@ -324,9 +324,9 @@ internal sealed class EngineBuilder : IEngineBuilder, IAsyncDisposable
     }
 
     /// <inheritdoc />
-    public IEngineBuilder MicroGateOptions(MicroGatePeerOptions options)
+    public IEngineBuilder HdlcOptions(HdlcPeerOptions options)
     {
-        MicroGateOptionsValue = options;
+        HdlcOptionsValue = options;
         return this;
     }
 

@@ -6,12 +6,14 @@
   },
   "Users": {
     "PEER1": {
-      "PeerPoint": { "Host": "127.0.0.1", "Port": 50021 },
+      "IpHost": "127.0.0.1",
+      "Msmt": { "Port": 50021 },
       "InterfacePort": 50020,
       "SecurityLevel": "PUBLIC"
     },
     "PEER2": {
-      "PeerPoint": { "Host": "127.0.0.1", "Port": 50023 },
+      "IpHost": "127.0.0.1",
+      "Msmt": { "Port": 50023 },
       "InterfacePort": 50022,
       "SecurityLevel": "PUBLIC"
     }

@@ -4,7 +4,8 @@
   "Users": {
     "SERVER1": {
       "Role": "Server",
-      "PeerPoint": { "Host": "127.0.0.1", "Port": 50221 },
+      "IpHost": "127.0.0.1",
+      "Msmt": { "Port": 50221 },
       "InterfacePort": 50220,
       "Parent": "SERVER2",
       "Children": [ "CLIENT1" ],
@@ -13,7 +14,8 @@
     },
     "SERVER2": {
       "Role": "Server",
-      "PeerPoint": { "Host": "127.0.0.1", "Port": 50223 },
+      "IpHost": "127.0.0.1",
+      "Msmt": { "Port": 50223 },
       "InterfacePort": 50222,
       "Children": [ "CLIENT2" ],
       "SecurityLevel": "RESTRICTED"

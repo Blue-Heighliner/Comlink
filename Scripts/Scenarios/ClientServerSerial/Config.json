@@ -4,10 +4,12 @@
   "Users": {
     "SERVER": {
       "Role": "Server",
-      "PeerPoint": { "Host": "127.0.0.1", "Port": 50321 },
+      "IpHost": "127.0.0.1",
+      "Msmt": { "Port": 50321 },
       "InterfacePort": 50320,
+      "Hdlc": { "Address": 1, "Ports": [ "ttyUSB3" ] },
       "Children": [
-        { "User": "CLIENT1", "Mode": "SyncSerial", "SerialPort": "ttyUSB3", "SerialAddress": 1, "RemoteSerialAddress": 2 },
+        { "User": "CLIENT1", "Mode": "Hdlc" },
         "CLIENT2"
       ],
       "SecurityLevel": "RESTRICTED"
@@ -15,7 +17,8 @@
     "CLIENT1": {
       "Role": "Client",
       "InterfacePort": 50322,
-      "Parent": { "User": "SERVER", "Mode": "SyncSerial", "SerialPort": "ttyUSB0", "SerialAddress": 2, "RemoteSerialAddress": 1 },
+      "Hdlc": { "Address": 2, "Ports": [ "ttyUSB0" ] },
+      "Parent": { "User": "SERVER", "Mode": "Hdlc" },
       "SecurityLevel": "INTERNAL"
     },
     "CLIENT2": {

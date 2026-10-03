@@ -3,7 +3,7 @@ namespace BlueHeighliner.Comlink.Tests.Unit.Internal.Peer.Transport;
 /// <summary>Unit tests for <see cref="SerialPeerTransport"/> and its <see cref="SerialLink"/>, over an in-memory cable.</summary>
 public sealed class SerialPeerTransportTests
 {
-    private static async Task StartAndConnect(IMicroGatePeer peer)
+    private static async Task StartAndConnect(IHdlcPeer peer)
     {
         await peer.Start("SL0");
         await peer.Connect(255, 255);
@@ -13,7 +13,7 @@ public sealed class SerialPeerTransportTests
     private static readonly ConnectionPoint point = new() { SerialPort = "SL0" };
     private static readonly TimeSpan timeout = TimeSpan.FromSeconds(30);
 
-    private sealed record Pair(SerialPeerTransport A, SerialPeerTransport B, FakeMicroGateCable Cable, PeerCollector AConnections, PeerCollector BReceived) : IAsyncDisposable
+    private sealed record Pair(SerialPeerTransport A, SerialPeerTransport B, FakeHdlcCable Cable, PeerCollector AConnections, PeerCollector BReceived) : IAsyncDisposable
     {
         public async ValueTask DisposeAsync()
         {
@@ -41,7 +41,7 @@ public sealed class SerialPeerTransportTests
 
     private static async Task<Pair> ConnectedPair(int maxPayloadSize = 4090, TimeSpan? requestTimeout = null)
     {
-        FakeMicroGateCable cable = new(maxPayloadSize);
+        FakeHdlcCable cable = new(maxPayloadSize);
         SerialPeerTransport a = new(cable.EndA, logger, TimeSpan.FromMilliseconds(20), requestTimeout);
         SerialPeerTransport b = new(cable.EndB, logger, TimeSpan.FromMilliseconds(20), requestTimeout);
         PeerCollector aConnections = new();
@@ -177,8 +177,8 @@ public sealed class SerialPeerTransportTests
     [Fact]
     public async Task Connect_StartsPeersWithTheConfiguredOptionsAndPointAddress()
     {
-        FakeMicroGateCable cable = new();
-        MicroGatePeerOptions options = new() { MaxInfoField = 512 };
+        FakeHdlcCable cable = new();
+        HdlcPeerOptions options = new() { MaxInfoField = 512 };
         await using SerialPeerTransport a = new(cable.EndA, logger, TimeSpan.FromMilliseconds(20), options: options);
         await using SerialPeerTransport b = new(cable.EndB, logger, TimeSpan.FromMilliseconds(20), options: options);
         ConnectionPoint addressed = new() { SerialPort = "SL0", SerialAddress = 7, RemoteSerialAddress = 9 };
@@ -194,11 +194,32 @@ public sealed class SerialPeerTransportTests
         });
     }
 
+    /// <summary>With several users that may be at the far end of the cable, a link tries each one's address in turn until the end that answers is found, and the connection is identified as the user at that address.</summary>
+    [Fact]
+    public async Task Connect_SeveralRemotes_TriesEachUntilTheFarEndAnswers()
+    {
+        FakeHdlcCable cable = new() { EnforcesAddresses = true };
+        await using SerialPeerTransport a = new(cable.EndA, logger, TimeSpan.FromMilliseconds(20), candidateTimeout: TimeSpan.FromMilliseconds(150));
+        await using SerialPeerTransport b = new(cable.EndB, logger, TimeSpan.FromMilliseconds(20));
+        ConnectionPoint wrongFirst = new() { SerialPort = "SL0", SerialAddress = 1, RemoteSerialAddress = 2, User = "NOBODY", OtherRemotes = [new HdlcRemote("BOB", 3)] };
+        ConnectionPoint far = new() { SerialPort = "SL0", SerialAddress = 3, RemoteSerialAddress = 1, User = "ALICE" };
+        Open(b, far);
+        Open(a, wrongFirst);
+
+        await WaitUntil(() => a.Connect(wrongFirst).IsCompletedSuccessfully);
+
+        PeerConnection connection = await a.Connect(wrongFirst);
+        Assert.Equal(3, ((ISerialConnectionInfo)connection.Info).RemoteSerialAddress);
+        Assert.Equal("BOB", wrongFirst.UserAt(((ISerialConnectionInfo)connection.Info).RemoteSerialAddress));
+        Assert.Contains(cable.Starts, start => start.Address == 1 && start.RemoteAddress == 2);
+        Assert.Contains(cable.Starts, start => start.Address == 1 && start.RemoteAddress == 3);
+    }
+
     /// <summary>Requesting before the link has come up fails immediately instead of waiting.</summary>
     [Fact]
     public async Task Request_NotConnected_ThrowsIOException()
     {
-        FakeMicroGateCable cable = new();
+        FakeHdlcCable cable = new();
         await using SerialPeerTransport transport = new(cable.EndA, logger, TimeSpan.FromMilliseconds(20));
 
         await Assert.ThrowsAsync<IOException>(() => Request(transport, point, new byte[] { 1 }));
@@ -208,9 +229,9 @@ public sealed class SerialPeerTransportTests
     [Fact]
     public async Task Request_NoReply_TimesOut()
     {
-        FakeMicroGateCable cable = new();
+        FakeHdlcCable cable = new();
         await using SerialPeerTransport transport = new(cable.EndA, logger, TimeSpan.FromMilliseconds(20), TimeSpan.FromMilliseconds(100));
-        IMicroGatePeer silent = cable.EndB.Create();
+        IHdlcPeer silent = cable.EndB.Create();
         _ = StartAndConnect(silent);
         Open(transport, point);
         TaskCompletionSource up = new();
@@ -236,9 +257,9 @@ public sealed class SerialPeerTransportTests
     [Fact]
     public async Task Request_LinkLostWhileWaiting_ThrowsIOException()
     {
-        FakeMicroGateCable cable = new();
+        FakeHdlcCable cable = new();
         await using SerialPeerTransport transport = new(cable.EndA, logger, TimeSpan.FromMilliseconds(20), TimeSpan.FromSeconds(30));
-        IMicroGatePeer silent = cable.EndB.Create();
+        IHdlcPeer silent = cable.EndB.Create();
         _ = StartAndConnect(silent);
         Open(transport, point);
         TaskCompletionSource up = new();
@@ -255,7 +276,7 @@ public sealed class SerialPeerTransportTests
     [Fact]
     public async Task Link_StartFailure_IsRetriedUntilItSucceeds()
     {
-        FakeMicroGateCable cable = new() { StartFailure = new IOException("no such port") };
+        FakeHdlcCable cable = new() { StartFailure = new IOException("no such port") };
         await using SerialPeerTransport a = new(cable.EndA, logger, TimeSpan.FromMilliseconds(20));
         await using SerialPeerTransport b = new(cable.EndB, logger, TimeSpan.FromMilliseconds(20));
         TaskCompletionSource up = new();
@@ -314,7 +335,7 @@ public sealed class SerialPeerTransportTests
     [Fact]
     public async Task SetClosed_BeforeAnythingOpened_CreatesNoPeerUntilReopened()
     {
-        FakeMicroGateCable cable = new();
+        FakeHdlcCable cable = new();
         await using SerialPeerTransport transport = new(cable.EndA, logger, TimeSpan.FromMilliseconds(20));
 
         transport.SetClosed(point, true);
@@ -329,7 +350,7 @@ public sealed class SerialPeerTransportTests
     [Fact]
     public async Task SetClosed_WhileConnecting_AbandonsAttempt()
     {
-        FakeMicroGateCable cable = new();
+        FakeHdlcCable cable = new();
         await using SerialPeerTransport transport = new(cable.EndA, logger, TimeSpan.FromMilliseconds(20));
         Open(transport, point);
         await WaitUntil(() => cable.PeersCreated == 1);
@@ -360,7 +381,7 @@ public sealed class SerialPeerTransportTests
     [Fact]
     public async Task Reset_UnopenedPoint_DoesNotOpenIt()
     {
-        FakeMicroGateCable cable = new();
+        FakeHdlcCable cable = new();
         await using SerialPeerTransport transport = new(cable.EndA, logger, TimeSpan.FromMilliseconds(20));
 
         transport.Reset(point);
@@ -373,7 +394,7 @@ public sealed class SerialPeerTransportTests
     [Fact]
     public async Task Open_SamePointTwice_SharesOneLink()
     {
-        FakeMicroGateCable cable = new();
+        FakeHdlcCable cable = new();
         await using SerialPeerTransport transport = new(cable.EndA, logger, TimeSpan.FromMilliseconds(20));
 
         Open(transport, new ConnectionPoint { SerialPort = "SL0", SerialAddress = 1 });
@@ -389,7 +410,7 @@ public sealed class SerialPeerTransportTests
     [Fact]
     public async Task Request_IpPoint_ThrowsArgumentException()
     {
-        FakeMicroGateCable cable = new();
+        FakeHdlcCable cable = new();
         await using SerialPeerTransport transport = new(cable.EndA, logger);
 
         await Assert.ThrowsAsync<ArgumentException>(() => Request(transport, new ConnectionPoint { IpAddress = "10.0.0.1", Port = 1 }, new byte[] { 1 }));
@@ -409,7 +430,7 @@ public sealed class SerialPeerTransportTests
     [Fact]
     public async Task DisposeAsync_StopsLinkAndDisposesPeer()
     {
-        FakeMicroGateCable cable = new();
+        FakeHdlcCable cable = new();
         SerialPeerTransport transport = new(cable.EndA, logger, TimeSpan.FromMilliseconds(20));
         Open(transport, point);
         await WaitUntil(() => cable.PeersCreated >= 1);
@@ -425,9 +446,9 @@ public sealed class SerialPeerTransportTests
     [Fact]
     public async Task Received_GarbageFrame_IsIgnored()
     {
-        FakeMicroGateCable cable = new();
+        FakeHdlcCable cable = new();
         await using SerialPeerTransport transport = new(cable.EndA, logger, TimeSpan.FromMilliseconds(20));
-        IMicroGatePeer raw = cable.EndB.Create();
+        IHdlcPeer raw = cable.EndB.Create();
         _ = StartAndConnect(raw);
         Open(transport, point);
         PeerCollector received = new();
@@ -446,9 +467,9 @@ public sealed class SerialPeerTransportTests
     [Fact]
     public async Task Received_InterleavedFragments_AreDropped()
     {
-        FakeMicroGateCable cable = new();
+        FakeHdlcCable cable = new();
         await using SerialPeerTransport transport = new(cable.EndA, logger, TimeSpan.FromMilliseconds(20));
-        IMicroGatePeer raw = cable.EndB.Create();
+        IHdlcPeer raw = cable.EndB.Create();
         _ = StartAndConnect(raw);
         Open(transport, point);
         PeerCollector received = new();

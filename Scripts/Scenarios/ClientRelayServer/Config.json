@@ -4,7 +4,8 @@
   "Users": {
     "SERVER": {
       "Role": "Server",
-      "PeerPoint": { "Host": "127.0.0.1", "Port": 50321 },
+      "IpHost": "127.0.0.1",
+      "Msmt": { "Port": 50321 },
       "InterfacePort": 50320,
       "Children": [ "RELAY" ],
       "StoresMessages": true,
@@ -12,7 +13,8 @@
     },
     "RELAY": {
       "Role": "Relay",
-      "PeerPoint": { "Host": "127.0.0.1", "Port": 50323 },
+      "IpHost": "127.0.0.1",
+      "Msmt": { "Port": 50323 },
       "InterfacePort": 50322,
       "Parent": "SERVER",
       "Children": [ "CLIENT1", "CLIENT2" ],

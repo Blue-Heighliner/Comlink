@@ -65,7 +65,7 @@ public sealed class SampleEngineConfiguration : IEngineConfiguration
             .CanDelete(folder => folder is FolderType.Drafts or FolderType.Notes)
             .CommandLineOverrides(true)
             .MsmtOptions(new MsmtConnectionOptions { HandshakeTimeout = TimeSpan.FromSeconds(15), ResponseTimeout = TimeSpan.FromSeconds(60) })
-            .MicroGateOptions(new MicroGatePeerOptions { MaxInfoField = 1024, TransmitWindow = 4 })
+            .HdlcOptions(new HdlcPeerOptions { MaxInfoField = 1024, TransmitWindow = 4 })
             .ExportFormat<SampleTextExportFormat>()
             .ImportFormat<SampleCsvImportFormat>();
 }

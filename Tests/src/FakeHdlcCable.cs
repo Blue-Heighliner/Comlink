@@ -1,17 +1,17 @@
 namespace BlueHeighliner.Comlink.Tests;
 
 /// <summary>
-/// An in-memory stand-in for a serial cable between two MicroGate devices. Each end has its own <see cref="IMicroGatePeerFactory"/>;
+/// An in-memory stand-in for a serial cable between two MicroGate devices. Each end has its own <see cref="IHdlcPeerFactory"/>;
 /// once a peer has been started and connected on both ends they become connected and frames sent on one arrive on the other, as with a real link.
 /// A peer is single use, so <see cref="Cut"/> disconnects whichever peers are attached and the next pair started reconnects.
 /// </summary>
-internal sealed class FakeMicroGateCable
+internal sealed class FakeHdlcCable
 {
     private readonly Lock gate = new();
-    private readonly FakeMicroGatePeer?[] attached = new FakeMicroGatePeer?[2];
+    private readonly FakeHdlcPeer?[] attached = new FakeHdlcPeer?[2];
 
     /// <summary>Creates a cable whose peers report <paramref name="maxPayloadSize"/> as their largest frame.</summary>
-    public FakeMicroGateCable(int maxPayloadSize = 4090)
+    public FakeHdlcCable(int maxPayloadSize = 4090)
     {
         MaxPayloadSize = maxPayloadSize;
         EndA = new EndFactory(this, 0);
@@ -22,50 +22,53 @@ internal sealed class FakeMicroGateCable
     public int MaxPayloadSize { get; }
 
     /// <summary>Factory for the first end.</summary>
-    public IMicroGatePeerFactory EndA { get; }
+    public IHdlcPeerFactory EndA { get; }
 
     /// <summary>Factory for the second end.</summary>
-    public IMicroGatePeerFactory EndB { get; }
+    public IHdlcPeerFactory EndB { get; }
 
     /// <summary>When set, every <c>Start</c> on any end fails with this exception until it is cleared.</summary>
     public Exception? StartFailure { get; set; }
+
+    /// <summary>When set, two ends only connect when each one's remote address is the other's own address, as on a real link; otherwise any two ends connect.</summary>
+    public bool EnforcesAddresses { get; set; }
 
     /// <summary>Number of peers created on either end so far.</summary>
     public int PeersCreated { get; private set; }
 
     /// <summary>The (local address, remote address, options) every <c>Connect</c> on any end was given, in order.</summary>
-    public List<(byte Address, byte RemoteAddress, MicroGatePeerOptions Options)> Starts { get; } = [];
+    public List<(byte Address, byte RemoteAddress, HdlcPeerOptions Options)> Starts { get; } = [];
 
     /// <summary>Disconnects both attached peers, as if the cable were pulled.</summary>
     public void Cut()
     {
-        FakeMicroGatePeer?[] peers;
+        FakeHdlcPeer?[] peers;
         lock (gate)
         {
             peers = [.. attached];
             Array.Clear(attached);
         }
 
-        foreach (FakeMicroGatePeer? peer in peers) { peer?.Terminate(); }
+        foreach (FakeHdlcPeer? peer in peers) { peer?.Terminate(); }
     }
 
-    private void Attach(int end, FakeMicroGatePeer peer)
+    private void Attach(int end, FakeHdlcPeer peer)
     {
-        FakeMicroGatePeer? other;
+        FakeHdlcPeer? other;
         lock (gate)
         {
             attached[end] = peer;
             other = attached[1 - end];
         }
 
-        if (other is not null)
+        if (other is not null && (!EnforcesAddresses || (peer.Remote == other.Local && other.Remote == peer.Local)))
         {
             peer.MarkConnected();
             other.MarkConnected();
         }
     }
 
-    private void Detach(int end, FakeMicroGatePeer peer)
+    private void Detach(int end, FakeHdlcPeer peer)
     {
         lock (gate)
         {
@@ -73,47 +76,51 @@ internal sealed class FakeMicroGateCable
         }
     }
 
-    private FakeMicroGatePeer? Other(int end)
+    private FakeHdlcPeer? Other(int end)
     {
         lock (gate) { return attached[1 - end]; }
     }
 
-    private sealed class EndFactory(FakeMicroGateCable cable, int end) : IMicroGatePeerFactory
+    private sealed class EndFactory(FakeHdlcCable cable, int end) : IHdlcPeerFactory
     {
-        public IMicroGatePeer Create()
+        public IHdlcPeer Create()
         {
             cable.PeersCreated++;
-            return new FakeMicroGatePeer(cable, end);
+            return new FakeHdlcPeer(cable, end);
         }
     }
 
-    private sealed class FakeMicroGatePeer(FakeMicroGateCable cable, int end) : IMicroGatePeer
+    private sealed class FakeHdlcPeer(FakeHdlcCable cable, int end) : IHdlcPeer
     {
         private readonly TestSubject<Exception> exceptions = new();
-        private readonly TestSubject<MicroGateFrame> monitored = new();
-        private readonly TestSubject<MicroGateFrame> transmitted = new();
-        private readonly TestSubject<MicroGatePeerState> stateChanged = new();
+        private readonly TestSubject<HdlcFrame> monitored = new();
+        private readonly TestSubject<HdlcFrame> transmitted = new();
+        private readonly TestSubject<HdlcPeerState> stateChanged = new();
         private readonly TaskCompletionSource connected = new(TaskCreationOptions.RunContinuationsAsynchronously);
 
-        private MicroGatePeerOptions options = new();
+        private HdlcPeerOptions options = new();
+
+        public byte Local { get; private set; }
+
+        public byte Remote { get; private set; }
 
         public Action<IMemoryOwner<byte>>? Receiver { get; set; }
 
-        public IObservable<MicroGateFrame> Monitored => monitored;
+        public IObservable<HdlcFrame> Monitored => monitored;
 
-        public IObservable<MicroGateFrame> Transmitted => transmitted;
+        public IObservable<HdlcFrame> Transmitted => transmitted;
 
         public IObservable<Exception> Exceptions => exceptions;
 
-        public IObservable<MicroGatePeerState> StateChanged => stateChanged;
+        public IObservable<HdlcPeerState> StateChanged => stateChanged;
 
-        public MicroGatePeerState State { get; private set; } = MicroGatePeerState.Idle;
+        public HdlcPeerState State { get; private set; } = HdlcPeerState.Idle;
 
-        public bool IsConnected => State == MicroGatePeerState.Connected;
+        public bool IsConnected => State == HdlcPeerState.Connected;
 
         public int MaxPayloadSize => cable.MaxPayloadSize;
 
-        public ValueTask Start(string portName, MicroGatePeerOptions? options = null, CancellationToken cancellation = default)
+        public ValueTask Start(string portName, HdlcPeerOptions? options = null, CancellationToken cancellation = default)
         {
             this.options = options ?? new();
             if (cable.StartFailure is { } failure)
@@ -122,15 +129,17 @@ internal sealed class FakeMicroGateCable
                 throw failure;
             }
 
-            SetState(MicroGatePeerState.Ready);
+            SetState(HdlcPeerState.Ready);
             return ValueTask.CompletedTask;
         }
 
         public async ValueTask Connect(byte address, byte remoteAddress, CancellationToken cancellation = default)
         {
             lock (cable.gate) { cable.Starts.Add((address, remoteAddress, options)); }
+            Local = address;
+            Remote = remoteAddress;
 
-            SetState(MicroGatePeerState.Connecting);
+            SetState(HdlcPeerState.Connecting);
             cable.Attach(end, this);
             try { await connected.Task.WaitAsync(cancellation); }
             catch (OperationCanceledException)
@@ -158,16 +167,16 @@ internal sealed class FakeMicroGateCable
 
         public void MarkConnected()
         {
-            SetState(MicroGatePeerState.Connected);
+            SetState(HdlcPeerState.Connected);
             connected.TrySetResult();
         }
 
         public void Terminate()
         {
-            if (State == MicroGatePeerState.Disconnected) { return; }
+            if (State == HdlcPeerState.Disconnected) { return; }
 
-            FakeMicroGatePeer? remote = cable.Other(end);
-            SetState(MicroGatePeerState.Disconnected);
+            FakeHdlcPeer? remote = cable.Other(end);
+            SetState(HdlcPeerState.Disconnected);
             cable.Detach(end, this);
             connected.TrySetException(new IOException("closed before connected"));
             exceptions.Complete();
@@ -185,7 +194,7 @@ internal sealed class FakeMicroGateCable
             return ValueTask.CompletedTask;
         }
 
-        private void SetState(MicroGatePeerState state)
+        private void SetState(HdlcPeerState state)
         {
             State = state;
             stateChanged.Publish(state);

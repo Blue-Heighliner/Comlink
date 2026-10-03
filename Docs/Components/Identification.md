@@ -1,6 +1,6 @@
 # Connection Identification
 
-A node is configured with the places it connects and listens, not with the users it expects there. The user it runs states, on its user info, the `PeerPoint` it listens on for IP connections and its links to a parent and children, from which the points it dials follow: the other users' `PeerPoint`s and the serial ports it opens. Nothing in what a node connects with ties a user name to what arrives on a connection, so the same node can be reached by a different user from a different point tomorrow without any node's configuration changing. Who is on the other end of a connection is instead worked out at the moment the connection forms, and a message for a user goes over whichever connection is then identified as them.
+A node is configured with the places it connects and listens, not with the users it expects there. The user it runs states, on its user info, its `IpHost` and `Msmt` port it listens on for IP connections, its `Hdlc` address and ports, and its links to a parent and children, from which the points it dials follow: the other users' IP hosts and MSMT ports, and the HDLC ports it opens. Nothing in what a node connects with ties a user name to what arrives on a connection, so the same node can be reached by a different user from a different point tomorrow without any node's configuration changing. Who is on the other end of a connection is instead worked out at the moment the connection forms, and a message for a user goes over whichever connection is then identified as them.
 
 ## Where it happens
 
@@ -19,7 +19,7 @@ The peer services keep the established connections in a `UserConnections`, keyed
 The user an initial packet or frame processor marked the connection connected as (below) wins over the hook. Otherwise the hook returns the user name, or `null` to leave the decision to the engine:
 
 - **IP**: the first user (from `Users`, and every server and child client in `Servers`) whose `CertificateName` matches one of the certificate's common names. The certificate authority already vouched for the certificate, so when none matches the connection is still accepted, as a user named after the first common name. A certificate with no common name cannot be identified.
-- **Serial**: the user named by the matching `SyncSerial` link in the network file (matching port and address), else a user named after the port. A cable carries no certificate, so a host that needs more overrides the hook, for example with its own table from port and address to user, or has its processors name the user during the initial exchange.
+- **Serial**: the user named by the matching `Hdlc` link in the network file (matching port and address), else a user named after the port. A cable carries no certificate, so a host that needs more overrides the hook, for example with its own table from port and address to user, or has its processors name the user during the initial exchange.
 
 The identity the engine builds from the name carries the `Data` on that name's user info, which is where a host attaches whatever it wants to a user (the `Data` map of a user's entry in the network configuration file); a hook cannot supply data of its own. The engine never interprets it; it travels with the identity for the host's own hooks. A hook that throws drops the connection.
 

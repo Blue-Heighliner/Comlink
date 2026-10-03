@@ -140,7 +140,7 @@ internal sealed class ConfiguredEngineController : IEngineController
     /// <inheritdoc />
     public string? ParentUser => fallback.ParentUser;
     /// <inheritdoc />
-    public ConnectionPoint? ParentPoint => fallback.ParentPoint;
+    public IReadOnlyList<ConnectionPoint> ParentPoints => fallback.ParentPoints;
     /// <inheritdoc />
     public IReadOnlyDictionary<string, ServerUserConfig> Servers => fallback.Servers;
     /// <inheritdoc />
@@ -197,7 +197,7 @@ internal sealed class ConfiguredEngineController : IEngineController
             string? authorityFile = config.GetAuthorityCertificatePath();
             if (store is null && authorityFile is null)
             {
-                return fallback.ConnectionOptions;
+                return ApplyMsmt(fallback.ConnectionOptions);
             }
             if (store is null || authorityFile is null)
             {
@@ -205,15 +205,43 @@ internal sealed class ConfiguredEngineController : IEngineController
             }
 
             string userName = currentUserProvider.UserName ?? DebugUserName?.ToUpperInvariant() ?? throw new InvalidOperationException("Peer authentication requires a current user to load an identity certificate for.");
-            return fallback.ConfigureConnectionOptions(MsmtCertificateLookup.BuildPeerOptionsFromFiles(config.GetCertificatePath(userName)!, authorityFile));
+            return ApplyMsmt(fallback.ConfigureConnectionOptions(MsmtCertificateLookup.BuildPeerOptionsFromFiles(config.GetCertificatePath(userName)!, authorityFile)));
         }
     }
 
     /// <inheritdoc />
-    public MsmtSessionPeerOptions ConfigureConnectionOptions(MsmtSessionPeerOptions options) => fallback.ConfigureConnectionOptions(options);
+    public MsmtSessionPeerOptions ConfigureConnectionOptions(MsmtSessionPeerOptions options) => ApplyMsmt(fallback.ConfigureConnectionOptions(options));
 
     /// <inheritdoc />
-    public MicroGatePeerOptions MicroGateOptions => fallback.MicroGateOptions;
+    public HdlcPeerOptions HdlcOptions => Current?.Hdlc is { } overrides ? fallback.HdlcOptions.Overlay(overrides) : fallback.HdlcOptions;
+
+    private MsmtSessionPeerOptions ApplyMsmt(MsmtSessionPeerOptions options)
+    {
+        if (Current?.Msmt is not { } overrides) { return options; }
+
+        MsmtConnectionOptions merged = new MsmtConnectionOptions
+        {
+            HandshakeTimeout = options.HandshakeTimeout,
+            StallTimeout = options.StallTimeout,
+            ResponseTimeout = options.ResponseTimeout,
+            TcpKeepAliveTime = options.TcpKeepAliveTime,
+            MaximumSessionLifetime = options.MaximumSessionLifetime,
+            SessionLifetime = options.SessionLifetime,
+            KeepAliveMinInterval = options.KeepAliveMinInterval,
+            KeepAliveMaxInterval = options.KeepAliveMaxInterval
+        }.Overlay(overrides);
+        return options with
+        {
+            HandshakeTimeout = merged.HandshakeTimeout,
+            StallTimeout = merged.StallTimeout,
+            ResponseTimeout = merged.ResponseTimeout,
+            TcpKeepAliveTime = merged.TcpKeepAliveTime,
+            MaximumSessionLifetime = merged.MaximumSessionLifetime,
+            SessionLifetime = merged.SessionLifetime,
+            KeepAliveMinInterval = merged.KeepAliveMinInterval,
+            KeepAliveMaxInterval = merged.KeepAliveMaxInterval
+        };
+    }
 
     /// <inheritdoc />
     public IInitialProcessor? InitialPacketProcessor => fallback.InitialPacketProcessor;

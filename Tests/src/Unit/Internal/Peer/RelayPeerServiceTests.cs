@@ -89,7 +89,7 @@ public sealed class RelayPeerServiceTests
         string[] childNames = children ?? ["ClientR1", "ClientR2"];
         Mock<TestEngineController> engineController = new() { CallBase = true };
         engineController.Setup(p => p.OutgoingPoints).Returns([serverPoint]);
-        engineController.Setup(p => p.ParentPoint).Returns(serverPoint);
+        engineController.Setup(p => p.ParentPoints).Returns([serverPoint]);
         engineController.Setup(p => p.ParentUser).Returns("Server1");
         engineController.Setup(p => p.PeerPort).Returns(9100);
         engineController.Setup(p => p.GetUserInfo("Relay1")).Returns(new UserInfo { Name = "Relay1", Role = UserRole.Relay, Children = [.. childNames.Select(name => (UserLink)name)] });

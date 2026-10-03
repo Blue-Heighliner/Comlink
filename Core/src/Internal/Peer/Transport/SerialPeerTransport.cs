@@ -9,20 +9,22 @@ namespace BlueHeighliner.Comlink.Peer.Transport;
 internal sealed class SerialPeerTransport : IPeerTransport
 {
     /// <summary>Initializes a new <see cref="SerialPeerTransport"/>.</summary>
-    public SerialPeerTransport(IMicroGatePeerFactory peerFactory, ILogger logger, TimeSpan? reconnectDelay = null, TimeSpan? requestTimeout = null, MicroGatePeerOptions? options = null)
+    public SerialPeerTransport(IHdlcPeerFactory peerFactory, ILogger logger, TimeSpan? reconnectDelay = null, TimeSpan? requestTimeout = null, HdlcPeerOptions? options = null, TimeSpan? candidateTimeout = null)
     {
         this.peerFactory = peerFactory;
         this.options = options ?? new();
         this.logger = logger;
         this.reconnectDelay = reconnectDelay;
         this.requestTimeout = requestTimeout;
+        this.candidateTimeout = candidateTimeout;
     }
 
-    private readonly IMicroGatePeerFactory peerFactory;
-    private readonly MicroGatePeerOptions options;
+    private readonly IHdlcPeerFactory peerFactory;
+    private readonly HdlcPeerOptions options;
     private readonly ILogger logger;
     private readonly TimeSpan? reconnectDelay;
     private readonly TimeSpan? requestTimeout;
+    private readonly TimeSpan? candidateTimeout;
     private readonly ConcurrentDictionary<string, Lazy<SerialLink>> links = new();
     private readonly PeerEvent<PeerReceivedEventArgs> received = new();
     private readonly PeerEvent<PeerConnectionEventArgs> connected = new();
@@ -82,6 +84,6 @@ internal sealed class SerialPeerTransport : IPeerTransport
     {
         if (!point.IsSerial) { throw new ArgumentException("Point is not a serial point", nameof(point)); }
 
-        return links.GetOrAdd(point.Key, _ => new Lazy<SerialLink>(() => new SerialLink(point, peerFactory, options, logger, received, connected, disconnected, reconnectDelay, requestTimeout, startClosed))).Value;
+        return links.GetOrAdd(point.Key, _ => new Lazy<SerialLink>(() => new SerialLink(point, peerFactory, options, logger, received, connected, disconnected, reconnectDelay, requestTimeout, startClosed, candidateTimeout))).Value;
     }
 }
