@@ -58,6 +58,8 @@ internal sealed class PacketizingPeerTransport : IPeerTransport
     /// <inheritdoc />
     public async Task<bool> Request(PeerConnection connection, ReadOnlyMemory<byte> data, PeerSendOptions? options = null, CancellationToken cancellation = default)
     {
+        if (options?.IsPacket == true) { return await inner.Request(connection, data, options, cancellation); }
+
         IReadOnlyList<Packet> packets = packetizer.Split(data, options?.Priority ?? 0, options?.Frame);
         try
         {

@@ -21,4 +21,6 @@ public sealed class Packet
     [ProtoMember(5)] public byte[] Chunk { get; set; } = [];
     /// <summary>Whether this packet carries a piece of a frame, as opposed to a packet that carries none, such as an identification packet.</summary>
     [ProtoMember(6)] public bool IsFramePacket { get; set; }
+    /// <summary>Whether this packet is a heartbeat, which carries nothing.</summary>
+    [ProtoMember(7)] public bool IsHeartbeat { get; set; }
 }

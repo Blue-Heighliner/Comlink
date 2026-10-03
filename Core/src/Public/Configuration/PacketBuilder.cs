@@ -42,4 +42,12 @@ public interface IPacketBuilder<TPacket> where TPacket : class, new()
     /// </summary>
     /// <typeparam name="TProcessor">The processor type, instantiated through dependency injection when the engine runs: the instance registered for it in the host's services, or else one constructed from them.</typeparam>
     IPacketBuilder<TPacket> InitialProcessor<TProcessor>() where TProcessor : IInitialPacketProcessor<TPacket>;
+
+    /// <summary>
+    /// States the handler for heartbeat packets (see <see cref="IHeartbeatHandler{TFrame}"/>, with the packet type as its type argument): a heartbeat sent as a packet of its own, beneath
+    /// packetization, so it is never split or reassembled and its receiver discards it. Optional, and when stated it is used instead of any heartbeat frame stated with
+    /// <see cref="IFrameBuilder{TFrame}.Heartbeat{THandler}"/>. Without either no heartbeats are sent. Heartbeats are never sent over HDLC.
+    /// </summary>
+    /// <typeparam name="THandler">The handler type, instantiated through dependency injection when the engine runs: the instance registered for it in the host's services, or else one constructed from them.</typeparam>
+    IPacketBuilder<TPacket> Heartbeat<THandler>() where THandler : IHeartbeatHandler<TPacket>;
 }

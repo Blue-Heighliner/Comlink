@@ -39,11 +39,11 @@ public sealed class SerialPeerTransportTests
         public void AddEvent(string name) { lock (gate) { events.Add(name); } }
     }
 
-    private static async Task<Pair> ConnectedPair(int maxPayloadSize = 4090, TimeSpan? requestTimeout = null)
+    private static async Task<Pair> ConnectedPair(int maxPayloadSize = 4090)
     {
         FakeHdlcCable cable = new(maxPayloadSize);
-        SerialPeerTransport a = new(cable.EndA, logger, TimeSpan.FromMilliseconds(20), requestTimeout);
-        SerialPeerTransport b = new(cable.EndB, logger, TimeSpan.FromMilliseconds(20), requestTimeout);
+        SerialPeerTransport a = new(cable.EndA, logger, TimeSpan.FromMilliseconds(20));
+        SerialPeerTransport b = new(cable.EndB, logger, TimeSpan.FromMilliseconds(20));
         PeerCollector aConnections = new();
         PeerCollector bReceived = new();
         a.Connected.Listen(args =>
@@ -76,9 +76,9 @@ public sealed class SerialPeerTransportTests
         }
     }
 
-    /// <summary>A request is delivered to the other end's Received and returns true once the other end has acknowledged it.</summary>
+    /// <summary>A request is delivered to the other end's Received and returns true once it is on the link.</summary>
     [Fact]
-    public async Task Request_DeliversPayloadAndReturnsTrueOnAcknowledgement()
+    public async Task Request_DeliversPayloadAndReturnsTrue()
     {
         await using Pair pair = await ConnectedPair();
 
@@ -88,25 +88,45 @@ public sealed class SerialPeerTransportTests
         Assert.Equal(new byte[] { 1, 2, 3 }, Assert.Single(pair.BReceived.Payloads));
     }
 
-    /// <summary>A message larger than one HDLC frame is split into fragments and delivered to the other end whole, in order.</summary>
+    /// <summary>A payload larger than one HDLC frame is refused up front, never split or sent partially.</summary>
     [Fact]
-    public async Task Request_LargerThanOneFrame_IsFragmentedAndReassembled()
+    public async Task Request_LargerThanOneFrame_ThrowsArgumentOutOfRange()
     {
         await using Pair pair = await ConnectedPair(maxPayloadSize: 40);
-        byte[] payload = Enumerable.Range(0, 1000).Select(i => (byte)(i % 251)).ToArray();
 
-        bool accepted = await Request(pair.A, point, payload).WaitAsync(timeout);
-
-        Assert.True(accepted);
-        Assert.Equal(payload, Assert.Single(pair.BReceived.Payloads));
+        await Assert.ThrowsAsync<ArgumentOutOfRangeException>(() => Request(pair.A, point, new byte[41]));
+        Assert.Empty(pair.BReceived.Payloads);
     }
 
-    /// <summary>Several concurrent requests each get their own acknowledgement and none of their fragments are mixed up.</summary>
+    /// <summary>Each payload is exactly one HDLC frame carrying the payload bytes and nothing else.</summary>
+    [Fact]
+    public async Task Request_SendsOnlyThePayloadInOneFrame()
+    {
+        FakeHdlcCable cable = new();
+        await using SerialPeerTransport transport = new(cable.EndA, logger, TimeSpan.FromMilliseconds(20));
+        IHdlcPeer raw = cable.EndB.Create();
+        List<byte[]> frames = [];
+        raw.Receiver = owner => { using (owner) { lock (frames) { frames.Add(owner.Memory.ToArray()); } } };
+        _ = StartAndConnect(raw);
+        Open(transport, point);
+        TaskCompletionSource up = new();
+        transport.Connected.Listen(_ => up.TrySetResult());
+        await up.Task.WaitAsync(timeout);
+
+        await Request(transport, point, new byte[] { 9, 8, 7 }).WaitAsync(timeout);
+        await Request(transport, point, ReadOnlyMemory<byte>.Empty).WaitAsync(timeout);
+
+        await WaitUntil(() => { lock (frames) { return frames.Count == 2; } });
+        Assert.Equal(new byte[] { 9, 8, 7 }, frames[0]);
+        Assert.Empty(frames[1]);
+    }
+
+    /// <summary>Several concurrent requests are each delivered intact.</summary>
     [Fact]
     public async Task Request_Concurrent_AllDeliveredIntact()
     {
         await using Pair pair = await ConnectedPair(maxPayloadSize: 40);
-        byte[][] payloads = [.. Enumerable.Range(1, 8).Select(n => Enumerable.Repeat((byte)n, 200).ToArray())];
+        byte[][] payloads = [.. Enumerable.Range(1, 8).Select(n => Enumerable.Repeat((byte)n, 30).ToArray())];
 
         bool[] results = await Task.WhenAll(payloads.Select(p => Request(pair.A, point, p))).WaitAsync(timeout);
 
@@ -225,22 +245,6 @@ public sealed class SerialPeerTransportTests
         await Assert.ThrowsAsync<IOException>(() => Request(transport, point, new byte[] { 1 }));
     }
 
-    /// <summary>A request whose other end never answers fails with IOException once the request timeout elapses.</summary>
-    [Fact]
-    public async Task Request_NoReply_TimesOut()
-    {
-        FakeHdlcCable cable = new();
-        await using SerialPeerTransport transport = new(cable.EndA, logger, TimeSpan.FromMilliseconds(20), TimeSpan.FromMilliseconds(100));
-        IHdlcPeer silent = cable.EndB.Create();
-        _ = StartAndConnect(silent);
-        Open(transport, point);
-        TaskCompletionSource up = new();
-        transport.Connected.Listen(_ => up.TrySetResult());
-        await up.Task.WaitAsync(timeout);
-
-        await Assert.ThrowsAsync<IOException>(() => Request(transport, point, new byte[] { 1 }));
-    }
-
     /// <summary>Connected and Disconnected are published as the link comes up and is lost, and the link comes back on its own.</summary>
     [Fact]
     public async Task Link_CableCut_DisconnectsThenReconnects()
@@ -251,25 +255,6 @@ public sealed class SerialPeerTransportTests
 
         await WaitUntil(() => pair.AConnections.Events.SequenceEqual(["connected", "disconnected", "connected"]));
         Assert.True(await Request(pair.A, point, new byte[] { 5 }).WaitAsync(timeout));
-    }
-
-    /// <summary>A request in flight when the link is lost fails with IOException rather than hanging.</summary>
-    [Fact]
-    public async Task Request_LinkLostWhileWaiting_ThrowsIOException()
-    {
-        FakeHdlcCable cable = new();
-        await using SerialPeerTransport transport = new(cable.EndA, logger, TimeSpan.FromMilliseconds(20), TimeSpan.FromSeconds(30));
-        IHdlcPeer silent = cable.EndB.Create();
-        _ = StartAndConnect(silent);
-        Open(transport, point);
-        TaskCompletionSource up = new();
-        transport.Connected.Listen(_ => up.TrySetResult());
-        await up.Task.WaitAsync(timeout);
-
-        Task<bool> request = Request(transport, point, new byte[] { 1 });
-        cable.Cut();
-
-        await Assert.ThrowsAsync<IOException>(() => request.WaitAsync(timeout));
     }
 
     /// <summary>A device that cannot be opened is retried until it can, without ever surfacing an exception to the caller.</summary>
@@ -416,16 +401,6 @@ public sealed class SerialPeerTransportTests
         await Assert.ThrowsAsync<ArgumentException>(() => Request(transport, new ConnectionPoint { IpAddress = "10.0.0.1", Port = 1 }, new byte[] { 1 }));
     }
 
-    /// <summary>A message too large to number its fragments is refused up front rather than sent partially.</summary>
-    [Fact]
-    public async Task Request_TooManyFragments_ThrowsArgumentOutOfRange()
-    {
-        await using Pair pair = await ConnectedPair(maxPayloadSize: SerialFrame.DataHeaderSize + 1);
-        byte[] huge = new byte[ushort.MaxValue + 10];
-
-        await Assert.ThrowsAsync<ArgumentOutOfRangeException>(() => Request(pair.A, point, huge));
-    }
-
     /// <summary>Disposing the transport stops the reconnect loop and disposes the device peer.</summary>
     [Fact]
     public async Task DisposeAsync_StopsLinkAndDisposesPeer()
@@ -442,9 +417,9 @@ public sealed class SerialPeerTransportTests
         Assert.Equal(created, cable.PeersCreated);
     }
 
-    /// <summary>Frames that are not part of the protocol are ignored without disturbing the link.</summary>
+    /// <summary>Whatever arrives in an information frame is delivered verbatim as one payload, since the link adds no framing of its own.</summary>
     [Fact]
-    public async Task Received_GarbageFrame_IsIgnored()
+    public async Task Received_EveryFrame_IsDeliveredVerbatim()
     {
         FakeHdlcCable cable = new();
         await using SerialPeerTransport transport = new(cable.EndA, logger, TimeSpan.FromMilliseconds(20));
@@ -456,35 +431,11 @@ public sealed class SerialPeerTransportTests
         await WaitUntil(() => raw.IsConnected);
 
         await raw.Send(new byte[] { 0xEE, 1, 2, 3 });
-        await raw.Send(SerialFrame.EncodeData(5, 1, 3, [1]));
-        await raw.Send(SerialFrame.EncodeData(6, 0, 1, [7, 7]));
+        await raw.Send(new byte[] { 7, 7 });
 
-        await WaitUntil(() => received.Payloads.Count == 1);
-        Assert.Equal(new byte[] { 7, 7 }, received.Payloads[0]);
-    }
-
-    /// <summary>Fragments of two messages arriving interleaved are dropped rather than stitched together, and later messages still arrive.</summary>
-    [Fact]
-    public async Task Received_InterleavedFragments_AreDropped()
-    {
-        FakeHdlcCable cable = new();
-        await using SerialPeerTransport transport = new(cable.EndA, logger, TimeSpan.FromMilliseconds(20));
-        IHdlcPeer raw = cable.EndB.Create();
-        _ = StartAndConnect(raw);
-        Open(transport, point);
-        PeerCollector received = new();
-        transport.Received.Listen(args => received.AddPayload(args.Payload.ToArray()));
-        await WaitUntil(() => raw.IsConnected);
-
-        await raw.Send(SerialFrame.EncodeData(10, 0, 2, [1]));
-        await raw.Send(SerialFrame.EncodeData(11, 0, 2, [2]));
-        await raw.Send(SerialFrame.EncodeData(10, 1, 2, [3]));
-        await raw.Send(SerialFrame.EncodeData(11, 1, 2, [4]));
-        await raw.Send(SerialFrame.EncodeData(12, 0, 1, [9]));
-
-        await WaitUntil(() => received.Payloads.Count == 1);
-        await Task.Delay(50);
-        Assert.Equal(new byte[] { 9 }, Assert.Single(received.Payloads));
+        await WaitUntil(() => received.Payloads.Count == 2);
+        Assert.Equal(new byte[] { 0xEE, 1, 2, 3 }, received.Payloads[0]);
+        Assert.Equal(new byte[] { 7, 7 }, received.Payloads[1]);
     }
 
     /// <summary>Closing an already closed link, and disposing twice, are both harmless.</summary>

@@ -50,7 +50,7 @@ internal interface IEngineController
     /// The largest a serialized packet may be, in bytes. Smaller packets let a higher-priority payload cut in
     /// sooner; larger ones carry less framing overhead. The engine works out how much payload fits in a packet
     /// by measuring what <see cref="PacketSerializer"/> makes of one, so it must leave room for the packet's own
-    /// fields. Ignored while <see cref="PacketType"/> is <see langword="null"/>.
+    /// fields. A node with an HDLC link never sends a larger packet than one HDLC information frame holds (<see cref="HdlcOptions"/>), since each packet is exactly one frame. Ignored while <see cref="PacketType"/> is <see langword="null"/>.
     /// </summary>
     int PacketSize { get; }
 
@@ -278,6 +278,22 @@ internal interface IEngineController
     string GetReceiveReceiptMessageId(object frame);
     /// <summary>Gets whether <paramref name="frame"/> is a receive receipt.</summary>
     bool IsReceiveReceipt(object frame);
+    /// <summary>Gets whether a heartbeat handler is stated. When it is not, no heartbeats are sent and a connection counts as up once it is established.</summary>
+    bool HeartbeatsEnabled { get; }
+    /// <summary>Gets whether a heartbeat packet handler is stated, in which case heartbeats are sent as packets, beneath packetization, instead of as frames.</summary>
+    bool PacketHeartbeatsEnabled { get; }
+    /// <summary>Creates a heartbeat packet. Only valid while <see cref="PacketHeartbeatsEnabled"/>.</summary>
+    object CreatePacketHeartbeat();
+    /// <summary>Returns whether <paramref name="packet"/> is a heartbeat packet, which is discarded; always <see langword="false"/> when no heartbeat packet handler is stated.</summary>
+    /// <param name="packet">A received instance of <see cref="PacketType"/>.</param>
+    bool IsPacketHeartbeat(object packet);
+    /// <summary>Gets the priority heartbeat packets are sent with.</summary>
+    int PacketHeartbeatPriority { get; }
+    /// <summary>Creates a heartbeat frame. Only valid while <see cref="HeartbeatsEnabled"/>.</summary>
+    object CreateHeartbeat();
+    /// <summary>Returns whether <paramref name="frame"/> is a heartbeat, which is acknowledged and otherwise ignored; always <see langword="false"/> when no heartbeat handler is stated.</summary>
+    /// <param name="frame">A received instance of <see cref="FrameType"/>.</param>
+    bool IsHeartbeat(object frame);
     /// <summary>Gets whether <paramref name="frame"/> is a retrieval request; see <see cref="IFrameBuilder{TFrame}.Retrieval{THandler}"/>.</summary>
     bool IsRetrieval(object frame);
     /// <summary>Reads the criteria a retrieval request carries from its mapped fields. Meaningful only when <see cref="IsRetrieval"/> is <see langword="true"/>.</summary>
@@ -437,6 +453,8 @@ internal class EngineController(EngineBuilder builder, ICurrentUserProvider curr
     private readonly Lazy<IMessageFrameHandler> messageHandler = new(() => builder.FrameMap!.Message.Create(services));
     private readonly Lazy<IRetrievalFrameHandler> retrievalHandler = new(() => builder.FrameMap!.Retrieval.Create(services));
     private readonly Lazy<IReceiptFrameHandler> readReceiptHandler = new(() => builder.FrameMap!.ReadReceipt.Create(services));
+    private readonly Lazy<IHeartbeatFrameHandler?> heartbeatHandler = new(() => builder.FrameMap!.Heartbeat?.Create(services));
+    private readonly Lazy<IHeartbeatFrameHandler?> packetHeartbeatHandler = new(() => builder.PacketMap?.Heartbeat?.Create(services));
     private readonly Lazy<IReceiptFrameHandler> receiveReceiptHandler = new(() => builder.FrameMap!.ReceiveReceipt.Create(services));
     private readonly Lazy<IFramePacketAdapter> framePacketHandler = new(() => (builder.PacketMap ?? throw new NotSupportedException("This engine has no packet type; state one with Packets<TPacket>(...) to enable packetization.")).FramePacket.Create(services));
     private readonly Lazy<IFrameSerializer> frameSerializer = new(() => (builder.FrameMap ?? throw new InvalidOperationException("The engine configuration must state its frame type with Frames<TFrame>(...).")).Serializer.Create(services));
@@ -743,6 +761,7 @@ internal class EngineController(EngineBuilder builder, ICurrentUserProvider curr
     /// <inheritdoc />
     public virtual int GetPriority(object value)
         => IsMessage(value) ? ResolvePriority(messageHandler.Value.GetPriority(value))
+        : IsHeartbeat(value) ? PriorityValue(heartbeatHandler.Value!.Priority)
         : IsRetrieval(value) ? PriorityValue(retrievalHandler.Value.Priority)
         : IsReadReceipt(value) ? PriorityValue(readReceiptHandler.Value.Priority)
         : IsReceiveReceipt(value) ? PriorityValue(receiveReceiptHandler.Value.Priority)
@@ -759,6 +778,20 @@ internal class EngineController(EngineBuilder builder, ICurrentUserProvider curr
     public virtual string GetReadReceiptMessageId(object value) => readReceiptHandler.Value.GetMessageId(value);
     /// <inheritdoc />
     public virtual bool IsReceiveReceipt(object value) => receiveReceiptHandler.Value.IsValid(value);
+    /// <inheritdoc />
+    public virtual bool HeartbeatsEnabled => frame.Heartbeat is not null;
+    /// <inheritdoc />
+    public virtual bool PacketHeartbeatsEnabled => packet?.Heartbeat is not null;
+    /// <inheritdoc />
+    public virtual object CreatePacketHeartbeat() => (packetHeartbeatHandler.Value ?? throw new InvalidOperationException("No heartbeat packet handler is stated; state one with Heartbeat<THandler>() on the packet configuration.")).Create();
+    /// <inheritdoc />
+    public virtual bool IsPacketHeartbeat(object packet) => packetHeartbeatHandler.Value?.IsValid(packet) ?? false;
+    /// <inheritdoc />
+    public virtual int PacketHeartbeatPriority => PriorityValue((packetHeartbeatHandler.Value ?? throw new InvalidOperationException("No heartbeat packet handler is stated.")).Priority);
+    /// <inheritdoc />
+    public virtual object CreateHeartbeat() => (heartbeatHandler.Value ?? throw new InvalidOperationException("No heartbeat handler is stated; state one with Heartbeat<THandler>() on the frame configuration.")).Create();
+    /// <inheritdoc />
+    public virtual bool IsHeartbeat(object value) => heartbeatHandler.Value?.IsValid(value) ?? false;
     /// <inheritdoc />
     public virtual object CreateReceiveReceipt(string messageId) => receiveReceiptHandler.Value.Create(new ReceiptCreateContext { MessageId = messageId });
     /// <inheritdoc />
@@ -840,19 +873,6 @@ internal static class EngineControllerExtensions
 {
     extension(IEngineController engineController)
     {
-        /// <summary>
-        /// The message a node sends to keep a connection verified: an empty instance of <see cref="IEngineController.FrameType"/>, serialized like any
-        /// message. It is recognized by having no identifier, addresses, receipt or retrieval, which no message built by the engine ever lacks,
-        /// and is acknowledged and otherwise ignored.
-        /// </summary>
-        /// <param name="message">A received instance of <see cref="IEngineController.FrameType"/>.</param>
-        public bool IsHeartbeat(object message)
-            => string.IsNullOrEmpty(engineController.GetFrameId(message))
-            && engineController.GetAddresses(message).Count == 0
-            && !engineController.IsReadReceipt(message)
-            && !engineController.IsReceiveReceipt(message)
-            && !engineController.IsRetrieval(message);
-
         /// <summary>
         /// Reads every logical field of <paramref name="payload"/> (an instance of <see cref="IEngineController.FrameType"/>)
         /// into a new <see cref="MessageReceivedEvent"/>. Shared by <see cref="DirectServiceConnection"/> and

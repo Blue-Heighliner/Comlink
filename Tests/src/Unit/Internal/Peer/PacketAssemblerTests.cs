@@ -32,6 +32,17 @@ public sealed class PacketAssemblerTests
         return payload?.Memory.ToArray();
     }
 
+    /// <summary>A heartbeat packet is discarded instead of being assembled or rejected.</summary>
+    [Fact]
+    public void Add_HeartbeatPacket_IsDiscarded()
+    {
+        EngineController controller = new(EngineBuilder.Build(new TestEngineConfiguration(packetExtra: packet => packet.Heartbeat<TestPacketHeartbeatHandler>())), new CurrentUserProvider(), null);
+        using IPacketAssembler assembler = new Packetizer(controller).CreateAssembler();
+        using IMemoryOwner<byte> heartbeat = controller.PacketSerializer!.Serialize(controller.CreatePacketHeartbeat(), null);
+
+        Assert.Null(assembler.Add(heartbeat.Memory));
+    }
+
     /// <summary>Packets that arrive in reverse order still reassemble the payload, and it completes only on the last one.</summary>
     [Fact]
     public void Add_PacketsOutOfOrder_AssembleOnLast()

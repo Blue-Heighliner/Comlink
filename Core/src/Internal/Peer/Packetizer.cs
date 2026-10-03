@@ -48,7 +48,7 @@ internal sealed class Packetizer : IPacketizer
         this.maxPayloadSize = maxPayloadSize;
         this.maxPendingPayloads = maxPendingPayloads;
         serializer = engineController.PacketSerializer ?? throw new InvalidOperationException("Packetization needs a PacketType and PacketSerializer, but the engine controller has none");
-        packetSize = engineController.PacketSize;
+        packetSize = engineController.OutgoingPoints.Any(point => point.IsSerial) ? Math.Min(engineController.PacketSize, engineController.HdlcOptions.MaxInfoField) : engineController.PacketSize;
         chunkSize = MeasureChunkSize();
         nextId = Random.Shared.Next();
     }

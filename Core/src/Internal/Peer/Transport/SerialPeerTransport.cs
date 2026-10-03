@@ -9,13 +9,12 @@ namespace BlueHeighliner.Comlink;
 internal sealed class SerialPeerTransport : IPeerTransport
 {
     /// <summary>Initializes a new <see cref="SerialPeerTransport"/>.</summary>
-    public SerialPeerTransport(IHdlcPeerFactory peerFactory, ILogger logger, TimeSpan? reconnectDelay = null, TimeSpan? requestTimeout = null, HdlcPeerOptions? options = null, TimeSpan? candidateTimeout = null)
+    public SerialPeerTransport(IHdlcPeerFactory peerFactory, ILogger logger, TimeSpan? reconnectDelay = null, HdlcPeerOptions? options = null, TimeSpan? candidateTimeout = null)
     {
         this.peerFactory = peerFactory;
         this.options = options ?? new();
         this.logger = logger;
         this.reconnectDelay = reconnectDelay;
-        this.requestTimeout = requestTimeout;
         this.candidateTimeout = candidateTimeout;
     }
 
@@ -23,7 +22,6 @@ internal sealed class SerialPeerTransport : IPeerTransport
     private readonly HdlcPeerOptions options;
     private readonly ILogger logger;
     private readonly TimeSpan? reconnectDelay;
-    private readonly TimeSpan? requestTimeout;
     private readonly TimeSpan? candidateTimeout;
     private readonly ConcurrentDictionary<string, Lazy<SerialLink>> links = new();
     private readonly PeerEvent<PeerReceivedEventArgs> received = new();
@@ -84,6 +82,6 @@ internal sealed class SerialPeerTransport : IPeerTransport
     {
         if (!point.IsSerial) { throw new ArgumentException("Point is not a serial point", nameof(point)); }
 
-        return links.GetOrAdd(point.Key, _ => new Lazy<SerialLink>(() => new SerialLink(point, peerFactory, options, logger, received, connected, disconnected, reconnectDelay, requestTimeout, startClosed, candidateTimeout))).Value;
+        return links.GetOrAdd(point.Key, _ => new Lazy<SerialLink>(() => new SerialLink(point, peerFactory, options, logger, received, connected, disconnected, reconnectDelay, startClosed, candidateTimeout))).Value;
     }
 }

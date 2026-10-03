@@ -215,6 +215,23 @@ public sealed class EngineBuilderTests
         Assert.Contains("TestPriority.Retrieval", Assert.Throws<InvalidOperationException>(() => controller.GetPriority(new TestFrame { IsHidden = true, IsRetrieval = true })).Message);
     }
 
+    /// <summary>A stated heartbeat handler creates, recognizes and prioritizes heartbeats; without one there are none.</summary>
+    [Fact]
+    public void Heartbeat_IsOptionalAndHandlerDriven()
+    {
+        EngineController withHandler = new(EngineBuilder.Build(new Configuration(engine => engine.Priorities<TestPriority>())), new CurrentUserProvider(), null);
+        EngineController without = new(EngineBuilder.Build(new TestEngineConfiguration(heartbeats: false)), new CurrentUserProvider(), null);
+
+        object heartbeat = withHandler.CreateHeartbeat();
+        Assert.True(withHandler.HeartbeatsEnabled);
+        Assert.True(withHandler.IsHeartbeat(heartbeat));
+        Assert.False(withHandler.IsHeartbeat(new TestFrame()));
+        Assert.Equal(0, withHandler.GetPriority(heartbeat));
+        Assert.False(without.HeartbeatsEnabled);
+        Assert.False(without.IsHeartbeat(heartbeat));
+        Assert.Throws<InvalidOperationException>(() => without.CreateHeartbeat());
+    }
+
     /// <summary>With no priorities configured everything goes at priority 0, and with some configured nothing goes outside their range.</summary>
     [Fact]
     public void ResolvePriority_StaysWithinTheConfiguredLevels()

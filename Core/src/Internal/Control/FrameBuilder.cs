@@ -11,6 +11,7 @@ internal sealed class FrameBuilder<TFrame> : IFrameBuilder<TFrame> where TFrame 
     private ServiceRegistration<IRetrievalFrameHandler>? retrieval;
     private ServiceRegistration<IReceiptFrameHandler>? readReceipt;
     private ServiceRegistration<IReceiptFrameHandler>? receiveReceipt;
+    private ServiceRegistration<IHeartbeatFrameHandler>? heartbeat;
 
     /// <summary>The initial message processor, if stated.</summary>
     public ServiceRegistration<IInitialProcessor>? Initial { get; private set; }
@@ -94,6 +95,13 @@ internal sealed class FrameBuilder<TFrame> : IFrameBuilder<TFrame> where TFrame 
     }
 
     /// <inheritdoc />
+    public IFrameBuilder<TFrame> Heartbeat<THandler>() where THandler : IHeartbeatHandler<TFrame>
+    {
+        heartbeat = ServiceRegistration<IHeartbeatFrameHandler>.Of(typeof(THandler), handler => new HeartbeatFrameHandler<TFrame>((IHeartbeatHandler<TFrame>)handler));
+        return this;
+    }
+
+    /// <inheritdoc />
     public IFrameBuilder<TFrame> Serializer<TSerializer>() where TSerializer : IFrameSerializer
     {
         serializer = ServiceRegistration<IFrameSerializer>.Of(typeof(TSerializer), instance => (IFrameSerializer)instance);
@@ -146,7 +154,8 @@ internal sealed class FrameBuilder<TFrame> : IFrameBuilder<TFrame> where TFrame 
             Message = message!,
             Retrieval = retrieval!,
             ReadReceipt = readReceipt!,
-            ReceiveReceipt = receiveReceipt!
+            ReceiveReceipt = receiveReceipt!,
+            Heartbeat = heartbeat
         };
     }
 

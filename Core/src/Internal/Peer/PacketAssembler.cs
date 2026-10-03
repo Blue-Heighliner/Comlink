@@ -33,6 +33,7 @@ internal sealed class PacketAssembler(IEngineController engineController, int ma
     public AssembledPayload? Add(ReadOnlyMemory<byte> packet)
     {
         object decoded = serializer.Deserialize(packet);
+        if (decoded.GetType() == engineController.PacketType && engineController.IsPacketHeartbeat(decoded)) { return null; }
         if (decoded.GetType() != engineController.PacketType || !engineController.IsFramePacket(decoded)) { throw new InvalidDataException("The bytes are not a frame packet"); }
 
         int id = engineController.GetPayloadId(decoded);

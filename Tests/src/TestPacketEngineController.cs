@@ -16,6 +16,8 @@ public sealed class TestPacket
     [ProtoMember(5)] public byte[] Data { get; set; } = [];
     /// <summary>Whether the packet carries a piece of a frame.</summary>
     [ProtoMember(6)] public bool IsFramePacket { get; set; }
+    /// <summary>Whether the packet is a heartbeat.</summary>
+    [ProtoMember(7)] public bool IsHeartbeat { get; set; }
 }
 
 /// <summary>

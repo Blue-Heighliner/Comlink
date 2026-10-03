@@ -13,4 +13,6 @@ internal sealed class PacketMap
     public required int Window { get; init; }
     /// <summary>Gets how the host's frame packet handler is instantiated.</summary>
     public required ServiceRegistration<IFramePacketAdapter> FramePacket { get; init; }
+    /// <summary>Gets the heartbeat packet handler, or <see langword="null"/> when none is stated.</summary>
+    public ServiceRegistration<IHeartbeatFrameHandler>? Heartbeat { get; init; }
 }

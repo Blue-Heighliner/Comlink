@@ -41,6 +41,8 @@ public sealed class TestFrame
     [ProtoMember(17)] public List<string> RetrievalIds { get; set; } = [];
     /// <summary>Whether this frame is only network traffic rather than a message (stored inversely so an ordinary test frame is a message).</summary>
     [ProtoMember(18)] public bool IsHidden { get; set; }
+    /// <summary>Whether this frame is a heartbeat.</summary>
+    [ProtoMember(20)] public bool IsHeartbeat { get; set; }
 }
 
 /// <summary>A single address entry within a <see cref="TestFrame"/>.</summary>

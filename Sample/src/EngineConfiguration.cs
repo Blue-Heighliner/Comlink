@@ -9,6 +9,7 @@ namespace BlueHeighliner.Comlink.Sample;
 /// <item><description>home text - a product-appropriate home screen welcome text.</description></item>
 /// <item><description>window icon - Sample's own envelope icon instead of the operating system's.</description></item>
 /// <item><description>users - none stated here: every user of the network, with their role, ports, connections, security level and node settings, comes from the network configuration file (<c>--config</c>, or <c>Config.json</c> in the working directory), which each of the <c>Scripts/Scenarios/</c> scenarios supplies for its own network, and an install code is just the name of a user in it.</description></item>
+/// <item><description>heartbeats - a <see cref="PacketHeartbeatHandler"/> sends an empty packet flagged as a heartbeat over every IP connection to verify it, at the lowest user priority.</description></item>
 /// <item><description>priorities and blocked tags - three user priority levels, two system ones and both blocked-combination kinds.</description></item>
 /// <item><description>print count - prints an alert message twice and every other received message once.</description></item>
 /// <item><description>deleting - only drafts and notes can be deleted; Inbox, Outbox, and Activity are protected.</description></item>
@@ -52,7 +53,8 @@ public sealed class EngineConfiguration : IEngineConfiguration
                 .ReceiveReceipt<ReceiveReceiptHandler>())
             .Packets<Packet>(packet => packet
                 .InitialProcessor<IdentityProcessor>()
-                .Frame<FramePacketHandler>())
+                .Frame<FramePacketHandler>()
+                .Heartbeat<PacketHeartbeatHandler>())
             .HomeText("Select a folder and entry to get started, or create a new draft or note.")
             .WindowIcon("avares://BlueHeighliner.Comlink.Sample/Assets/envelope.png")
             .Priorities<MessagePriority>(

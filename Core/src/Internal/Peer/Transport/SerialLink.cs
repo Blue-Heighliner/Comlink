@@ -3,13 +3,11 @@ namespace BlueHeighliner.Comlink;
 /// <summary>
 /// One persistent point-to-point link to a remote node over a MicroGate serial port. A HDLC peer is single
 /// use, so this owns the loop that creates a new one, waits for the remote end to answer, and brings the link back up
-/// whenever it is lost. Messages are fragmented into HDLC frames and answered with an accept or reject, giving the
-/// same send-then-acknowledge contract as an IP connection.
+/// whenever it is lost. Nothing but serialized messages or packets crosses the cable: each payload is exactly one HDLC
+/// information frame, carrying no header, fragment number or reply of this software's own, so a system that does not run it can take part.
 /// </summary>
 internal sealed class SerialLink : IAsyncDisposable
 {
-    private static int MaxMessageSize { get; } = 64 * 1024 * 1024;
-
     /// <summary>Starts connecting to <paramref name="point"/> in the background and keeps trying until disposed.</summary>
     public SerialLink(
         ConnectionPoint point,
@@ -20,7 +18,6 @@ internal sealed class SerialLink : IAsyncDisposable
         PeerEvent<PeerConnectionEventArgs> connected,
         PeerEvent<PeerConnectionEventArgs> disconnected,
         TimeSpan? reconnectDelay = null,
-        TimeSpan? requestTimeout = null,
         bool startClosed = false,
         TimeSpan? candidateTimeout = null)
     {
@@ -32,7 +29,6 @@ internal sealed class SerialLink : IAsyncDisposable
         this.connected = connected;
         this.disconnected = disconnected;
         this.reconnectDelay = reconnectDelay ?? TimeSpan.FromSeconds(2);
-        this.requestTimeout = requestTimeout ?? TimeSpan.FromSeconds(60);
         this.candidateTimeout = candidateTimeout ?? TimeSpan.FromSeconds(4);
         remotes = [point.RemoteSerialAddress, .. point.OtherRemotes.Select(remote => remote.Address)];
         connection = new PeerConnection(point, new SerialConnectionInfo { SerialPort = point.SerialPort!, SerialAddress = point.SerialAddress, RemoteSerialAddress = point.RemoteSerialAddress }, () => DropPeer(current));
@@ -49,7 +45,6 @@ internal sealed class SerialLink : IAsyncDisposable
     private readonly PeerEvent<PeerConnectionEventArgs> connected;
     private readonly PeerEvent<PeerConnectionEventArgs> disconnected;
     private readonly TimeSpan reconnectDelay;
-    private readonly TimeSpan requestTimeout;
     private readonly TimeSpan candidateTimeout;
     private readonly byte[] remotes;
     private int nextRemote;
@@ -57,16 +52,12 @@ internal sealed class SerialLink : IAsyncDisposable
     private readonly CancellationTokenSource lifetime = new();
     private readonly Task loop;
     private readonly PriorityLock sendLock = new();
-    private readonly ConcurrentDictionary<uint, TaskCompletionSource<bool>> pending = new();
-    private readonly Lock reassemblyLock = new();
     private readonly Lock closeLock = new();
     private TaskCompletionSource openGate = new(TaskCreationOptions.RunContinuationsAsynchronously);
 
     private volatile IHdlcPeer? current;
     private volatile bool isClosed;
     private CancellationTokenSource? attempt;
-    private Reassembly? reassembly;
-    private uint nextId;
     private bool failureLogged;
     private int disposed;
 
@@ -110,28 +101,28 @@ internal sealed class SerialLink : IAsyncDisposable
         if (!isClosed) { DropPeer(current); }
     }
 
-    /// <summary>Sends <paramref name="data"/> and waits for the remote node's accept or reject.</summary>
-    /// <exception cref="IOException">The link is down, dropped while waiting, or the remote node did not answer in time.</exception>
+    /// <summary>Sends <paramref name="data"/> as one HDLC information frame, once the frame is on the link.</summary>
+    /// <exception cref="ArgumentOutOfRangeException"><paramref name="data"/> does not fit one frame; enable packetization with a packet size that does.</exception>
+    /// <exception cref="IOException">The link is down or was lost while sending.</exception>
     public async Task<bool> Request(ReadOnlyMemory<byte> data, PeerSendOptions? options, CancellationToken cancellation)
     {
         IHdlcPeer peer = current ?? throw new IOException(isClosed ? $"Serial link to {point} is closed" : $"Serial link to {point} is not connected");
-        uint id = Interlocked.Increment(ref nextId);
-        TaskCompletionSource<bool> reply = new(TaskCreationOptions.RunContinuationsAsynchronously);
-        pending[id] = reply;
+        if (data.Length > peer.MaxPayloadSize)
+        {
+            throw new ArgumentOutOfRangeException(nameof(data), data.Length, $"The payload does not fit one HDLC frame of {peer.MaxPayloadSize} bytes; packetization must be enabled with a packet size that does");
+        }
+
         try
         {
-            await SendMessage(peer, id, data, options?.Priority ?? 0, cancellation);
-            options?.Transmitted?.Invoke();
-            return await reply.Task.WaitAsync(requestTimeout, cancellation);
+            using (await sendLock.Acquire(options?.Priority ?? 0, cancellation)) { await peer.Send(data, cancellation); }
         }
-        catch (TimeoutException)
+        catch (Exception ex) when (ex is not OperationCanceledException and not IOException)
         {
-            throw new IOException($"Serial link to {point} did not acknowledge the message in time");
+            throw new IOException($"Serial link to {point} was lost", ex);
         }
-        finally
-        {
-            pending.TryRemove(id, out _);
-        }
+
+        options?.Transmitted?.Invoke();
+        return true;
     }
 
     /// <inheritdoc />
@@ -156,27 +147,6 @@ internal sealed class SerialLink : IAsyncDisposable
     {
         try { await peer.DisposeAsync(); }
         catch { }
-    }
-
-    private async Task SendMessage(IHdlcPeer peer, uint id, ReadOnlyMemory<byte> data, int priority, CancellationToken cancellation)
-    {
-        int chunkSize = peer.MaxPayloadSize - SerialFrame.DataHeaderSize;
-        int count = Math.Max(1, (data.Length + chunkSize - 1) / chunkSize);
-        if (count > ushort.MaxValue || data.Length > MaxMessageSize)
-        {
-            throw new ArgumentOutOfRangeException(nameof(data), data.Length, "Message is too large to send over a serial link");
-        }
-
-        // Every fragment of one message is sent under the lock, so fragments of different messages never interleave
-        // on the wire; the receiving side relies on this to keep only one reassembly in progress at a time.
-        using (await sendLock.Acquire(priority, cancellation))
-        {
-            for (int index = 0; index < count; index++)
-            {
-                ReadOnlyMemory<byte> chunk = data.Slice(index * chunkSize, Math.Min(chunkSize, data.Length - (index * chunkSize)));
-                await peer.Send(SerialFrame.EncodeData(id, (ushort)index, (ushort)count, chunk.Span), cancellation);
-            }
-        }
     }
 
     private async Task Run()
@@ -262,8 +232,6 @@ internal sealed class SerialLink : IAsyncDisposable
         catch (OperationCanceledException) { }
 
         lock (closeLock) { current = null; }
-        FailPending();
-        lock (reassemblyLock) { reassembly = null; }
         disconnected.Publish(new PeerConnectionEventArgs { Connection = connection });
         if (!lifetime.IsCancellationRequested && !isClosed) { logger.LogWarning("Serial link to {Point} lost", point); }
 
@@ -277,95 +245,9 @@ internal sealed class SerialLink : IAsyncDisposable
         catch (OperationCanceledException) { }
     }
 
-    private void FailPending()
-    {
-        foreach (TaskCompletionSource<bool> reply in pending.Values)
-        {
-            reply.TrySetException(new IOException($"Serial link to {point} was lost"));
-        }
-    }
-
     private void OnFrame(IMemoryOwner<byte> owner)
     {
         using IMemoryOwner<byte> frame = owner;
-        if (!SerialFrame.TryParse(frame.Memory, out SerialFrame parsed)) { return; }
-
-        if (parsed.Kind == SerialFrameKind.Reply)
-        {
-            if (pending.TryGetValue(parsed.Id, out TaskCompletionSource<bool>? reply)) { reply.TrySetResult(parsed.Success); }
-            return;
-        }
-
-        byte[]? message = Reassemble(parsed);
-        if (message is not null)
-        {
-            uint id = parsed.Id;
-            _ = Task.Run(() => Deliver(id, message));
-        }
-    }
-
-    private byte[]? Reassemble(SerialFrame frame)
-    {
-        if (frame.Count == 1) { return frame.Chunk.ToArray(); }
-
-        lock (reassemblyLock)
-        {
-            if (frame.Index == 0)
-            {
-                reassembly = new Reassembly(frame.Id, frame.Count);
-            }
-            else if (reassembly is null || reassembly.Id != frame.Id || reassembly.Next != frame.Index)
-            {
-                reassembly = null;
-                return null;
-            }
-
-            reassembly.Append(frame.Chunk.Span);
-            if (reassembly.Length > MaxMessageSize)
-            {
-                reassembly = null;
-                return null;
-            }
-
-            if (reassembly.Next < reassembly.Count) { return null; }
-
-            byte[] message = reassembly.ToArray();
-            reassembly = null;
-            return message;
-        }
-    }
-
-    private async Task Deliver(uint id, byte[] message)
-    {
-        received.Publish(new PeerReceivedEventArgs { Connection = connection, Payload = message });
-
-        IHdlcPeer? peer = current;
-        if (peer is null) { return; }
-
-        try
-        {
-            using (await sendLock.Acquire(int.MaxValue, lifetime.Token)) { await peer.Send(SerialFrame.EncodeReply(id, true), lifetime.Token); }
-        }
-        catch
-        {
-        }
-    }
-
-    private sealed class Reassembly(uint id, ushort count)
-    {
-        private readonly MemoryStream buffer = new();
-
-        public uint Id { get; } = id;
-        public ushort Count { get; } = count;
-        public int Next { get; private set; }
-        public long Length => buffer.Length;
-
-        public void Append(ReadOnlySpan<byte> chunk)
-        {
-            buffer.Write(chunk);
-            Next++;
-        }
-
-        public byte[] ToArray() => buffer.ToArray();
+        received.Publish(new PeerReceivedEventArgs { Connection = connection, Payload = frame.Memory.ToArray() });
     }
 }

@@ -72,6 +72,13 @@ public interface IFrameBuilder<TFrame> where TFrame : class, new()
     IFrameBuilder<TFrame> ReceiveReceipt<THandler>() where THandler : IReceiveReceiptHandler<TFrame>;
 
     /// <summary>
+    /// States the handler for heartbeat frames (see <see cref="IHeartbeatHandler{TFrame}"/>), which a node sends over each MSMT connection to verify it is really up and keep it live. Optional: when not
+    /// stated no heartbeats are sent, and an MSMT connection counts as up as soon as it is established. Heartbeats are never sent over HDLC.
+    /// </summary>
+    /// <typeparam name="THandler">The handler type, instantiated through dependency injection when the engine runs: the instance registered for it in the host's services, or else one constructed from them.</typeparam>
+    IFrameBuilder<TFrame> Heartbeat<THandler>() where THandler : IHeartbeatHandler<TFrame>;
+
+    /// <summary>
     /// Replaces the serializer that turns frames into the bytes sent across the network. The default is a
     /// <see cref="ProtobufSerializer"/> that builds only <typeparamref name="TFrame"/>, so the frame type then
     /// needs <c>[ProtoContract]</c>/<c>[ProtoMember]</c> attributes. Every node on a network must use a matching serializer.

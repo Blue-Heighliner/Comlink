@@ -102,6 +102,21 @@ public sealed class PacketizingPeerTransportTests
         return bytes;
     }
 
+    /// <summary>A payload that is already a packet is sent as it is, not split.</summary>
+    [Fact]
+    public async Task Request_AlreadyAPacket_IsSentUntouched()
+    {
+        Fixture fx = Build();
+        byte[] packet = Payload(35);
+
+        bool ok = await fx.Transport.Request(target, packet, new PeerSendOptions { Priority = 3, IsPacket = true });
+
+        Assert.True(ok);
+        Sent sent = Assert.Single(fx.Sends);
+        Assert.Equal(packet, sent.Data);
+        Assert.Equal(3, sent.Options!.Priority);
+    }
+
     /// <summary>A payload is sent as several packets at the payload's priority, which reassemble into the original payload.</summary>
     [Fact]
     public async Task Request_SplitsPayloadIntoPacketsAtItsPriority()

@@ -29,8 +29,6 @@ internal static class TestHeartbeat
 
     private static object Frame()
     {
-        object frame = controller.CreateFrame();
-        ((TestFrame)frame).IsHidden = true;
-        return frame;
+        return controller.CreateHeartbeat();
     }
 }

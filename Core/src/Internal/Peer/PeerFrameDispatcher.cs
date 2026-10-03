@@ -10,7 +10,7 @@ internal static class PeerFrameDispatcher
     /// <summary>
     /// Deserializes <paramref name="data"/> as an instance of <see cref="IEngineController.FrameType"/> and
     /// raises <paramref name="readReceiptReceived"/>, <paramref name="receiveReceiptReceived"/> or <paramref name="frameDelivered"/> as appropriate.
-    /// A <see cref="PeerConnectionMonitor"/> heartbeat (an empty frame that is not a message, see <see cref="EngineControllerExtensions.IsHeartbeat"/>)
+    /// A <see cref="PeerConnectionMonitor"/> heartbeat (a frame the host's heartbeat handler recognizes, see <see cref="IEngineController.IsHeartbeat"/>)
     /// is not a real frame and is acknowledged without being delivered.
     /// </summary>
     /// <param name="data">The raw, already-received frame payload.</param>

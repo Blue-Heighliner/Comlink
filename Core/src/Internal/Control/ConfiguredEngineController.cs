@@ -79,6 +79,20 @@ internal sealed class ConfiguredEngineController : IEngineController
 
     /// <inheritdoc />
     public bool IsReceiveReceipt(object frame) => fallback.IsReceiveReceipt(frame);
+    /// <inheritdoc />
+    public bool HeartbeatsEnabled => fallback.HeartbeatsEnabled;
+    /// <inheritdoc />
+    public bool PacketHeartbeatsEnabled => fallback.PacketHeartbeatsEnabled;
+    /// <inheritdoc />
+    public object CreatePacketHeartbeat() => fallback.CreatePacketHeartbeat();
+    /// <inheritdoc />
+    public bool IsPacketHeartbeat(object packet) => fallback.IsPacketHeartbeat(packet);
+    /// <inheritdoc />
+    public int PacketHeartbeatPriority => fallback.PacketHeartbeatPriority;
+    /// <inheritdoc />
+    public object CreateHeartbeat() => fallback.CreateHeartbeat();
+    /// <inheritdoc />
+    public bool IsHeartbeat(object frame) => fallback.IsHeartbeat(frame);
 
     /// <inheritdoc />
     public bool IsRetrieval(object frame) => fallback.IsRetrieval(frame);

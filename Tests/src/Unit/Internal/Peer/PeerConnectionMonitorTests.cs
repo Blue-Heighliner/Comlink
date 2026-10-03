@@ -51,6 +51,61 @@ public sealed class PeerConnectionMonitorTests
         cts.Cancel();
     }
 
+    /// <summary>A serial point is never sent a heartbeat: it counts as up as soon as its link is connected.</summary>
+    [Fact]
+    public async Task Maintain_SerialPoint_SendsNoHeartbeatAndCountsAsUp()
+    {
+        ConnectionPoint serial = new() { SerialPort = "SL0" };
+        Mock<IPeerTransport> transport = new();
+        transport.Setup(t => t.Connect(serial, It.IsAny<CancellationToken>())).ReturnsAsync(connection);
+        PeerConnectionMonitor monitor = new(new TestEngineController(), steadyInterval: TimeSpan.FromMinutes(10), fastRetryInterval: TimeSpan.FromMinutes(10));
+        TaskCompletionSource up = new();
+
+        using CancellationTokenSource cts = new();
+        monitor.Maintain(transport.Object, serial, cts.Token, _ => up.TrySetResult());
+
+        await up.Task.WaitAsync(TimeSpan.FromSeconds(2));
+        transport.Verify(t => t.Request(It.IsAny<PeerConnection>(), It.IsAny<ReadOnlyMemory<byte>>(), It.IsAny<PeerSendOptions>(), It.IsAny<CancellationToken>()), Times.Never);
+        cts.Cancel();
+    }
+
+    /// <summary>Without a heartbeat handler no heartbeat is ever sent, and an IP connection counts as up once it is established.</summary>
+    [Fact]
+    public async Task Maintain_NoHeartbeatHandler_SendsNothingAndCountsAsUp()
+    {
+        Mock<IPeerTransport> transport = new();
+        AutoConnect(transport);
+        EngineController controller = new(EngineBuilder.Build(new TestEngineConfiguration(heartbeats: false)), new CurrentUserProvider(), null);
+        PeerConnectionMonitor monitor = new(controller, steadyInterval: TimeSpan.FromMinutes(10), fastRetryInterval: TimeSpan.FromMinutes(10));
+        TaskCompletionSource up = new();
+
+        using CancellationTokenSource cts = new();
+        monitor.Maintain(transport.Object, target, cts.Token, _ => up.TrySetResult());
+
+        await up.Task.WaitAsync(TimeSpan.FromSeconds(2));
+        transport.Verify(t => t.Request(It.IsAny<PeerConnection>(), It.IsAny<ReadOnlyMemory<byte>>(), It.IsAny<PeerSendOptions>(), It.IsAny<CancellationToken>()), Times.Never);
+        cts.Cancel();
+    }
+
+    /// <summary>A heartbeat packet handler makes the monitor send the heartbeat as a packet of its own, instead of the frame heartbeat.</summary>
+    [Fact]
+    public async Task Maintain_PacketHeartbeat_IsSentAsAPacketInsteadOfAFrame()
+    {
+        Mock<IPeerTransport> transport = new();
+        AutoAcknowledge(transport);
+        EngineController controller = new(EngineBuilder.Build(new TestEngineConfiguration(packetExtra: packet => packet.Heartbeat<TestPacketHeartbeatHandler>())), new CurrentUserProvider(), null);
+        PeerConnectionMonitor monitor = new(controller, steadyInterval: TimeSpan.FromMinutes(10), fastRetryInterval: TimeSpan.FromMinutes(10));
+
+        using CancellationTokenSource cts = new();
+        monitor.Maintain(transport.Object, target, cts.Token);
+
+        await WaitUntil(() => transport.Invocations.Any(i => i.Method.Name == nameof(IPeerTransport.Request)), TimeSpan.FromSeconds(2));
+        IInvocation request = transport.Invocations.First(i => i.Method.Name == nameof(IPeerTransport.Request));
+        Assert.True(((PeerSendOptions)request.Arguments[2]).IsPacket);
+        Assert.True(((TestPacket)controller.PacketSerializer!.Deserialize((ReadOnlyMemory<byte>)request.Arguments[1])).IsHeartbeat);
+        cts.Cancel();
+    }
+
     /// <summary>While the last heartbeat failed, the next one follows the fast retry interval rather than the steady one.</summary>
     [Fact]
     public async Task Maintain_WhileDisconnected_RetriesOnFastInterval()

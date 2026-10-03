@@ -29,4 +29,6 @@ internal sealed class FrameMap
     public required ServiceRegistration<IReceiptFrameHandler> ReadReceipt { get; init; }
     /// <summary>Gets how the host's receive receipt handler is instantiated.</summary>
     public required ServiceRegistration<IReceiptFrameHandler> ReceiveReceipt { get; init; }
+    /// <summary>Gets the heartbeat handler, or <see langword="null"/> when none is stated, in which case no heartbeats are sent.</summary>
+    public ServiceRegistration<IHeartbeatFrameHandler>? Heartbeat { get; init; }
 }

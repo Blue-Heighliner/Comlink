@@ -51,7 +51,7 @@ given point when it is connected to, and reuses that same connection for every l
 until MSMT reports it disconnected, at which point the next connect opens a fresh one.
 Every peer service additionally runs a background `PeerConnectionMonitor` per outgoing point
 (a client's server; a server's or peer's configured points), sending a
-heartbeat (an empty instance of the frame type) on an interval so each of those connections is proactively opened and kept alive even
+heartbeat (a frame from the host's optional heartbeat handler) on an interval so each of those connections is proactively opened and kept alive even
 when no real message is being sent - see [Peer.md](Peer.md#connection-status-client-and-server) for the
 full mechanism and why `IMsmtReachabilityChecker.Reach` is not used for this.
 

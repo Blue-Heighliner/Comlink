@@ -2,13 +2,13 @@ namespace BlueHeighliner.Comlink;
 
 /// <summary>
 /// Proactively opens, and continuously maintains, the connection to one of this node's outgoing
-/// <see cref="ConnectionPoint"/>s by connecting to it and requesting a heartbeat over the connection,
-/// awaiting its outcome. The heartbeat is an empty instance of the frame type that is not a message, serialized like any frame (see
-/// <see cref="EngineControllerExtensions.IsHeartbeat"/>), so nothing but serialized frames and packets ever crosses a connection;
+/// <see cref="ConnectionPoint"/>s by connecting to it and, over IP only, requesting a heartbeat over the connection,
+/// awaiting its outcome, but only when the host states a heartbeat handler (see <see cref="IEngineController.HeartbeatsEnabled"/> and <see cref="IEngineController.PacketHeartbeatsEnabled"/>, the latter taking precedence and sending the heartbeat as a packet beneath packetization); without one a connection counts as up once established. The heartbeat is a frame of the host's own heartbeat handler, serialized like any frame (see
+/// <see cref="IEngineController.IsHeartbeat"/>), so nothing but serialized frames and packets ever crosses a connection;
 /// <see cref="PeerFrameDispatcher.Dispatch"/> and <see cref="ServerRoutingService"/> acknowledge it without acting on it, so it never
 /// reaches the remote peer's application logic. Over IP a heartbeat reuses the
 /// same cached session connection, so the connection genuinely stays open between heartbeats rather than flapping; over
-/// serial the first connect is what creates the link to the port, which then reconnects on its own.
+/// serial no heartbeat is ever sent: HDLC reports the state of its own link, so a serial point counts as up while its link is connected, and the first connect is what creates the link to the port, which then reconnects on its own.
 /// </summary>
 /// <remarks>
 /// While the last heartbeat did not succeed - including the very first one, which commonly races the
@@ -59,10 +59,23 @@ internal sealed class PeerConnectionMonitor(IEngineController engineController, 
                 try
                 {
                     connection = await transport.Connect(target, cancellation);
-                    object frame = Heartbeat();
-                    byte[] heartbeat;
-                    using (IMemoryOwner<byte> owner = engineController.FrameSerializer.Serialize(frame)) { heartbeat = owner.Memory.ToArray(); }
-                    connected = await transport.Request(connection, heartbeat, new PeerSendOptions { Priority = engineController.LowestPriority, Frame = frame }, cancellation);
+                    if (target.IsSerial || !(engineController.HeartbeatsEnabled || engineController.PacketHeartbeatsEnabled))
+                    {
+                        connected = true;
+                    }
+                    else if (engineController.PacketHeartbeatsEnabled)
+                    {
+                        byte[] heartbeat;
+                        using (IMemoryOwner<byte> owner = engineController.PacketSerializer!.Serialize(engineController.CreatePacketHeartbeat(), null)) { heartbeat = owner.Memory.ToArray(); }
+                        connected = await transport.Request(connection, heartbeat, new PeerSendOptions { Priority = engineController.PacketHeartbeatPriority, IsPacket = true }, cancellation);
+                    }
+                    else
+                    {
+                        object frame = engineController.CreateHeartbeat();
+                        byte[] heartbeat;
+                        using (IMemoryOwner<byte> owner = engineController.FrameSerializer.Serialize(frame)) { heartbeat = owner.Memory.ToArray(); }
+                        connected = await transport.Request(connection, heartbeat, new PeerSendOptions { Priority = engineController.GetPriority(frame), Frame = frame }, cancellation);
+                    }
                 }
                 catch
                 {
@@ -83,8 +96,4 @@ internal sealed class PeerConnectionMonitor(IEngineController engineController, 
         }
     }
 
-    private object Heartbeat()
-    {
-        return engineController.CreateFrame();
-    }
 }

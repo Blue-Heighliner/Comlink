@@ -5,6 +5,7 @@ internal sealed class PacketBuilder<TPacket> : IPacketBuilder<TPacket> where TPa
 {
     private ServiceRegistration<IPacketSerializer> serializer = new(_ => new ProtobufSerializer(typeof(TPacket)));
     private ServiceRegistration<IFramePacketAdapter>? framePacket;
+    private ServiceRegistration<IHeartbeatFrameHandler>? heartbeat;
     private int size = 16 * 1024;
     private int window = 1;
 
@@ -46,6 +47,13 @@ internal sealed class PacketBuilder<TPacket> : IPacketBuilder<TPacket> where TPa
         return this;
     }
 
+    /// <inheritdoc />
+    public IPacketBuilder<TPacket> Heartbeat<THandler>() where THandler : IHeartbeatHandler<TPacket>
+    {
+        heartbeat = ServiceRegistration<IHeartbeatFrameHandler>.Of(typeof(THandler), handler => new HeartbeatFrameHandler<TPacket>((IHeartbeatHandler<TPacket>)handler));
+        return this;
+    }
+
     /// <summary>Builds the engine-side map.</summary>
     /// <exception cref="InvalidOperationException">The frame packet handler has not been stated.</exception>
     public PacketMap Build()
@@ -58,7 +66,8 @@ internal sealed class PacketBuilder<TPacket> : IPacketBuilder<TPacket> where TPa
             Serializer = serializer,
             Size = size,
             Window = window,
-            FramePacket = framePacket
+            FramePacket = framePacket,
+            Heartbeat = heartbeat
         };
     }
 }

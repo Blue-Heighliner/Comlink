@@ -128,7 +128,8 @@ public sealed class ClientPeerServiceTests
         using CancellationTokenSource cts = new();
 
         Task startTask = fx.Service.Start(cts.Token);
-        await WaitUntil(() => Heartbeats(fx.Transport) >= 1, TimeSpan.FromSeconds(30));
+        await WaitUntil(() => serial || Heartbeats(fx.Transport) >= 1, TimeSpan.FromSeconds(30));
+        await WaitUntil(() => fx.Transport.Invocations.Any(i => i.Method.Name == nameof(IPeerTransport.Connect)), TimeSpan.FromSeconds(30));
 
         fx.Transport.Verify(p => p.StartListener(It.IsAny<int>()), Times.Never);
         fx.Transport.Verify(p => p.Connect(point, It.IsAny<CancellationToken>()), Times.AtLeastOnce);
