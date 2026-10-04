@@ -24,8 +24,8 @@ public sealed class Frame
     [ProtoMember(7)] public string ReadMessageId { get; set; } = string.Empty;
     /// <summary>Whether this message is an alert.</summary>
     [ProtoMember(8)] public bool Alert { get; set; }
-    /// <summary>Priority number of this message.</summary>
-    [ProtoMember(9)] public int Importance { get; set; }
+    /// <summary>Name of the priority level of this message, the name of a MessagePriority member.</summary>
+    [ProtoMember(9)] public string Importance { get; set; } = string.Empty;
     /// <summary>Short user-inputted tag identifying the type of this message.</summary>
     [ProtoMember(10)] public string Category { get; set; } = string.Empty;
     /// <summary>Security level name this message was sent at.</summary>

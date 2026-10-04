@@ -75,9 +75,9 @@ public sealed class ImportServiceTests : IDisposable
     private async Task<MessageEntity> InsertSourceMessage(string messageId, string body, bool isOutbound, DateTime? receivedAt = null, int priority = 0)
     {
         object message = messageFormat.CreateFrame();
-        messageFormat.SetFrameId(message, messageId);
+        ((TestFrame)message).MessageId = messageId;
         ((TestFrame)message).Body = body;
-        ((TestFrame)message).Priority = priority;
+        ((TestFrame)message).Priority = priority == 0 ? "NORMAL" : $"LEVEL{priority}";
         MessageEntity entity = new()
         {
             MessageId = messageId,
@@ -178,7 +178,7 @@ public sealed class ImportServiceTests : IDisposable
     [Fact]
     public async Task Import_NewDraft_IsInserted()
     {
-        DraftEntity source = await sourceDrafts.Insert(new DraftEntity { Body = "Plan\nBody", FolderId = "root-drafts", Priority = 2 });
+        DraftEntity source = await sourceDrafts.Insert(new DraftEntity { Body = "Plan\nBody", FolderId = "root-drafts", Priority = "LEVEL2" });
         string package = await BuildPackage(new ExportEntryRef { Id = source.Id.ToString(), EntryType = EntryType.Draft });
 
         ImportSummary summary = await import.Import(package, NeverAsked);
@@ -187,7 +187,7 @@ public sealed class ImportServiceTests : IDisposable
         DraftEntity? imported = (await destDrafts.GetAll()).SingleOrDefault(d => d.Body.FirstLine == "Plan");
         Assert.NotNull(imported);
         Assert.Equal("Plan\nBody", imported.Body);
-        Assert.Equal(2, imported.Priority);
+        Assert.Equal("LEVEL2", imported.Priority);
     }
 
     /// <summary>KeepExisting leaves the existing draft untouched and counts as skipped.</summary>
@@ -211,9 +211,9 @@ public sealed class ImportServiceTests : IDisposable
     [Fact]
     public async Task Import_DraftConflict_Overwrite_ReplacesContent()
     {
-        DraftEntity source = await sourceDrafts.Insert(new DraftEntity { Body = "Plan\nNew", FolderId = "root-drafts", Priority = 3 });
+        DraftEntity source = await sourceDrafts.Insert(new DraftEntity { Body = "Plan\nNew", FolderId = "root-drafts", Priority = "LEVEL3" });
         string package = await BuildPackage(new ExportEntryRef { Id = source.Id.ToString(), EntryType = EntryType.Draft });
-        DraftEntity existing = await destDrafts.Insert(new DraftEntity { Body = "Plan\nOld", FolderId = "root-drafts", Priority = 0 });
+        DraftEntity existing = await destDrafts.Insert(new DraftEntity { Body = "Plan\nOld", FolderId = "root-drafts", Priority = "NORMAL" });
 
         ImportSummary summary = await import.Import(package, _ => Task.FromResult(DraftNoteConflictResolution.Overwrite));
 
@@ -222,7 +222,7 @@ public sealed class ImportServiceTests : IDisposable
         DraftEntity? found = await destDrafts.Get(existing.Id);
         Assert.Equal("Plan\nNew", found!.Body);
         Assert.Equal(existing.Id, found.Id);
-        Assert.Equal(3, found.Priority);
+        Assert.Equal("LEVEL3", found.Priority);
     }
 
     /// <summary>The conflict prompt receives the draft's first line as the conflict name.</summary>
@@ -427,7 +427,7 @@ public sealed class ImportServiceTests : IDisposable
                     Addresses = [],
                     SentAt = DateTime.UtcNow,
                     IsAlert = false,
-                    Priority = 0,
+                    Priority = "NORMAL",
                     Tag = string.Empty,
                     ReceivedAt = DateTime.UtcNow,
                     DeliveryStatuses = []
@@ -439,7 +439,7 @@ public sealed class ImportServiceTests : IDisposable
                     Addresses = [],
                     IsSent = false,
                     IsAlert = false,
-                    Priority = 0,
+                    Priority = "NORMAL",
                     Tag = string.Empty,
                     CreatedAt = DateTime.UtcNow,
                     ModifiedAt = DateTime.UtcNow
@@ -478,7 +478,7 @@ public sealed class ImportServiceTests : IDisposable
                 Addresses = [],
                 IsSent = false,
                 IsAlert = false,
-                Priority = 0,
+                Priority = "NORMAL",
                 Tag = string.Empty,
                 CreatedAt = DateTime.UtcNow,
                 ModifiedAt = DateTime.UtcNow

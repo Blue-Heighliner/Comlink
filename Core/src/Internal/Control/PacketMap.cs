@@ -7,10 +7,6 @@ internal sealed class PacketMap
     public required Type Type { get; init; }
     /// <summary>The serializer for the packet type.</summary>
     public required ServiceRegistration<IPacketSerializer> Serializer { get; init; }
-    /// <summary>The largest a serialized packet may be, in bytes.</summary>
-    public required int Size { get; init; }
-    /// <summary>How many packets may be in flight over one connection at once.</summary>
-    public required int Window { get; init; }
     /// <summary>Gets how the host's frame packet handler is instantiated.</summary>
     public required ServiceRegistration<IFramePacketAdapter> FramePacket { get; init; }
     /// <summary>Gets the heartbeat packet handler, or <see langword="null"/> when none is stated.</summary>

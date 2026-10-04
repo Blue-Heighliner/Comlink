@@ -41,7 +41,7 @@ Two independent sources are supported, chosen per user in the network configurat
 ## Session Peer
 
 Comlink uses MSMT's session-mode API, `IMsmtSessionPeer` (created via `IMsmtSessionPeer.IFactory.Create(MsmtSessionPeerOptions)`),
-never the message-mode `IMsmtMessagePeer`: every Comlink connection (peer, client/server hierarchy, and
+never the message-mode `IMsmtMessagePeer`: every Comlink connection (client/server hierarchy, and
 interface) is a negotiated session connection that persists across multiple sends and is kept alive
 automatically by MSMT's own idle keep-alive, rather than a fresh TLS connection (or rekey) per message.
 Unlike message mode, a session connection is a real object the caller gets back and manages - MSMT itself
@@ -93,7 +93,7 @@ back out to a connected interface client over the connection it opened in; see [
 
 | Component | Role |
 |-----------|------|
-| `PeerService` (`Core/src/Internal/Peer/PeerService.cs`) | Wraps a single `IPeerTransport` (IP through `MsmtPeerTransport`, which wraps the `IMsmtSessionPeer`, and serial through `SerialPeerTransport`) for `UserRole.Peer`; keeps a connection to each outgoing point and sends to a user over the connection identified as them, serializes/deserializes instances of `IEngineController.FrameType` (see [Configuration.md](Configuration.md#frame-format)), and dispatches `FrameDelivered`/`DeliveryStatusChanged` events derived directly from the transport's `Request` outcome and its `Transmitted` progress callback. |
+| `ClientPeerService`, `ServerRoutingService` and `RelayPeerService` | Each wraps a single `IPeerTransport` (IP through `MsmtPeerTransport`, which wraps the `IMsmtSessionPeer`, and serial through `SerialPeerTransport`) for `UserRole.Peer`; keeps a connection to each outgoing point and sends to a user over the connection identified as them, serializes/deserializes instances of `IEngineController.FrameType` (see [Configuration.md](Configuration.md#frame-format)), and dispatches `FrameDelivered`/`DeliveryStatusChanged` events derived directly from the transport's `Request` outcome and its `Transmitted` progress callback. |
 | `ClientPeerService` (`Core/src/Internal/Peer/ClientPeerService.cs`) | Implements `UserRole.Client`: sends every outbound message over its one connection to the server, which delivers back down that same connection. Proactively maintains the connection via `PeerConnectionMonitor`. |
 | `ServerRoutingService` (`Core/src/Internal/Peer/ServerRoutingService.cs`) | Implements `UserRole.Server`: accepts connections from child clients and other servers, keeps a connection to each outgoing point, and delivers to any recipient (a child or another server) over the connection identified as them. Proactively maintains each outgoing point via `PeerConnectionMonitor`. |
 | `PeerConnectionMonitor` (`Core/src/Internal/Peer/PeerConnectionMonitor.cs`) | Connects to an outgoing point and sends a periodic heartbeat (an empty message) over the connection so it opens and stays open without needing a real message. See [Session Peer](#session-peer). |

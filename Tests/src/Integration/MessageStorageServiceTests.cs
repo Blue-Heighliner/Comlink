@@ -36,14 +36,14 @@ public sealed class MessageStorageServiceTests : IDisposable
         Body = $"Body {id}",
         SentAt = sentAt,
         IsAlert = true,
-        Priority = 2,
+        Priority = "LEVEL2",
         Tag = "TAG",
         Addresses = [.. to.Select(u => new TestAddressEntry { UserName = u, Type = "To" })]
     };
 
     private static TestFrame Request(RetrievalCriteria criteria)
     {
-        TestFrame request = (TestFrame)new TestEngineController().CreateRetrieval(criteria);
+        TestFrame request = (TestFrame)new TestEngineController().CreateRetrieval(criteria, "SERVER");
         request.MessageId = "REQ";
         return request;
     }
@@ -147,7 +147,7 @@ public sealed class MessageStorageServiceTests : IDisposable
 
         Assert.Equal(("M1", "ALICE", "Body M1"), (copy.MessageId, copy.FromUser, copy.Body));
         Assert.Equal(day1, copy.SentAt);
-        Assert.Equal((2, "TAG"), (copy.Priority, copy.Tag));
+        Assert.Equal(("LEVEL2", "TAG"), (copy.Priority, copy.Tag));
         Assert.False(copy.IsAlert);
         TestAddressEntry address = Assert.Single(copy.Addresses);
         Assert.Equal("CAROL", address.UserName);

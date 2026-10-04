@@ -17,6 +17,8 @@ internal interface ILiteDbContext : IDisposable
     ILiteCollection<AutoForwardTargetsEntity> AutoForwardTargets { get; }
     /// <summary>Collection of message copies a storage server keeps.</summary>
     ILiteCollection<StoredMessageEntity> StoredMessages { get; }
+    /// <summary>Collection holding the last generated frame identifier.</summary>
+    ILiteCollection<LastIdEntity> LastIds { get; }
     /// <summary>Opens the database file in the current user's data folder, binds all collections, and ensures indexes and root folders exist. Does nothing when it is already open on that folder, so it is safe to call from anywhere that needs the database, and reopens when the folder has changed.</summary>
     void Initialize();
 }
@@ -51,6 +53,8 @@ internal sealed class LiteDbContext : ILiteDbContext
     public ILiteCollection<AutoForwardTargetsEntity> AutoForwardTargets { get; private set; } = null!;
     /// <summary>Collection of message copies a storage server keeps.</summary>
     public ILiteCollection<StoredMessageEntity> StoredMessages { get; private set; } = null!;
+    /// <summary>Collection holding the last generated frame identifier.</summary>
+    public ILiteCollection<LastIdEntity> LastIds { get; private set; } = null!;
 
 
     /// <summary>Opens the database file, binds all collections, and ensures indexes and root folders exist.</summary>
@@ -79,6 +83,7 @@ internal sealed class LiteDbContext : ILiteDbContext
         Folders = db.GetCollection<FolderEntity>("folders");
         AutoForwardTargets = db.GetCollection<AutoForwardTargetsEntity>("auto_forward_targets");
         StoredMessages = db.GetCollection<StoredMessageEntity>("stored_messages");
+        LastIds = db.GetCollection<LastIdEntity>("last_id");
 
         EnsureIndexes();
         EnsureRootFolders();

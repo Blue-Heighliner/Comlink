@@ -19,6 +19,17 @@ public interface IReceiveReceiptHandler<TFrame> where TFrame : class
     /// <returns>The new frame.</returns>
     TFrame Create(ReceiptCreateContext context);
 
+    /// <summary>Gets the user name of the sender of <paramref name="frame"/>.</summary>
+    string GetSender(TFrame frame);
+
+    /// <summary>Sets the user name of the sender of <paramref name="frame"/>, which the engine does for every receive receipt it sends.</summary>
+    /// <param name="frame">The receive receipt.</param>
+    /// <param name="sender">The sender's user name.</param>
+    void SetSender(TFrame frame, string sender);
+
+    /// <summary>Gets the user name <paramref name="frame"/> is for: where the engine sends this receive receipt, and where a server or relay hands it on to. The engine states it when it creates the frame (see <see cref="ReceiptCreateContext.To"/>).</summary>
+    string GetDestination(TFrame frame);
+
     /// <summary>Gets the identifier of the message <paramref name="frame"/> is a receive receipt for.</summary>
     string GetMessageId(TFrame frame);
 }

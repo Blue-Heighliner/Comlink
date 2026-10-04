@@ -65,11 +65,11 @@ public sealed class EntryServiceTests : IDisposable
     public async Task StoreMessage_Priority_RoundTripsOnStoredMessage()
     {
         MessageEntity incoming = await service.StoreIncomingMessage(
-            Guid.NewGuid().ToString(), "SenderUser", "Hello", [], DateTime.UtcNow, priority: 2);
+            Guid.NewGuid().ToString(), "SenderUser", "Hello", [], DateTime.UtcNow, priority: TestMessagePriority.Level2);
         Assert.Equal(2, format.GetPriority(incoming.Message));
 
         MessageEntity sent = await service.StoreSentMessage(
-            Guid.NewGuid().ToString("N"), "Subj", [], DateTime.UtcNow, [], priority: 3);
+            Guid.NewGuid().ToString("N"), "Subj", [], DateTime.UtcNow, [], priority: TestMessagePriority.Level3);
         Assert.Equal(3, format.GetPriority(sent.Message));
     }
 
@@ -190,8 +190,8 @@ public sealed class EntryServiceTests : IDisposable
     [InlineData("Normal", "ALPHA")]
     public async Task GetMessagesAsync_SearchMatchesSenderTagAndPriority(string search, string expectedBody)
     {
-        await service.StoreIncomingMessage(Guid.NewGuid().ToString(), "Sender", expectedBody, [], DateTime.UtcNow, priority: 0, tag: "URGENT");
-        await service.StoreIncomingMessage(Guid.NewGuid().ToString(), "BRAVO", "Unrelated", [], DateTime.UtcNow, priority: 9);
+        await service.StoreIncomingMessage(Guid.NewGuid().ToString(), "Sender", expectedBody, [], DateTime.UtcNow, priority: TestMessagePriority.Normal, tag: "URGENT");
+        await service.StoreIncomingMessage(Guid.NewGuid().ToString(), "BRAVO", "Unrelated", [], DateTime.UtcNow, priority: TestMessagePriority.Level9);
 
         (List<MessageEntity> items, int total) = await service.GetMessages("root-inbox", 1, filter: new EntryFilter { Search = search });
 
@@ -319,14 +319,14 @@ public sealed class EntryServiceTests : IDisposable
         Assert.Equal("Match", Assert.Single(items).Body);
     }
 
-    /// <summary>A message filter's Priority matches the exact stored priority number.</summary>
+    /// <summary>A message filter's Priority matches the exact priority level.</summary>
     [Fact]
     public async Task GetMessagesAsync_FilterMatchesPriorityExactly()
     {
-        await service.StoreIncomingMessage(Guid.NewGuid().ToString(), "S", "High priority", [], DateTime.UtcNow, priority: 2);
-        await service.StoreIncomingMessage(Guid.NewGuid().ToString(), "S", "Low priority", [], DateTime.UtcNow, priority: 0);
+        await service.StoreIncomingMessage(Guid.NewGuid().ToString(), "S", "High priority", [], DateTime.UtcNow, priority: TestMessagePriority.Level2);
+        await service.StoreIncomingMessage(Guid.NewGuid().ToString(), "S", "Low priority", [], DateTime.UtcNow, priority: TestMessagePriority.Normal);
 
-        (List<MessageEntity> items, int total) = await service.GetMessages("root-inbox", 1, filter: new EntryFilter { Priority = 2 });
+        (List<MessageEntity> items, int total) = await service.GetMessages("root-inbox", 1, filter: new EntryFilter { Priority = TestMessagePriority.Level2 });
 
         Assert.Equal(1, total);
         Assert.Equal("High priority", format.GetBody(Assert.Single(items).Message));
@@ -385,11 +385,11 @@ public sealed class EntryServiceTests : IDisposable
     [Fact]
     public async Task GetMessagesAsync_MultipleCriteria_CombineWithAnd()
     {
-        await service.StoreIncomingMessage(Guid.NewGuid().ToString(), "S", "Match", [], DateTime.UtcNow, priority: 2, securityLevel: "RESTRICTED");
-        await service.StoreIncomingMessage(Guid.NewGuid().ToString(), "S", "WrongPriority", [], DateTime.UtcNow, priority: 0, securityLevel: "RESTRICTED");
-        await service.StoreIncomingMessage(Guid.NewGuid().ToString(), "S", "WrongLevel", [], DateTime.UtcNow, priority: 2, securityLevel: "PUBLIC");
+        await service.StoreIncomingMessage(Guid.NewGuid().ToString(), "S", "Match", [], DateTime.UtcNow, priority: TestMessagePriority.Level2, securityLevel: "RESTRICTED");
+        await service.StoreIncomingMessage(Guid.NewGuid().ToString(), "S", "WrongPriority", [], DateTime.UtcNow, priority: TestMessagePriority.Normal, securityLevel: "RESTRICTED");
+        await service.StoreIncomingMessage(Guid.NewGuid().ToString(), "S", "WrongLevel", [], DateTime.UtcNow, priority: TestMessagePriority.Level2, securityLevel: "PUBLIC");
 
-        (List<MessageEntity> items, int total) = await service.GetMessages("root-inbox", 1, filter: new EntryFilter { Priority = 2, SecurityLevel = "RESTRICTED" });
+        (List<MessageEntity> items, int total) = await service.GetMessages("root-inbox", 1, filter: new EntryFilter { Priority = TestMessagePriority.Level2, SecurityLevel = "RESTRICTED" });
 
         Assert.Equal(1, total);
         Assert.Equal("Match", format.GetBody(Assert.Single(items).Message));
@@ -401,7 +401,7 @@ public sealed class EntryServiceTests : IDisposable
     {
         DraftEntity match = await service.CreateDraft();
         match.Body = "Match";
-        match.Priority = 2;
+        match.Priority = "LEVEL2";
         match.SecurityLevel = "RESTRICTED";
         match.IsAlert = true;
         await service.SaveDraft(match);
@@ -410,7 +410,7 @@ public sealed class EntryServiceTests : IDisposable
         await service.SaveDraft(other);
 
         (List<DraftEntity> items, int total) = await service.GetDrafts("root-drafts", 1, alphabetical: false,
-            filter: new EntryFilter { Priority = 2, SecurityLevel = "RESTRICTED", AlertOnly = true });
+            filter: new EntryFilter { Priority = TestMessagePriority.Level2, SecurityLevel = "RESTRICTED", AlertOnly = true });
 
         Assert.Equal(1, total);
         Assert.Equal("Match", Assert.Single(items).Body);

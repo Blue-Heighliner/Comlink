@@ -42,6 +42,20 @@ public sealed class PeerFrameDispatcherTests
         Assert.Same(frame, Assert.Single(delivered));
     }
 
+    /// <summary>A message with no identifier is invalid and is dropped: it is not delivered and the dispatch fails.</summary>
+    [Fact]
+    public async Task Dispatch_MessageWithoutId_IsDroppedAndFails()
+    {
+        TestEngineController controller = new();
+        List<object> delivered = [];
+        using IMemoryOwner<byte> bytes = controller.FrameSerializer.Serialize(new TestFrame { FromUser = "ALICE" });
+
+        bool ok = await PeerFrameDispatcher.Dispatch(bytes.Memory, controller, logger, m => { delivered.Add(m); return Task.CompletedTask; }, null, null);
+
+        Assert.False(ok);
+        Assert.Empty(delivered);
+    }
+
     /// <summary>A heartbeat, an empty message, is acknowledged and neither delivered nor treated as a receipt.</summary>
     [Fact]
     public async Task Dispatch_Heartbeat_IsAcknowledgedAndIgnored()

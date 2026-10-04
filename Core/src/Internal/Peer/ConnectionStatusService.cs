@@ -27,11 +27,9 @@ internal sealed record PeerConnectionStatus
 }
 
 /// <summary>
-/// Exposes live connection status for <see cref="IConnectionStatusViewModel"/> — registered only
-/// for <see cref="UserRole.Client"/> (the single connection to its server) and <see cref="UserRole.Server"/>
-/// (one entry per own child client, plus one entry per other server in the cluster); <see cref="UserRole.Peer"/>
-/// registers <see cref="NullConnectionStatusService"/> instead, since peer-to-peer connections are not
-/// configured, long-term links. Implemented directly by <see cref="ClientPeerService"/>/<see cref="ServerRoutingService"/>
+/// Exposes live connection status for <see cref="IConnectionStatusViewModel"/> — reported by
+/// <see cref="UserRole.Client"/> (the single connection to its server), <see cref="UserRole.Server"/>
+/// (one entry per own child client, plus one entry per other server in the cluster) and <see cref="UserRole.Relay"/>. Implemented directly by <see cref="ClientPeerService"/>/<see cref="ServerRoutingService"/>
 /// rather than a separate tracking component, since they already own the connection state this reports on.
 /// </summary>
 internal interface IConnectionStatusService
@@ -55,24 +53,4 @@ internal interface IConnectionStatusService
     /// <param name="kind">Which table the connection is in.</param>
     /// <param name="userName">The remote user name of the connection (empty for a client's single server connection).</param>
     void Refresh(PeerConnectionKind kind, string userName);
-}
-
-/// <summary>Default <see cref="IConnectionStatusService"/> for <see cref="UserRole.Peer"/>, where no configured connections are tracked.</summary>
-internal sealed class NullConnectionStatusService : IConnectionStatusService
-{
-    /// <inheritdoc />
-    public event Action? StatusesChanged { add { } remove { } }
-
-    /// <inheritdoc />
-    public IReadOnlyList<PeerConnectionStatus> GetStatuses() => [];
-
-    /// <inheritdoc />
-    public void SetClosed(PeerConnectionKind kind, string userName, bool closed)
-    {
-    }
-
-    /// <inheritdoc />
-    public void Refresh(PeerConnectionKind kind, string userName)
-    {
-    }
 }

@@ -16,11 +16,11 @@ internal interface IEntryService
     /// <summary>Raised after an Inbox message's <see cref="MessageEntity.ReadStatus"/> transitions from <c>Received</c> to <c>Read</c>.</summary>
     event Func<MessageEntity, Task>? MessageRead;
     /// <summary>Persists a sent message to the Outbox folder, including per-user delivery status entries.</summary>
-    Task<MessageEntity> StoreSentMessage(string messageId, string body, List<AddressData> addresses, DateTime sentAt, IReadOnlyList<UserDeliveryResult> userResults, bool isAlert = false, int priority = 0, string tag = "", string securityLevel = "");
+    Task<MessageEntity> StoreSentMessage(string messageId, string body, List<AddressData> addresses, DateTime sentAt, IReadOnlyList<UserDeliveryResult> userResults, bool isAlert = false, Enum? priority = null, string tag = "", string securityLevel = "");
     /// <summary>Updates the delivery status for a specific user on the Outbox record, ignoring a status that would move it backward (for example a late "Sent" after "Confirmed"); user names match case-insensitively.</summary>
     Task<MessageEntity?> UpdateDeliveryStatus(string messageId, string userName, DestinationStatus status);
     /// <summary>Persists a received message to the Inbox folder with <see cref="MessageEntity.ReadStatus"/> set to <see cref="DestinationStatus.Received"/>, and raises <see cref="MessageInserted"/>.</summary>
-    Task<MessageEntity> StoreIncomingMessage(string messageId, string fromUser, string body, List<AddressData> addresses, DateTime sentAt, bool isAlert = false, int priority = 0, string tag = "", string securityLevel = "");
+    Task<MessageEntity> StoreIncomingMessage(string messageId, string fromUser, string body, List<AddressData> addresses, DateTime sentAt, bool isAlert = false, Enum? priority = null, string tag = "", string securityLevel = "");
     /// <summary>Returns whether the Inbox already holds a record for <paramref name="messageId"/>.</summary>
     Task<bool> IncomingMessageExists(string messageId);
     /// <summary>
@@ -144,25 +144,25 @@ internal sealed class EntryService : IEntryService
         _ => 4
     };
 
-    private object BuildMessage(string messageId, string fromUser, string body, List<AddressData> addresses, DateTime sentAt, bool isAlert, int priority, string tag, string securityLevel)
+    private object BuildMessage(string messageId, string fromUser, string body, List<AddressData> addresses, DateTime sentAt, bool isAlert, Enum? priority, string tag, string securityLevel)
     {
         object message = engineController.CreateMessage(new MessageCreateContext
         {
             SentAt = sentAt,
             Body = body,
             IsAlert = isAlert,
-            Priority = priority,
+            Priority = engineController.ResolvePriority(priority),
             Tag = tag,
             SecurityLevel = securityLevel
         });
-        engineController.SetFrameId(message, messageId);
+        engineController.SetMessageId(message, messageId);
         engineController.SetFromUser(message, fromUser);
         engineController.SetAddresses(message, addresses.Select(a => new MessageAddress { UserName = a.UserName, Type = a.Type.ParseAddressType(), Information = a.Information }).ToList());
         return message;
     }
 
     /// <summary>Persists a sent message to the Outbox folder, including per-user delivery status entries.</summary>
-    public async Task<MessageEntity> StoreSentMessage(string messageId, string body, List<AddressData> addresses, DateTime sentAt, IReadOnlyList<UserDeliveryResult> userResults, bool isAlert = false, int priority = 0, string tag = "", string securityLevel = "")
+    public async Task<MessageEntity> StoreSentMessage(string messageId, string body, List<AddressData> addresses, DateTime sentAt, IReadOnlyList<UserDeliveryResult> userResults, bool isAlert = false, Enum? priority = null, string tag = "", string securityLevel = "")
     {
         string outboxId = await folders.GetRootId(FolderType.Outbox);
         await deliveryLock.WaitAsync();
@@ -176,7 +176,7 @@ internal sealed class EntryService : IEntryService
         }
     }
 
-    private async Task<MessageEntity> InsertSentMessage(string messageId, string body, List<AddressData> addresses, DateTime sentAt, IReadOnlyList<UserDeliveryResult> userResults, bool isAlert, int priority, string tag, string securityLevel, string outboxId)
+    private async Task<MessageEntity> InsertSentMessage(string messageId, string body, List<AddressData> addresses, DateTime sentAt, IReadOnlyList<UserDeliveryResult> userResults, bool isAlert, Enum? priority, string tag, string securityLevel, string outboxId)
     {
         List<DeliveryStatus> deliveryStatuses = [];
         foreach (UserDeliveryResult result in userResults)
@@ -247,7 +247,7 @@ internal sealed class EntryService : IEntryService
     }
 
     /// <summary>Persists a received message to the Inbox folder and raises <see cref="MessageInserted"/>.</summary>
-    public async Task<MessageEntity> StoreIncomingMessage(string messageId, string fromUser, string body, List<AddressData> addresses, DateTime sentAt, bool isAlert = false, int priority = 0, string tag = "", string securityLevel = "")
+    public async Task<MessageEntity> StoreIncomingMessage(string messageId, string fromUser, string body, List<AddressData> addresses, DateTime sentAt, bool isAlert = false, Enum? priority = null, string tag = "", string securityLevel = "")
     {
         string inboxId = await folders.GetRootId(FolderType.Inbox);
         MessageEntity entity = new()
@@ -374,7 +374,7 @@ internal sealed class EntryService : IEntryService
         object message = entity.Message;
         if (filter.DateFrom is { } from && entity.ReceivedAt < from) { return false; }
         if (filter.DateTo is { } to && entity.ReceivedAt > to) { return false; }
-        if (filter.Priority is { } priority && engineController.GetPriority(message) != priority) { return false; }
+        if (filter.Priority is { } priority && !engineController.GetMessagePriority(message).Equals(priority)) { return false; }
         if (filter.AlertOnly is true && !engineController.GetIsAlert(message)) { return false; }
         if (filter.SecurityLevel is { } level && !string.Equals(engineController.GetSecurityLevel(message), level, StringComparison.OrdinalIgnoreCase)) { return false; }
         if (!string.IsNullOrWhiteSpace(filter.Author) && !Contains(engineController.GetFromUser(message), filter.Author.Trim())) { return false; }
@@ -383,7 +383,7 @@ internal sealed class EntryService : IEntryService
         string search = filter.Search;
 
         string destinations = string.Join(" ", engineController.GetAddresses(message).Select(a => a.UserName));
-        string priorityLabel = engineController.Priorities.GetLabel(engineController.GetPriority(message));
+        string priorityLabel = engineController.NameOf(engineController.GetMessagePriority(message));
         return Contains(engineController.GetBody(message), search)
             || Contains(engineController.GetFromUser(message), search)
             || Contains(destinations, search)
@@ -392,11 +392,11 @@ internal sealed class EntryService : IEntryService
             || Contains(engineController.GetSecurityLevel(message), search);
     }
 
-    private static bool MatchesDraft(DraftEntity entity, EntryFilter filter)
+    private bool MatchesDraft(DraftEntity entity, EntryFilter filter)
     {
         if (filter.DateFrom is { } from && entity.ModifiedAt < from) { return false; }
         if (filter.DateTo is { } to && entity.ModifiedAt > to) { return false; }
-        if (filter.Priority is { } priority && entity.Priority != priority) { return false; }
+        if (filter.Priority is { } priority && !engineController.PriorityOf(entity.Priority).Equals(priority)) { return false; }
         if (filter.AlertOnly is true && !entity.IsAlert) { return false; }
         if (filter.SecurityLevel is { } level && !string.Equals(entity.SecurityLevel, level, StringComparison.OrdinalIgnoreCase)) { return false; }
         if (!string.IsNullOrWhiteSpace(filter.Destination) && !entity.Addresses.Any(a => Contains(a.UserName, filter.Destination.Trim()))) { return false; }

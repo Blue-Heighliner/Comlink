@@ -24,7 +24,7 @@ internal interface IConnectionStatusViewModel
 internal sealed partial class ConnectionStatusViewModel : ObservableObject, IConnectionStatusViewModel
 {
     /// <summary>Initializes a new <see cref="ConnectionStatusViewModel"/> and subscribes to live status updates.</summary>
-    /// <param name="statusService">Source of live connection status; a no-op source in <see cref="UserRole.Peer"/> mode.</param>
+    /// <param name="statusService">Source of live connection status.</param>
     public ConnectionStatusViewModel(IConnectionStatusService statusService)
     {
         this.statusService = statusService;

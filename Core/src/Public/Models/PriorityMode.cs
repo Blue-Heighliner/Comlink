@@ -1,11 +1,11 @@
 namespace BlueHeighliner.Comlink;
 
-/// <summary>Who may assign a configured priority to a frame. See <see cref="IEngineBuilder.Priorities"/>.</summary>
+/// <summary>Whether a configured priority can be chosen by a user in the GUI. It never restricts code, which may use any configured priority. See <see cref="IEngineBuilder.Priorities{TPriority}"/>.</summary>
 public enum PriorityMode
 {
-    /// <summary>A user may choose the priority for a message they compose.</summary>
+    /// <summary>The GUI offers the priority to a user composing a message.</summary>
     User,
 
-    /// <summary>Only the system assigns the priority, through a handler, so it is never offered to a user.</summary>
+    /// <summary>The GUI never offers the priority to a user; it is for code to use, such as the priority a retrieval or receipt handler names.</summary>
     System
 }

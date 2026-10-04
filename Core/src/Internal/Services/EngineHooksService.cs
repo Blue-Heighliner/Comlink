@@ -71,7 +71,7 @@ internal sealed class EngineHooksService : IEngineHooksService
     private Task OnMessageDelivered(object payload)
     {
         INetworkFrameContext context = BuildFrameContext(payload);
-        Run(handler => handler.OnReceived(context), "OnReceived", engineController.GetFrameId(payload));
+        Run(handler => handler.OnReceived(context), "OnReceived", engineController.GetIdentifier(payload));
         return Task.CompletedTask;
     }
 

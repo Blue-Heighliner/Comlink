@@ -12,6 +12,7 @@ internal interface IPriorityLock
 }
 
 /// <inheritdoc cref="IPriorityLock" />
+[ConstructedManually]
 internal sealed class PriorityLock : IPriorityLock
 {
     private readonly Lock gate = new();
@@ -34,7 +35,12 @@ internal sealed class PriorityLock : IPriorityLock
             waiters.Enqueue(waiter, (-(long)priority, sequence++));
         }
 
-        if (cancellation.CanBeCanceled) { cancellation.Register(() => waiter.TrySetCanceled(cancellation)); }
+        if (cancellation.CanBeCanceled)
+        {
+            CancellationTokenRegistration registration = cancellation.Register(() => waiter.TrySetCanceled(cancellation));
+            _ = waiter.Task.ContinueWith(_ => registration.Dispose(), TaskScheduler.Default);
+        }
+
         return waiter.Task;
     }
 

@@ -6,8 +6,6 @@ internal sealed class PacketBuilder<TPacket> : IPacketBuilder<TPacket> where TPa
     private ServiceRegistration<IPacketSerializer> serializer = new(_ => new ProtobufSerializer(typeof(TPacket)));
     private ServiceRegistration<IFramePacketAdapter>? framePacket;
     private ServiceRegistration<IHeartbeatFrameHandler>? heartbeat;
-    private int size = 16 * 1024;
-    private int window = 1;
 
     /// <summary>The initial packet processor, if stated.</summary>
     public ServiceRegistration<IInitialProcessor>? Initial { get; private set; }
@@ -16,20 +14,6 @@ internal sealed class PacketBuilder<TPacket> : IPacketBuilder<TPacket> where TPa
     public IPacketBuilder<TPacket> Frame<THandler>() where THandler : IFramePacketHandler<TPacket>
     {
         framePacket = ServiceRegistration<IFramePacketAdapter>.Of(typeof(THandler), handler => new FramePacketAdapter<TPacket>((IFramePacketHandler<TPacket>)handler));
-        return this;
-    }
-
-    /// <inheritdoc />
-    public IPacketBuilder<TPacket> Size(int bytes)
-    {
-        size = bytes;
-        return this;
-    }
-
-    /// <inheritdoc />
-    public IPacketBuilder<TPacket> Window(int packets)
-    {
-        window = packets;
         return this;
     }
 
@@ -64,8 +48,6 @@ internal sealed class PacketBuilder<TPacket> : IPacketBuilder<TPacket> where TPa
         {
             Type = typeof(TPacket),
             Serializer = serializer,
-            Size = size,
-            Window = window,
             FramePacket = framePacket,
             Heartbeat = heartbeat
         };

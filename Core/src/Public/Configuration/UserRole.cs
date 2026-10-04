@@ -6,8 +6,6 @@ namespace BlueHeighliner.Comlink;
 /// </summary>
 public enum UserRole
 {
-    /// <summary>Direct peer-to-peer networking: every user connects straight to every other user it addresses. The default.</summary>
-    Peer,
     /// <summary>Hierarchical networking: all traffic flows through one long-term connection to a server, its <see cref="UserInfo.Parent"/>.</summary>
     Client,
     /// <summary>Hierarchical networking: routes messages between its own children (each server user's <see cref="UserInfo.Children"/>) and other servers, over the connections its links form: the children and other servers connect to it, or it connects to them, as each link's mode says.</summary>

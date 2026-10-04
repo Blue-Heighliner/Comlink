@@ -6,7 +6,7 @@ public sealed class RepositoryTests : IDisposable
     private static MessageEntity MakeMessage(string messageId, string folderId, bool isOutbound)
     {
         object message = messageFormat.CreateFrame();
-        messageFormat.SetFrameId(message, messageId);
+        ((TestFrame)message).MessageId = messageId;
         return new MessageEntity { MessageId = messageId, Message = message, FolderId = folderId, IsOutbound = isOutbound };
     }
 
@@ -470,5 +470,19 @@ public sealed class RepositoryTests : IDisposable
 
         Assert.Equal(["ALICE"], (await repo.Get("Alerts"))!.Targets);
         Assert.Equal(["BOB"], (await repo.Get("Backups"))!.Targets);
+    }
+
+    /// <summary>The last identifier is null until one is saved, then the latest one saved is returned, also by a new repository over the same database.</summary>
+    [Fact]
+    public async Task LastId_Save_ThenGet_ReturnsTheLatest()
+    {
+        LastIdRepository repo = new(ctx);
+        Assert.Null(await repo.Get());
+
+        await repo.Save("A1");
+        await repo.Save("A2");
+
+        Assert.Equal("A2", await repo.Get());
+        Assert.Equal("A2", await new LastIdRepository(ctx).Get());
     }
 }

@@ -244,7 +244,7 @@ public sealed class ControlProviderTests
         Mock<IEngineController> fallback = new();
         fallback.Setup(f => f.TagsEnabled).Returns(false);
         fallback.Setup(f => f.TagLabel).Returns("Category");
-        IReadOnlyList<MessagePriorityOption> priorities = [new MessagePriorityOption { Name = "Low", Value = 0 }];
+        IReadOnlyList<MessagePriorityOption> priorities = [new MessagePriorityOption { Name = "Low", Value = 0, Key = TestMessagePriority.Low }];
         fallback.Setup(f => f.Priorities).Returns(priorities);
         IReadOnlyList<TagPriorityBlock> blocks = [new TagPriorityBlock { Tag = "SPAM" }];
         fallback.Setup(f => f.BlockedCombinations).Returns(blocks);
@@ -274,10 +274,10 @@ public sealed class ControlProviderTests
 
     /// <summary>A rule with only Tag set blocks that tag regardless of priority.</summary>
     [Theory]
-    [InlineData(0)]
-    [InlineData(1)]
-    [InlineData(99)]
-    public void TagPriorityBlockExtensions_IsBlocked_TagWithNullPriority_BlocksAnyPriority(int priority)
+    [InlineData(TestMessagePriority.Normal)]
+    [InlineData(TestMessagePriority.Level1)]
+    [InlineData(TestMessagePriority.High)]
+    public void TagPriorityBlockExtensions_IsBlocked_TagWithNullPriority_BlocksAnyPriority(TestMessagePriority priority)
     {
         IReadOnlyList<TagPriorityBlock> blocks = [new TagPriorityBlock { Tag = "SPAM", Priority = null }];
         Assert.True(blocks.IsBlocked("SPAM", priority));
@@ -290,19 +290,19 @@ public sealed class ControlProviderTests
     [InlineData(null)]
     public void TagPriorityBlockExtensions_IsBlocked_PriorityWithNullTag_BlocksAnyTag(string? tag)
     {
-        IReadOnlyList<TagPriorityBlock> blocks = [new TagPriorityBlock { Tag = null, Priority = 2 }];
-        Assert.True(blocks.IsBlocked(tag, 2));
+        IReadOnlyList<TagPriorityBlock> blocks = [new TagPriorityBlock { Tag = null, Priority = TestMessagePriority.Level2 }];
+        Assert.True(blocks.IsBlocked(tag, TestMessagePriority.Level2));
     }
 
     /// <summary>A rule with both fields set only blocks that exact tag/priority pair.</summary>
     [Fact]
     public void TagPriorityBlockExtensions_IsBlocked_SpecificPair_OnlyBlocksExactMatch()
     {
-        IReadOnlyList<TagPriorityBlock> blocks = [new TagPriorityBlock { Tag = "URGENT", Priority = 2 }];
+        IReadOnlyList<TagPriorityBlock> blocks = [new TagPriorityBlock { Tag = "URGENT", Priority = TestMessagePriority.Level2 }];
 
-        Assert.True(blocks.IsBlocked("URGENT", 2));
-        Assert.False(blocks.IsBlocked("URGENT", 1));
-        Assert.False(blocks.IsBlocked("OTHER", 2));
+        Assert.True(blocks.IsBlocked("URGENT", TestMessagePriority.Level2));
+        Assert.False(blocks.IsBlocked("URGENT", TestMessagePriority.Level1));
+        Assert.False(blocks.IsBlocked("OTHER", TestMessagePriority.Level2));
     }
 
     /// <summary>Tag matching is case-insensitive.</summary>
@@ -310,7 +310,7 @@ public sealed class ControlProviderTests
     public void TagPriorityBlockExtensions_IsBlocked_TagMatchIsCaseInsensitive()
     {
         IReadOnlyList<TagPriorityBlock> blocks = [new TagPriorityBlock { Tag = "SPAM", Priority = null }];
-        Assert.True(blocks.IsBlocked("spam", 0));
+        Assert.True(blocks.IsBlocked("spam", TestMessagePriority.Normal));
     }
 
     /// <summary>No rule matches → not blocked.</summary>
@@ -318,29 +318,7 @@ public sealed class ControlProviderTests
     public void TagPriorityBlockExtensions_IsBlocked_NoMatchingRule_ReturnsFalse()
     {
         IReadOnlyList<TagPriorityBlock> blocks = [new TagPriorityBlock { Tag = "SPAM", Priority = null }];
-        Assert.False(blocks.IsBlocked("OK", 0));
-    }
-
-    /// <summary>GetLabel returns the matching option's Name.</summary>
-    [Fact]
-    public void MessagePriorityOptionExtensions_GetLabel_ReturnsMatchingName()
-    {
-        IReadOnlyList<MessagePriorityOption> priorities =
-        [
-            new MessagePriorityOption { Name = "Low", Value = 0 },
-            new MessagePriorityOption { Name = "High", Value = 2 }
-        ];
-
-        Assert.Equal("High", priorities.GetLabel(2));
-    }
-
-    /// <summary>GetLabel falls back to the plain numeric value when no option matches.</summary>
-    [Fact]
-    public void MessagePriorityOptionExtensions_GetLabel_NoMatch_FallsBackToNumber()
-    {
-        IReadOnlyList<MessagePriorityOption> priorities = [new MessagePriorityOption { Name = "Normal", Value = 0 }];
-
-        Assert.Equal("99", priorities.GetLabel(99));
+        Assert.False(blocks.IsBlocked("OK", TestMessagePriority.Normal));
     }
 
     /// <summary>The default implementation returns hardcoded settings.</summary>
@@ -582,10 +560,10 @@ public sealed class ControlProviderTests
 
     /// <summary>The default implementation is always Peer with no outgoing points or server users configured.</summary>
     [Fact]
-    public void EngineController_PeerWithNothingConfigured()
+    public void EngineController_ClientWithNothingConfigured()
     {
         TestEngineController controller = new();
-        Assert.Equal(UserRole.Peer, controller.Role);
+        Assert.Equal(UserRole.Client, controller.Role);
         Assert.Empty(controller.OutgoingPoints);
         Assert.Empty(controller.Servers);
     }
@@ -689,8 +667,8 @@ public sealed class ControlProviderTests
         object message = controller.CreateFrame();
         Assert.IsType<TestFrame>(message);
 
-        controller.SetFrameId(message, "M1");
-        Assert.Equal("M1", controller.GetFrameId(message));
+        ((TestFrame)message).MessageId = "M1";
+        Assert.Equal("M1", controller.GetMessageId(message));
         controller.SetFromUser(message, "ALICE");
         Assert.Equal("ALICE", controller.GetFromUser(message));
         ((TestFrame)message).Body = "Body text";
@@ -707,7 +685,7 @@ public sealed class ControlProviderTests
         Assert.Equal("M0", controller.GetReadReceiptMessageId(message));
         ((TestFrame)message).IsAlert = true;
         Assert.True(controller.GetIsAlert(message));
-        ((TestFrame)message).Priority = 2;
+        ((TestFrame)message).Priority = "LEVEL2";
         Assert.Equal(2, controller.GetPriority(message));
         ((TestFrame)message).Tag = "URGENT";
         Assert.Equal("URGENT", controller.GetTag(message));

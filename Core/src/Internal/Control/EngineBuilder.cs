@@ -11,7 +11,7 @@ internal sealed class EngineBuilder : IEngineBuilder, IAsyncDisposable
     private readonly List<SecurityLevel> securityLevels = [];
     private readonly List<string> users = [];
     private readonly List<MessagePriorityOption> priorities = [];
-    private readonly List<(string? Tag, Enum? Priority)> blocked = [];
+    private readonly List<TagPriorityBlock> blocked = [];
     private readonly Dictionary<AddressType, string> addressTypeLabels = [];
     private readonly List<IExternalSystem> externalSystems = [];
     private readonly List<ServiceRegistration<IExportFormat>> exportFormats = [];
@@ -49,6 +49,10 @@ internal sealed class EngineBuilder : IEngineBuilder, IAsyncDisposable
     public TimeSpan? AlarmDurationValue { get; private set; }
     /// <summary>Whether quick confirmation is on, if stated.</summary>
     public bool? QuickConfirmationValue { get; private set; }
+    /// <summary>The largest serialized packet, if stated.</summary>
+    public int? PacketSizeValue { get; private set; }
+    /// <summary>How many packets may be in flight at once, if stated.</summary>
+    public int? PacketWindowValue { get; private set; }
     /// <summary>Whether composing alerts is on, if stated.</summary>
     public bool? ComposeAlertsValue { get; private set; }
     /// <summary>The selectable priorities, empty when none were stated.</summary>
@@ -57,8 +61,8 @@ internal sealed class EngineBuilder : IEngineBuilder, IAsyncDisposable
     public bool? TagsEnabledValue { get; private set; }
     /// <summary>The tag label, if stated.</summary>
     public string? TagLabelValue { get; private set; }
-    /// <summary>The blocked tag and priority name combinations.</summary>
-    public IReadOnlyList<(string? Tag, Enum? Priority)> BlockedTags => blocked;
+    /// <summary>The blocked tag and priority combinations.</summary>
+    public IReadOnlyList<TagPriorityBlock> BlockedCombinations => blocked;
     /// <summary>The overridden address type display labels, by address type.</summary>
     public IReadOnlyDictionary<AddressType, string> AddressTypeLabels => addressTypeLabels;
     /// <summary>Whether printing received messages starts on, if stated.</summary>
@@ -220,14 +224,12 @@ internal sealed class EngineBuilder : IEngineBuilder, IAsyncDisposable
     }
 
     /// <inheritdoc />
-    public IEngineBuilder SecurityLevels<TLevel>(params (TLevel Level, string? Label, string? Color)[] options) where TLevel : struct, Enum
+    public IEngineBuilder SecurityLevels<TLevel>(Action<ISecurityLevelsBuilder<TLevel>>? configure = null) where TLevel : struct, Enum
     {
+        SecurityLevelBuilder<TLevel> builder = new();
+        configure?.Invoke(builder);
         securityLevels.Clear();
-        securityLevels.AddRange(Enum.GetValues<TLevel>().Select(level =>
-        {
-            (TLevel Level, string? Label, string? Color) option = options.FirstOrDefault(o => EqualityComparer<TLevel>.Default.Equals(o.Level, level));
-            return new SecurityLevel { Name = option.Label ?? level.ToString().ToUpperInvariant(), Color = option.Color ?? "#5A5A5A" };
-        }));
+        securityLevels.AddRange(builder.Build());
         return this;
     }
 
@@ -253,6 +255,20 @@ internal sealed class EngineBuilder : IEngineBuilder, IAsyncDisposable
     }
 
     /// <inheritdoc />
+    public IEngineBuilder PacketSize(int bytes)
+    {
+        PacketSizeValue = bytes;
+        return this;
+    }
+
+    /// <inheritdoc />
+    public IEngineBuilder PacketWindow(int packets)
+    {
+        PacketWindowValue = packets;
+        return this;
+    }
+
+    /// <inheritdoc />
     public IEngineBuilder ComposeAlerts(bool enabled = true)
     {
         ComposeAlertsValue = enabled;
@@ -260,14 +276,14 @@ internal sealed class EngineBuilder : IEngineBuilder, IAsyncDisposable
     }
 
     /// <inheritdoc />
-    public IEngineBuilder Priorities<TPriority>(params (TPriority Priority, string? Label, PriorityMode? Mode)[] options) where TPriority : struct, Enum
+    public IEngineBuilder Priorities<TPriority>(Action<IPriorityBuilder<TPriority>>? configure = null) where TPriority : struct, Enum
     {
+        PriorityBuilder<TPriority> builder = new();
+        configure?.Invoke(builder);
         priorities.Clear();
-        priorities.AddRange(Enum.GetValues<TPriority>().Select((priority, index) =>
-        {
-            (TPriority Priority, string? Label, PriorityMode? Mode) option = options.FirstOrDefault(o => EqualityComparer<TPriority>.Default.Equals(o.Priority, priority));
-            return new MessagePriorityOption { Name = option.Label ?? priority.ToString().ToUpperInvariant(), Value = index, Mode = option.Mode ?? PriorityMode.User, Key = priority };
-        }));
+        priorities.AddRange(builder.Build());
+        blocked.Clear();
+        blocked.AddRange(builder.Blocks);
         return this;
     }
 
@@ -276,13 +292,6 @@ internal sealed class EngineBuilder : IEngineBuilder, IAsyncDisposable
     {
         TagsEnabledValue = enabled;
         if (label is not null) { TagLabelValue = label; }
-        return this;
-    }
-
-    /// <inheritdoc />
-    public IEngineBuilder BlockTag(string? tag, Enum? priority)
-    {
-        blocked.Add((tag, priority));
         return this;
     }
 

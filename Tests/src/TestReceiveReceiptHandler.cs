@@ -10,7 +10,16 @@ public sealed class TestReceiveReceiptHandler : IReceiveReceiptHandler<TestFrame
     public bool IsValid(TestFrame frame) => !string.IsNullOrEmpty(frame.ReceiveReceiptMessageId);
 
     /// <inheritdoc />
-    public TestFrame Create(ReceiptCreateContext context) => new() { IsHidden = true, ReceiveReceiptMessageId = context.MessageId };
+    public TestFrame Create(ReceiptCreateContext context) => new() { IsHidden = true, ReceiveReceiptMessageId = context.MessageId, Addresses = [new TestAddressEntry { UserName = context.To }] };
+
+    /// <inheritdoc />
+    public string GetDestination(TestFrame frame) => frame.Addresses[0].UserName;
+
+    /// <inheritdoc />
+    public string GetSender(TestFrame frame) => frame.FromUser;
+
+    /// <inheritdoc />
+    public void SetSender(TestFrame frame, string sender) => frame.FromUser = sender;
 
     /// <inheritdoc />
     public string GetMessageId(TestFrame frame) => frame.ReceiveReceiptMessageId;

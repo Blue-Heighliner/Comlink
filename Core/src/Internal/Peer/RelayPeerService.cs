@@ -295,11 +295,17 @@ internal sealed class RelayPeerService : IPeerService, IConnectionStatusService,
     {
         object? frame = TryDeserialize(data, packet);
         PeerConnection? connection = serverConnection;
-        if (frame is null || engineController.IsHeartbeat(frame) || engineController.GetAddresses(frame).Count == 0) { return; }
+        if (frame is null || engineController.IsHeartbeat(frame) || engineController.Route(frame).Count == 0) { return; }
+
+        if (engineController.IsMessageWithoutId(frame))
+        {
+            logger.LogError("A message from {FromUser} has no identifier and was dropped", engineController.GetFromUser(frame));
+            return;
+        }
 
         if (transport is null || connection is null || isServerClosed)
         {
-            logger.LogWarning("Cannot forward {MessageId} from {FromUser}: the server is unreachable", engineController.GetFrameId(frame), engineController.GetFromUser(frame));
+            logger.LogWarning("Cannot forward {MessageId} from {FromUser}: the server is unreachable", engineController.GetIdentifier(frame), engineController.GetFromUser(frame));
             return;
         }
 
@@ -312,7 +318,13 @@ internal sealed class RelayPeerService : IPeerService, IConnectionStatusService,
         object? frame = TryDeserialize(data, packet);
         if (frame is null || engineController.IsHeartbeat(frame) || transport is null) { return; }
 
-        HashSet<string> addressed = new(engineController.GetAddresses(frame).Where(address => address.Type != AddressType.External).Select(address => address.UserName), StringComparer.OrdinalIgnoreCase);
+        if (engineController.IsMessageWithoutId(frame))
+        {
+            logger.LogError("A message from the server for {Users} has no identifier and was dropped", string.Join(", ", engineController.Route(frame)));
+            return;
+        }
+
+        HashSet<string> addressed = new(engineController.Route(frame), StringComparer.OrdinalIgnoreCase);
         int priority = engineController.GetPriority(frame);
         IEnumerable<Task> sends = GetChildNames()
             .Where(child => addressed.Contains(child) && !closedChildren.ContainsKey(child))

@@ -14,12 +14,22 @@ public sealed class RetrievalHandler : IRetrievalHandler<Frame>
         => new()
         {
             IsRetrieval = true,
+            Recipients = [new Recipient { User = context.Server }],
             RetrievalFrom = context.From,
             RetrievalTo = context.To,
             RetrievalAuthors = [.. context.Authors],
             RetrievalDestinations = [.. context.Destinations],
             RetrievalIds = [.. context.Ids]
         };
+
+    /// <inheritdoc />
+    public string GetDestination(Frame frame) => frame.Recipients[0].User;
+
+    /// <inheritdoc />
+    public string GetSender(Frame frame) => frame.Sender;
+
+    /// <inheritdoc />
+    public void SetSender(Frame frame, string sender) => frame.Sender = sender;
 
     /// <inheritdoc />
     public DateTime? GetFrom(Frame frame) => frame.RetrievalFrom;

@@ -53,9 +53,9 @@ public sealed class PrintManagerViewModelTests
     private static MessageEntity MakeMessage(string messageId, string body, int priority)
     {
         object message = format.CreateFrame();
-        format.SetFrameId(message, messageId);
+        ((TestFrame)message).MessageId = messageId;
         ((TestFrame)message).Body = body;
-        ((TestFrame)message).Priority = priority;
+        ((TestFrame)message).Priority = priority == 0 ? "NORMAL" : $"LEVEL{priority}";
         return new MessageEntity { MessageId = messageId, Message = message };
     }
 

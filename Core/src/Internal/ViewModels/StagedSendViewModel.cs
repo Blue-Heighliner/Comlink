@@ -27,7 +27,7 @@ internal sealed record StagedSendEntry
     /// <summary>Whether this message will be sent as an alert.</summary>
     public bool IsAlert { get; init; }
     /// <summary>Priority number this message will be sent at.</summary>
-    public int Priority { get; init; }
+    public Enum? Priority { get; init; }
     /// <summary>Tag identifying the type of this message.</summary>
     public string Tag { get; init; } = string.Empty;
     /// <summary>Security level name this message will be sent at.</summary>

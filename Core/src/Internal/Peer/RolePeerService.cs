@@ -16,7 +16,7 @@ internal interface IRolePeerService : IPeerService
 /// <summary>
 /// The <see cref="IPeerService"/> the rest of the engine depends on. Which implementation does the work is decided by
 /// <see cref="IEngineController.Role"/>, which comes from the installed user's <see cref="UserInfo"/> and so is not known
-/// until a user is installed; this therefore creates the <see cref="PeerService"/>, <see cref="ClientPeerService"/> or
+/// until a user is installed; this therefore creates the <see cref="ClientPeerService"/>, <see cref="RelayPeerService"/> or
 /// <see cref="ServerRoutingService"/> when <see cref="Start"/> runs, and forwards its events. Until then no user is
 /// connected and nothing can be sent.
 /// </summary>
@@ -72,6 +72,10 @@ internal sealed class RolePeerService(IServiceProvider services, IEngineControll
             StatusesChanged?.Invoke();
             try { await created.Start(run.Token); }
             catch (OperationCanceledException) when (run.IsCancellationRequested) { }
+            catch (InvalidOperationException ex)
+            {
+                services.GetService<ILoggerFactory>()?.CreateLogger("ACTIVITY").LogError("Networking could not start: {Message}", ex.Message);
+            }
 
             if (created is IAsyncDisposable disposable) { await disposable.DisposeAsync(); }
             lock (innerLock)
@@ -127,7 +131,7 @@ internal sealed class RolePeerService(IServiceProvider services, IEngineControll
             UserRole.Client => ActivatorUtilities.CreateInstance<ClientPeerService>(services),
             UserRole.Server => ActivatorUtilities.CreateInstance<ServerRoutingService>(services),
             UserRole.Relay => ActivatorUtilities.CreateInstance<RelayPeerService>(services),
-            _ => ActivatorUtilities.CreateInstance<PeerService>(services)
+            _ => ActivatorUtilities.CreateInstance<ClientPeerService>(services)
         };
         created.FrameDelivered += payload => Raise(FrameDelivered, handler => handler(payload));
         created.ReceiveReceiptReceived += (messageId, userName) => Raise(ReceiveReceiptReceived, handler => handler(messageId, userName));

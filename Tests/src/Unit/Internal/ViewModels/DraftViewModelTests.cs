@@ -13,9 +13,9 @@ public sealed class DraftViewModelTests
         mock.Setup(a => a.AlertLabel).Returns(alertText);
         mock.Setup(a => a.ComposeAlertsEnabled).Returns(composeAlertsEnabled);
         mock.Setup(p => p.Priorities).Returns([
-            new MessagePriorityOption { Name = "ROUTINE", Value = 0 },
-            new MessagePriorityOption { Name = "FLASH", Value = 3 },
-            new MessagePriorityOption { Name = "RECEIPT", Value = 9, Mode = PriorityMode.System }
+            new MessagePriorityOption { Name = "ROUTINE", Value = 0, Key = TestMessagePriority.Routine },
+            new MessagePriorityOption { Name = "FLASH", Value = 3, Key = TestMessagePriority.Flash },
+            new MessagePriorityOption { Name = "RECEIPT", Value = 9, Mode = PriorityMode.System, Key = TestMessagePriority.Receipt }
         ]);
         mock.Setup(t => t.TagsEnabled).Returns(tagsEnabled);
         mock.Setup(t => t.TagLabel).Returns(tagLabel);
@@ -128,7 +128,7 @@ public sealed class DraftViewModelTests
     [Fact]
     public void Constructor_SelectedPriorityMatchesEntityPriority()
     {
-        DraftEntity entity = new() { Priority = 3 };
+        DraftEntity entity = new() { Priority = "FLASH" };
         DraftViewModel vm = Build(out _, out _, entity: entity);
         Assert.Equal("FLASH", vm.SelectedPriority.Name);
         Assert.Equal(3, vm.SelectedPriority.Value);
@@ -138,7 +138,7 @@ public sealed class DraftViewModelTests
     [Fact]
     public void Constructor_SelectedPriorityFallsBackToFirstWhenNoMatch()
     {
-        DraftEntity entity = new() { Priority = 99 };
+        DraftEntity entity = new() { Priority = "LEVEL99" };
         DraftViewModel vm = Build(out _, out _, entity: entity);
         Assert.Equal("ROUTINE", vm.SelectedPriority.Name);
     }
@@ -174,8 +174,8 @@ public sealed class DraftViewModelTests
     [Fact]
     public void Constructor_AvailablePrioritiesExcludesPriorityBlockedForStoredTag()
     {
-        DraftEntity entity = new() { Tag = "URGENT", Priority = 3 };
-        IReadOnlyList<TagPriorityBlock> blocks = [new TagPriorityBlock { Tag = "URGENT", Priority = 3 }];
+        DraftEntity entity = new() { Tag = "URGENT", Priority = "FLASH" };
+        IReadOnlyList<TagPriorityBlock> blocks = [new TagPriorityBlock { Tag = "URGENT", Priority = TestMessagePriority.Flash }];
         DraftViewModel vm = Build(out _, out _, entity: entity, blockedCombinations: blocks);
 
         Assert.DoesNotContain(vm.AvailablePriorities, p => p.Name == "FLASH");
@@ -219,7 +219,7 @@ public sealed class DraftViewModelTests
     [Fact]
     public void Tag_SetToValueBlockingAnotherPriority_RemovesItFromAvailablePriorities()
     {
-        IReadOnlyList<TagPriorityBlock> blocks = [new TagPriorityBlock { Tag = "URGENT", Priority = 3 }];
+        IReadOnlyList<TagPriorityBlock> blocks = [new TagPriorityBlock { Tag = "URGENT", Priority = TestMessagePriority.Flash }];
         DraftViewModel vm = Build(out _, out _, blockedCombinations: blocks);
         Assert.Contains(vm.AvailablePriorities, p => p.Name == "FLASH");
 
@@ -468,7 +468,7 @@ public sealed class DraftViewModelTests
 
         await vm.SaveCommand.ExecuteAsync(null);
 
-        entryMock.Verify(e => e.SaveDraft(It.Is<DraftEntity>(d => d.Priority == 3)), Times.Once);
+        entryMock.Verify(e => e.SaveDraft(It.Is<DraftEntity>(d => d.Priority == "FLASH")), Times.Once);
     }
 
     /// <summary>SaveCommand persists the current Tag value onto the draft entity.</summary>
@@ -494,7 +494,7 @@ public sealed class DraftViewModelTests
         await vm.SendCommand.ExecuteAsync(null);
 
         Assert.Equal("Add at least one recipient", vm.StatusMessage);
-        connMock.Verify(c => c.SendMessage(It.IsAny<string>(), It.IsAny<List<AddressRequest>>(), It.IsAny<bool>(), It.IsAny<int>(), It.IsAny<string>(), It.IsAny<string>(), It.IsAny<CancellationToken>()), Times.Never);
+        connMock.Verify(c => c.SendMessage(It.IsAny<string>(), It.IsAny<List<AddressRequest>>(), It.IsAny<bool>(), It.IsAny<Enum?>(), It.IsAny<string>(), It.IsAny<string>(), It.IsAny<CancellationToken>()), Times.Never);
     }
 
     /// <summary>SendCommand reports that no user is installed when the send is refused for that reason, rather than failing on a missing result.</summary>
@@ -503,14 +503,14 @@ public sealed class DraftViewModelTests
     {
         DraftEntity entity = new() { Body = "World", Addresses = [new AddressData { UserName = "ALPHA", Type = "To" }], FolderId = "root-drafts" };
         DraftViewModel vm = Build(out Mock<IEntryService> entryMock, out Mock<IServiceConnection> connMock, entity: entity);
-        connMock.Setup(c => c.SendMessage(It.IsAny<string>(), It.IsAny<List<AddressRequest>>(), It.IsAny<bool>(), It.IsAny<int>(), It.IsAny<string>(), It.IsAny<string>(), It.IsAny<CancellationToken>()))
+        connMock.Setup(c => c.SendMessage(It.IsAny<string>(), It.IsAny<List<AddressRequest>>(), It.IsAny<bool>(), It.IsAny<Enum?>(), It.IsAny<string>(), It.IsAny<string>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync((SendMessageResult?)null);
 
         await vm.SendCommand.ExecuteAsync(null);
 
         Assert.Equal("Cannot send until a user is installed", vm.StatusMessage);
         Assert.False(vm.IsSent);
-        entryMock.Verify(e => e.StoreSentMessage(It.IsAny<string>(), It.IsAny<string>(), It.IsAny<List<AddressData>>(), It.IsAny<DateTime>(), It.IsAny<IReadOnlyList<UserDeliveryResult>>(), It.IsAny<bool>(), It.IsAny<int>(), It.IsAny<string>()), Times.Never);
+        entryMock.Verify(e => e.StoreSentMessage(It.IsAny<string>(), It.IsAny<string>(), It.IsAny<List<AddressData>>(), It.IsAny<DateTime>(), It.IsAny<IReadOnlyList<UserDeliveryResult>>(), It.IsAny<bool>(), It.IsAny<Enum?>(), It.IsAny<string>()), Times.Never);
     }
 
     /// <summary>SendCommand with addresses and successful send sets IsSent and StatusMessage.</summary>
@@ -531,14 +531,14 @@ public sealed class DraftViewModelTests
             UserResults = [new UserDeliveryResult { UserName = "ALPHA", Success = true, AddressedVia = [] }]
         };
         connMock.Setup(c => c.SendMessage(It.IsAny<string>(),
-                It.IsAny<List<AddressRequest>>(), It.IsAny<bool>(), It.IsAny<int>(), It.IsAny<string>(), It.IsAny<string>(), It.IsAny<CancellationToken>()))
+                It.IsAny<List<AddressRequest>>(), It.IsAny<bool>(), It.IsAny<Enum?>(), It.IsAny<string>(), It.IsAny<string>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync(sendResult);
 
         MessageEntity sentMessage = new() { MessageId = "MSG-001" };
         entryMock.Setup(e => e.SaveDraft(It.IsAny<DraftEntity>())).Returns(Task.CompletedTask);
         entryMock.Setup(e => e.StoreSentMessage(It.IsAny<string>(), It.IsAny<string>(),
                 It.IsAny<List<AddressData>>(), It.IsAny<DateTime>(),
-                It.IsAny<IReadOnlyList<UserDeliveryResult>>(), It.IsAny<bool>(), It.IsAny<int>(), It.IsAny<string>()))
+                It.IsAny<IReadOnlyList<UserDeliveryResult>>(), It.IsAny<bool>(), It.IsAny<Enum?>(), It.IsAny<string>()))
             .ReturnsAsync(sentMessage);
 
         await vm.SendCommand.ExecuteAsync(null);
@@ -567,23 +567,23 @@ public sealed class DraftViewModelTests
             UserResults = [new UserDeliveryResult { UserName = "ALPHA", Success = true, AddressedVia = [] }]
         };
         connMock.Setup(c => c.SendMessage(It.IsAny<string>(),
-                It.IsAny<List<AddressRequest>>(), It.IsAny<bool>(), 3, It.IsAny<string>(), It.IsAny<string>(), It.IsAny<CancellationToken>()))
+                It.IsAny<List<AddressRequest>>(), It.IsAny<bool>(), TestMessagePriority.Flash, It.IsAny<string>(), It.IsAny<string>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync(sendResult);
 
         MessageEntity sentMessage = new() { MessageId = "MSG-001" };
         entryMock.Setup(e => e.SaveDraft(It.IsAny<DraftEntity>())).Returns(Task.CompletedTask);
         entryMock.Setup(e => e.StoreSentMessage(It.IsAny<string>(), It.IsAny<string>(),
                 It.IsAny<List<AddressData>>(), It.IsAny<DateTime>(),
-                It.IsAny<IReadOnlyList<UserDeliveryResult>>(), It.IsAny<bool>(), 3, It.IsAny<string>()))
+                It.IsAny<IReadOnlyList<UserDeliveryResult>>(), It.IsAny<bool>(), TestMessagePriority.Flash, It.IsAny<string>()))
             .ReturnsAsync(sentMessage);
 
         await vm.SendCommand.ExecuteAsync(null);
 
         connMock.Verify(c => c.SendMessage(It.IsAny<string>(),
-            It.IsAny<List<AddressRequest>>(), It.IsAny<bool>(), 3, It.IsAny<string>(), It.IsAny<string>(), It.IsAny<CancellationToken>()), Times.Once);
+            It.IsAny<List<AddressRequest>>(), It.IsAny<bool>(), TestMessagePriority.Flash, It.IsAny<string>(), It.IsAny<string>(), It.IsAny<CancellationToken>()), Times.Once);
         entryMock.Verify(e => e.StoreSentMessage(It.IsAny<string>(), It.IsAny<string>(),
             It.IsAny<List<AddressData>>(), It.IsAny<DateTime>(),
-            It.IsAny<IReadOnlyList<UserDeliveryResult>>(), It.IsAny<bool>(), 3, It.IsAny<string>()), Times.Once);
+            It.IsAny<IReadOnlyList<UserDeliveryResult>>(), It.IsAny<bool>(), TestMessagePriority.Flash, It.IsAny<string>()), Times.Once);
         Assert.True(vm.IsSent);
     }
 
@@ -606,23 +606,23 @@ public sealed class DraftViewModelTests
             UserResults = [new UserDeliveryResult { UserName = "ALPHA", Success = true, AddressedVia = [] }]
         };
         connMock.Setup(c => c.SendMessage(It.IsAny<string>(),
-                It.IsAny<List<AddressRequest>>(), It.IsAny<bool>(), It.IsAny<int>(), "URGENT", It.IsAny<string>(), It.IsAny<CancellationToken>()))
+                It.IsAny<List<AddressRequest>>(), It.IsAny<bool>(), It.IsAny<Enum?>(), "URGENT", It.IsAny<string>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync(sendResult);
 
         MessageEntity sentMessage = new() { MessageId = "MSG-001" };
         entryMock.Setup(e => e.SaveDraft(It.IsAny<DraftEntity>())).Returns(Task.CompletedTask);
         entryMock.Setup(e => e.StoreSentMessage(It.IsAny<string>(), It.IsAny<string>(),
                 It.IsAny<List<AddressData>>(), It.IsAny<DateTime>(),
-                It.IsAny<IReadOnlyList<UserDeliveryResult>>(), It.IsAny<bool>(), It.IsAny<int>(), "URGENT"))
+                It.IsAny<IReadOnlyList<UserDeliveryResult>>(), It.IsAny<bool>(), It.IsAny<Enum?>(), "URGENT"))
             .ReturnsAsync(sentMessage);
 
         await vm.SendCommand.ExecuteAsync(null);
 
         connMock.Verify(c => c.SendMessage(It.IsAny<string>(),
-            It.IsAny<List<AddressRequest>>(), It.IsAny<bool>(), It.IsAny<int>(), "URGENT", It.IsAny<string>(), It.IsAny<CancellationToken>()), Times.Once);
+            It.IsAny<List<AddressRequest>>(), It.IsAny<bool>(), It.IsAny<Enum?>(), "URGENT", It.IsAny<string>(), It.IsAny<CancellationToken>()), Times.Once);
         entryMock.Verify(e => e.StoreSentMessage(It.IsAny<string>(), It.IsAny<string>(),
             It.IsAny<List<AddressData>>(), It.IsAny<DateTime>(),
-            It.IsAny<IReadOnlyList<UserDeliveryResult>>(), It.IsAny<bool>(), It.IsAny<int>(), "URGENT"), Times.Once);
+            It.IsAny<IReadOnlyList<UserDeliveryResult>>(), It.IsAny<bool>(), It.IsAny<Enum?>(), "URGENT"), Times.Once);
         Assert.True(vm.IsSent);
     }
 
@@ -639,14 +639,14 @@ public sealed class DraftViewModelTests
             Addresses = [new AddressData { UserName = "ALPHA", Type = "To" }],
             FolderId = "root-drafts"
         };
-        IReadOnlyList<TagPriorityBlock> blocks = [new TagPriorityBlock { Tag = "URGENT", Priority = 3 }];
+        IReadOnlyList<TagPriorityBlock> blocks = [new TagPriorityBlock { Tag = "URGENT", Priority = TestMessagePriority.Flash }];
         DraftViewModel vm = Build(out _, out Mock<IServiceConnection> connMock, entity: entity, blockedCombinations: blocks);
         vm.Tag = "URGENT";
-        vm.SelectedPriority = new MessagePriorityOption { Name = "FLASH", Value = 3 };
+        vm.SelectedPriority = new MessagePriorityOption { Name = "FLASH", Value = 3, Key = TestMessagePriority.Flash };
 
         await vm.SendCommand.ExecuteAsync(null);
 
         Assert.Equal("This tag/priority combination is not allowed", vm.StatusMessage);
-        connMock.Verify(c => c.SendMessage(It.IsAny<string>(), It.IsAny<List<AddressRequest>>(), It.IsAny<bool>(), It.IsAny<int>(), It.IsAny<string>(), It.IsAny<string>(), It.IsAny<CancellationToken>()), Times.Never);
+        connMock.Verify(c => c.SendMessage(It.IsAny<string>(), It.IsAny<List<AddressRequest>>(), It.IsAny<bool>(), It.IsAny<Enum?>(), It.IsAny<string>(), It.IsAny<string>(), It.IsAny<CancellationToken>()), Times.Never);
     }
 }

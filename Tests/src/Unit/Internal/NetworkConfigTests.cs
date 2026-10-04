@@ -18,6 +18,19 @@ public sealed class NetworkConfigTests : IDisposable
         return path;
     }
 
+    /// <summary>A file with a role that is not Client, Server or Relay (the retired Peer, say) does not load, so networking cannot start.</summary>
+    [Theory]
+    [InlineData("Peer")]
+    [InlineData("Bogus")]
+    public void Load_UnrecognizedRole_Fails(string role)
+    {
+        File.WriteAllText(Path.Combine(directory, "Config.json"), $$"""{ "Users": { "ALICE": { "Role": "{{role}}" }, "BOB": { "Role": "Client" } } }""");
+
+        InvalidDataException error = Assert.Throws<InvalidDataException>(() => NetworkConfig.Load([], directory));
+
+        Assert.Contains($"\"{role}\" of user ALICE", error.Message);
+    }
+
     /// <summary>With no argument and no Config.json in the working directory, the network is empty.</summary>
     [Fact]
     public void Load_NoArgumentAndNoFile_IsEmpty()
@@ -109,7 +122,7 @@ public sealed class NetworkConfigTests : IDisposable
                   "Role": "server", "IpHost": "10.0.0.1", "Msmt": { "Port": 1, "HandshakeTimeout": "00:00:07" }, "Hdlc": { "Address": 3, "Ports": [ "SL0", "SL1" ], "MaxInfoField": 512 }, "InterfacePort": 2,
                   "Parent": { "User": "ROOT", "Mode": "MsmtListen" },
                   "Children": [ "BOB", { "User": "CAROL", "Mode": "Hdlc", "Port": "ignored", "Address": 5 }, { "user": "DAN", "mode": "msmtconnect" } ],
-                  "StoresMessages": true, "SecurityLevel": "HIGH", "CertificateName": "CN-ALICE",
+                  "SecurityLevel": "HIGH", "CertificateName": "CN-ALICE",
                   "Data": { "desk": "4" },
                   "Headless": true, "AlertText": "HEY", "AlarmSoundSeconds": 5.5,
                   "QuickConfirmationEnabled": false, "ComposeAlertsEnabled": false, "MessageTagsEnabled": false, "MessageTagLabel": "Kind", "PrintReceivedEnabled": true
@@ -132,7 +145,6 @@ public sealed class NetworkConfigTests : IDisposable
         Assert.Equal(
             [new UserLink { User = "BOB" }, new UserLink { User = "CAROL", Mode = ConnectionMode.Hdlc }, new UserLink { User = "DAN", Mode = ConnectionMode.MsmtConnect }],
             info.Children);
-        Assert.True(info.StoresMessages);
         Assert.Equal(("HIGH", "CN-ALICE"), (info.SecurityLevel, info.CertificateName));
         Assert.Equal("4", info.Data["desk"]);
         Assert.Equal(["OPS"], info.Groups);
@@ -173,7 +185,7 @@ public sealed class NetworkConfigTests : IDisposable
     [InlineData("server", UserRole.Server)]
     [InlineData("CLIENT", UserRole.Client)]
     [InlineData("relay", UserRole.Relay)]
-    [InlineData("Peer", UserRole.Peer)]
+    [InlineData("Peer", null)]
     [InlineData(null, null)]
     [InlineData("Bogus", null)]
     public void GetRole_ParsesRecognizedNamesOnly(string? role, UserRole? expected) => Assert.Equal(expected, new NetworkUserConfig { Role = role }.GetRole());

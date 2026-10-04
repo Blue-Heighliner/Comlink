@@ -184,9 +184,9 @@ public sealed class DirectServiceConnectionTests
         Assert.True(receipt.IsHidden);
     }
 
-    /// <summary>A message the user sent to themselves is not answered with a receipt.</summary>
+    /// <summary>A message the user sent to themselves comes back from the server like any other, so it is answered with a receipt.</summary>
     [Fact]
-    public async Task MessageDelivered_FromSelf_SendsNoReceipt()
+    public async Task MessageDelivered_FromSelf_IsAnsweredWithAReceiptToSelf()
     {
         DirectServiceConnection conn = Build(out FakePeerService peer, out _, out Mock<IUserService> user, out _, out _);
         user.Setup(s => s.GetCurrentUserInfo()).Returns(new UserInfo { Name = "LOCAL" });
@@ -194,7 +194,7 @@ public sealed class DirectServiceConnectionTests
 
         await peer.FireMessageDelivered(new TestFrame { MessageId = "MSG1", FromUser = "LOCAL" });
 
-        Assert.Empty(peer.Sent);
+        Assert.Equal("LOCAL", Assert.Single(peer.Sent).UserName);
     }
 
     /// <summary>After Connect, a FrameDelivered peer event is converted and re-raised as MessageReceived.</summary>
@@ -214,7 +214,7 @@ public sealed class DirectServiceConnectionTests
             Body = "Body text",
             Addresses = [new TestAddressEntry { UserName = "LOCAL", Type = "To" }, new TestAddressEntry { UserName = "OMAHA", Type = "External", Information = "Deliver to Eastside Office" }],
             SentAt = new DateTime(2025, 7, 4, 12, 0, 0, DateTimeKind.Utc),
-            Priority = 2
+            Priority = "LEVEL2"
         };
         await peer.FireMessageDelivered(payload);
 
@@ -226,7 +226,7 @@ public sealed class DirectServiceConnectionTests
         Assert.Equal("LOCAL", received.Addresses[0].UserName);
         Assert.Equal("External", received.Addresses[1].Type);
         Assert.Equal("Deliver to Eastside Office", received.Addresses[1].Information);
-        Assert.Equal(2, received.Priority);
+        Assert.Equal(TestMessagePriority.Level2, received.Priority);
     }
 
     /// <summary>After Connect, a DeliveryStatusChanged routing event updates the entry service and fires the connection event.</summary>
@@ -304,10 +304,10 @@ public sealed class DirectServiceConnectionTests
         });
         routing.RouteResult = ("MSGID1", []);
 
-        await conn.SendMessage("Body", [new AddressRequest { UserName = "DEST" }], priority: 3);
+        await conn.SendMessage("Body", [new AddressRequest { UserName = "DEST" }], priority: TestMessagePriority.Level3);
 
         Assert.NotNull(routing.LastPayload);
-        Assert.Equal(3, routing.LastPayload.Priority);
+        Assert.Equal(TestMessagePriority.Level3, routing.LastPayload.Priority);
     }
 
     /// <summary>MarkMessageRead returns false and sends nothing when EntryService reports no change (already read or not found).</summary>
@@ -348,14 +348,14 @@ public sealed class DirectServiceConnectionTests
         Assert.Equal("REMOTE", userName);
         Assert.Equal("MSG1", confirmation.ReadReceiptMessageId);
         Assert.Equal("LOCAL", confirmation.FromUser);
-        Assert.NotEqual("MSG1", confirmation.MessageId);
+        Assert.Equal(string.Empty, confirmation.MessageId);
         TestAddressEntry address = Assert.Single(confirmation.Addresses);
         Assert.Equal("REMOTE", address.UserName);
     }
 
-    /// <summary>MarkMessageRead for a self-addressed message updates the Outbox status directly instead of sending over the wire.</summary>
+    /// <summary>MarkMessageRead for a self-addressed message sends the read receipt to the user itself like any other, which goes up to the server.</summary>
     [Fact]
-    public async Task MarkMessageRead_ForSelfAddressedMessage_UpdatesStatusWithoutSending()
+    public async Task MarkMessageRead_ForSelfAddressedMessage_SendsTheReceiptToSelf()
     {
         DirectServiceConnection conn = Build(out FakePeerService peer, out _, out Mock<IUserService> user, out Mock<IEntryService> entry, out _);
         user.Setup(s => s.GetCurrentUserInfo()).Returns(new UserInfo { Name = "LOCAL" });
@@ -367,8 +367,9 @@ public sealed class DirectServiceConnectionTests
         bool result = await conn.MarkMessageRead("MSG1");
 
         Assert.True(result);
-        Assert.Empty(peer.Sent);
-        entry.Verify(e => e.UpdateDeliveryStatus("MSG1", "LOCAL", DestinationStatus.Read), Times.Once);
+        (string userName, TestFrame receipt) = Assert.Single(peer.Sent);
+        Assert.Equal("LOCAL", userName);
+        Assert.Equal("MSG1", receipt.ReadReceiptMessageId);
     }
 
     /// <summary>The event reports the status as stored, so a late, out-of-order status that storage ignored is not shown either.</summary>

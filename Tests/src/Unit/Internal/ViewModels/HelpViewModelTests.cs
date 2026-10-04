@@ -3,7 +3,7 @@ namespace BlueHeighliner.Comlink.Tests.Unit.Internal.ViewModels;
 /// <summary>Unit tests for <see cref="HelpViewModel"/>, whose tabs reflect the configured role and compose settings.</summary>
 public sealed class HelpViewModelTests
 {
-    private static HelpViewModel Build(UserRole role = UserRole.Peer, bool tags = true, bool alerts = true)
+    private static HelpViewModel Build(UserRole role = UserRole.Client, bool tags = true, bool alerts = true)
     {
         Mock<TestEngineController> controller = new() { CallBase = true };
         controller.Setup(c => c.Role).Returns(role);
@@ -21,41 +21,12 @@ public sealed class HelpViewModelTests
     [Fact]
     public void AppName_ComesFromEngineController() => Assert.Equal("MyApp", Build().AppName);
 
-    /// <summary>A peer offers the full messaging guide, in the order a new user needs it, and no connection tab.</summary>
-    [Fact]
-    public void Peer_HasMessagingTabsAndNoConnectionTab()
-    {
-        Assert.Equal(
-            ["Getting started", "Sending a message", "Receiving messages", "Notes and drafts", "Folders and entries", "Backup and restore", "Printing"],
-            Titles(Build(UserRole.Peer)));
-    }
-
-    /// <summary>A client has the messaging guide plus a tab about its connection to the server.</summary>
-    [Fact]
-    public void Client_AddsConnectionTab()
-    {
-        HelpViewModel vm = Build(UserRole.Client);
-
-        Assert.Equal("Connection", vm.Tabs[^1].Title);
-        Assert.Contains("Getting started", Titles(vm));
-    }
-
-    /// <summary>A server has no inbox or drafts, so it gets a guide to its own two views instead of the messaging tabs.</summary>
-    [Fact]
-    public void Server_HasOnlyServerTabs()
-    {
-        HelpViewModel vm = Build(UserRole.Server);
-
-        Assert.Equal(["Overview", "Connections", "Activity"], Titles(vm));
-    }
-
     /// <summary>A relay has the same tabs as a server.</summary>
     [Fact]
     public void Relay_HasTheServerTabs() => Assert.Equal(Titles(Build(UserRole.Server)), Titles(Build(UserRole.Relay)));
 
     /// <summary>Every tab has content, and every section has a heading and text.</summary>
     [Theory]
-    [InlineData(UserRole.Peer)]
     [InlineData(UserRole.Client)]
     [InlineData(UserRole.Server)]
     [InlineData(UserRole.Relay)]
@@ -74,7 +45,6 @@ public sealed class HelpViewModelTests
 
     /// <summary>Tab titles are unique so the tab strip is unambiguous.</summary>
     [Theory]
-    [InlineData(UserRole.Peer)]
     [InlineData(UserRole.Client)]
     [InlineData(UserRole.Server)]
     public void TabTitles_AreUnique(UserRole role)

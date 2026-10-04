@@ -10,18 +10,24 @@ public sealed class HandshakePeerTransportTests
 
     private static bool Matches(IConnectionInfo info) => info is ISerialConnectionInfo { SerialPort: "SL0", SerialAddress: 0xFF };
 
+    private static bool Opens(IInitialSession session)
+        => session.Connection is ISerialConnectionInfo serial ? serial.SerialAddress > serial.RemoteSerialAddress : !session.Connection.IsInbound;
+
     private sealed class Scripted : IInitialProcessor
     {
         public Type ItemType { get; init; } = typeof(TestFrame);
+        public TimeSpan Timeout { get; init; } = TimeSpan.FromSeconds(10);
         public Action<IInitialSession> Connected { get; init; } = _ => { };
         public Action<IInitialSession, object> Initial { get; init; } = (_, _) => { };
         public Action<IInitialSession, object> Reply { get; init; } = (_, _) => { };
 
         public void OnConnected(IInitialSession session) => Connected(session);
 
-        public void OnInitial(IInitialSession session, object item) => Initial(session, item);
-
-        public void OnReply(IInitialSession session, object item) => Reply(session, item);
+        public void OnReceived(IInitialSession session, object item)
+        {
+            if (Opens(session)) { Reply(session, item); }
+            else { Initial(session, item); }
+        }
     }
 
     private sealed class End(HandshakePeerTransport transport, LoopbackPeerTransport raw)
@@ -65,8 +71,8 @@ public sealed class HandshakePeerTransportTests
         {
             Connected = session =>
             {
-                openers?.Add(session.IsOpener);
-                if (session.IsOpener) { session.Send(Who(me)); }
+                openers?.Add(Opens(session));
+                if (Opens(session)) { session.Send(Who(me)); }
             },
             Initial = (session, item) =>
             {
@@ -81,11 +87,11 @@ public sealed class HandshakePeerTransportTests
 
     private static TestFrame Who(string user) => new() { FromUser = user };
 
-    private static (End A, End B) Pair(IEngineController a, IEngineController b, IReadOnlyList<string>? aNames = null, IReadOnlyList<string>? bNames = null, bool serial = false, TimeSpan? handshakeTimeout = null)
+    private static (End A, End B) Pair(IEngineController a, IEngineController b, IReadOnlyList<string>? aNames = null, IReadOnlyList<string>? bNames = null, bool serial = false)
     {
         (LoopbackPeerTransport rawA, LoopbackPeerTransport rawB) = LoopbackPeerTransport.CreatePair(aNames, bNames, serial);
-        End endA = new(new HandshakePeerTransport(rawA, a, logger, Handshake.ForFrames(a), identify: true, handshakeTimeout), rawA);
-        End endB = new(new HandshakePeerTransport(rawB, b, logger, Handshake.ForFrames(b), identify: true, handshakeTimeout), rawB);
+        End endA = new(new HandshakePeerTransport(rawA, a, logger, Handshake.ForFrames(a), identify: true), rawA);
+        End endB = new(new HandshakePeerTransport(rawB, b, logger, Handshake.ForFrames(b), identify: true), rawB);
         endA.Watch();
         endB.Watch();
         return (endA, endB);
@@ -381,7 +387,7 @@ public sealed class HandshakePeerTransportTests
         {
             Connected = session =>
             {
-                if (!session.IsOpener) { return; }
+                if (!Opens(session)) { return; }
                 session.Send(Who("ONE"));
                 session.Send(Who("TWO"));
             },
@@ -443,8 +449,8 @@ public sealed class HandshakePeerTransportTests
     [Fact]
     public async Task Handshake_NeverConnected_TimesOutAndDrops()
     {
-        Scripted silent = new();
-        (End endA, End endB) = Pair(WithProcessor(Introduce("ALICE")).Object, WithProcessor(silent).Object, handshakeTimeout: TimeSpan.FromMilliseconds(150));
+        Scripted silent = new() { Timeout = TimeSpan.FromMilliseconds(150) };
+        (End endA, End endB) = Pair(WithProcessor(Introduce("ALICE")).Object, WithProcessor(silent).Object);
 
         await Assert.ThrowsAsync<IOException>(() => endA.Transport.Connect(point));
 
@@ -456,8 +462,8 @@ public sealed class HandshakePeerTransportTests
     [Fact]
     public async Task Handshake_WrongItemType_DropsConnection()
     {
-        Scripted wrong = new() { ItemType = typeof(TestHello) };
-        (End endA, End endB) = Pair(WithProcessor(Introduce("ALICE")).Object, WithProcessor(wrong).Object, handshakeTimeout: TimeSpan.FromMilliseconds(300));
+        Scripted wrong = new() { ItemType = typeof(TestHello), Timeout = TimeSpan.FromMilliseconds(300) };
+        (End endA, End endB) = Pair(WithProcessor(Introduce("ALICE")).Object, WithProcessor(wrong).Object);
 
         await Assert.ThrowsAsync<IOException>(() => endA.Transport.Connect(point));
 
@@ -485,7 +491,7 @@ public sealed class HandshakePeerTransportTests
             ItemType = typeof(TestPacket),
             Connected = session =>
             {
-                if (session.IsOpener) { session.Send(new TestPacket { PayloadId = 11 }); }
+                if (Opens(session)) { session.Send(new TestPacket { PayloadId = 11 }); }
             },
             Reply = (session, item) =>
             {

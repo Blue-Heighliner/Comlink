@@ -51,12 +51,10 @@ internal sealed class DirectServiceConnection : IServiceConnection
     {
         UserInfo? userInfo = userService.GetCurrentUserInfo();
         string fromUser = engineController.GetFromUser(message);
-        if (userInfo is null || string.Equals(fromUser, userInfo.Name, StringComparison.OrdinalIgnoreCase)) { return; }
+        if (userInfo is null) { return; }
 
-        object receipt = engineController.CreateReceiveReceipt(engineController.GetFrameId(message));
-        engineController.SetFrameId(receipt, Guid.NewGuid().ToString("N").ToUpperInvariant());
+        object receipt = engineController.CreateReceiveReceipt(engineController.GetMessageId(message), fromUser);
         engineController.SetFromUser(receipt, userInfo.Name);
-        engineController.SetAddresses(receipt, [new MessageAddress { UserName = fromUser, Type = AddressType.To }]);
         await peerService.Send(fromUser, receipt);
     }
 
@@ -97,7 +95,7 @@ internal sealed class DirectServiceConnection : IServiceConnection
         => userService.Install(userCode, cancellation);
 
     /// <inheritdoc />
-    public async Task<SendMessageResult?> SendMessage(string body, List<AddressRequest> addresses, bool isAlert = false, int priority = 0, string tag = "", string securityLevel = "", CancellationToken cancellation = default)
+    public async Task<SendMessageResult?> SendMessage(string body, List<AddressRequest> addresses, bool isAlert = false, Enum? priority = null, string tag = "", string securityLevel = "", CancellationToken cancellation = default)
     {
         UserInfo? userInfo = userService.GetCurrentUserInfo();
         if (userInfo is null) { return null; }
@@ -132,17 +130,8 @@ internal sealed class DirectServiceConnection : IServiceConnection
         if (userInfo is null) { return true; }
 
         string fromUser = engineController.GetFromUser(entity.Message);
-        if (string.Equals(fromUser, userInfo.Name, StringComparison.OrdinalIgnoreCase))
-        {
-            // Self-addressed message: no network hop needed, mirroring MessageRoutingService.Route's own self-delivery bypass.
-            await entryService.UpdateDeliveryStatus(messageId, fromUser, DestinationStatus.Read);
-            return true;
-        }
-
-        object receipt = engineController.CreateReadReceipt(messageId);
-        engineController.SetFrameId(receipt, Guid.NewGuid().ToString("N").ToUpperInvariant());
+        object receipt = engineController.CreateReadReceipt(messageId, fromUser);
         engineController.SetFromUser(receipt, userInfo.Name);
-        engineController.SetAddresses(receipt, [new MessageAddress { UserName = fromUser, Type = AddressType.To }]);
         await peerService.Send(fromUser, receipt, cancellation);
         return true;
     }

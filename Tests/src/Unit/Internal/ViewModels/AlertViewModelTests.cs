@@ -26,7 +26,7 @@ public sealed class AlertViewModelTests
     private static MessageEntity MakeMessage(string messageId, bool isAlert)
     {
         object message = format.CreateFrame();
-        format.SetFrameId(message, messageId);
+        ((TestFrame)message).MessageId = messageId;
         ((TestFrame)message).IsAlert = isAlert;
         return new MessageEntity { MessageId = messageId, Message = message };
     }

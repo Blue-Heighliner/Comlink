@@ -40,16 +40,16 @@ public sealed class MessageFormatTests
             new MessageAddress { UserName = "GAMMA", Type = AddressType.Cc }
         ];
 
-        format.SetFrameId(message, "MSG1");
+        ((TestFrame)message).MessageId = "MSG1";
         format.SetFromUser(message, "ALPHA");
         ((TestFrame)message).Body = "World";
         format.SetAddresses(message, addresses);
         ((TestFrame)message).SentAt = sentAt;
         ((TestFrame)message).ReadReceiptMessageId = "MSG0";
         ((TestFrame)message).IsAlert = true;
-        ((TestFrame)message).Priority = 3;
+        ((TestFrame)message).Priority = "LEVEL3";
 
-        Assert.Equal("MSG1", format.GetFrameId(message));
+        Assert.Equal("MSG1", format.GetMessageId(message));
         Assert.Equal("ALPHA", format.GetFromUser(message));
         Assert.Equal("World", format.GetBody(message));
         Assert.Equal(sentAt, format.GetSentAt(message));
@@ -71,7 +71,7 @@ public sealed class MessageFormatTests
     {
         TestFrame concrete = new() { MessageId = "DIRECT", FromUser = "DELTA" };
 
-        Assert.Equal("DIRECT", format.GetFrameId(concrete));
+        Assert.Equal("DIRECT", format.GetMessageId(concrete));
         Assert.Equal("DELTA", format.GetFromUser(concrete));
     }
 }

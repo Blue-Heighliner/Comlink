@@ -58,7 +58,7 @@ public sealed class NetworkReloadServiceTests : IDisposable
     [Fact]
     public void Reload_RoleChanged_RestartsThePeerLayer()
     {
-        Write("""{ "Users": { "ME": { "Role": "Client", "PeerPort": 1000, "InterfacePort": 2000, "OutgoingPoints": [ { "IpAddress": "10.0.0.1", "Port": 1 } ] } } }""");
+        Write("""{ "Users": { "ME": { "Role": "Server", "PeerPort": 1000, "InterfacePort": 2000, "OutgoingPoints": [ { "IpAddress": "10.0.0.1", "Port": 1 } ] } } }""");
 
         service.Reload();
 

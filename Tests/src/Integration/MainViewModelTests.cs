@@ -39,7 +39,7 @@ public sealed class MainViewModelTests
             EngineController.Setup(a => a.AppName).Returns("TestApp");
             FolderBar.Setup(f => f.RootFolders).Returns([]);
             BodyDocumentFactory.Setup(f => f.Create()).Returns(new StringBodyDocument());
-            EngineController.Setup(p => p.Priorities).Returns([new MessagePriorityOption { Name = "Normal", Value = 0 }]);
+            EngineController.Setup(p => p.Priorities).Returns([new MessagePriorityOption { Name = "Normal", Value = 0, Key = TestMessagePriority.Normal }]);
             EngineController.Setup(a => a.AlertLabel).Returns("ALERT");
             EngineController.Setup(a => a.ComposeAlertsEnabled).Returns(true);
             EngineController.Setup(t => t.TagsEnabled).Returns(true);
@@ -111,7 +111,7 @@ public sealed class MainViewModelTests
     public void NetworkReloaded_RecomputesTheUsersInfo()
     {
         Setup s = new();
-        s.EngineController.SetupGet(e => e.Role).Returns(UserRole.Peer);
+        s.EngineController.SetupGet(e => e.Role).Returns(UserRole.Server);
         s.EngineController.Setup(e => e.GetUserInfo("ALICE")).Returns(new UserInfo { Name = "ALICE", Role = UserRole.Client });
         s.EngineController.SetupGet(e => e.SecurityLevels).Returns([]);
         s.EngineController.SetupGet(e => e.AutoForwardControllers).Returns([]);
@@ -600,7 +600,7 @@ public sealed class MainViewModelTests
     [Theory]
     [InlineData(UserRole.Client, true, true)]
     [InlineData(UserRole.Client, false, false)]
-    [InlineData(UserRole.Peer, true, false)]
+    [InlineData(UserRole.Relay, true, false)]
     [InlineData(UserRole.Server, true, false)]
     public void CanRetrieve_RequiresClientRoleAndAStorageServer(UserRole role, bool hasStorageServer, bool expected)
     {
@@ -624,7 +624,7 @@ public sealed class MainViewModelTests
         s.Connection.Raise(c => c.MessageReceived += null!, new MessageReceivedEvent { MessageId = "M1", FromUser = "BOB" });
         await Task.Delay(100);
 
-        s.EntryService.Verify(e => e.StoreIncomingMessage(It.IsAny<string>(), It.IsAny<string>(), It.IsAny<string>(), It.IsAny<List<AddressData>>(), It.IsAny<DateTime>(), It.IsAny<bool>(), It.IsAny<int>(), It.IsAny<string>(), It.IsAny<string>()), Times.Never);
+        s.EntryService.Verify(e => e.StoreIncomingMessage(It.IsAny<string>(), It.IsAny<string>(), It.IsAny<string>(), It.IsAny<List<AddressData>>(), It.IsAny<DateTime>(), It.IsAny<bool>(), It.IsAny<Enum?>(), It.IsAny<string>(), It.IsAny<string>()), Times.Never);
         GC.KeepAlive(vm);
     }
 

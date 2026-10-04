@@ -59,12 +59,12 @@ public interface IEngineBuilder
     /// <summary>
     /// Defines the ordered set of security levels a message may be sent at as the members of <typeparamref name="TLevel"/>, from lowest to highest: each member
     /// ranks higher than the one declared before it. A level is named by its member name in uppercase, which is how network files and frames refer to it, and shown in the top banner
-    /// in a neutral color, unless overridden. Not stating any (the default) turns the whole feature off: every message maps to an empty
+    /// in a neutral color, unless <paramref name="configure"/> says otherwise. Not stating any (the default) turns the whole feature off: every message maps to an empty
     /// security level and no destination is ever blocked for lacking one.
     /// </summary>
     /// <typeparam name="TLevel">The enum whose members are the levels.</typeparam>
-    /// <param name="options">Optional per-level overrides: the member, its name (null for the member name in uppercase) and its hex banner color (null for the neutral default).</param>
-    IEngineBuilder SecurityLevels<TLevel>(params (TLevel Level, string? Label, string? Color)[] options) where TLevel : struct, Enum;
+    /// <param name="configure">Configures the aspects of individual levels, such as their name and color.</param>
+    IEngineBuilder SecurityLevels<TLevel>(Action<ISecurityLevelsBuilder<TLevel>>? configure = null) where TLevel : struct, Enum;
 
     /// <summary>Sets the text shown in the title bar's alert box while alarming, and the draft editor's alert checkbox label. Defaults to <c>ALERT</c>.</summary>
     IEngineBuilder AlertLabel(string label);
@@ -75,23 +75,37 @@ public interface IEngineBuilder
     /// <summary>Sets whether clicking the alert box, or pressing Space or Enter outside a text input, confirms the latest unconfirmed alert. On by default.</summary>
     IEngineBuilder QuickConfirmation(bool enabled = true);
 
+    /// <summary>
+    /// Sets the largest a serialized packet may be, in bytes, when packets are used (see <see cref="IFrameBuilder{TFrame}"/> and <c>Packets</c>). Smaller packets let a higher-priority payload cut in
+    /// sooner; larger ones carry less framing overhead. The default is 16 KiB. The engine measures what the serializer makes of a packet to see how much payload fits, so it must leave room for the packet's own fields.
+    /// This is the only limit the engine applies: a packet or frame larger than a connection can carry (the HDLC <c>MaxInfoField</c>, say) fails to send, and the reason is logged.
+    /// </summary>
+    /// <param name="bytes">The largest serialized packet, in bytes.</param>
+    IEngineBuilder PacketSize(int bytes);
+
+    /// <summary>
+    /// Sets how many packets may be in flight over one connection at once. A higher-priority payload sent meanwhile goes out
+    /// as soon as the packets in flight finish, so the window is how many it can end up waiting behind: 1 (the
+    /// default) is the most responsive, while a wider window keeps a link with a long round trip busier. Must be at least 1.
+    /// </summary>
+    /// <param name="packets">The number of packets.</param>
+    IEngineBuilder PacketWindow(int packets);
+
     /// <summary>Sets whether the draft editor lets the user send a draft as an alert. On by default; turning it off never stops alerts from being received.</summary>
     IEngineBuilder ComposeAlerts(bool enabled = true);
 
     /// <summary>
-    /// Sets the priority levels as the members of <typeparamref name="TPriority"/>, lowest first like <see cref="SecurityLevels{TLevel}"/>: a member's position is its priority, so later members are sent before earlier ones.
-    /// A level is named by its member name in uppercase unless overridden, and is a <see cref="PriorityMode.User"/> priority, offered to users composing a message, unless overridden to
-    /// <see cref="PriorityMode.System"/>, only assigned by the system, such as the priority a retrieval or receipt handler names. Defaults to a single user level named <c>NORMAL</c>, with which handler priorities are ignored.
+    /// Sets the priority levels as the members of <typeparamref name="TPriority"/>, lowest first like <see cref="SecurityLevels{TLevel}"/>: a member's position is its send priority, so later members are sent before earlier ones.
+    /// A level is named by its member name in uppercase unless <paramref name="configure"/> says otherwise, and that name is how a level is stored in drafts and exports, so a level survives being reordered but not renamed.
+    /// A level is a <see cref="PriorityMode.User"/> priority, which the GUI offers to users composing a message, unless set to <see cref="PriorityMode.System"/>, which the GUI never offers; code may use any level.
+    /// Defaults to a single user level named <c>NORMAL</c>, with which handler priorities are ignored.
     /// </summary>
     /// <typeparam name="TPriority">The enum whose members are the levels.</typeparam>
-    /// <param name="options">Optional per-level overrides: the member, its name (null for the member name in uppercase) and its mode (null for <see cref="PriorityMode.User"/>).</param>
-    IEngineBuilder Priorities<TPriority>(params (TPriority Priority, string? Label, PriorityMode? Mode)[] options) where TPriority : struct, Enum;
+    /// <param name="configure">Configures the aspects of individual levels, such as their name and mode, and which tag and priority combinations are blocked when composing a draft.</param>
+    IEngineBuilder Priorities<TPriority>(Action<IPriorityBuilder<TPriority>>? configure = null) where TPriority : struct, Enum;
 
     /// <summary>Turns message tags on or off in the user interface, and optionally renames the tag input (for example to <c>Category</c>). On by default, labelled <c>Tag</c>.</summary>
     IEngineBuilder Tags(bool enabled = true, string? label = null);
-
-    /// <summary>Blocks a tag and priority combination when composing a draft. Either may be <see langword="null"/> to match any value; the priority is a member of the enum stated to <see cref="Priorities{TPriority}"/>.</summary>
-    IEngineBuilder BlockTag(string? tag, Enum? priority);
 
     /// <summary>
     /// Overrides the display label shown for an address type: in the address type picker, the per-address badge, and
@@ -133,6 +147,7 @@ public interface IEngineBuilder
     /// The app-specific data that travels with the identity is the named user's <see cref="UserInfo.Data"/>.
     /// </summary>
     IEngineBuilder Identify(Func<IConnectionInfo, string?> identify);
+
 
     /// <summary>
     /// Sets whether command-line arguments may override where the network configuration file (the file that describes every user

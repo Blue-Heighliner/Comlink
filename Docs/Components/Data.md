@@ -20,7 +20,8 @@ Collections initialized:
 | `activity_logs` | `ActivityLogEntity` | Daily activity entries |
 | `folders` | `FolderEntity` | Folder hierarchy |
 | `auto_forward_targets` | `AutoForwardTargetsEntity` | Auto forward controller target lists |
-| `stored_messages` | `StoredMessageEntity` | Copies of routed messages a storage server keeps |
+| `stored_messages` | `StoredMessageEntity` | Copies of the messages a server's children sent |
+| `last_id` | `LastIdEntity` | The last message identifier generated, kept so the message handler's `NextId` continues from it after a restart |
 
 On each `Initialize()` call, root folders are auto-created (Inbox, Outbox, Drafts, Notes, Activity) if absent.
 
@@ -74,7 +75,7 @@ Stored in both Inbox (received) and Outbox (sent).
 | Field | Type | Notes |
 |-------|------|-------|
 | `Id` | `ObjectId` | LiteDB auto-ID (the actual primary key) |
-| `MessageId` | `string` | Denormalized from `Message` (via `IEngineController.GetFrameId`) so LiteDB can query/index on it directly. **Not unique** — see below |
+| `MessageId` | `string` | Denormalized from `Message` (via `IEngineController.GetMessageId`) so LiteDB can query/index on it directly. **Not unique** — see below |
 | `Message` | `object` | The message content — body, sender, addresses, sent time — as an instance of `IEngineController.FrameType`. This is the canonical representation; LiteDB serializes it using its own runtime type (via its built-in `object`-property polymorphism, storing a `_type` discriminator) and reconstructs the same concrete type on load. Read its logical fields through the registered `IEngineController` — see `Docs/Components/Peer.md` and `Docs/Components/Configuration.md`. |
 | `DeliveryStatuses` | `List<DeliveryStatus>` | Per-user delivery state (Outbox messages) |
 | `ReadStatus` | `DestinationStatus?` | Inbox-only: `Received` when stored, `Read` once the user opens it (see `Docs/Components/Peer.md#receipts`). Always `null` on Outbox records — per-destination read state lives in `DeliveryStatuses` instead |
@@ -142,7 +143,7 @@ One document per configured auto forward controller, keyed by the controller's o
 
 ### `StoredMessageEntity`
 
-A storage server's copy of one routed message (see `Docs/Components/Configuration.md#server-storage`): `Id (ObjectId)`, `MessageId (string)` denormalized from `Message` and indexed so a duplicate is caught cheaply, `Message (object)` as an instance of `IEngineController.FrameType` stored the same way `MessageEntity.Message` is, and `StoredAt (DateTime)`. Written only by a server whose user is in `IEngineController.StorageServers`; a client's database never has any. A stored `DateTime` reads back as local time, so anything comparing a stored message's sent time converts it to UTC first.
+A server's copy of one message a child of it sent (see `Docs/Components/Configuration.md#server-storage`): `Id (ObjectId)`, `MessageId (string)` denormalized from `Message` and indexed so a duplicate is caught cheaply, `Message (object)` as an instance of `IEngineController.FrameType` stored the same way `MessageEntity.Message` is, and `StoredAt (DateTime)`. Written only by a server whose user is in `IEngineController.StorageServers`; a client's database never has any. A stored `DateTime` reads back as local time, so anything comparing a stored message's sent time converts it to UTC first.
 
 ### Embedded Types
 

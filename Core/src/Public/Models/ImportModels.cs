@@ -13,8 +13,8 @@ public sealed record StagedSendData
     public required List<AddressRequest> Addresses { get; init; }
     /// <summary>Whether this message will be sent as an alert.</summary>
     public bool IsAlert { get; init; }
-    /// <summary>Priority number this message will be sent at; see <see cref="IEngineController.GetPriority"/>.</summary>
-    public int Priority { get; init; }
+    /// <summary>Priority level this message will be sent at, a member of the enum the host stated for its priorities; <see langword="null"/> or one that is not a configured level is the lowest level.</summary>
+    public Enum? Priority { get; init; }
     /// <summary>Tag identifying the type of this message; see <see cref="IEngineController.GetTag"/>.</summary>
     public string Tag { get; init; } = string.Empty;
     /// <summary>Security level name this message will be sent at, or an empty string for no security level.</summary>

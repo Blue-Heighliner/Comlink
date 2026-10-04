@@ -70,6 +70,12 @@ internal sealed class ExternalSystemsService : IExternalSystemsService
         // RouteToExternalSystems — invoked synchronously underneath DeliverLocal, below — knows where the
         // message came from. AsyncLocal (rather than a plain field) keeps this correct if more than one
         // external system receives a message concurrently.
+        if (engineController.IsMessageWithoutId(message))
+        {
+            logger.LogError("A message from external system {Name} has no identifier and was dropped", source.Name);
+            return;
+        }
+
         receivingFrom.Value = source;
         try
         {

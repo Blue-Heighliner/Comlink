@@ -27,14 +27,14 @@ public sealed class InterfaceServiceTests
             Body = "Body",
             Addresses = [new TestAddressEntry { UserName = "DEST", Type = "To" }, new TestAddressEntry { UserName = "OMAHA", Type = "External", Information = "Deliver to Eastside Office" }],
             IsAlert = true,
-            Priority = 2
+            Priority = "LEVEL2"
         };
         using IMemoryOwner<byte> buf = serializer.Serialize(incoming);
 
         await svc.HandleInterfaceMessage(buf.Memory.ToArray());
 
         routing.Verify(r => r.Route("LOCAL", It.Is<SendMessagePayload>(p =>
-            p.Body == "Body" && p.Addresses.Count == 2 && p.Addresses[0].UserName == "DEST" && p.Addresses[1].Type == "External" && p.Addresses[1].Information == "Deliver to Eastside Office" && p.IsAlert && p.Priority == 2),
+            p.Body == "Body" && p.Addresses.Count == 2 && p.Addresses[0].UserName == "DEST" && p.Addresses[1].Type == "External" && p.Addresses[1].Information == "Deliver to Eastside Office" && p.IsAlert && Equals(p.Priority, TestMessagePriority.Level2)),
             It.IsAny<CancellationToken>()), Times.Once);
     }
 

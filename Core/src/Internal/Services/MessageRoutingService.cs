@@ -15,12 +15,12 @@ internal interface IMessageRoutingService
     Task<(string MessageId, IReadOnlyList<UserDeliveryResult> UserResults)> Route(string fromUser, SendMessagePayload payload, CancellationToken cancellation);
 
     /// <summary>
-    /// The same as <see cref="Route"/>, except every field this reads (addresses, security level) comes straight from
-    /// <paramref name="message"/> itself, via <see cref="IEngineController"/>'s Get accessors, rather than
-    /// from a <see cref="SendMessagePayload"/> - so the caller builds the whole message (an instance of
-    /// <see cref="IEngineController.FrameType"/>) itself instead of stating loose fields. Its message ID
-    /// and sender are still overwritten with a freshly generated ID and <paramref name="fromUser"/>, exactly as <see cref="Route"/> also does,
-    /// so a caller only needs to set the content fields, including the sent time when the frame is a message.
+    /// The same as <see cref="Route"/>, except every field this reads (security level) comes straight from
+    /// <paramref name="message"/> itself, via <see cref="IEngineController"/>'s Get accessors, and who it goes to from
+    /// <see cref="IEngineController.Route"/>, rather than from a <see cref="SendMessagePayload"/> - so the caller builds the whole frame (an instance of
+    /// <see cref="IEngineController.FrameType"/>) itself instead of stating loose fields. Its sender is overwritten with <paramref name="fromUser"/>,
+    /// and a message whose identifier is unset is given a generated one, so a caller only needs to set the content fields,
+    /// including the sent time when the frame is a message. Any other kind of frame has no identifier.
     /// </summary>
     Task<(string MessageId, IReadOnlyList<UserDeliveryResult> UserResults)> RouteFrame(string fromUser, object message, CancellationToken cancellation);
 }
@@ -48,9 +48,11 @@ internal sealed class MessageRoutingService : IMessageRoutingService
     /// <summary>Initializes a new <see cref="MessageRoutingService"/> and subscribes to peer delivery status events.</summary>
     /// <param name="peerService">Peer service for sending and receiving messages.</param>
     /// <param name="engineController">Provides group definitions for address expansion and maps logical fields onto the engine's frame type when building outbound messages.</param>
+    /// <param name="ids">Generates the identifier of each message built.</param>
     /// <param name="loggerFactory">Factory for creating named loggers.</param>
-    public MessageRoutingService(IPeerService peerService, IEngineController engineController, ILoggerFactory loggerFactory)
+    public MessageRoutingService(IPeerService peerService, IEngineController engineController, IIdGenerator ids, ILoggerFactory loggerFactory)
     {
+        this.ids = ids;
         this.peerService = peerService;
         this.engineController = engineController;
         logger = loggerFactory.CreateLogger("ACTIVITY");
@@ -62,6 +64,7 @@ internal sealed class MessageRoutingService : IMessageRoutingService
 
     private readonly IPeerService peerService;
     private readonly IEngineController engineController;
+    private readonly IIdGenerator ids;
     private readonly ILogger logger;
 
     /// <inheritdoc />
@@ -80,9 +83,8 @@ internal sealed class MessageRoutingService : IMessageRoutingService
         => await DeliveryStatusChanged.InvokeAll(messageId, receivingUser, DestinationStatus.Received);
 
     /// <inheritdoc />
-    public Task<(string MessageId, IReadOnlyList<UserDeliveryResult> UserResults)> Route(string fromUser, SendMessagePayload payload, CancellationToken cancellation)
+    public async Task<(string MessageId, IReadOnlyList<UserDeliveryResult> UserResults)> Route(string fromUser, SendMessagePayload payload, CancellationToken cancellation)
     {
-        string messageId = Guid.NewGuid().ToString("N").ToUpperInvariant();
         List<MessageAddress> addresses = [.. payload.Addresses.Select(a => new MessageAddress { UserName = a.UserName, Type = a.Type.ParseAddressType(), Information = a.Information })];
 
         object message = engineController.CreateMessage(new MessageCreateContext
@@ -90,42 +92,46 @@ internal sealed class MessageRoutingService : IMessageRoutingService
             SentAt = DateTime.UtcNow,
             Body = payload.Body,
             IsAlert = payload.IsAlert,
-            Priority = payload.Priority,
+            Priority = engineController.ResolvePriority(payload.Priority),
             Tag = payload.Tag,
             SecurityLevel = payload.SecurityLevel
         });
-        engineController.SetFrameId(message, messageId);
         engineController.SetFromUser(message, fromUser);
         engineController.SetAddresses(message, addresses);
 
-        return RouteBuiltMessage(fromUser, messageId, message, addresses, payload.SecurityLevel, cancellation);
+        return await RouteBuiltMessage(fromUser, await EnsureId(message), message, payload.SecurityLevel, cancellation);
     }
 
     /// <inheritdoc />
-    public Task<(string MessageId, IReadOnlyList<UserDeliveryResult> UserResults)> RouteFrame(string fromUser, object message, CancellationToken cancellation)
+    public async Task<(string MessageId, IReadOnlyList<UserDeliveryResult> UserResults)> RouteFrame(string fromUser, object message, CancellationToken cancellation)
     {
-        string messageId = Guid.NewGuid().ToString("N").ToUpperInvariant();
-        engineController.SetFrameId(message, messageId);
         engineController.SetFromUser(message, fromUser);
 
-        return RouteBuiltMessage(fromUser, messageId, message, engineController.GetAddresses(message), engineController.GetSecurityLevel(message), cancellation);
+        return await RouteBuiltMessage(fromUser, await EnsureId(message), message, engineController.GetSecurityLevel(message), cancellation);
+    }
+
+    private async Task<string> EnsureId(object message)
+    {
+        if (!engineController.IsMessage(message)) { return string.Empty; }
+
+        if (string.IsNullOrEmpty(engineController.GetMessageId(message))) { engineController.SetMessageId(message, await ids.Next()); }
+
+        return engineController.GetMessageId(message);
     }
 
     private async Task<(string MessageId, IReadOnlyList<UserDeliveryResult> UserResults)> RouteBuiltMessage(
-        string fromUser, string messageId, object message, List<MessageAddress> addresses, string securityLevel, CancellationToken cancellation)
+        string fromUser, string messageId, object message, string securityLevel, CancellationToken cancellation)
     {
         IReadOnlyDictionary<string, IReadOnlyList<string>> groupMap = engineController.UserGroups;
 
         // Expand group addresses to individual users, tracking which top-level addressed groups contain each user.
         Dictionary<string, List<string>> userAddressedVia = new(StringComparer.OrdinalIgnoreCase);
-        foreach (MessageAddress address in addresses)
+        foreach (string name in engineController.Route(message))
         {
-            if (address.Type == AddressType.External) { continue; }
-
-            if (groupMap.ContainsKey(address.UserName))
+            if (groupMap.ContainsKey(name))
             {
                 HashSet<string> expanded = new(StringComparer.OrdinalIgnoreCase);
-                ExpandGroup(address.UserName, groupMap, expanded, new HashSet<string>(StringComparer.OrdinalIgnoreCase));
+                ExpandGroup(name, groupMap, expanded, new HashSet<string>(StringComparer.OrdinalIgnoreCase));
                 foreach (string user in expanded)
                 {
                     if (!userAddressedVia.TryGetValue(user, out List<string>? via))
@@ -133,15 +139,15 @@ internal sealed class MessageRoutingService : IMessageRoutingService
                         via = [];
                         userAddressedVia[user] = via;
                     }
-                    if (!via.Contains(address.UserName, StringComparer.OrdinalIgnoreCase))
+                    if (!via.Contains(name, StringComparer.OrdinalIgnoreCase))
                     {
-                        via.Add(address.UserName);
+                        via.Add(name);
                     }
                 }
             }
-            else if (!userAddressedVia.ContainsKey(address.UserName))
+            else if (!userAddressedVia.ContainsKey(name))
             {
-                userAddressedVia[address.UserName] = [];
+                userAddressedVia[name] = [];
             }
         }
 
@@ -162,12 +168,9 @@ internal sealed class MessageRoutingService : IMessageRoutingService
 
         logger.LogInformation("{MessageId} sending to {Destinations}", messageId, string.Join(", ", targetUsers));
 
-        string? selfUser = targetUsers.FirstOrDefault(user => string.Equals(user, fromUser, StringComparison.OrdinalIgnoreCase));
-        List<string> remoteUsers = selfUser is null ? targetUsers : targetUsers.Where(user => !string.Equals(user, fromUser, StringComparison.OrdinalIgnoreCase)).ToList();
-
         UserDeliveryResult[] remoteResults = engineController.ExternalServer is { } externalServer
-            ? await RouteToExternalServer(externalServer, messageId, message, remoteUsers, userAddressedVia)
-            : await Task.WhenAll(remoteUsers.Select(async user =>
+            ? await RouteToExternalServer(externalServer, messageId, message, targetUsers, userAddressedVia)
+            : await Task.WhenAll(targetUsers.Select(async user =>
             {
                 bool sent = await peerService.Send(user, message, cancellation);
                 IReadOnlyList<string> via = userAddressedVia.TryGetValue(user, out List<string>? v) ? v.AsReadOnly() : Array.Empty<string>();
@@ -176,15 +179,6 @@ internal sealed class MessageRoutingService : IMessageRoutingService
             }));
 
         List<UserDeliveryResult> allResults = [.. remoteResults];
-
-        if (selfUser is not null)
-        {
-            await peerService.DeliverLocal(message);
-            IReadOnlyList<string> via = userAddressedVia.TryGetValue(selfUser, out List<string>? v) ? v.AsReadOnly() : Array.Empty<string>();
-            logger.LogInformation("{MessageId} delivered locally to {User}", messageId, selfUser);
-            await DeliveryStatusChanged.InvokeAll(messageId, selfUser, DestinationStatus.Received);
-            allResults.Add(new UserDeliveryResult { UserName = selfUser, Success = true, AddressedVia = [.. via] });
-        }
 
         allResults.AddRange(blockedUsers.Select(user => new UserDeliveryResult
         {

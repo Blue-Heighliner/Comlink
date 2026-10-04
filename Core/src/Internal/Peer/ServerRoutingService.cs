@@ -47,7 +47,6 @@ internal sealed class ServerRoutingService : IPeerService, IConnectionStatusServ
 
     private readonly ConcurrentDictionary<string, bool> childConnected = new(StringComparer.OrdinalIgnoreCase);
     private readonly ConcurrentDictionary<string, bool> serverConnected = new(StringComparer.OrdinalIgnoreCase);
-    private readonly ConcurrentDictionary<string, Task<bool>> inFlightSends = new();
     private readonly ConcurrentDictionary<string, DateTime> serverLastConnectedAt = new(StringComparer.OrdinalIgnoreCase);
     private readonly ConcurrentDictionary<string, DateTime> serverLastDisconnectedAt = new(StringComparer.OrdinalIgnoreCase);
     private readonly ConcurrentDictionary<string, DateTime> childLastConnectedAt = new(StringComparer.OrdinalIgnoreCase);
@@ -346,6 +345,12 @@ internal sealed class ServerRoutingService : IPeerService, IConnectionStatusServ
         object? message = TryDeserialize(data, packet);
         if (message is null || engineController.IsHeartbeat(message)) { return; }
 
+        if (engineController.IsMessageWithoutId(message))
+        {
+            logger.LogError("A message from {User} has no identifier and was dropped", childName);
+            return;
+        }
+
         HashSet<string> addressedUsers = GetAddressedUsers(message);
         int priority = engineController.GetPriority(message);
         string myName = currentUserProvider.UserName ?? string.Empty;
@@ -398,6 +403,12 @@ internal sealed class ServerRoutingService : IPeerService, IConnectionStatusServ
         object? message = TryDeserialize(data, packet);
         if (message is null || engineController.IsHeartbeat(message)) { return; }
 
+        if (engineController.IsMessageWithoutId(message))
+        {
+            logger.LogError("A message from {User} has no identifier and was dropped", serverName);
+            return;
+        }
+
         HashSet<string> addressedUsers = GetAddressedUsers(message);
         int priority = engineController.GetPriority(message);
         string myName = currentUserProvider.UserName ?? string.Empty;
@@ -409,8 +420,6 @@ internal sealed class ServerRoutingService : IPeerService, IConnectionStatusServ
             await RouteRetrieval(engineController.GetFromUser(message), message, data, addressedUsers, priority, forward: false);
             return;
         }
-
-        await storage.Store(message);
 
         await Task.WhenAll(GetLocalTargets(myConfig, addressedUsers).Select(user => TrySend(user, data, priority, message)));
     }
@@ -449,7 +458,7 @@ internal sealed class ServerRoutingService : IPeerService, IConnectionStatusServ
 
     private HashSet<string> GetAddressedUsers(object message)
     {
-        HashSet<string> addressed = new(engineController.GetAddresses(message).Where(a => a.Type != AddressType.External).Select(a => a.UserName), StringComparer.OrdinalIgnoreCase);
+        HashSet<string> addressed = new(engineController.Route(message), StringComparer.OrdinalIgnoreCase);
 
         IReadOnlyList<SecurityLevel> securityLevels = engineController.SecurityLevels;
         int messageLevelRank = securityLevels.GetRank(engineController.GetSecurityLevel(message));
@@ -511,11 +520,7 @@ internal sealed class ServerRoutingService : IPeerService, IConnectionStatusServ
     }
 
     /// <inheritdoc />
-    public Task<bool> Send(string userName, object message, CancellationToken cancellation = default)
-    {
-        string messageId = engineController.GetFrameId(message);
-        return inFlightSends.GetOrAdd(messageId, _ => SendOnceAndCleanup(messageId, message, cancellation));
-    }
+    public Task<bool> Send(string userName, object message, CancellationToken cancellation = default) => Task.FromResult(false);
 
     /// <inheritdoc />
     public IReadOnlyList<PeerConnectionStatus> GetStatuses()
@@ -607,24 +612,10 @@ internal sealed class ServerRoutingService : IPeerService, IConnectionStatusServ
         foreach (PeerConnection connection in connections.GetAll(userName)) { connection.Drop(); }
     }
 
-    private async Task<bool> SendOnceAndCleanup(string messageId, object message, CancellationToken cancellation)
-    {
-        try
-        {
-            using IMemoryOwner<byte> buf = engineController.FrameSerializer.Serialize(message);
-            await HandleFromChild(currentUserProvider.UserName ?? string.Empty, buf.Memory);
-            return true;
-        }
-        finally
-        {
-            inFlightSends.TryRemove(messageId, out _);
-        }
-    }
-
     /// <inheritdoc />
     public async Task DeliverLocal(object payload)
     {
-        logger.LogInformation("{MessageId} delivered locally from {FromUser}", engineController.GetFrameId(payload), engineController.GetFromUser(payload));
+        logger.LogInformation("{MessageId} delivered locally from {FromUser}", engineController.GetIdentifier(payload), engineController.GetFromUser(payload));
         await FrameDelivered.InvokeAll(payload);
     }
 

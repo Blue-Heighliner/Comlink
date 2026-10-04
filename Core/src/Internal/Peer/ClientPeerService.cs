@@ -30,7 +30,7 @@ internal sealed class ClientPeerService : IPeerService, IConnectionStatusService
     private readonly PointMaintenance points;
     private readonly Lock reconfigureLock = new();
 
-    private readonly ConcurrentDictionary<string, Task<bool>> inFlightSends = new();
+    private readonly ConcurrentDictionary<object, Task<bool>> inFlightSends = new(ReferenceEqualityComparer.Instance);
 
     private IPeerTransport? transport;
     private readonly ParentLinkSet parentLinks = new();
@@ -117,16 +117,15 @@ internal sealed class ClientPeerService : IPeerService, IConnectionStatusService
     {
         // Route()/MessageRoutingService calls Send once per resolved recipient, even for a single group
         // address expanding to several users; since every send here goes to the one shared server
-        // regardless of userName, in-flight sends are coalesced by message ID to avoid transmitting the
+        // regardless of userName, in-flight sends are coalesced by frame instance to avoid transmitting the
         // same message multiple times.
-        string messageId = engineController.GetFrameId(message);
-        return inFlightSends.GetOrAdd(messageId, _ => SendOnceAndCleanup(messageId, message, cancellation));
+        return inFlightSends.GetOrAdd(message, _ => SendOnceAndCleanup(message, cancellation));
     }
 
-    private async Task<bool> SendOnceAndCleanup(string messageId, object message, CancellationToken cancellation)
+    private async Task<bool> SendOnceAndCleanup(object message, CancellationToken cancellation)
     {
-        try { return await SendOnce(messageId, message, cancellation); }
-        finally { inFlightSends.TryRemove(messageId, out _); }
+        try { return await SendOnce(message, cancellation); }
+        finally { inFlightSends.TryRemove(message, out _); }
     }
 
     /// <inheritdoc />
@@ -209,7 +208,7 @@ internal sealed class ClientPeerService : IPeerService, IConnectionStatusService
         parentLinks.Refresh(transport);
     }
 
-    private async Task<bool> SendOnce(string messageId, object message, CancellationToken cancellation)
+    private async Task<bool> SendOnce(object message, CancellationToken cancellation)
     {
         PeerConnection? connection = serverConnection;
         if (transport is null || connection is null || isClosed) { return false; }
@@ -247,7 +246,7 @@ internal sealed class ClientPeerService : IPeerService, IConnectionStatusService
     /// <inheritdoc />
     public async Task DeliverLocal(object payload)
     {
-        logger.LogInformation("{MessageId} delivered locally from {FromUser}", engineController.GetFrameId(payload), engineController.GetFromUser(payload));
+        logger.LogInformation("{MessageId} delivered locally from {FromUser}", engineController.GetIdentifier(payload), engineController.GetFromUser(payload));
         await FrameDelivered.InvokeAll(payload);
     }
 

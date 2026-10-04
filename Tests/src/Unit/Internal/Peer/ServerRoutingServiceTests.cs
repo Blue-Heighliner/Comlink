@@ -627,6 +627,27 @@ public sealed class ServerRoutingServiceTests
         await Stop(fx);
     }
 
+    /// <summary>A message from a child with no identifier is invalid: it is neither routed nor stored.</summary>
+    [Fact]
+    public async Task FromChild_MessageWithoutId_IsDropped()
+    {
+        Mock<IMessageStorageService> storage = new();
+        Fixture fx = await BuildStarted(storage: storage.Object);
+        PeerConnection clientA1 = Inbound("ClientA1");
+        PeerConnection clientA2 = Inbound("ClientA2");
+        fx.Come(clientA1);
+        fx.Come(clientA2);
+        TestFrame message = MessageTo("ClientA2");
+        message.MessageId = string.Empty;
+
+        fx.Receive(clientA1, Encode(message));
+
+        await Task.Delay(150);
+        Assert.Equal(0, Requests(fx, clientA2));
+        storage.Verify(s => s.Store(It.IsAny<object>()), Times.Never);
+        await Stop(fx);
+    }
+
     /// <summary>A heartbeat (an empty message) from a child is not a real message and is not relayed or stored.</summary>
     [Fact]
     public async Task FromChild_Heartbeat_IsIgnored()
@@ -660,21 +681,18 @@ public sealed class ServerRoutingServiceTests
         await Stop(fx);
     }
 
-    /// <summary>IPeerService.Send (this server instance originating its own message) is routed exactly like a message received from itself as a child.</summary>
+    /// <summary>A server does not compose messages, only transports them, so sending one of its own fails and nothing goes out.</summary>
     [Fact]
-    public async Task Send_FromServerItself_RoutesLikeAChildMessage()
+    public async Task Send_FromTheServerItself_Fails()
     {
         Fixture fx = await BuildStarted();
         PeerConnection clientA2 = Inbound("ClientA2");
         fx.Come(clientA2);
-        TestFrame message = MessageTo("ClientA2");
-        message.MessageId = "SELF-M1";
 
-        bool ok = await fx.Service.Send("ClientA2", message);
+        bool ok = await fx.Service.Send("ClientA2", MessageTo("ClientA2"));
 
-        Assert.True(ok);
-        await WaitUntil(() => SentReal(fx, clientA2), TimeSpan.FromSeconds(30));
-        Assert.Equal(1, Requests(fx, clientA2, real: true));
+        Assert.False(ok);
+        Assert.Equal(0, Requests(fx, clientA2, real: true));
         await Stop(fx);
     }
 
@@ -1000,7 +1018,7 @@ public sealed class ServerRoutingServiceTests
         fx.Come(clientA2);
         fx.Come(serverB);
         TestFrame message = MessageTo("ClientA2", "ClientB1");
-        message.Priority = 7;
+        message.Priority = "LEVEL7";
 
         fx.Receive(clientA1, Encode(message));
 
@@ -1087,7 +1105,7 @@ public sealed class ServerRoutingServiceTests
         Addresses = [new TestAddressEntry { UserName = server, Type = "To" }]
     };
 
-    /// <summary>A message routed from a child is handed to storage, whether or not storage keeps it.</summary>
+    /// <summary>A message routed from a child is handed to storage.</summary>
     [Fact]
     public async Task FromChild_Message_IsHandedToStorage()
     {
@@ -1103,9 +1121,9 @@ public sealed class ServerRoutingServiceTests
         await Stop(fx);
     }
 
-    /// <summary>A message routed from another server is handed to storage too, since this server routes it on to its own children.</summary>
+    /// <summary>A message routed from another server is not stored: a server stores only what its own children send.</summary>
     [Fact]
-    public async Task FromServer_Message_IsHandedToStorage()
+    public async Task FromServer_Message_IsNotStored()
     {
         Mock<IMessageStorageService> storage = new();
         Fixture fx = await BuildStarted(storage: storage.Object);
@@ -1114,8 +1132,8 @@ public sealed class ServerRoutingServiceTests
 
         fx.Receive(serverB, Encode(MessageTo("ClientA1")));
 
-        await WaitUntil(() => storage.Invocations.Count > 0, TimeSpan.FromSeconds(30));
-        storage.Verify(s => s.Store(It.IsAny<object>()), Times.Once);
+        await Task.Delay(300);
+        storage.Verify(s => s.Store(It.IsAny<object>()), Times.Never);
         await Stop(fx);
     }
 

@@ -170,11 +170,11 @@ internal sealed class ImportService : IImportService
             SentAt = data.SentAt,
             Body = data.Body,
             IsAlert = data.IsAlert,
-            Priority = data.Priority,
+            Priority = engineController.PriorityOf(data.Priority),
             Tag = data.Tag,
             SecurityLevel = string.Empty
         });
-        engineController.SetFrameId(message, data.MessageId);
+        engineController.SetMessageId(message, data.MessageId);
         engineController.SetFromUser(message, data.FromUser);
         engineController.SetAddresses(message, data.Addresses
             .Select(a => new MessageAddress { UserName = a.UserName, Type = a.Type.ParseAddressType(), Information = a.Information })

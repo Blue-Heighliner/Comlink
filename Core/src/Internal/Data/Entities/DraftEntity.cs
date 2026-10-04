@@ -20,7 +20,7 @@ internal sealed class DraftEntity
     /// <summary>Whether this draft should be sent as an alert; see <see cref="IEngineController.GetIsAlert"/>.</summary>
     public bool IsAlert { get; set; }
     /// <summary>Priority number this draft should be sent at; see <see cref="IEngineController.GetPriority"/>.</summary>
-    public int Priority { get; set; }
+    public string Priority { get; set; } = string.Empty;
     /// <summary>Tag identifying the type of this draft; see <see cref="IEngineController.GetTag"/>.</summary>
     public string Tag { get; set; } = string.Empty;
     /// <summary>Security level name this draft should be sent at; see <see cref="IEngineController.GetSecurityLevel"/>.</summary>

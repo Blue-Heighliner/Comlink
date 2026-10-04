@@ -37,33 +37,29 @@ public sealed class PacketBuilderTests
         Assert.Equal(new byte[] { 1, 2, 3 }, handler.GetData(packet).ToArray());
     }
 
-    /// <summary>The default size is 16 KiB, the default window is 1, and the default serializer builds only the packet type.</summary>
+    /// <summary>The default serializer builds only the packet type.</summary>
     [Fact]
-    public void Defaults_SizeWindowAndSerializer()
+    public void Defaults_Serializer()
     {
         PacketMap map = Complete().Build();
         IPacketSerializer serializer = map.Serializer.Create(null);
         using IMemoryOwner<byte> own = serializer.Serialize(new TestPacket { Count = 1 }, null);
         using IMemoryOwner<byte> other = new ProtobufSerializer().Serialize(new TestFrame());
 
-        Assert.Equal(16 * 1024, map.Size);
-        Assert.Equal(1, map.Window);
         Assert.IsType<TestPacket>(serializer.Deserialize(own.Memory));
         Assert.Throws<InvalidDataException>(() => serializer.Deserialize(other.Memory));
     }
 
-    /// <summary>The size, window and serializer a host states replace the defaults.</summary>
+    /// <summary>The serializer a host states replaces the default.</summary>
     [Fact]
-    public void Size_Window_AndSerializer_CanBeReplaced()
+    public void Serializer_CanBeReplaced()
     {
         IPacketSerializer serializer = Mock.Of<IPacketSerializer>();
         PacketBuilder<TestPacket> builder = Complete();
-        builder.Size(200).Window(3).Serializer<IPacketSerializer>();
+        builder.Serializer<IPacketSerializer>();
 
         PacketMap map = builder.Build();
 
-        Assert.Equal(200, map.Size);
-        Assert.Equal(3, map.Window);
         Assert.Same(serializer, map.Serializer.Create(new ServiceCollection().AddSingleton(serializer).BuildServiceProvider()));
     }
 }

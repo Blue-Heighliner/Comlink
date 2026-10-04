@@ -17,4 +17,7 @@ public sealed record RetrievalCreateContext
 
     /// <summary>Gets the message identifiers to retrieve.</summary>
     public IReadOnlyList<string> Ids { get; init; } = [];
+
+    /// <summary>Gets the server the messages are stored on, which the request is for and which the handler stores as the request's destination.</summary>
+    public required string Server { get; init; }
 }

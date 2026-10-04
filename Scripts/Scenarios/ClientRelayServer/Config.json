@@ -8,7 +8,6 @@
       "Msmt": { "Port": 50321 },
       "InterfacePort": 50320,
       "Children": [ "RELAY" ],
-      "StoresMessages": true,
       "SecurityLevel": "RESTRICTED"
     },
     "RELAY": {

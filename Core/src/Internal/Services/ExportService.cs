@@ -231,7 +231,7 @@ internal sealed class ExportService : IExportService
             .ToList(),
         SentAt = engineController.GetSentAt(entity.Message),
         IsAlert = engineController.GetIsAlert(entity.Message),
-        Priority = engineController.GetPriority(entity.Message),
+        Priority = engineController.NameOf(engineController.GetMessagePriority(entity.Message)),
         Tag = engineController.GetTag(entity.Message),
         ReceivedAt = entity.ReceivedAt,
         ReadStatus = entity.ReadStatus,

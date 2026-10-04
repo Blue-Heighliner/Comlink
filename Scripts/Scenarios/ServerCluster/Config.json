@@ -9,7 +9,6 @@
       "InterfacePort": 50220,
       "Parent": "SERVER2",
       "Children": [ "CLIENT1" ],
-      "StoresMessages": true,
       "SecurityLevel": "RESTRICTED"
     },
     "SERVER2": {

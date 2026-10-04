@@ -6,6 +6,7 @@ namespace BlueHeighliner.Comlink.Sample;
 /// behavior worth showing. Everything left unstated uses the engine's default, with the network configuration file applied on top
 /// automatically (see <c>Docs/Components/Configuration.md</c>):
 /// <list type="bullet">
+/// <item><description>message identifiers - the <see cref="MessageHandler"/> numbers every message in sequence, continuing the counter from the identifier the engine kept from the previous run, instead of the default random GUID.</description></item>
 /// <item><description>home text - a product-appropriate home screen welcome text.</description></item>
 /// <item><description>window icon - Sample's own envelope icon instead of the operating system's.</description></item>
 /// <item><description>users - none stated here: every user of the network, with their role, ports, connections, security level and node settings, comes from the network configuration file (<c>--config</c>, or <c>Config.json</c> in the working directory), which each of the <c>Scripts/Scenarios/</c> scenarios supplies for its own network, and an install code is just the name of a user in it.</description></item>
@@ -15,15 +16,15 @@ namespace BlueHeighliner.Comlink.Sample;
 /// <item><description>deleting - only drafts and notes can be deleted; Inbox, Outbox, and Activity are protected.</description></item>
 /// <item><description>connection identification - a <see cref="IdentityProcessor"/> carries out an initial packet exchange on every connection: the node that opens it sends a <see cref="Packet"/> whose chunk is its user name, the accepting node answers with one carrying its own, and each marks the connection connected as the user the other named, instead of by the peer's certificate or (for a serial cable) its port. Like all traffic between nodes they are serialized instances of the packet type, nothing else.</description></item>
 /// <item><description>command-line overrides - allowed, so Sample honors <c>--config</c> and <c>--user</c> (which its scenario scripts pass), unlike the engine default.</description></item>
-/// <item><description>packetization - enabled with <see cref="Packet"/>, using the default packet size, window and serializer.</description></item>
+/// <item><description>packetization - enabled with <see cref="Packet"/>, with a packet size of 1024 bytes (what one HDLC frame carries, as set by the HDLC options below) and the default window and serializer.</description></item>
 /// <item><description>address type labels - renames the <see cref="AddressType.External"/> label to <c>OUTSIDE</c>, matching the <c>Kind</c> vocabulary <see cref="Recipient"/> already uses for it.</description></item>
-/// <item><description>security levels - three placeholder levels (<c>PUBLIC</c>, <c>INTERNAL</c>, <c>RESTRICTED</c>), assigned to users in each scenario's network configuration; the <c>Peer</c> scenario's sites run at <c>PUBLIC</c>, the <c>ClientServer</c>/<c>ServerCluster</c> scenarios' clients at <c>INTERNAL</c>, and their servers at <c>RESTRICTED</c>.</description></item>
+/// <item><description>security levels - three placeholder levels (<c>PUBLIC</c>, <c>INTERNAL</c>, <c>RESTRICTED</c>), assigned to users in each scenario's network configuration; the <c>ClientServer</c>/<c>ServerCluster</c> scenarios' clients at <c>INTERNAL</c>, and their servers at <c>RESTRICTED</c>.</description></item>
 /// <item><description>custom frame serialization - <see cref="JsonSerializer"/> sends every <see cref="Frame"/> across the network as JSON instead of the default protobuf-net.</description></item>
-/// <item><description>a <see cref="NetworkProcessor"/> reacting to peer activity - a newly connected user is welcomed with who else is currently online (<see cref="IEngineContext.ConnectedUsers"/>), everyone still online is told when someone disconnects, and any received message tagged <c>PING</c> gets an automatic <c>PONG</c> reply (all via <see cref="INetworkContext{TFrame}.Send"/>).</description></item>
+/// <item><description>a <see cref="NetworkProcessor"/> reacting to peer activity - any received message tagged <c>PING</c> gets an automatic <c>PONG</c> reply (via <see cref="INetworkContext{TFrame}.Send"/>), except on a server or relay, which compose nothing.</description></item>
 /// <item><description>export formats - a plain-text alternative to the built-in JSON export, restricted to messages, drafts, and notes (an activity log's structured entries don't read naturally as prose).</description></item>
 /// <item><description>import formats - a CSV reader that stages one send per <c>User,Body</c> line for the user to review and send from the staged send screen, one at a time a second apart.</description></item>
-/// <item><description>server storage - <c>Server</c> (ClientServer scenario) and <c>Server1</c> (ServerCluster scenario) (<c>StoresMessages</c> in the network configuration) keep a copy of every message they route and answer a client's RETRIEVE request; <c>Server2</c> does not.</description></item>
-/// <item><description>auto forward controllers - an "Escalation" controller, open to every Peer/Client scenario site, that forwards any received alert or <c>URGENT</c>-tagged message to whichever users its target list names.</description></item>
+/// <item><description>server storage - every server keeps a copy of every message one of its own children sends and answers a client's RETRIEVE request, which names the server the message is stored on.</description></item>
+/// <item><description>auto forward controllers - an "Escalation" controller, open to every Client scenario site, that forwards any received alert or <c>URGENT</c>-tagged message to whichever users its target list names.</description></item>
 /// </list>
 /// Actual alarm sound playback and printer discovery and driving are real platform behavior always provided by the
 /// engine itself, not something Sample states here.
@@ -41,11 +42,6 @@ public sealed class EngineConfiguration : IEngineConfiguration
             .Frames<Frame>(frame => frame
                 .Serializer<JsonSerializer>()
                 .Processor<NetworkProcessor>()
-                .Id(m => m.Id)
-                .Sender(m => m.Sender)
-                .Addresses(
-                    m => m.Recipients.Select(r => (r.User, r.Kind switch { "CC" => AddressType.Cc, "OUTSIDE" => AddressType.External, _ => AddressType.To }, r.Note)),
-                    (m, value) => m.Recipients = [.. value.Select(a => new Recipient { User = a.Name, Kind = a.Type switch { AddressType.Cc => "CC", AddressType.External => "OUTSIDE", _ => "TO" }, Note = a.Information })])
                 .Message<MessageHandler>()
                 .AutoForward<EscalationController>()
                 .Retrieval<RetrievalHandler>()
@@ -57,16 +53,17 @@ public sealed class EngineConfiguration : IEngineConfiguration
                 .Heartbeat<PacketHeartbeatHandler>())
             .HomeText("Select a folder and entry to get started, or create a new draft or note.")
             .WindowIcon("avares://BlueHeighliner.Comlink.Sample/Assets/envelope.png")
-            .Priorities<MessagePriority>(
-                (MessagePriority.Retrieval, null, PriorityMode.System),
-                (MessagePriority.Receipt, null, PriorityMode.System))
-            .BlockTag("SPAM", null)
-            .BlockTag(null, MessagePriority.High)
+            .Priorities<MessagePriority>(priorities => priorities
+                .Priority(MessagePriority.Retrieval).Mode(PriorityMode.System)
+                .Priority(MessagePriority.Receipt).Mode(PriorityMode.System)
+                .Block("SPAM", null)
+                .Block(null, MessagePriority.High))
             .AddressTypeLabel(AddressType.External, "OUTSIDE")
-            .SecurityLevels<SecurityLevel>(
-                (SecurityLevel.Public, null, "#2E7D32"),
-                (SecurityLevel.Internal, null, "#1565C0"),
-                (SecurityLevel.Restricted, null, "#C62828"))
+            .SecurityLevels<SecurityLevel>(levels => levels
+                .Level(SecurityLevel.Public).Color("#2E7D32")
+                .Level(SecurityLevel.Internal).Color("#1565C0")
+                .Level(SecurityLevel.Restricted).Color("#C62828"))
+            .PacketSize(1024)
             .CanDelete(folder => folder is FolderType.Drafts or FolderType.Notes)
             .CommandLineOverrides(true)
             .MsmtOptions(new MsmtConnectionOptions { HandshakeTimeout = TimeSpan.FromSeconds(15), ResponseTimeout = TimeSpan.FromSeconds(60) })

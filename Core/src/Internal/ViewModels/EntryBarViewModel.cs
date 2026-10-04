@@ -121,7 +121,7 @@ internal sealed partial class EntryBarViewModel : ObservableObject, IEntryBarVie
         this.entryService = entryService;
         this.engineController = engineController;
         AvailableSecurityLevelFilters = [new SecurityLevelFilterOption { Label = "Any", Name = null }, .. engineController.SecurityLevels.Select(l => new SecurityLevelFilterOption { Label = l.Name, Name = l.Name })];
-        AvailablePriorityFilters = [new PriorityFilterOption { Label = "Any", Value = null }, .. engineController.Priorities.Select(p => new PriorityFilterOption { Label = p.Name, Value = p.Value })];
+        AvailablePriorityFilters = [new PriorityFilterOption { Label = "Any", Value = null }, .. engineController.Priorities.Select(p => new PriorityFilterOption { Label = p.Name, Value = p.Key })];
         selectedSecurityLevelFilter = AvailableSecurityLevelFilters[0];
         selectedPriorityFilter = AvailablePriorityFilters[0];
     }
@@ -269,7 +269,7 @@ internal sealed partial class EntryBarViewModel : ObservableObject, IEntryBarVie
     /// <inheritdoc />
     public event Action<EntryItemViewModel>? EntryDeleted;
 
-    private string GetPriorityLabel(object message) => engineController.Priorities.GetLabel(engineController.GetPriority(message));
+    private string GetPriorityLabel(object message) => engineController.NameOf(engineController.GetMessagePriority(message));
 
     private string? GetTagLabel(object message)
     {

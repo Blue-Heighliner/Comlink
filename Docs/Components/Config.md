@@ -23,14 +23,13 @@ The file is read again while the application runs when the user right-clicks the
   },
   "Users": {
     "USER-A": {
-      "Role": "Peer",
+      "Role": "Client",
       "IpHost": "10.0.0.2",
       "Msmt": { "Port": 50021, "HandshakeTimeout": "00:00:30" },
       "Hdlc": { "Address": 1, "Ports": [ "ttyUSB0" ], "MaxInfoField": 1024 },
       "InterfacePort": 50020,
       "Parent": null,
       "Children": [],
-      "StoresMessages": false,
       "SecurityLevel": null,
       "CertificateName": null,
       "Data": { "role": "clerk" },
@@ -66,7 +65,7 @@ Path to a public certificate file (for example `.cer`) for that authority, used 
 
 **Type:** `string | null` | **Default:** `null`
 
-Path to a folder of PKCS#12 (`.pfx`) files, one per user named `{USERNAME}.pfx` (for example `PEER1.pfx`, matching the user name's case on a case-sensitive file system), holding each user's identity certificate and private key. A node loads the running user's own identity from it instead of a system store lookup. A relative path resolves against the directory of the configuration file. It must be used together with `AuthorityCertificate`.
+Path to a folder of PKCS#12 (`.pfx`) files, one per user named `{USERNAME}.pfx` (for example `CLIENT1.pfx`, matching the user name's case on a case-sensitive file system), holding each user's identity certificate and private key. A node loads the running user's own identity from it instead of a system store lookup. A relative path resolves against the directory of the configuration file. It must be used together with `AuthorityCertificate`.
 
 ### `UserGroups`
 
@@ -93,15 +92,15 @@ These become the user's `UserInfo` (see [Configuration.md](Configuration.md#user
 
 ### `Role`
 
-**Type:** `string | null` | **Default:** `null` (`"Peer"`)
+**Type:** `string | null` | **Default:** `null` (`"Client"`)
 
-The networking role of a node this user runs: `"Peer"`, `"Client"`, `"Server"` or `"Relay"` (case-insensitive). An unrecognized value is `"Peer"`. See [Peer.md](Peer.md#user-roles).
+The networking role of a node this user runs: `"Client"`, `"Server"` or `"Relay"` (case-insensitive). An unrecognized value, including the retired `"Peer"`, is an error: the file does not load, so networking does not start (and a reload keeps the previous contents). Leaving it out is a `"Client"`. See [Peer.md](Peer.md#user-roles).
 
 ### `IpHost`
 
 **Type:** `string | null` | **Default:** `null`
 
-The IP address or host name that other nodes connect to in order to reach this user over IP. A user that nobody dials need not state one. Where one user dials another (a peer dialing a peer, a node dialing its parent, a parent dialing a child whose link is forced to `MsmtConnect`), it uses the other user's `IpHost` (the loopback address when the other user states none) and `Msmt.Port`.
+The IP address or host name that other nodes connect to in order to reach this user over IP. A user that nobody dials need not state one. Where one user dials another (a node dialing its parent, a parent dialing a child whose link is forced to `MsmtConnect`), it uses the other user's `IpHost` (the loopback address when the other user states none) and `Msmt.Port`.
 
 ### `Msmt`
 
@@ -128,7 +127,7 @@ The user's HDLC settings. Every option of the HDLC peer is a key (`AcknowledgeDe
 
 | Key | Type | Description |
 |-----|------|-------------|
-| `Address` | `int` | The HDLC station address of this user (0-255, default `1`): the local address its node uses, and the remote address other nodes use to connect to it. Users that are linked by HDLC need distinct addresses |
+| `Address` | `int` | The HDLC station address of this user (0-255, default `1`): the local address its node uses, and the remote address other nodes use to connect to it. Users that are linked by HDLC must have distinct addresses: a node and a user it links to may not share one, nor may two users it links to, and networking does not start (an error is logged) when they do |
 | `Ports` | `string[] \| "*"` | The MicroGate ports the node opens to form HDLC connections: an array of port names, or the string `"*"` for every port available on the machine. None by default |
 
 A node opens its ports only when it has a link in `Hdlc` mode. Nothing says which port is cabled to which user, so every opened port tries the address of each HDLC-linked user in turn until the far end answers, and the connection is identified as the user at that address. A serial link carries no certificate; override `Identify` or configure an initial packet or message for anything more elaborate.
@@ -156,14 +155,6 @@ Instead of a plain user name, a link may be an object that forces how the connec
 "SERVER":  { "Role": "Server", "Hdlc": { "Address": 1, "Ports": [ "ttyUSB3" ] }, "Children": [ { "User": "CLIENT1", "Mode": "Hdlc" }, "CLIENT2" ] },
 "CLIENT1": { "Role": "Client", "Hdlc": { "Address": 2, "Ports": [ "ttyUSB0" ] }, "Parent": { "User": "SERVER", "Mode": "Hdlc" } }
 ```
-
-Peers have no parent or children: a `"Peer"` dials every other peer that states an `IpHost`, except that when both state one only the one whose name sorts first dials, so a pair is never connected both ways, and a peer with none dials all of them.
-
-### `StoresMessages`
-
-**Type:** `bool` | **Default:** `false`
-
-For a `"Server"`, whether it keeps a copy of every message it routes and answers retrieval requests (see [Configuration.md](Configuration.md#server-storage)).
 
 ### `SecurityLevel`
 
@@ -237,27 +228,6 @@ Whether the print manager's "print received" toggle starts enabled, automaticall
 
 ## Examples
 
-### A peer network
-
-Two peers sharing one machine, the one whose name sorts first dialing the other (`Scripts/Scenarios/Peer/Config.json`):
-
-```json
-{
-  "AuthorityCertificate": "../Root.cer",
-  "CertificateStore": ".",
-  "UserGroups": { "TEST": [ "PEER1", "PEER2" ] },
-  "Users": {
-    "PEER1": { "IpHost": "127.0.0.1", "Msmt": { "Port": 50021 }, "InterfacePort": 50020, "SecurityLevel": "PUBLIC" },
-    "PEER2": { "IpHost": "127.0.0.1", "Msmt": { "Port": 50023 }, "InterfacePort": 50022, "SecurityLevel": "PUBLIC" }
-  }
-}
-```
-
-```sh
-Sample.exe --config Scripts/Scenarios/Peer/Config.json --user PEER1
-Sample.exe --config Scripts/Scenarios/Peer/Config.json --user PEER2
-```
-
 ### A client/server hierarchy
 
 One server with two clients that each name it as their parent, the server storing messages (`Scripts/Scenarios/ClientServer/Config.json`):
@@ -267,7 +237,7 @@ One server with two clients that each name it as their parent, the server storin
   "AuthorityCertificate": "../Root.cer",
   "CertificateStore": ".",
   "Users": {
-    "SERVER":  { "Role": "Server", "IpHost": "127.0.0.1", "Msmt": { "Port": 50121 }, "InterfacePort": 50120, "Children": [ "CLIENT1", "CLIENT2" ], "StoresMessages": true, "SecurityLevel": "RESTRICTED" },
+    "SERVER":  { "Role": "Server", "IpHost": "127.0.0.1", "Msmt": { "Port": 50121 }, "InterfacePort": 50120, "Children": [ "CLIENT1", "CLIENT2" ], "SecurityLevel": "RESTRICTED" },
     "CLIENT1": { "Role": "Client", "InterfacePort": 50122, "Parent": "SERVER", "SecurityLevel": "INTERNAL" },
     "CLIENT2": { "Role": "Client", "InterfacePort": 50124, "Parent": "SERVER", "SecurityLevel": "INTERNAL" }
   }

@@ -57,8 +57,7 @@ public sealed class PeerNetworkTests
             {
                 UserRole.Server => Both(new ServerRoutingService(factory, controller.Object, currentUser.Object, storage ?? Mock.Of<IMessageStorageService>(), noLogger)),
                 UserRole.Client => Both(new ClientPeerService(factory, controller.Object, noLogger)),
-                UserRole.Relay => Both(new RelayPeerService(factory, controller.Object, currentUser.Object, noLogger)),
-                _ => (new PeerService(factory, controller.Object, noLogger), null)
+                _ => Both(new RelayPeerService(factory, controller.Object, currentUser.Object, noLogger))
             };
             Service.FrameDelivered += message => { Delivered.Enqueue((TestFrame)message); return Task.CompletedTask; };
             run = Service.Start(cts.Token);
@@ -287,32 +286,5 @@ public sealed class PeerNetworkTests
         await WaitUntil(() => !client2.Delivered.IsEmpty && !client1.Delivered.IsEmpty, "both messages to arrive");
         Assert.Equal("FROM-1", client2.Delivered.Single().MessageId);
         Assert.Equal("FROM-2", client1.Delivered.Single().MessageId);
-    }
-
-    /// <summary>Peers that each list only the other's listener find out who is who from the certificates, and a peer that only listens can still reply over the connection it was dialed on.</summary>
-    [Fact]
-    public async Task Peers_OneDialsTheOther_MessagesFlowBothWays()
-    {
-        (Dictionary<string, X509Certificate2> certificates, X509Certificate2Collection authorities) = TestMsmtCertificates.CreateNamed("Alice", "Bob");
-        int bobPort = FreePort();
-        await using Node bob = new("Bob", certificates["Bob"], authorities, UserRole.Peer, bobPort, []);
-        await using Node alice = new("Alice", certificates["Alice"], authorities, UserRole.Peer, 0, [Local(bobPort)]);
-
-        await WaitUntil(() => alice.Service.Send("Bob", MessageTo("Alice", "Bob", "TO-BOB")), "Alice to reach Bob");
-        await WaitUntil(() => bob.Service.Send("Alice", MessageTo("Bob", "Alice", "TO-ALICE")), "Bob to reach Alice over the connection Alice opened");
-
-        await WaitUntil(() => !bob.Delivered.IsEmpty && !alice.Delivered.IsEmpty, "both messages to arrive");
-        Assert.Equal("TO-BOB", bob.Delivered.First().MessageId);
-        Assert.Equal("TO-ALICE", alice.Delivered.First().MessageId);
-    }
-
-    /// <summary>A peer has no connection to a user nobody has identified, so sending to them fails rather than dialing anywhere.</summary>
-    [Fact]
-    public async Task Peers_SendToUserWithNoConnection_Fails()
-    {
-        (Dictionary<string, X509Certificate2> certificates, X509Certificate2Collection authorities) = TestMsmtCertificates.CreateNamed("Alice");
-        await using Node alice = new("Alice", certificates["Alice"], authorities, UserRole.Peer, 0, []);
-
-        Assert.False(await alice.Service.Send("Nobody", MessageTo("Alice", "Nobody")));
     }
 }

@@ -15,12 +15,22 @@ public sealed class TestRetrievalHandler : IRetrievalHandler<TestFrame>
         {
             IsHidden = true,
             IsRetrieval = true,
+            Addresses = [new TestAddressEntry { UserName = context.Server }],
             RetrievalFrom = context.From,
             RetrievalTo = context.To,
             RetrievalAuthors = [.. context.Authors],
             RetrievalDestinations = [.. context.Destinations],
             RetrievalIds = [.. context.Ids]
         };
+
+    /// <inheritdoc />
+    public string GetDestination(TestFrame frame) => frame.Addresses[0].UserName;
+
+    /// <inheritdoc />
+    public string GetSender(TestFrame frame) => frame.FromUser;
+
+    /// <inheritdoc />
+    public void SetSender(TestFrame frame, string sender) => frame.FromUser = sender;
 
     /// <inheritdoc />
     public DateTime? GetFrom(TestFrame frame) => frame.RetrievalFrom;

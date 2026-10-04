@@ -11,10 +11,10 @@ public sealed class EntryBarViewModelTests
     private static MessageEntity MakeMessage(string id = "MSG1", string fromUser = "ALPHA", string body = "Hello", int priority = 0, string tag = "", string securityLevel = "", bool isAlert = false)
     {
         object message = format.CreateFrame();
-        format.SetFrameId(message, id);
+        ((TestFrame)message).MessageId = id;
         format.SetFromUser(message, fromUser);
         ((TestFrame)message).Body = body;
-        ((TestFrame)message).Priority = priority;
+        ((TestFrame)message).Priority = priority switch { 0 => "NORMAL", 1 => "Medium", 2 => "High", _ => $"LEVEL{priority}" };
         ((TestFrame)message).Tag = tag;
         ((TestFrame)message).SecurityLevel = securityLevel;
         ((TestFrame)message).IsAlert = isAlert;
@@ -191,7 +191,7 @@ public sealed class EntryBarViewModelTests
         EntryBarViewModel vm = new(new Mock<IEntryService>().Object, new EngineController(EngineBuilder.Build(new TestEngineConfiguration()), new CurrentUserProvider(), null));
 
         Assert.Equal(["Any", "NORMAL"], vm.AvailablePriorityFilters.Select(f => f.Label));
-        Assert.Equal([null, 0], vm.AvailablePriorityFilters.Select(f => f.Value));
+        Assert.Equal([(Enum?)null, DefaultPriority.Normal], vm.AvailablePriorityFilters.Select(f => f.Value));
         Assert.Same(vm.AvailablePriorityFilters[0], vm.SelectedPriorityFilter);
     }
 
@@ -246,7 +246,7 @@ public sealed class EntryBarViewModelTests
         vm.SelectedPriorityFilter = vm.AvailablePriorityFilters.Single(f => f.Label == "NORMAL");
 
         Assert.Equal(1, vm.CurrentPage);
-        svc.Verify(s => s.GetMessages("root-inbox", 1, new EntryFilter { Priority = 0 }), Times.Once);
+        svc.Verify(s => s.GetMessages("root-inbox", 1, new EntryFilter { Priority = TestMessagePriority.Normal }), Times.Once);
     }
 
     /// <summary>Setting AlertOnlyFilter passes an EntryFilter with AlertOnly true through to the entry service.</summary>
@@ -770,9 +770,9 @@ public sealed class EntryBarViewModelTests
     {
         Mock<TestEngineController> priorityProvider = new() { CallBase = true };
         priorityProvider.Setup(p => p.Priorities).Returns([
-            new MessagePriorityOption { Name = "Low", Value = 0 },
-            new MessagePriorityOption { Name = "Medium", Value = 1 },
-            new MessagePriorityOption { Name = "High", Value = 2 }
+            new MessagePriorityOption { Name = "Low", Value = 0, Key = TestMessagePriority.Low },
+            new MessagePriorityOption { Name = "Medium", Value = 1, Key = TestMessagePriority.Medium },
+            new MessagePriorityOption { Name = "High", Value = 2, Key = TestMessagePriority.High }
         ]);
         Mock<IEntryService> svc = new();
         svc.Setup(s => s.GetMessages(It.IsAny<string>(), It.IsAny<int>()))
@@ -790,9 +790,9 @@ public sealed class EntryBarViewModelTests
     {
         Mock<TestEngineController> priorityProvider = new() { CallBase = true };
         priorityProvider.Setup(p => p.Priorities).Returns([
-            new MessagePriorityOption { Name = "Low", Value = 0 },
-            new MessagePriorityOption { Name = "Medium", Value = 1 },
-            new MessagePriorityOption { Name = "High", Value = 2 }
+            new MessagePriorityOption { Name = "Low", Value = 0, Key = TestMessagePriority.Low },
+            new MessagePriorityOption { Name = "Medium", Value = 1, Key = TestMessagePriority.Medium },
+            new MessagePriorityOption { Name = "High", Value = 2, Key = TestMessagePriority.High }
         ]);
         Mock<IEntryService> svc = new();
         svc.Setup(s => s.GetMessages(It.IsAny<string>(), It.IsAny<int>()))
@@ -852,7 +852,7 @@ public sealed class EntryBarViewModelTests
     {
         Mock<TestEngineController> tagConfiguration = new() { CallBase = true };
         tagConfiguration.Setup(t => t.TagsEnabled).Returns(false);
-        tagConfiguration.Setup(t => t.Priorities).Returns([new MessagePriorityOption { Name = "Normal", Value = 0 }]);
+        tagConfiguration.Setup(t => t.Priorities).Returns([new MessagePriorityOption { Name = "Normal", Value = 0, Key = TestMessagePriority.Normal }]);
         Mock<IEntryService> svc = new();
         svc.Setup(s => s.GetMessages(It.IsAny<string>(), It.IsAny<int>()))
            .ReturnsAsync((Items: new List<MessageEntity> { MakeMessage("M1", tag: "URGENT") }, Total: 1));

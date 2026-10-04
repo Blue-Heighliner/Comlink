@@ -5,6 +5,6 @@ internal sealed record PriorityFilterOption
 {
     /// <summary>Gets the display label shown in the picker.</summary>
     public required string Label { get; init; }
-    /// <summary>Gets the priority number to filter on, or <see langword="null"/> for "Any" (no filter).</summary>
-    public int? Value { get; init; }
+    /// <summary>Gets the priority level to filter on, or <see langword="null"/> for "Any" (no filter).</summary>
+    public Enum? Value { get; init; }
 }

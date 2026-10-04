@@ -17,15 +17,9 @@ public sealed record UserInfo
     public string? CertificateName { get; init; }
     /// <summary>App-specific data attached to the user. The engine does not interpret it; it travels with the user's <see cref="UserIdentity"/>. Empty by default.</summary>
     public IReadOnlyDictionary<string, string> Data { get; init; } = new Dictionary<string, string>();
-    /// <summary>
-    /// For a <see cref="UserRole.Server"/> user, whether it keeps a copy of every message it routes and answers a client's retrieval
-    /// request (the client's RETRIEVE screen, see <see cref="IFrameBuilder{TFrame}.Retrieval{THandler}"/>) with a copy of each stored message that fits.
-    /// Every node on a network must describe the server alike, since a client learns which servers store from this same info.
-    /// </summary>
-    public bool StoresMessages { get; init; }
     /// <summary>Names of the groups this user is a member of.</summary>
     public IReadOnlyList<string> Groups { get; init; } = [];
-    /// <summary>The networking role of a node this user runs. <see langword="null"/> (the default) is <see cref="UserRole.Peer"/>.</summary>
+    /// <summary>The networking role of a node this user runs. <see langword="null"/> (the default) is <see cref="UserRole.Client"/>.</summary>
     public UserRole? Role { get; init; }
     /// <summary>The IP address or host name other nodes connect to in order to reach a node this user runs. <see langword="null"/> (the default) when it is not reachable that way, so no one dials it unless a link says to, and then at the loopback address.</summary>
     public string? IpHost { get; init; }

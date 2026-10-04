@@ -9,6 +9,12 @@ internal interface IRetrievalFrameHandler
     bool IsValid(object frame);
     /// <summary>Creates a retrieval request frame asking for <paramref name="context"/>.</summary>
     object Create(RetrievalCreateContext context);
+    /// <summary>Gets the user <paramref name="frame"/> is for.</summary>
+    string GetDestination(object frame);
+    /// <summary>Gets the sender of <paramref name="frame"/>.</summary>
+    string GetSender(object frame);
+    /// <summary>Sets the sender of <paramref name="frame"/>.</summary>
+    void SetSender(object frame, string sender);
     /// <summary>Gets the earliest sent time <paramref name="frame"/> asks for.</summary>
     DateTime? GetFrom(object frame);
     /// <summary>Gets the latest sent time <paramref name="frame"/> asks for.</summary>
@@ -32,6 +38,15 @@ internal sealed class RetrievalFrameHandler<TFrame>(IRetrievalHandler<TFrame> ha
 
     /// <inheritdoc />
     public object Create(RetrievalCreateContext context) => handler.Create(context);
+
+    /// <inheritdoc />
+    public string GetDestination(object frame) => handler.GetDestination((TFrame)frame);
+
+    /// <inheritdoc />
+    public string GetSender(object frame) => handler.GetSender((TFrame)frame);
+
+    /// <inheritdoc />
+    public void SetSender(object frame, string sender) => handler.SetSender((TFrame)frame, sender);
 
     /// <inheritdoc />
     public DateTime? GetFrom(object frame) => handler.GetFrom((TFrame)frame);

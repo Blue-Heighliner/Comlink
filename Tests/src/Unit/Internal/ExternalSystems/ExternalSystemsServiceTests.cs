@@ -66,6 +66,7 @@ public sealed class ExternalSystemsServiceTests
     {
         Mock<IEngineController> controller = new();
         controller.Setup(c => c.IsMessage(It.IsAny<object>())).Returns(true);
+        controller.Setup(c => c.GetMessageId(It.IsAny<object>())).Returns((object message) => ((TestFrame)message).MessageId);
         controller.Setup(c => c.ExternalSystems).Returns(systems);
         controller.Setup(c => c.ExternalServer).Returns(externalServer);
         return controller.Object;
@@ -89,6 +90,24 @@ public sealed class ExternalSystemsServiceTests
         ExternalSystemsService service = new(MakeController([]), peer, noLogger);
 
         await service.Start(CancellationToken.None).WaitAsync(TimeSpan.FromSeconds(30));
+    }
+
+    /// <summary>A message an external system delivers without an identifier is invalid and is dropped.</summary>
+    [Fact]
+    public async Task ExternalSystemMessageReceived_WithoutAnId_IsDropped()
+    {
+        FakeExternalSystem systemA = new("A");
+        FakePeerService peer = new();
+        ExternalSystemsService service = new(MakeController([systemA]), peer, noLogger);
+        using CancellationTokenSource cts = new();
+        Task startTask = service.Start(cts.Token);
+        await Task.Delay(50);
+
+        await systemA.Deliver(new TestFrame());
+
+        Assert.Empty(peer.DeliveredLocally);
+        cts.Cancel();
+        await startTask.WaitAsync(TimeSpan.FromSeconds(30));
     }
 
     /// <summary>Start runs every configured external system's own Start loop concurrently.</summary>

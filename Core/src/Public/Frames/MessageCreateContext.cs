@@ -13,8 +13,8 @@ public sealed record MessageCreateContext
     /// <summary>Gets whether the message is an alert.</summary>
     public required bool IsAlert { get; init; }
 
-    /// <summary>Gets the priority number, one of the engine's configured priorities.</summary>
-    public required int Priority { get; init; }
+    /// <summary>Gets the message's priority level, a member of the enum the host stated for its priorities (or an engine default when it stated none), which the handler stores as it likes, for example as the member's name.</summary>
+    public required Enum Priority { get; init; }
 
     /// <summary>Gets the short tag identifying the type of message, or an empty string for none.</summary>
     public required string Tag { get; init; }

@@ -28,8 +28,8 @@ internal sealed record EntryFilter
     public string? Destination { get; init; }
     /// <summary>Matches only entries sent/composed at this exact security level name. Messages and drafts; ignored for notes.</summary>
     public string? SecurityLevel { get; init; }
-    /// <summary>Matches only entries sent/composed at this exact priority number. Messages and drafts; ignored for notes.</summary>
-    public int? Priority { get; init; }
+    /// <summary>Matches only entries sent/composed at this priority level. Messages and drafts; ignored for notes.</summary>
+    public Enum? Priority { get; init; }
     /// <summary>When <see langword="true"/>, matches only entries flagged as an alert. Messages and drafts; ignored for notes.</summary>
     public bool? AlertOnly { get; init; }
 

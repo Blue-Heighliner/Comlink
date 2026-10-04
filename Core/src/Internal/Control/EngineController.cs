@@ -50,7 +50,7 @@ internal interface IEngineController
     /// The largest a serialized packet may be, in bytes. Smaller packets let a higher-priority payload cut in
     /// sooner; larger ones carry less framing overhead. The engine works out how much payload fits in a packet
     /// by measuring what <see cref="PacketSerializer"/> makes of one, so it must leave room for the packet's own
-    /// fields. A node with an HDLC link never sends a larger packet than one HDLC information frame holds (<see cref="HdlcOptions"/>), since each packet is exactly one frame. Ignored while <see cref="PacketType"/> is <see langword="null"/>.
+    /// fields. Ignored while <see cref="PacketType"/> is <see langword="null"/>.
     /// </summary>
     int PacketSize { get; }
 
@@ -180,8 +180,8 @@ internal interface IEngineController
     /// <summary>
     /// The points this node connects out to, and keeps connected, worked out from its links: for each link to its parent or a child whose mode is
     /// <see cref="ConnectionMode.MsmtConnect"/>, the other user's <see cref="UserInfo.IpHost"/> and <see cref="UserInfo.MsmtPort"/>, and for the <see cref="ConnectionMode.Hdlc"/> links together one point per HDLC port
-    /// the node opens (a serial cable joins two nodes and is opened from both ends); the parent's comes first. A <see cref="UserRole.Peer"/> also dials every other peer that states an
-    /// <see cref="UserInfo.IpHost"/>, unless both have one and the other's name sorts first, so a pair never connects both ways. Who is on the other end of a connection is still worked out
+    /// the node opens (a serial cable joins two nodes and is opened from both ends); the parent's comes first.
+    /// Who is on the other end of a connection is still worked out
     /// when it forms, by <see cref="IdentifyConnection"/>.
     /// </summary>
     IReadOnlyList<ConnectionPoint> OutgoingPoints { get; }
@@ -239,7 +239,7 @@ internal interface IEngineController
     /// <summary>Every custom import format added via <see cref="IEngineBuilder.ImportFormat{TFormat}"/>, in the order added; empty if none.</summary>
     IReadOnlyList<ImportFormatDefinition> ImportFormats { get; }
 
-    /// <summary>The server users, from <see cref="Servers"/>, that keep a copy of every message they route and answer retrieval requests; see <see cref="UserInfo.StoresMessages"/>. Empty if none.</summary>
+    /// <summary>Every server user, from <see cref="Servers"/>: each keeps a copy of every message one of its own children sends and answers retrieval requests for them, so a retrieval names the server the message is stored on. Empty if none.</summary>
     IReadOnlyList<string> StorageServers { get; }
 
     /// <summary>Every custom auto forward controller added via <see cref="IFrameBuilder{TFrame}.AutoForward{TController}"/>, in the order added; empty if none.</summary>
@@ -247,13 +247,13 @@ internal interface IEngineController
 
     /// <summary>Creates a new, empty instance of <see cref="FrameType"/>.</summary>
     object CreateFrame();
-    /// <summary>Gets the application-level frame identifier from <paramref name="frame"/>.</summary>
-    string GetFrameId(object frame);
-    /// <summary>Sets the application-level frame identifier on <paramref name="frame"/>.</summary>
-    void SetFrameId(object frame, string value);
-    /// <summary>Gets the sender user name from <paramref name="frame"/>.</summary>
+    /// <summary>Gets the identifier of <paramref name="message"/>, an instance of <see cref="FrameType"/> the message handler recognizes. Only messages have one.</summary>
+    string GetMessageId(object message);
+    /// <summary>Sets the identifier of <paramref name="message"/>, an instance of <see cref="FrameType"/> the message handler recognizes.</summary>
+    void SetMessageId(object message, string id);
+    /// <summary>Gets the sender user name from <paramref name="frame"/>, through the handler of its kind (message, retrieval request or receipt); empty for any other frame, which has no sender.</summary>
     string GetFromUser(object frame);
-    /// <summary>Sets the sender user name on <paramref name="frame"/>.</summary>
+    /// <summary>Sets the sender user name on <paramref name="frame"/>, through the handler of its kind; does nothing for a frame that has no sender.</summary>
     void SetFromUser(object frame, string value);
     /// <summary>Gets the body text from <paramref name="frame"/>.</summary>
     string GetBody(object frame);
@@ -266,7 +266,7 @@ internal interface IEngineController
     /// <summary>
     /// Gets the message ID this frame is a read receipt for, or an empty string if
     /// <paramref name="frame"/> is not a read receipt. A read receipt frame carries only this field
-    /// (plus <see cref="GetFrameId"/>/<see cref="GetFromUser"/> for its own transport) — body,
+    /// (plus <see cref="GetMessageId"/>/<see cref="GetFromUser"/> for its own transport) — body,
     /// and addresses are left unset — and is sent back to the original sender when the recipient opens the
     /// referenced message, so the sender can advance that message's delivery status to <c>Read</c>. See
     /// <c>Docs/Components/Peer.md</c>.
@@ -289,6 +289,10 @@ internal interface IEngineController
     bool IsPacketHeartbeat(object packet);
     /// <summary>Gets the priority heartbeat packets are sent with.</summary>
     int PacketHeartbeatPriority { get; }
+    /// <summary>Gets how long a connection waits between heartbeats while they succeed, as stated by the heartbeat handler in use (the packet one first), or 30 seconds when there is none.</summary>
+    TimeSpan HeartbeatInterval { get; }
+    /// <summary>Gets how long a connection waits between heartbeats while they fail, as stated by the heartbeat handler in use (the packet one first), or 2 seconds when there is none.</summary>
+    TimeSpan HeartbeatRetryInterval { get; }
     /// <summary>Creates a heartbeat frame. Only valid while <see cref="HeartbeatsEnabled"/>.</summary>
     object CreateHeartbeat();
     /// <summary>Returns whether <paramref name="frame"/> is a heartbeat, which is acknowledged and otherwise ignored; always <see langword="false"/> when no heartbeat handler is stated.</summary>
@@ -300,12 +304,14 @@ internal interface IEngineController
     RetrievalCriteria GetRetrieval(object frame);
     /// <summary>Creates a message frame carrying <paramref name="context"/> through the host's message handler, with no identifier, sender, addresses or sent time yet.</summary>
     object CreateMessage(MessageCreateContext context);
-    /// <summary>Creates a read receipt frame for the message <paramref name="messageId"/> through the host's read receipt handler, with no identifier, sender, addresses or sent time yet.</summary>
-    object CreateReadReceipt(string messageId);
-    /// <summary>Creates a receive receipt frame for the message <paramref name="messageId"/> through the host's receive receipt handler, with no identifier, sender, addresses or sent time yet.</summary>
-    object CreateReceiveReceipt(string messageId);
-    /// <summary>Creates a retrieval request frame asking for <paramref name="criteria"/> through the host's retrieval handler, with no identifier, sender, addresses or sent time yet.</summary>
-    object CreateRetrieval(RetrievalCriteria criteria);
+    /// <summary>Creates a read receipt frame for the message <paramref name="messageId"/>, which is for the user <paramref name="to"/>, through the host's read receipt handler, with no sender yet.</summary>
+    object CreateReadReceipt(string messageId, string to);
+    /// <summary>Creates a receive receipt frame for the message <paramref name="messageId"/>, which is for the user <paramref name="to"/>, through the host's receive receipt handler, with no sender yet.</summary>
+    object CreateReceiveReceipt(string messageId, string to);
+    /// <summary>Creates a retrieval request frame asking <paramref name="server"/> for <paramref name="criteria"/> through the host's retrieval handler, with no sender yet.</summary>
+    object CreateRetrieval(RetrievalCriteria criteria, string server);
+    /// <summary>Returns the user names <paramref name="frame"/> needs to get to: for a message the users it is addressed to other than external ones (a name may be a group), for a retrieval request or receipt the destination its handler reads, and nobody for any other frame.</summary>
+    IReadOnlyList<string> Route(object frame);
     /// <summary>Gets whether <paramref name="frame"/> is a message, one the user reads and that is stored, as opposed to a frame that is only network traffic.</summary>
     bool IsMessage(object frame);
     /// <summary>
@@ -320,13 +326,25 @@ internal interface IEngineController
     /// see <c>Docs/Components/Peer.md</c>) whenever this frame is sent.
     /// </summary>
     int GetPriority(object frame);
+    /// <summary>Generates the identifier of the next message this node creates, through the host's message handler (a random GUID unless it states otherwise).</summary>
+    /// <param name="previous">The identifier generated last, or <see langword="null"/> when none has been.</param>
+    string NextId(string? previous);
     /// <summary>Gets the lowest priority anything is sent with, <c>0</c>: the first configured level, and the only one when none are configured. Used for traffic that should yield to everything else, such as heartbeats.</summary>
     int LowestPriority { get; }
     /// <summary>Gets the highest priority anything is sent with: that of the last configured level, or <c>0</c> when none are configured. Used for traffic that must not wait behind anything else, such as the exchange that identifies a connection.</summary>
     int HighestPriority { get; }
-    /// <summary>Brings <paramref name="priority"/> within the configured levels, from <see cref="LowestPriority"/> to <see cref="HighestPriority"/>, so nothing is ever sent with a priority the configuration does not define.</summary>
-    /// <param name="priority">The priority to bring within range.</param>
-    int ResolvePriority(int priority);
+    /// <summary>Returns <paramref name="priority"/> if it is one of the configured priority levels, or the lowest level otherwise (including when it is <see langword="null"/>), so nothing is ever sent with a priority the configuration does not define.</summary>
+    /// <param name="priority">The level to resolve, a member of the enum stated for the priorities.</param>
+    Enum ResolvePriority(Enum? priority);
+    /// <summary>Returns the configured priority level called <paramref name="name"/> (case-insensitive), or the lowest level when it is empty or none is called that. This is how a level stored by name in a draft or export becomes a level again.</summary>
+    /// <param name="name">The stored name.</param>
+    Enum PriorityOf(string? name);
+    /// <summary>Gets the name of <paramref name="priority"/> as it is stored in drafts and exports and shown to users: the name of the level, or of the lowest level when it is not a configured one.</summary>
+    /// <param name="priority">The level.</param>
+    string NameOf(Enum priority);
+    /// <summary>Gets the priority level of <paramref name="message"/>, one of the configured priorities: what its handler reads, brought within them by <see cref="ResolvePriority"/>.</summary>
+    /// <param name="message">An instance of <see cref="FrameType"/> the message handler recognizes.</param>
+    Enum GetMessagePriority(object message);
     /// <summary>
     /// Gets the short, user-inputted tag identifying the type of message this frame is, or an empty string if
     /// none was set. See <see cref="BlockedCombinations"/>.
@@ -474,8 +492,7 @@ internal class EngineController(EngineBuilder builder, ICurrentUserProvider curr
     private readonly Lazy<IInitialProcessor?> initialPacketProcessor = new(() => builder.InitialPacketProcessor?.Create(services));
     private readonly Lazy<IInitialProcessor?> initialMessageProcessor = new(() => builder.InitialFrameProcessor?.Create(services));
     private readonly Lazy<INetworkHandler?> networkHandler = new(() => builder.NetworkHandler?.Create(services));
-    private readonly IReadOnlyList<MessagePriorityOption> defaultPriorities = [new MessagePriorityOption { Name = "NORMAL", Value = 0 }];
-    private IReadOnlyList<TagPriorityBlock>? blockedCombinations;
+    private readonly IReadOnlyList<MessagePriorityOption> defaultPriorities = [new MessagePriorityOption { Name = "NORMAL", Value = 0, Key = DefaultPriority.Normal }];
     private readonly IReadOnlyList<AddressType> addressTypeOrder = [AddressType.To, AddressType.Cc, AddressType.External];
 
     /// <inheritdoc />
@@ -487,9 +504,9 @@ internal class EngineController(EngineBuilder builder, ICurrentUserProvider curr
     /// <inheritdoc />
     public virtual IPacketSerializer? PacketSerializer => packetSerializer.Value;
     /// <inheritdoc />
-    public virtual int PacketSize => packet?.Size ?? 16 * 1024;
+    public virtual int PacketSize => builder.PacketSizeValue ?? 16 * 1024;
     /// <inheritdoc />
-    public virtual int PacketWindow => packet?.Window ?? 1;
+    public virtual int PacketWindow => builder.PacketWindowValue ?? 1;
 
     /// <inheritdoc />
     public virtual string AppName => builder.AppNameValue ?? Assembly.GetEntryAssembly()?.GetName().Name ?? "App";
@@ -559,7 +576,7 @@ internal class EngineController(EngineBuilder builder, ICurrentUserProvider curr
     /// <inheritdoc />
     public virtual string TagLabel => builder.TagLabelValue ?? "Tag";
     /// <inheritdoc />
-    public virtual IReadOnlyList<TagPriorityBlock> BlockedCombinations => blockedCombinations ??= [.. builder.BlockedTags.Select(block => new TagPriorityBlock { Tag = block.Tag, Priority = block.Priority is null ? null : PriorityValue(block.Priority) })];
+    public virtual IReadOnlyList<TagPriorityBlock> BlockedCombinations => builder.BlockedCombinations;
     /// <inheritdoc />
     public virtual IReadOnlyList<AddressTypeOption> AddressTypes
         => [.. addressTypeOrder.Select(type => new AddressTypeOption { Type = type, Label = builder.AddressTypeLabels.TryGetValue(type, out string? label) ? label : type.ToString() })];
@@ -599,7 +616,7 @@ internal class EngineController(EngineBuilder builder, ICurrentUserProvider curr
     public virtual HdlcPeerOptions HdlcOptions => builder.HdlcOptionsValue ?? new();
 
     /// <inheritdoc />
-    public virtual UserRole Role => CurrentUserInfo?.Role ?? UserRole.Peer;
+    public virtual UserRole Role => CurrentUserInfo?.Role ?? UserRole.Client;
     /// <inheritdoc />
     public virtual IReadOnlyList<ConnectionPoint> OutgoingPoints
     {
@@ -609,15 +626,6 @@ internal class EngineController(EngineBuilder builder, ICurrentUserProvider curr
 
             List<(UserLink Link, bool IsParent)> links = [.. current.Parent is { } parent ? [(parent, true)] : Array.Empty<(UserLink, bool)>(), .. current.Children.Select(child => (child, false))];
             List<ConnectionPoint> points = [.. LinkPoints(current, links)];
-            if ((current.Role ?? UserRole.Peer) == UserRole.Peer)
-            {
-                points.AddRange(Users
-                    .Select(GetUserInfo)
-                    .Where(other => (other.Role ?? UserRole.Peer) == UserRole.Peer && other.IpHost is not null && !string.Equals(other.Name, current.Name, StringComparison.OrdinalIgnoreCase)
-                        && (current.IpHost is null || string.Compare(current.Name, other.Name, StringComparison.OrdinalIgnoreCase) < 0))
-                    .Select(other => new ConnectionPoint { IpAddress = other.IpHost!, Port = other.MsmtPort ?? 50021 }));
-            }
-
             return [.. points.DistinctBy(point => point.Key)];
         }
     }
@@ -650,6 +658,17 @@ internal class EngineController(EngineBuilder builder, ICurrentUserProvider curr
 
         if (remotes.Count > 0)
         {
+            byte local = current.HdlcAddress ?? 1;
+            if (remotes.FirstOrDefault(remote => remote.Address == local) is { } same)
+            {
+                throw new InvalidOperationException($"{current.Name} and {same.User} are linked by HDLC but both use the station address {local}; the local and remote addresses must differ");
+            }
+
+            if (remotes.GroupBy(remote => remote.Address).FirstOrDefault(group => group.Count() > 1) is { } shared)
+            {
+                throw new InvalidOperationException($"{string.Join(" and ", shared.Select(remote => remote.User))} are linked to {current.Name} by HDLC but both use the station address {shared.Key}; each user needs its own");
+            }
+
             points.AddRange(HdlcPortNames(current).Select(port => new ConnectionPoint
             {
                 SerialPort = port,
@@ -721,7 +740,7 @@ internal class EngineController(EngineBuilder builder, ICurrentUserProvider curr
     /// <inheritdoc />
     public virtual IReadOnlyList<ImportFormatDefinition> ImportFormats => importFormats.Value;
     /// <inheritdoc />
-    public virtual IReadOnlyList<string> StorageServers => [.. Servers.Keys.Where(name => GetUserInfo(name).StoresMessages)];
+    public virtual IReadOnlyList<string> StorageServers => [.. Servers.Keys];
     /// <inheritdoc />
     public virtual IReadOnlyList<AutoForwardControllerDefinition> AutoForwardControllers => autoForwardControllers.Value;
 
@@ -731,17 +750,35 @@ internal class EngineController(EngineBuilder builder, ICurrentUserProvider curr
     /// <inheritdoc />
     public virtual object CreateFrame() => frame.Create();
     /// <inheritdoc />
-    public virtual string GetFrameId(object value) => frame.GetId(value);
+    public virtual string GetMessageId(object value) => messageHandler.Value.GetId(value);
     /// <inheritdoc />
-    public virtual void SetFrameId(object value, string id) => frame.SetId(value, id);
+    public virtual void SetMessageId(object value, string id) => messageHandler.Value.SetId(value, id);
     /// <inheritdoc />
-    public virtual string GetFromUser(object value) => frame.GetSender(value);
+    public virtual string GetFromUser(object value)
+        => IsMessage(value) ? messageHandler.Value.GetSender(value)
+        : IsRetrieval(value) ? retrievalHandler.Value.GetSender(value)
+        : IsReadReceipt(value) ? readReceiptHandler.Value.GetSender(value)
+        : IsReceiveReceipt(value) ? receiveReceiptHandler.Value.GetSender(value)
+        : string.Empty;
     /// <inheritdoc />
-    public virtual void SetFromUser(object value, string user) => frame.SetSender(value, user);
+    public virtual void SetFromUser(object value, string user)
+    {
+        if (IsMessage(value)) { messageHandler.Value.SetSender(value, user); }
+        else if (IsRetrieval(value)) { retrievalHandler.Value.SetSender(value, user); }
+        else if (IsReadReceipt(value)) { readReceiptHandler.Value.SetSender(value, user); }
+        else if (IsReceiveReceipt(value)) { receiveReceiptHandler.Value.SetSender(value, user); }
+    }
     /// <inheritdoc />
-    public virtual List<MessageAddress> GetAddresses(object value) => frame.GetAddresses(value);
+    public virtual List<MessageAddress> GetAddresses(object value) => messageHandler.Value.GetAddresses(value);
     /// <inheritdoc />
-    public virtual void SetAddresses(object value, List<MessageAddress> addresses) => frame.SetAddresses(value, addresses);
+    public virtual void SetAddresses(object value, List<MessageAddress> addresses) => messageHandler.Value.SetAddresses(value, addresses);
+    /// <inheritdoc />
+    public virtual IReadOnlyList<string> Route(object value)
+        => IsMessage(value) ? [.. GetAddresses(value).Where(address => address.Type != AddressType.External).Select(address => address.UserName).Distinct(StringComparer.OrdinalIgnoreCase)]
+        : IsRetrieval(value) ? [retrievalHandler.Value.GetDestination(value)]
+        : IsReadReceipt(value) ? [readReceiptHandler.Value.GetDestination(value)]
+        : IsReceiveReceipt(value) ? [receiveReceiptHandler.Value.GetDestination(value)]
+        : [];
     /// <inheritdoc />
     public virtual DateTime GetSentAt(object value) => messageHandler.Value.GetSentAt(value);
     /// <inheritdoc />
@@ -753,14 +790,22 @@ internal class EngineController(EngineBuilder builder, ICurrentUserProvider curr
     /// <inheritdoc />
     public virtual bool GetIsAlert(object value) => messageHandler.Value.GetIsAlert(value);
     /// <inheritdoc />
+    public virtual string NextId(string? previous) => messageHandler.Value.NextId(previous);
+    /// <inheritdoc />
     public virtual int LowestPriority => 0;
     /// <inheritdoc />
     public virtual int HighestPriority => Priorities.Max(priority => priority.Value);
     /// <inheritdoc />
-    public virtual int ResolvePriority(int priority) => Math.Clamp(priority, LowestPriority, HighestPriority);
+    public virtual Enum ResolvePriority(Enum? priority) => (Priorities.FirstOrDefault(level => priority is not null && priority.Equals(level.Key)) ?? Priorities[0]).Key;
+    /// <inheritdoc />
+    public virtual Enum PriorityOf(string? name) => (Priorities.FirstOrDefault(level => string.Equals(level.Name, name, StringComparison.OrdinalIgnoreCase)) ?? Priorities[0]).Key;
+    /// <inheritdoc />
+    public virtual string NameOf(Enum priority) => (Priorities.FirstOrDefault(level => priority.Equals(level.Key)) ?? Priorities[0]).Name;
+    /// <inheritdoc />
+    public virtual Enum GetMessagePriority(object message) => ResolvePriority(messageHandler.Value.GetPriority(message));
     /// <inheritdoc />
     public virtual int GetPriority(object value)
-        => IsMessage(value) ? ResolvePriority(messageHandler.Value.GetPriority(value))
+        => IsMessage(value) ? Priorities.First(level => level.Key.Equals(GetMessagePriority(value))).Value
         : IsHeartbeat(value) ? PriorityValue(heartbeatHandler.Value!.Priority)
         : IsRetrieval(value) ? PriorityValue(retrievalHandler.Value.Priority)
         : IsReadReceipt(value) ? PriorityValue(readReceiptHandler.Value.Priority)
@@ -769,11 +814,11 @@ internal class EngineController(EngineBuilder builder, ICurrentUserProvider curr
     /// <inheritdoc />
     public virtual string GetTag(object value) => messageHandler.Value.GetTag(value);
     /// <inheritdoc />
-    public virtual string GetSecurityLevel(object value) => messageHandler.Value.GetSecurityLevel(value);
+    public virtual string GetSecurityLevel(object value) => IsMessage(value) ? messageHandler.Value.GetSecurityLevel(value) : string.Empty;
     /// <inheritdoc />
     public virtual bool IsReadReceipt(object value) => readReceiptHandler.Value.IsValid(value);
     /// <inheritdoc />
-    public virtual object CreateReadReceipt(string messageId) => readReceiptHandler.Value.Create(new ReceiptCreateContext { MessageId = messageId });
+    public virtual object CreateReadReceipt(string messageId, string to) => readReceiptHandler.Value.Create(new ReceiptCreateContext { MessageId = messageId, To = to });
     /// <inheritdoc />
     public virtual string GetReadReceiptMessageId(object value) => readReceiptHandler.Value.GetMessageId(value);
     /// <inheritdoc />
@@ -787,20 +832,25 @@ internal class EngineController(EngineBuilder builder, ICurrentUserProvider curr
     /// <inheritdoc />
     public virtual bool IsPacketHeartbeat(object packet) => packetHeartbeatHandler.Value?.IsValid(packet) ?? false;
     /// <inheritdoc />
+    public virtual TimeSpan HeartbeatInterval => (packetHeartbeatHandler.Value ?? heartbeatHandler.Value)?.Interval ?? TimeSpan.FromSeconds(30);
+    /// <inheritdoc />
+    public virtual TimeSpan HeartbeatRetryInterval => (packetHeartbeatHandler.Value ?? heartbeatHandler.Value)?.RetryInterval ?? TimeSpan.FromSeconds(2);
+    /// <inheritdoc />
     public virtual int PacketHeartbeatPriority => PriorityValue((packetHeartbeatHandler.Value ?? throw new InvalidOperationException("No heartbeat packet handler is stated.")).Priority);
     /// <inheritdoc />
     public virtual object CreateHeartbeat() => (heartbeatHandler.Value ?? throw new InvalidOperationException("No heartbeat handler is stated; state one with Heartbeat<THandler>() on the frame configuration.")).Create();
     /// <inheritdoc />
     public virtual bool IsHeartbeat(object value) => heartbeatHandler.Value?.IsValid(value) ?? false;
     /// <inheritdoc />
-    public virtual object CreateReceiveReceipt(string messageId) => receiveReceiptHandler.Value.Create(new ReceiptCreateContext { MessageId = messageId });
+    public virtual object CreateReceiveReceipt(string messageId, string to) => receiveReceiptHandler.Value.Create(new ReceiptCreateContext { MessageId = messageId, To = to });
     /// <inheritdoc />
     public virtual string GetReceiveReceiptMessageId(object value) => receiveReceiptHandler.Value.GetMessageId(value);
     /// <inheritdoc />
     public virtual bool IsRetrieval(object value) => retrievalHandler.Value.IsValid(value);
     /// <inheritdoc />
-    public virtual object CreateRetrieval(RetrievalCriteria criteria) => retrievalHandler.Value.Create(new RetrievalCreateContext
+    public virtual object CreateRetrieval(RetrievalCriteria criteria, string server) => retrievalHandler.Value.Create(new RetrievalCreateContext
     {
+        Server = server,
         From = criteria.From,
         To = criteria.To,
         Authors = criteria.Authors,
@@ -873,6 +923,18 @@ internal static class EngineControllerExtensions
 {
     extension(IEngineController engineController)
     {
+        /// <summary>Returns whether <paramref name="frameValue"/> is a message with no identifier, which is invalid: a message always has one before it is sent, so one received without is dropped.</summary>
+        /// <param name="frameValue">An instance of <see cref="IEngineController.FrameType"/>.</param>
+        public bool IsMessageWithoutId(object frameValue) => engineController.IsMessage(frameValue) && string.IsNullOrEmpty(engineController.GetMessageId(frameValue));
+
+        /// <summary>Gets the identifier a frame is known by: a message's own, the message a receipt is for, or an empty string for any other frame, which has none.</summary>
+        /// <param name="frameValue">An instance of <see cref="IEngineController.FrameType"/>.</param>
+        public string GetIdentifier(object frameValue)
+            => engineController.IsMessage(frameValue) ? engineController.GetMessageId(frameValue)
+            : engineController.IsReadReceipt(frameValue) ? engineController.GetReadReceiptMessageId(frameValue)
+            : engineController.IsReceiveReceipt(frameValue) ? engineController.GetReceiveReceiptMessageId(frameValue)
+            : string.Empty;
+
         /// <summary>
         /// Reads every logical field of <paramref name="payload"/> (an instance of <see cref="IEngineController.FrameType"/>)
         /// into a new <see cref="MessageReceivedEvent"/>. Shared by <see cref="DirectServiceConnection"/> and
@@ -880,13 +942,13 @@ internal static class EngineControllerExtensions
         /// </summary>
         public MessageReceivedEvent ToMessageReceivedEvent(object payload) => new()
         {
-            MessageId = engineController.GetFrameId(payload),
+            MessageId = engineController.GetMessageId(payload),
             FromUser = engineController.GetFromUser(payload),
             Body = engineController.GetBody(payload),
             Addresses = [.. engineController.GetAddresses(payload).Select(a => new AddressRequest { UserName = a.UserName, Type = a.Type.ToString(), Information = a.Information })],
             SentAt = engineController.GetSentAt(payload),
             IsAlert = engineController.GetIsAlert(payload),
-            Priority = engineController.GetPriority(payload),
+            Priority = engineController.GetMessagePriority(payload),
             Tag = engineController.GetTag(payload),
             SecurityLevel = engineController.GetSecurityLevel(payload)
         };

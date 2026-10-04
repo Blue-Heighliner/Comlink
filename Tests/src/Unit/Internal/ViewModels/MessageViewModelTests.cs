@@ -17,10 +17,10 @@ public sealed class MessageViewModelTests
     {
         string id = messageId ?? Guid.NewGuid().ToString("N").ToUpperInvariant();
         object message = format.CreateFrame();
-        format.SetFrameId(message, id);
+        ((TestFrame)message).MessageId = id;
         ((TestFrame)message).Body = body;
         format.SetFromUser(message, fromUser);
-        ((TestFrame)message).Priority = priority;
+        ((TestFrame)message).Priority = priority == 0 ? "NORMAL" : $"LEVEL{priority}";
         ((TestFrame)message).Tag = tag;
         ((TestFrame)message).SecurityLevel = securityLevel;
         format.SetAddresses(message, [.. (addresses ?? [new AddressData { UserName = "DEST", Type = "To" }])

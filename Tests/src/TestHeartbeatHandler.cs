@@ -7,6 +7,12 @@ public sealed class TestHeartbeatHandler : IHeartbeatHandler<TestFrame>
     public Enum Priority { get; init; } = TestPriority.Normal;
 
     /// <inheritdoc />
+    public TimeSpan Interval { get; init; } = TimeSpan.FromSeconds(30);
+
+    /// <inheritdoc />
+    public TimeSpan RetryInterval { get; init; } = TimeSpan.FromSeconds(2);
+
+    /// <inheritdoc />
     public bool IsValid(TestFrame frame) => frame.IsHeartbeat;
 
     /// <inheritdoc />

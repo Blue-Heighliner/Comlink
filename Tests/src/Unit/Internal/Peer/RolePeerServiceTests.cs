@@ -11,9 +11,10 @@ public sealed class RolePeerServiceTests
 
         public Harness()
         {
-            Controller.SetupGet(c => c.Role).Returns(UserRole.Peer);
+            Controller.SetupGet(c => c.Role).Returns(UserRole.Server);
             Controller.SetupGet(c => c.PeerPort).Returns(1234);
             Controller.SetupGet(c => c.OutgoingPoints).Returns([]);
+            Controller.SetupGet(c => c.Servers).Returns(new Dictionary<string, ServerUserConfig> { ["SERVER"] = new ServerUserConfig { Children = [] } });
             Mock<IPeerTransportFactory> factory = new();
             factory.Setup(f => f.Create()).Returns(() =>
             {
@@ -26,6 +27,10 @@ public sealed class RolePeerServiceTests
             });
             ServiceCollection services = new();
             services.AddSingleton(factory.Object);
+            Mock<ICurrentUserProvider> currentUser = new();
+            currentUser.SetupGet(p => p.UserName).Returns("SERVER");
+            services.AddSingleton(currentUser.Object);
+            services.AddSingleton(Mock.Of<IMessageStorageService>());
             services.AddSingleton(Controller.Object);
             services.AddSingleton(LoggerFactory.Create(_ => { }));
             Service = new RolePeerService(services.BuildServiceProvider(), Controller.Object);

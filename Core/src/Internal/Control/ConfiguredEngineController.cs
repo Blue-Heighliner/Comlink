@@ -44,20 +44,22 @@ internal sealed class ConfiguredEngineController : IEngineController
     public object CreateMessage(MessageCreateContext context) => fallback.CreateMessage(context);
 
     /// <inheritdoc />
-    public object CreateReadReceipt(string messageId) => fallback.CreateReadReceipt(messageId);
+    public object CreateReadReceipt(string messageId, string to) => fallback.CreateReadReceipt(messageId, to);
 
     /// <inheritdoc />
-    public object CreateReceiveReceipt(string messageId) => fallback.CreateReceiveReceipt(messageId);
+    public object CreateReceiveReceipt(string messageId, string to) => fallback.CreateReceiveReceipt(messageId, to);
 
     /// <inheritdoc />
-    public object CreateRetrieval(RetrievalCriteria criteria) => fallback.CreateRetrieval(criteria);
+    public object CreateRetrieval(RetrievalCriteria criteria, string server) => fallback.CreateRetrieval(criteria, server);
+    /// <inheritdoc />
+    public IReadOnlyList<string> Route(object frame) => fallback.Route(frame);
 
     /// <inheritdoc />
     public object CreateFrame() => fallback.CreateFrame();
     /// <inheritdoc />
-    public string GetFrameId(object frame) => fallback.GetFrameId(frame);
+    public string GetMessageId(object message) => fallback.GetMessageId(message);
     /// <inheritdoc />
-    public void SetFrameId(object frame, string value) => fallback.SetFrameId(frame, value);
+    public void SetMessageId(object message, string id) => fallback.SetMessageId(message, id);
     /// <inheritdoc />
     public string GetFromUser(object frame) => fallback.GetFromUser(frame);
     /// <inheritdoc />
@@ -90,6 +92,10 @@ internal sealed class ConfiguredEngineController : IEngineController
     /// <inheritdoc />
     public int PacketHeartbeatPriority => fallback.PacketHeartbeatPriority;
     /// <inheritdoc />
+    public TimeSpan HeartbeatInterval => fallback.HeartbeatInterval;
+    /// <inheritdoc />
+    public TimeSpan HeartbeatRetryInterval => fallback.HeartbeatRetryInterval;
+    /// <inheritdoc />
     public object CreateHeartbeat() => fallback.CreateHeartbeat();
     /// <inheritdoc />
     public bool IsHeartbeat(object frame) => fallback.IsHeartbeat(frame);
@@ -105,11 +111,19 @@ internal sealed class ConfiguredEngineController : IEngineController
     /// <inheritdoc />
     public int GetPriority(object frame) => fallback.GetPriority(frame);
     /// <inheritdoc />
+    public string NextId(string? previous) => fallback.NextId(previous);
+    /// <inheritdoc />
     public int LowestPriority => fallback.LowestPriority;
     /// <inheritdoc />
     public int HighestPriority => fallback.HighestPriority;
     /// <inheritdoc />
-    public int ResolvePriority(int priority) => fallback.ResolvePriority(priority);
+    public Enum ResolvePriority(Enum? priority) => fallback.ResolvePriority(priority);
+    /// <inheritdoc />
+    public Enum PriorityOf(string? name) => fallback.PriorityOf(name);
+    /// <inheritdoc />
+    public string NameOf(Enum priority) => fallback.NameOf(priority);
+    /// <inheritdoc />
+    public Enum GetMessagePriority(object message) => fallback.GetMessagePriority(message);
     /// <inheritdoc />
     public string GetTag(object frame) => fallback.GetTag(frame);
     /// <inheritdoc />

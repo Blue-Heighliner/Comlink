@@ -12,7 +12,9 @@ public sealed class RetrievalServiceTests
         routing.Setup(r => r.RouteFrame(It.IsAny<string>(), It.IsAny<object>(), It.IsAny<CancellationToken>()))
             .Callback<string, object, CancellationToken>((_, message, _) => sent.Add(message))
             .ReturnsAsync(("ID", (IReadOnlyList<UserDeliveryResult>)[new UserDeliveryResult { UserName = "SERVER", Success = delivered }]));
-        return (new RetrievalService(new TestEngineController(), currentUser.Object, routing.Object), routing, sent);
+        Mock<TestEngineController> controller = new() { CallBase = true };
+        controller.Setup(c => c.StorageServers).Returns(["SERVER"]);
+        return (new RetrievalService(controller.Object, currentUser.Object, routing.Object), routing, sent);
     }
 
     /// <summary>The request is an ordinary message carrying the criteria in its retrieval fields, addressed only to the server, routed from the current user.</summary>
@@ -32,6 +34,16 @@ public sealed class RetrievalServiceTests
         TestAddressEntry address = Assert.Single(request.Addresses);
         Assert.Equal(("SERVER", "To"), (address.UserName, address.Type));
         routing.Verify(r => r.RouteFrame("ALICE", request, It.IsAny<CancellationToken>()), Times.Once);
+    }
+
+    /// <summary>A retrieval can only be asked of a server, so any other user is refused before anything is sent.</summary>
+    [Fact]
+    public async Task Request_ToAUserThatIsNotAServer_IsRefused()
+    {
+        (RetrievalService service, Mock<IMessageRoutingService> routing, _) = Build();
+
+        await Assert.ThrowsAsync<ArgumentException>(() => service.Request("BOB", new RetrievalCriteria()));
+        routing.Verify(r => r.RouteFrame(It.IsAny<string>(), It.IsAny<object>(), It.IsAny<CancellationToken>()), Times.Never);
     }
 
     /// <summary>A request the server side never acknowledged reports failure.</summary>

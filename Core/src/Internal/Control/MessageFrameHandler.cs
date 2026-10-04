@@ -7,6 +7,20 @@ internal interface IMessageFrameHandler
     bool IsValid(object frame);
     /// <summary>Creates a message frame carrying <paramref name="context"/>.</summary>
     object Create(MessageCreateContext context);
+    /// <summary>Gets the recipient list of <paramref name="frame"/>.</summary>
+    List<MessageAddress> GetAddresses(object frame);
+    /// <summary>Sets the recipient list of <paramref name="frame"/>.</summary>
+    void SetAddresses(object frame, List<MessageAddress> addresses);
+    /// <summary>Gets the sender of <paramref name="frame"/>.</summary>
+    string GetSender(object frame);
+    /// <summary>Sets the sender of <paramref name="frame"/>.</summary>
+    void SetSender(object frame, string sender);
+    /// <summary>Gets the identifier of the message <paramref name="frame"/>.</summary>
+    string GetId(object frame);
+    /// <summary>Sets the identifier of the message <paramref name="frame"/>.</summary>
+    void SetId(object frame, string id);
+    /// <summary>Generates the next message identifier.</summary>
+    string NextId(string? previous);
     /// <summary>Gets the sent time of <paramref name="frame"/>.</summary>
     DateTime GetSentAt(object frame);
     /// <summary>Gets the body text of <paramref name="frame"/>.</summary>
@@ -14,7 +28,7 @@ internal interface IMessageFrameHandler
     /// <summary>Gets whether <paramref name="frame"/> is an alert.</summary>
     bool GetIsAlert(object frame);
     /// <summary>Gets the priority number of <paramref name="frame"/>.</summary>
-    int GetPriority(object frame);
+    Enum GetPriority(object frame);
     /// <summary>Gets how many copies of <paramref name="frame"/> are printed when received.</summary>
     int GetPrintCount(object frame);
     /// <summary>Gets the tag of <paramref name="frame"/>.</summary>
@@ -33,6 +47,29 @@ internal sealed class MessageFrameHandler<TFrame>(IMessageHandler<TFrame> handle
     public object Create(MessageCreateContext context) => handler.Create(context);
 
     /// <inheritdoc />
+    public List<MessageAddress> GetAddresses(object frame)
+        => [.. handler.GetAddresses((TFrame)frame).Select(address => new MessageAddress { UserName = address.Name, Type = address.Type, Information = address.Information })];
+
+    /// <inheritdoc />
+    public void SetAddresses(object frame, List<MessageAddress> addresses)
+        => handler.SetAddresses((TFrame)frame, [.. addresses.Select(address => (address.UserName, address.Type, address.Information))]);
+
+    /// <inheritdoc />
+    public string GetSender(object frame) => handler.GetSender((TFrame)frame);
+
+    /// <inheritdoc />
+    public void SetSender(object frame, string sender) => handler.SetSender((TFrame)frame, sender);
+
+    /// <inheritdoc />
+    public string GetId(object frame) => handler.GetId((TFrame)frame);
+
+    /// <inheritdoc />
+    public void SetId(object frame, string id) => handler.SetId((TFrame)frame, id);
+
+    /// <inheritdoc />
+    public string NextId(string? previous) => handler.NextId(previous);
+
+    /// <inheritdoc />
     public DateTime GetSentAt(object frame) => handler.GetSentAt((TFrame)frame);
 
     /// <inheritdoc />
@@ -42,7 +79,7 @@ internal sealed class MessageFrameHandler<TFrame>(IMessageHandler<TFrame> handle
     public bool GetIsAlert(object frame) => handler.GetIsAlert((TFrame)frame);
 
     /// <inheritdoc />
-    public int GetPriority(object frame) => handler.GetPriority((TFrame)frame);
+    public Enum GetPriority(object frame) => handler.GetPriority((TFrame)frame);
 
     /// <inheritdoc />
     public int GetPrintCount(object frame) => handler.GetPrintCount((TFrame)frame);

@@ -65,7 +65,7 @@ internal sealed class AutoForwardService : IAutoForwardService
             try { matches = controller.Filter(message); }
             catch (Exception ex)
             {
-                logger.LogError(ex, "Auto forward controller {Controller} filter failed for {MessageId}", controller.Name, engineController.GetFrameId(message));
+                logger.LogError(ex, "Auto forward controller {Controller} filter failed for {MessageId}", controller.Name, engineController.GetMessageId(message));
                 continue;
             }
             if (!matches) { continue; }
@@ -87,7 +87,7 @@ internal sealed class AutoForwardService : IAutoForwardService
                 SentAt = DateTime.UtcNow,
                 Body = engineController.GetBody(original),
                 IsAlert = engineController.GetIsAlert(original),
-                Priority = engineController.GetPriority(original),
+                Priority = engineController.GetMessagePriority(original),
                 Tag = engineController.GetTag(original),
                 SecurityLevel = engineController.GetSecurityLevel(original)
             });
@@ -97,7 +97,7 @@ internal sealed class AutoForwardService : IAutoForwardService
         }
         catch (Exception ex)
         {
-            logger.LogError(ex, "Auto forward controller {Controller} failed to forward {MessageId}", controllerName, engineController.GetFrameId(original));
+            logger.LogError(ex, "Auto forward controller {Controller} failed to forward {MessageId}", controllerName, engineController.GetMessageId(original));
         }
     }
 }

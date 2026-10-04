@@ -12,15 +12,13 @@ internal sealed class InitialFrameProcessorAdapter<TFrame>(IInitialFrameProcesso
     public void OnConnected(IInitialSession session) => processor.OnConnected(new Context(session));
 
     /// <inheritdoc />
-    public void OnInitial(IInitialSession session, object item) => processor.OnInitial(new Context(session), (TFrame)item);
+    public TimeSpan Timeout => processor.Timeout;
 
     /// <inheritdoc />
-    public void OnReply(IInitialSession session, object item) => processor.OnReply(new Context(session), (TFrame)item);
+    public void OnReceived(IInitialSession session, object item) => processor.OnReceived(new Context(session), (TFrame)item);
 
     private sealed class Context(IInitialSession session) : IInitialFrameContext<TFrame>
     {
-        public bool IsOpener => session.IsOpener;
-
         public IConnectionInfo Connection => session.Connection;
 
         public UserInfo CurrentUser => session.Engine.CurrentUser;

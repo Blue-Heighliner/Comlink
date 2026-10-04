@@ -91,7 +91,7 @@ public sealed class MessageRoutingServiceTests
     public async Task RouteAsync_ReturnsNonEmptyMessageId()
     {
         FakePeerService fake = new();
-        MessageRoutingService service = new(fake, format, loggerFactory);
+        MessageRoutingService service = new(fake, format, TestIdGenerator.Instance, loggerFactory);
         SendMessagePayload payload = new()
         {
             Body = "World",
@@ -109,17 +109,17 @@ public sealed class MessageRoutingServiceTests
     public async Task RouteAsync_SetsMessagePriorityFromPayload()
     {
         FakePeerService fake = new();
-        MessageRoutingService service = new(fake, format, loggerFactory);
+        MessageRoutingService service = new(fake, format, TestIdGenerator.Instance, loggerFactory);
         SendMessagePayload payload = new()
         {
             Body = "World",
             Addresses = [new AddressPayload { UserName = "TargetUser", Type = "To" }],
-            Priority = 2
+            Priority = TestMessagePriority.Level2
         };
 
         await service.Route("SourceUser", payload, default);
 
-        Assert.Equal(2, fake.Sent[0].Message.Priority);
+        Assert.Equal("LEVEL2", fake.Sent[0].Message.Priority);
     }
 
     /// <summary>Verifies that Route sends exactly once to each unique destination user, deduplicating addresses.</summary>
@@ -127,7 +127,7 @@ public sealed class MessageRoutingServiceTests
     public async Task RouteAsync_SendsToEachUniqueTargetUser()
     {
         FakePeerService fake = new();
-        MessageRoutingService service = new(fake, format, loggerFactory);
+        MessageRoutingService service = new(fake, format, TestIdGenerator.Instance, loggerFactory);
         SendMessagePayload payload = new()
         {
             Body = "Body",
@@ -153,7 +153,7 @@ public sealed class MessageRoutingServiceTests
         FakePeerService fake = new();
         Mock<TestEngineController> controller = new() { CallBase = true };
         controller.Setup(c => c.UserGroups).Returns(new Dictionary<string, IReadOnlyList<string>> { ["OMAHA"] = ["Gamma"] });
-        MessageRoutingService service = new(fake, controller.Object, loggerFactory);
+        MessageRoutingService service = new(fake, controller.Object, TestIdGenerator.Instance, loggerFactory);
         SendMessagePayload payload = new()
         {
             Body = "Body",
@@ -182,7 +182,7 @@ public sealed class MessageRoutingServiceTests
     public async Task RouteAsync_OnlyExternalAddresses_SendsToNobody()
     {
         FakePeerService fake = new();
-        MessageRoutingService service = new(fake, format, loggerFactory);
+        MessageRoutingService service = new(fake, format, TestIdGenerator.Instance, loggerFactory);
         SendMessagePayload payload = new() { Body = "Body", Addresses = [new AddressPayload { UserName = "OMAHA", Type = "External" }] };
 
         (string messageId, IReadOnlyList<UserDeliveryResult> results) = await service.Route("Source", payload, default);
@@ -197,7 +197,7 @@ public sealed class MessageRoutingServiceTests
     public async Task RouteAsync_WhenPeerSendFails_StillReturnsMessageId()
     {
         FakePeerService fake = new() { ReturnSuccess = false };
-        MessageRoutingService service = new(fake, format, loggerFactory);
+        MessageRoutingService service = new(fake, format, TestIdGenerator.Instance, loggerFactory);
         SendMessagePayload payload = new()
         {
             Body = "Body",
@@ -223,7 +223,7 @@ public sealed class MessageRoutingServiceTests
         };
         IEngineController groups = new TestEngineController(config);
         FakePeerService fake = new();
-        MessageRoutingService service = new(fake, groups, loggerFactory);
+        MessageRoutingService service = new(fake, groups, TestIdGenerator.Instance, loggerFactory);
 
         SendMessagePayload payload = new()
         {
@@ -254,7 +254,7 @@ public sealed class MessageRoutingServiceTests
         };
         IEngineController groups = new TestEngineController(config);
         FakePeerService fake = new();
-        MessageRoutingService service = new(fake, groups, loggerFactory);
+        MessageRoutingService service = new(fake, groups, TestIdGenerator.Instance, loggerFactory);
 
         SendMessagePayload payload = new()
         {
@@ -269,12 +269,12 @@ public sealed class MessageRoutingServiceTests
         Assert.Contains(fake.Sent, s => s.User.Equals("BETA", StringComparison.OrdinalIgnoreCase));
     }
 
-    /// <summary>Sending to the current user skips the network entirely, delivers locally, and confirms immediately.</summary>
+    /// <summary>Sending to the current user goes through the peer service like any recipient, so it reaches the server.</summary>
     [Fact]
-    public async Task RouteAsync_ToOwnUser_DeliversLocallyAndConfirmsImmediately()
+    public async Task RouteAsync_ToOwnUser_IsSentThroughThePeerService()
     {
         FakePeerService fake = new();
-        MessageRoutingService service = new(fake, format, loggerFactory);
+        MessageRoutingService service = new(fake, format, TestIdGenerator.Instance, loggerFactory);
 
         List<(string MessageId, string User, DestinationStatus Status)> statusEvents = [];
         service.DeliveryStatusChanged += (msgId, user, status) =>
@@ -291,25 +291,21 @@ public sealed class MessageRoutingServiceTests
 
         (string messageId, IReadOnlyList<UserDeliveryResult> results) = await service.Route("SOURCE", payload, default);
 
-        Assert.Empty(fake.Sent);
-        Assert.Single(fake.DeliveredLocally);
-        Assert.Equal(messageId, fake.DeliveredLocally[0].MessageId);
+        Assert.Empty(fake.DeliveredLocally);
+        Assert.Equal("SOURCE", Assert.Single(fake.Sent).User, ignoreCase: true);
+        Assert.Equal(messageId, fake.Sent[0].Message.MessageId);
 
         Assert.Single(results);
         Assert.True(results[0].Success);
         Assert.Equal("SOURCE", results[0].UserName, ignoreCase: true);
-
-        Assert.Single(statusEvents);
-        Assert.Equal(messageId, statusEvents[0].MessageId);
-        Assert.Equal(DestinationStatus.Received, statusEvents[0].Status);
     }
 
-    /// <summary>Sending to a mix of self and a remote user delivers locally to self and over the network to the remote user.</summary>
+    /// <summary>Sending to a mix of self and a remote user sends to both through the peer service, so a message to oneself goes up to the server like any other.</summary>
     [Fact]
-    public async Task RouteAsync_ToSelfAndRemoteUser_HandlesBothIndependently()
+    public async Task RouteAsync_ToSelfAndRemoteUser_SendsToBoth()
     {
         FakePeerService fake = new();
-        MessageRoutingService service = new(fake, format, loggerFactory);
+        MessageRoutingService service = new(fake, format, TestIdGenerator.Instance, loggerFactory);
 
         SendMessagePayload payload = new()
         {
@@ -323,9 +319,8 @@ public sealed class MessageRoutingServiceTests
 
         (string _, IReadOnlyList<UserDeliveryResult> results) = await service.Route("SOURCE", payload, default);
 
-        Assert.Single(fake.Sent);
-        Assert.Equal("REMOTE", fake.Sent[0].User, ignoreCase: true);
-        Assert.Single(fake.DeliveredLocally);
+        Assert.Equal(["REMOTE", "SOURCE"], fake.Sent.Select(sent => sent.User.ToUpperInvariant()).Order());
+        Assert.Empty(fake.DeliveredLocally);
 
         Assert.Equal(2, results.Count);
         Assert.Contains(results, r => r.UserName.Equals("SOURCE", StringComparison.OrdinalIgnoreCase) && r.Success);
@@ -341,7 +336,7 @@ public sealed class MessageRoutingServiceTests
     public async Task PeerDeliveryStatusChanged_ForwardsStatusUnchanged(DestinationStatus status)
     {
         FakePeerService fake = new();
-        MessageRoutingService service = new(fake, format, loggerFactory);
+        MessageRoutingService service = new(fake, format, TestIdGenerator.Instance, loggerFactory);
 
         List<DestinationStatus> statuses = [];
         service.DeliveryStatusChanged += (_, _, s) =>
@@ -361,7 +356,7 @@ public sealed class MessageRoutingServiceTests
     public async Task PeerConfirmationReceived_ReRaisesAsReadStatus()
     {
         FakePeerService fake = new();
-        MessageRoutingService service = new(fake, format, loggerFactory);
+        MessageRoutingService service = new(fake, format, TestIdGenerator.Instance, loggerFactory);
 
         List<(string MessageId, string User, DestinationStatus Status)> changes = [];
         service.DeliveryStatusChanged += (messageId, user, status) =>
@@ -383,7 +378,7 @@ public sealed class MessageRoutingServiceTests
     public async Task ReceiveReceiptReceived_RaisesReceivedStatus()
     {
         FakePeerService fake = new();
-        MessageRoutingService service = new(fake, format, loggerFactory);
+        MessageRoutingService service = new(fake, format, TestIdGenerator.Instance, loggerFactory);
         List<(string MessageId, string User, DestinationStatus Status)> changes = [];
         service.DeliveryStatusChanged += (messageId, user, status) =>
         {
@@ -404,7 +399,7 @@ public sealed class MessageRoutingServiceTests
         Mock<TestEngineController> controller = new() { CallBase = true };
         controller.Setup(c => c.ExternalServer).Returns(externalServer);
         FakePeerService fake = new();
-        MessageRoutingService service = new(fake, controller.Object, loggerFactory);
+        MessageRoutingService service = new(fake, controller.Object, TestIdGenerator.Instance, loggerFactory);
 
         SendMessagePayload payload = new()
         {
@@ -436,7 +431,7 @@ public sealed class MessageRoutingServiceTests
         Mock<TestEngineController> controller = new() { CallBase = true };
         controller.Setup(c => c.ExternalServer).Returns(externalServer);
         FakePeerService fake = new();
-        MessageRoutingService service = new(fake, controller.Object, loggerFactory);
+        MessageRoutingService service = new(fake, controller.Object, TestIdGenerator.Instance, loggerFactory);
 
         SendMessagePayload payload = new()
         {
@@ -453,15 +448,15 @@ public sealed class MessageRoutingServiceTests
         await startTask;
     }
 
-    /// <summary>With ExternalServer configured, sending to the current user still delivers locally instead of going through the external server.</summary>
+    /// <summary>With ExternalServer configured, sending to the current user goes through the external server like any other recipient.</summary>
     [Fact]
-    public async Task RouteAsync_ExternalServerConfigured_SelfSendStillDeliversLocally()
+    public async Task RouteAsync_ExternalServerConfigured_SelfSendGoesToTheExternalServerToo()
     {
         (FakeExternalSystem externalServer, CancellationTokenSource cts, Task startTask) = await StartConnectedExternalServer();
         Mock<TestEngineController> controller = new() { CallBase = true };
         controller.Setup(c => c.ExternalServer).Returns(externalServer);
         FakePeerService fake = new();
-        MessageRoutingService service = new(fake, controller.Object, loggerFactory);
+        MessageRoutingService service = new(fake, controller.Object, TestIdGenerator.Instance, loggerFactory);
 
         SendMessagePayload payload = new()
         {
@@ -471,8 +466,8 @@ public sealed class MessageRoutingServiceTests
 
         await service.Route("SOURCE", payload, default);
 
-        Assert.Single(fake.DeliveredLocally);
-        Assert.Empty(externalServer.SentMessages);
+        Assert.Empty(fake.DeliveredLocally);
+        Assert.Single(externalServer.SentMessages);
 
         cts.Cancel();
         await startTask;
@@ -483,7 +478,7 @@ public sealed class MessageRoutingServiceTests
     public async Task RouteMessage_ReadsAddressesFromMessageItself()
     {
         FakePeerService fake = new();
-        MessageRoutingService service = new(fake, format, loggerFactory);
+        MessageRoutingService service = new(fake, format, TestIdGenerator.Instance, loggerFactory);
         TestFrame message = new() { Body = "Body" };
         format.SetAddresses(message, [new MessageAddress { UserName = "TargetUser", Type = AddressType.To }]);
 
@@ -494,22 +489,37 @@ public sealed class MessageRoutingServiceTests
         Assert.Same(message, fake.Sent[0].Message);
     }
 
-    /// <summary>RouteFrame overwrites the message's own MessageId and FromUser with a freshly generated ID and the given fromUser, regardless of what the caller set them to, and leaves its sent time alone.</summary>
+    /// <summary>RouteFrame overwrites the message's FromUser with the given fromUser, regardless of what the caller set it to, keeps an identifier the message already has, and leaves its sent time alone.</summary>
     [Fact]
-    public async Task RouteMessage_OverwritesMessageIdAndFromUser()
+    public async Task RouteMessage_OverwritesFromUserAndKeepsAnExistingId()
     {
         FakePeerService fake = new();
-        MessageRoutingService service = new(fake, format, loggerFactory);
+        MessageRoutingService service = new(fake, format, TestIdGenerator.Instance, loggerFactory);
         TestFrame message = new() { MessageId = "STALE-ID", FromUser = "WRONG-USER", SentAt = new DateTime(2000, 1, 1) };
         format.SetAddresses(message, [new MessageAddress { UserName = "TargetUser", Type = AddressType.To }]);
 
         (string messageId, _) = await service.RouteFrame("SourceUser", message, default);
 
-        Assert.NotEqual("STALE-ID", messageId);
-        Assert.True(Guid.TryParseExact(messageId, "N", out _));
-        Assert.Equal(messageId, message.MessageId);
+        Assert.Equal("STALE-ID", messageId);
+        Assert.Equal("STALE-ID", message.MessageId);
         Assert.Equal("SourceUser", message.FromUser, ignoreCase: true);
         Assert.Equal(new DateTime(2000, 1, 1), message.SentAt);
+    }
+
+    /// <summary>A message sent while its identifier is unset is given a generated one, which it carries when it is sent.</summary>
+    [Fact]
+    public async Task RouteFrame_UnsetId_GetsAGeneratedOne()
+    {
+        FakePeerService fake = new();
+        MessageRoutingService service = new(fake, format, TestIdGenerator.Instance, loggerFactory);
+        TestFrame message = new();
+        format.SetAddresses(message, [new MessageAddress { UserName = "TargetUser", Type = AddressType.To }]);
+
+        (string messageId, _) = await service.RouteFrame("SourceUser", message, default);
+
+        Assert.True(Guid.TryParseExact(messageId, "N", out _));
+        Assert.Equal(messageId, message.MessageId);
+        Assert.Equal(messageId, fake.Sent[0].Message.MessageId);
     }
 
     /// <summary>RouteFrame applies the same security-level filtering as Route, reading the blocking level from the message itself.</summary>
@@ -521,7 +531,7 @@ public sealed class MessageRoutingServiceTests
         controller.Setup(c => c.GetUserSecurityLevel("Cleared")).Returns("HIGH");
         controller.Setup(c => c.GetUserSecurityLevel("Blocked")).Returns("LOW");
         FakePeerService fake = new();
-        MessageRoutingService service = new(fake, controller.Object, loggerFactory);
+        MessageRoutingService service = new(fake, controller.Object, TestIdGenerator.Instance, loggerFactory);
         TestFrame message = new() { Body = "Body", SecurityLevel = "HIGH" };
         controller.Object.SetAddresses(message, [new MessageAddress { UserName = "Cleared", Type = AddressType.To }, new MessageAddress { UserName = "Blocked", Type = AddressType.To }]);
 

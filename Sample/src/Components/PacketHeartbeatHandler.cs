@@ -7,6 +7,12 @@ public sealed class PacketHeartbeatHandler : IHeartbeatHandler<Packet>
     public Enum Priority => MessagePriority.Low;
 
     /// <inheritdoc />
+    public TimeSpan Interval { get; } = TimeSpan.FromSeconds(30);
+
+    /// <inheritdoc />
+    public TimeSpan RetryInterval { get; } = TimeSpan.FromSeconds(2);
+
+    /// <inheritdoc />
     public bool IsValid(Packet packet) => packet.IsHeartbeat;
 
     /// <inheritdoc />

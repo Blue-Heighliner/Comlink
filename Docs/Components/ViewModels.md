@@ -305,7 +305,7 @@ Drives the staged send screen: every message a custom import format's reader has
 
 ## IRetrieveViewModel / RetrieveViewModel
 
-Drives the retrieve screen: asking a storage server (see `Docs/Components/Configuration.md#server-storage`) for copies of the messages it stored that fit a date range, authors, destinations and message IDs. Registered as `IRetrieveViewModel → RetrieveViewModel` singleton; exposed as `MainViewModel.Retrieve` and shown in the content area the same way as `Export`/`Import` (`RetrieveView.axaml`, `DataTemplate`d on `RetrieveViewModel` in `ContentArea.axaml`); being a singleton, what was entered survives navigating away and back. The title bar's RETRIEVE button is shown only when `MainViewModel.CanRetrieve` is `true`.
+Drives the retrieve screen: asking the server a message is stored on (see `Docs/Components/Configuration.md#server-storage`) for copies of the messages it stored that fit a date range, authors, destinations and message IDs. Registered as `IRetrieveViewModel → RetrieveViewModel` singleton; exposed as `MainViewModel.Retrieve` and shown in the content area the same way as `Export`/`Import` (`RetrieveView.axaml`, `DataTemplate`d on `RetrieveViewModel` in `ContentArea.axaml`); being a singleton, what was entered survives navigating away and back. The title bar's RETRIEVE button is shown only when `MainViewModel.CanRetrieve` is `true`.
 
 **Properties**:
 - `AvailableServers (IReadOnlyList<string>)` — `IEngineController.StorageServers`, read once at construction; `SelectedServer (string?)` defaults to the first
@@ -401,9 +401,7 @@ snapshot — always marshaled onto the UI thread first (`Dispatcher.UIThread`), 
 fire from a background connection thread but these collections are bound to a live Avalonia `ItemsControl`.
 `IConnectionStatusService` is registered per `UserRole` (see `Docs/Components/Peer.md#user-roles`): for
 `UserRole.Client`, `ClientPeerService` itself implements it; for `UserRole.Server`, `ServerRoutingService`
-itself implements it; for `UserRole.Peer`, `NullConnectionStatusService` is registered instead (always
-an empty list), since peer-to-peer connections are not configured, long-term links worth showing a status
-row for.
+itself implements it; so does `RelayPeerService` for `UserRole.Relay`.
 
 ---
 

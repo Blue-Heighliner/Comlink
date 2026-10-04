@@ -167,9 +167,9 @@ internal sealed partial class DraftViewModel : ObservableObject, IDraftViewModel
 
         allPriorities = engineController.Priorities;
         availablePriorities = FilterPriorities(entity.Tag);
-        selectedPriority = AvailablePriorities.FirstOrDefault(p => p.Value == entity.Priority)
+        selectedPriority = AvailablePriorities.FirstOrDefault(p => string.Equals(p.Name, entity.Priority, StringComparison.OrdinalIgnoreCase))
             ?? AvailablePriorities.FirstOrDefault()
-            ?? new MessagePriorityOption { Name = "NORMAL", Value = 0 };
+            ?? allPriorities[0];
 
         IReadOnlyList<SecurityLevel> allSecurityLevels = engineController.SecurityLevels;
         int ownRank = allSecurityLevels.GetRank(currentSecurityLevel);
@@ -293,11 +293,11 @@ internal sealed partial class DraftViewModel : ObservableObject, IDraftViewModel
     partial void OnPlsoModeChanged(PlsoMode value) => OnPropertyChanged(nameof(PlsoButtonText));
 
     private IReadOnlyList<MessagePriorityOption> FilterPriorities(string tag)
-        => allPriorities.Where(p => p.Mode == PriorityMode.User && !engineController.BlockedCombinations.IsBlocked(tag, p.Value)).ToList();
+        => allPriorities.Where(p => p.Mode == PriorityMode.User && !engineController.BlockedCombinations.IsBlocked(tag, p.Key)).ToList();
 
     partial void OnTagChanged(string value)
     {
-        if (engineController.BlockedCombinations.IsBlocked(value, SelectedPriority.Value))
+        if (engineController.BlockedCombinations.IsBlocked(value, SelectedPriority.Key))
         {
             // Reject the change: this combination is blocked, so revert to the last valid tag instead of
             // letting the blocked value stand. Re-enters this method with a value that is never blocked
@@ -402,7 +402,7 @@ internal sealed partial class DraftViewModel : ObservableObject, IDraftViewModel
             entity.BodySegmentsJson = SerializeBody();
             entity.Addresses = [.. Addresses];
             entity.IsAlert = IsAlert;
-            entity.Priority = SelectedPriority.Value;
+            entity.Priority = SelectedPriority.Name;
             entity.Tag = Tag;
             entity.SecurityLevel = SelectedSecurityLevel?.Name ?? string.Empty;
             await entryService.SaveDraft(entity);
@@ -423,7 +423,7 @@ internal sealed partial class DraftViewModel : ObservableObject, IDraftViewModel
             return;
         }
 
-        if (engineController.BlockedCombinations.IsBlocked(Tag, SelectedPriority.Value))
+        if (engineController.BlockedCombinations.IsBlocked(Tag, SelectedPriority.Key))
         {
             StatusMessage = "This tag/priority combination is not allowed";
             return;
@@ -437,7 +437,7 @@ internal sealed partial class DraftViewModel : ObservableObject, IDraftViewModel
             entity.BodySegmentsJson = SerializeBody();
             entity.Addresses = [.. Addresses];
             entity.IsAlert = IsAlert;
-            entity.Priority = SelectedPriority.Value;
+            entity.Priority = SelectedPriority.Name;
             entity.Tag = Tag;
             string securityLevel = SelectedSecurityLevel?.Name ?? string.Empty;
             entity.SecurityLevel = securityLevel;
@@ -445,7 +445,7 @@ internal sealed partial class DraftViewModel : ObservableObject, IDraftViewModel
             SendMessageResult? result = await connection.SendMessage(
                 body,
                 Addresses.Select(a => new AddressRequest { UserName = a.UserName, Type = a.Type, Information = a.Information }).ToList(),
-                IsAlert, SelectedPriority.Value, Tag, securityLevel);
+                IsAlert, SelectedPriority.Key, Tag, securityLevel);
             if (result is null)
             {
                 StatusMessage = "Cannot send until a user is installed";
@@ -458,7 +458,7 @@ internal sealed partial class DraftViewModel : ObservableObject, IDraftViewModel
 
             DateTime sentAt = entity.SentAt ?? DateTime.UtcNow;
             MessageEntity sentMessage = await entryService.StoreSentMessage(
-                result.MessageId, body, [.. Addresses], sentAt, result.UserResults, IsAlert, SelectedPriority.Value, Tag, securityLevel);
+                result.MessageId, body, [.. Addresses], sentAt, result.UserResults, IsAlert, SelectedPriority.Key, Tag, securityLevel);
 
             IsSent = true;
             StatusMessage = "Sent";

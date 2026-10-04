@@ -13,11 +13,6 @@ public sealed class TestEngineConfiguration(bool packets = false, Action<IFrameB
         engine.Frames<TestFrame>(message =>
         {
             message
-                .Id(m => m.MessageId)
-                .Sender(m => m.FromUser)
-                .Addresses(
-                    m => m.Addresses.Select(a => (a.UserName, a.Type.ParseAddressType(), a.Information)),
-                    (m, value) => m.Addresses = [.. value.Select(a => new TestAddressEntry { UserName = a.Name, Type = a.Type.ToString(), Information = a.Information })])
                 .Message<TestMessageHandler>()
                 .Retrieval<TestRetrievalHandler>()
                 .ReadReceipt<TestReadReceiptHandler>()

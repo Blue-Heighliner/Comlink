@@ -18,7 +18,7 @@ public sealed class ContentAreaViewModelTests
         public Task<List<string>> GetUserNames(CancellationToken cancellation = default) => Task.FromResult(new List<string>());
         public Task<List<string>> GetConnectedUsers(CancellationToken cancellation = default) => Task.FromResult(new List<string>());
         public Task<UserInfo?> InstallUser(string userCode, CancellationToken cancellation = default) => Task.FromResult<UserInfo?>(null);
-        public Task<SendMessageResult?> SendMessage(string body, List<AddressRequest> addresses, bool isAlert = false, int priority = 0, string tag = "", string securityLevel = "", CancellationToken cancellation = default) => Task.FromResult<SendMessageResult?>(null);
+        public Task<SendMessageResult?> SendMessage(string body, List<AddressRequest> addresses, bool isAlert = false, Enum? priority = null, string tag = "", string securityLevel = "", CancellationToken cancellation = default) => Task.FromResult<SendMessageResult?>(null);
 
         public Task<bool> MarkMessageRead(string messageId, CancellationToken cancellation = default)
         {
@@ -36,7 +36,7 @@ public sealed class ContentAreaViewModelTests
     {
         Mock<TestEngineController> mock = new() { CallBase = true };
         mock.Setup(h => h.HomeText).Returns(homeText);
-        mock.Setup(p => p.Priorities).Returns([new MessagePriorityOption { Name = "Normal", Value = 0 }]);
+        mock.Setup(p => p.Priorities).Returns([new MessagePriorityOption { Name = "Normal", Value = 0, Key = TestMessagePriority.Normal }]);
         mock.Setup(t => t.TagsEnabled).Returns(true);
         mock.Setup(t => t.TagLabel).Returns("Tag");
         mock.Setup(p => p.BlockedCombinations).Returns([]);

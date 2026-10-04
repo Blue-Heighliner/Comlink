@@ -184,6 +184,25 @@ public sealed class RelayPeerServiceTests
         await fx.Stop();
     }
 
+    /// <summary>A message with no identifier is invalid and is not forwarded either way.</summary>
+    [Fact]
+    public async Task MessagesWithoutAnId_AreNotForwarded()
+    {
+        Fixture fx = await BuildStarted();
+        PeerConnection child = Inbound("ClientR1");
+        fx.Come(child);
+        TestFrame message = MessageTo("ClientR1");
+        message.MessageId = string.Empty;
+
+        fx.Receive(child, Encode(message));
+        fx.Receive(fx.Server, Encode(message));
+        await Task.Delay(150);
+
+        Assert.Equal(0, RealRequests(fx, fx.Server));
+        Assert.Equal(0, RealRequests(fx, child));
+        await fx.Stop();
+    }
+
     /// <summary>Heartbeats are connection upkeep, not traffic, and are not forwarded.</summary>
     [Fact]
     public async Task Heartbeats_AreNotForwarded()

@@ -71,6 +71,7 @@ internal sealed class NetworkConfig
         {
             config = JsonSerializer.Deserialize<NetworkConfig>(File.ReadAllText(path), jsonOptions) ?? new NetworkConfig();
             config.ConfigDirectory = Path.GetDirectoryName(Path.GetFullPath(path));
+            config.Validate();
         }
 
         int userIndex = Array.IndexOf(args, "--user");
@@ -78,6 +79,19 @@ internal sealed class NetworkConfig
         config.workingDirectory = workingDirectory;
         config.User = userIndex >= 0 && userIndex + 1 < args.Length ? args[userIndex + 1] : ReadUserFile(Path.Combine(workingDirectory ?? Directory.GetCurrentDirectory(), "User.json"));
         return config;
+    }
+
+    /// <summary>Checks the file for mistakes that must stop networking from starting.</summary>
+    /// <exception cref="InvalidDataException">A user's role is not <c>Client</c>, <c>Server</c> or <c>Relay</c>.</exception>
+    private void Validate()
+    {
+        foreach ((string name, NetworkUserConfig user) in Users)
+        {
+            if (!string.IsNullOrWhiteSpace(user.Role) && user.GetRole() is null)
+            {
+                throw new InvalidDataException($"The role \"{user.Role}\" of user {name} is not recognized: it must be Client, Server or Relay");
+            }
+        }
     }
 
     /// <summary>
@@ -126,7 +140,6 @@ internal sealed class NetworkConfig
                 InterfacePort = user.InterfacePort,
                 Parent = user.Parent?.ToLink(),
                 Children = [.. user.Children.Select(child => child.ToLink())],
-                StoresMessages = user.StoresMessages,
                 SecurityLevel = user.SecurityLevel,
                 CertificateName = user.CertificateName,
                 Data = new Dictionary<string, string>(user.Data),
@@ -167,9 +180,6 @@ internal sealed class NetworkUserConfig
 
     /// <summary>The user's children: each a user name, or an object that also forces the connection mode.</summary>
     public List<NetworkLinkConfig> Children { get; init; } = [];
-
-    /// <summary>For a server, whether it stores the messages it routes and answers retrieval requests.</summary>
-    public bool StoresMessages { get; init; }
 
     /// <summary>The name of the security level this user runs at. <see langword="null"/> is the lowest configured level.</summary>
     public string? SecurityLevel { get; init; }
@@ -222,7 +232,7 @@ internal sealed class NetworkUserConfig
     private static JsonElement? Read(JsonElement? section, string name)
         => section is { ValueKind: JsonValueKind.Object } value && value.EnumerateObject().FirstOrDefault(property => string.Equals(property.Name, name, StringComparison.OrdinalIgnoreCase)) is { Value.ValueKind: not JsonValueKind.Undefined } property ? property.Value : null;
 
-    /// <summary>Parses <see cref="Role"/>, or <see langword="null"/> when unset or unrecognized.</summary>
+    /// <summary>Parses <see cref="Role"/>, or <see langword="null"/> when unset or unrecognized (loading a file with an unrecognized role fails, so only an unset one is left).</summary>
     public UserRole? GetRole() => Enum.TryParse(Role, ignoreCase: true, out UserRole role) ? role : null;
 }
 

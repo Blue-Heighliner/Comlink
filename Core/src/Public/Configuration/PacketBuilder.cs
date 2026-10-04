@@ -16,20 +16,6 @@ public interface IPacketBuilder<TPacket> where TPacket : class, new()
     /// <typeparam name="THandler">The handler type, instantiated through dependency injection when the engine runs: the instance registered for it in the host's services, or else one constructed from them.</typeparam>
     IPacketBuilder<TPacket> Frame<THandler>() where THandler : IFramePacketHandler<TPacket>;
 
-    /// <summary>
-    /// Sets the largest a serialized packet may be, in bytes. Smaller packets let a higher-priority payload cut in
-    /// sooner; larger ones carry less framing overhead. The default is 16 KiB. The engine measures what the serializer
-    /// makes of a packet to see how much payload fits, so it must leave room for the packet's own fields.
-    /// </summary>
-    IPacketBuilder<TPacket> Size(int bytes);
-
-    /// <summary>
-    /// Sets how many packets may be in flight over one connection at once. A higher-priority payload sent meanwhile goes
-    /// out as soon as the packets in flight finish, so the window is how many it can end up waiting behind: 1 (the
-    /// default) is the most responsive, while a wider window keeps a link with a long round trip busier. Must be at least 1.
-    /// </summary>
-    IPacketBuilder<TPacket> Window(int packets);
-
     /// <summary>Replaces the serializer that turns packets into bytes. The default is a <see cref="ProtobufSerializer"/> that builds only <typeparamref name="TPacket"/>.</summary>
     /// <typeparam name="TSerializer">The serializer type, instantiated through dependency injection when the engine runs: the instance registered for it in the host's services, or else one constructed from them.</typeparam>
     IPacketBuilder<TPacket> Serializer<TSerializer>() where TSerializer : IPacketSerializer;

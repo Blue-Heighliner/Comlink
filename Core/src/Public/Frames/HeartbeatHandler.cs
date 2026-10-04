@@ -11,6 +11,12 @@ public interface IHeartbeatHandler<TFrame> where TFrame : class
     /// <summary>Gets the member of the priority enum (see <see cref="IEngineBuilder.Priorities{TPriority}"/>) naming the level that heartbeats are sent with, which is how they are ordered against other traffic.</summary>
     Enum Priority { get; }
 
+    /// <summary>Gets how long a connection waits between heartbeats while the last one succeeded.</summary>
+    TimeSpan Interval { get; }
+
+    /// <summary>Gets how long a connection waits before sending another heartbeat while the last one failed, which is how quickly a connection that is down is noticed to be back.</summary>
+    TimeSpan RetryInterval { get; }
+
     /// <summary>Returns whether <paramref name="frame"/> is a heartbeat.</summary>
     /// <param name="frame">The frame to classify.</param>
     bool IsValid(TFrame frame);

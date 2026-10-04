@@ -8,33 +8,6 @@ namespace BlueHeighliner.Comlink;
 /// <typeparam name="TFrame">The host's frame type.</typeparam>
 public interface IFrameBuilder<TFrame> where TFrame : class, new()
 {
-    /// <summary>Maps the application-level frame identifier.</summary>
-    IFrameBuilder<TFrame> Id(Func<TFrame, string> get, Action<TFrame, string> set);
-
-    /// <summary>Maps the same field by the property or field the expression reads, such as <c>x => x.Id</c>, building the setter from it. The member must have the same type and be assignable.</summary>
-    IFrameBuilder<TFrame> Id(Expression<Func<TFrame, string>> property);
-
-    /// <summary>Maps the sender's user name.</summary>
-    IFrameBuilder<TFrame> Sender(Func<TFrame, string> get, Action<TFrame, string> set);
-
-    /// <summary>Maps the same field by the property or field the expression reads, such as <c>x => x.Sender</c>, building the setter from it. The member must have the same type and be assignable.</summary>
-    IFrameBuilder<TFrame> Sender(Expression<Func<TFrame, string>> property);
-
-    /// <summary>
-    /// Maps the recipient list, converting between the host's own recipient shape and the engine's: a name, whether it is
-    /// addressed to (<see cref="AddressType.To"/>), copied (<see cref="AddressType.Cc"/>) or outside the system
-    /// (<see cref="AddressType.External"/>, information for the user that the engine takes no action for), and any custom
-    /// instructions attached to it (for example <c>Deliver to Eastside Office</c>, an empty string when there are none).
-    /// The getter is called whenever the engine needs to know who a frame is for, and the setter when it builds a frame.
-    /// </summary>
-    IFrameBuilder<TFrame> Addresses(Func<TFrame, IEnumerable<(string Name, AddressType Type, string Information)>> get, Action<TFrame, IReadOnlyList<(string Name, AddressType Type, string Information)>> set);
-
-    /// <summary>
-    /// Maps the recipient list the same way as the other <c>Addresses</c> overload, for a host whose own recipient
-    /// shape has no place for custom instructions; every address maps with an empty <c>Information</c>.
-    /// </summary>
-    IFrameBuilder<TFrame> Addresses(Func<TFrame, IEnumerable<(string Name, AddressType Type)>> get, Action<TFrame, IReadOnlyList<(string Name, AddressType Type)>> set);
-
     /// <summary>
     /// States the handler for message frames: the ones the user reads, which are stored in the Inbox when received and in the Outbox when sent by the user. The handler creates a
     /// message from its content, recognizes message frames and reads their content (see <see cref="IMessageHandler{TFrame}"/>). A frame that is not a message
@@ -51,7 +24,7 @@ public interface IFrameBuilder<TFrame> where TFrame : class, new()
     IFrameBuilder<TFrame> AutoForward<TController>() where TController : IAutoForwardController<TFrame>;
 
     /// <summary>
-    /// States the handler for retrieval request frames, what a user sends a storage server (see <see cref="UserInfo.StoresMessages"/>) to ask for stored messages
+    /// States the handler for retrieval request frames, what a user sends a server to ask for stored messages
     /// (see <see cref="IRetrievalHandler{TFrame}"/>). A request is never shown to a user as a received message and is not a message.
     /// </summary>
     /// <typeparam name="THandler">The handler type, instantiated through dependency injection when the engine runs: the instance registered for it in the host's services, or else one constructed from them.</typeparam>

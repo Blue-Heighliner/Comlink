@@ -109,7 +109,8 @@ internal sealed class SerialLink : IAsyncDisposable
         IHdlcPeer peer = current ?? throw new IOException(isClosed ? $"Serial link to {point} is closed" : $"Serial link to {point} is not connected");
         if (data.Length > peer.MaxPayloadSize)
         {
-            throw new ArgumentOutOfRangeException(nameof(data), data.Length, $"The payload does not fit one HDLC frame of {peer.MaxPayloadSize} bytes; packetization must be enabled with a packet size that does");
+            logger.LogError("A payload of {Length} bytes cannot be sent over {Point}: an HDLC frame carries at most {Max} bytes (MaxInfoField), and each frame or packet is sent as exactly one, so lower the packet size or raise MaxInfoField", data.Length, point, peer.MaxPayloadSize);
+            throw new ArgumentOutOfRangeException(nameof(data), data.Length, $"The payload does not fit one HDLC frame of {peer.MaxPayloadSize} bytes");
         }
 
         try

@@ -107,7 +107,7 @@ internal sealed partial class MessageViewModel : ObservableObject, IMessageViewM
         FromUser = engineController.GetFromUser(entity.Message);
         ReceivedAt = entity.ReceivedAt;
         IsAlert = engineController.GetIsAlert(entity.Message);
-        PriorityLabel = engineController.Priorities.GetLabel(engineController.GetPriority(entity.Message));
+        PriorityLabel = engineController.NameOf(engineController.GetMessagePriority(entity.Message));
         TagsEnabled = engineController.TagsEnabled;
         Tag = engineController.GetTag(entity.Message);
         SecurityLevelName = engineController.GetSecurityLevel(entity.Message);

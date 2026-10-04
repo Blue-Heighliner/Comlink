@@ -1,7 +1,7 @@
 namespace BlueHeighliner.Comlink;
 
 /// <summary>
-/// The storage half of a storage server (see <see cref="UserInfo.StoresMessages"/>): keeps a copy of each
+/// The storage half of a server: keeps a copy of each
 /// message the server routes, and answers a retrieval request by finding the stored messages that fit its criteria.
 /// Any user can retrieve any stored message; nothing restricts a request to the requester's own traffic. Sending the found copies is left to the caller, since only the server's peer service
 /// knows how to reach the requester and this service must not depend on it.
@@ -60,11 +60,11 @@ internal sealed class MessageStorageService : IMessageStorageService
 
         try
         {
-            await repository.InsertIfNew(new StoredMessageEntity { MessageId = engineController.GetFrameId(message), Message = message });
+            await repository.InsertIfNew(new StoredMessageEntity { MessageId = engineController.GetMessageId(message), Message = message });
         }
         catch (Exception ex)
         {
-            logger.LogError(ex, "Failed to store a copy of {MessageId}", engineController.GetFrameId(message));
+            logger.LogError(ex, "Failed to store a copy of {MessageId}", engineController.GetMessageId(message));
         }
     }
 
@@ -102,7 +102,7 @@ internal sealed class MessageStorageService : IMessageStorageService
         DateTime sentAt = Utc(engineController.GetSentAt(message));
         if (criteria.From is { } from && sentAt < Utc(from)) { return false; }
         if (criteria.To is { } to && sentAt > Utc(to)) { return false; }
-        if (criteria.Ids.Count > 0 && !criteria.Ids.Contains(engineController.GetFrameId(message), StringComparer.OrdinalIgnoreCase)) { return false; }
+        if (criteria.Ids.Count > 0 && !criteria.Ids.Contains(engineController.GetMessageId(message), StringComparer.OrdinalIgnoreCase)) { return false; }
         if (criteria.Authors.Count > 0 && !criteria.Authors.Contains(engineController.GetFromUser(message), StringComparer.OrdinalIgnoreCase)) { return false; }
         return criteria.Destinations.Count == 0
             || engineController.GetAddresses(message).Any(address => criteria.Destinations.Contains(address.UserName, StringComparer.OrdinalIgnoreCase));
@@ -115,11 +115,11 @@ internal sealed class MessageStorageService : IMessageStorageService
             SentAt = Utc(engineController.GetSentAt(original)),
             Body = engineController.GetBody(original),
             IsAlert = false,
-            Priority = engineController.GetPriority(original),
+            Priority = engineController.GetMessagePriority(original),
             Tag = engineController.GetTag(original),
             SecurityLevel = engineController.GetSecurityLevel(original)
         });
-        engineController.SetFrameId(copy, engineController.GetFrameId(original));
+        engineController.SetMessageId(copy, engineController.GetMessageId(original));
         engineController.SetFromUser(copy, engineController.GetFromUser(original));
         engineController.SetAddresses(copy, [new MessageAddress { UserName = requester, Type = AddressType.To }]);
         return copy;

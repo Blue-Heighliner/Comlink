@@ -1,7 +1,7 @@
 namespace BlueHeighliner.Comlink;
 
 /// <summary>
-/// ViewModel for the retrieve screen: asking a storage server (see <see cref="UserInfo.StoresMessages"/>) to send
+/// ViewModel for the retrieve screen: asking the server a message is stored on to send
 /// back copies of the messages it stored that fit a date range, authors, destinations and message IDs. Registered as
 /// a DI singleton (see <see cref="MainViewModel.Retrieve"/>) so what was entered survives navigating away and back.
 /// </summary>

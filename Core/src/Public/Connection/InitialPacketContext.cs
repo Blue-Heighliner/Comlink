@@ -8,9 +8,6 @@ namespace BlueHeighliner.Comlink;
 /// <typeparam name="TPacket">The host's packet type.</typeparam>
 public interface IInitialPacketContext<TPacket> : IEngineContext where TPacket : class
 {
-    /// <summary>Gets a value indicating whether this node opens the exchange: the node that opened the connection, or for a serial link, which both ends open, the node at the higher station address.</summary>
-    bool IsOpener { get; }
-
     /// <summary>Gets what is known about the connection.</summary>
     IConnectionInfo Connection { get; }
 

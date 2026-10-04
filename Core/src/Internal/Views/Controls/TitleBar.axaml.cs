@@ -2,7 +2,7 @@ namespace BlueHeighliner.Comlink;
 
 /// <summary>
 /// User control for the application title bar, providing window controls, user info, and action buttons —
-/// the normal drafts/notes/export/import/print actions in Peer/Client mode (<see cref="IsServerMode"/> is
+/// the normal drafts/notes/export/import/print actions in Client mode (<see cref="IsServerMode"/> is
 /// <see langword="false"/>), or the CONNECTIONS/ACTIVITY view-switching buttons in Server mode
 /// (<see cref="IsServerMode"/> is <see langword="true"/>).
 /// </summary>

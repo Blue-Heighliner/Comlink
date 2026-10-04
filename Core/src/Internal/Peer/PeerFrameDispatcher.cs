@@ -3,7 +3,7 @@ namespace BlueHeighliner.Comlink;
 /// <summary>
 /// Shared deserialize-and-classify logic for raw bytes received over a peer or client connection:
 /// distinguishes receive and read receipts from an ordinary frame and raises the matching event.
-/// Used by both <see cref="PeerService"/> and <see cref="ClientPeerService"/>.
+/// Used by <see cref="ClientPeerService"/>.
 /// </summary>
 internal static class PeerFrameDispatcher
 {
@@ -36,6 +36,12 @@ internal static class PeerFrameDispatcher
 
             if (engineController.IsHeartbeat(frame)) { return true; }
 
+            if (engineController.IsMessageWithoutId(frame))
+            {
+                logger.LogError("A message from {FromUser} has no identifier and was dropped", engineController.GetFromUser(frame));
+                return false;
+            }
+
             if (engineController.IsReadReceipt(frame))
             {
                 string readMessageId = engineController.GetReadReceiptMessageId(frame);
@@ -56,11 +62,11 @@ internal static class PeerFrameDispatcher
 
             if (engineController.IsRetrieval(frame))
             {
-                logger.LogWarning("{MessageId} retrieval request from {User} ignored: only a storage server answers one", engineController.GetFrameId(frame), engineController.GetFromUser(frame));
+                logger.LogWarning("{MessageId} retrieval request from {User} ignored: only a storage server answers one", engineController.GetIdentifier(frame), engineController.GetFromUser(frame));
                 return true;
             }
 
-            logger.LogInformation("{MessageId} received from {FromUser}", engineController.GetFrameId(frame), engineController.GetFromUser(frame));
+            logger.LogInformation("{MessageId} received from {FromUser}", engineController.GetIdentifier(frame), engineController.GetFromUser(frame));
             await frameDelivered.InvokeAll(frame);
             return true;
         }

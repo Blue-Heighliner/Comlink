@@ -9,8 +9,8 @@ internal sealed record TagPriorityBlock
 {
     /// <summary>The blocked tag (case-insensitive exact match), or <see langword="null"/> to match any tag.</summary>
     public string? Tag { get; init; }
-    /// <summary>The blocked priority value, or <see langword="null"/> to match any priority.</summary>
-    public int? Priority { get; init; }
+    /// <summary>The blocked priority level, or <see langword="null"/> to match any priority.</summary>
+    public Enum? Priority { get; init; }
 }
 
 /// <summary>Extension helpers for evaluating a set of <see cref="TagPriorityBlock"/> rules.</summary>
@@ -20,8 +20,8 @@ internal static class TagPriorityBlockExtensions
     /// <param name="blocks">The blocked combination rules to evaluate.</param>
     /// <param name="tag">The message tag to check.</param>
     /// <param name="priority">The message priority to check.</param>
-    public static bool IsBlocked(this IReadOnlyList<TagPriorityBlock> blocks, string? tag, int priority)
+    public static bool IsBlocked(this IReadOnlyList<TagPriorityBlock> blocks, string? tag, Enum priority)
         => blocks.Any(b =>
             (b.Tag is null || string.Equals(b.Tag, tag, StringComparison.OrdinalIgnoreCase)) &&
-            (b.Priority is null || b.Priority == priority));
+            (b.Priority is null || b.Priority.Equals(priority)));
 }

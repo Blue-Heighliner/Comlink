@@ -21,8 +21,8 @@ public sealed class TestFrame
     /// <summary>Whether this message is an alert.</summary>
     [ProtoMember(8)] public bool IsAlert { get; set; }
     public int PrintCount { get; set; } = 1;
-    /// <summary>Priority number of this message.</summary>
-    [ProtoMember(9)] public int Priority { get; set; }
+    /// <summary>Name of the priority level of this message.</summary>
+    [ProtoMember(9)] public string Priority { get; set; } = string.Empty;
     /// <summary>Tag identifying the type of this message.</summary>
     [ProtoMember(10)] public string Tag { get; set; } = string.Empty;
     /// <summary>Security level name this message was sent at.</summary>
@@ -78,5 +78,5 @@ internal class TestEngineController : EngineController
     }
 
     /// <summary>Gets ten priority levels, so tests may use any priority from 0 to 9 without it being brought within range.</summary>
-    public override IReadOnlyList<MessagePriorityOption> Priorities { get; } = [.. Enumerable.Range(0, 10).Select(value => new MessagePriorityOption { Name = value == 0 ? "NORMAL" : $"LEVEL{value}", Value = value })];
+    public override IReadOnlyList<MessagePriorityOption> Priorities { get; } = [.. Enum.GetValues<TestMessagePriority>().Take(10).Select((key, value) => new MessagePriorityOption { Name = key.ToString().ToUpperInvariant(), Value = value, Key = key })];
 }

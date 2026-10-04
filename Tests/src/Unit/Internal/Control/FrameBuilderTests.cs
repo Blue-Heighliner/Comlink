@@ -7,9 +7,6 @@ public sealed class FrameBuilderTests
     {
         FrameBuilder<TestFrame> builder = new();
         builder
-            .Id(m => m.MessageId, (m, v) => m.MessageId = v)
-            .Sender(m => m.FromUser, (m, v) => m.FromUser = v)
-            .Addresses(m => m.Addresses.Select(a => (a.UserName, a.Type.ParseAddressType(), a.Information)), (m, v) => m.Addresses = [.. v.Select(a => new TestAddressEntry { UserName = a.Name, Type = a.Type.ToString(), Information = a.Information })])
             .Message<TestMessageHandler>()
             .Retrieval<TestRetrievalHandler>()
             .ReadReceipt<TestReadReceiptHandler>()
@@ -22,32 +19,20 @@ public sealed class FrameBuilderTests
     public void Build_UnstatedFields_ThrowsNamingThem()
     {
         FrameBuilder<TestFrame> builder = new();
-        builder.Id(m => m.MessageId, (m, v) => m.MessageId = v);
-
         InvalidOperationException error = Assert.Throws<InvalidOperationException>(() => builder.Build());
 
         Assert.Contains("TestFrame", error.Message);
         string[] missing = error.Message[(error.Message.IndexOf(':') + 1)..].Split(',', StringSplitOptions.TrimEntries);
-        Assert.Equal(["Sender", "Addresses", "Message", "Retrieval", "ReadReceipt", "ReceiveReceipt"], missing);
+        Assert.Equal(["Message", "Retrieval", "ReadReceipt", "ReceiveReceipt"], missing);
     }
 
-    /// <summary>The map reads and writes each common field of the host's frame through the object-typed accessors.</summary>
+    /// <summary>The map creates the host's frame and reports its type.</summary>
     [Fact]
-    public void Map_ReadsAndWritesEveryCommonField()
+    public void Map_CreatesTheHostsFrame()
     {
         FrameMap map = Complete().Build();
-        object message = map.Create();
-        map.SetId(message, "ID");
-        map.SetSender(message, "FROM");
-        map.SetAddresses(message, [new MessageAddress { UserName = "A", Type = AddressType.Cc }]);
 
-        TestFrame typed = Assert.IsType<TestFrame>(message);
-        Assert.Equal("ID", typed.MessageId);
-        Assert.Equal("ID", map.GetId(message));
-        Assert.Equal("FROM", map.GetSender(message));
-        MessageAddress address = Assert.Single(map.GetAddresses(message));
-        Assert.Equal("A", address.UserName);
-        Assert.Equal(AddressType.Cc, address.Type);
+        Assert.IsType<TestFrame>(map.Create());
         Assert.Equal(typeof(TestFrame), map.Type);
     }
 
@@ -58,12 +43,12 @@ public sealed class FrameBuilderTests
         IMessageFrameHandler handler = Complete().Build().Message.Create(null);
         DateTime sentAt = new(2026, 9, 28, 1, 2, 3, DateTimeKind.Utc);
 
-        object message = handler.Create(new MessageCreateContext { SentAt = sentAt, Body = "BODY", IsAlert = true, Priority = 7, Tag = "TAG", SecurityLevel = "SECRET" });
+        object message = handler.Create(new MessageCreateContext { SentAt = sentAt, Body = "BODY", IsAlert = true, Priority = TestMessagePriority.Level7, Tag = "TAG", SecurityLevel = "SECRET" });
 
         Assert.IsType<TestFrame>(message);
         Assert.True(handler.IsValid(message));
         Assert.False(handler.IsValid(new TestFrame { IsHidden = true }));
-        Assert.Equal((sentAt, "BODY", true, 7, "TAG", "SECRET"), (handler.GetSentAt(message), handler.GetBody(message), handler.GetIsAlert(message), handler.GetPriority(message), handler.GetTag(message), handler.GetSecurityLevel(message)));
+        Assert.Equal((sentAt, "BODY", true, TestMessagePriority.Level7, "TAG", "SECRET"), (handler.GetSentAt(message), handler.GetBody(message), handler.GetIsAlert(message), handler.GetPriority(message), handler.GetTag(message), handler.GetSecurityLevel(message)));
     }
 
     /// <summary>The retrieval handler the host states creates a request from its criteria, recognizes it, and reads the criteria back.</summary>
@@ -73,7 +58,7 @@ public sealed class FrameBuilderTests
         IRetrievalFrameHandler handler = Complete().Build().Retrieval.Create(null);
         DateTime from = new(2026, 9, 28, 0, 0, 0, DateTimeKind.Utc);
 
-        object request = handler.Create(new RetrievalCreateContext { From = from, Authors = ["ALICE"], Destinations = ["BOB"], Ids = ["M1"] });
+        object request = handler.Create(new RetrievalCreateContext { Server = "SERVER", From = from, Authors = ["ALICE"], Destinations = ["BOB"], Ids = ["M1"] });
 
         Assert.True(handler.IsValid(request));
         Assert.False(handler.IsValid(new TestFrame()));
@@ -92,8 +77,8 @@ public sealed class FrameBuilderTests
         IReceiptFrameHandler read = map.ReadReceipt.Create(null);
         IReceiptFrameHandler receive = map.ReceiveReceipt.Create(null);
 
-        object readReceipt = read.Create(new ReceiptCreateContext { MessageId = "M1" });
-        object receiveReceipt = receive.Create(new ReceiptCreateContext { MessageId = "M2" });
+        object readReceipt = read.Create(new ReceiptCreateContext { MessageId = "M1", To = "ALICE" });
+        object receiveReceipt = receive.Create(new ReceiptCreateContext { MessageId = "M2", To = "ALICE" });
 
         Assert.True(read.IsValid(readReceipt));
         Assert.False(read.IsValid(receiveReceipt));
@@ -128,16 +113,6 @@ public sealed class FrameBuilderTests
 
         Assert.Same(serializer, map.Serializer.Create(new ServiceCollection().AddSingleton(serializer).BuildServiceProvider()));
         Assert.Same(created, map.Create());
-    }
-
-    /// <summary>Mapping a field again replaces the earlier mapping.</summary>
-    [Fact]
-    public void Map_SameFieldTwice_LastWins()
-    {
-        FrameBuilder<TestFrame> builder = Complete();
-        builder.Sender(m => "replaced", (m, v) => { });
-
-        Assert.Equal("replaced", builder.Build().GetSender(new TestFrame { FromUser = "original" }));
     }
 
     private sealed class AlertsController : IAutoForwardController<TestFrame>
@@ -188,74 +163,35 @@ public sealed class FrameBuilderTests
         Assert.Equal(["CAROL"], controller.AutoForwardControllers[0].Users);
     }
 
-    private sealed class Plain
-    {
-        public string Id { get; set; } = "";
-        public string Sender { get; set; } = "";
-        public List<(string Name, AddressType Type, string Information)> Addresses { get; set; } = [];
-    }
-
-    /// <summary>Every field whose type already matches can be mapped by naming the property alone, and behaves exactly like the explicit getter and setter.</summary>
+    /// <summary>The message handler's addresses are converted between the host's own shape and the engine's, in both directions.</summary>
     [Fact]
-    public void PropertyOverloads_MapEachMatchingFieldWithoutASetter()
+    public void MessageHandler_Addresses_ConvertBothWays()
     {
-        FrameBuilder<Plain> builder = new();
-        builder.Id(m => m.Id).Sender(m => m.Sender)
-            .Addresses(m => m.Addresses, (m, v) => m.Addresses = [.. v])
-            .Message<IMessageHandler<Plain>>().Retrieval<IRetrievalHandler<Plain>>().ReadReceipt<IReadReceiptHandler<Plain>>().ReceiveReceipt<IReceiveReceiptHandler<Plain>>();
-        FrameMap map = builder.Build();
-        object message = map.Create();
-        map.SetId(message, "ID");
-        map.SetSender(message, "FROM");
+        IMessageFrameHandler handler = Complete().Build().Message.Create(null);
+        object message = new TestFrame();
 
-        Plain typed = Assert.IsType<Plain>(message);
-        Assert.Equal(("ID", "FROM"), (typed.Id, typed.Sender));
-        Assert.Equal("ID", map.GetId(message));
-    }
-
-    /// <summary>A property overload that cannot supply a setter fails when the mapping is stated, naming the expression.</summary>
-    [Fact]
-    public void PropertyOverload_ReadOnlyProperty_ThrowsImmediately()
-    {
-        FrameBuilder<TestFrame> builder = new();
-
-        Assert.Throws<ArgumentException>(() => builder.Id(m => m.MessageId.ToUpper()));
-    }
-
-    /// <summary>The addresses are converted between the host's own shape and the engine's, in both directions, through name and type tuples.</summary>
-    [Fact]
-    public void Addresses_ConvertsThroughTuples()
-    {
-        FrameMap map = Complete().Build();
-        object message = map.Create();
-
-        map.SetAddresses(message, [
+        handler.SetAddresses(message, [
             new MessageAddress { UserName = "A", Type = AddressType.To },
             new MessageAddress { UserName = "B", Type = AddressType.Cc },
             new MessageAddress { UserName = "OMAHA", Type = AddressType.External, Information = "Deliver to Eastside Office" }]);
 
         TestFrame typed = Assert.IsType<TestFrame>(message);
         Assert.Equal([("A", "To", ""), ("B", "Cc", ""), ("OMAHA", "External", "Deliver to Eastside Office")], typed.Addresses.Select(a => (a.UserName, a.Type, a.Information)));
-        List<MessageAddress> read = map.GetAddresses(message);
-        Assert.Equal([("A", AddressType.To, ""), ("B", AddressType.Cc, ""), ("OMAHA", AddressType.External, "Deliver to Eastside Office")], read.Select(a => (a.UserName, a.Type, a.Information)));
+        Assert.Equal([("A", AddressType.To, ""), ("B", AddressType.Cc, ""), ("OMAHA", AddressType.External, "Deliver to Eastside Office")], handler.GetAddresses(message).Select(a => (a.UserName, a.Type, a.Information)));
     }
 
-    /// <summary>A host with no use for per-address instructions can map addresses with the two-tuple overload; every address reads back with an empty <c>Information</c>.</summary>
+    /// <summary>A message goes to its non-external addresses, a retrieval request or receipt to the destination its handler reads, and any other frame nowhere.</summary>
     [Fact]
-    public void Addresses_TwoTupleOverload_MapsWithEmptyInformation()
+    public void Route_FollowsTheKindOfFrame()
     {
-        FrameBuilder<TestFrame> builder = new();
-        builder.Id(m => m.MessageId, (m, v) => m.MessageId = v).Sender(m => "", (m, v) => { })
-            .Addresses(
-                m => m.Addresses.Select(a => (a.UserName, a.Type.ParseAddressType())),
-                (m, v) => m.Addresses = [.. v.Select(a => new TestAddressEntry { UserName = a.Name, Type = a.Type.ToString() })])
-            .Message<TestMessageHandler>().Retrieval<TestRetrievalHandler>().ReadReceipt<TestReadReceiptHandler>().ReceiveReceipt<TestReceiveReceiptHandler>();
-        FrameMap map = builder.Build();
-        object message = map.Create();
+        EngineController controller = new(EngineBuilder.Build(new TestEngineConfiguration()), new CurrentUserProvider(), null);
+        TestFrame message = new() { Addresses = [new TestAddressEntry { UserName = "A", Type = "To" }, new TestAddressEntry { UserName = "OUT", Type = "External" }, new TestAddressEntry { UserName = "a", Type = "Cc" }] };
+        TestFrame retrieval = (TestFrame)controller.CreateRetrieval(new RetrievalCriteria(), "SERVER");
+        TestFrame receipt = (TestFrame)controller.CreateReadReceipt("M", "BOB");
 
-        map.SetAddresses(message, [new MessageAddress { UserName = "A", Type = AddressType.To, Information = "ignored" }]);
-
-        MessageAddress address = Assert.Single(map.GetAddresses(message));
-        Assert.Equal(("A", AddressType.To, ""), (address.UserName, address.Type, address.Information));
+        Assert.Equal(["A"], controller.Route(message));
+        Assert.Equal(["SERVER"], controller.Route(retrieval));
+        Assert.Equal(["BOB"], controller.Route(receipt));
+        Assert.Empty(controller.Route(new TestFrame { IsHidden = true, IsHeartbeat = true }));
     }
 }

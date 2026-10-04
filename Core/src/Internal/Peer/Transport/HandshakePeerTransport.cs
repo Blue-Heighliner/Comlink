@@ -22,16 +22,14 @@ internal sealed class HandshakePeerTransport : IPeerTransport
     /// <param name="logger">Receives a warning for every connection that is refused.</param>
     /// <param name="handshake">The initial exchange to carry out, or <see langword="null"/> for none.</param>
     /// <param name="identify">Whether to identify the node on the other end once the exchange is done. Only the outermost handshake transport does.</param>
-    /// <param name="handshakeTimeout">How long the exchange may take. Defaults to ten seconds.</param>
     /// <param name="contexts">Creates the engine snapshot a processor sees, or <see langword="null"/> for one that knows no connected users.</param>
-    public HandshakePeerTransport(IPeerTransport inner, IEngineController engineController, ILogger logger, Handshake? handshake, bool identify, TimeSpan? handshakeTimeout = null, IEngineContextFactory? contexts = null)
+    public HandshakePeerTransport(IPeerTransport inner, IEngineController engineController, ILogger logger, Handshake? handshake, bool identify, IEngineContextFactory? contexts = null)
     {
         this.inner = inner;
         this.engineController = engineController;
         this.logger = logger;
         this.handshake = handshake;
         this.identify = identify;
-        this.handshakeTimeout = handshakeTimeout ?? TimeSpan.FromSeconds(10);
         this.contexts = contexts;
 
         inner.Received.Listen(OnReceived);
@@ -44,7 +42,6 @@ internal sealed class HandshakePeerTransport : IPeerTransport
     private readonly ILogger logger;
     private readonly Handshake? handshake;
     private readonly bool identify;
-    private readonly TimeSpan handshakeTimeout;
     private readonly IEngineContextFactory? contexts;
     private readonly ConditionalWeakTable<PeerConnection, Session> sessions = new();
     private readonly PeerEvent<PeerReceivedEventArgs> received = new();
@@ -89,10 +86,6 @@ internal sealed class HandshakePeerTransport : IPeerTransport
 
     /// <inheritdoc />
     public ValueTask DisposeAsync() => inner.DisposeAsync();
-
-    // The node that opens a connection starts the exchange. A serial link has no opener, since both ends open the port, so the node at the higher station
-    // address plays that part and the other accepts.
-    private static bool IsInitiator(ConnectionInfo info) => !info.IsInbound && (info is not SerialConnectionInfo serial || serial.SerialAddress > serial.RemoteSerialAddress);
 
     private Session GetSession(PeerConnection connection)
         => sessions.GetValue(connection, key =>
@@ -143,7 +136,7 @@ internal sealed class HandshakePeerTransport : IPeerTransport
     {
         _ = Task.Run(async () =>
         {
-            try { await Task.Delay(handshakeTimeout, session.Deadline.Token); }
+            try { await Task.Delay(handshake!.Processor.Timeout, session.Deadline.Token); }
             catch (OperationCanceledException) { return; }
 
             Fail(session, "did not complete its initial exchange in time");
@@ -228,8 +221,7 @@ internal sealed class HandshakePeerTransport : IPeerTransport
         object item = handshake!.Deserialize(body, packet);
         if (item.GetType() != handshake.Processor.ItemType) { throw new InvalidDataException($"expected a {handshake.Processor.ItemType.Name}"); }
 
-        if (IsInitiator(session.Connection.Info)) { handshake.Processor.OnReply(session.Initial, item); }
-        else { handshake.Processor.OnInitial(session.Initial, item); }
+        handshake.Processor.OnReceived(session.Initial, item);
     }
 
     private void Establish(Session session)
@@ -375,8 +367,6 @@ internal sealed class HandshakePeerTransport : IPeerTransport
 
     private sealed class InitialSession(HandshakePeerTransport owner, Session session) : IInitialSession
     {
-        public bool IsOpener => IsInitiator(session.Connection.Info);
-
         public IConnectionInfo Connection => owner.engineController.WithLocalUser(session.Connection.Info);
 
         public IEngineContext Engine => owner.contexts?.Create() ?? new EngineContext(new UserInfo { Name = Connection.LocalUser ?? string.Empty }, owner.engineController.Users, owner.engineController.GetUserInfo, _ => false);

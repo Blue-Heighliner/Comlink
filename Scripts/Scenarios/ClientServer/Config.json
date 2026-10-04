@@ -8,7 +8,6 @@
       "Msmt": { "Port": 50121 },
       "InterfacePort": 50120,
       "Children": [ "CLIENT1", "CLIENT2" ],
-      "StoresMessages": true,
       "SecurityLevel": "RESTRICTED"
     },
     "CLIENT1": {

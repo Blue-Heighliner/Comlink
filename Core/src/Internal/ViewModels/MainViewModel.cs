@@ -73,7 +73,7 @@ internal interface IMainViewModel
     IStagedSendViewModel StagedSend { get; }
     /// <summary>Gets the retrieve ViewModel driving the retrieve screen.</summary>
     IRetrieveViewModel Retrieve { get; }
-    /// <summary>Gets a value indicating whether the title bar's RETRIEVE button is shown: only for a <see cref="UserRole.Client"/> on a network where at least one server stores messages (see <see cref="UserInfo.StoresMessages"/>).</summary>
+    /// <summary>Gets a value indicating whether the title bar's RETRIEVE button is shown: only for a <see cref="UserRole.Client"/> on a network that has at least one server.</summary>
     bool CanRetrieve { get; }
     /// <summary>Gets the auto forward ViewModel driving the auto forward screen.</summary>
     IAutoForwardViewModel AutoForward { get; }
@@ -389,7 +389,7 @@ internal sealed partial class MainViewModel : ObservableObject, IMainViewModel
             if (inboxFolder is not null && folderBar.SelectedFolder?.Id == inboxFolder.Id)
             {
                 string timeText = entity.ReceivedAt.ToString("dd-MMM-yyyy HH:mm").ToUpperInvariant();
-                string priorityText = engineController.Priorities.GetLabel(evt.Priority);
+                string priorityText = engineController.NameOf(engineController.ResolvePriority(evt.Priority));
                 string? tagText = engineController.TagsEnabled && !string.IsNullOrEmpty(evt.Tag) ? evt.Tag : null;
                 string? securityLevelColor = engineController.SecurityLevels.IsRecognized(evt.SecurityLevel) ? engineController.SecurityLevels.GetColor(evt.SecurityLevel) : null;
                 EntryItemViewModel item = new(entity.MessageId, evt.FromUser, EntryType.Message, entity.ReceivedAt,
