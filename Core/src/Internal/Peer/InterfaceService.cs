@@ -144,6 +144,12 @@ internal sealed class InterfaceService : IInterfaceService
         UserInfo? userInfo = userService.GetCurrentUserInfo();
         if (userInfo is null) { return; }
 
+        if (engineController.GetUnconfiguredLevelReason(message) is { } invalid)
+        {
+            logger.LogError("A message received on the interface is invalid and was dropped: it {Reason}", invalid);
+            return;
+        }
+
         SendMessagePayload payload = new()
         {
             Body = engineController.GetBody(message),

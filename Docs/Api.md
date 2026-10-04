@@ -8,9 +8,11 @@ already covered in the source itself.
 ## Shape
 
 A host implements `IEngineConfiguration`, whose single `Configure` method receives an `IEngineBuilder` and states, through
-fluent calls, how the engine should run: the concrete frame type and how its fields map onto the engine's logical
-fields, and anything else that should differ from the engine's defaults (see [Configuration.md](Components/Configuration.md)).
-Only the frame type is required; Core has no frame DTO of its own.
+fluent calls, how the engine should run. It starts with `Types`, which fixes the frame type, the optional packet type, the
+priority enum and the security level enum, and returns the typed builder every other setting is stated on, so handlers,
+priorities and security levels are all checked against those types. After `Types`, the handlers for each kind of frame are
+required and anything else that should differ from the engine's defaults is optional (see [Configuration.md](Components/Configuration.md)).
+Core has no frame DTO of its own.
 
 `Engine.Start<TConfiguration>(string[] args, Action<IServiceCollection>? configureServices = null)` is the only entry
 point. The host never builds an engine object: it names the type that describes what it wants, and the engine constructs

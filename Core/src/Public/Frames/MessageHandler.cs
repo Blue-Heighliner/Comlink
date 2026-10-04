@@ -2,10 +2,12 @@ namespace BlueHeighliner.Comlink;
 
 /// <summary>
 /// Handles the frames of the host's frame type <typeparamref name="TFrame"/> that are messages: the ones the user reads, which are stored in the Inbox when received
-/// and in the Outbox when sent. A frame that is not a message is still routed and handed to the network processor, but never shown or stored. See <see cref="IFrameBuilder{TFrame}.Message{THandler}"/>.
+/// and in the Outbox when sent. A frame that is not a message is still routed and handed to the network processor, but never shown or stored. See <see cref="IFrameBuilder{TFrame, TPacket, TPriority, TLevel}.Message{THandler}"/>.
 /// </summary>
 /// <typeparam name="TFrame">The host's frame type.</typeparam>
-public interface IMessageHandler<TFrame> where TFrame : class
+/// <typeparam name="TPriority">The enum whose members are the priority levels.</typeparam>
+/// <typeparam name="TLevel">The enum whose members are the security levels.</typeparam>
+public interface IMessageHandler<TFrame, TPriority, TLevel> where TFrame : class where TPriority : struct, Enum where TLevel : struct, Enum
 {
     /// <summary>Returns whether <paramref name="frame"/> is a message.</summary>
     /// <param name="frame">The frame to classify.</param>
@@ -14,7 +16,7 @@ public interface IMessageHandler<TFrame> where TFrame : class
     /// <summary>Creates a new message frame carrying <paramref name="context"/>, for which <see cref="IsValid"/> returns <see langword="true"/>. A new message has no identifier yet (<see cref="GetId"/> returns an empty string), and the engine sets the identifier, sender and addresses itself.</summary>
     /// <param name="context">The content of the message.</param>
     /// <returns>The new frame.</returns>
-    TFrame Create(MessageCreateContext context);
+    TFrame Create(MessageCreateContext<TPriority, TLevel> context);
 
     /// <summary>Gets the identifier of <paramref name="frame"/>, or an empty string while it is unset, which is how a newly created message starts: a message sent while its identifier is unset is given a generated one (see <see cref="NextId"/>). Only messages have an identifier: how receipts, retrievals and stored copies refer to a message, so it must be unique across the whole network. A receipt is identified by the identifier of the message it is for.</summary>
     string GetId(TFrame frame);
@@ -59,8 +61,8 @@ public interface IMessageHandler<TFrame> where TFrame : class
     /// <summary>Gets whether <paramref name="frame"/> is an alert, a message that makes a receiving Client-mode UI alarm until the user reads it.</summary>
     bool GetIsAlert(TFrame frame);
 
-    /// <summary>Gets the priority level <paramref name="frame"/> was created with (see <see cref="MessageCreateContext.Priority"/>), as a member of the enum the host stated for its priorities; one that is not a configured level counts as the lowest level, and the level also sets the send priority.</summary>
-    Enum GetPriority(TFrame frame);
+    /// <summary>Gets the priority level <paramref name="frame"/> was created with (see <see cref="MessageCreateContext{TPriority, TLevel}.Priority"/>), which also sets the send priority. A message received with a priority that is not a configured level is dropped, and an error logged.</summary>
+    TPriority GetPriority(TFrame frame);
 
     /// <summary>Gets how many copies of the received message <paramref name="frame"/> are printed while the print manager's "print received" toggle is on: <c>0</c> to not print it, <c>1</c> to print it once, and so on.</summary>
     int GetPrintCount(TFrame frame);
@@ -68,6 +70,6 @@ public interface IMessageHandler<TFrame> where TFrame : class
     /// <summary>Gets the short tag identifying the type of message <paramref name="frame"/> is, or an empty string for none.</summary>
     string GetTag(TFrame frame);
 
-    /// <summary>Gets the security level name <paramref name="frame"/> was sent at, or an empty string when none are configured.</summary>
-    string GetSecurityLevel(TFrame frame);
+    /// <summary>Gets the security level <paramref name="frame"/> was sent at, or <see langword="null"/> for none. A message received with a level that is not a configured one is dropped, and an error logged.</summary>
+    TLevel? GetSecurityLevel(TFrame frame);
 }

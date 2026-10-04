@@ -16,19 +16,20 @@ public sealed class MyFrame
     public DateTime SentAt { get; set; }
     public bool IsMessage { get; set; }
     public bool IsAlert { get; set; }
-    public string Priority { get; set; } = "";
+    public int Priority { get; set; }
     public string Tag { get; set; } = "";
-    public string SecurityLevel { get; set; } = "";
+    public int? SecurityLevel { get; set; }
 }
 
 public sealed class MyEngineConfiguration : IEngineConfiguration
 {
-    public IEngineBuilder Configure(IEngineBuilder engine) => engine
-        .Frames<MyFrame>(frame => frame
+    public void Configure(IEngineBuilder engine) => engine.Types<MyFrame, MyPriority, MySecurityLevel>()
+        .Priorities().Priority(MyPriority.Normal)
+        .Frames()
             .Message<MyMessageHandler>()
             .Retrieval<MyRetrievalHandler>()
             .ReadReceipt<MyReadReceiptHandler>()
-            .ReceiveReceipt<MyReceiveReceiptHandler>());
+            .ReceiveReceipt<MyReceiveReceiptHandler>();
 }
 
 await Engine.Start<MyEngineConfiguration>(args);
@@ -37,32 +38,31 @@ await Engine.Start<MyEngineConfiguration>(args);
 A common field whose type already matches is mapped by naming the property (`m => m.Id`), which builds the setter for you; when the type differs (a host's own recipient shape for the addresses, or a packet's data) the getter and setter are given explicitly, as `Addresses` is above. Each kind of frame is handled by a class implementing the matching handler interface; for example:
 
 ```csharp
-public sealed class MyMessageHandler : IMessageHandler<MyFrame>
+public sealed class MyMessageHandler : IMessageHandler<MyFrame, MyPriority, MySecurityLevel>
 {
     public bool IsValid(MyFrame frame) => frame.IsMessage;
-    public MyFrame Create(MessageCreateContext context) => new() { IsMessage = true, SentAt = context.SentAt, Body = context.Body, IsAlert = context.IsAlert, Priority = context.Priority.ToString(), Tag = context.Tag, SecurityLevel = context.SecurityLevel };
+    public MyFrame Create(MessageCreateContext<MyPriority, MySecurityLevel> context) => new() { IsMessage = true, SentAt = context.SentAt, Body = context.Body, IsAlert = context.IsAlert, Priority = (int)context.Priority, Tag = context.Tag, SecurityLevel = (int?)context.SecurityLevel };
     public DateTime GetSentAt(MyFrame frame) => frame.SentAt;
     public string GetBody(MyFrame frame) => frame.Body;
     public bool GetIsAlert(MyFrame frame) => frame.IsAlert;
-    public Enum GetPriority(MyFrame frame) => Enum.Parse<MyPriority>(frame.Priority);
+    public MyPriority GetPriority(MyFrame frame) => (MyPriority)frame.Priority;
     public string GetTag(MyFrame frame) => frame.Tag;
-    public string GetSecurityLevel(MyFrame frame) => frame.SecurityLevel;
+    public MySecurityLevel? GetSecurityLevel(MyFrame frame) => (MySecurityLevel?)frame.SecurityLevel;
 }
 ```
 
 The retrieval and receipt handlers follow the same shape (`Create`, `IsValid`, and getters for their own fields). `Addresses` also has an overload taking `(string Name, AddressType Type, string Information)` tuples, for a host whose recipient shape carries custom per-address instructions (e.g. `OMAHA - Deliver to Eastside Office`); `Information` is optional and defaults to an empty string when the two-tuple overload above is used instead. The frame type also needs `[ProtoContract]`/`[ProtoMember]` attributes for the default network serializer.
 By default this runs the Avalonia desktop UI, with command-line overrides disallowed (`CommandLineOverrides` is off
-unless stated) and no window icon (`WindowIcon` is the operating system's unless stated).
+unless stated) and no window icon (the display handler's `Icon` is the operating system's unless stated).
 
 ## Stating a single behavior
 
 A host only states what it needs distinct behavior for; every other setting keeps the engine's default.
 
 ```csharp
-public IEngineBuilder Configure(IEngineBuilder engine) => engine
-    .Frames<MyFrame>(/* ...required mapping from above... */)
-    .HomeText("Select a folder and entry to get started.")
-    .WindowIcon("avares://MyApp/Assets/icon.png");
+public void Configure(IEngineBuilder engine) => engine.Types<MyFrame, MyPriority, MySecurityLevel>()
+    .Display<MyDisplayHandler>()
+    .Frames() /* ...required handlers from above... */;
 ```
 
 ## The network configuration file
@@ -74,8 +74,8 @@ as from `User.json` there; nothing about a user is stated in code. Stating `Comm
 lets `--config` name another file and `--user` name the user.
 
 ```csharp
-public IEngineBuilder Configure(IEngineBuilder engine) => engine
-    .Frames<MyFrame>(/* ...required mapping... */)
+public void Configure(IEngineBuilder engine) => engine.Types<MyFrame, MyPriority, MySecurityLevel>()
+    .Frames() /* ...required handlers... */
     .CommandLineOverrides(true);
 ```
 

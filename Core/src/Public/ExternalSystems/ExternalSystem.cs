@@ -44,8 +44,8 @@ public interface IExternalSystem
 
 /// <summary>
 /// Base class for an external system integration, generic over the host's concrete frame type
-/// <typeparamref name="TFrame"/> — matching the type given to <see cref="IEngineBuilder.Frames{TFrame}"/>,
-/// since <see cref="IEngineBuilder.ExternalSystem"/> adds instances of these. Handles the connect/poll/disconnect lifecycle so a derived class only needs to supply
+/// <typeparamref name="TFrame"/> — matching the type given to <see cref="IEngineBuilder{TFrame, TPacket, TPriority, TLevel}.Frames"/>,
+/// since <see cref="IEngineBuilder{TFrame, TPacket, TPriority, TLevel}.ExternalSystem"/> adds instances of these. Handles the connect/poll/disconnect lifecycle so a derived class only needs to supply
 /// the real connection behavior for its specific external system, via three abstract methods —
 /// <see cref="TryConnect"/> (attempt to establish a connection), <see cref="Disconnect"/> (release a
 /// connection once it is known to be gone), and <see cref="Send(TFrame)"/> (send one message over an
@@ -61,7 +61,7 @@ public interface IExternalSystem
 /// messages in either direction (e.g. by tag, priority, or sender) without touching the connection lifecycle
 /// itself. See <c>Docs/Components/ExternalSystems.md</c>.
 /// </summary>
-/// <typeparam name="TFrame">The host's concrete frame type — the same type argument supplied to <see cref="IEngineBuilder.Frames{TFrame}"/>.</typeparam>
+/// <typeparam name="TFrame">The host's concrete frame type — the same type argument supplied to <see cref="IEngineBuilder{TFrame, TPacket, TPriority, TLevel}.Frames"/>.</typeparam>
 /// <param name="name">A short, human-readable name identifying this external system.</param>
 /// <param name="connectRetryInterval">How long to wait between connection attempts while disconnected; defaults to 5 seconds. Overriding this is intended for unit testing.</param>
 /// <param name="pollInterval">How long to wait between connection-status polls while connected; defaults to 5 seconds. Overriding this is intended for unit testing.</param>

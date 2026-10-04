@@ -15,17 +15,18 @@ dotnet add package BlueHeighliner.Comlink
 
 ## Getting started
 
-A host implements `IEngineConfiguration`, whose fluent `Configure` method states how the engine runs (starting with its own frame DTO), and starts the engine with `Engine.Start<T>`, which constructs it through dependency injection:
+A host implements `IEngineConfiguration`, whose fluent `Configure` method states how the engine runs (starting with the types it is typed by: its own frame DTO, priority enum and security level enum), and starts the engine with `Engine.Start<T>`, which constructs it through dependency injection:
 
 ```csharp
 public sealed class MyEngineConfiguration : IEngineConfiguration
 {
-    public IEngineBuilder Configure(IEngineBuilder engine) => engine
-        .Frames<MyFrame>(frame => frame
-            .Id(m => m.Id)
-            // ...every other logical field...
-            )
-        .HomeText("Select a folder and entry to get started.");
+    public void Configure(IEngineBuilder engine) => engine.Types<MyFrame, MyPriority, MySecurityLevel>()
+        .Display<MyDisplayHandler>()
+        .Priorities().Priority(MyPriority.Normal)
+        .Frames()
+            .Message<MyMessageHandler>()
+            // ...a handler for every other kind of frame...
+        ;
 }
 
 await Engine.Start<MyEngineConfiguration>(args);

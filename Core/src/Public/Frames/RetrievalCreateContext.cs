@@ -1,6 +1,6 @@
 namespace BlueHeighliner.Comlink;
 
-/// <summary>The criteria the engine hands to <see cref="IRetrievalHandler{TFrame}.Create"/> to build a retrieval request frame. A criterion left empty or null does not narrow the request.</summary>
+/// <summary>The criteria the engine hands to <see cref="IRetrievalHandler{TFrame, TPriority}.Create"/> to build a retrieval request frame. A criterion left empty or null does not narrow the request.</summary>
 public sealed record RetrievalCreateContext
 {
     /// <summary>Gets the earliest sent time to retrieve, or <see langword="null"/> for no lower bound.</summary>

@@ -60,8 +60,10 @@ internal sealed class ImportService : IImportService
         INoteRepository notes,
         IActivityLogRepository activityLogs,
         IFolderRepository folders,
-        IEngineController engineController)
+        IEngineController engineController,
+        ILoggerFactory loggerFactory)
     {
+        logger = loggerFactory.CreateLogger("ACTIVITY");
         this.messages = messages;
         this.drafts = drafts;
         this.notes = notes;
@@ -70,6 +72,7 @@ internal sealed class ImportService : IImportService
         this.engineController = engineController;
     }
 
+    private readonly ILogger logger;
     private readonly IMessageRepository messages;
     private readonly IDraftRepository drafts;
     private readonly INoteRepository notes;
@@ -165,7 +168,13 @@ internal sealed class ImportService : IImportService
             return false;
         }
 
-        object message = engineController.CreateMessage(new MessageCreateContext
+        if (!engineController.Priorities.Any(level => level.Stored == data.Priority))
+        {
+            logger.LogError("Message {MessageId} from {FromUser} was not imported: it has the priority value {Priority}, which is not a configured priority", data.MessageId, data.FromUser, data.Priority);
+            return false;
+        }
+
+        object message = engineController.CreateMessage(new MessageContent
         {
             SentAt = data.SentAt,
             Body = data.Body,
@@ -200,6 +209,12 @@ internal sealed class ImportService : IImportService
         Func<bool> getOverwriteAll,
         Action<bool> setOverwriteAll)
     {
+        if (!engineController.Priorities.Any(level => level.Stored == data.Priority))
+        {
+            logger.LogError("The draft {Name} was not imported: it has the priority value {Priority}, which is not a configured priority", data.Body.FirstLine, data.Priority);
+            return (false, false);
+        }
+
         string name = data.Body.FirstLine;
         DraftEntity? existing = (await drafts.GetAll()).FirstOrDefault(d => d.Body.FirstLine == name);
         if (existing is null)

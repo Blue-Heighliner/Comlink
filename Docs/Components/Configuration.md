@@ -1,6 +1,6 @@
 # Engine Configuration
 
-A host tells the engine how to run by implementing `IEngineConfiguration` and naming it to `Engine.Start<T>`, which constructs it through dependency injection. The engine calls `Configure` once, before anything else starts, handing it an `IEngineBuilder`; every call on the builder is optional except `Frames<TFrame>`, which states the frame type and everything typed with it (through `IFrameBuilder<TFrame>`), and each returns the builder so a configuration reads as one fluent expression. `Packets<TPacket>` likewise states the packet type and what is typed with it (through `IPacketBuilder<TPacket>`). The builder is the only public way to change what the engine does; everything it collects is read internally through `IEngineController`, which is not part of the public surface. See each area below for what it covers.
+A host tells the engine how to run by implementing `IEngineConfiguration` and naming it to `Engine.Start<T>`, which constructs it through dependency injection. The engine calls `Configure` once, before anything else starts, handing it an `IEngineBuilder`; the first call must be `Types`, which fixes the frame, packet, priority and security level types, and every call after it is optional except `Frames()`, which starts stating the handlers of each kind of frame (through `IFrameBuilder<TFrame, TPacket, TPriority, TLevel>`), and each returns a builder so a configuration reads as one fluent expression. `Packets()`, `Priorities()` and `SecurityLevels()` likewise start sub-configurations (`IPacketBuilder`, `IPriorityBuilder` with `IPriorityLevelBuilder`, `ISecurityLevelsBuilder` with `ISecurityLevelBuilder`), but no lambda is involved: each sub-configuration builder is also an `IEngineBuilder`, so its own calls (`Message<>()`, `Priority(x).Mode(...)`, `Level(x).Color(...)`) and every ordinary setting follow on the same chain, in any order, and a sub-configuration may be started again later to add to it. They are one object internally, collected as the host states things and completed when `Configure` returns. The builder is the only public way to change what the engine does; everything it collects is read internally through `IEngineController`, which is not part of the public surface. See each area below for what it covers.
 
 ## Concept
 
@@ -9,18 +9,18 @@ Engine never reads environment variables, hardcodes paths, or calls host-specifi
 ```csharp
 public sealed class MyEngineConfiguration : IEngineConfiguration
 {
-    public IEngineBuilder Configure(IEngineBuilder engine) => engine
-        .Frames<MyFrame>(frame => frame
-            // ...every other logical field...
-            )
-        .HomeText("Select a folder and entry to get started.")
-        .Users("ALICE", "BOB");
+    public void Configure(IEngineBuilder engine) => engine.Types<MyFrame, MyPriority, MySecurityLevel>()
+        .Users("ALICE", "BOB")
+        .Display<MyDisplayHandler>()
+        .Frames()
+            // ...a handler for every kind of frame...
+        ;
 }
 
 await Engine.Start<MyEngineConfiguration>(args);
 ```
 
-`EngineBuilder` (internal) implements `IEngineBuilder` by recording what it is told; nothing is interpreted while configuring. `EngineController` (internal) reads the recorded state through `IEngineController` and supplies the default for every setting the host left alone, which is what every service, ViewModel and repository in the engine depends on. Keeping the recording separate from the reading means a configuration can be checked as a whole (`Engine.Start` throws an `InvalidOperationException` naming a missing frame type or unmapped field before any service starts), and that tests can replace a single behavior of the controller.
+`IEngineBuilder` has only `Types`, which fixes the frame, packet, priority and security level types and returns the `IEngineBuilder<TFrame, TPacket, TPriority, TLevel>` that carries every other setting, so a handler states its priority as a member of the host's own priority enum, a message handler states its security level as a member of the host's security level enum, and the priority and security level sub-configurations take members of those enums, all checked by the compiler. `Types<TFrame, TPriority, TLevel>()` is for a configuration without packets and states `NoPacket` as the packet type, and a configuration without priorities or security levels states `NoPriority` (one level, `NORMAL`) or `NoSecurityLevel` (no members, which turns security levels off). The builders (internal) implement these by recording what they are told; nothing is interpreted while configuring. `EngineController` (internal) reads the recorded state through `IEngineController` and supplies the default for every setting the host left alone, which is what every service, ViewModel and repository in the engine depends on. Keeping the recording separate from the reading means a configuration can be checked as a whole (`Engine.Start` throws an `InvalidOperationException` naming missing types or an unstated handler before any service starts), and that tests can replace a single behavior of the controller.
 
 **A configuration describes non-config-file behavior only. It must never read `NetworkConfig` itself, and it must never read an environment variable.** Everything about the network's users, and the settings of the node a user runs, comes from the network configuration file, applied by the engine itself: the users' info is read by `EngineController`, and the node settings (identity certificate file, alert, tag and print settings) are applied as a decorator layered on top of it (see [Network Configuration File](#network-configuration-file) below). This split keeps "what does this app do out of the box" (the configuration) and "who is on this network and how do they run" (the file) as two independent, separately testable concerns, and means a host is never tempted to reimplement file parsing just to add one small piece of non-file behavior.
 
@@ -39,25 +39,25 @@ The engine defines the schema of one network configuration file, shared by every
 ### Frame Format
 
 ```csharp
-engine
-    .Frames<MyFrame>(frame => frame
+engine.Types<MyFrame, MyPacket, MyPriority, MySecurityLevel>()
+    .Frames()
         .Message<MyMessageHandler>()
         .Retrieval<MyRetrievalHandler>()
         .ReadReceipt<MyReadReceiptHandler>()
         .ReceiveReceipt<MyReceiveReceiptHandler>()
         .Heartbeat<MyHeartbeatHandler>()
-        .AutoForward<MyEscalationController>())
-    .Packets<MyPacket>(packet => packet
+        .AutoForward<MyEscalationController>()
+    .Packets()
         .Frame<MyFramePacketHandler>()
-        .Heartbeat<MyPacketHeartbeatHandler>())
-    .PacketSize(16 * 1024).PacketWindow(1);
+        .Heartbeat<MyPacketHeartbeatHandler>()
+        .Size(16 * 1024).Window(1);
 ```
 
-A **frame** is the data format of all network traffic other than packets: every heartbeat (when the host states one), receive receipt, read receipt, retrieval request and user message, and any other frame the host's own processors exchange, is an instance of the host's one frame type. A **message** is a kind of frame, the kind the user sees: it is shown in the UI, stored in the Inbox when received and in the Outbox when sent, and is what auto forward, printing, server storage and external systems act on. Each kind of frame is stated with a handler type (`Message<THandler>`, `Retrieval<THandler>`, `ReadReceipt<THandler>`, `ReceiveReceipt<THandler>`, and the optional `Heartbeat<THandler>`), instantiated through dependency injection like serializers and processors, and implementing the matching interface (`IMessageHandler<TFrame>`, `IRetrievalHandler<TFrame>`, `IReadReceiptHandler<TFrame>`, `IReceiveReceiptHandler<TFrame>`, `IHeartbeatHandler<TFrame>`). A heartbeat handler recognizes and creates the empty frame a node sends over each MSMT connection to verify it, names its priority like the other non-message handlers, and states how long a connection waits between heartbeats (`Interval`) and, while they fail, before the next try (`RetryInterval`); heartbeats are never sent over HDLC, and when no handler is stated none are sent at all and an MSMT connection counts as up once it is established. With packetization on, a heartbeat may instead be stated on the packet configuration (`Packets<TPacket>(p => p.Heartbeat<THandler>())`, the same `IHeartbeatHandler`, over the packet type): it is then sent as a packet of its own, beneath packetization, so it is never split or reassembled and the receiving assembler discards it, and it takes precedence over a frame heartbeat. A handler has three jobs: `Create` takes the inputs relevant to its kind (a `MessageCreateContext`, `RetrievalCreateContext` or `ReceiptCreateContext`) and returns a new frame that is of that kind; `IsValid` says whether a given frame is of that kind; and getters read the kind's logical fields from a frame (identifier, sender, recipients, sent time, body, alert, priority, tag and security level for a message; the date range, authors, destinations and ids for a retrieval request; the message id for a receipt). Every handler must be stated. The aspects every frame needs to be routed (id, sender, addresses) stay on the frame builder as getter and setter mappings, and the engine stamps them onto every frame a handler creates. A frame the message handler does not recognize is still routed and handed to the network processor but is never shown or stored; a processor that sends a frame the recipient should see makes one the message handler recognizes. Frames are classified by asking handlers, never by a stored enum, so a host decides how a frame says what it is (a flag, a field that is empty or not, a derived rule; the tests recognize a message as a frame whose `IsHidden` flag is not set, so a default frame is a message).
+A **frame** is the data format of all network traffic other than packets: every heartbeat (when the host states one), receive receipt, read receipt, retrieval request and user message, and any other frame the host's own processors exchange, is an instance of the host's one frame type. A **message** is a kind of frame, the kind the user sees: it is shown in the UI, stored in the Inbox when received and in the Outbox when sent, and is what auto forward, printing, server storage and external systems act on. Each kind of frame is stated with a handler type (`Message<THandler>`, `Retrieval<THandler>`, `ReadReceipt<THandler>`, `ReceiveReceipt<THandler>`, and the optional `Heartbeat<THandler>`), instantiated through dependency injection like serializers and processors, and implementing the matching interface (`IMessageHandler<TFrame, TPriority, TLevel>`, `IRetrievalHandler<TFrame, TPriority>`, `IReadReceiptHandler<TFrame, TPriority>`, `IReceiveReceiptHandler<TFrame, TPriority>`, `IHeartbeatHandler<TFrame, TPriority>`). A heartbeat handler recognizes and creates the empty frame a node sends over each MSMT connection to verify it, names its priority like the other non-message handlers, and states how long a connection waits between heartbeats (`Interval`) and, while they fail, before the next try (`RetryInterval`); heartbeats are never sent over HDLC, and when no handler is stated none are sent at all and an MSMT connection counts as up once it is established. With packetization on, a heartbeat may instead be stated on the packet configuration (`Packets(p => p.Heartbeat<THandler>())`, the same `IHeartbeatHandler`, over the packet type): it is then sent as a packet of its own, beneath packetization, so it is never split or reassembled and the receiving assembler discards it, and it takes precedence over a frame heartbeat. A handler has three jobs: `Create` takes the inputs relevant to its kind (a `MessageCreateContext<TPriority, TLevel>`, `RetrievalCreateContext` or `ReceiptCreateContext`) and returns a new frame that is of that kind; `IsValid` says whether a given frame is of that kind; and getters read the kind's logical fields from a frame (identifier, sender, recipients, sent time, body, alert, priority, tag and security level for a message; the date range, authors, destinations and ids for a retrieval request; the message id for a receipt). Every handler must be stated. The aspects every frame needs to be routed (id, sender, addresses) stay on the frame builder as getter and setter mappings, and the engine stamps them onto every frame a handler creates. A frame the message handler does not recognize is still routed and handed to the network processor but is never shown or stored; a processor that sends a frame the recipient should see makes one the message handler recognizes. Frames are classified by asking handlers, never by a stored enum, so a host decides how a frame says what it is (a flag, a field that is empty or not, a derived rule; the tests recognize a message as a frame whose `IsHidden` flag is not set, so a default frame is a message).
 
-`Frames` supplies the concrete frame type used throughout the engine, on the wire (peer and interface connections) and in the database, and maps the engine's logical fields onto that type's real fields. The frame type needs no field mapping of its own: everything the engine reads from or writes to a frame goes through the handler of the kind of frame (a message's body, sender, recipients and identifier; a receipt's sender and the message it is for; a retrieval request's criteria and sender), so the engine never assumes a field name or shape. Every handler must be stated. The type must be LiteDB-serializable for storage, and must additionally satisfy whatever serializer is used for the wire, which by default is a `ProtobufSerializer` that builds only the frame type (so `[ProtoContract]`/`[ProtoMember]` attributes). `Serializer<TSerializer>` on the frame builder replaces it with a type implementing `IFrameSerializer` (derive from `FrameSerializer<TFrame, TPacket>` to work with the frame and packet types rather than `object`), instantiated through the running engine's dependency injection container, as long as every node this instance talks to (including its own interface connections) uses a matching one: Comlink never negotiates or advertises which format a payload used, so a mismatch deserializes garbage or throws rather than failing cleanly. A serializer can write into a `PooledBufferWriter` (an `IBufferWriter<byte>`, which a `Utf8JsonWriter` accepts) and return its `ToOwner()` to keep the buffers it hands back pooled rather than allocated per frame; `JsonSerializer` does this. `IFrameSerializer.Deserialize` is given the bytes and the first packet that carried the frame across (`null` when packetization is disabled, or the frame arrived over an interface connection), so a serializer can read what the host's own packet fields say about the frame; it so a custom serializer must make its format self-describing enough to rebuild the right type itself (the default wraps every payload in an outer envelope naming the type). Both serializers' `Deserialize` return a value or throw `InvalidDataException` for bytes they cannot or will not build (such as a type the sender names that is not this engine's own); the engine treats a throw as a rejected frame or packet. `Create` replaces `new TFrame()` for building an empty message. The retrieval fields back [Server Storage](#server-storage); the receipt handlers and alert flag back the receive and read receipts and alert-message features (see [Peer.md](Peer.md#receipts) and [Peer.md](Peer.md#alert-messages)); the priority backs [Message Composition](#message-composition) and the MSMT send priority, and the tag backs [Message Composition](#message-composition) too.
+`Types` supplies the concrete frame type used throughout the engine, on the wire (peer and interface connections) and in the database, and `Frames` states the handlers that read and write that type's real fields. The frame type needs no field mapping of its own: everything the engine reads from or writes to a frame goes through the handler of the kind of frame (a message's body, sender, recipients and identifier; a receipt's sender and the message it is for; a retrieval request's criteria and sender), so the engine never assumes a field name or shape. Every handler must be stated. The type must be LiteDB-serializable for storage, and must additionally satisfy whatever serializer is used for the wire, which by default is a `ProtobufSerializer` that builds only the frame type (so `[ProtoContract]`/`[ProtoMember]` attributes). `Serializer<TSerializer>` on the frame builder replaces it with a type implementing `IFrameSerializer` (derive from `FrameSerializer<TFrame, TPacket>` to work with the frame and packet types rather than `object`), instantiated through the running engine's dependency injection container, as long as every node this instance talks to (including its own interface connections) uses a matching one: Comlink never negotiates or advertises which format a payload used, so a mismatch deserializes garbage or throws rather than failing cleanly. A serializer can write into a `PooledBufferWriter` (an `IBufferWriter<byte>`, which a `Utf8JsonWriter` accepts) and return its `ToOwner()` to keep the buffers it hands back pooled rather than allocated per frame; `JsonSerializer` does this. `IFrameSerializer.Deserialize` is given the bytes and the first packet that carried the frame across (`null` when packetization is disabled, or the frame arrived over an interface connection), so a serializer can read what the host's own packet fields say about the frame; it so a custom serializer must make its format self-describing enough to rebuild the right type itself (the default wraps every payload in an outer envelope naming the type). Both serializers' `Deserialize` return a value or throw `InvalidDataException` for bytes they cannot or will not build (such as a type the sender names that is not this engine's own); the engine treats a throw as a rejected frame or packet. `Create` replaces `new TFrame()` for building an empty message. The retrieval fields back [Server Storage](#server-storage); the receipt handlers and alert flag back the receive and read receipts and alert-message features (see [Peer.md](Peer.md#receipts) and [Peer.md](Peer.md#alert-messages)); the priority backs [Message Composition](#message-composition) and the MSMT send priority, and the tag backs [Message Composition](#message-composition) too.
 
-Packetization is off unless `Packets<TPacket>` is called. With it, payloads are broken into prioritized packets of the host's packet type and reassembled on the other side. The host only states how its packet carries a piece of a frame, with a frame packet handler (`Frame<THandler>`, instantiated through dependency injection like the frame handlers, implementing `IFramePacketHandler<TPacket>`): `Create` takes a `FramePacketCreateContext` (payload id, packet index, packet count, payload length and the data slice, which is only valid during the call so a packet that stores it must copy it) and returns a packet; `IsValid` says whether a given packet is a frame packet, as opposed to one that carries no frame, such as an initial packet exchanged by a processor, and the engine refuses to reassemble a packet that is not one; and getters read the same five aspects back. The handler must be stated; all splitting, reassembly and priority scheduling is the engine's, so a host gets its own packet format and serialization without writing any packetization logic. The packet serializer, a type implementing `IPacketSerializer` (derive from `PacketSerializer<TFrame, TPacket>`) stated with `Serializer<TSerializer>` on the packet builder and instantiated the same way, defaults to a `ProtobufSerializer` that wraps every packet in an envelope naming its type, a fixed overhead per packet that a leaner custom serializer avoids. `IFrameSerializer.ConfigurePacket(frame, packet)` is called on every outgoing frame packet, once per packet in order and before the packet is serialized, so the frame serializer can set the host's own packet properties from the frame being packetized. `IPacketSerializer.Serialize` is also given the packet and the original frame being packetized (`null` for a packet that carries no frame, such as one an initial packet processor sends), so a packet's encoding can depend on its frame. `PacketSize` (an engine setting, default 16 KiB) is the largest serialized packet in bytes: the engine measures what the serializer makes of a packet to see how much payload fits, and refuses to start with an error in the log if none does. `PacketWindow` (an engine setting, default 1) is how many packets may be in flight over one connection at once, and must be at least 1. `PacketSize` is the only limit the engine applies: a frame or packet larger than a connection can carry (the HDLC `MaxInfoField`, say) fails to send, with the reason logged, so on a serial network the packet size must not be larger than `MaxInfoField`. Every node must be configured alike, since neither side can tell whether the other packetizes. Interface connections are never packetized.
+Packetization is off unless `Packets` is called, which needs a packet type stated in `Types` (calling it with `NoPacket` throws). With it, payloads are broken into prioritized packets of the host's packet type and reassembled on the other side. The host only states how its packet carries a piece of a frame, with a frame packet handler (`Frame<THandler>`, instantiated through dependency injection like the frame handlers, implementing `IFramePacketHandler<TPacket>`): `Create` takes a `FramePacketCreateContext` (payload id, packet index, packet count, payload length and the data slice, which is only valid during the call so a packet that stores it must copy it) and returns a packet; `IsValid` says whether a given packet is a frame packet, as opposed to one that carries no frame, such as an initial packet exchanged by a processor, and the engine refuses to reassemble a packet that is not one; and getters read the same five aspects back. The handler must be stated; all splitting, reassembly and priority scheduling is the engine's, so a host gets its own packet format and serialization without writing any packetization logic. The packet serializer, a type implementing `IPacketSerializer` (derive from `PacketSerializer<TFrame, TPacket>`) stated with `Serializer<TSerializer>` on the packet builder and instantiated the same way, defaults to a `ProtobufSerializer` that wraps every packet in an envelope naming its type, a fixed overhead per packet that a leaner custom serializer avoids. `IFrameSerializer.ConfigurePacket(frame, packet)` is called on every outgoing frame packet, once per packet in order and before the packet is serialized, so the frame serializer can set the host's own packet properties from the frame being packetized. `IPacketSerializer.Serialize` is also given the packet and the original frame being packetized (`null` for a packet that carries no frame, such as one an initial packet processor sends), so a packet's encoding can depend on its frame. `Size` (on the packet configuration, default 16 KiB) is the largest serialized packet in bytes: the engine measures what the serializer makes of a packet to see how much payload fits, and refuses to start with an error in the log if none does. `Window` (on the packet configuration, default 1) is how many packets may be in flight over one connection at once, and must be at least 1. `Size` is the only limit the engine applies: a frame or packet larger than a connection can carry (the HDLC `MaxInfoField`, say) fails to send, with the reason logged, so on a serial network the packet size must not be larger than `MaxInfoField`. Every node must be configured alike, since neither side can tell whether the other packetizes. Interface connections are never packetized.
 
 Internally the configuration becomes a `FrameMap` and a `PacketMap`, whose accessors and handlers take the frame or packet as an `object`, since that is the boundary every other layer (LiteDB storage, MSMT wire serialization) operates at. A packet member of an engine that never called `Packets` throws `NotSupportedException`, because nothing calls them.
 
@@ -72,18 +72,18 @@ Internally the configuration becomes a `FrameMap` and a `PacketMap`, whose acces
 ### App Settings
 
 ```csharp
-engine.AppName("MyApp").AppVersion("1.2.3").KioskMode().HomeText("Welcome").WindowIcon("avares://Host/icon.png");
+engine.AppVersion("1.2.3").KioskMode();
 ```
 
-This app's own identity and top-level presentation: the display name (also the name of the folder holding the install state), the version shown in the title bar and the info popup, whether the main window runs in kiosk mode (hides window chrome and restricts navigation), the placeholder text shown in the content area when no entry is selected, and the window icon (an `avares://` URI of an Avalonia asset, or else the path of an image file).
+This app's own identity and top-level presentation: the version shown in the title bar and the info popup, whether the main window runs in kiosk mode (hides window chrome and restricts navigation). The window icon is the display handler's `Icon` (see [Display Names](#display-names)): an `avares://` URI of an Avalonia asset, or else the path of an image file.
 
-**Default:** the name comes from the entry assembly name; the version is the entry assembly's `major.minor.build` version (`1.0.0` if it has none); kiosk mode is off; the home text is `"HOME"`; the icon is the operating system's.
+**Default:** the name comes from the entry assembly name; the version is the entry assembly's `major.minor.build` version (`1.0.0` if it has none); kiosk mode is off; the icon is the operating system's.
 
 The data folder is not configurable: a user's persistent state (LiteDB database, logs) is always written to `%APPDATA%\{AppName}\{USERNAME}` (`IEngineController.AppDataPath`), so users sharing a machine never share data. The one thing outside it is the file remembering which user is installed, `%APPDATA%\{AppName}\State.json` (`IEngineController.StatePath`), which sits beside the user folders since it is what says whose folder to use; logged lines from before a user is installed or named go to `%APPDATA%\{AppName}\Logs`.
 
 **Network file:** none; the file has no field for any of these, and none for the data folder.
 
-**Sample:** `EngineConfiguration` states the home text and the window icon; everything else uses the default, including the data folder, which is always the user's own.
+**Sample:** `EngineConfiguration` states nothing here beyond what its display handler states; everything else uses the default, including the data folder, which is always the user's own.
 
 ---
 
@@ -160,8 +160,8 @@ The current user's info is what decides how this node behaves, so it is read onc
 
 ```csharp
 engine
-    .Frames<MyFrame>(frame => frame.InitialProcessor<MyFrameIntroduction>())
-    .Packets<MyPacket>(packet => packet.InitialProcessor<MyPacketIntroduction>())
+    .Frames().InitialProcessor<MyFrameIntroduction>()
+    .Packets().InitialProcessor<MyPacketIntroduction>()
     .Identify(connection => ...);
 ```
 
@@ -175,13 +175,37 @@ Who is on the other end of a connection, decided as the connection forms. All tr
 
 ---
 
+### Display Names
+
+```csharp
+engine.Display<MyDisplayHandler>();
+
+public sealed class MyDisplayHandler : IDisplayHandler
+{
+    public string? AppName => "MyApp";
+    public string? HomeText => "Select a folder and entry to get started.";
+    public string? TagLabel => "Category";
+    public string? InboxLabel => "Received";
+}
+```
+
+The names and words the app shows its users, stated by a handler implementing `IDisplayHandler` (instantiated through dependency injection like the other handlers, but from the bootstrap container, which exists before the engine and holds the logging and the services the host registered, so the handler can log and can use the host's services but nothing the engine itself registers; creating it there is why the log location and the controller never wait on each other). Every member has a default of `null`, which keeps the engine's own text, so a handler overrides only what it wants: `AppName` (the title bar and log headers), `DataFolderName` (the folder under the application data root holding the app's data and logs: a member of its own so renaming the app can never move, and so appear to lose, its data; changing it after data has been stored starts from an empty folder), `Icon` (the window icon: an `avares://` URI of an Avalonia asset, or else the path of an image file), `HomeText` (the content area when no entry is selected), `AlertLabel` (the title bar's alarm box and the draft editor's alert checkbox, so both surfaces always show the same word for "alert"), `TagLabel`, `PriorityLabel` and `SecurityLevelLabel` (the concepts of tags, priorities and security levels wherever the user interface names them), each with a plural member (`TagPluralLabel` and so on) for text that names several, which defaults to the singular with an `s` added when only the singular is stated, and one member for each of the engine's other names for concepts: `InboxLabel`, `OutboxLabel`, `DraftsLabel`, `DraftLabel`, `NotesLabel`, `NoteLabel`, `ActivityLabel`, `MessagesLabel` and `MessageLabel`. These reach the whole user interface: every fixed piece of text in the GUI (the title bar, folders, editors, filters, dialogs, status messages and the help) is written with the engine's own names, and what is shown is that text with each concept name replaced by what the host calls it, in the case style of what it replaces (`NEW DRAFT` becomes `NEW MEMO`, `Drafts` becomes `Memos`). The alert, tag, priority and security level names are replaced by their own labels in the same way, so an `Alert only` filter reads `Flag only` once the alert label is `Flag`. XAML does this with the `{vm:Display '...'}` markup extension and view models with `Display(text)`. Text the host supplies itself, such as the home text, is shown as it is. An empty string counts as `null`. Everything here is presentation: a rename changes what users read, never how anything is stored or routed.
+
+**Default:** `AppName` and `DataFolderName` are the entry assembly's name, `"HOME"`, `"ALERT"`, `"Tag"`, `"Priority"`, `"Security Level"`, and no renames.
+
+**Network file:** the current user's entry may set `AlertText` and `MessageTagLabel`, overriding the handler's alert and tag labels. See [Config.md](Config.md). The file names security levels by their label, unlike drafts, which store the enum value: the file describes a network and is edited and redistributed quickly, while stored data must stay readable for as long as it is kept.
+
+**Sample:** `DisplayHandler` states the home text, renames the Inbox, Outbox and Activity folders to `Received`, `Sent` and `History`, and calls tags, priorities and security levels `Category`, `Importance` and `Confidentiality`, with their plurals.
+
+---
+
 ### Alert Settings
 
 ```csharp
-engine.AlertLabel("ALERT").AlarmDuration(TimeSpan.FromSeconds(30)).QuickConfirmation().ComposeAlerts();
+engine.AlarmDuration(TimeSpan.FromSeconds(30)).QuickConfirmation().ComposeAlerts();
 ```
 
-Configuration for the alert-message feature in Client mode: the title bar's alarm box text (also the draft editor's alert checkbox label, so both surfaces always show the same word for "alert"), how long the alarm sound plays before automatically stopping (resetting whenever a new alert arrives while already alarming), whether click/Space/Enter quick confirmation is enabled, and whether the draft editor shows its alert checkbox at all (disabling only affects local origination; the app can still receive and alarm on a peer-originated alert). See [Peer.md](Peer.md#alert-messages) and `Docs/Components/ViewModels.md`. Actually playing the alarm sound is real platform behavior, not configuration, see [`IAlertSoundPlayer`](#ialertsoundplayer-not-configurable) below.
+Configuration for the alert-message feature in Client mode: how long the alarm sound plays before automatically stopping (resetting whenever a new alert arrives while already alarming), whether click/Space/Enter quick confirmation is enabled, and whether the draft editor shows its alert checkbox at all (disabling only affects local origination; the app can still receive and alarm on a peer-originated alert). See [Peer.md](Peer.md#alert-messages) and `Docs/Components/ViewModels.md`. Actually playing the alarm sound is real platform behavior, not configuration, see [`IAlertSoundPlayer`](#ialertsoundplayer-not-configurable) below.
 
 **Default:** `"ALERT"` / 30 seconds / on / on.
 
@@ -207,17 +231,17 @@ Only messages have an identifier, stated on the message handler (see [Frame Form
 
 ```csharp
 engine
-    .Priorities<MessagePriority>(priorities => priorities
+    .Tags(enabled: true)
+    .Priorities()
         .Priority(MessagePriority.Receipt).Mode(PriorityMode.System)
-        .Block("SPAM", null).Block(null, MessagePriority.High))
-    .Tags(enabled: true, label: "Category");
+        .Block(null, "SPAM").Block(MessagePriority.High, null);
 ```
 
-How messages are composed and displayed: the priority levels, the members of an enum the host declares (in declaration order, lowest first like security levels, so a member's position is its send priority and later members are sent first on every connection, see [Peer.md](Peer.md)), configured through the sub-configuration `Priorities<TPriority>(priorities => ...)`: `Priority(level)` selects a level to give it a `Label` (its name, the member name in uppercase by default) and a `Mode` (the GUI offers `User` priorities to users composing a message and never offers `System` ones, which restricts only the GUI, not code), and `Block(tag, level)` blocks a tag and priority combination when composing a draft (each pairs an optional case-insensitive tag with an optional level; `null` matches any value for that field). In code a level is the enum member (the message handler's `GetPriority` and `MessageCreateContext.Priority` are members of the host's enum); in long-term storage (drafts, exports, imports) it is the level's name, so reordering the levels does not change what stored data means, while renaming one does, and a name that is empty or unknown is the lowest level; how a message frame stores its level is the message handler's choice. A message carries the priority its user chose; the retrieval, read receipt and receive receipt handlers each state a `Priority`, a member of that enum, that every frame of their kind is sent with, so receipts and requests can be ordered against messages; and whether message tags are shown anywhere in the UI and what the tag input's watermark says.
+How messages are composed and displayed: the priority levels, members of the enum `TPriority` stated in `Types`, each stated in the sub-configuration `Priorities()`, whose calls continue the same fluent chain, lowest first: the order stated is the send priority, never the order of the enum, so later levels are sent first on every connection (see [Peer.md](Peer.md)), and a member not stated is not a level. `Priority(level)` states a level and selects it to give it a `Label` (its name, the member name in uppercase by default) and a `Mode` (the GUI offers `User` priorities to users composing a message and never offers `System` ones, which restricts only the GUI, not code), and `Block(level, tag)` blocks a tag and priority combination when composing a draft (each pairs an optional level with an optional case-insensitive tag; `null` matches any value for that field). In code a level is the enum member (the message handler's `GetPriority` and `MessageCreateContext<TPriority, TLevel>.Priority` are members of the host's enum, as is the `Priority` of the other handlers); in long-term storage (drafts and exports) it is the enum member's integer value, so reordering or relabelling the levels does not change what stored data means, and a value that is not a stated level is the lowest level. **A member's value must therefore never change or be reused, even for a level that is no longer stated**, or data stored earlier would read as another level. How a message frame stores its level is the message handler's choice (the Sample stores the value too). A message carries the priority its user chose; the retrieval, read receipt and receive receipt handlers each state a `Priority`, a member of that enum, that every frame of their kind is sent with, so receipts and requests can be ordered against messages; and whether message tags are shown anywhere in the UI and what the tag input's watermark says.
 
 `DraftViewModel` enforces the blocked-combination rules proactively rather than only at send time: `AvailablePriorities` excludes any priority blocked for the currently-entered tag, and setting `Tag` to a value blocked for the currently-selected priority is rejected outright (the value reverts), so a blocked combination can never actually be entered in the draft editor. `SendCommand` also re-checks before sending, as a defense-in-depth safety net. See `Docs/Components/ViewModels.md`.
 
-**Default:** a single `"NORMAL"` (`User`) priority level; tags on with label `"Tag"`; no blocked combinations. Stating priorities twice replaces the earlier list. Without stated priorities the handlers' `Priority` is ignored and everything is sent at priority 0. Nothing is ever sent with a priority outside the configured levels: a message's priority is brought within them when it is created and again when it is read, heartbeats go at the lowest level, the exchange that identifies a connection at the highest, and other traffic at the lowest.
+**Default:** the levels must be stated (the engine refuses to start otherwise), each a `User` level named by its member name in uppercase. A priority or security level is never used unless it is stated: creating a message with one that is not stated throws, a handler naming a priority that is not stated fails the engine at startup, and a received or imported message carrying one is dropped with an error logged; tags on with label `"Tag"`; no blocked combinations. Stating a level again selects it without changing its place. With `NoPriority` the only level is `"NORMAL"` and everything is sent at priority 0. Nothing is ever sent with a priority outside the configured levels: a message's priority is brought within them when it is created and again when it is read, heartbeats go at the lowest level, the exchange that identifies a connection at the highest, and other traffic at the lowest.
 
 **Network file:** the current user's entry may set `MessageTagsEnabled` and `MessageTagLabel`, overriding what is stated, field by field. See [Config.md](Config.md). Priorities and blocked combinations have no field in the file.
 
@@ -228,10 +252,10 @@ How messages are composed and displayed: the priority levels, the members of an 
 ### Address Type Labels
 
 ```csharp
-engine.AddressTypeLabel(AddressType.External, "OUTSIDE");
+engine.AddressTypes().Type(AddressType.External).Label("OUTSIDE");
 ```
 
-Overrides the display label shown for one address type, everywhere it appears in the UI: the address type picker in the draft editor, the per-address badge next to each recipient, and the message view's section headers. Each call replaces the label for exactly the type given; every other type keeps its own current label (its own override, if stated, or the default). The underlying `AddressType` value itself never changes - overriding a label only changes what the user reads, not how an address is stored, routed, or mapped through `Frames<TFrame>.Addresses`.
+The `AddressTypes()` sub-configuration, whose `Type(type)` selects an address type and whose `Label(...)` overrides the display label shown for it, everywhere it appears in the UI: the address type picker in the draft editor, the per-address badge next to each recipient, and the message view's section headers. Each label applies to exactly the type selected; every other type keeps its own current label (its own override, if stated, or the default). The underlying `AddressType` value itself never changes - overriding a label only changes what the user reads, not how an address is stored, routed, or read by the message handler's `GetAddresses`.
 
 **Default:** the enum name itself (`"To"`, `"Cc"`, `"External"`).
 
@@ -245,17 +269,17 @@ Overrides the display label shown for one address type, everywhere it appears in
 
 ```csharp
 engine
-    .SecurityLevels<SecurityLevel>(levels => levels
+    .SecurityLevels()
         .Level(SecurityLevel.Public).Color("#2E7D32")
         .Level(SecurityLevel.Internal).Color("#1565C0")
-        .Level(SecurityLevel.Restricted).Color("#C62828"));
+        .Level(SecurityLevel.Restricted).Color("#C62828");
 ```
 
-Defines the ordered set of security levels a message may be sent at (`IFrameBuilder<TFrame>.SecurityLevel`, see [Frame Format](#frame-format)): the members of an enum the host declares, each named by its member name in uppercase unless `Level(level).Label(...)` says otherwise, with an optional hex color from `Color(...)` shown for it in the title bar's banner (neutral gray by default) (`SecurityLevelBanner`, replacing the fixed orange "DEBUG" banner every user used to see). Order is declaration order: each member ranks higher than the one declared before it, so the last is the most senior. A user's level is the `SecurityLevel` on their [user info](#user-info).
+The ordered set of security levels a message may be sent at (a member of the `TLevel` stated in `Types`, which the message handler's `GetSecurityLevel` and `MessageCreateContext<TPriority, TLevel>.SecurityLevel` use, see [Frame Format](#frame-format)): members of the enum `TLevel`, each stated with `Level(level)` and named by its member name in uppercase unless `.Label(...)` says otherwise, with an optional hex color from `Color(...)` shown for it in the title bar's banner (neutral gray by default) (`SecurityLevelBanner`, replacing the fixed orange "DEBUG" banner every user used to see). Order is the order stated, never the order of the enum: each level ranks higher than the one stated before it, so the last is the most senior, and a member not stated is not a level. A level is stored in drafts as the enum member's integer value, so, as for priorities, **a member's value must never change or be reused, even for a level that is no longer stated**. A user's level is the `SecurityLevel` on their [user info](#user-info).
 
-A destination user may only receive a message whose security level their own assigned level ranks at or above: `MessageRoutingService.Route` drops any lower-ranked destination before sending, and the draft editor's security level picker only ever offers the sending user's own level and lower, so a message can be deliberately declassified but never sent above the sender's own clearance. Turning the feature off entirely is just leaving `SecurityLevels` empty (the default): every message maps to an empty security level, the picker is hidden, and no destination is ever blocked for lacking one.
+A destination user may only receive a message whose security level their own assigned level ranks at or above: `MessageRoutingService.Route` drops any lower-ranked destination before sending, and the draft editor's security level picker only ever offers the sending user's own level and lower, so a message can be deliberately declassified but never sent above the sender's own clearance. Turning the feature off entirely is stating `NoSecurityLevel` as the level type: every message maps to an empty security level, the picker is hidden, and no destination is ever blocked for lacking one.
 
-**Default:** no security levels; the feature is off.
+**Default:** none stated, which turns the feature off (as does `NoSecurityLevel`); stated levels are neutral gray unless colored.
 
 **Network file:** the level each user runs at is that user's `SecurityLevel` in the file; the set of levels itself has no field.
 
@@ -282,10 +306,15 @@ The print manager's automatic "print received" behavior: whether its toggle star
 ### Deletion Policy
 
 ```csharp
-engine.CanDelete(folder => folder is FolderType.Drafts or FolderType.Notes);
+engine.Deletes<MyDeleteHandler>();
+
+public sealed class MyDeleteHandler : IDeleteHandler
+{
+    public bool CanDelete(DeleteContext context) => context.Folder is FolderType.Drafts or FolderType.Notes;
+}
 ```
 
-Whether the user can delete entries in a given root folder type (`FolderType.Inbox`/`Outbox`/`Drafts`/`Notes`/`Activity`). Consulted by `EntryBarViewModel.DeleteEntry` before deleting; the active folder's `RootType` is passed straight through, and when the rule returns `false`, `DeleteEntry` is a silent no-op (the entry stays in the data store and in the list) rather than throwing. `LoadFolder` also caches the result on `EntryBarViewModel.CanDeleteEntries`, which drives whether the entry list's right-click "Delete" context menu item is shown at all. Draft and note editors also show a DELETE button, gated on the same rule for `FolderType.Drafts`/`FolderType.Notes` when the editor is created. See `Docs/Components/ViewModels.md`.
+Whether the user can delete entries and subfolders, decided per root folder, never per entry, by the `IDeleteHandler` stated with `Deletes<THandler>()` (instantiated through dependency injection like the other handlers). Its `CanDelete` is given a `DeleteContext` holding the root folder type (`FolderType.Inbox`/`Outbox`/`Drafts`/`Notes`/`Activity`) that the entry or subfolder being deleted is under. Consulted by `EntryBarViewModel.DeleteEntry` before deleting; the active folder's `RootType` is passed straight through, and when the handler returns `false`, `DeleteEntry` is a silent no-op (the entry stays in the data store and in the list) rather than throwing. `LoadFolder` also caches the result on `EntryBarViewModel.CanDeleteEntries`, which drives whether the entry list's right-click "Delete" context menu item is shown at all. Draft and note editors also show a DELETE button, gated on the same rule for `FolderType.Drafts`/`FolderType.Notes` when the editor is created. See `Docs/Components/ViewModels.md`.
 
 **Default:** allowed for every folder type; deletion is unrestricted unless a host locks down specific folders.
 
@@ -298,7 +327,7 @@ Whether the user can delete entries in a given root folder type (`FolderType.Inb
 ### Export Formats
 
 ```csharp
-engine.ExportFormat<MyCsvExportFormat>();
+engine.Exports().Format<MyCsvExportFormat>();
 
 public sealed class MyCsvExportFormat : IExportFormat
 {
@@ -317,7 +346,7 @@ public sealed class MyCsvExportFormat : IExportFormat
 }
 ```
 
-Adds a custom export format, a type implementing `IExportFormat` that is instantiated through the running engine's dependency injection container (the instance the host registered for it, or else one constructed from the host's services), shown as an option in the export screen's format picker alongside the built-in JSON
+The `Exports()` sub-configuration's `Format<T>()` adds a custom export format, a type implementing `IExportFormat` that is instantiated through the running engine's dependency injection container (the instance the host registered for it, or else one constructed from the host's services), shown as an option in the export screen's format picker alongside the built-in JSON
 format (see `Docs/Components/ViewModels.md`, `IExportViewModel`). `Export` is handed one entry - a
 `MessageExportData`, `DraftExportData`, `NoteExportData`, or `ActivityLogExportData` depending on which root
 folder type it came from, the exact same public DTOs the engine's own built-in JSON export writes - and a stream
@@ -345,7 +374,7 @@ format instead.
 ### Import Formats
 
 ```csharp
-engine.ImportFormat<MyCsvImportFormat>();
+engine.Imports().Format<MyCsvImportFormat>();
 
 public sealed class MyCsvImportFormat : IImportFormat
 {
@@ -367,7 +396,7 @@ public sealed class MyCsvImportFormat : IImportFormat
 }
 ```
 
-Adds a custom import format, a type implementing `IImportFormat` that is instantiated through the running engine's dependency injection container, shown as an option in the import screen's format picker alongside the built-in
+The `Imports()` sub-configuration's `Format<T>()` adds a custom import format, a type implementing `IImportFormat` that is instantiated through the running engine's dependency injection container, shown as an option in the import screen's format picker alongside the built-in
 package format (see `Docs/Components/ViewModels.md`, `IImportViewModel`). Selecting it changes which files the
 screen finds on the source drive - not `IExportService.PackageExtension` packages, but files whose extension
 matches this format's own name-derived extension (the same derivation an `ExportFormat` entry's file extension
@@ -404,8 +433,8 @@ a second apart (`StagedSendMode.Sequential`, a one second `StagedSendDelay`).
 ### Auto Forward Controllers
 
 ```csharp
-engine.Frames<MyFrame>(frame => frame
-    .AutoForward<MyEscalationController>());
+engine.Frames()
+    .AutoForward<MyEscalationController>();
 
 public sealed class MyEscalationController : IAutoForwardController<MyFrame>
 {
@@ -469,7 +498,7 @@ and stores nothing.
 ### HDLC Options
 
 ```csharp
-engine.HdlcOptions(new HdlcPeerOptions { MaxInfoField = 1024, Link = new HdlcPeerOptions().Link with { Crc = HdlcCrc.Crc32Ccitt } });
+engine.Connections().Hdlc(new HdlcPeerOptions { MaxInfoField = 1024, Link = new HdlcPeerOptions().Link with { Crc = HdlcCrc.Crc32Ccitt } });
 ```
 
 The options every serial connection starts its HDLC peer with: line encoding, CRC and clocking (`Link`, which must match the station at the far end of the cable), frame size, transmit window and retransmission timing. The options object is the MicroGate package's `HdlcPeerOptions`, defaulting to the package defaults. The HDLC address is not an option; each serial `ConnectionPoint` supplies it, used as both this station's and the remote station's address.
@@ -490,13 +519,13 @@ MSMT peer authentication is mandatory - there is no unauthenticated mode. A user
 
 The MSMT options (identity certificate plus trusted authorities) used for both inbound and outbound session peer connections are built from those two by default, against the current user name (via `ICurrentUserProvider`). If no current user is registered yet, or either certificate can't be found in the store, building them throws `InvalidOperationException`; callers (`PeerService`, `ClientPeerService`, `ServerRoutingService`, `InterfaceService`) catch this at startup, log it, and simply don't start their listener, retried the next time the host restarts once a user and certificates are in place. `ConnectionOptions` replaces the whole policy, but for most customization needs stating `CertificateName`/`TrustedAuthority` instead is sufficient and does not require touching this security-sensitive logic at all. State `ConnectionOptions` only when you need custom certificate pinning, a non-store certificate source, or a different validation policy.
 
-`MsmtOptions` adjusts the other MSMT settings (handshake, stall and response timeouts, TCP keep-alive, session lifetimes and keep-alive intervals) for every IP connection, inbound and outbound, including the interface listener. It takes a `MsmtConnectionOptions` object (handshake, stall and response timeouts, TCP keep-alive time, session lifetimes and keep-alive intervals, each defaulting to the MSMT package's own value) instead of the library's session options, since those require credentials the engine supplies. Its values are laid over the options built above, after `ConnectionOptions` and after the config file's certificate file override, and the credentials and hostname rule stay the engine's:
+`Connections().Msmt` adjusts the other MSMT settings (handshake, stall and response timeouts, TCP keep-alive, session lifetimes and keep-alive intervals) for every IP connection, inbound and outbound, including the interface listener. It takes a `MsmtConnectionOptions` object (handshake, stall and response timeouts, TCP keep-alive time, session lifetimes and keep-alive intervals, each defaulting to the MSMT package's own value) instead of the library's session options, since those require credentials the engine supplies. Its values are laid over the options built above, after `ConnectionOptions` and after the config file's certificate file override, and the credentials and hostname rule stay the engine's:
 
 ```csharp
-engine.MsmtOptions(new MsmtConnectionOptions { HandshakeTimeout = TimeSpan.FromSeconds(20) });
+engine.Connections().Msmt(new MsmtConnectionOptions { HandshakeTimeout = TimeSpan.FromSeconds(20) });
 ```
 
-**Default:** the certificate name is the user name unchanged; the trusted authority is `"COMLINK-ROOT"`; the MSMT options are otherwise left at the package defaults. Sample states a 15 second handshake timeout and a 60 second response timeout through `MsmtOptions`.
+**Default:** the certificate name is the user name unchanged; the trusted authority is `"COMLINK-ROOT"`; the MSMT options are otherwise left at the package defaults. Sample states a 15 second handshake timeout and a 60 second response timeout through `Connections().Msmt`.
 
 **Network file:** each user's entry may set `CertificateName` (the name of that user's certificate, defaulting to the user name); the file's `TrustedAuthorityCertificateName` names the trusted authority. The file's `CertificateStore` (a folder of `{USERNAME}.pfx` identity files) and `AuthorityCertificate` bypass the system store entirely, loading the running user's identity and the authority certificate directly from disk instead, set together or not at all; see [Config.md](Config.md). The options are built by `ConfiguredEngineController` for the current user, so the files are used even though they are not part of the wrapped controller.
 
@@ -556,7 +585,7 @@ Each external system is constructed directly by the configuration, not resolved 
 ### Network Processor
 
 ```csharp
-engine.Frames<MyFrame>(frame => frame.Processor<MyNetworkProcessor>());
+engine.Frames().Processor<MyNetworkProcessor>();
 
 public sealed class MyNetworkProcessor : INetworkProcessor<MyFrame>
 {
@@ -643,7 +672,7 @@ Task<UserInfo?> GetUserInfo(CancellationToken cancellation = default);
 Task<List<string>> GetUserNames(CancellationToken cancellation = default);
 Task<List<string>> GetConnectedUsers(CancellationToken cancellation = default);
 Task<UserInfo?> InstallUser(string userCode, CancellationToken cancellation = default);
-Task<SendMessageResult?> SendMessage(string body, List<AddressRequest> addresses, bool isAlert = false, Enum? priority = null, string tag = "", CancellationToken cancellation = default);
+Task<SendMessageResult?> SendMessage(string body, List<AddressRequest> addresses, bool isAlert = false, Enum? priority = null, string tag = "", Enum? securityLevel = null, CancellationToken cancellation = default);
 Task<bool> MarkMessageRead(string messageId, CancellationToken cancellation = default);
 ```
 

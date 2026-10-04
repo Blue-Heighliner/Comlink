@@ -1,7 +1,7 @@
 namespace BlueHeighliner.Comlink;
 
 /// <summary>
-/// What is known about a connection that has just formed, handed to <see cref="IEngineBuilder.Identify"/>
+/// What is known about a connection that has just formed, handed to <see cref="IEngineBuilder{TFrame, TPacket, TPriority, TLevel}.Identify"/>
 /// and the initial packet and frame contexts so a host can decide who is on the other end. The medium specific details
 /// are on <see cref="IIpConnectionInfo"/> and <see cref="ISerialConnectionInfo"/>; test which one a connection is with a type pattern.
 /// </summary>

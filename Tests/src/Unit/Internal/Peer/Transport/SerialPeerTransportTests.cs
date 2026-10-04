@@ -88,13 +88,13 @@ public sealed class SerialPeerTransportTests
         Assert.Equal(new byte[] { 1, 2, 3 }, Assert.Single(pair.BReceived.Payloads));
     }
 
-    /// <summary>A payload larger than one HDLC frame is refused up front, never split or sent partially.</summary>
+    /// <summary>A payload larger than one HDLC frame fails to send up front, with the reason logged, and is never split or sent partially.</summary>
     [Fact]
-    public async Task Request_LargerThanOneFrame_ThrowsArgumentOutOfRange()
+    public async Task Request_LargerThanOneFrame_FailsWithoutSending()
     {
         await using Pair pair = await ConnectedPair(maxPayloadSize: 40);
 
-        await Assert.ThrowsAsync<ArgumentOutOfRangeException>(() => Request(pair.A, point, new byte[41]));
+        Assert.False(await Request(pair.A, point, new byte[41]));
         Assert.Empty(pair.BReceived.Payloads);
     }
 

@@ -1,10 +1,10 @@
 namespace BlueHeighliner.Comlink.Tests;
 
-/// <summary>Test <see cref="IRetrievalHandler{TFrame}"/> for <see cref="TestFrame"/>, recognizing frames with <see cref="TestFrame.IsRetrieval"/> set.</summary>
-public sealed class TestRetrievalHandler : IRetrievalHandler<TestFrame>
+/// <summary>Test <see cref="IRetrievalHandler{TFrame, TPriority}"/> for <see cref="TestFrame"/>, recognizing frames with <see cref="TestFrame.IsRetrieval"/> set.</summary>
+public sealed class TestRetrievalHandler : IRetrievalHandler<TestFrame, TestMessagePriority>
 {
     /// <inheritdoc />
-    public Enum Priority { get; init; } = TestPriority.Normal;
+    public TestMessagePriority Priority { get; init; } = TestMessagePriority.Normal;
 
     /// <inheritdoc />
     public bool IsValid(TestFrame frame) => frame.IsRetrieval;

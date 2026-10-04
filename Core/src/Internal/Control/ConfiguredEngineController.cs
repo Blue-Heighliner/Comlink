@@ -41,7 +41,7 @@ internal sealed class ConfiguredEngineController : IEngineController
     /// <inheritdoc />
     public int PacketWindow => fallback.PacketWindow;
     /// <inheritdoc />
-    public object CreateMessage(MessageCreateContext context) => fallback.CreateMessage(context);
+    public object CreateMessage(MessageContent context) => fallback.CreateMessage(context);
 
     /// <inheritdoc />
     public object CreateReadReceipt(string messageId, string to) => fallback.CreateReadReceipt(messageId, to);
@@ -119,7 +119,15 @@ internal sealed class ConfiguredEngineController : IEngineController
     /// <inheritdoc />
     public Enum ResolvePriority(Enum? priority) => fallback.ResolvePriority(priority);
     /// <inheritdoc />
-    public Enum PriorityOf(string? name) => fallback.PriorityOf(name);
+    public Enum RequirePriority(Enum? priority) => fallback.RequirePriority(priority);
+    /// <inheritdoc />
+    public string? GetUnconfiguredLevelReason(object message) => fallback.GetUnconfiguredLevelReason(message);
+    /// <inheritdoc />
+    public void Validate() => fallback.Validate();
+    /// <inheritdoc />
+    public Enum PriorityOf(int? value) => fallback.PriorityOf(value);
+    /// <inheritdoc />
+    public int StoredPriority(Enum priority) => fallback.StoredPriority(priority);
     /// <inheritdoc />
     public string NameOf(Enum priority) => fallback.NameOf(priority);
     /// <inheritdoc />
@@ -128,6 +136,10 @@ internal sealed class ConfiguredEngineController : IEngineController
     public string GetTag(object frame) => fallback.GetTag(frame);
     /// <inheritdoc />
     public string GetSecurityLevel(object frame) => fallback.GetSecurityLevel(frame);
+    /// <inheritdoc />
+    public Enum? GetSecurityLevelKey(object frame) => fallback.GetSecurityLevelKey(frame);
+    /// <inheritdoc />
+    public string GetSecurityLevelName(Enum? level) => fallback.GetSecurityLevelName(level);
     /// <inheritdoc />
     public object CreateFramePacket(FramePacketCreateContext context) => fallback.CreateFramePacket(context);
     /// <inheritdoc />
@@ -157,6 +169,16 @@ internal sealed class ConfiguredEngineController : IEngineController
     public bool IsKioskMode => fallback.IsKioskMode;
     /// <inheritdoc />
     public string HomeText => fallback.HomeText;
+    /// <inheritdoc />
+    public string PriorityLabel => fallback.PriorityLabel;
+    /// <inheritdoc />
+    public string PriorityPluralLabel => fallback.PriorityPluralLabel;
+    /// <inheritdoc />
+    public string SecurityLevelPluralLabel => fallback.SecurityLevelPluralLabel;
+    /// <inheritdoc />
+    public string SecurityLevelLabel => fallback.SecurityLevelLabel;
+    /// <inheritdoc />
+    public string Rename(string label) => fallback.Rename(label);
     /// <inheritdoc />
     public string? WindowIconPath => fallback.WindowIconPath;
 
@@ -189,6 +211,10 @@ internal sealed class ConfiguredEngineController : IEngineController
     /// <inheritdoc />
     public int InterfacePort => fallback.InterfacePort;
 
+    /// <inheritdoc />
+    public string AlertPluralLabel => Current?.AlertText is { Length: > 0 } text ? (text.EndsWith('s') ? text : text + "s") : fallback.AlertPluralLabel;
+    /// <inheritdoc />
+    public string TagPluralLabel => Current?.MessageTagLabel is { Length: > 0 } label ? (label.EndsWith('s') ? label : label + "s") : fallback.TagPluralLabel;
     /// <inheritdoc />
     public string AlertLabel => Current?.AlertText is { Length: > 0 } text ? text : fallback.AlertLabel;
     /// <inheritdoc />

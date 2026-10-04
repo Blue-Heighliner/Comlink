@@ -77,6 +77,10 @@ internal class TestEngineController : EngineController
     {
     }
 
+    /// <summary>Gets the security level name the frame carries, as it is.</summary>
+    /// <param name="value">The frame.</param>
+    public override string GetSecurityLevel(object value) => value is TestFrame frame ? frame.SecurityLevel : string.Empty;
+
     /// <summary>Gets ten priority levels, so tests may use any priority from 0 to 9 without it being brought within range.</summary>
     public override IReadOnlyList<MessagePriorityOption> Priorities { get; } = [.. Enum.GetValues<TestMessagePriority>().Take(10).Select((key, value) => new MessagePriorityOption { Name = key.ToString().ToUpperInvariant(), Value = value, Key = key })];
 }

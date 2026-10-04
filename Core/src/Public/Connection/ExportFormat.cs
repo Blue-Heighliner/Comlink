@@ -2,7 +2,7 @@ namespace BlueHeighliner.Comlink;
 
 /// <summary>
 /// A custom export format, shown as an option alongside the built-in JSON format in the client's export screen. State one with
-/// <see cref="IEngineBuilder.ExportFormat{TFormat}"/>. Each entry in the export zip gets a file extension derived from <see cref="Name"/>
+/// <see cref="IExportsBuilder{TFrame, TPacket, TPriority, TLevel}.Format{TFormat}"/>. Each entry in the export zip gets a file extension derived from <see cref="Name"/>
 /// (lowercased, stripped to letters and digits). A package written with a custom format is one-way: only the built-in JSON format can be imported again.
 /// </summary>
 public interface IExportFormat

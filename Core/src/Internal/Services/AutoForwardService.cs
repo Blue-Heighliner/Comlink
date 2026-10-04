@@ -82,7 +82,7 @@ internal sealed class AutoForwardService : IAutoForwardService
     {
         try
         {
-            object forwarded = engineController.CreateMessage(new MessageCreateContext
+            object forwarded = engineController.CreateMessage(new MessageContent
             {
                 SentAt = DateTime.UtcNow,
                 Body = engineController.GetBody(original),

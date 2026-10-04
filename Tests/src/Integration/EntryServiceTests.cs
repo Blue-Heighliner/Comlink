@@ -401,8 +401,8 @@ public sealed class EntryServiceTests : IDisposable
     {
         DraftEntity match = await service.CreateDraft();
         match.Body = "Match";
-        match.Priority = "LEVEL2";
-        match.SecurityLevel = "RESTRICTED";
+        match.Priority = 2;
+        match.SecurityLevel = (int)TestLevel.Restricted;
         match.IsAlert = true;
         await service.SaveDraft(match);
         DraftEntity other = await service.CreateDraft();

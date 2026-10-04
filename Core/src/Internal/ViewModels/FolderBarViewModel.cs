@@ -31,14 +31,17 @@ internal interface IFolderBarViewModel
     Task DeleteFolder(FolderItemViewModel folder);
     /// <summary>Collapses all folders in the tree.</summary>
     void CollapseAll();
+    /// <summary>Returns <paramref name="text"/>, written with the engine's own names for concepts, with what the host calls them (see <see cref="EngineControllerExtensions"/>).</summary>
+    /// <param name="text">The text.</param>
+    string Display(string text);
 }
 
 /// <summary>ViewModel for the folder tree panel, managing folder loading, selection, and drag-and-drop moves.</summary>
 internal sealed partial class FolderBarViewModel : ObservableObject, IFolderBarViewModel
 {
-    private static FolderItemViewModel BuildViewModel(Folder folder)
+    private FolderItemViewModel BuildViewModel(Folder folder)
     {
-        FolderItemViewModel vm = new(folder.Id, folder.Name, folder.RootType, folder.ParentId);
+        FolderItemViewModel vm = new(folder.Id, folder.ParentId is null ? engineController.Display(folder.Name) : folder.Name, folder.RootType, folder.ParentId);
         foreach (Folder child in folder.Children)
         {
             vm.Children.Add(BuildViewModel(child));
@@ -193,6 +196,9 @@ internal sealed partial class FolderBarViewModel : ObservableObject, IFolderBarV
         parent.IsExpanded = true;
         SelectFolder(child);
     }
+
+    /// <inheritdoc />
+    public string Display(string text) => engineController.Display(text);
 
     /// <inheritdoc />
     public bool CanDeleteFolder(FolderItemViewModel folder)

@@ -1,6 +1,6 @@
 <Window xmlns="https://github.com/avaloniaui"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
-        xmlns:vm="using:BlueHeighliner.Comlink"
+             xmlns:vm="using:BlueHeighliner.Comlink"
         xmlns:controls="using:BlueHeighliner.Comlink"
         xmlns:installViews="using:BlueHeighliner.Comlink"
         x:Class="BlueHeighliner.Comlink.MainWindow"

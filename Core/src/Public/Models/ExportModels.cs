@@ -2,7 +2,7 @@ namespace BlueHeighliner.Comlink;
 
 /// <summary>
 /// Exported representation of a message entry: what the engine's own built-in JSON export writes, and what a
-/// custom export format's serializer (see <see cref="IEngineBuilder.ExportFormat{TFormat}"/>) receives for a message.
+/// custom export format's serializer (see <see cref="IExportsBuilder{TFrame, TPacket, TPriority, TLevel}.Format{TFormat}"/>) receives for a message.
 /// </summary>
 public sealed record MessageExportData
 {
@@ -20,8 +20,8 @@ public sealed record MessageExportData
     public required DateTime SentAt { get; init; }
     /// <summary>Whether this message was sent as an alert.</summary>
     public required bool IsAlert { get; init; }
-    /// <summary>Name of the priority level of this message, one of the configured priorities.</summary>
-    public required string Priority { get; init; }
+    /// <summary>Integer value of the enum member that is the priority level of this message, one of the configured priorities.</summary>
+    public required int Priority { get; init; }
     /// <summary>Tag identifying the type of this message; see <see cref="IEngineController.GetTag"/>.</summary>
     public required string Tag { get; init; }
     /// <summary>UTC timestamp when this record was received or created.</summary>
@@ -45,7 +45,7 @@ public sealed record MessageDeliveryStatus
 
 /// <summary>
 /// Exported representation of a draft entry: what the engine's own built-in JSON export writes, and what a
-/// custom export format's serializer (see <see cref="IEngineBuilder.ExportFormat{TFormat}"/>) receives for a draft.
+/// custom export format's serializer (see <see cref="IExportsBuilder{TFrame, TPacket, TPriority, TLevel}.Format{TFormat}"/>) receives for a draft.
 /// </summary>
 public sealed record DraftExportData
 {
@@ -61,8 +61,8 @@ public sealed record DraftExportData
     public required bool IsSent { get; init; }
     /// <summary>Whether this draft is marked to send as an alert.</summary>
     public required bool IsAlert { get; init; }
-    /// <summary>Name of the priority level this draft should be sent at.</summary>
-    public required string Priority { get; init; }
+    /// <summary>Integer value of the enum member that is the priority level this draft should be sent at.</summary>
+    public required int Priority { get; init; }
     /// <summary>Tag identifying the type of this draft; see <see cref="IEngineController.GetTag"/>.</summary>
     public required string Tag { get; init; }
     /// <summary>UTC timestamp when the draft was sent, or <see langword="null"/> if not yet sent.</summary>
@@ -75,7 +75,7 @@ public sealed record DraftExportData
 
 /// <summary>
 /// Exported representation of a note entry: what the engine's own built-in JSON export writes, and what a
-/// custom export format's serializer (see <see cref="IEngineBuilder.ExportFormat{TFormat}"/>) receives for a note.
+/// custom export format's serializer (see <see cref="IExportsBuilder{TFrame, TPacket, TPriority, TLevel}.Format{TFormat}"/>) receives for a note.
 /// </summary>
 public sealed record NoteExportData
 {
@@ -91,7 +91,7 @@ public sealed record NoteExportData
 
 /// <summary>
 /// Exported representation of an activity log entry: what the engine's own built-in JSON export writes, and what
-/// a custom export format's serializer (see <see cref="IEngineBuilder.ExportFormat{TFormat}"/>) receives for an activity log.
+/// a custom export format's serializer (see <see cref="IExportsBuilder{TFrame, TPacket, TPriority, TLevel}.Format{TFormat}"/>) receives for an activity log.
 /// </summary>
 public sealed record ActivityLogExportData
 {

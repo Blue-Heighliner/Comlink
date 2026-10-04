@@ -101,8 +101,7 @@ internal sealed class SerialLink : IAsyncDisposable
         if (!isClosed) { DropPeer(current); }
     }
 
-    /// <summary>Sends <paramref name="data"/> as one HDLC information frame, once the frame is on the link.</summary>
-    /// <exception cref="ArgumentOutOfRangeException"><paramref name="data"/> does not fit one frame; enable packetization with a packet size that does.</exception>
+    /// <summary>Sends <paramref name="data"/> as one HDLC information frame, once the frame is on the link. Returns <see langword="false"/>, having logged why, when it does not fit one frame; enable packetization with a packet size that does.</summary>
     /// <exception cref="IOException">The link is down or was lost while sending.</exception>
     public async Task<bool> Request(ReadOnlyMemory<byte> data, PeerSendOptions? options, CancellationToken cancellation)
     {
@@ -110,7 +109,7 @@ internal sealed class SerialLink : IAsyncDisposable
         if (data.Length > peer.MaxPayloadSize)
         {
             logger.LogError("A payload of {Length} bytes cannot be sent over {Point}: an HDLC frame carries at most {Max} bytes (MaxInfoField), and each frame or packet is sent as exactly one, so lower the packet size or raise MaxInfoField", data.Length, point, peer.MaxPayloadSize);
-            throw new ArgumentOutOfRangeException(nameof(data), data.Length, $"The payload does not fit one HDLC frame of {peer.MaxPayloadSize} bytes");
+            return false;
         }
 
         try

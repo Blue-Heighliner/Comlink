@@ -134,18 +134,33 @@ internal interface IEngineController
     /// something other than "Tag" (e.g. "Category", "Type") without changing engine behavior.
     /// </summary>
     string TagLabel { get; }
+    /// <summary>Gets the name of the priority concept in the user interface (see <see cref="IDisplayHandler.PriorityLabel"/>).</summary>
+    string PriorityLabel { get; }
+    /// <summary>Gets the name of the security level concept in the user interface (see <see cref="IDisplayHandler.SecurityLevelLabel"/>).</summary>
+    string SecurityLevelLabel { get; }
+    /// <summary>Gets the plural of <see cref="AlertLabel"/>.</summary>
+    string AlertPluralLabel { get; }
+    /// <summary>Gets the plural of <see cref="TagLabel"/>.</summary>
+    string TagPluralLabel { get; }
+    /// <summary>Gets the plural of <see cref="PriorityLabel"/>.</summary>
+    string PriorityPluralLabel { get; }
+    /// <summary>Gets the plural of <see cref="SecurityLevelLabel"/>.</summary>
+    string SecurityLevelPluralLabel { get; }
+    /// <summary>Returns the text to show for <paramref name="label"/>, the engine's own name for a concept of the app: what the host's display handler calls it (see <see cref="IDisplayHandler.InboxLabel"/> and the members like it), or <paramref name="label"/> itself.</summary>
+    /// <param name="label">The engine's name for the concept.</param>
+    string Rename(string label);
     /// <summary>Every blocked tag/priority combination rule, enforced when composing a draft.</summary>
     IReadOnlyList<TagPriorityBlock> BlockedCombinations { get; }
     /// <summary>
     /// Every address type, in a fixed order (<see cref="AddressType.To"/>, <see cref="AddressType.Cc"/>,
     /// <see cref="AddressType.External"/>), paired with its display label - shown in the address type picker, the
     /// per-address badge, and the message view's section headers. A label defaults to the enum name unless overridden
-    /// with <see cref="IEngineBuilder.AddressTypeLabel"/>.
+    /// with <see cref="IAddressTypeBuilder{TFrame, TPacket, TPriority, TLevel}.Label"/>.
     /// </summary>
     IReadOnlyList<AddressTypeOption> AddressTypes { get; }
     /// <summary>
     /// Every configured security level, in ascending order (index 0 is lowest); empty when
-    /// <see cref="IEngineBuilder.SecurityLevels"/> was never stated, which turns the whole feature off. A
+    /// <see cref="IEngineBuilder{TFrame, TPacket, TPriority, TLevel}.SecurityLevels"/> was never stated, which turns the whole feature off. A
     /// message may only be sent at one of these levels, and a destination user's own assigned level (see
     /// <see cref="GetUserSecurityLevel"/>) must rank at or above it.
     /// </summary>
@@ -169,10 +184,10 @@ internal interface IEngineController
     /// <summary>The peer options - including TLS identity certificate and trusted certificate authorities - used for both inbound and outbound MSMT session peer connections.</summary>
     MsmtSessionPeerOptions ConnectionOptions { get; }
 
-    /// <summary>Applies the host's adjustment of the MSMT options (see <see cref="IEngineBuilder.MsmtOptions"/>) to <paramref name="options"/>, returning them unchanged if none was stated.</summary>
+    /// <summary>Applies the host's adjustment of the MSMT options (see <see cref="IConnectionsBuilder{TFrame, TPacket, TPriority, TLevel}.Msmt(MsmtConnectionOptions)"/>) to <paramref name="options"/>, returning them unchanged if none was stated.</summary>
     MsmtSessionPeerOptions ConfigureConnectionOptions(MsmtSessionPeerOptions options);
 
-    /// <summary>The options used for every MicroGate serial connection, after the host's adjustment (see <see cref="IEngineBuilder.HdlcOptions"/>).</summary>
+    /// <summary>The options used for every MicroGate serial connection, after the host's adjustment (see <see cref="IConnectionsBuilder{TFrame, TPacket, TPriority, TLevel}.Hdlc(HdlcPeerOptions)"/>).</summary>
     HdlcPeerOptions HdlcOptions { get; }
 
     /// <summary>The configured role for this instance.</summary>
@@ -197,11 +212,11 @@ internal interface IEngineController
     /// </summary>
     IReadOnlyDictionary<string, ServerUserConfig> Servers { get; }
 
-    /// <summary>Gets the processor that carries out the initial packet exchange on each new connection (see <see cref="IPacketBuilder{TPacket}.InitialProcessor"/>), or <see langword="null"/> for none. Requires <see cref="PacketType"/>.</summary>
+    /// <summary>Gets the processor that carries out the initial packet exchange on each new connection (see <see cref="IPacketBuilder{TFrame, TPacket, TPriority, TLevel}.InitialProcessor"/>), or <see langword="null"/> for none. Requires <see cref="PacketType"/>.</summary>
     IInitialProcessor? InitialPacketProcessor { get; }
-    /// <summary>Gets the processor that carries out the initial message exchange on each new connection (see <see cref="IFrameBuilder{TFrame}.InitialProcessor"/>), or <see langword="null"/> for none.</summary>
+    /// <summary>Gets the processor that carries out the initial message exchange on each new connection (see <see cref="IFrameBuilder{TFrame, TPacket, TPriority, TLevel}.InitialProcessor"/>), or <see langword="null"/> for none.</summary>
     IInitialProcessor? InitialFrameProcessor { get; }
-    /// <summary>When <see langword="true"/>, the <c>--config</c> and <c>--user</c> command-line arguments override where the network configuration file and the running user come from (see <see cref="IEngineBuilder.CommandLineOverrides"/>); when <see langword="false"/> (the default) they are ignored and only <c>Config.json</c> and <c>User.json</c> in the working directory are used.</summary>
+    /// <summary>When <see langword="true"/>, the <c>--config</c> and <c>--user</c> command-line arguments override where the network configuration file and the running user come from (see <see cref="IEngineBuilder{TFrame, TPacket, TPriority, TLevel}.CommandLineOverrides"/>); when <see langword="false"/> (the default) they are ignored and only <c>Config.json</c> and <c>User.json</c> in the working directory are used.</summary>
     bool CommandLineOverridesAllowed { get; }
 
     /// <summary>
@@ -230,19 +245,19 @@ internal interface IEngineController
     /// </summary>
     IExternalSystem? ExternalServer { get; }
 
-    /// <summary>The processor that reacts to a user connecting or disconnecting and to a message being received (see <see cref="IFrameBuilder{TFrame}.Processor"/>), or <see langword="null"/> for none.</summary>
+    /// <summary>The processor that reacts to a user connecting or disconnecting and to a message being received (see <see cref="IFrameBuilder{TFrame, TPacket, TPriority, TLevel}.Processor"/>), or <see langword="null"/> for none.</summary>
     INetworkHandler? NetworkHandler { get; }
 
-    /// <summary>Every custom export format added via <see cref="IEngineBuilder.ExportFormat{TFormat}"/>, in the order added; empty if none.</summary>
+    /// <summary>Every custom export format added via <see cref="IExportsBuilder{TFrame, TPacket, TPriority, TLevel}.Format{TFormat}"/>, in the order added; empty if none.</summary>
     IReadOnlyList<ExportFormatDefinition> ExportFormats { get; }
 
-    /// <summary>Every custom import format added via <see cref="IEngineBuilder.ImportFormat{TFormat}"/>, in the order added; empty if none.</summary>
+    /// <summary>Every custom import format added via <see cref="IImportsBuilder{TFrame, TPacket, TPriority, TLevel}.Format{TFormat}"/>, in the order added; empty if none.</summary>
     IReadOnlyList<ImportFormatDefinition> ImportFormats { get; }
 
     /// <summary>Every server user, from <see cref="Servers"/>: each keeps a copy of every message one of its own children sends and answers retrieval requests for them, so a retrieval names the server the message is stored on. Empty if none.</summary>
     IReadOnlyList<string> StorageServers { get; }
 
-    /// <summary>Every custom auto forward controller added via <see cref="IFrameBuilder{TFrame}.AutoForward{TController}"/>, in the order added; empty if none.</summary>
+    /// <summary>Every custom auto forward controller added via <see cref="IFrameBuilder{TFrame, TPacket, TPriority, TLevel}.AutoForward{TController}"/>, in the order added; empty if none.</summary>
     IReadOnlyList<AutoForwardControllerDefinition> AutoForwardControllers { get; }
 
     /// <summary>Creates a new, empty instance of <see cref="FrameType"/>.</summary>
@@ -298,12 +313,12 @@ internal interface IEngineController
     /// <summary>Returns whether <paramref name="frame"/> is a heartbeat, which is acknowledged and otherwise ignored; always <see langword="false"/> when no heartbeat handler is stated.</summary>
     /// <param name="frame">A received instance of <see cref="FrameType"/>.</param>
     bool IsHeartbeat(object frame);
-    /// <summary>Gets whether <paramref name="frame"/> is a retrieval request; see <see cref="IFrameBuilder{TFrame}.Retrieval{THandler}"/>.</summary>
+    /// <summary>Gets whether <paramref name="frame"/> is a retrieval request; see <see cref="IFrameBuilder{TFrame, TPacket, TPriority, TLevel}.Retrieval{THandler}"/>.</summary>
     bool IsRetrieval(object frame);
     /// <summary>Reads the criteria a retrieval request carries from its mapped fields. Meaningful only when <see cref="IsRetrieval"/> is <see langword="true"/>.</summary>
     RetrievalCriteria GetRetrieval(object frame);
     /// <summary>Creates a message frame carrying <paramref name="context"/> through the host's message handler, with no identifier, sender, addresses or sent time yet.</summary>
-    object CreateMessage(MessageCreateContext context);
+    object CreateMessage(MessageContent context);
     /// <summary>Creates a read receipt frame for the message <paramref name="messageId"/>, which is for the user <paramref name="to"/>, through the host's read receipt handler, with no sender yet.</summary>
     object CreateReadReceipt(string messageId, string to);
     /// <summary>Creates a receive receipt frame for the message <paramref name="messageId"/>, which is for the user <paramref name="to"/>, through the host's receive receipt handler, with no sender yet.</summary>
@@ -336,10 +351,23 @@ internal interface IEngineController
     /// <summary>Returns <paramref name="priority"/> if it is one of the configured priority levels, or the lowest level otherwise (including when it is <see langword="null"/>), so nothing is ever sent with a priority the configuration does not define.</summary>
     /// <param name="priority">The level to resolve, a member of the enum stated for the priorities.</param>
     Enum ResolvePriority(Enum? priority);
-    /// <summary>Returns the configured priority level called <paramref name="name"/> (case-insensitive), or the lowest level when it is empty or none is called that. This is how a level stored by name in a draft or export becomes a level again.</summary>
-    /// <param name="name">The stored name.</param>
-    Enum PriorityOf(string? name);
-    /// <summary>Gets the name of <paramref name="priority"/> as it is stored in drafts and exports and shown to users: the name of the level, or of the lowest level when it is not a configured one.</summary>
+    /// <summary>Returns <paramref name="priority"/> if it is one of the configured priority levels, the lowest level when it is <see langword="null"/>, and otherwise throws: a message is never created with a priority the configuration does not define.</summary>
+    /// <param name="priority">The level, a member of the enum stated for the priorities, or <see langword="null"/> for the lowest.</param>
+    /// <exception cref="ArgumentException"><paramref name="priority"/> is not a configured level.</exception>
+    Enum RequirePriority(Enum? priority);
+    /// <summary>Returns why the received message <paramref name="message"/> carries a priority or security level that is not a configured one, or <see langword="null"/> when it does not (or it is not a message).</summary>
+    /// <param name="message">An instance of <see cref="FrameType"/>.</param>
+    string? GetUnconfiguredLevelReason(object message);
+    /// <summary>Checks what the engine can only check once its handlers exist: that every priority a handler names is a configured level. Called when the engine starts.</summary>
+    /// <exception cref="InvalidOperationException">A handler names a priority that is not configured.</exception>
+    void Validate();
+    /// <summary>Returns the configured priority level whose enum member has the integer value <paramref name="value"/>, or the lowest level when there is none. This is how a level stored in a draft or export becomes a level again.</summary>
+    /// <param name="value">The stored value.</param>
+    Enum PriorityOf(int? value);
+    /// <summary>Gets the integer value of <paramref name="priority"/> as it is stored in drafts and exports: the value of its enum member, or of the lowest level's member when it is not a configured one.</summary>
+    /// <param name="priority">The level.</param>
+    int StoredPriority(Enum priority);
+    /// <summary>Gets the name of <paramref name="priority"/> as it is shown to users: the name of the level, or of the lowest level when it is not a configured one.</summary>
     /// <param name="priority">The level.</param>
     string NameOf(Enum priority);
     /// <summary>Gets the priority level of <paramref name="message"/>, one of the configured priorities: what its handler reads, brought within them by <see cref="ResolvePriority"/>.</summary>
@@ -355,6 +383,13 @@ internal interface IEngineController
     /// an empty string when no security levels are configured.
     /// </summary>
     string GetSecurityLevel(object frame);
+    /// <summary>Gets the security level <paramref name="frame"/> carries as the host's enum member, or <see langword="null"/> for none or when it is not a message.</summary>
+    /// <param name="frame">An instance of <see cref="FrameType"/>.</param>
+    Enum? GetSecurityLevelKey(object frame);
+    /// <summary>Gets the name of the configured security level <paramref name="level"/>, or an empty string for <see langword="null"/>.</summary>
+    /// <param name="level">The level, a member of the enum stated for the security levels, or <see langword="null"/> for none.</param>
+    /// <exception cref="ArgumentException"><paramref name="level"/> is not a configured security level.</exception>
+    string GetSecurityLevelName(Enum? level);
 
     /// <summary>Creates a frame packet carrying <paramref name="context"/> through the host's frame packet handler. Only called while <see cref="PacketType"/> is set.</summary>
     object CreateFramePacket(FramePacketCreateContext context);
@@ -371,11 +406,11 @@ internal interface IEngineController
     /// <summary>Gets the slice of the payload <paramref name="packet"/> carries.</summary>
     ReadOnlyMemory<byte> GetPacketData(object packet);
 
-    /// <summary>Resolves <paramref name="userCode"/> to the name of the user it installs, or <see langword="null"/> if the code is unrecognized. Unless the host states its own scheme (<see cref="IEngineBuilder.UserCodes"/>), a code is the name of a user of the network.</summary>
+    /// <summary>Resolves <paramref name="userCode"/> to the name of the user it installs, or <see langword="null"/> if the code is unrecognized. Unless the host states its own scheme (<see cref="IEngineBuilder{TFrame, TPacket, TPriority, TLevel}.UserCodes"/>), a code is the name of a user of the network.</summary>
     /// <param name="userCode">The user installation code to resolve.</param>
     string? ResolveUserName(string userCode);
     /// <summary>
-    /// Returns what is known about <paramref name="userName"/>: what the network configuration file states (see <see cref="IEngineBuilder.CommandLineOverrides"/>), or a user with just
+    /// Returns what is known about <paramref name="userName"/>: what the network configuration file states (see <see cref="IEngineBuilder{TFrame, TPacket, TPriority, TLevel}.CommandLineOverrides"/>), or a user with just
     /// that name when it states none. For the current user this is where <see cref="Role"/>, <see cref="PeerPort"/>, <see cref="InterfacePort"/>,
     /// <see cref="OutgoingPoints"/> and <see cref="Servers"/> come from.
     /// </summary>
@@ -418,7 +453,7 @@ internal interface IEngineController
     /// <see cref="IEntryBarViewModel.DeleteEntry"/> before deleting; when <see langword="false"/>,
     /// the delete is silently skipped.
     /// </summary>
-    /// <param name="folderType">The root folder type the entry being deleted belongs to.</param>
+    /// <param name="folderType">The root folder type the entry or subfolder being deleted belongs to.</param>
     bool CanDelete(FolderType folderType);
 
     /// <summary>
@@ -491,8 +526,9 @@ internal class EngineController(EngineBuilder builder, ICurrentUserProvider curr
         definition => definition.Name));
     private readonly Lazy<IInitialProcessor?> initialPacketProcessor = new(() => builder.InitialPacketProcessor?.Create(services));
     private readonly Lazy<IInitialProcessor?> initialMessageProcessor = new(() => builder.InitialFrameProcessor?.Create(services));
+    private readonly Lazy<IDeleteHandler?> deleteHandler = new(() => builder.DeleteHandler?.Create(services));
     private readonly Lazy<INetworkHandler?> networkHandler = new(() => builder.NetworkHandler?.Create(services));
-    private readonly IReadOnlyList<MessagePriorityOption> defaultPriorities = [new MessagePriorityOption { Name = "NORMAL", Value = 0, Key = DefaultPriority.Normal }];
+    private readonly IReadOnlyList<MessagePriorityOption> defaultPriorities = [new MessagePriorityOption { Name = "NORMAL", Value = 0, Key = NoPriority.Normal }];
     private readonly IReadOnlyList<AddressType> addressTypeOrder = [AddressType.To, AddressType.Cc, AddressType.External];
 
     /// <inheritdoc />
@@ -508,26 +544,29 @@ internal class EngineController(EngineBuilder builder, ICurrentUserProvider curr
     /// <inheritdoc />
     public virtual int PacketWindow => builder.PacketWindowValue ?? 1;
 
+    /// <summary>Gets the name of the folder under the application data root that holds the app's data: what the display handler states, otherwise the entry assembly's name. It is not the app name, so renaming the app never moves the data.</summary>
+    protected string DataFolderName => builder.DisplayHandlerInstance?.DataFolderName.OrNull() ?? Assembly.GetEntryAssembly()?.GetName().Name ?? "App";
+
     /// <inheritdoc />
-    public virtual string AppName => builder.AppNameValue ?? Assembly.GetEntryAssembly()?.GetName().Name ?? "App";
+    public virtual string AppName => builder.DisplayHandlerInstance?.AppName.OrNull() ?? Assembly.GetEntryAssembly()?.GetName().Name ?? "App";
     /// <inheritdoc />
     public virtual string AppVersion => builder.AppVersionValue ?? (Assembly.GetEntryAssembly()?.GetName().Version is { } version ? $"{version.Major}.{version.Minor}.{version.Build}" : "1.0.0");
     /// <inheritdoc />
     public virtual string AppDataRoot => Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData);
     /// <inheritdoc />
-    public virtual string AppDataPath => currentUserProvider.UserName is { Length: > 0 } user ? Path.Combine(AppDataRoot, AppName, user) : Path.Combine(AppDataRoot, AppName);
+    public virtual string AppDataPath => currentUserProvider.UserName is { Length: > 0 } user ? Path.Combine(AppDataRoot, DataFolderName, user) : Path.Combine(AppDataRoot, DataFolderName);
     /// <inheritdoc />
-    public virtual string StatePath => Path.Combine(AppDataRoot, AppName, "State.json");
+    public virtual string StatePath => Path.Combine(AppDataRoot, DataFolderName, "State.json");
     /// <inheritdoc />
     public virtual bool IsKioskMode => builder.IsKioskMode;
     /// <inheritdoc />
-    public virtual string HomeText => builder.HomeTextValue ?? "HOME";
+    public virtual string HomeText => builder.DisplayHandlerInstance?.HomeText.OrNull() ?? "HOME";
     private readonly NetworkConfig network = networkConfig ?? new();
 
     private UserInfo? CurrentUserInfo => currentUserProvider.UserName is { Length: > 0 } name ? GetUserInfo(name) : null;
 
     /// <inheritdoc />
-    public virtual string? WindowIconPath => builder.WindowIconValue;
+    public virtual string? WindowIconPath => builder.DisplayHandlerInstance?.Icon.OrNull();
 
     /// <inheritdoc />
     public virtual string? DebugUserName => builder.DebugUserValue;
@@ -561,7 +600,7 @@ internal class EngineController(EngineBuilder builder, ICurrentUserProvider curr
     public virtual int InterfacePort => CurrentUserInfo?.InterfacePort ?? 50020;
 
     /// <inheritdoc />
-    public virtual string AlertLabel => builder.AlertLabelValue ?? "ALERT";
+    public virtual string AlertLabel => builder.DisplayHandlerInstance?.AlertLabel.OrNull() ?? "ALERT";
     /// <inheritdoc />
     public virtual TimeSpan AlarmSoundDuration => builder.AlarmDurationValue ?? TimeSpan.FromSeconds(30);
     /// <inheritdoc />
@@ -574,7 +613,34 @@ internal class EngineController(EngineBuilder builder, ICurrentUserProvider curr
     /// <inheritdoc />
     public virtual bool TagsEnabled => builder.TagsEnabledValue ?? true;
     /// <inheritdoc />
-    public virtual string TagLabel => builder.TagLabelValue ?? "Tag";
+    public virtual string PriorityLabel => builder.DisplayHandlerInstance?.PriorityLabel.OrNull() ?? "Priority";
+    /// <inheritdoc />
+    public virtual string SecurityLevelLabel => builder.DisplayHandlerInstance?.SecurityLevelLabel.OrNull() ?? "Security Level";
+    /// <inheritdoc />
+    public virtual string Rename(string label)
+        => (builder.DisplayHandlerInstance is { } display ? label switch
+        {
+            "Inbox" => display.InboxLabel,
+            "Outbox" => display.OutboxLabel,
+            "Drafts" => display.DraftsLabel,
+            "Draft" => display.DraftLabel,
+            "Notes" => display.NotesLabel,
+            "Note" => display.NoteLabel,
+            "Activity" => display.ActivityLabel,
+            "Messages" => display.MessagesLabel,
+            "Message" => display.MessageLabel,
+            _ => null
+        } : null).OrNull() ?? label;
+    /// <inheritdoc />
+    public virtual string AlertPluralLabel => PluralOf(builder.DisplayHandlerInstance?.AlertPluralLabel, builder.DisplayHandlerInstance?.AlertLabel, "ALERTS");
+    /// <inheritdoc />
+    public virtual string TagPluralLabel => PluralOf(builder.DisplayHandlerInstance?.TagPluralLabel, builder.DisplayHandlerInstance?.TagLabel, "Tags");
+    /// <inheritdoc />
+    public virtual string PriorityPluralLabel => PluralOf(builder.DisplayHandlerInstance?.PriorityPluralLabel, builder.DisplayHandlerInstance?.PriorityLabel, "Priorities");
+    /// <inheritdoc />
+    public virtual string SecurityLevelPluralLabel => PluralOf(builder.DisplayHandlerInstance?.SecurityLevelPluralLabel, builder.DisplayHandlerInstance?.SecurityLevelLabel, "Security Levels");
+    /// <inheritdoc />
+    public virtual string TagLabel => builder.DisplayHandlerInstance?.TagLabel.OrNull() ?? "Tag";
     /// <inheritdoc />
     public virtual IReadOnlyList<TagPriorityBlock> BlockedCombinations => builder.BlockedCombinations;
     /// <inheritdoc />
@@ -775,16 +841,21 @@ internal class EngineController(EngineBuilder builder, ICurrentUserProvider curr
     /// <inheritdoc />
     public virtual IReadOnlyList<string> Route(object value)
         => IsMessage(value) ? [.. GetAddresses(value).Where(address => address.Type != AddressType.External).Select(address => address.UserName).Distinct(StringComparer.OrdinalIgnoreCase)]
-        : IsRetrieval(value) ? [retrievalHandler.Value.GetDestination(value)]
-        : IsReadReceipt(value) ? [readReceiptHandler.Value.GetDestination(value)]
-        : IsReceiveReceipt(value) ? [receiveReceiptHandler.Value.GetDestination(value)]
+        : IsRetrieval(value) ? NonEmpty(retrievalHandler.Value.GetDestination(value))
+        : IsReadReceipt(value) ? NonEmpty(readReceiptHandler.Value.GetDestination(value))
+        : IsReceiveReceipt(value) ? NonEmpty(receiveReceiptHandler.Value.GetDestination(value))
         : [];
+
+    private string PluralOf(string? plural, string? singular, string fallback)
+        => plural.OrNull() ?? (singular.OrNull() is { } stated ? (stated.EndsWith('s') ? stated : stated + "s") : fallback);
+
+    private string[] NonEmpty(string destination) => string.IsNullOrWhiteSpace(destination) ? [] : [destination];
     /// <inheritdoc />
     public virtual DateTime GetSentAt(object value) => messageHandler.Value.GetSentAt(value);
     /// <inheritdoc />
     public virtual bool IsMessage(object value) => messageHandler.Value.IsValid(value);
     /// <inheritdoc />
-    public virtual object CreateMessage(MessageCreateContext context) => messageHandler.Value.Create(context with { Priority = ResolvePriority(context.Priority) });
+    public virtual object CreateMessage(MessageContent context) => messageHandler.Value.Create(context with { Priority = RequirePriority(context.Priority) });
     /// <inheritdoc />
     public virtual string GetBody(object value) => messageHandler.Value.GetBody(value);
     /// <inheritdoc />
@@ -798,7 +869,39 @@ internal class EngineController(EngineBuilder builder, ICurrentUserProvider curr
     /// <inheritdoc />
     public virtual Enum ResolvePriority(Enum? priority) => (Priorities.FirstOrDefault(level => priority is not null && priority.Equals(level.Key)) ?? Priorities[0]).Key;
     /// <inheritdoc />
-    public virtual Enum PriorityOf(string? name) => (Priorities.FirstOrDefault(level => string.Equals(level.Name, name, StringComparison.OrdinalIgnoreCase)) ?? Priorities[0]).Key;
+    public virtual Enum RequirePriority(Enum? priority)
+        => priority is null ? Priorities[0].Key
+        : Priorities.FirstOrDefault(level => priority.Equals(level.Key))?.Key
+            ?? throw new ArgumentException($"A priority of {priority.GetType().Name}.{priority} is used, which is not one of the configured priorities: {string.Join(", ", Priorities.Select(level => level.Name))}", nameof(priority));
+
+    /// <inheritdoc />
+    public virtual string? GetUnconfiguredLevelReason(object message)
+    {
+        if (!IsMessage(message)) { return null; }
+
+        Enum priority = messageHandler.Value.GetPriority(message);
+        if (!Priorities.Any(level => priority.Equals(level.Key))) { return $"has the priority {priority.GetType().Name}.{priority}, which is not a configured priority"; }
+
+        return messageHandler.Value.GetSecurityLevelKey(message) is { } security && !SecurityLevels.Any(level => security.Equals(level.Key))
+            ? $"has the security level {security.GetType().Name}.{security}, which is not a configured security level"
+            : null;
+    }
+
+    /// <inheritdoc />
+    public virtual void Validate()
+    {
+        if (HeartbeatsEnabled) { PriorityValue(heartbeatHandler.Value!.Priority); }
+
+        PriorityValue(retrievalHandler.Value.Priority);
+        PriorityValue(readReceiptHandler.Value.Priority);
+        PriorityValue(receiveReceiptHandler.Value.Priority);
+        if (packetHeartbeatHandler.Value is { } packetHeartbeat) { PriorityValue(packetHeartbeat.Priority); }
+    }
+
+    /// <inheritdoc />
+    public virtual Enum PriorityOf(int? value) => (Priorities.FirstOrDefault(level => level.Stored == value) ?? Priorities[0]).Key;
+    /// <inheritdoc />
+    public virtual int StoredPriority(Enum priority) => (Priorities.FirstOrDefault(level => priority.Equals(level.Key)) ?? Priorities[0]).Stored;
     /// <inheritdoc />
     public virtual string NameOf(Enum priority) => (Priorities.FirstOrDefault(level => priority.Equals(level.Key)) ?? Priorities[0]).Name;
     /// <inheritdoc />
@@ -813,6 +916,15 @@ internal class EngineController(EngineBuilder builder, ICurrentUserProvider curr
         : 0;
     /// <inheritdoc />
     public virtual string GetTag(object value) => messageHandler.Value.GetTag(value);
+    /// <inheritdoc />
+    public virtual Enum? GetSecurityLevelKey(object value) => IsMessage(value) ? messageHandler.Value.GetSecurityLevelKey(value) : null;
+
+    /// <inheritdoc />
+    public virtual string GetSecurityLevelName(Enum? level)
+        => level is null ? string.Empty
+        : SecurityLevels.FirstOrDefault(candidate => level.Equals(candidate.Key))?.Name
+            ?? throw new ArgumentException($"A security level of {level.GetType().Name}.{level} is used, which is not one of the configured security levels: {string.Join(", ", SecurityLevels.Select(candidate => candidate.Name))}", nameof(level));
+
     /// <inheritdoc />
     public virtual string GetSecurityLevel(object value) => IsMessage(value) ? messageHandler.Value.GetSecurityLevel(value) : string.Empty;
     /// <inheritdoc />
@@ -910,7 +1022,7 @@ internal class EngineController(EngineBuilder builder, ICurrentUserProvider curr
     public virtual int GetPrintCount(object value) => messageHandler.Value.GetPrintCount(value);
 
     /// <inheritdoc />
-    public virtual bool CanDelete(FolderType folderType) => builder.CanDeleteValue?.Invoke(folderType) ?? true;
+    public virtual bool CanDelete(FolderType folderType) => deleteHandler.Value?.CanDelete(new DeleteContext { Folder = folderType }) ?? true;
 
     /// <inheritdoc />
     public virtual string GetCertificateName(string userName) => GetUserInfo(userName).CertificateName ?? userName;
@@ -921,11 +1033,46 @@ internal class EngineController(EngineBuilder builder, ICurrentUserProvider curr
 /// <summary>Extension members for <see cref="IEngineController"/>.</summary>
 internal static class EngineControllerExtensions
 {
+    private static readonly Regex conceptPattern = new(@"\b(Security Levels|Security Level|Priorities|Priority|Alerts|Alert|Tags|Tag|Inbox|Outbox|Drafts|Draft|Notes|Note|Activity|Messages|Message)\b", RegexOptions.IgnoreCase | RegexOptions.Compiled);
+
     extension(IEngineController engineController)
     {
-        /// <summary>Returns whether <paramref name="frameValue"/> is a message with no identifier, which is invalid: a message always has one before it is sent, so one received without is dropped.</summary>
+        /// <summary>Returns why <paramref name="frameValue"/> is an invalid message, which is dropped with an error logged, or <see langword="null"/> when it is valid or not a message. A message always has an identifier before it is sent, and only carries priorities and security levels the configuration defines.</summary>
         /// <param name="frameValue">An instance of <see cref="IEngineController.FrameType"/>.</param>
-        public bool IsMessageWithoutId(object frameValue) => engineController.IsMessage(frameValue) && string.IsNullOrEmpty(engineController.GetMessageId(frameValue));
+        public string? GetInvalidMessageReason(object frameValue)
+            => !engineController.IsMessage(frameValue) ? null
+            : string.IsNullOrEmpty(engineController.GetMessageId(frameValue)) ? "has no identifier"
+            : engineController.GetUnconfiguredLevelReason(frameValue);
+
+        /// <summary>Returns <paramref name="text"/>, a fixed piece of the user interface written with the engine's own names for concepts, with each concept name replaced by what the host calls it: the root folders, drafts, notes, messages and activity through the display handler's members for them, and alerts, tags, priorities and security levels through their own labels. A replacement keeps the case style of what it replaces (all capitals, all lowercase, or as written). Text with none of them, or with no host names for them, comes back as it is.</summary>
+        /// <param name="text">The text, written with the engine's own names.</param>
+        public string Display(string text)
+        {
+            if (!conceptPattern.IsMatch(text)) { return text; }
+
+            Dictionary<string, string?> replacements = new(StringComparer.OrdinalIgnoreCase)
+            {
+                ["Security Levels"] = engineController.SecurityLevelPluralLabel,
+                ["Security Level"] = engineController.SecurityLevelLabel,
+                ["Priorities"] = engineController.PriorityPluralLabel,
+                ["Priority"] = engineController.PriorityLabel,
+                ["Alerts"] = engineController.AlertPluralLabel,
+                ["Alert"] = engineController.AlertLabel,
+                ["Tags"] = engineController.TagPluralLabel,
+                ["Tag"] = engineController.TagLabel
+            };
+            foreach (string concept in new[] { "Inbox", "Outbox", "Drafts", "Draft", "Notes", "Note", "Activity", "Messages", "Message" }) { replacements[concept] = engineController.Rename(concept); }
+
+            return conceptPattern.Replace(text, match =>
+            {
+                string replacement = replacements[match.Value] is { Length: > 0 } named ? named : match.Value;
+                if (string.Equals(replacement, match.Value, StringComparison.OrdinalIgnoreCase)) { return match.Value; }
+
+                return match.Value.Length > 1 && match.Value == match.Value.ToUpperInvariant() ? replacement.ToUpperInvariant()
+                    : match.Value == match.Value.ToLowerInvariant() ? replacement.ToLowerInvariant()
+                    : replacement;
+            });
+        }
 
         /// <summary>Gets the identifier a frame is known by: a message's own, the message a receipt is for, or an empty string for any other frame, which has none.</summary>
         /// <param name="frameValue">An instance of <see cref="IEngineController.FrameType"/>.</param>
@@ -950,7 +1097,7 @@ internal static class EngineControllerExtensions
             IsAlert = engineController.GetIsAlert(payload),
             Priority = engineController.GetMessagePriority(payload),
             Tag = engineController.GetTag(payload),
-            SecurityLevel = engineController.GetSecurityLevel(payload)
+            SecurityLevel = engineController.GetSecurityLevelKey(payload)
         };
     }
 }

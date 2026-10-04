@@ -452,6 +452,9 @@ public sealed class ClientPeerServiceTests
         await WaitUntil(() => fx.Service.GetStatuses().Single().IsConnected, TimeSpan.FromSeconds(30));
         Assert.Equal("Server1", Assert.Single(fx.Service.GetStatuses()).UserName);
 
+        // The drop wakes the monitor, which would reconnect at once and race the assertion below, so the server stops answering first.
+        fx.Transport.Setup(p => p.Connect(It.IsAny<ConnectionPoint>(), It.IsAny<CancellationToken>())).ThrowsAsync(new IOException("refused"));
+        AutoAcknowledge(fx, success: false);
         fx.Drop();
         PeerConnectionStatus status = Assert.Single(fx.Service.GetStatuses());
         Assert.False(status.IsConnected);

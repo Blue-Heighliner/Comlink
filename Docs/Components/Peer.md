@@ -115,7 +115,7 @@ An outgoing message's per-recipient status moves **Sent → Received → Read** 
 
 **Self-addressing**: a message addressed to the sending user is sent like any other, so a client's goes up to its server, which routes it back to the client as one of its children; its status advances through the receipts that return.
 
-**Messages without an identifier**: a message always has an identifier before it is sent (see [Configuration.md](Configuration.md#message-identifiers)), so one received without is an error and is dropped, with an error logged: a client does not deliver it, a server neither stores nor routes it, a relay does not forward it, and an external system's message without one is not processed.
+**Invalid messages**: a message always has an identifier before it is sent (see [Configuration.md](Configuration.md#message-identifiers)) and only carries priorities and security levels the configuration states (see [Message Composition](Configuration.md#message-composition)), so one received without an identifier, or with a priority or security level that is not stated, is an error and is dropped, with the reason logged: a client does not deliver it, a server neither stores nor routes it, a relay does not forward it, and an external system's message without one is not processed.
 
 ## Receipts
 

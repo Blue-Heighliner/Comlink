@@ -297,9 +297,9 @@ internal sealed class RelayPeerService : IPeerService, IConnectionStatusService,
         PeerConnection? connection = serverConnection;
         if (frame is null || engineController.IsHeartbeat(frame) || engineController.Route(frame).Count == 0) { return; }
 
-        if (engineController.IsMessageWithoutId(frame))
+        if (engineController.GetInvalidMessageReason(frame) is { } invalid)
         {
-            logger.LogError("A message from {FromUser} has no identifier and was dropped", engineController.GetFromUser(frame));
+            logger.LogError("A message from {FromUser} is invalid and was dropped: it {Reason}", engineController.GetFromUser(frame), invalid);
             return;
         }
 
@@ -318,9 +318,9 @@ internal sealed class RelayPeerService : IPeerService, IConnectionStatusService,
         object? frame = TryDeserialize(data, packet);
         if (frame is null || engineController.IsHeartbeat(frame) || transport is null) { return; }
 
-        if (engineController.IsMessageWithoutId(frame))
+        if (engineController.GetInvalidMessageReason(frame) is { } invalid)
         {
-            logger.LogError("A message from the server for {Users} has no identifier and was dropped", string.Join(", ", engineController.Route(frame)));
+            logger.LogError("A message from the server for {Users} is invalid and was dropped: it {Reason}", string.Join(", ", engineController.Route(frame)), invalid);
             return;
         }
 

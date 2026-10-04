@@ -26,7 +26,7 @@ internal sealed class HelpViewModel : IHelpViewModel
     public string AppName { get; }
 
     /// <inheritdoc />
-    public IReadOnlyList<HelpTab> Tabs => engineController.Role is UserRole.Server or UserRole.Relay ? BuildServerTabs() : BuildMessagingTabs(engineController);
+    public IReadOnlyList<HelpTab> Tabs => [.. (engineController.Role is UserRole.Server or UserRole.Relay ? BuildServerTabs() : BuildMessagingTabs(engineController)).Select(tab => new HelpTab(engineController.Display(tab.Title), [.. tab.Sections.Select(section => new HelpSection(engineController.Display(section.Heading), engineController.Display(section.Body)))]))];
 
     private static List<HelpTab> BuildServerTabs() =>
     [
@@ -115,14 +115,14 @@ internal sealed class HelpViewModel : IHelpViewModel
 
         if (engineController.TagsEnabled)
         {
-            sections.Add(new HelpSection($"{engineController.TagLabel}", $"Fill in the {engineController.TagLabel} box to label the message. Some {engineController.TagLabel} and priority combinations are not allowed, and a blocked choice is either not offered or is put back to the last allowed one."));
+            sections.Add(new HelpSection($"Tag", $"Fill in the Tag box to label the message. Some Tag and priority combinations are not allowed, and a blocked choice is either not offered or is put back to the last allowed one."));
         }
 
-        sections.Add(new HelpSection("Priority", "Choose a priority to control how urgently the message is sent when several are waiting. Higher priorities go first."));
+        sections.Add(new HelpSection("Priority", $"Choose a priority to control how urgently the message is sent when several are waiting. Higher ones go first."));
 
         if (engineController.ComposeAlertsEnabled)
         {
-            sections.Add(new HelpSection($"Sending as {engineController.AlertLabel}", $"Tick the {engineController.AlertLabel} box to make the message an alert. Every recipient's window sounds an alarm until they have read it."));
+            sections.Add(new HelpSection($"Sending as Alert", $"Tick the Alert box to make the message an alert. Every recipient's window sounds an alarm until they have read it."));
         }
 
         sections.Add(new HelpSection("Sending", "Press SEND to send it, or SAVE to keep it as a draft. A sent message moves to Outbox and shows a delivery status for each recipient, described under Receiving messages."));
@@ -137,7 +137,7 @@ internal sealed class HelpViewModel : IHelpViewModel
             new HelpSection("Delivery status", "Open a message from Outbox and expand its delivery status to see each recipient. Sending means it is on its way, Sent means it left this computer, Received means the recipient's application has it, Read means the recipient has opened it, and Failed means it could not be delivered, in which case send it again. The overall status is only Read once every recipient has read it.")
         ];
 
-        sections.Add(new HelpSection(engineController.AlertLabel, $"When an {engineController.AlertLabel} message arrives, a red box appears in the title bar and an alarm sounds. The sound stops by itself after a while, but the box stays until every {engineController.AlertLabel} message has been read. Open the message to read it. If quick confirmation is on for this installation, you can also click the box or press Space or Enter, which reads the most recent one and does the next on each further press."));
+        sections.Add(new HelpSection("Alert", $"When an Alert message arrives, a red box appears in the title bar and an alarm sounds. The sound stops by itself after a while, but the box stays until every Alert message has been read. Open the message to read it. If quick confirmation is on for this installation, you can also click the box or press Space or Enter, which reads the most recent one and does the next on each further press."));
         return new HelpTab("Receiving messages", sections);
     }
 }

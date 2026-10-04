@@ -44,10 +44,12 @@ internal sealed partial class RetrieveViewModel : ObservableObject, IRetrieveVie
     public RetrieveViewModel(IEngineController engineController, IRetrievalService retrievalService)
     {
         this.retrievalService = retrievalService;
+        this.engineController = engineController;
         AvailableServers = engineController.StorageServers;
         selectedServer = AvailableServers.FirstOrDefault();
     }
 
+    private readonly IEngineController engineController;
     private readonly IRetrievalService retrievalService;
     private readonly char[] separators = [',', ';', '\n', '\r'];
     /// <summary>The last instant of a day (23:59:59.999), paired with an unset <see cref="TimeTo"/>.</summary>
@@ -95,7 +97,7 @@ internal sealed partial class RetrieveViewModel : ObservableObject, IRetrieveVie
         {
             bool sent = await retrievalService.Request(server, BuildCriteria());
             StatusMessage = sent
-                ? $"Requested from {server}; matching messages will arrive in your Inbox"
+                ? $"Requested from {server}; {engineController.Display("matching messages will arrive in your Inbox")}"
                 : $"Could not reach {server}";
         }
         catch (Exception ex)

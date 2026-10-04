@@ -13,14 +13,14 @@ public sealed class MessageReceivedEvent
     public List<AddressRequest> Addresses { get; set; } = [];
     /// <summary>UTC timestamp when the message was originally sent.</summary>
     public DateTime SentAt { get; set; }
-    /// <summary>Whether this message is an alert; see <see cref="IFrameBuilder{TFrame}"/>.</summary>
+    /// <summary>Whether this message is an alert; see <see cref="IFrameBuilder{TFrame, TPacket, TPriority, TLevel}"/>.</summary>
     public bool IsAlert { get; set; }
     /// <summary>Priority level of this message, a member of the enum the host stated for its priorities.</summary>
     public Enum? Priority { get; set; }
-    /// <summary>Tag identifying the type of this message; see <see cref="IFrameBuilder{TFrame}"/>.</summary>
+    /// <summary>Tag identifying the type of this message; see <see cref="IFrameBuilder{TFrame, TPacket, TPriority, TLevel}"/>.</summary>
     public string Tag { get; set; } = string.Empty;
-    /// <summary>Security level name this message was sent at, or an empty string when no security levels are configured; see <see cref="IFrameBuilder{TFrame}"/>.</summary>
-    public string SecurityLevel { get; set; } = string.Empty;
+    /// <summary>Security level of this message, a member of the enum the host stated for its security levels, or <see langword="null"/> for none.</summary>
+    public Enum? SecurityLevel { get; set; }
 }
 
 /// <summary>Represents a single addressee in a send or receive operation.</summary>

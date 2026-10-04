@@ -54,7 +54,7 @@
 
     <!-- Queue -->
     <StackPanel DockPanel.Dock="Top" Spacing="6">
-      <TextBlock Text="MESSAGES" FontSize="11" FontWeight="SemiBold" Foreground="#858585" LetterSpacing="1" />
+      <TextBlock Text="{vm:Display 'MESSAGES'}" FontSize="11" FontWeight="SemiBold" Foreground="#858585" LetterSpacing="1" />
       <TextBlock Text="No staged sends yet"
                  IsVisible="{Binding !HasQueue}"
                  FontSize="12"

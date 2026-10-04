@@ -60,7 +60,14 @@ internal sealed class PacketizingPeerTransport : IPeerTransport
     {
         if (options?.IsPacket == true) { return await inner.Request(connection, data, options, cancellation); }
 
-        IReadOnlyList<Packet> packets = packetizer.Split(data, options?.Priority ?? 0, options?.Frame);
+        IReadOnlyList<Packet> packets;
+        try { packets = packetizer.Split(data, options?.Priority ?? 0, options?.Frame); }
+        catch (ArgumentOutOfRangeException ex)
+        {
+            logger.LogError(ex, "A payload of {Length} bytes cannot be sent over {Point}: it is too large to be split into packets, so nothing is sent", data.Length, connection.Point);
+            return false;
+        }
+
         try
         {
             int untransmitted = packets.Count;

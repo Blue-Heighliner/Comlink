@@ -3,7 +3,7 @@ namespace BlueHeighliner.Comlink;
 /// <summary>
 /// The schema of the network configuration file: everything the engine needs to know about the users of one network, in one
 /// place shared by every node, instead of per-node files or code. It is read from <c>Config.json</c> in the current working directory,
-/// or, when the host allows command-line overrides (see <see cref="IEngineBuilder.CommandLineOverrides"/>), from the path given by the
+/// or, when the host allows command-line overrides (see <see cref="IEngineBuilder{TFrame, TPacket, TPriority, TLevel}.CommandLineOverrides"/>), from the path given by the
 /// <c>--config</c> argument; its absence is not an error unless <c>--config</c> names a file that does not exist.
 /// The user this process runs as, for a node that should not ask for an install code, is named by the <c>--user</c> argument (again only when
 /// overrides are allowed) or else a <c>User.json</c> in the current working directory does, holding <c>{ "User": "NAME" }</c> (or just the name as a JSON string).

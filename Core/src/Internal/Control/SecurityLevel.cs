@@ -3,12 +3,16 @@ namespace BlueHeighliner.Comlink;
 /// <summary>
 /// A single named, colored security classification level. Levels are ordered: each level in
 /// <see cref="IEngineController.SecurityLevels"/> outranks every one stated before it (see
-/// <see cref="IEngineBuilder.SecurityLevels"/>).
+/// <see cref="IEngineBuilder{TFrame, TPacket, TPriority, TLevel}.SecurityLevels"/>).
 /// </summary>
 internal sealed record SecurityLevel
 {
     /// <summary>Gets the display name of this level, and the value stored in a message's security level field and a user's assigned level.</summary>
     public required string Name { get; init; }
+    /// <summary>Gets the member of the host's security level enum this level is.</summary>
+    public Enum? Key { get; init; }
+    /// <summary>Gets the integer value of <see cref="Key"/>, which is how the level is stored in drafts and so must never change for a member of the host's enum, or <see langword="null"/> without a key.</summary>
+    public int? Value => Key is null ? null : Convert.ToInt32(Key);
     /// <summary>Gets the hex color shown for this level in the top banner.</summary>
     public required string Color { get; init; }
 }

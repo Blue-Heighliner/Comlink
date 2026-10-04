@@ -345,9 +345,9 @@ internal sealed class ServerRoutingService : IPeerService, IConnectionStatusServ
         object? message = TryDeserialize(data, packet);
         if (message is null || engineController.IsHeartbeat(message)) { return; }
 
-        if (engineController.IsMessageWithoutId(message))
+        if (engineController.GetInvalidMessageReason(message) is { } invalid)
         {
-            logger.LogError("A message from {User} has no identifier and was dropped", childName);
+            logger.LogError("A message from {User} is invalid and was dropped: it {Reason}", childName, invalid);
             return;
         }
 
@@ -403,9 +403,9 @@ internal sealed class ServerRoutingService : IPeerService, IConnectionStatusServ
         object? message = TryDeserialize(data, packet);
         if (message is null || engineController.IsHeartbeat(message)) { return; }
 
-        if (engineController.IsMessageWithoutId(message))
+        if (engineController.GetInvalidMessageReason(message) is { } invalid)
         {
-            logger.LogError("A message from {User} has no identifier and was dropped", serverName);
+            logger.LogError("A message from {User} is invalid and was dropped: it {Reason}", serverName, invalid);
             return;
         }
 

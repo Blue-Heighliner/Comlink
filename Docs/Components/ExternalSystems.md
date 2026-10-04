@@ -45,7 +45,7 @@ instead subclasses the optional convenience base class `ExternalSystemBase<TFram
 `IExternalSystem` on your behalf and exposes only type-safe `TFrame`-typed members — `protected abstract`
 methods for the real connection behavior (plus one `protected virtual` method, `PollIsConnected` — see
 [Lifecycle](#lifecycle) below), and `protected Task Receive(TFrame message)` to report an inbound
-message. `TFrame` should match the host's own frame type (the one given to `Frames<TFrame>`).
+message. `TFrame` should match the host's own frame type (the one given to `Types`).
 
 `ExternalSystemBase<TFrame>`'s constructor deliberately does not take an `ILoggerFactory` — each
 external system is constructed directly by the host's `IEngineConfiguration`, not resolved from the running

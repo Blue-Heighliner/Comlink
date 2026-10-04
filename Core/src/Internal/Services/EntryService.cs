@@ -146,12 +146,12 @@ internal sealed class EntryService : IEntryService
 
     private object BuildMessage(string messageId, string fromUser, string body, List<AddressData> addresses, DateTime sentAt, bool isAlert, Enum? priority, string tag, string securityLevel)
     {
-        object message = engineController.CreateMessage(new MessageCreateContext
+        object message = engineController.CreateMessage(new MessageContent
         {
             SentAt = sentAt,
             Body = body,
             IsAlert = isAlert,
-            Priority = engineController.ResolvePriority(priority),
+            Priority = engineController.RequirePriority(priority),
             Tag = tag,
             SecurityLevel = securityLevel
         });
@@ -398,7 +398,7 @@ internal sealed class EntryService : IEntryService
         if (filter.DateTo is { } to && entity.ModifiedAt > to) { return false; }
         if (filter.Priority is { } priority && !engineController.PriorityOf(entity.Priority).Equals(priority)) { return false; }
         if (filter.AlertOnly is true && !entity.IsAlert) { return false; }
-        if (filter.SecurityLevel is { } level && !string.Equals(entity.SecurityLevel, level, StringComparison.OrdinalIgnoreCase)) { return false; }
+        if (filter.SecurityLevel is { } level && !string.Equals(engineController.SecurityLevels.FirstOrDefault(candidate => candidate.Value == entity.SecurityLevel)?.Name, level, StringComparison.OrdinalIgnoreCase)) { return false; }
         if (!string.IsNullOrWhiteSpace(filter.Destination) && !entity.Addresses.Any(a => Contains(a.UserName, filter.Destination.Trim()))) { return false; }
         return string.IsNullOrWhiteSpace(filter.Search) || Contains(entity.Body, filter.Search) || Contains(entity.Tag, filter.Search);
     }

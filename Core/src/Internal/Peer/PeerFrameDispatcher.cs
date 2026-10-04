@@ -36,9 +36,9 @@ internal static class PeerFrameDispatcher
 
             if (engineController.IsHeartbeat(frame)) { return true; }
 
-            if (engineController.IsMessageWithoutId(frame))
+            if (engineController.GetInvalidMessageReason(frame) is { } invalid)
             {
-                logger.LogError("A message from {FromUser} has no identifier and was dropped", engineController.GetFromUser(frame));
+                logger.LogError("A message from {FromUser} is invalid and was dropped: it {Reason}", engineController.GetFromUser(frame), invalid);
                 return false;
             }
 

@@ -1,3 +1,4 @@
+global using System.Text.RegularExpressions;
 global using ProtoBuf;
 global using ProtoBuf.Meta;
 global using Avalonia;

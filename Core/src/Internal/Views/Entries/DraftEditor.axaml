@@ -115,7 +115,7 @@
         <StackPanel Orientation="Horizontal"
                     Spacing="8"
                     VerticalAlignment="Center">
-          <TextBlock Text="DRAFT"
+          <TextBlock Text="{vm:Display 'DRAFT'}"
                      FontSize="11"
                      FontWeight="SemiBold"
                      Foreground="#858585"

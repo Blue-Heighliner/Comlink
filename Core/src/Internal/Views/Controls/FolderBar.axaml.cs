@@ -75,7 +75,7 @@ internal partial class FolderBar : UserControl
             {
                 Window? owner = this.GetVisualRoot() as Window;
                 if (owner is null || DataContext is not IFolderBarViewModel vm) { return; }
-                ConfirmDialog dialog = new("Delete Folder", $"Delete \"{folder.Name}\" and everything inside it, including its subfolders and all their messages, drafts and notes? This cannot be undone.", "Delete");
+                ConfirmDialog dialog = new("Delete Folder", $"Delete \"{folder.Name}\" and everything inside it, including its subfolders and {vm.Display("all their messages, drafts and notes")}? This cannot be undone.", "Delete");
                 if (await dialog.ShowDialog<bool>(owner))
                 {
                     await vm.DeleteFolder(folder);

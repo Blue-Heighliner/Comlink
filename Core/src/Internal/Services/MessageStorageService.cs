@@ -110,7 +110,7 @@ internal sealed class MessageStorageService : IMessageStorageService
 
     private object CopyFor(object original, string requester)
     {
-        object copy = engineController.CreateMessage(new MessageCreateContext
+        object copy = engineController.CreateMessage(new MessageContent
         {
             SentAt = Utc(engineController.GetSentAt(original)),
             Body = engineController.GetBody(original),

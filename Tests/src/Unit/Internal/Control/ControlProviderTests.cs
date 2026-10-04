@@ -127,12 +127,13 @@ public sealed class ControlProviderTests
         public override IFrameSerializer FrameSerializer { get; } = new TestNetworkSerializer();
     }
 
-    /// <summary>A subclass overriding only AppName automatically gets a matching AppDataPath, since the base computes it via virtual dispatch.</summary>
+    /// <summary>The app name is only a display name: changing it never moves the app data folder, which has a member of its own.</summary>
     [Fact]
-    public void EngineController_OverridingAppNameOnly_AppDataPathFollows()
+    public void EngineController_OverridingAppName_DoesNotMoveTheAppDataFolder()
     {
         TestAppNameOverride controller = new();
-        Assert.Equal(Path.Combine(SystemAppData, "CustomApp"), controller.AppDataPath);
+        Assert.Equal("CustomApp", controller.AppName);
+        Assert.DoesNotContain("CustomApp", controller.AppDataPath);
     }
 
     private sealed class TestAppNameOverride : TestEngineController
@@ -222,8 +223,8 @@ public sealed class ControlProviderTests
         EngineController controller = new(EngineBuilder.Build(new TestEngineConfiguration()), new CurrentUserProvider(), null);
 
         IReadOnlyList<MessagePriorityOption> priorities = controller.Priorities;
-        Assert.Equal(["NORMAL"], priorities.Select(p => p.Name).ToList());
-        Assert.Equal([0], priorities.Select(p => p.Value).ToList());
+        Assert.Equal(Enum.GetValues<TestMessagePriority>().Select(p => p.ToString().ToUpperInvariant()), priorities.Select(p => p.Name));
+        Assert.Equal(Enumerable.Range(0, priorities.Count), priorities.Select(p => p.Value));
         Assert.True(controller.TagsEnabled);
         Assert.Equal("Tag", controller.TagLabel);
         Assert.Empty(controller.BlockedCombinations);

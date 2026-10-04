@@ -1,6 +1,6 @@
 namespace BlueHeighliner.Comlink;
 
-/// <summary>The engine's untyped view of the host's <see cref="IRetrievalHandler{TFrame}"/>, working on frames as <see cref="object"/>.</summary>
+/// <summary>The engine's untyped view of the host's <see cref="IRetrievalHandler{TFrame, TPriority}"/>, working on frames as <see cref="object"/>.</summary>
 internal interface IRetrievalFrameHandler
 {
     /// <summary>Gets the priority level retrieval requests are sent with.</summary>
@@ -27,8 +27,8 @@ internal interface IRetrievalFrameHandler
     IReadOnlyList<string> GetIds(object frame);
 }
 
-/// <summary>Adapts a typed <see cref="IRetrievalHandler{TFrame}"/> to <see cref="IRetrievalFrameHandler"/>.</summary>
-internal sealed class RetrievalFrameHandler<TFrame>(IRetrievalHandler<TFrame> handler) : IRetrievalFrameHandler where TFrame : class
+/// <summary>Adapts a typed <see cref="IRetrievalHandler{TFrame, TPriority}"/> to <see cref="IRetrievalFrameHandler"/>.</summary>
+internal sealed class RetrievalFrameHandler<TFrame, TPriority>(IRetrievalHandler<TFrame, TPriority> handler) : IRetrievalFrameHandler where TFrame : class where TPriority : struct, Enum
 {
     /// <inheritdoc />
     public Enum Priority => handler.Priority;

@@ -87,12 +87,12 @@ internal sealed class MessageRoutingService : IMessageRoutingService
     {
         List<MessageAddress> addresses = [.. payload.Addresses.Select(a => new MessageAddress { UserName = a.UserName, Type = a.Type.ParseAddressType(), Information = a.Information })];
 
-        object message = engineController.CreateMessage(new MessageCreateContext
+        object message = engineController.CreateMessage(new MessageContent
         {
             SentAt = DateTime.UtcNow,
             Body = payload.Body,
             IsAlert = payload.IsAlert,
-            Priority = engineController.ResolvePriority(payload.Priority),
+            Priority = engineController.RequirePriority(payload.Priority),
             Tag = payload.Tag,
             SecurityLevel = payload.SecurityLevel
         });

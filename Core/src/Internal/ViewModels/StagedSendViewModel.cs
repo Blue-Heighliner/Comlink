@@ -31,7 +31,7 @@ internal sealed record StagedSendEntry
     /// <summary>Tag identifying the type of this message.</summary>
     public string Tag { get; init; } = string.Empty;
     /// <summary>Security level name this message will be sent at.</summary>
-    public string SecurityLevel { get; init; } = string.Empty;
+    public Enum? SecurityLevel { get; init; }
     /// <summary>How far this entry has gotten toward being sent.</summary>
     public StagedSendStatus Status { get; init; } = StagedSendStatus.Pending;
     /// <summary>The failure reason, when <see cref="StagedSendEntry.Status"/> is <see cref="StagedSendStatus.Failed"/>; otherwise <see langword="null"/>.</summary>
@@ -40,7 +40,7 @@ internal sealed record StagedSendEntry
 
 /// <summary>
 /// ViewModel interface for the staged send screen: every message a custom import format has prepared (see
-/// <see cref="IEngineBuilder.ImportFormat{TFormat}"/>), reviewed by the user and sent only once they press
+/// <see cref="IImportsBuilder{TFrame, TPacket, TPriority, TLevel}.Format{TFormat}"/>), reviewed by the user and sent only once they press
 /// <see cref="SendAllCommand"/>. Registered as a DI singleton (see <see cref="MainViewModel.StagedSend"/>) so
 /// staged sends added by one import, and the progress of a send-all in flight, survive navigating the content
 /// area away to other views and back.
@@ -77,14 +77,17 @@ internal sealed partial class StagedSendViewModel : ObservableObject, IStagedSen
     /// <param name="connection">Service connection used to send each staged message.</param>
     /// <param name="entryService">Entry service used to persist each sent message to the Outbox.</param>
     /// <param name="loggerFactory">Factory for creating named loggers.</param>
-    public StagedSendViewModel(IServiceConnection connection, IEntryService entryService, ILoggerFactory loggerFactory)
+    /// <param name="engineController">Resolves a staged send's security level name to the configured level.</param>
+    public StagedSendViewModel(IServiceConnection connection, IEntryService entryService, ILoggerFactory loggerFactory, IEngineController engineController)
     {
         this.connection = connection;
         this.entryService = entryService;
+        this.engineController = engineController;
         activityLogger = loggerFactory.CreateLogger("ACTIVITY");
         Queue.CollectionChanged += (_, _) => OnPropertyChanged(nameof(HasQueue));
     }
 
+    private readonly IEngineController engineController;
     private readonly IServiceConnection connection;
     private readonly IEntryService entryService;
     private readonly ILogger activityLogger;
@@ -224,7 +227,7 @@ internal sealed partial class StagedSendViewModel : ObservableObject, IStagedSen
             List<AddressData> addresses = [.. entry.Addresses.Select(a => new AddressData { UserName = a.UserName, Type = a.Type, Information = a.Information })];
             await entryService.StoreSentMessage(
                 result.MessageId, entry.Body, addresses, DateTime.UtcNow, result.UserResults,
-                entry.IsAlert, entry.Priority, entry.Tag, entry.SecurityLevel);
+                entry.IsAlert, entry.Priority, entry.Tag, engineController.GetSecurityLevelName(entry.SecurityLevel));
 
             SetStatus(entry.Id, StagedSendStatus.Sent);
         }

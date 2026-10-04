@@ -96,15 +96,15 @@
         </StackPanel>
 
         <StackPanel Spacing="6">
-          <TextBlock Text="MESSAGE IDS" FontSize="11" FontWeight="SemiBold" Foreground="#858585" LetterSpacing="1" />
+          <TextBlock Text="{vm:Display 'MESSAGE IDS'}" FontSize="11" FontWeight="SemiBold" Foreground="#858585" LetterSpacing="1" />
           <TextBox Text="{Binding Ids}"
-                   Watermark="Message IDs, separated by commas..."
+                   Watermark="{vm:Display 'Message IDs, separated by commas...'}"
                    Background="#3C3C3C"
                    BorderThickness="0"
                    FontSize="13" />
         </StackPanel>
 
-        <TextBlock Text="Any stored message that fits is returned, whoever sent or received it. Leave a field empty to match anything."
+        <TextBlock Text="{vm:Display 'Any stored message that fits is returned, whoever sent or received it. Leave a field empty to match anything.'}"
                    FontSize="12"
                    Foreground="#858585"
                    TextWrapping="Wrap" />

@@ -1,11 +1,22 @@
 namespace BlueHeighliner.Comlink.Tests.Unit.Internal.Control;
 
-/// <summary>Unit tests for <see cref="FrameBuilder{TFrame}"/> and the <see cref="FrameMap"/> it produces.</summary>
+/// <summary>Unit tests for <see cref="FrameBuilder{TFrame, TPriority, TLevel}"/> and the <see cref="FrameMap"/> it produces.</summary>
 public sealed class FrameBuilderTests
 {
-    private static FrameBuilder<TestFrame> Complete()
+    private static EngineBuilder Types()
     {
-        FrameBuilder<TestFrame> builder = new();
+        EngineBuilder state = new();
+        state.Types<TestFrame, TestMessagePriority, TestLevel>();
+        SecurityLevelBuilder<TestLevel> levels = new();
+        foreach (TestLevel level in Enum.GetValues<TestLevel>()) { levels.Level(level); }
+
+        state.SecurityLevelValues.AddRange(levels.Build());
+        return state;
+    }
+
+    private static FrameBuilder<TestFrame, TestMessagePriority, TestLevel> Complete()
+    {
+        FrameBuilder<TestFrame, TestMessagePriority, TestLevel> builder = new(Types());
         builder
             .Message<TestMessageHandler>()
             .Retrieval<TestRetrievalHandler>()
@@ -18,7 +29,7 @@ public sealed class FrameBuilderTests
     [Fact]
     public void Build_UnstatedFields_ThrowsNamingThem()
     {
-        FrameBuilder<TestFrame> builder = new();
+        FrameBuilder<TestFrame, TestMessagePriority, TestLevel> builder = new(new EngineBuilder());
         InvalidOperationException error = Assert.Throws<InvalidOperationException>(() => builder.Build());
 
         Assert.Contains("TestFrame", error.Message);
@@ -43,7 +54,7 @@ public sealed class FrameBuilderTests
         IMessageFrameHandler handler = Complete().Build().Message.Create(null);
         DateTime sentAt = new(2026, 9, 28, 1, 2, 3, DateTimeKind.Utc);
 
-        object message = handler.Create(new MessageCreateContext { SentAt = sentAt, Body = "BODY", IsAlert = true, Priority = TestMessagePriority.Level7, Tag = "TAG", SecurityLevel = "SECRET" });
+        object message = handler.Create(new MessageContent { SentAt = sentAt, Body = "BODY", IsAlert = true, Priority = TestMessagePriority.Level7, Tag = "TAG", SecurityLevel = "SECRET" });
 
         Assert.IsType<TestFrame>(message);
         Assert.True(handler.IsValid(message));
@@ -109,7 +120,7 @@ public sealed class FrameBuilderTests
         IFrameSerializer serializer = Mock.Of<IFrameSerializer>();
         TestFrame created = new() { MessageId = "CREATED" };
 
-        FrameMap map = Complete().Serializer<IFrameSerializer>().Create(() => created) is FrameBuilder<TestFrame> builder ? builder.Build() : throw new InvalidOperationException();
+        FrameMap map = Complete().Serializer<IFrameSerializer>().Create(() => created) is FrameBuilder<TestFrame, TestMessagePriority, TestLevel> builder ? builder.Build() : throw new InvalidOperationException();
 
         Assert.Same(serializer, map.Serializer.Create(new ServiceCollection().AddSingleton(serializer).BuildServiceProvider()));
         Assert.Same(created, map.Create());
@@ -140,7 +151,7 @@ public sealed class FrameBuilderTests
     [Fact]
     public void AutoForward_RegistersControllersByType()
     {
-        FrameBuilder<TestFrame> builder = Complete();
+        FrameBuilder<TestFrame, TestMessagePriority, TestLevel> builder = Complete();
 
         builder.AutoForward<AlertsController>().AutoForward<OtherController>();
 

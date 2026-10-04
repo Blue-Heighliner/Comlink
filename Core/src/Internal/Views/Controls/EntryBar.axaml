@@ -130,7 +130,7 @@
           </StackPanel>
 
           <StackPanel Spacing="3" IsVisible="{Binding ShowSecurityLevelFilter}">
-            <TextBlock Text="SECURITY LEVEL" FontSize="10" Foreground="#5A5A5A" FontWeight="SemiBold" LetterSpacing="1" />
+            <TextBlock Text="{vm:Display 'SECURITY LEVEL'}" FontSize="10" Foreground="#5A5A5A" FontWeight="SemiBold" LetterSpacing="1" />
             <ComboBox ItemsSource="{Binding AvailableSecurityLevelFilters}"
                       SelectedItem="{Binding SelectedSecurityLevelFilter}"
                       Background="#3C3C3C"
@@ -147,7 +147,7 @@
           </StackPanel>
 
           <StackPanel Spacing="3" IsVisible="{Binding ShowPriorityFilter}">
-            <TextBlock Text="PRIORITY" FontSize="10" Foreground="#5A5A5A" FontWeight="SemiBold" LetterSpacing="1" />
+            <TextBlock Text="{vm:Display 'PRIORITY'}" FontSize="10" Foreground="#5A5A5A" FontWeight="SemiBold" LetterSpacing="1" />
             <ComboBox ItemsSource="{Binding AvailablePriorityFilters}"
                       SelectedItem="{Binding SelectedPriorityFilter}"
                       Background="#3C3C3C"
@@ -163,7 +163,7 @@
             </ComboBox>
           </StackPanel>
 
-          <CheckBox Content="Alert only"
+          <CheckBox Content="{vm:Display 'Alert only'}"
                     IsChecked="{Binding AlertOnlyFilter}"
                     IsVisible="{Binding ShowAlertFilter}"
                     Foreground="#CCCCCC"

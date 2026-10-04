@@ -1,12 +1,12 @@
 namespace BlueHeighliner.Comlink;
 
-/// <summary>The engine's untyped view of the host's <see cref="IMessageHandler{TFrame}"/>, working on frames as <see cref="object"/>.</summary>
+/// <summary>The engine's untyped view of the host's <see cref="IMessageHandler{TFrame, TPriority, TLevel}"/>, working on frames as <see cref="object"/>.</summary>
 internal interface IMessageFrameHandler
 {
     /// <summary>Returns whether <paramref name="frame"/> is a message.</summary>
     bool IsValid(object frame);
-    /// <summary>Creates a message frame carrying <paramref name="context"/>.</summary>
-    object Create(MessageCreateContext context);
+    /// <summary>Creates a message frame carrying <paramref name="content"/>.</summary>
+    object Create(MessageContent content);
     /// <summary>Gets the recipient list of <paramref name="frame"/>.</summary>
     List<MessageAddress> GetAddresses(object frame);
     /// <summary>Sets the recipient list of <paramref name="frame"/>.</summary>
@@ -33,18 +33,29 @@ internal interface IMessageFrameHandler
     int GetPrintCount(object frame);
     /// <summary>Gets the tag of <paramref name="frame"/>.</summary>
     string GetTag(object frame);
-    /// <summary>Gets the security level name of <paramref name="frame"/>.</summary>
+    /// <summary>Gets the security level name of <paramref name="frame"/>, or an empty string for none.</summary>
     string GetSecurityLevel(object frame);
+    /// <summary>Gets the security level <paramref name="frame"/> carries as the host's enum member, whether or not it is a configured one, or <see langword="null"/> for none.</summary>
+    Enum? GetSecurityLevelKey(object frame);
 }
 
-/// <summary>Adapts a typed <see cref="IMessageHandler{TFrame}"/> to <see cref="IMessageFrameHandler"/>.</summary>
-internal sealed class MessageFrameHandler<TFrame>(IMessageHandler<TFrame> handler) : IMessageFrameHandler where TFrame : class
+/// <summary>Adapts a typed <see cref="IMessageHandler{TFrame, TPriority, TLevel}"/> to <see cref="IMessageFrameHandler"/>.</summary>
+internal sealed class MessageFrameHandler<TFrame, TPriority, TLevel>(IMessageHandler<TFrame, TPriority, TLevel> handler, IReadOnlyList<SecurityLevel> securityLevels) : IMessageFrameHandler where TFrame : class where TPriority : struct, Enum where TLevel : struct, Enum
 {
     /// <inheritdoc />
     public bool IsValid(object frame) => handler.IsValid((TFrame)frame);
 
     /// <inheritdoc />
-    public object Create(MessageCreateContext context) => handler.Create(context);
+    public object Create(MessageContent content)
+        => handler.Create(new MessageCreateContext<TPriority, TLevel>
+        {
+            SentAt = content.SentAt,
+            Body = content.Body,
+            IsAlert = content.IsAlert,
+            Priority = (TPriority)(object)content.Priority,
+            Tag = content.Tag,
+            SecurityLevel = ToLevel(content.SecurityLevel)
+        });
 
     /// <inheritdoc />
     public List<MessageAddress> GetAddresses(object frame)
@@ -88,5 +99,14 @@ internal sealed class MessageFrameHandler<TFrame>(IMessageHandler<TFrame> handle
     public string GetTag(object frame) => handler.GetTag((TFrame)frame);
 
     /// <inheritdoc />
-    public string GetSecurityLevel(object frame) => handler.GetSecurityLevel((TFrame)frame);
+    public string GetSecurityLevel(object frame)
+        => handler.GetSecurityLevel((TFrame)frame) is { } level ? securityLevels.FirstOrDefault(candidate => candidate.Key?.Equals(level) == true)?.Name ?? string.Empty : string.Empty;
+
+    /// <inheritdoc />
+    public Enum? GetSecurityLevelKey(object frame) => handler.GetSecurityLevel((TFrame)frame) is { } level ? level : null;
+
+    private TLevel? ToLevel(string name)
+        => string.IsNullOrEmpty(name) ? null
+        : securityLevels.FirstOrDefault(level => string.Equals(level.Name, name, StringComparison.OrdinalIgnoreCase))?.Key is TLevel key ? key
+        : throw new ArgumentException($"The security level \"{name}\" is not one of the configured security levels: {string.Join(", ", securityLevels.Select(level => level.Name))}", nameof(name));
 }

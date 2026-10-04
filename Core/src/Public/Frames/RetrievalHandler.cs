@@ -2,13 +2,14 @@ namespace BlueHeighliner.Comlink;
 
 /// <summary>
 /// Handles the frames of the host's frame type <typeparamref name="TFrame"/> that are retrieval requests: what a user sends a server
-/// to ask for stored messages. A request is not a message and is never shown to a user. See <see cref="IFrameBuilder{TFrame}.Retrieval{THandler}"/>.
+/// to ask for stored messages. A request is not a message and is never shown to a user. See <see cref="IFrameBuilder{TFrame, TPacket, TPriority, TLevel}.Retrieval{THandler}"/>.
 /// </summary>
 /// <typeparam name="TFrame">The host's frame type.</typeparam>
-public interface IRetrievalHandler<TFrame> where TFrame : class
+/// <typeparam name="TPriority">The enum whose members are the priority levels.</typeparam>
+public interface IRetrievalHandler<TFrame, TPriority> where TFrame : class where TPriority : struct, Enum
 {
-    /// <summary>Gets the member of the priority enum (see <see cref="IEngineBuilder.Priorities{TPriority}"/>) naming the level that retrieval requests are sent with, which is how they are ordered against other traffic.</summary>
-    Enum Priority { get; }
+    /// <summary>Gets the priority level that retrieval requests are sent with, which is how they are ordered against other traffic.</summary>
+    TPriority Priority { get; }
 
     /// <summary>Returns whether <paramref name="frame"/> is a retrieval request.</summary>
     /// <param name="frame">The frame to classify.</param>

@@ -35,7 +35,7 @@
                   FontWeight="SemiBold"
                   FontSize="12" />
         </StackPanel>
-        <TextBlock Text="NOTE"
+        <TextBlock Text="{vm:Display 'NOTE'}"
                    FontSize="11"
                    FontWeight="SemiBold"
                    Foreground="#858585"

@@ -35,7 +35,7 @@ internal interface IPeerTransport : IAsyncDisposable
     Task<PeerConnection> Connect(ConnectionPoint point, CancellationToken cancellation = default);
 
     /// <summary>Sends <paramref name="data"/> over <paramref name="connection"/> and waits for the remote node to acknowledge it.</summary>
-    /// <returns><see langword="true"/> if the remote node accepted the message, <see langword="false"/> if it rejected it.</returns>
+    /// <returns><see langword="true"/> if the remote node accepted the message, <see langword="false"/> if it rejected it or if the data exceeds what the connection can carry, in which case nothing is sent and the reason is logged as an error.</returns>
     /// <exception cref="IOException">The message could not be delivered (the connection is gone, or dropped while waiting).</exception>
     Task<bool> Request(PeerConnection connection, ReadOnlyMemory<byte> data, PeerSendOptions? options = null, CancellationToken cancellation = default);
 }

@@ -1,11 +1,11 @@
 namespace BlueHeighliner.Comlink.Tests.Unit.Internal.Control;
 
-/// <summary>Unit tests for <see cref="PacketBuilder{TPacket}"/> and the <see cref="PacketMap"/> it produces.</summary>
+/// <summary>Unit tests for <see cref="PacketBuilder{TPacket, TPriority}"/> and the <see cref="PacketMap"/> it produces.</summary>
 public sealed class PacketBuilderTests
 {
-    private static PacketBuilder<TestPacket> Complete()
+    private static PacketBuilder<TestPacket, TestMessagePriority> Complete()
     {
-        PacketBuilder<TestPacket> builder = new();
+        PacketBuilder<TestPacket, TestMessagePriority> builder = new();
         builder.Frame<TestFramePacketHandler>();
         return builder;
     }
@@ -14,7 +14,7 @@ public sealed class PacketBuilderTests
     [Fact]
     public void Build_UnstatedHandler_ThrowsNamingIt()
     {
-        PacketBuilder<TestPacket> builder = new();
+        PacketBuilder<TestPacket, TestMessagePriority> builder = new();
 
         InvalidOperationException error = Assert.Throws<InvalidOperationException>(() => builder.Build());
 
@@ -55,7 +55,7 @@ public sealed class PacketBuilderTests
     public void Serializer_CanBeReplaced()
     {
         IPacketSerializer serializer = Mock.Of<IPacketSerializer>();
-        PacketBuilder<TestPacket> builder = Complete();
+        PacketBuilder<TestPacket, TestMessagePriority> builder = Complete();
         builder.Serializer<IPacketSerializer>();
 
         PacketMap map = builder.Build();

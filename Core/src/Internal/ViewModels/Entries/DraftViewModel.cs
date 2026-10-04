@@ -36,7 +36,7 @@ internal interface IDraftViewModel
     MessagePriorityOption SelectedPriority { get; set; }
     /// <summary>
     /// Gets the security levels available to send this draft at: every level configured with
-    /// <see cref="IEngineBuilder.SecurityLevels"/> up to and including the current user's own assigned level (see
+    /// <see cref="IEngineBuilder{TFrame, TPacket, TPriority, TLevel}.SecurityLevels"/> up to and including the current user's own assigned level (see
     /// <see cref="IEngineController.GetUserSecurityLevel"/>): a user can declassify to a lower level but never send
     /// above their own clearance. Empty when no security levels are configured, in which case the picker is hidden.
     /// </summary>
@@ -167,14 +167,14 @@ internal sealed partial class DraftViewModel : ObservableObject, IDraftViewModel
 
         allPriorities = engineController.Priorities;
         availablePriorities = FilterPriorities(entity.Tag);
-        selectedPriority = AvailablePriorities.FirstOrDefault(p => string.Equals(p.Name, entity.Priority, StringComparison.OrdinalIgnoreCase))
+        selectedPriority = AvailablePriorities.FirstOrDefault(p => p.Stored == entity.Priority)
             ?? AvailablePriorities.FirstOrDefault()
             ?? allPriorities[0];
 
         IReadOnlyList<SecurityLevel> allSecurityLevels = engineController.SecurityLevels;
         int ownRank = allSecurityLevels.GetRank(currentSecurityLevel);
         AvailableSecurityLevels = ownRank < 0 ? [] : [.. allSecurityLevels.Take(ownRank + 1)];
-        selectedSecurityLevel = AvailableSecurityLevels.FirstOrDefault(l => string.Equals(l.Name, entity.SecurityLevel, StringComparison.OrdinalIgnoreCase))
+        selectedSecurityLevel = AvailableSecurityLevels.FirstOrDefault(l => l.Value == entity.SecurityLevel)
             ?? AvailableSecurityLevels.LastOrDefault();
 
         foreach (AddressData a in entity.Addresses)
@@ -402,9 +402,9 @@ internal sealed partial class DraftViewModel : ObservableObject, IDraftViewModel
             entity.BodySegmentsJson = SerializeBody();
             entity.Addresses = [.. Addresses];
             entity.IsAlert = IsAlert;
-            entity.Priority = SelectedPriority.Name;
+            entity.Priority = SelectedPriority.Stored;
             entity.Tag = Tag;
-            entity.SecurityLevel = SelectedSecurityLevel?.Name ?? string.Empty;
+            entity.SecurityLevel = SelectedSecurityLevel?.Value;
             await entryService.SaveDraft(entity);
             StatusMessage = "Saved";
         }
@@ -425,7 +425,7 @@ internal sealed partial class DraftViewModel : ObservableObject, IDraftViewModel
 
         if (engineController.BlockedCombinations.IsBlocked(Tag, SelectedPriority.Key))
         {
-            StatusMessage = "This tag/priority combination is not allowed";
+            StatusMessage = engineController.Display("This tag/priority combination is not allowed");
             return;
         }
 
@@ -437,15 +437,14 @@ internal sealed partial class DraftViewModel : ObservableObject, IDraftViewModel
             entity.BodySegmentsJson = SerializeBody();
             entity.Addresses = [.. Addresses];
             entity.IsAlert = IsAlert;
-            entity.Priority = SelectedPriority.Name;
+            entity.Priority = SelectedPriority.Stored;
             entity.Tag = Tag;
-            string securityLevel = SelectedSecurityLevel?.Name ?? string.Empty;
-            entity.SecurityLevel = securityLevel;
+            entity.SecurityLevel = SelectedSecurityLevel?.Value;
 
             SendMessageResult? result = await connection.SendMessage(
                 body,
                 Addresses.Select(a => new AddressRequest { UserName = a.UserName, Type = a.Type, Information = a.Information }).ToList(),
-                IsAlert, SelectedPriority.Key, Tag, securityLevel);
+                IsAlert, SelectedPriority.Key, Tag, SelectedSecurityLevel?.Key);
             if (result is null)
             {
                 StatusMessage = "Cannot send until a user is installed";
@@ -458,7 +457,7 @@ internal sealed partial class DraftViewModel : ObservableObject, IDraftViewModel
 
             DateTime sentAt = entity.SentAt ?? DateTime.UtcNow;
             MessageEntity sentMessage = await entryService.StoreSentMessage(
-                result.MessageId, body, [.. Addresses], sentAt, result.UserResults, IsAlert, SelectedPriority.Key, Tag, securityLevel);
+                result.MessageId, body, [.. Addresses], sentAt, result.UserResults, IsAlert, SelectedPriority.Key, Tag, SelectedSecurityLevel?.Name ?? string.Empty);
 
             IsSent = true;
             StatusMessage = "Sent";

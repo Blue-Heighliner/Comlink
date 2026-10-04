@@ -85,7 +85,7 @@ public sealed class ExportServiceTests : IDisposable
     public async Task Export_WritesOneJsonFilePerEntry()
     {
         await InsertMessage("M1", "Hello World", isOutbound: false, priority: 3);
-        DraftEntity draft = await drafts.Insert(new DraftEntity { Body = "Draft Subject", FolderId = "root-drafts", Priority = "LEVEL2" });
+        DraftEntity draft = await drafts.Insert(new DraftEntity { Body = "Draft Subject", FolderId = "root-drafts", Priority = 2 });
         string zipPath = ZipPath();
 
         List<ExportEntryRef> refs =
@@ -106,7 +106,7 @@ public sealed class ExportServiceTests : IDisposable
         {
             MessageExportData? data = JsonSerializer.Deserialize<MessageExportData>(reader.ReadToEnd());
             Assert.Equal("Hello World", data!.Body);
-            Assert.Equal("LEVEL3", data.Priority);
+            Assert.Equal(3, data.Priority);
         }
 
         ZipArchiveEntry draftEntry = Assert.Single(archive.Entries, e => e.Name.Contains("Draft"));
@@ -114,7 +114,7 @@ public sealed class ExportServiceTests : IDisposable
         {
             DraftExportData? data = JsonSerializer.Deserialize<DraftExportData>(reader.ReadToEnd());
             Assert.Equal("Draft Subject", data!.Body);
-            Assert.Equal("LEVEL2", data.Priority);
+            Assert.Equal(2, data.Priority);
         }
     }
 

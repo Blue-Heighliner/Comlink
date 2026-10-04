@@ -3,14 +3,14 @@ namespace BlueHeighliner.Comlink.Tests.Unit.Internal.Control;
 /// <summary>Unit tests for <see cref="EngineBuilder"/>: what a host states in its configuration is what <see cref="EngineController"/> reports, and anything left unstated takes the default.</summary>
 public sealed class EngineBuilderTests
 {
-    private sealed class Configuration(Func<IEngineBuilder, IEngineBuilder> configure) : IEngineConfiguration
+    private sealed class Configuration(Func<TestEngineBuilder, TestEngineBuilder> configure) : IEngineConfiguration
     {
-        public IEngineBuilder Configure(IEngineBuilder engine) => configure(new TestEngineConfiguration().Configure(engine));
+        public void Configure(IEngineBuilder engine) => configure(new TestEngineConfiguration().Apply(engine));
     }
 
-    private sealed class PacketConfiguration(Func<IEngineBuilder, IEngineBuilder> configure) : IEngineConfiguration
+    private sealed class PacketConfiguration(Func<TestEngineBuilder, TestEngineBuilder> configure) : IEngineConfiguration
     {
-        public IEngineBuilder Configure(IEngineBuilder engine) => configure(new TestEngineConfiguration(packets: true).Configure(engine));
+        public void Configure(IEngineBuilder engine) => configure(new TestEngineConfiguration(packets: true).Apply(engine));
     }
 
     private static IServiceProvider Services(params object[] processors)
@@ -24,13 +24,13 @@ public sealed class EngineBuilderTests
         return services.BuildServiceProvider();
     }
 
-    private static (EngineBuilder Builder, EngineController Controller) BuildWith(Action<IFrameBuilder<TestFrame>>? message = null, Action<IPacketBuilder<TestPacket>>? packet = null, IServiceProvider? services = null)
+    private static (EngineBuilder Builder, EngineController Controller) BuildWith(Action<TestFrameBuilder>? message = null, Action<TestPacketBuilder>? packet = null, IServiceProvider? services = null)
     {
         EngineBuilder builder = packet is null ? EngineBuilder.Build(new TestEngineConfiguration(false, message)) : EngineBuilder.Build(new TestEngineConfiguration(false, message, packet));
         return (builder, new EngineController(builder, new CurrentUserProvider(), null, services));
     }
 
-    private static (EngineBuilder Builder, EngineController Controller) Build(Func<IEngineBuilder, IEngineBuilder> configure, string? currentUser = null, NetworkConfig? network = null)
+    private static (EngineBuilder Builder, EngineController Controller) Build(Func<TestEngineBuilder, TestEngineBuilder> configure, string? currentUser = null, NetworkConfig? network = null)
     {
         EngineBuilder builder = EngineBuilder.Build(new Configuration(configure));
         return (builder, new EngineController(builder, new CurrentUserProvider { UserName = currentUser }, network));
@@ -47,12 +47,152 @@ public sealed class EngineBuilderTests
     {
         InvalidOperationException error = Assert.Throws<InvalidOperationException>(() => EngineBuilder.Build(new EmptyConfiguration()));
 
-        Assert.Contains("Frames<TFrame>", error.Message);
+        Assert.Contains("Types<", error.Message);
+    }
+
+    private sealed class TypesOnlyConfiguration : IEngineConfiguration
+    {
+        public void Configure(IEngineBuilder engine) => engine.Types<TestFrame, TestMessagePriority, TestLevel>().Priorities().Priority(TestMessagePriority.Normal);
+    }
+
+    /// <summary>A configuration that states its types but no frame handlers cannot start the engine.</summary>
+    [Fact]
+    public void Build_TypesWithoutFrames_Throws()
+        => Assert.Contains("Frames(", Assert.Throws<InvalidOperationException>(() => EngineBuilder.Build(new TypesOnlyConfiguration())).Message);
+
+    /// <summary>The types can only be stated once.</summary>
+    [Fact]
+    public void Types_StatedTwice_Throws()
+    {
+        EngineBuilder builder = new();
+        builder.Types<TestFrame, TestMessagePriority, TestLevel>();
+
+        Assert.Throws<InvalidOperationException>(() => builder.Types<TestFrame, TestMessagePriority, TestLevel>());
+    }
+
+    /// <summary>The no-priority and no-security-level types give a single NORMAL level and none, and packets cannot be stated without a packet type.</summary>
+    [Fact]
+    public void Types_NoPriorityAndNoSecurityLevel_AndPacketsWithoutAPacketType()
+    {
+        EngineBuilder builder = new();
+        IEngineBuilder<TestFrame, NoPacket, NoPriority, NoSecurityLevel> typed = builder.Types<TestFrame, NoPriority, NoSecurityLevel>();
+
+        Assert.Equal(["NORMAL"], builder.PriorityOptions.Select(option => option.Name));
+        Assert.Empty(builder.SecurityLevelValues);
+        Assert.Throws<InvalidOperationException>(() => typed.Packets());
+    }
+
+    private sealed class UnorderedConfiguration : IEngineConfiguration
+    {
+        public void Configure(IEngineBuilder engine)
+            => engine.Types<TestFrame, TestPacket, TestMessagePriority, TestLevel>()
+                .Priorities().Priority(TestMessagePriority.High).Priority(TestMessagePriority.Low).Priority(TestMessagePriority.Flash)
+                .SecurityLevels().Level(TestLevel.Secret).Level(TestLevel.Public)
+                .Frames()
+                    .Message<TestMessageHandler>()
+                    .Retrieval<TestRetrievalHandler>()
+                    .ReadReceipt<TestReadReceiptHandler>()
+                    .ReceiveReceipt<TestReceiveReceiptHandler>();
+    }
+
+    /// <summary>Levels rank in the order they are stated, not the order of the enum, a member not stated is not a level, and what is stored is the member's integer value.</summary>
+    [Fact]
+    public void Levels_FollowTheStatedOrderAndStoreTheEnumValue()
+    {
+        EngineBuilder builder = EngineBuilder.Build(new UnorderedConfiguration());
+        EngineController controller = new(builder, new CurrentUserProvider(), null);
+
+        Assert.Equal([TestMessagePriority.High, TestMessagePriority.Low, TestMessagePriority.Flash], controller.Priorities.Select(level => level.Key).Take(3));
+        Assert.Equal(3, controller.Priorities.Count);
+        Assert.Equal(["SECRET", "PUBLIC"], controller.SecurityLevels.Select(level => level.Name));
+        Assert.Equal((int)TestMessagePriority.Flash, controller.StoredPriority(TestMessagePriority.Flash));
+        Assert.Equal(TestMessagePriority.Flash, controller.PriorityOf((int)TestMessagePriority.Flash));
+        Assert.Equal(TestMessagePriority.High, controller.PriorityOf(12345));
+    }
+
+    /// <summary>A handler naming a priority that is not a configured level fails the engine at startup, not later when something is sent.</summary>
+    [Fact]
+    public void Validate_HandlerPriorityNotConfigured_Throws()
+    {
+        EngineController controller = new(EngineBuilder.Build(new UnorderedConfiguration()), new CurrentUserProvider(), null);
+
+        Assert.Contains("not one of the configured priorities", Assert.Throws<InvalidOperationException>(() => controller.Validate()).Message);
+    }
+
+    /// <summary>A received message with an unconfigured priority or security level is invalid, with the reason, so it is dropped and logged.</summary>
+    [Fact]
+    public void GetInvalidMessageReason_UnconfiguredPriorityOrSecurityLevel_IsReported()
+    {
+        EngineController controller = new(EngineBuilder.Build(new UnorderedConfiguration()), new CurrentUserProvider(), null);
+
+        Assert.Null(controller.GetInvalidMessageReason(new TestFrame { MessageId = "M", Priority = "FLASH", SecurityLevel = "SECRET" }));
+        Assert.Null(controller.GetInvalidMessageReason(new TestFrame { MessageId = "M", Priority = "FLASH" }));
+        Assert.Contains("priority", controller.GetInvalidMessageReason(new TestFrame { MessageId = "M", Priority = "LEVEL3" }));
+        Assert.Contains("security level", controller.GetInvalidMessageReason(new TestFrame { MessageId = "M", Priority = "FLASH", SecurityLevel = "LOW" }));
+        Assert.Contains("identifier", controller.GetInvalidMessageReason(new TestFrame { Priority = "FLASH" }));
+    }
+
+    private sealed class DuplicateLabelConfiguration : IEngineConfiguration
+    {
+        public void Configure(IEngineBuilder engine)
+            => engine.Types<TestFrame, TestPacket, TestMessagePriority, TestLevel>()
+                .Priorities().Priority(TestMessagePriority.Normal).Label("SAME").Priority(TestMessagePriority.Flash).Label("same")
+                .Frames().Message<TestMessageHandler>().Retrieval<TestRetrievalHandler>().ReadReceipt<TestReadReceiptHandler>().ReceiveReceipt<TestReceiveReceiptHandler>();
+    }
+
+    /// <summary>Two priorities with the same name are refused, since the name is what users pick by.</summary>
+    [Fact]
+    public void Build_DuplicatePriorityNames_Throws()
+        => Assert.Contains("SAME", Assert.Throws<InvalidOperationException>(() => EngineBuilder.Build(new DuplicateLabelConfiguration())).Message);
+
+    /// <summary>Stating a frame handler before Frames() says so, rather than failing with a null reference.</summary>
+    [Fact]
+    public void FrameHandlers_BeforeFrames_ThrowAClearError()
+    {
+        EngineBuilder state = new();
+        TestEngineBuilder typed = state.Types<TestFrame, TestPacket, TestMessagePriority, TestLevel>();
+
+        Assert.Contains("Frames()", Assert.Throws<InvalidOperationException>(() => ((IFrameBuilder<TestFrame, TestPacket, TestMessagePriority, TestLevel>)typed).Message<TestMessageHandler>()).Message);
+    }
+
+    /// <summary>A receipt or retrieval with no destination goes nowhere rather than to an empty user name.</summary>
+    [Fact]
+    public void Route_EmptyDestination_GoesNowhere()
+    {
+        (_, EngineController controller) = Build(engine => engine);
+
+        Assert.Empty(controller.Route(new TestFrame { IsHidden = true, ReadReceiptMessageId = "M", Addresses = [new TestAddressEntry { UserName = "" }] }));
+        Assert.Equal(["ALICE"], controller.Route(new TestFrame { IsHidden = true, ReadReceiptMessageId = "M", Addresses = [new TestAddressEntry { UserName = "ALICE" }] }));
+    }
+
+    /// <summary>A security level is named by its configured level, nothing for none, and anything else throws.</summary>
+    [Fact]
+    public void GetSecurityLevelName_NullIsNone_UnconfiguredThrows()
+    {
+        (_, EngineController controller) = Build(engine => engine);
+
+        Assert.Equal(["", "RESTRICTED"], [controller.GetSecurityLevelName(null), controller.GetSecurityLevelName(TestLevel.Restricted)]);
+        Assert.Throws<ArgumentException>(() => controller.GetSecurityLevelName(TestMessagePriority.High));
+    }
+
+    /// <summary>A priority enum other than the no-priority one needs its levels stated.</summary>
+    [Fact]
+    public void Build_WithoutPriorityLevels_Throws()
+    {
+        EngineBuilder builder = new();
+        builder.Types<TestFrame, TestMessagePriority, TestLevel>();
+
+        Assert.Throws<InvalidOperationException>(() => EngineBuilder.Build(new NoPrioritiesConfiguration()));
+    }
+
+    private sealed class NoPrioritiesConfiguration : IEngineConfiguration
+    {
+        public void Configure(IEngineBuilder engine) => engine.Types<TestFrame, TestMessagePriority, TestLevel>().Frames();
     }
 
     private sealed class EmptyConfiguration : IEngineConfiguration
     {
-        public IEngineBuilder Configure(IEngineBuilder engine) => engine;
+        public void Configure(IEngineBuilder engine) { }
     }
 
     /// <summary>The engine cannot build a controller from a builder that has no frame mapping.</summary>
@@ -65,10 +205,10 @@ public sealed class EngineBuilderTests
     public void Build_RunsConfigurationOnceAndKeepsWhatItStated()
     {
         int calls = 0;
-        EngineBuilder builder = EngineBuilder.Build(new Configuration(engine => { calls++; return engine.AppName("MyApp"); }));
+        EngineBuilder builder = EngineBuilder.Build(new Configuration(engine => { calls++; return engine.AppVersion("1.0"); }));
 
         Assert.Equal(1, calls);
-        Assert.Equal("MyApp", builder.AppNameValue);
+        Assert.Equal("1.0", builder.AppVersionValue);
     }
 
     /// <summary>Settings left unstated take the engine's defaults.</summary>
@@ -99,7 +239,7 @@ public sealed class EngineBuilderTests
         Assert.Null(controller.ExternalServer);
         Assert.Null(controller.NetworkHandler);
         Assert.Null(controller.PacketType);
-        Assert.Single(controller.Priorities);
+        Assert.Equal(Enum.GetValues<TestMessagePriority>().Length, controller.Priorities.Count);
         Assert.Equal("NORMAL", controller.Priorities[0].Name);
         Assert.Equal("USER", controller.GetCertificateName("USER"));
         Assert.True(controller.CanDelete(FolderType.Inbox));
@@ -114,7 +254,7 @@ public sealed class EngineBuilderTests
     {
         const string icon = "avares://Host/icon.png";
         (_, EngineController controller) = Build(engine => engine
-            .AppName("MyApp").AppVersion("2.3.4").KioskMode().HomeText("Welcome").WindowIcon(icon)
+            .Display<TestDisplayHandler>().AppVersion("2.3.4").KioskMode()
             .DebugUser("DEBUG").CommandLineOverrides(true));
 
         Assert.Equal("MyApp", controller.AppName);
@@ -131,8 +271,8 @@ public sealed class EngineBuilderTests
     public void AppDataPath_IsTheCurrentUsersFolder()
     {
         string root = Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData);
-        (_, EngineController noUser) = Build(engine => engine.AppName("MyApp"));
-        (_, EngineController alice) = Build(engine => engine.AppName("MyApp"), "ALICE");
+        (_, EngineController noUser) = Build(engine => engine.Display<TestDisplayHandler>());
+        (_, EngineController alice) = Build(engine => engine.Display<TestDisplayHandler>(), "ALICE");
 
         Assert.Equal(root, alice.AppDataRoot);
         Assert.Equal(Path.Combine(root, "MyApp"), noUser.AppDataPath);
@@ -145,25 +285,49 @@ public sealed class EngineBuilderTests
     public void Stated_CompositionAndAlertSettings_AreReported()
     {
         (_, EngineController controller) = Build(engine => engine
-            .AlertLabel("ALARM").AlarmDuration(TimeSpan.FromSeconds(5)).QuickConfirmation(false).ComposeAlerts(false)
-            .Priorities<TestLevel>(priorities => priorities.Priority(TestLevel.High).Label("TOP").Mode(PriorityMode.System).Block("SPAM", null).Block(null, TestLevel.High))
-            .Tags(false, "Category")
+            .Display<TestDisplayHandler>().AlarmDuration(TimeSpan.FromSeconds(5)).QuickConfirmation(false).ComposeAlerts(false)
+            .Priorities().Priority(TestMessagePriority.High).Label("TOP").Mode(PriorityMode.System).Block(null, "SPAM").Block(TestMessagePriority.High, null)
+            .Tags(false)
             .PrintReceived()
-            .CanDelete(folder => folder == FolderType.Drafts));
+            .Deletes<DraftsOnlyDeleteHandler>());
 
         Assert.Equal("ALARM", controller.AlertLabel);
         Assert.Equal(TimeSpan.FromSeconds(5), controller.AlarmSoundDuration);
         Assert.False(controller.QuickConfirmationEnabled);
         Assert.False(controller.ComposeAlertsEnabled);
-        Assert.Equal(["LOW", "TOP"], controller.Priorities.Select(p => p.Name));
-        Assert.Equal([PriorityMode.User, PriorityMode.System], controller.Priorities.Select(p => p.Mode));
+        Assert.Equal(["NORMAL", "TOP"], [controller.Priorities[0].Name, controller.Priorities[^1].Name]);
+        Assert.Equal([PriorityMode.User, PriorityMode.System], [controller.Priorities[0].Mode, controller.Priorities[^1].Mode]);
         Assert.False(controller.TagsEnabled);
         Assert.Equal("Category", controller.TagLabel);
         Assert.Equal(2, controller.BlockedCombinations.Count);
-        Assert.Equal(TestLevel.High, controller.BlockedCombinations[1].Priority);
+        Assert.Equal(TestMessagePriority.High, controller.BlockedCombinations[1].Priority);
         Assert.True(controller.PrintReceivedDefaultEnabled);
         Assert.True(controller.CanDelete(FolderType.Drafts));
         Assert.False(controller.CanDelete(FolderType.Inbox));
+    }
+
+    /// <summary>Without an info handler every name and word is the engine's own, and a handler renames what it states.</summary>
+    [Fact]
+    public void Display_StatedHandlerRenamesAndUnstatedKeepsDefaults()
+    {
+        (_, EngineController plain) = Build(engine => engine);
+        (_, EngineController named) = Build(engine => engine.Display<TestDisplayHandler>());
+
+        Assert.Equal(["HOME", "ALERT", "Tag", "Priority", "Security Level", "Inbox"], [plain.HomeText, plain.AlertLabel, plain.TagLabel, plain.PriorityLabel, plain.SecurityLevelLabel, plain.Rename("Inbox")]);
+        Assert.Equal(["Welcome", "ALARM", "Category", "Importance", "Classification", "Received", "Outbox"], [named.HomeText, named.AlertLabel, named.TagLabel, named.PriorityLabel, named.SecurityLevelLabel, named.Rename("Inbox"), named.Rename("Outbox")]);
+    }
+
+    /// <summary>Fixed interface text written with the engine's own names shows what the host calls the concepts, in the case style of what it replaces, and is untouched when the host states nothing.</summary>
+    [Fact]
+    public void Display_ReplacesConceptNamesKeepingCaseStyle()
+    {
+        (_, EngineController plain) = Build(engine => engine);
+        (_, EngineController named) = Build(engine => engine.Display<TestDisplayHandler>());
+
+        Assert.Equal("NEW DRAFT in the Inbox, Alert only", plain.Display("NEW DRAFT in the Inbox, Alert only"));
+        Assert.Equal("NEW DRAFT in the Received, ALARM only", named.Display("NEW DRAFT in the Inbox, Alert only"));
+        Assert.Equal("Categories, importances and classifications, plus alarms.", named.Display("Tags, priorities and security levels, plus alerts."));
+        Assert.Equal("Choose an importance, classification and category.", named.Display("Choose an priority, security level and tag."));
     }
 
     /// <summary>Turning tags on or off without a label keeps the default label.</summary>
@@ -178,9 +342,9 @@ public sealed class EngineBuilderTests
 
     /// <summary>An overridden address type label replaces the default for that type only; the others keep theirs.</summary>
     [Fact]
-    public void AddressTypeLabel_Stated_ReplacesOnlyThatTypesDefault()
+    public void AddressTypes_Labelled_ReplacesOnlyThatTypesDefault()
     {
-        (_, EngineController controller) = Build(engine => engine.AddressTypeLabel(AddressType.External, "OUTSIDE"));
+        (_, EngineController controller) = Build(engine => engine.AddressTypes().Type(AddressType.External).Label("OUTSIDE"));
 
         Assert.Equal(["To", "Cc", "OUTSIDE"], controller.AddressTypes.Select(t => t.Label));
         Assert.Equal([AddressType.To, AddressType.Cc, AddressType.External], controller.AddressTypes.Select(t => t.Type));
@@ -191,35 +355,23 @@ public sealed class EngineBuilderTests
     public void GetPriority_FollowsTheKindOfFrame()
     {
         ServiceCollection services = new();
-        services.AddSingleton(new TestRetrievalHandler { Priority = TestPriority.Retrieval });
-        services.AddSingleton(new TestReadReceiptHandler { Priority = TestPriority.Receipt });
-        services.AddSingleton(new TestReceiveReceiptHandler { Priority = TestPriority.Receipt });
-        EngineBuilder builder = EngineBuilder.Build(new Configuration(engine => engine.Priorities<TestPriority>(priorities => priorities.Priority(TestPriority.Retrieval).Mode(PriorityMode.System).Priority(TestPriority.Receipt).Mode(PriorityMode.System))));
+        services.AddSingleton(new TestRetrievalHandler { Priority = TestMessagePriority.Level1 });
+        services.AddSingleton(new TestReadReceiptHandler { Priority = TestMessagePriority.Receipt });
+        services.AddSingleton(new TestReceiveReceiptHandler { Priority = TestMessagePriority.Receipt });
+        EngineBuilder builder = EngineBuilder.Build(new Configuration(engine => engine.Priorities().Priority(TestMessagePriority.Level1).Mode(PriorityMode.System).Priority(TestMessagePriority.Receipt).Mode(PriorityMode.System)));
         EngineController controller = new(builder, new CurrentUserProvider(), null, services.BuildServiceProvider());
 
         Assert.Equal(1, controller.GetPriority(new TestFrame { IsHidden = true, IsRetrieval = true }));
-        Assert.Equal(2, controller.GetPriority(new TestFrame { IsHidden = true, ReadReceiptMessageId = "M" }));
-        Assert.Equal(2, controller.GetPriority(new TestFrame { IsHidden = true, ReceiveReceiptMessageId = "M" }));
+        Assert.Equal(12, controller.GetPriority(new TestFrame { IsHidden = true, ReadReceiptMessageId = "M" }));
+        Assert.Equal(12, controller.GetPriority(new TestFrame { IsHidden = true, ReceiveReceiptMessageId = "M" }));
         Assert.Equal(0, controller.GetPriority(new TestFrame()));
-    }
-
-    /// <summary>A handler naming a priority that is not configured fails loudly.</summary>
-    [Fact]
-    public void GetPriority_UnknownHandlerPriority_Throws()
-    {
-        ServiceCollection services = new();
-        services.AddSingleton(new TestRetrievalHandler { Priority = TestPriority.Retrieval });
-        EngineBuilder builder = EngineBuilder.Build(new Configuration(engine => engine.Priorities<TestLevel>()));
-        EngineController controller = new(builder, new CurrentUserProvider(), null, services.BuildServiceProvider());
-
-        Assert.Contains("TestPriority.Retrieval", Assert.Throws<InvalidOperationException>(() => controller.GetPriority(new TestFrame { IsHidden = true, IsRetrieval = true })).Message);
     }
 
     /// <summary>A stated heartbeat handler creates, recognizes and prioritizes heartbeats; without one there are none.</summary>
     [Fact]
     public void Heartbeat_IsOptionalAndHandlerDriven()
     {
-        EngineController withHandler = new(EngineBuilder.Build(new Configuration(engine => engine.Priorities<TestPriority>())), new CurrentUserProvider(), null);
+        EngineController withHandler = new(EngineBuilder.Build(new Configuration(engine => engine)), new CurrentUserProvider(), null);
         EngineController without = new(EngineBuilder.Build(new TestEngineConfiguration(heartbeats: false)), new CurrentUserProvider(), null);
 
         object heartbeat = withHandler.CreateHeartbeat();
@@ -294,26 +446,24 @@ public sealed class EngineBuilderTests
     [Fact]
     public void Priorities_ResolveWithinTheConfiguredLevels()
     {
-        (_, EngineController unconfigured) = Build(engine => engine);
-        (_, EngineController configured) = Build(engine => engine.Priorities<TestMessagePriority>());
+        (_, EngineController configured) = Build(engine => engine);
 
-        Assert.Equal(["NORMAL", "NORMAL", "NORMAL"], [unconfigured.NameOf(unconfigured.PriorityOf(null)), unconfigured.NameOf(unconfigured.PriorityOf("HIGH")), unconfigured.NameOf(unconfigured.PriorityOf(""))]);
-        Assert.Equal(0, unconfigured.HighestPriority);
-        Assert.Equal([TestMessagePriority.Normal, TestMessagePriority.Receipt, TestMessagePriority.Receipt, TestMessagePriority.Normal, TestMessagePriority.Normal], [configured.PriorityOf(null), configured.PriorityOf("receipt"), configured.PriorityOf("RECEIPT"), configured.PriorityOf("BOGUS"), configured.PriorityOf("")]);
+        Assert.Equal([TestMessagePriority.Normal, TestMessagePriority.Receipt, TestMessagePriority.Normal, TestMessagePriority.Normal], [configured.PriorityOf(null), configured.PriorityOf((int)TestMessagePriority.Receipt), configured.PriorityOf(999), configured.PriorityOf(0)]);
         Assert.Equal([TestMessagePriority.Normal, TestMessagePriority.Flash], [configured.ResolvePriority(TestLevel.High), configured.ResolvePriority(TestMessagePriority.Flash)]);
         Assert.Equal(15, configured.HighestPriority);
         Assert.Equal(12, configured.GetPriority(new TestFrame { Priority = "receipt" }));
         Assert.Equal(0, configured.GetPriority(new TestFrame { Priority = "BOGUS" }));
-        Assert.Equal(0, unconfigured.GetPriority(new TestFrame { Priority = "LEVEL9" }));
         Assert.Equal(TestMessagePriority.Receipt, configured.GetMessagePriority(new TestFrame { Priority = "Receipt" }));
-        Assert.Equal("NORMAL", ((TestFrame)configured.CreateMessage(new MessageCreateContext { SentAt = DateTime.UtcNow, Body = "B", IsAlert = false, Priority = TestLevel.High, Tag = "", SecurityLevel = "" })).Priority);
+        Assert.Equal("NORMAL", ((TestFrame)configured.CreateMessage(new MessageContent { SentAt = DateTime.UtcNow, Body = "B", IsAlert = false, Priority = TestMessagePriority.Normal, Tag = "", SecurityLevel = "" })).Priority);
+        Assert.Throws<ArgumentException>(() => configured.CreateMessage(new MessageContent { SentAt = DateTime.UtcNow, Body = "B", IsAlert = false, Priority = TestLevel.High, Tag = "", SecurityLevel = "" }));
+        Assert.Throws<ArgumentException>(() => configured.CreateMessage(new MessageContent { SentAt = DateTime.UtcNow, Body = "B", IsAlert = false, Priority = TestMessagePriority.Normal, Tag = "", SecurityLevel = "BOGUS" }));
     }
 
-    /// <summary>The packet size and window are engine settings, defaulting to 16 KiB and 1.</summary>
+    /// <summary>The packet size and window are stated on the packet configuration, defaulting to 16 KiB and 1.</summary>
     [Fact]
-    public void PacketSizeAndWindow_AreEngineSettings()
+    public void PacketSizeAndWindow_AreStatedOnPackets()
     {
-        (_, EngineController stated) = Build(engine => engine.PacketSize(1024).PacketWindow(3));
+        (_, EngineController stated) = Build(engine => engine.Packets().Frame<TestFramePacketHandler>().Size(1024).Window(3));
         (_, EngineController unstated) = Build(engine => engine);
 
         Assert.Equal((1024, 3), (stated.PacketSize, stated.PacketWindow));
@@ -325,10 +475,11 @@ public sealed class EngineBuilderTests
     public void Priorities_StatedTwice_ReplacesTheEarlierList()
     {
         (_, EngineController controller) = Build(engine => engine
-            .Priorities<TestLevel>()
-            .Priorities<TestPriority>());
+            .Priorities().Priority(TestMessagePriority.Flash).Label("FIRST")
+            .Priorities().Priority(TestMessagePriority.Flash).Label("SECOND"));
 
-        Assert.Equal(["NORMAL", "RETRIEVAL", "RECEIPT"], controller.Priorities.Select(p => p.Name));
+        Assert.Contains("SECOND", controller.Priorities.Select(p => p.Name));
+        Assert.DoesNotContain("FIRST", controller.Priorities.Select(p => p.Name));
     }
 
     /// <summary>Users and groups from the host and the network file are merged, with the file winning for a group of the same name, and the data attached to a user comes from their entry.</summary>
@@ -510,7 +661,7 @@ public sealed class EngineBuilderTests
     {
         MsmtSessionPeerOptions options = new() { Credentials = new MsmtCredentials { Identity = TestMsmtCertificates.Create().Server, TrustedAuthorities = [] } };
         (_, EngineController adjusted) = Build(engine => engine
-            .ConnectionOptions(() => options).MsmtOptions(new MsmtConnectionOptions { HandshakeTimeout = TimeSpan.FromSeconds(7) }));
+            .ConnectionOptions(() => options).Connections().Msmt(new MsmtConnectionOptions { HandshakeTimeout = TimeSpan.FromSeconds(7) }));
         (_, EngineController plain) = Build(engine => engine.ConnectionOptions(() => options));
 
         Assert.Equal(TimeSpan.FromSeconds(7), adjusted.ConnectionOptions.HandshakeTimeout);
@@ -523,7 +674,7 @@ public sealed class EngineBuilderTests
     public void Stated_HdlcOptions_ReplaceTheDefaults()
     {
         (_, EngineController adjusted) = Build(engine => engine
-            .HdlcOptions(new HdlcPeerOptions { MaxInfoField = 512, Link = new HdlcPeerOptions().Link with { Crc = HdlcCrc.Crc32Ccitt } }));
+            .Connections().Hdlc(new HdlcPeerOptions { MaxInfoField = 512, Link = new HdlcPeerOptions().Link with { Crc = HdlcCrc.Crc32Ccitt } }));
         (_, EngineController plain) = Build(engine => engine);
 
         Assert.Equal(512, adjusted.HdlcOptions.MaxInfoField);
@@ -552,7 +703,7 @@ public sealed class EngineBuilderTests
             false,
             message => message.InitialProcessor<IInitialFrameProcessor<TestFrame>>(),
             packet => packet.InitialProcessor<IInitialPacketProcessor<TestPacket>>()));
-        builder.Identify(connection => ((IIpConnectionInfo)connection).Host);
+        builder.IdentifyValue = connection => ((IIpConnectionInfo)connection).Host;
         EngineController controller = new(builder, new CurrentUserProvider(), null, Services(messages.Object, packets.Object));
         Mock<IInitialSession> session = new();
         TestFrame initialMessage = new();
@@ -702,7 +853,7 @@ public sealed class EngineBuilderTests
     [Fact]
     public void Formats_AreAddedByType_AndSameNameReplaces()
     {
-        (_, EngineController controller) = Build(engine => engine.ExportFormat<FirstExportFormat>().ExportFormat<ReplacingExportFormat>().ImportFormat<SlowImportFormat>());
+        (_, EngineController controller) = Build(engine => engine.Exports().Format<FirstExportFormat>().Format<ReplacingExportFormat>().Imports().Format<SlowImportFormat>());
 
         ExportFormatDefinition export = Assert.Single(controller.ExportFormats);
         Assert.Equal("csv", export.Name);
@@ -722,6 +873,11 @@ public sealed class EngineBuilderTests
         Assert.Null(controller.NetworkHandler);
     }
 
+    private sealed class DraftsOnlyDeleteHandler : IDeleteHandler
+    {
+        public bool CanDelete(DeleteContext context) => context.Folder == FolderType.Drafts;
+    }
+
     private sealed class Dependency(string name)
     {
         public string Name { get; } = name;
@@ -729,9 +885,10 @@ public sealed class EngineBuilderTests
 
     private sealed class InjectedConfiguration(Dependency dependency, ILoggerFactory loggers) : IEngineConfiguration
     {
-        public IEngineBuilder Configure(IEngineBuilder engine) => new TestEngineConfiguration().Configure(engine)
-            .AppName(dependency.Name)
-            .HomeText(loggers is null ? "no logging" : "logging");
+        public void Configure(IEngineBuilder engine)
+            => new TestEngineConfiguration().Apply(engine)
+                .AppVersion(dependency.Name)
+                .KioskMode(loggers is not null);
     }
 
     /// <summary>The configuration is constructed through dependency injection: it receives the services the host registered and the logging services the engine always provides.</summary>
@@ -740,8 +897,8 @@ public sealed class EngineBuilderTests
     {
         await using EngineBuilder builder = EngineBuilder.Build<InjectedConfiguration>(services => services.AddSingleton(new Dependency("from-di")));
 
-        Assert.Equal("from-di", builder.AppNameValue);
-        Assert.Equal("logging", builder.HomeTextValue);
+        Assert.Equal("from-di", builder.AppVersionValue);
+        Assert.True(builder.IsKioskMode);
     }
 
     /// <summary>A configuration whose dependencies were not registered cannot be constructed, and fails with the container's own error.</summary>
@@ -751,7 +908,7 @@ public sealed class EngineBuilderTests
 
     private sealed class PlainConfiguration : IEngineConfiguration
     {
-        public IEngineBuilder Configure(IEngineBuilder engine) => new TestEngineConfiguration().Configure(engine);
+        public void Configure(IEngineBuilder engine) => new TestEngineConfiguration().Apply(engine);
     }
 
     /// <summary>A configuration with no dependencies needs no registrations at all.</summary>
@@ -777,7 +934,7 @@ public sealed class EngineBuilderTests
 
     private sealed class DisposingConfiguration(DisposableService service) : IEngineConfiguration
     {
-        public IEngineBuilder Configure(IEngineBuilder engine) => new TestEngineConfiguration().Configure(engine).CanDelete(_ => !service.IsDisposed);
+        public void Configure(IEngineBuilder engine) => new TestEngineConfiguration().Apply(engine).UserCodes(code => service.IsDisposed ? null : code);
     }
 
     /// <summary>The container the configuration was built in lives until the builder is disposed, since the configuration may have given the engine functions that use what was injected.</summary>
@@ -786,7 +943,7 @@ public sealed class EngineBuilderTests
     {
         DisposableService service = new();
         EngineBuilder builder = EngineBuilder.Build<DisposingConfiguration>(services => services.AddSingleton(_ => service));
-        Assert.True(builder.CanDeleteValue!(FolderType.Inbox));
+        Assert.Equal("X", builder.UserCodeResolver!("X"));
 
         await builder.DisposeAsync();
 
@@ -797,9 +954,9 @@ public sealed class EngineBuilderTests
     [Fact]
     public void FluentCalls_ReturnTheBuilder()
     {
-        EngineBuilder builder = new();
+        TestEngineBuilder builder = new EngineBuilder().Types<TestFrame, TestPacket, TestMessagePriority, TestLevel>();
 
-        Assert.Same(builder, builder.AppName("a").AppVersion("1").KioskMode().HomeText("h").CommandLineOverrides(false));
+        Assert.Same(builder, builder.AppVersion("1").KioskMode().Display<TestDisplayHandler>().CommandLineOverrides(false));
     }
 
     /// <summary>With no servers in the network there are no storage servers.</summary>
@@ -823,14 +980,14 @@ public sealed class EngineBuilderTests
         Assert.Equal(["Server1", "Server2"], controller.StorageServers);
     }
 
-    /// <summary>Levels take their order from the enum, their name from the member (or an override) and a neutral color unless stated.</summary>
+    /// <summary>Levels take their order from how they are stated, their name from the member (or an override) and a neutral color unless stated.</summary>
     [Fact]
-    public void SecurityLevels_FollowEnumOrderWithOverrides()
+    public void SecurityLevels_FollowTheStatedOrderWithOverrides()
     {
-        (_, EngineController controller) = Build(engine => engine.SecurityLevels<TestLevel>(levels => levels.Level(TestLevel.High).Label("TOP").Color("#222222")));
+        (_, EngineController controller) = Build(engine => engine.SecurityLevels().Level(TestLevel.High).Label("TOP").Color("#222222"));
 
-        Assert.Equal(["LOW", "TOP"], controller.SecurityLevels.Select(l => l.Name));
-        Assert.Equal(["#5A5A5A", "#222222"], controller.SecurityLevels.Select(l => l.Color));
+        Assert.Equal(["PUBLIC", "TOP"], [controller.SecurityLevels[0].Name, controller.SecurityLevels[^1].Name]);
+        Assert.Equal(["#5A5A5A", "#222222"], [controller.SecurityLevels[0].Color, controller.SecurityLevels[^1].Color]);
     }
 
     /// <summary>A user's security level is the one on their entry, or the lowest configured level when none is stated.</summary>
@@ -838,10 +995,10 @@ public sealed class EngineBuilderTests
     public void GetUserSecurityLevel_UsesTheEntryElseTheLowestLevel()
     {
         (_, EngineController controller) = Build(
-            engine => engine.SecurityLevels<TestLevel>(levels => levels.Level(TestLevel.Low).Color("#111111").Level(TestLevel.High).Color("#222222")),
+            engine => engine.SecurityLevels().Level(TestLevel.Low).Color("#111111").Level(TestLevel.High).Color("#222222"),
             network: Network(("ALICE", new NetworkUserConfig { SecurityLevel = "HIGH" })));
 
         Assert.Equal("HIGH", controller.GetUserSecurityLevel("ALICE"));
-        Assert.Equal("LOW", controller.GetUserSecurityLevel("BOB"));
+        Assert.Equal("PUBLIC", controller.GetUserSecurityLevel("BOB"));
     }
 }

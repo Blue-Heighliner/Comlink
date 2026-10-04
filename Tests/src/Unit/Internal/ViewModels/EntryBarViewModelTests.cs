@@ -190,8 +190,8 @@ public sealed class EntryBarViewModelTests
     {
         EntryBarViewModel vm = new(new Mock<IEntryService>().Object, new EngineController(EngineBuilder.Build(new TestEngineConfiguration()), new CurrentUserProvider(), null));
 
-        Assert.Equal(["Any", "NORMAL"], vm.AvailablePriorityFilters.Select(f => f.Label));
-        Assert.Equal([(Enum?)null, DefaultPriority.Normal], vm.AvailablePriorityFilters.Select(f => f.Value));
+        Assert.Equal(["Any", .. Enum.GetValues<TestMessagePriority>().Select(p => p.ToString().ToUpperInvariant())], vm.AvailablePriorityFilters.Select(f => f.Label));
+        Assert.Equal([(Enum?)null, .. Enum.GetValues<TestMessagePriority>().Cast<Enum>()], vm.AvailablePriorityFilters.Select(f => f.Value));
         Assert.Same(vm.AvailablePriorityFilters[0], vm.SelectedPriorityFilter);
     }
 
@@ -224,7 +224,9 @@ public sealed class EntryBarViewModelTests
     {
         Mock<IEntryService> svc = new();
         svc.Setup(s => s.GetMessages(It.IsAny<string>(), It.IsAny<int>(), It.IsAny<EntryFilter>())).ReturnsAsync((Items: new List<MessageEntity>(), Total: 0));
-        EntryBarViewModel vm = new(svc.Object, format);
+        Mock<TestEngineController> controller = new() { CallBase = true };
+        controller.Setup(c => c.SecurityLevels).Returns([]);
+        EntryBarViewModel vm = new(svc.Object, controller.Object);
 
         await vm.LoadFolder(MakeFolder("root-inbox", FolderType.Inbox));
 

@@ -1,10 +1,10 @@
 namespace BlueHeighliner.Comlink.Sample;
 
 /// <summary>Treats a <see cref="Frame"/> as a retrieval request when its <see cref="Frame.IsRetrieval"/> flag is set.</summary>
-public sealed class RetrievalHandler : IRetrievalHandler<Frame>
+public sealed class RetrievalHandler : IRetrievalHandler<Frame, MessagePriority>
 {
     /// <inheritdoc />
-    public Enum Priority => MessagePriority.Retrieval;
+    public MessagePriority Priority => MessagePriority.Retrieval;
 
     /// <inheritdoc />
     public bool IsValid(Frame frame) => frame.IsRetrieval;
@@ -23,7 +23,7 @@ public sealed class RetrievalHandler : IRetrievalHandler<Frame>
         };
 
     /// <inheritdoc />
-    public string GetDestination(Frame frame) => frame.Recipients[0].User;
+    public string GetDestination(Frame frame) => frame.Recipients.FirstOrDefault()?.User ?? string.Empty;
 
     /// <inheritdoc />
     public string GetSender(Frame frame) => frame.Sender;

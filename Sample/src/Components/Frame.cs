@@ -24,12 +24,12 @@ public sealed class Frame
     [ProtoMember(7)] public string ReadMessageId { get; set; } = string.Empty;
     /// <summary>Whether this message is an alert.</summary>
     [ProtoMember(8)] public bool Alert { get; set; }
-    /// <summary>Name of the priority level of this message, the name of a MessagePriority member.</summary>
-    [ProtoMember(9)] public string Importance { get; set; } = string.Empty;
+    /// <summary>Integer value of the priority level of this message, the value of a MessagePriority member.</summary>
+    [ProtoMember(9)] public int Importance { get; set; }
     /// <summary>Short user-inputted tag identifying the type of this message.</summary>
     [ProtoMember(10)] public string Category { get; set; } = string.Empty;
-    /// <summary>Security level name this message was sent at.</summary>
-    [ProtoMember(11)] public string Classification { get; set; } = string.Empty;
+    /// <summary>Integer value of the security level this message was sent at, the value of a SecurityLevel member, or <see langword="null"/> for none.</summary>
+    [ProtoMember(11)] public int? Confidentiality { get; set; }
     /// <summary>Whether this message is a retrieval request to a storage server.</summary>
     [ProtoMember(12)] public bool IsRetrieval { get; set; }
     /// <summary>Retrieval request lower sent-time bound.</summary>

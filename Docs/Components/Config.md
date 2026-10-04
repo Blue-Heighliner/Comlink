@@ -106,7 +106,7 @@ The IP address or host name that other nodes connect to in order to reach this u
 
 **Type:** `object | null` | **Default:** `null` (the MSMT defaults)
 
-The user's MSMT settings. Every option of the MSMT connection is a key, each overriding its default, anything not stated keeping the value the host stated in code (`MsmtOptions`) or else the default; `Port` also sets the TCP port MSMT listens on. Timeouts and intervals are `hh:mm:ss` strings, and `null` disables a timeout that can be disabled. The options apply to every IP connection of the node, inbound and outbound, including the interface listener.
+The user's MSMT settings. Every option of the MSMT connection is a key, each overriding its default, anything not stated keeping the value the host stated in code (`Connections().Msmt`) or else the default; `Port` also sets the TCP port MSMT listens on. Timeouts and intervals are `hh:mm:ss` strings, and `null` disables a timeout that can be disabled. The options apply to every IP connection of the node, inbound and outbound, including the interface listener.
 
 | Key | Type | Description |
 |-----|------|-------------|
@@ -123,7 +123,7 @@ The user's MSMT settings. Every option of the MSMT connection is a key, each ove
 
 **Type:** `object | null` | **Default:** `null` (the HDLC defaults, no ports)
 
-The user's HDLC settings. Every option of the HDLC peer is a key (`AcknowledgeDelay`, `DisablePollFinalBit`, `EnableMonitor`, `IdlePattern`, `Loopback`, `MaxInfoField`, `MaxRetransmissions`, `PreambleLength`, `PreamblePattern`, `RetransmitInterval`, `RetryInterval`, `TransmitWindow`, `UnderrunAction`, and `Link` with `Crc`, `ClockSpeed`, `Encoding`, `PhaseLockedLoopDivisor`, `ReceiveClockSource` and `TransmitClockSource`), each overriding its default, anything not stated keeping the value the host stated in code (`HdlcOptions`) or else the default; enums are written by name. These keys must match the station at the far end of the cable. Two more keys are not options:
+The user's HDLC settings. Every option of the HDLC peer is a key (`AcknowledgeDelay`, `DisablePollFinalBit`, `EnableMonitor`, `IdlePattern`, `Loopback`, `MaxInfoField`, `MaxRetransmissions`, `PreambleLength`, `PreamblePattern`, `RetransmitInterval`, `RetryInterval`, `TransmitWindow`, `UnderrunAction`, and `Link` with `Crc`, `ClockSpeed`, `Encoding`, `PhaseLockedLoopDivisor`, `ReceiveClockSource` and `TransmitClockSource`), each overriding its default, anything not stated keeping the value the host stated in code (`Connections().Hdlc`) or else the default; enums are written by name. These keys must match the station at the far end of the cable. Two more keys are not options:
 
 | Key | Type | Description |
 |-----|------|-------------|

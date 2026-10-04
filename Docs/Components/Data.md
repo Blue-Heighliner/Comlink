@@ -95,9 +95,9 @@ Stored in both Inbox (received) and Outbox (sent).
 | `Addresses` | `List<AddressData>` | |
 | `IsSent` | `bool` | `true` after successful send |
 | `IsAlert` | `bool` | Whether this draft will be sent as an alert; see `Docs/Components/Peer.md#alert-messages` |
-| `Priority` | `int` | Priority number this draft should be sent at; see `Docs/Components/Configuration.md#message-composition` |
+| `Priority` | `int` | Integer value of the enum member that is the priority level this draft should be sent at (never the level's name or position, so it survives relabelling and reordering); see `Docs/Components/Configuration.md#message-composition` |
 | `Tag` | `string` | Short user-inputted tag identifying the type of this message; see `Docs/Components/Configuration.md#message-composition` |
-| `SecurityLevel` | `string` | Security level name this draft should be sent at, one of `IEngineController.SecurityLevels`, or an empty string when none are configured |
+| `SecurityLevel` | `int?` | Integer value of the enum member that is the security level this draft should be sent at, one of `IEngineController.SecurityLevels`, or `null` when none is chosen or none are configured |
 | `SentAt` | `DateTime?` | UTC send time |
 | `ModifiedAt` | `DateTime` | UTC last edit time |
 | `FolderId` | `string` | |

@@ -1,8 +1,8 @@
 namespace BlueHeighliner.Comlink;
 
 /// <summary>
-/// Serializes and deserializes instances of the host's frame type (see <see cref="IEngineBuilder.Frames{TFrame}"/>) to and from the bytes sent across
-/// the network. A host may substitute its own wire format entirely by stating its own implementation with <see cref="IFrameBuilder{TFrame}.Serializer{TSerializer}"/>,
+/// Serializes and deserializes instances of the host's frame type (see <see cref="IEngineBuilder{TFrame, TPacket, TPriority, TLevel}.Frames"/>) to and from the bytes sent across
+/// the network. A host may substitute its own wire format entirely by stating its own implementation with <see cref="IFrameBuilder{TFrame, TPacket, TPriority, TLevel}.Serializer{TSerializer}"/>,
 /// as long as the same format is used consistently by every node that needs to talk to this one. Derive from <see cref="FrameSerializer{TFrame, TPacket}"/> to work with the
 /// frame and packet types rather than <see cref="object"/>.
 /// </summary>

@@ -20,11 +20,15 @@ internal sealed class PeerTransportFactory(
     {
         ILogger logger = loggerFactory.CreateLogger("ACTIVITY");
         IPacketizer? packetizer = CreatePacketizer(logger);
+        if (packetizer is not null && engineController.PacketSize > engineController.HdlcOptions.MaxInfoField)
+        {
+            logger.LogWarning("The packet size of {PacketSize} bytes is larger than the HDLC MaxInfoField of {MaxInfoField} bytes, so packets will fail to send over serial connections", engineController.PacketSize, engineController.HdlcOptions.MaxInfoField);
+        }
 
         IPeerTransport? ip = null;
         try
         {
-            ip = new MsmtPeerTransport(msmtFactory.Create(engineController.ConnectionOptions));
+            ip = new MsmtPeerTransport(msmtFactory.Create(engineController.ConnectionOptions), logger);
         }
         catch (InvalidOperationException ex)
         {

@@ -1,6 +1,6 @@
 namespace BlueHeighliner.Comlink;
 
-/// <summary>The engine's untyped view of the host's <see cref="IHeartbeatHandler{TFrame}"/>, working on frames as <see cref="object"/>.</summary>
+/// <summary>The engine's untyped view of the host's <see cref="IHeartbeatHandler{TFrame, TPriority}"/>, working on frames as <see cref="object"/>.</summary>
 internal interface IHeartbeatFrameHandler
 {
     /// <summary>Gets the priority level heartbeats are sent with.</summary>
@@ -15,8 +15,8 @@ internal interface IHeartbeatFrameHandler
     object Create();
 }
 
-/// <summary>Adapts a typed <see cref="IHeartbeatHandler{TFrame}"/> to <see cref="IHeartbeatFrameHandler"/>.</summary>
-internal sealed class HeartbeatFrameHandler<TFrame>(IHeartbeatHandler<TFrame> handler) : IHeartbeatFrameHandler where TFrame : class
+/// <summary>Adapts a typed <see cref="IHeartbeatHandler{TFrame, TPriority}"/> to <see cref="IHeartbeatFrameHandler"/>.</summary>
+internal sealed class HeartbeatFrameHandler<TFrame, TPriority>(IHeartbeatHandler<TFrame, TPriority> handler) : IHeartbeatFrameHandler where TFrame : class where TPriority : struct, Enum
 {
     /// <inheritdoc />
     public Enum Priority => handler.Priority;

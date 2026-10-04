@@ -61,7 +61,7 @@
       <!-- Targets -->
       <StackPanel Spacing="6">
         <TextBlock Text="TARGETS" FontSize="11" FontWeight="SemiBold" Foreground="#858585" LetterSpacing="1" />
-        <TextBlock Text="No targets yet - a matching received message has nowhere to forward to"
+        <TextBlock Text="{vm:Display 'No targets yet - a matching received message has nowhere to forward to'}"
                    IsVisible="{Binding !HasTargets}"
                    FontSize="12"
                    Foreground="#858585" />

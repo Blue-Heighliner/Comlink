@@ -9,10 +9,11 @@ namespace BlueHeighliner.Comlink;
 /// </summary>
 internal sealed class MsmtPeerTransport : IPeerTransport
 {
-    /// <summary>Initializes a new <see cref="MsmtPeerTransport"/> over <paramref name="peer"/>.</summary>
-    public MsmtPeerTransport(IMsmtSessionPeer peer)
+    /// <summary>Initializes a new <see cref="MsmtPeerTransport"/> over <paramref name="peer"/>, logging to <paramref name="logger"/> (nothing when <see langword="null"/>).</summary>
+    public MsmtPeerTransport(IMsmtSessionPeer peer, ILogger? logger = null)
     {
         this.peer = peer;
+        this.logger = logger ?? NullLogger.Instance;
         peer.Connected.Listen(MarkConnected);
         peer.Disconnected.Listen(OnDisconnected);
         peer.PackageChanged.Listen(OnPackageChanged);
@@ -20,6 +21,7 @@ internal sealed class MsmtPeerTransport : IPeerTransport
     }
 
     private readonly IMsmtSessionPeer peer;
+    private readonly ILogger logger;
     private readonly ConcurrentDictionary<IMsmtConnection, PeerConnection> connections = new();
     private readonly ConcurrentDictionary<PeerConnection, IMsmtConnection> handles = new();
     private readonly ConcurrentDictionary<string, IMsmtConnection> outbound = new();
@@ -85,6 +87,11 @@ internal sealed class MsmtPeerTransport : IPeerTransport
             MsmtResponse response = await handle.Request(data, sendOptions, cancellation);
             response.Payload?.Dispose();
             return response.Success;
+        }
+        catch (ArgumentOutOfRangeException ex)
+        {
+            logger.LogError(ex, "A payload of {Length} bytes cannot be sent over {Point}: it exceeds the largest message MSMT can carry, so lower the packet size or enable packetization", data.Length, connection.Point);
+            return false;
         }
         catch (Exception ex) when (ex is ObjectDisposedException or TimeoutException)
         {

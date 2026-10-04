@@ -1,10 +1,10 @@
 namespace BlueHeighliner.Comlink.Tests;
 
-/// <summary>Test <see cref="IReadReceiptHandler{TFrame}"/> for <see cref="TestFrame"/>: a frame with a non-empty <see cref="TestFrame.ReadReceiptMessageId"/> is a read receipt.</summary>
-public sealed class TestReadReceiptHandler : IReadReceiptHandler<TestFrame>
+/// <summary>Test <see cref="IReadReceiptHandler{TFrame, TPriority}"/> for <see cref="TestFrame"/>: a frame with a non-empty <see cref="TestFrame.ReadReceiptMessageId"/> is a read receipt.</summary>
+public sealed class TestReadReceiptHandler : IReadReceiptHandler<TestFrame, TestMessagePriority>
 {
     /// <inheritdoc />
-    public Enum Priority { get; init; } = TestPriority.Normal;
+    public TestMessagePriority Priority { get; init; } = TestMessagePriority.Normal;
 
     /// <inheritdoc />
     public bool IsValid(TestFrame frame) => !string.IsNullOrEmpty(frame.ReadReceiptMessageId);

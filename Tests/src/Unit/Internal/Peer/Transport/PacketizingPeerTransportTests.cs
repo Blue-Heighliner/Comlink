@@ -462,13 +462,13 @@ public sealed class PacketizingPeerTransportTests
         Assert.All(owners, owner => Assert.True(owner.IsDisposed));
     }
 
-    /// <summary>A payload that is too big for the packetizer fails the request without sending anything.</summary>
+    /// <summary>A payload that is too big for the packetizer fails the request, logging why, without sending anything.</summary>
     [Fact]
-    public async Task Request_PayloadTooBig_ThrowsWithoutSending()
+    public async Task Request_PayloadTooBig_FailsWithoutSending()
     {
         Fixture fx = Build(new Packetizer(new RawPacketEngineController(100), maxPayloadSize: 10));
 
-        await Assert.ThrowsAsync<ArgumentOutOfRangeException>(() => fx.Transport.Request(target, Payload(11)));
+        Assert.False(await fx.Transport.Request(target, Payload(11)));
 
         Assert.Empty(fx.Sends);
     }

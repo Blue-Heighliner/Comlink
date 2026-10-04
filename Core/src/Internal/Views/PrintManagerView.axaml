@@ -55,7 +55,7 @@
       </StackPanel>
 
       <!-- Print received toggle -->
-      <CheckBox Content="Automatically print received messages"
+      <CheckBox Content="{vm:Display 'Automatically print received messages'}"
                 IsChecked="{Binding PrintReceivedEnabled}"
                 FontSize="13" />
 

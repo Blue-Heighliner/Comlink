@@ -1,6 +1,6 @@
 namespace BlueHeighliner.Comlink;
 
-/// <summary>Whether a configured priority can be chosen by a user in the GUI. It never restricts code, which may use any configured priority. See <see cref="IEngineBuilder.Priorities{TPriority}"/>.</summary>
+/// <summary>Whether a configured priority can be chosen by a user in the GUI. It never restricts code, which may use any configured priority. See <see cref="IEngineBuilder{TFrame, TPacket, TPriority, TLevel}.Priorities"/>.</summary>
 public enum PriorityMode
 {
     /// <summary>The GUI offers the priority to a user composing a message.</summary>

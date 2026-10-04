@@ -22,6 +22,7 @@ internal sealed class EngineHost : IHostedService
         this.externalSystemsService = externalSystemsService;
         this.engineHooksService = engineHooksService;
         this.autoForwardService = autoForwardService;
+        engineController.Validate();
         logger = loggerFactory.CreateLogger("APP");
         displayName = mode == EngineMode.Headless ? $"{engineController.AppName} (Headless)" : engineController.AppName;
     }

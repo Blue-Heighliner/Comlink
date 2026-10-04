@@ -14,7 +14,7 @@
             Padding="0,0,0,12"
             Margin="0,0,0,8">
       <StackPanel Spacing="4">
-        <TextBlock Text="ACTIVITY"
+        <TextBlock Text="{vm:Display 'ACTIVITY'}"
                    FontSize="11"
                    FontWeight="SemiBold"
                    Foreground="#5A5A5A"

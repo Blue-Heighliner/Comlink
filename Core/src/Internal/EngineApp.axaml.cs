@@ -34,6 +34,9 @@ internal partial class EngineApp : Application
             catch { }
         };
 
+        IEngineController displayController = host.Services.GetRequiredService<IEngineController>();
+        DisplayExtension.Source = text => displayController.Display(text);
+
         // Run startup on thread pool to avoid SynchronizationContext deadlock with async continuations
         Task.Run(() => host.StartAsync(CancellationToken.None)).GetAwaiter().GetResult();
 

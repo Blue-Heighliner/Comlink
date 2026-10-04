@@ -46,7 +46,7 @@
                   CornerRadius="3"
                   Padding="6,2"
                   VerticalAlignment="Center">
-            <TextBlock Text="ALERT" FontSize="10" FontWeight="Bold" Foreground="White" />
+            <TextBlock Text="{vm:Display 'ALERT'}" FontSize="10" FontWeight="Bold" Foreground="White" />
           </Border>
         </StackPanel>
         <Grid ColumnDefinitions="Auto,*" RowDefinitions="Auto,Auto,Auto,Auto,Auto,Auto">

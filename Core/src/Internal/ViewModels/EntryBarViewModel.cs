@@ -435,7 +435,7 @@ internal sealed partial class EntryBarViewModel : ObservableObject, IEntryBarVie
                     {
                         string title = d.Body.FirstLine;
                         string timeText = d.ModifiedAt.ToString("dd-MMM-yyyy HH:mm").ToUpperInvariant();
-                        items.Add(new EntryItemViewModel(d.Id.ToString(), string.IsNullOrEmpty(title) ? "(Empty draft)" : title, EntryType.Draft, d.ModifiedAt, timeText: timeText, isAlert: d.IsAlert));
+                        items.Add(new EntryItemViewModel(d.Id.ToString(), string.IsNullOrEmpty(title) ? engineController.Display("(Empty draft)") : title, EntryType.Draft, d.ModifiedAt, timeText: timeText, isAlert: d.IsAlert));
                     }
                     return (items, total);
                 }
@@ -448,7 +448,7 @@ internal sealed partial class EntryBarViewModel : ObservableObject, IEntryBarVie
                         string? title = (n.Body ?? string.Empty).Split('\n').FirstOrDefault()?.Trim();
                         string timeText = n.ModifiedAt.ToString("dd-MMM-yyyy HH:mm").ToUpperInvariant();
                         items.Add(new EntryItemViewModel(n.Id.ToString(),
-                            string.IsNullOrEmpty(title) ? "(Empty note)" : title, EntryType.Note, n.ModifiedAt,
+                            string.IsNullOrEmpty(title) ? engineController.Display("(Empty note)") : title, EntryType.Note, n.ModifiedAt,
                             timeText: timeText));
                     }
                     return (items, total);

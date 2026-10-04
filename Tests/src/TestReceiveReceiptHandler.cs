@@ -1,10 +1,10 @@
 namespace BlueHeighliner.Comlink.Tests;
 
-/// <summary>Test <see cref="IReceiveReceiptHandler{TFrame}"/> for <see cref="TestFrame"/>: a frame with a non-empty <see cref="TestFrame.ReceiveReceiptMessageId"/> is a receive receipt.</summary>
-public sealed class TestReceiveReceiptHandler : IReceiveReceiptHandler<TestFrame>
+/// <summary>Test <see cref="IReceiveReceiptHandler{TFrame, TPriority}"/> for <see cref="TestFrame"/>: a frame with a non-empty <see cref="TestFrame.ReceiveReceiptMessageId"/> is a receive receipt.</summary>
+public sealed class TestReceiveReceiptHandler : IReceiveReceiptHandler<TestFrame, TestMessagePriority>
 {
     /// <inheritdoc />
-    public Enum Priority { get; init; } = TestPriority.Normal;
+    public TestMessagePriority Priority { get; init; } = TestMessagePriority.Normal;
 
     /// <inheritdoc />
     public bool IsValid(TestFrame frame) => !string.IsNullOrEmpty(frame.ReceiveReceiptMessageId);

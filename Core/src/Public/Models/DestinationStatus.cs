@@ -22,7 +22,7 @@ public enum DestinationStatus
     /// <summary>
     /// The user has opened the message. On an Inbox record this is set locally when the user opens it.
     /// On an Outbox record's per-destination status, this is set only after the sender receives that
-    /// destination's read receipt frame (see <see cref="IFrameBuilder{TFrame}"/>).
+    /// destination's read receipt frame (see <see cref="IFrameBuilder{TFrame, TPacket, TPriority, TLevel}"/>).
     /// </summary>
     Read
 }

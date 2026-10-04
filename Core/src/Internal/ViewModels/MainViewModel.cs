@@ -383,7 +383,7 @@ internal sealed partial class MainViewModel : ObservableObject, IMainViewModel
             MessageEntity entity = await entryService.StoreIncomingMessage(
                 evt.MessageId, evt.FromUser, evt.Body,
                 evt.Addresses.Select(a => new AddressData { UserName = a.UserName, Type = a.Type, Information = a.Information }).ToList(),
-                evt.SentAt, evt.IsAlert, evt.Priority, evt.Tag, evt.SecurityLevel);
+                evt.SentAt, evt.IsAlert, evt.Priority, evt.Tag, engineController.GetSecurityLevelName(evt.SecurityLevel));
 
             FolderItemViewModel? inboxFolder = folderBar.RootFolders.FirstOrDefault(f => f.RootType == FolderType.Inbox);
             if (inboxFolder is not null && folderBar.SelectedFolder?.Id == inboxFolder.Id)
@@ -391,7 +391,8 @@ internal sealed partial class MainViewModel : ObservableObject, IMainViewModel
                 string timeText = entity.ReceivedAt.ToString("dd-MMM-yyyy HH:mm").ToUpperInvariant();
                 string priorityText = engineController.NameOf(engineController.ResolvePriority(evt.Priority));
                 string? tagText = engineController.TagsEnabled && !string.IsNullOrEmpty(evt.Tag) ? evt.Tag : null;
-                string? securityLevelColor = engineController.SecurityLevels.IsRecognized(evt.SecurityLevel) ? engineController.SecurityLevels.GetColor(evt.SecurityLevel) : null;
+                string securityLevelName = engineController.GetSecurityLevelName(evt.SecurityLevel);
+                string? securityLevelColor = engineController.SecurityLevels.IsRecognized(securityLevelName) ? engineController.SecurityLevels.GetColor(securityLevelName) : null;
                 EntryItemViewModel item = new(entity.MessageId, evt.FromUser, EntryType.Message, entity.ReceivedAt,
                     secondaryText: evt.Body.FirstLine, priorityText: priorityText, tagText: tagText, timeText: timeText, securityLevelColorHex: securityLevelColor, isAlert: evt.IsAlert);
                 item.OverallStatus = entity.ReadStatus;
