@@ -129,7 +129,7 @@ A receipt is a non-message frame (see the `ReceiveReceipt` and `ReadReceipt` han
 
 ## Alert Messages
 
-An alert is an ordinary message with `IEngineController.GetIsAlert` set to `true` — nothing about its wire format, routing, or storage differs from a non-alert message. The only difference is client-side: a Client-mode UI that receives an alert message alarms (a red box in the title bar, plus a looping sound) until the user reads it, via the read receipt flow described above. See `Docs/Components/ViewModels.md` for `AlertViewModel` and the `IEngineController` members that drive this.
+Whether a message is an alert is not chosen by the user: the host's message handler decides it from the message's other fields (`IMessageHandler.IsAlert(frame)`, for example its tag), so a host can make, say, every message with a certain tag an alert, and there is no alert flag to store or send. An alert is an ordinary message for which `IEngineController.GetIsAlert` is `true` — nothing about its wire format, routing, or storage differs from a non-alert message. The only difference is client-side: a Client-mode UI that receives an alert message alarms (a red box in the title bar, plus a looping sound) until the user reads it, via the read receipt flow described above. See `Docs/Components/ViewModels.md` for `AlertViewModel` and the `IEngineController` members that drive this.
 
 ## Network Processor
 

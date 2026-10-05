@@ -51,6 +51,8 @@ public sealed record DraftExportData
 {
     /// <summary>LiteDB object-id string for this draft.</summary>
     public required string Id { get; init; }
+    /// <summary>The name the user gave the draft, or <see langword="null"/> when it is named by the first line of its body.</summary>
+    public string? Name { get; init; }
     /// <summary>Plain-text body of the draft.</summary>
     public required string Body { get; init; }
     /// <summary>The draft body with its fill-ins, or <see langword="null"/> in a package written before fill-ins were exported, in which case only <see cref="Body"/> is restored.</summary>
@@ -81,6 +83,8 @@ public sealed record NoteExportData
 {
     /// <summary>LiteDB object-id string for this note.</summary>
     public required string Id { get; init; }
+    /// <summary>The name the user gave the note, or <see langword="null"/> when it is named by the first line of its body.</summary>
+    public string? Name { get; init; }
     /// <summary>Text body of the note.</summary>
     public required string Body { get; init; }
     /// <summary>UTC timestamp when this note was first created.</summary>

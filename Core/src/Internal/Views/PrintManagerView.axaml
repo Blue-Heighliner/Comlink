@@ -18,10 +18,8 @@
                     Orientation="Horizontal"
                     Spacing="8"
                     VerticalAlignment="Center">
-          <Button Content="PURGE"
-                  Command="{Binding PurgeCommand}"
-                  FontWeight="SemiBold"
-                  FontSize="12" />
+          <Button Classes="negative" Content="PURGE"
+                  Command="{Binding PurgeCommand}" />
           <Button Content="×"
                   Command="{Binding $parent[Window].DataContext.ShowHomeCommand}"
                   ToolTip.Tip="Close"

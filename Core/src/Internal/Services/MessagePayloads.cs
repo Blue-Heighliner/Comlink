@@ -8,7 +8,6 @@ internal sealed class SendMessagePayload
     /// <summary>List of recipient addresses for this message.</summary>
     public List<AddressPayload> Addresses { get; set; } = [];
     /// <summary>Whether this message is an alert; see <see cref="IEngineController.GetIsAlert"/>.</summary>
-    public bool IsAlert { get; set; }
     /// <summary>Priority level of this message, a member of the enum the host stated for its priorities; <see langword="null"/> or one that is not a configured level is the lowest level.</summary>
     public Enum? Priority { get; set; }
     /// <summary>Tag identifying the type of this message; see <see cref="IEngineController.GetTag"/>.</summary>

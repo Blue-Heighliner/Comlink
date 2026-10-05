@@ -9,18 +9,22 @@ internal interface IEntryService
     event Func<DraftEntity, Task>? DraftInserted;
     /// <summary>Raised after an existing draft is saved.</summary>
     event Func<DraftEntity, Task>? DraftUpdated;
+    /// <summary>Raised after <see cref="SaveDraftQuietly"/> saved a draft, so what shows it can be brought up to date without anything being selected.</summary>
+    event Func<DraftEntity, Task>? DraftSavedQuietly;
     /// <summary>Raised after a new note is created and persisted.</summary>
     event Func<NoteEntity, Task>? NoteInserted;
     /// <summary>Raised after an existing note is saved.</summary>
     event Func<NoteEntity, Task>? NoteUpdated;
+    /// <summary>Raised after <see cref="SaveNoteQuietly"/> saved a note, so what shows it can be brought up to date without anything being selected.</summary>
+    event Func<NoteEntity, Task>? NoteSavedQuietly;
     /// <summary>Raised after an Inbox message's <see cref="MessageEntity.ReadStatus"/> transitions from <c>Received</c> to <c>Read</c>.</summary>
     event Func<MessageEntity, Task>? MessageRead;
     /// <summary>Persists a sent message to the Outbox folder, including per-user delivery status entries.</summary>
-    Task<MessageEntity> StoreSentMessage(string messageId, string body, List<AddressData> addresses, DateTime sentAt, IReadOnlyList<UserDeliveryResult> userResults, bool isAlert = false, Enum? priority = null, string tag = "", string securityLevel = "");
+    Task<MessageEntity> StoreSentMessage(string messageId, string body, List<AddressData> addresses, DateTime sentAt, IReadOnlyList<UserDeliveryResult> userResults, Enum? priority = null, string tag = "", string securityLevel = "");
     /// <summary>Updates the delivery status for a specific user on the Outbox record, ignoring a status that would move it backward (for example a late "Sent" after "Confirmed"); user names match case-insensitively.</summary>
     Task<MessageEntity?> UpdateDeliveryStatus(string messageId, string userName, DestinationStatus status);
     /// <summary>Persists a received message to the Inbox folder with <see cref="MessageEntity.ReadStatus"/> set to <see cref="DestinationStatus.Received"/>, and raises <see cref="MessageInserted"/>.</summary>
-    Task<MessageEntity> StoreIncomingMessage(string messageId, string fromUser, string body, List<AddressData> addresses, DateTime sentAt, bool isAlert = false, Enum? priority = null, string tag = "", string securityLevel = "");
+    Task<MessageEntity> StoreIncomingMessage(string messageId, string fromUser, string body, List<AddressData> addresses, DateTime sentAt, Enum? priority = null, string tag = "", string securityLevel = "");
     /// <summary>Returns whether the Inbox already holds a record for <paramref name="messageId"/>.</summary>
     Task<bool> IncomingMessageExists(string messageId);
     /// <summary>
@@ -29,14 +33,26 @@ internal interface IEntryService
     /// (a no-op) if the record does not exist or is already <see cref="DestinationStatus.Read"/>.
     /// </summary>
     Task<MessageEntity?> MarkMessageRead(string messageId);
-    /// <summary>Creates a new empty draft in the Drafts folder and raises <see cref="DraftInserted"/>.</summary>
-    Task<DraftEntity> CreateDraft();
-    /// <summary>Creates a new empty note in the Notes folder and raises <see cref="NoteInserted"/>.</summary>
-    Task<NoteEntity> CreateNote();
+    /// <summary>Makes a new draft for the Drafts folder with what the draft handler says a new one starts with, without saving it: nothing exists until <see cref="InsertDraft"/> is called, which is not until it has been written in.</summary>
+    Task<DraftEntity> NewDraft();
+    /// <summary>Makes a new note for the Notes folder, without saving it: nothing exists until <see cref="InsertNote"/> is called, which is not until it has been written in.</summary>
+    Task<NoteEntity> NewNote();
+    /// <summary>Saves a draft made with <see cref="NewDraft"/> and raises <see cref="DraftInserted"/>.</summary>
+    Task InsertDraft(DraftEntity entity);
+    /// <summary>Saves a note made with <see cref="NewNote"/> and raises <see cref="NoteInserted"/>.</summary>
+    Task InsertNote(NoteEntity entity);
+    /// <summary>Saves a copy of <paramref name="source"/> as a new, unsent draft in the same folder, leaving <paramref name="source"/> as it is, and raises <see cref="DraftInserted"/>.</summary>
+    Task<DraftEntity> DuplicateDraft(DraftEntity source);
+    /// <summary>Saves a copy of <paramref name="source"/> as a new note in the same folder, leaving <paramref name="source"/> as it is, and raises <see cref="NoteInserted"/>.</summary>
+    Task<NoteEntity> DuplicateNote(NoteEntity source);
     /// <summary>Persists changes to an existing draft and raises <see cref="DraftUpdated"/> if it has not yet been sent.</summary>
     Task SaveDraft(DraftEntity entity);
     /// <summary>Persists changes to an existing note and raises <see cref="NoteUpdated"/>.</summary>
     Task SaveNote(NoteEntity entity);
+    /// <summary>Persists changes to a draft the user is leaving and raises <see cref="DraftSavedQuietly"/>, which unlike <see cref="DraftUpdated"/> does not bring the draft back to the user's attention by selecting it.</summary>
+    Task SaveDraftQuietly(DraftEntity entity);
+    /// <summary>Persists changes to a note the user is leaving and raises <see cref="NoteSavedQuietly"/>, which unlike <see cref="NoteUpdated"/> does not bring the note back to the user's attention by selecting it.</summary>
+    Task SaveNoteQuietly(NoteEntity entity);
     /// <summary>
     /// Returns a page of messages from the specified folder together with the total message count. A non-empty
     /// <paramref name="filter"/> matches <see cref="EntryFilter.Search"/> case-insensitively against the message's
@@ -123,11 +139,17 @@ internal sealed class EntryService : IEntryService
     /// <summary>Raised after an existing draft is saved.</summary>
     public event Func<DraftEntity, Task>? DraftUpdated;
 
+    /// <inheritdoc />
+    public event Func<DraftEntity, Task>? DraftSavedQuietly;
+
     /// <summary>Raised after a new note is created and persisted.</summary>
     public event Func<NoteEntity, Task>? NoteInserted;
 
     /// <summary>Raised after an existing note is saved.</summary>
     public event Func<NoteEntity, Task>? NoteUpdated;
+
+    /// <inheritdoc />
+    public event Func<NoteEntity, Task>? NoteSavedQuietly;
 
     /// <summary>Raised after an Inbox message's <see cref="MessageEntity.ReadStatus"/> transitions from <c>Received</c> to <c>Read</c>.</summary>
     public event Func<MessageEntity, Task>? MessageRead;
@@ -144,13 +166,12 @@ internal sealed class EntryService : IEntryService
         _ => 4
     };
 
-    private object BuildMessage(string messageId, string fromUser, string body, List<AddressData> addresses, DateTime sentAt, bool isAlert, Enum? priority, string tag, string securityLevel)
+    private object BuildMessage(string messageId, string fromUser, string body, List<AddressData> addresses, DateTime sentAt, Enum? priority, string tag, string securityLevel)
     {
         object message = engineController.CreateMessage(new MessageContent
         {
             SentAt = sentAt,
             Body = body,
-            IsAlert = isAlert,
             Priority = engineController.RequirePriority(priority),
             Tag = tag,
             SecurityLevel = securityLevel
@@ -162,13 +183,13 @@ internal sealed class EntryService : IEntryService
     }
 
     /// <summary>Persists a sent message to the Outbox folder, including per-user delivery status entries.</summary>
-    public async Task<MessageEntity> StoreSentMessage(string messageId, string body, List<AddressData> addresses, DateTime sentAt, IReadOnlyList<UserDeliveryResult> userResults, bool isAlert = false, Enum? priority = null, string tag = "", string securityLevel = "")
+    public async Task<MessageEntity> StoreSentMessage(string messageId, string body, List<AddressData> addresses, DateTime sentAt, IReadOnlyList<UserDeliveryResult> userResults, Enum? priority = null, string tag = "", string securityLevel = "")
     {
         string outboxId = await folders.GetRootId(FolderType.Outbox);
         await deliveryLock.WaitAsync();
         try
         {
-            return await InsertSentMessage(messageId, body, addresses, sentAt, userResults, isAlert, priority, tag, securityLevel, outboxId);
+            return await InsertSentMessage(messageId, body, addresses, sentAt, userResults, priority, tag, securityLevel, outboxId);
         }
         finally
         {
@@ -176,7 +197,7 @@ internal sealed class EntryService : IEntryService
         }
     }
 
-    private async Task<MessageEntity> InsertSentMessage(string messageId, string body, List<AddressData> addresses, DateTime sentAt, IReadOnlyList<UserDeliveryResult> userResults, bool isAlert, Enum? priority, string tag, string securityLevel, string outboxId)
+    private async Task<MessageEntity> InsertSentMessage(string messageId, string body, List<AddressData> addresses, DateTime sentAt, IReadOnlyList<UserDeliveryResult> userResults, Enum? priority, string tag, string securityLevel, string outboxId)
     {
         List<DeliveryStatus> deliveryStatuses = [];
         foreach (UserDeliveryResult result in userResults)
@@ -193,7 +214,7 @@ internal sealed class EntryService : IEntryService
         MessageEntity entity = new()
         {
             MessageId = messageId,
-            Message = BuildMessage(messageId, currentUserProvider.UserName ?? string.Empty, body, addresses, sentAt, isAlert, priority, tag, securityLevel),
+            Message = BuildMessage(messageId, currentUserProvider.UserName ?? string.Empty, body, addresses, sentAt, priority, tag, securityLevel),
             DeliveryStatuses = deliveryStatuses,
             ReceivedAt = sentAt,
             FolderId = outboxId,
@@ -247,13 +268,13 @@ internal sealed class EntryService : IEntryService
     }
 
     /// <summary>Persists a received message to the Inbox folder and raises <see cref="MessageInserted"/>.</summary>
-    public async Task<MessageEntity> StoreIncomingMessage(string messageId, string fromUser, string body, List<AddressData> addresses, DateTime sentAt, bool isAlert = false, Enum? priority = null, string tag = "", string securityLevel = "")
+    public async Task<MessageEntity> StoreIncomingMessage(string messageId, string fromUser, string body, List<AddressData> addresses, DateTime sentAt, Enum? priority = null, string tag = "", string securityLevel = "")
     {
         string inboxId = await folders.GetRootId(FolderType.Inbox);
         MessageEntity entity = new()
         {
             MessageId = messageId,
-            Message = BuildMessage(messageId, fromUser, body, addresses, sentAt, isAlert, priority, tag, securityLevel),
+            Message = BuildMessage(messageId, fromUser, body, addresses, sentAt, priority, tag, securityLevel),
             ReceivedAt = sentAt,
             FolderId = inboxId,
             ReadStatus = DestinationStatus.Received
@@ -287,28 +308,65 @@ internal sealed class EntryService : IEntryService
         return entity;
     }
 
-    /// <summary>Creates a new empty draft in the Drafts folder and raises <see cref="DraftInserted"/>.</summary>
-    public async Task<DraftEntity> CreateDraft()
+    /// <inheritdoc />
+    public async Task<DraftEntity> NewDraft()
     {
         string draftsId = await folders.GetRootId(FolderType.Drafts);
-        DraftEntity entity = new() { FolderId = draftsId };
-        await drafts.Insert(entity);
-
-        await DraftInserted.InvokeAll(entity);
-
-        return entity;
+        DraftDefaults defaults = engineController.DraftDefaults;
+        return new DraftEntity
+        {
+            FolderId = draftsId,
+            Tag = defaults.Tag,
+            Priority = defaults.Priority is { } priority ? engineController.StoredPriority(priority) : 0,
+            SecurityLevel = defaults.SecurityLevel is { } level ? engineController.SecurityLevels.FirstOrDefault(candidate => level.Equals(candidate.Key))?.Value : null
+        };
     }
 
-    /// <summary>Creates a new empty note in the Notes folder and raises <see cref="NoteInserted"/>.</summary>
-    public async Task<NoteEntity> CreateNote()
+    /// <inheritdoc />
+    public async Task<NoteEntity> NewNote() => new() { FolderId = await folders.GetRootId(FolderType.Notes) };
+
+    /// <inheritdoc />
+    public async Task InsertDraft(DraftEntity entity)
     {
-        string notesId = await folders.GetRootId(FolderType.Notes);
-        NoteEntity entity = new() { FolderId = notesId };
+        entity.ModifiedAt = DateTime.UtcNow;
+        await drafts.Insert(entity);
+        await DraftInserted.InvokeAll(entity);
+    }
+
+    /// <inheritdoc />
+    public async Task InsertNote(NoteEntity entity)
+    {
+        entity.ModifiedAt = DateTime.UtcNow;
         await notes.Insert(entity);
-
         await NoteInserted.InvokeAll(entity);
+    }
 
-        return entity;
+    /// <inheritdoc />
+    public async Task<DraftEntity> DuplicateDraft(DraftEntity source)
+    {
+        DraftEntity copy = new()
+        {
+            Name = source.Name,
+            Body = source.Body,
+            BodySegmentsJson = source.BodySegmentsJson,
+            Addresses = [.. source.Addresses.Select(a => new AddressData { UserName = a.UserName, Type = a.Type, Information = a.Information })],
+            IsAlert = source.IsAlert,
+            Priority = source.Priority,
+            Tag = source.Tag,
+            SecurityLevel = source.SecurityLevel,
+            LineWidth = source.LineWidth,
+            FolderId = source.FolderId
+        };
+        await InsertDraft(copy);
+        return copy;
+    }
+
+    /// <inheritdoc />
+    public async Task<NoteEntity> DuplicateNote(NoteEntity source)
+    {
+        NoteEntity copy = new() { Name = source.Name, Body = source.Body, FolderId = source.FolderId };
+        await InsertNote(copy);
+        return copy;
     }
 
     /// <summary>Persists changes to an existing draft and raises <see cref="DraftUpdated"/> if it has not yet been sent.</summary>
@@ -317,6 +375,22 @@ internal sealed class EntryService : IEntryService
         entity.ModifiedAt = DateTime.UtcNow;
         await drafts.Update(entity);
         if (!entity.IsSent) { await DraftUpdated.InvokeAll(entity); }
+    }
+
+    /// <inheritdoc />
+    public async Task SaveDraftQuietly(DraftEntity entity)
+    {
+        entity.ModifiedAt = DateTime.UtcNow;
+        await drafts.Update(entity);
+        await DraftSavedQuietly.InvokeAll(entity);
+    }
+
+    /// <inheritdoc />
+    public async Task SaveNoteQuietly(NoteEntity entity)
+    {
+        entity.ModifiedAt = DateTime.UtcNow;
+        await notes.Update(entity);
+        await NoteSavedQuietly.InvokeAll(entity);
     }
 
     /// <summary>Persists changes to an existing note and raises <see cref="NoteUpdated"/>.</summary>
@@ -400,14 +474,14 @@ internal sealed class EntryService : IEntryService
         if (filter.AlertOnly is true && !entity.IsAlert) { return false; }
         if (filter.SecurityLevel is { } level && !string.Equals(engineController.SecurityLevels.FirstOrDefault(candidate => candidate.Value == entity.SecurityLevel)?.Name, level, StringComparison.OrdinalIgnoreCase)) { return false; }
         if (!string.IsNullOrWhiteSpace(filter.Destination) && !entity.Addresses.Any(a => Contains(a.UserName, filter.Destination.Trim()))) { return false; }
-        return string.IsNullOrWhiteSpace(filter.Search) || Contains(entity.Body, filter.Search) || Contains(entity.Tag, filter.Search);
+        return string.IsNullOrWhiteSpace(filter.Search) || Contains(entity.Body, filter.Search) || Contains(entity.Tag, filter.Search) || Contains(entity.Name ?? string.Empty, filter.Search);
     }
 
     private static bool MatchesNote(NoteEntity entity, EntryFilter filter)
     {
         if (filter.DateFrom is { } from && entity.ModifiedAt < from) { return false; }
         if (filter.DateTo is { } to && entity.ModifiedAt > to) { return false; }
-        return string.IsNullOrWhiteSpace(filter.Search) || Contains(entity.Body, filter.Search);
+        return string.IsNullOrWhiteSpace(filter.Search) || Contains(entity.Body, filter.Search) || Contains(entity.Name ?? string.Empty, filter.Search);
     }
 
     private static bool Contains(string? value, string search) => !string.IsNullOrEmpty(value) && value.Contains(search, StringComparison.OrdinalIgnoreCase);

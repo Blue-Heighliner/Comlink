@@ -112,13 +112,15 @@ internal interface IEngineController
     /// pending alerts one at a time, most-recently-received first.
     /// </summary>
     bool QuickConfirmationEnabled { get; }
-    /// <summary>
-    /// When <see langword="true"/>, the draft editor shows the alert checkbox so the user can mark and send
-    /// a draft as an alert. When <see langword="false"/>, the checkbox is hidden and a draft can never be
-    /// composed or sent as an alert from this app — alerts can still arrive from and be raised for a
-    /// peer-originated message.
-    /// </summary>
-    bool ComposeAlertsEnabled { get; }
+    /// <summary>Gets how wide a line of a draft may be (see <see cref="IDraftHandler{TPriority, TLevel}"/>), or <see langword="null"/> when the draft view does not offer a width, which is without a draft handler or when it states neither a default nor a maximum.</summary>
+    LineWidthRange? DraftLineWidth { get; }
+    /// <summary>Gets what message tags may be: their case, length, and whether they may hold symbols, numbers and spaces (see <see cref="IDraftHandler{TPriority, TLevel}"/>). Unrestricted without a draft handler.</summary>
+    TagRules DraftTagRules { get; }
+    /// <summary>Gets what a new draft starts with: its tag, priority and security level (see <see cref="IDraftHandler{TPriority, TLevel}"/>).</summary>
+    DraftDefaults DraftDefaults { get; }
+    /// <summary>Returns the header a message sent from the draft described by <paramref name="draft"/> must start with, or <see langword="null"/> for none (always the case without a draft handler).</summary>
+    /// <param name="draft">The draft as it currently is.</param>
+    string? GetDraftHeader(DraftContent draft);
 
     /// <summary>Every selectable priority level, in display order.</summary>
     IReadOnlyList<MessagePriorityOption> Priorities { get; }
@@ -355,6 +357,14 @@ internal interface IEngineController
     /// <param name="priority">The level, a member of the enum stated for the priorities, or <see langword="null"/> for the lowest.</param>
     /// <exception cref="ArgumentException"><paramref name="priority"/> is not a configured level.</exception>
     Enum RequirePriority(Enum? priority);
+    /// <summary>Returns whether a message with these properties would be an alert, which the host's message handler decides from the message's fields: the engine makes the message and asks it.</summary>
+    /// <param name="body">The body text, which a draft being composed does not have yet (an empty string).</param>
+    /// <param name="priority">The priority level, a member of the enum stated for the priorities, or <see langword="null"/> for the lowest.</param>
+    /// <param name="tag">The tag, or an empty string for none.</param>
+    /// <param name="securityLevel">The security level name, or an empty string for none.</param>
+    /// <param name="addresses">The recipients.</param>
+    /// <exception cref="ArgumentException">The priority or security level is not a configured one.</exception>
+    bool ComputeIsAlert(string body, Enum? priority, string tag, string securityLevel, IReadOnlyList<AddressRequest> addresses);
     /// <summary>Returns why the received message <paramref name="message"/> carries a priority or security level that is not a configured one, or <see langword="null"/> when it does not (or it is not a message).</summary>
     /// <param name="message">An instance of <see cref="FrameType"/>.</param>
     string? GetUnconfiguredLevelReason(object message);
@@ -526,6 +536,7 @@ internal class EngineController(EngineBuilder builder, ICurrentUserProvider curr
         definition => definition.Name));
     private readonly Lazy<IInitialProcessor?> initialPacketProcessor = new(() => builder.InitialPacketProcessor?.Create(services));
     private readonly Lazy<IInitialProcessor?> initialMessageProcessor = new(() => builder.InitialFrameProcessor?.Create(services));
+    private readonly Lazy<IDraftFrameHandler?> draftHandler = new(() => builder.DraftHandler?.Create(services));
     private readonly Lazy<IDeleteHandler?> deleteHandler = new(() => builder.DeleteHandler?.Create(services));
     private readonly Lazy<INetworkHandler?> networkHandler = new(() => builder.NetworkHandler?.Create(services));
     private readonly IReadOnlyList<MessagePriorityOption> defaultPriorities = [new MessagePriorityOption { Name = "NORMAL", Value = 0, Key = NoPriority.Normal }];
@@ -606,7 +617,20 @@ internal class EngineController(EngineBuilder builder, ICurrentUserProvider curr
     /// <inheritdoc />
     public virtual bool QuickConfirmationEnabled => builder.QuickConfirmationValue ?? true;
     /// <inheritdoc />
-    public virtual bool ComposeAlertsEnabled => builder.ComposeAlertsValue ?? true;
+    public virtual DraftDefaults DraftDefaults
+        => draftHandler.Value is { } handler ? new DraftDefaults(DraftTagRules.Filter(handler.DefaultTag ?? string.Empty), handler.DefaultPriority, handler.DefaultSecurityLevel) : DraftDefaults.None;
+
+    /// <inheritdoc />
+    public virtual TagRules DraftTagRules => draftHandler.Value?.TagRules ?? TagRules.Unrestricted;
+
+    /// <inheritdoc />
+    public virtual LineWidthRange? DraftLineWidth
+        => draftHandler.Value is { } handler && (handler.DefaultLineWidth is not null || handler.MaxLineWidth is not null)
+            ? new LineWidthRange(handler.DefaultLineWidth, Math.Max(1, handler.MinLineWidth), handler.MaxLineWidth)
+            : null;
+
+    /// <inheritdoc />
+    public virtual string? GetDraftHeader(DraftContent draft) => draftHandler.Value?.GetHeader(draft).OrNull();
 
     /// <inheritdoc />
     public virtual IReadOnlyList<MessagePriorityOption> Priorities => builder.PriorityOptions.Count > 0 ? builder.PriorityOptions : defaultPriorities;
@@ -859,7 +883,7 @@ internal class EngineController(EngineBuilder builder, ICurrentUserProvider curr
     /// <inheritdoc />
     public virtual string GetBody(object value) => messageHandler.Value.GetBody(value);
     /// <inheritdoc />
-    public virtual bool GetIsAlert(object value) => messageHandler.Value.GetIsAlert(value);
+    public virtual bool GetIsAlert(object value) => messageHandler.Value.IsAlert(value);
     /// <inheritdoc />
     public virtual string NextId(string? previous) => messageHandler.Value.NextId(previous);
     /// <inheritdoc />
@@ -868,6 +892,14 @@ internal class EngineController(EngineBuilder builder, ICurrentUserProvider curr
     public virtual int HighestPriority => Priorities.Max(priority => priority.Value);
     /// <inheritdoc />
     public virtual Enum ResolvePriority(Enum? priority) => (Priorities.FirstOrDefault(level => priority is not null && priority.Equals(level.Key)) ?? Priorities[0]).Key;
+    /// <inheritdoc />
+    public virtual bool ComputeIsAlert(string body, Enum? priority, string tag, string securityLevel, IReadOnlyList<AddressRequest> addresses)
+    {
+        object message = CreateMessage(new MessageContent { SentAt = DateTime.UtcNow, Body = body, Priority = RequirePriority(priority), Tag = tag, SecurityLevel = securityLevel });
+        SetAddresses(message, [.. addresses.Select(a => new MessageAddress { UserName = a.UserName, Type = a.Type.ParseAddressType(), Information = a.Information })]);
+        return messageHandler.Value.IsAlert(message);
+    }
+
     /// <inheritdoc />
     public virtual Enum RequirePriority(Enum? priority)
         => priority is null ? Priorities[0].Key

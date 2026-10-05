@@ -13,13 +13,9 @@
                        FontSize="13"
                        TextWrapping="Wrap" />
             <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" Spacing="8">
-                <Button x:Name="CancelBtn"
-                        Content="Cancel"
-                        FontSize="12"
-                        Padding="12,5" />
-                <Button x:Name="OkBtn"
-                        FontSize="12"
-                        Padding="12,5" />
+                <Button Classes="neutral" x:Name="CancelBtn"
+                        Content="Cancel" />
+                <Button Classes="negative" x:Name="OkBtn" />
             </StackPanel>
         </StackPanel>
     </Border>

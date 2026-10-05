@@ -5,6 +5,8 @@ internal sealed class NoteEntity
 {
     /// <summary>Unique document identifier.</summary>
     public ObjectId Id { get; set; } = ObjectId.NewObjectId();
+    /// <summary>The name the user gave the note, or <c>null</c> to be named by the first line of its body.</summary>
+    public string? Name { get; set; }
     /// <summary>Text body of the note.</summary>
     public string Body { get; set; } = string.Empty;
     /// <summary>UTC timestamp when this note was first created.</summary>

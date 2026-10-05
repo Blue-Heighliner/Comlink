@@ -292,6 +292,22 @@ public sealed class DirectServiceConnectionTests
         Assert.True(result.UserResults[0].Success);
     }
 
+    /// <summary>Whether a sent message is an alert is decided by the host's message handler from the message's other fields, and reported in the result.</summary>
+    [Fact]
+    public async Task SendMessage_IsAlertComesFromTheMessageHandler()
+    {
+        DirectServiceConnection conn = Build(out _, out FakeMessageRoutingService routing,
+            out Mock<IUserService> user, out _, out _);
+        user.Setup(s => s.GetCurrentUserInfo()).Returns(new UserInfo { Name = "ALPHA" });
+        routing.RouteResult = ("MSGID1", []);
+
+        SendMessageResult? alert = await conn.SendMessage("Body", [new AddressRequest { UserName = "DEST" }], tag: "ALERT");
+        Assert.True(alert!.IsAlert);
+
+        SendMessageResult? plain = await conn.SendMessage("Body", [new AddressRequest { UserName = "DEST" }], tag: "OTHER");
+        Assert.False(plain!.IsAlert);
+    }
+
     /// <summary>SendMessage passes the priority argument through to the routing payload.</summary>
     [Fact]
     public async Task SendMessage_PassesPriorityThroughToPayload()

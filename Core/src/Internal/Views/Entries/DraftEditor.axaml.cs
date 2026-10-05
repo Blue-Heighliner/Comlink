@@ -51,12 +51,133 @@ internal partial class DraftEditor : UserControl
             handledEventsToo: true);
 
         DataContextChanged += OnDataContextChanged;
+        TagBox.TextChanged += OnTagTextChanged;
+        BodyHost.SizeChanged += (_, _) => ApplyViewWidth();
+        Toolbar.SizeChanged += (_, _) => ArrangeToolbar();
+        Toolbar.LayoutUpdated += (_, _) => ArrangeToolbar();
+        Aspects.SizeChanged += (_, _) => ArrangeToolbar();
+        Actions.SizeChanged += (_, _) => ArrangeToolbar();
+    }
+
+    private void ArrangeToolbar()
+    {
+        double needed = Aspects.Children.Where(child => child.IsVisible).Sum(child => child.DesiredSize.Width) + Actions.Children.Where(child => child.IsVisible).Sum(child => child.DesiredSize.Width) + (Actions.Spacing * Actions.Children.Count(child => child.IsVisible)) + Actions.Margin.Left;
+        bool beside = Toolbar.Bounds.Width <= 0 || Toolbar.Bounds.Width >= needed;
+        Grid.SetRow(Actions, beside ? 0 : 1);
+        Grid.SetColumn(Actions, beside ? 1 : 0);
+        Grid.SetColumnSpan(Actions, beside ? 1 : 2);
+        Actions.HorizontalAlignment = beside ? HorizontalAlignment.Left : HorizontalAlignment.Right;
     }
 
     private FillInElementGenerator? fillInGenerator;
+    private System.ComponentModel.INotifyPropertyChanged? watchedViewModel;
+    private System.Collections.ObjectModel.ObservableCollection<AddressData>? watchedAddresses;
+    private double? chrome;
+
+    // After a recipient is added the name box is ready for the next one.
+    private void OnAddressesChanged(object? sender, System.Collections.Specialized.NotifyCollectionChangedEventArgs e)
+    {
+        if (e.Action == System.Collections.Specialized.NotifyCollectionChangedAction.Add) { Dispatcher.UIThread.Post(() => UserInput.Focus()); }
+    }
+
+    private void OnViewModelPropertyChanged(object? sender, System.ComponentModel.PropertyChangedEventArgs e)
+    {
+        if (e.PropertyName == nameof(IDraftViewModel.LineWidth)) { ApplyViewWidth(); }
+    }
+
+    /// <summary>
+    /// Shows the body, and the header above it, as wide as the draft's line width in monospace characters, so the text wraps there. It only changes how the text is shown: no line break
+    /// is added to the text, so changing the width never changes the draft.
+    /// </summary>
+    private void ApplyViewWidth()
+    {
+        if (DataContext is not IDraftViewModel vm) { return; }
+
+        if (vm.LineWidth is not { } width)
+        {
+            BodyEditor.ClearValue(WidthProperty);
+            HeaderBorder.ClearValue(WidthProperty);
+            BodyEditor.Options.ShowColumnRulers = false;
+            BodyEditor.HorizontalAlignment = HorizontalAlignment.Stretch;
+            return;
+        }
+
+        if (chrome is null)
+        {
+            if (BodyEditor.Bounds.Width <= 0 || BodyEditor.TextArea.TextView.Bounds.Width <= 0)
+            {
+                BodyEditor.LayoutUpdated += OnBodyLayoutUpdated;
+                return;
+            }
+
+            chrome = BodyEditor.Bounds.Width - BodyEditor.TextArea.TextView.Bounds.Width;
+        }
+
+        FormattedText probe = new("0", System.Globalization.CultureInfo.InvariantCulture, FlowDirection.LeftToRight, new Typeface(BodyEditor.FontFamily), BodyEditor.FontSize, Brushes.White);
+        double text = (width * probe.Width) + 0.5;
+        BodyEditor.HorizontalAlignment = HorizontalAlignment.Left;
+        // A line is never shown wider than the room there is, so the body never runs under the recipients; the cut-off is exact whenever it fits.
+        double room = BodyHost.Bounds.Width > 0 ? BodyHost.Bounds.Width : double.PositiveInfinity;
+        BodyEditor.Width = Math.Min(text + chrome.Value, room);
+        // The box has a one pixel border on the right, which is not room for text.
+        HeaderBorder.Width = Math.Min(text + 1, room);
+
+        // The cut-off: a ruler at the last column of a line in the body, and the right edge of the header's box, which is as wide as a line.
+        BodyEditor.Options.ColumnRulerPositions = [width];
+        BodyEditor.Options.ShowColumnRulers = true;
+        BodyEditor.TextArea.TextView.ColumnRulerPen = new Pen(new SolidColorBrush(Color.Parse("#4A4A4F")), 1, DashStyle.Dash);
+    }
+
+    /// <summary>Sizes the tag box to fit exactly as many monospace characters as a tag may have, and keeps more from being typed. Without a maximum it keeps its usual width.</summary>
+    private void ApplyTagBoxWidth(IDraftViewModel vm)
+    {
+        if (vm.TagMaxLength is not { } max)
+        {
+            TagBox.MaxLength = 0;
+            return;
+        }
+
+        FontFamily monoFont = new("avares://BlueHeighliner.Comlink/Assets/Fonts/DejaVuSansMono.ttf#DejaVu Sans Mono");
+        FormattedText probe = new("0", System.Globalization.CultureInfo.InvariantCulture, FlowDirection.LeftToRight, new Typeface(monoFont), TagBox.FontSize, Brushes.White);
+        TagBox.FontFamily = monoFont;
+        TagBox.MaxLength = max;
+        TagBox.Padding = new Thickness(6, 4);
+        // The characters, the padding on both sides, and room for the caret after the last one.
+        TagBox.Width = Math.Ceiling((max * probe.Width) + 12 + 2);
+    }
+
+    private void OnBodyLayoutUpdated(object? sender, EventArgs e)
+    {
+        BodyEditor.LayoutUpdated -= OnBodyLayoutUpdated;
+        ApplyViewWidth();
+    }
+
+    private void OnTagTextChanged(object? sender, TextChangedEventArgs e)
+    {
+        if (DataContext is not IDraftViewModel vm || TagBox.Text is not { } text) { return; }
+
+        string allowed = vm.FilterTag(text);
+        if (allowed == text) { return; }
+
+        int caret = TagBox.CaretIndex;
+        TagBox.Text = allowed;
+        TagBox.CaretIndex = Math.Min(caret, allowed.Length);
+    }
 
     private void OnDataContextChanged(object? sender, EventArgs e)
     {
+        if (watchedViewModel is not null)
+        {
+            watchedViewModel.PropertyChanged -= OnViewModelPropertyChanged;
+            watchedViewModel = null;
+        }
+
+        if (watchedAddresses is not null)
+        {
+            watchedAddresses.CollectionChanged -= OnAddressesChanged;
+            watchedAddresses = null;
+        }
+
         if (fillInGenerator is not null)
         {
             BodyEditor.TextArea.TextView.ElementGenerators.Remove(fillInGenerator);
@@ -72,6 +193,13 @@ internal partial class DraftEditor : UserControl
         BodyEditor.Document = vm.BodyDocument is TextDocumentBodyDocument textDocument
             ? textDocument.Document
             : new TextDocument(vm.BodyDocument.Text);
+
+        watchedViewModel = vm as System.ComponentModel.INotifyPropertyChanged;
+        if (watchedViewModel is not null) { watchedViewModel.PropertyChanged += OnViewModelPropertyChanged; }
+        watchedAddresses = vm.Addresses;
+        watchedAddresses.CollectionChanged += OnAddressesChanged;
+        ApplyViewWidth();
+        ApplyTagBoxWidth(vm);
 
         fillInGenerator = new FillInElementGenerator(vm.FillIns);
         BodyEditor.TextArea.TextView.ElementGenerators.Add(fillInGenerator);

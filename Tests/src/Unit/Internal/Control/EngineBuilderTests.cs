@@ -175,6 +175,40 @@ public sealed class EngineBuilderTests
         Assert.Throws<ArgumentException>(() => controller.GetSecurityLevelName(TestMessagePriority.High));
     }
 
+    /// <summary>Without a draft handler the draft view offers no width and no header, and the handler's range, initial width and header are reported otherwise.</summary>
+    [Fact]
+    public void Drafts_HandlerStatesTheWidthRangeAndHeader()
+    {
+        (_, EngineController none) = Build(engine => engine);
+        (_, EngineController full) = Build(engine => engine.Drafts<TestDraftHandler>());
+        (_, EngineController headerOnly) = Build(engine => engine.Drafts<TestHeaderOnlyDraftHandler>());
+        (_, EngineController maxOnly) = Build(engine => engine.Drafts<TestMaxOnlyDraftHandler>());
+        DraftContent withTag = new() { Tag = "X", Priority = TestMessagePriority.Normal, SecurityLevel = "", IsAlert = false, Addresses = [], LineWidth = null };
+
+        Assert.Null(none.DraftLineWidth);
+        Assert.Null(none.GetDraftHeader(withTag));
+        Assert.Equal(new LineWidthRange(60, 20, 80), full.DraftLineWidth);
+        Assert.Equal((60, 20, 80), (full.DraftLineWidth!.Initial, full.DraftLineWidth.Clamp(5), full.DraftLineWidth.Clamp(500)));
+        Assert.Equal("TAG: X", full.GetDraftHeader(withTag));
+        Assert.Null(full.GetDraftHeader(withTag with { Tag = "" }));
+        Assert.Null(headerOnly.DraftLineWidth);
+        Assert.Equal("HEADER", headerOnly.GetDraftHeader(withTag));
+        Assert.Equal(40, maxOnly.DraftLineWidth!.Initial);
+    }
+
+    /// <summary>The tag rules are the draft handler's, and unrestricted without one.</summary>
+    [Fact]
+    public void Drafts_HandlerStatesTheTagRules()
+    {
+        (_, EngineController none) = Build(engine => engine);
+        (_, EngineController ruled) = Build(engine => engine.Drafts<TestTagRulesDraftHandler>());
+
+        Assert.Equal(TagRules.Unrestricted, none.DraftTagRules);
+        Assert.Equal(new TagRules(TagCase.Upper, 2, 6, false, true, false, true), ruled.DraftTagRules);
+        Assert.Equal(DraftDefaults.None, none.DraftDefaults);
+        Assert.Equal(new DraftDefaults("NEWTAG", TestMessagePriority.Level3, TestLevel.Restricted), ruled.DraftDefaults);
+    }
+
     /// <summary>A priority enum other than the no-priority one needs its levels stated.</summary>
     [Fact]
     public void Build_WithoutPriorityLevels_Throws()
@@ -226,7 +260,6 @@ public sealed class EngineBuilderTests
         Assert.Equal("ALERT", controller.AlertLabel);
         Assert.Equal(TimeSpan.FromSeconds(30), controller.AlarmSoundDuration);
         Assert.True(controller.QuickConfirmationEnabled);
-        Assert.True(controller.ComposeAlertsEnabled);
         Assert.Equal("Tag", controller.TagLabel);
         Assert.True(controller.TagsEnabled);
         Assert.False(controller.PrintReceivedDefaultEnabled);
@@ -285,7 +318,7 @@ public sealed class EngineBuilderTests
     public void Stated_CompositionAndAlertSettings_AreReported()
     {
         (_, EngineController controller) = Build(engine => engine
-            .Display<TestDisplayHandler>().AlarmDuration(TimeSpan.FromSeconds(5)).QuickConfirmation(false).ComposeAlerts(false)
+            .Display<TestDisplayHandler>().AlarmDuration(TimeSpan.FromSeconds(5)).QuickConfirmation(false)
             .Priorities().Priority(TestMessagePriority.High).Label("TOP").Mode(PriorityMode.System).Block(null, "SPAM").Block(TestMessagePriority.High, null)
             .Tags(false)
             .PrintReceived()
@@ -294,7 +327,6 @@ public sealed class EngineBuilderTests
         Assert.Equal("ALARM", controller.AlertLabel);
         Assert.Equal(TimeSpan.FromSeconds(5), controller.AlarmSoundDuration);
         Assert.False(controller.QuickConfirmationEnabled);
-        Assert.False(controller.ComposeAlertsEnabled);
         Assert.Equal(["NORMAL", "TOP"], [controller.Priorities[0].Name, controller.Priorities[^1].Name]);
         Assert.Equal([PriorityMode.User, PriorityMode.System], [controller.Priorities[0].Mode, controller.Priorities[^1].Mode]);
         Assert.False(controller.TagsEnabled);
@@ -454,9 +486,9 @@ public sealed class EngineBuilderTests
         Assert.Equal(12, configured.GetPriority(new TestFrame { Priority = "receipt" }));
         Assert.Equal(0, configured.GetPriority(new TestFrame { Priority = "BOGUS" }));
         Assert.Equal(TestMessagePriority.Receipt, configured.GetMessagePriority(new TestFrame { Priority = "Receipt" }));
-        Assert.Equal("NORMAL", ((TestFrame)configured.CreateMessage(new MessageContent { SentAt = DateTime.UtcNow, Body = "B", IsAlert = false, Priority = TestMessagePriority.Normal, Tag = "", SecurityLevel = "" })).Priority);
-        Assert.Throws<ArgumentException>(() => configured.CreateMessage(new MessageContent { SentAt = DateTime.UtcNow, Body = "B", IsAlert = false, Priority = TestLevel.High, Tag = "", SecurityLevel = "" }));
-        Assert.Throws<ArgumentException>(() => configured.CreateMessage(new MessageContent { SentAt = DateTime.UtcNow, Body = "B", IsAlert = false, Priority = TestMessagePriority.Normal, Tag = "", SecurityLevel = "BOGUS" }));
+        Assert.Equal("NORMAL", ((TestFrame)configured.CreateMessage(new MessageContent { SentAt = DateTime.UtcNow, Body = "B", Priority = TestMessagePriority.Normal, Tag = "", SecurityLevel = "" })).Priority);
+        Assert.Throws<ArgumentException>(() => configured.CreateMessage(new MessageContent { SentAt = DateTime.UtcNow, Body = "B", Priority = TestLevel.High, Tag = "", SecurityLevel = "" }));
+        Assert.Throws<ArgumentException>(() => configured.CreateMessage(new MessageContent { SentAt = DateTime.UtcNow, Body = "B", Priority = TestMessagePriority.Normal, Tag = "", SecurityLevel = "BOGUS" }));
     }
 
     /// <summary>The packet size and window are stated on the packet configuration, defaulting to 16 KiB and 1.</summary>

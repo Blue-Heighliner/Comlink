@@ -16,15 +16,13 @@ internal interface IDraftViewModel
     string NewAddressInformation { get; set; }
     /// <summary>Gets or sets a value indicating whether this draft has been sent.</summary>
     bool IsSent { get; set; }
-    /// <summary>Gets or sets a value indicating whether this draft will be sent as an alert.</summary>
-    bool IsAlert { get; set; }
+    /// <summary>Gets a value indicating whether this draft will be sent as an alert, which the host's message handler decides from the draft's other properties (see <see cref="IEngineController.ComputeIsAlert"/>), so the user does not set it.</summary>
+    bool IsAlert { get; }
     /// <summary>
     /// Gets the label for the alert checkbox, sourced from <see cref="IEngineController.AlertLabel"/> — the
     /// same text shown in the title bar's alert box, so both surfaces always agree on what "alert" is called.
     /// </summary>
     string AlertLabel { get; }
-    /// <summary>Gets a value indicating whether the alert checkbox is shown; see <see cref="IEngineController"/>.</summary>
-    bool ComposeAlertsEnabled { get; }
     /// <summary>
     /// Gets the message priority levels available to choose from; see <see cref="IEngineController.Priorities"/>.
     /// Excludes any priority that <see cref="IEngineController.BlockedCombinations"/> blocks for the current
@@ -74,6 +72,23 @@ internal interface IDraftViewModel
     IBodyDocument BodyDocument { get; }
     /// <summary>Gets the map of fill-in IDs to their ViewModels, keyed by the 8-char hex ID.</summary>
     IReadOnlyDictionary<string, IFillInViewModel> FillIns { get; }
+    /// <summary>Gets the most characters a tag may have, or <see langword="null"/> for no maximum, which the tag box is sized to fit exactly.</summary>
+    int? TagMaxLength { get; }
+    /// <summary>Returns <paramref name="tag"/> as the tag rules make it: in the forced case, without what is not allowed, and cut to the maximum length.</summary>
+    /// <param name="tag">The tag as entered.</param>
+    string FilterTag(string tag);
+    /// <summary>Gets or sets how many monospace characters wide a line of the draft is shown, or <see langword="null"/> for no limit. Kept within the range the draft handler states. It only changes how the text is shown: no line break is ever added to the text.</summary>
+    int? LineWidth { get; set; }
+    /// <summary>Gets or sets <see cref="LineWidth"/> as the number the draft view's width control edits, with an empty control meaning no limit.</summary>
+    decimal? LineWidthValue { get; set; }
+    /// <summary>Gets whether the draft view offers a line width, which depends on the draft handler.</summary>
+    bool IsLineWidthAvailable { get; }
+    /// <summary>Gets the narrowest a line may be: what the draft handler states, but never less than the longest line of the <see cref="Header"/>, so the header always fits.</summary>
+    decimal LineWidthMinimum { get; }
+    /// <summary>Gets the widest a line may be; very large when there is no maximum. Never less than <see cref="LineWidthMinimum"/>: a header wider than the handler's maximum wins.</summary>
+    decimal LineWidthMaximum { get; }
+    /// <summary>Gets the header every message sent from the draft starts with, or <see langword="null"/> for none. Shown above the body where it cannot be edited, and asked for again whenever an aspect of the draft changes.</summary>
+    string? Header { get; }
     /// <summary>Gets all known user names available for recipient auto-complete.</summary>
     IReadOnlyList<string> AllUserNames { get; }
     /// <summary>Gets the selectable address types, each paired with its display label; see <see cref="IEngineController.AddressTypes"/>.</summary>
@@ -96,6 +111,22 @@ internal interface IDraftViewModel
     IRelayCommand AddAddressCommand { get; }
     /// <summary>Removes the specified address from the recipient list.</summary>
     IRelayCommand<AddressData> RemoveAddressCommand { get; }
+    /// <summary>Gets the recipients grouped by address type, in the order of the address types, each group in the order its recipients were added or moved to.</summary>
+    ObservableCollection<AddressGroup> AddressGroups { get; }
+    /// <summary>Moves the specified recipient up within its address type.</summary>
+    IRelayCommand<AddressData> MoveAddressUpCommand { get; }
+    /// <summary>Moves the specified recipient down within its address type.</summary>
+    IRelayCommand<AddressData> MoveAddressDownCommand { get; }
+    /// <summary>Raised when what the draft is titled in the list changes while it is being edited: its name, or else the first line of its body.</summary>
+    event Action<string>? TitleChanged;
+    /// <summary>Gets or sets the name the user gave the draft, shown in the list instead of the first line of the body. Empty clears it.</summary>
+    string Name { get; set; }
+    /// <summary>Duplicates the draft as it is now into a new draft, leaving this one as it was.</summary>
+    IAsyncRelayCommand DuplicateCommand { get; }
+    /// <summary>Raised with the id of the new draft after it has been created by <see cref="DuplicateCommand"/>.</summary>
+    event Func<string, Task>? Duplicated;
+    /// <summary>Saves what has been written to the data store without saying so, which is what happens when the user leaves the draft. Does nothing for a draft that was sent or deleted.</summary>
+    Task SaveChanges();
 
     /// <summary>Inserts a new fill-in marker into the body document at the specified caret offset.</summary>
     void InsertFillIn(int caretOffset);
@@ -134,6 +165,7 @@ internal sealed partial class DraftViewModel : ObservableObject, IDraftViewModel
     /// <param name="bodyDocument">Optional body document implementation; defaults to <see cref="StringBodyDocument"/> when <see langword="null"/>.</param>
     /// <param name="confirmationWindow">How long an armed delete waits for its confirming press; defaults to a few seconds.</param>
     /// <param name="currentSecurityLevel">The current user's own assigned security level name; see <see cref="IEngineController.GetUserSecurityLevel"/>.</param>
+    /// <param name="isNew">Whether the draft has not been stored yet; it is only stored once it is altered and not blank.</param>
     public DraftViewModel(
         DraftEntity entity,
         IEntryService entryService,
@@ -143,9 +175,12 @@ internal sealed partial class DraftViewModel : ObservableObject, IDraftViewModel
         IEngineController engineController,
         IBodyDocument? bodyDocument = null,
         TimeSpan? confirmationWindow = null,
-        string currentSecurityLevel = "")
+        string currentSecurityLevel = "",
+        bool isNew = false)
     {
         this.entity = entity;
+        this.isNew = isNew;
+        name = entity.Name ?? string.Empty;
         CanDelete = engineController.CanDelete(FolderType.Drafts);
         deleteConfirmation = new DeleteConfirmation(pending => IsConfirmingDelete = pending, confirmationWindow);
         this.entryService = entryService;
@@ -153,20 +188,19 @@ internal sealed partial class DraftViewModel : ObservableObject, IDraftViewModel
         this.engineController = engineController;
         activityLogger = loggerFactory.CreateLogger("ACTIVITY");
         isSent = entity.IsSent;
-        isAlert = entity.IsAlert;
-        tag = entity.Tag;
-        lastValidTag = entity.Tag;
+        // LiteDB reads an empty string back as null.
+        tag = engineController.DraftTagRules.Filter(entity.Tag ?? string.Empty);
+        lastValidTag = tag;
         AllUserNames = userNames;
         BodyDocument = bodyDocument ?? new StringBodyDocument();
         AlertLabel = engineController.AlertLabel;
-        ComposeAlertsEnabled = engineController.ComposeAlertsEnabled;
         TagsEnabled = engineController.TagsEnabled;
         TagLabel = engineController.TagLabel;
         AddressTypes = engineController.AddressTypes;
         newAddressType = AddressTypes[0];
 
         allPriorities = engineController.Priorities;
-        availablePriorities = FilterPriorities(entity.Tag);
+        availablePriorities = FilterPriorities(tag);
         selectedPriority = AvailablePriorities.FirstOrDefault(p => p.Stored == entity.Priority)
             ?? AvailablePriorities.FirstOrDefault()
             ?? allPriorities[0];
@@ -182,9 +216,85 @@ internal sealed partial class DraftViewModel : ObservableObject, IDraftViewModel
             Addresses.Add(a);
         }
 
+        lineWidthRange = engineController.DraftLineWidth;
+        lineWidth = lineWidthRange is null ? null : entity.LineWidth is { } stored ? lineWidthRange.Clamp(stored) : lineWidthRange.Initial;
+
         LoadBody(entity);
+
+        Addresses.CollectionChanged += (_, _) =>
+        {
+            RebuildAddressGroups();
+            UpdateHeader();
+            StoreIfNew();
+        };
+        RebuildAddressGroups();
+        isReady = true;
+        UpdateHeader();
+        savedSnapshot = Snapshot();
+        initialSnapshot = savedSnapshot;
+        BodyDocument.Changed += RaiseTitleChanged;
     }
 
+    private void RaiseTitleChanged()
+    {
+        TitleChanged?.Invoke(string.IsNullOrWhiteSpace(Name) ? BuildPlainBody().FirstLine : Name.Trim());
+        StoreIfNew();
+    }
+
+    // The first time a new draft is altered into something worth keeping it is stored, so it shows up in the list straight away.
+    private void StoreIfNew()
+    {
+        if (!isNew || isStoringNew) { return; }
+
+        _ = StoreNew();
+    }
+
+    private async Task StoreNew()
+    {
+        isStoringNew = true;
+        try
+        {
+            await Task.Yield();
+            await SaveChanges();
+        }
+        catch (Exception ex)
+        {
+            activityLogger.LogError(ex, "Failed to store a new draft");
+        }
+        finally
+        {
+            isStoringNew = false;
+        }
+    }
+
+    private bool isStoringNew;
+    private readonly SemaphoreSlim insertLock = new(1, 1);
+
+    private async Task InsertIfNew()
+    {
+        await insertLock.WaitAsync();
+        try
+        {
+            if (!isNew) { return; }
+
+            await entryService.InsertDraft(entity);
+            isNew = false;
+        }
+        finally
+        {
+            insertLock.Release();
+        }
+    }
+
+    partial void OnNameChanged(string value) => RaiseTitleChanged();
+
+    private bool isNew;
+    private readonly string initialSnapshot;
+    private readonly LineWidthRange? lineWidthRange;
+    private int headerWidth;
+    private bool isUpdatingHeader;
+    private bool isDeleted;
+    private string savedSnapshot = string.Empty;
     private readonly IEntryService entryService;
     private readonly DeleteConfirmation deleteConfirmation;
     private readonly IServiceConnection connection;
@@ -193,16 +303,22 @@ internal sealed partial class DraftViewModel : ObservableObject, IDraftViewModel
     private readonly ILogger activityLogger;
     private DraftEntity entity;
     private string lastValidTag = string.Empty;
+    private bool isReady;
 
+    [ObservableProperty] private string name;
     [ObservableProperty] private string newAddressUser = string.Empty;
     [ObservableProperty] private AddressTypeOption newAddressType;
     [ObservableProperty] private string newAddressInformation = string.Empty;
     [ObservableProperty] private bool isSent;
-    [ObservableProperty] private bool isAlert;
+    private bool isAlert;
     [ObservableProperty] private MessagePriorityOption selectedPriority;
     [ObservableProperty] private IReadOnlyList<MessagePriorityOption> availablePriorities = [];
     [ObservableProperty] private SecurityLevel? selectedSecurityLevel;
     [ObservableProperty] private string tag = string.Empty;
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(LineWidthValue))]
+    private int? lineWidth;
+    [ObservableProperty] private string? header;
     [ObservableProperty] private PlsoMode plsoMode;
     [ObservableProperty] private bool isSaving;
     [ObservableProperty] private string? statusMessage;
@@ -212,6 +328,10 @@ internal sealed partial class DraftViewModel : ObservableObject, IDraftViewModel
 
     /// <inheritdoc />
     public event Func<Task>? Deleted;
+    /// <inheritdoc />
+    public event Func<string, Task>? Duplicated;
+    /// <inheritdoc />
+    public event Action<string>? TitleChanged;
 
     /// <inheritdoc />
     public bool CanDelete { get; }
@@ -226,6 +346,8 @@ internal sealed partial class DraftViewModel : ObservableObject, IDraftViewModel
     /// <inheritdoc />
     public ObservableCollection<AddressData> Addresses { get; } = [];
     /// <inheritdoc />
+    public ObservableCollection<AddressGroup> AddressGroups { get; } = [];
+    /// <inheritdoc />
     public IBodyDocument BodyDocument { get; }
     /// <inheritdoc />
     public IReadOnlyDictionary<string, IFillInViewModel> FillIns => fillIns;
@@ -236,9 +358,27 @@ internal sealed partial class DraftViewModel : ObservableObject, IDraftViewModel
     /// <inheritdoc />
     public IReadOnlyList<SecurityLevel> AvailableSecurityLevels { get; }
     /// <inheritdoc />
+    public string FilterTag(string tag) => engineController.DraftTagRules.Filter(tag);
+
+    /// <inheritdoc />
+    public int? TagMaxLength => engineController.DraftTagRules.MaxLength;
+    /// <inheritdoc />
+    public bool IsLineWidthAvailable => lineWidthRange is not null;
+    /// <inheritdoc />
+    public decimal LineWidthMinimum => MinimumWidth;
+    /// <inheritdoc />
+    public decimal LineWidthMaximum => Math.Max(lineWidthRange?.Max ?? 1000, MinimumWidth);
+    /// <inheritdoc />
+    public decimal? LineWidthValue
+    {
+        get => LineWidth;
+        set => LineWidth = lineWidthRange is null ? null : value is { } width ? ClampWidth((int)width) : lineWidthRange.Max is null ? null : ClampWidth(lineWidthRange.Max.Value);
+    }
+
+    /// <inheritdoc />
     public string AlertLabel { get; }
     /// <inheritdoc />
-    public bool ComposeAlertsEnabled { get; }
+    public bool IsAlert { get => isAlert; private set => SetProperty(ref isAlert, value); }
     /// <inheritdoc />
     public bool TagsEnabled { get; }
     /// <inheritdoc />
@@ -297,6 +437,14 @@ internal sealed partial class DraftViewModel : ObservableObject, IDraftViewModel
 
     partial void OnTagChanged(string value)
     {
+        // What is typed or pasted is made into a tag the rules allow, and the change is made again with that.
+        string allowed = engineController.DraftTagRules.Filter(value);
+        if (allowed != value)
+        {
+            Tag = allowed;
+            return;
+        }
+
         if (engineController.BlockedCombinations.IsBlocked(value, SelectedPriority.Key))
         {
             // Reject the change: this combination is blocked, so revert to the last valid tag instead of
@@ -311,6 +459,54 @@ internal sealed partial class DraftViewModel : ObservableObject, IDraftViewModel
         if (!AvailablePriorities.Contains(SelectedPriority))
         {
             SelectedPriority = AvailablePriorities.FirstOrDefault() ?? SelectedPriority;
+        }
+
+        UpdateHeader();
+    }
+
+    partial void OnSelectedPriorityChanged(MessagePriorityOption value) => UpdateHeader();
+
+    partial void OnSelectedSecurityLevelChanged(SecurityLevel? value) => UpdateHeader();
+
+    partial void OnLineWidthChanged(int? value) => UpdateHeader();
+
+    private int MinimumWidth => Math.Max(lineWidthRange?.Min ?? 1, headerWidth);
+
+    private int ClampWidth(int width) => Math.Max(Math.Min(width, lineWidthRange?.Max ?? int.MaxValue), MinimumWidth);
+
+    private void UpdateHeader()
+    {
+        if (!isReady || isUpdatingHeader) { return; }
+
+        isUpdatingHeader = true;
+        try
+        {
+            // The header can depend on the width and the width can not be less than the header, so this settles by raising the width until the header fits.
+            for (int pass = 0; pass < 8; pass++)
+            {
+                IsAlert = engineController.ComputeIsAlert(string.Empty, SelectedPriority.Key, Tag, SelectedSecurityLevel?.Name ?? string.Empty, [.. Addresses.Select(a => new AddressRequest { UserName = a.UserName, Type = a.Type, Information = a.Information })]);
+                string? text = engineController.GetDraftHeader(new DraftContent
+                {
+                    Tag = Tag,
+                    Priority = SelectedPriority.Key,
+                    SecurityLevel = SelectedSecurityLevel?.Name ?? string.Empty,
+                    IsAlert = IsAlert,
+                    Addresses = [.. Addresses.Select(a => new AddressRequest { UserName = a.UserName, Type = a.Type, Information = a.Information })],
+                    LineWidth = LineWidth
+                });
+                Header = text;
+                headerWidth = lineWidthRange is null || text is null ? 0 : text.Split('\n').Max(line => line.TrimEnd('\r').Length);
+                OnPropertyChanged(nameof(LineWidthMinimum));
+                OnPropertyChanged(nameof(LineWidthMaximum));
+
+                if (LineWidth is not { } width || width >= MinimumWidth) { break; }
+
+                LineWidth = MinimumWidth;
+            }
+        }
+        finally
+        {
+            isUpdatingHeader = false;
         }
     }
 
@@ -388,24 +584,24 @@ internal sealed partial class DraftViewModel : ObservableObject, IDraftViewModel
     {
         if (!CanDelete || !deleteConfirmation.Confirm()) { return; }
 
-        await entryService.DeleteEntry(Id, EntryType.Draft);
+        if (!isNew) { await entryService.DeleteEntry(Id, EntryType.Draft); }
+        isDeleted = true;
         if (Deleted is not null) { await Deleted(); }
     }
 
     [RelayCommand]
     private async Task Save()
     {
+        if (!IsWorthStoring())
+        {
+            StatusMessage = "Nothing to save";
+            return;
+        }
+
         IsSaving = true;
         try
         {
-            entity.Body = BuildPlainBody();
-            entity.BodySegmentsJson = SerializeBody();
-            entity.Addresses = [.. Addresses];
-            entity.IsAlert = IsAlert;
-            entity.Priority = SelectedPriority.Stored;
-            entity.Tag = Tag;
-            entity.SecurityLevel = SelectedSecurityLevel?.Value;
-            await entryService.SaveDraft(entity);
+            await Persist(quietly: false);
             StatusMessage = "Saved";
         }
         finally
@@ -413,6 +609,54 @@ internal sealed partial class DraftViewModel : ObservableObject, IDraftViewModel
             IsSaving = false;
         }
     }
+
+    /// <inheritdoc />
+    public async Task SaveChanges()
+    {
+        if (IsSent || isDeleted || Snapshot() == savedSnapshot || !IsWorthStoring()) { return; }
+
+        await Persist(quietly: true);
+    }
+
+    // A new draft is only stored once it has been altered and is not blank; one that already exists is stored as it is, even if cleared.
+    private bool IsWorthStoring()
+        => !isNew || (Snapshot() != initialSnapshot && !(BuildPlainBody().Trim().Length == 0 && Addresses.Count == 0 && string.IsNullOrWhiteSpace(Name)));
+
+    private void ApplyToEntity()
+    {
+        entity.Name = string.IsNullOrWhiteSpace(Name) ? null : Name.Trim();
+        entity.Body = BuildPlainBody();
+        entity.BodySegmentsJson = SerializeBody();
+        entity.Addresses = [.. Addresses];
+        entity.IsAlert = IsAlert;
+        entity.Priority = SelectedPriority.Stored;
+        entity.Tag = Tag;
+        entity.SecurityLevel = SelectedSecurityLevel?.Value;
+        entity.LineWidth = LineWidth;
+    }
+
+    private async Task Persist(bool quietly)
+    {
+        ApplyToEntity();
+        await InsertIfNew();
+
+        if (quietly) { await entryService.SaveDraftQuietly(entity); }
+        else { await entryService.SaveDraft(entity); }
+
+        savedSnapshot = Snapshot();
+    }
+
+    [RelayCommand]
+    private async Task Duplicate()
+    {
+        ApplyToEntity();
+        DraftEntity copy = await entryService.DuplicateDraft(entity);
+        if (Duplicated is not null) { await Duplicated(copy.Id.ToString()); }
+    }
+
+    // Everything a save writes, so leaving a draft that was only looked at does not save it and move it to the top of the list.
+    private string Snapshot()
+        => string.Join('\u001F', Name, SerializeBody(), Tag, SelectedPriority.Stored, SelectedSecurityLevel?.Value, LineWidth, string.Join('\u001E', Addresses.Select(address => $"{address.UserName}\u001D{address.Type}\u001D{address.Information}")));
 
     [RelayCommand]
     private async Task Send()
@@ -429,35 +673,39 @@ internal sealed partial class DraftViewModel : ObservableObject, IDraftViewModel
             return;
         }
 
+        if (TagsEnabled && engineController.DraftTagRules.Validate(Tag) is { } tagError)
+        {
+            StatusMessage = engineController.Display(tagError);
+            return;
+        }
+
+        UpdateHeader();
         IsSaving = true;
         try
         {
-            string body = BuildPlainBody();
-            entity.Body = body;
-            entity.BodySegmentsJson = SerializeBody();
-            entity.Addresses = [.. Addresses];
-            entity.IsAlert = IsAlert;
-            entity.Priority = SelectedPriority.Stored;
-            entity.Tag = Tag;
-            entity.SecurityLevel = SelectedSecurityLevel?.Value;
+            string plainBody = BuildPlainBody();
+            string body = Header is { } header ? header + "\n" + plainBody : plainBody;
+            ApplyToEntity();
 
             SendMessageResult? result = await connection.SendMessage(
                 body,
                 Addresses.Select(a => new AddressRequest { UserName = a.UserName, Type = a.Type, Information = a.Information }).ToList(),
-                IsAlert, SelectedPriority.Key, Tag, SelectedSecurityLevel?.Key);
+                SelectedPriority.Key, Tag, SelectedSecurityLevel?.Key);
             if (result is null)
             {
                 StatusMessage = "Cannot send until a user is installed";
                 return;
             }
 
+            entity.IsAlert = result.IsAlert;
             entity.IsSent = true;
             entity.SentAt = DateTime.UtcNow;
+            await InsertIfNew();
             await entryService.SaveDraft(entity);
 
             DateTime sentAt = entity.SentAt ?? DateTime.UtcNow;
             MessageEntity sentMessage = await entryService.StoreSentMessage(
-                result.MessageId, body, [.. Addresses], sentAt, result.UserResults, IsAlert, SelectedPriority.Key, Tag, SelectedSecurityLevel?.Name ?? string.Empty);
+                result.MessageId, body, [.. Addresses], sentAt, result.UserResults, SelectedPriority.Key, Tag, SelectedSecurityLevel?.Name ?? string.Empty);
 
             IsSent = true;
             StatusMessage = "Sent";
@@ -489,4 +737,35 @@ internal sealed partial class DraftViewModel : ObservableObject, IDraftViewModel
 
     [RelayCommand]
     private void RemoveAddress(AddressData address) => Addresses.Remove(address);
+
+    [RelayCommand]
+    private void MoveAddressUp(AddressData address) => MoveAddress(address, -1);
+
+    [RelayCommand]
+    private void MoveAddressDown(AddressData address) => MoveAddress(address, 1);
+
+    private void MoveAddress(AddressData address, int direction)
+    {
+        int index = Addresses.IndexOf(address);
+        if (index < 0) { return; }
+
+        // The next recipient of the same type in that direction is the one to swap places with, skipping the other types in between.
+        for (int other = index + direction; other >= 0 && other < Addresses.Count; other += direction)
+        {
+            if (Addresses[other].Type.ParseAddressType() != address.Type.ParseAddressType()) { continue; }
+
+            Addresses.Move(index, other);
+            return;
+        }
+    }
+
+    private void RebuildAddressGroups()
+    {
+        AddressGroups.Clear();
+        foreach (AddressTypeOption type in AddressTypes)
+        {
+            List<AddressData> items = [.. Addresses.Where(address => address.Type.ParseAddressType() == type.Type)];
+            if (items.Count > 0) { AddressGroups.Add(new AddressGroup(type.Label, items)); }
+        }
+    }
 }

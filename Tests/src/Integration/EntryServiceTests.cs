@@ -22,6 +22,96 @@ public sealed class EntryServiceTests : IDisposable
     private readonly LiteDbContext ctx;
     private readonly EntryService service;
 
+    /// <summary>A duplicated draft is a stored, unsent copy that carries the original's content and leaves the original alone.</summary>
+    [Fact]
+    public async Task DuplicateDraft_StoresAnUnsentCopy()
+    {
+        DraftEntity original = await service.CreateDraft();
+        original.Name = "Plan";
+        original.Body = "Body";
+        original.Tag = "NOTICE";
+        original.IsSent = true;
+        original.Addresses = [new AddressData { UserName = "BOB", Type = "To", Information = "info" }];
+        await service.SaveDraft(original);
+
+        DraftEntity copy = await service.DuplicateDraft(original);
+
+        Assert.NotEqual(original.Id, copy.Id);
+        Assert.Equal("Plan", copy.Name);
+        Assert.Equal("Body", copy.Body);
+        Assert.Equal("NOTICE", copy.Tag);
+        Assert.False(copy.IsSent);
+        Assert.NotSame(original.Addresses[0], copy.Addresses[0]);
+        Assert.Equal("info", copy.Addresses[0].Information);
+        Assert.True(original.IsSent);
+    }
+
+    /// <summary>A duplicated note is a stored copy with the same name and body.</summary>
+    [Fact]
+    public async Task DuplicateNote_StoresACopy()
+    {
+        NoteEntity original = await service.CreateNote();
+        original.Name = "List";
+        original.Body = "Milk";
+        await service.SaveNote(original);
+
+        NoteEntity copy = await service.DuplicateNote(original);
+
+        Assert.NotEqual(original.Id, copy.Id);
+        Assert.Equal("List", copy.Name);
+        Assert.Equal("Milk", copy.Body);
+    }
+
+    /// <summary>NewDraft and NewNote build entities without storing them.</summary>
+    [Fact]
+    public async Task NewEntries_AreNotStoredUntilInserted()
+    {
+        DraftEntity draft = await service.NewDraft();
+        NoteEntity note = await service.NewNote();
+
+        Assert.Empty((await service.GetDrafts(draft.FolderId, 0, false)).Items);
+        Assert.Empty((await service.GetNotes(note.FolderId, 0, false)).Items);
+        Assert.NotNull(draft.FolderId);
+        Assert.NotNull(note.FolderId);
+    }
+
+    /// <summary>A new draft starts with the tag, priority and security level the draft handler states.</summary>
+    [Fact]
+    public async Task CreateDraft_StartsWithTheHandlersDefaults()
+    {
+        Mock<TestEngineController> controller = new() { CallBase = true };
+        controller.Setup(c => c.DraftDefaults).Returns(new DraftDefaults("NOTICE", TestMessagePriority.Level3, TestLevel.Restricted));
+        EntryService defaulted = new(new MessageRepository(ctx), new DraftRepository(ctx), new NoteRepository(ctx), new ActivityLogRepository(ctx), new FolderRepository(ctx), new CurrentUserProvider(), controller.Object);
+
+        DraftEntity draft = await defaulted.CreateDraft();
+        DraftEntity plain = await service.CreateDraft();
+
+        Assert.Equal(("NOTICE", (int)TestMessagePriority.Level3, (int?)(int)TestLevel.Restricted), (draft.Tag, draft.Priority, draft.SecurityLevel));
+        Assert.Equal((string.Empty, 0, (int?)null), (plain.Tag, plain.Priority, plain.SecurityLevel));
+    }
+
+    /// <summary>A draft or note saved quietly is written and reported without the update event that would bring it back to the user's attention.</summary>
+    [Fact]
+    public async Task SaveQuietly_WritesAndRaisesOnlyTheQuietEvents()
+    {
+        List<string> raised = [];
+        service.DraftUpdated += _ => { raised.Add("draft updated"); return Task.CompletedTask; };
+        service.DraftSavedQuietly += _ => { raised.Add("draft quiet"); return Task.CompletedTask; };
+        service.NoteUpdated += _ => { raised.Add("note updated"); return Task.CompletedTask; };
+        service.NoteSavedQuietly += _ => { raised.Add("note quiet"); return Task.CompletedTask; };
+        DraftEntity draft = await service.CreateDraft();
+        NoteEntity note = await service.CreateNote();
+        draft.Body = "written draft";
+        note.Body = "written note";
+
+        await service.SaveDraftQuietly(draft);
+        await service.SaveNoteQuietly(note);
+
+        Assert.Equal(["draft quiet", "note quiet"], raised);
+        Assert.Equal("written draft", (await new DraftRepository(ctx).Get(draft.Id))!.Body);
+        Assert.Equal("written note", (await new NoteRepository(ctx).Get(note.Id))!.Body);
+    }
+
     /// <summary>Verifies that StoreIncomingMessage creates a message in the Inbox folder.</summary>
     [Fact]
     public async Task StoreIncomingMessageAsync_CreatesMessageInInbox()
@@ -47,16 +137,16 @@ public sealed class EntryServiceTests : IDisposable
         Assert.Equal(DestinationStatus.Received, entity.ReadStatus);
     }
 
-    /// <summary>StoreIncomingMessage/StoreSentMessage round-trip the IsAlert flag onto the stored message.</summary>
+    /// <summary>A stored message is an alert when the message handler says so from its other fields, here its tag.</summary>
     [Fact]
-    public async Task StoreMessage_IsAlertTrue_RoundTripsOnStoredMessage()
+    public async Task StoreMessage_AlertTag_IsAnAlertOnTheStoredMessage()
     {
         MessageEntity incoming = await service.StoreIncomingMessage(
-            Guid.NewGuid().ToString(), "SenderUser", "Hello", [], DateTime.UtcNow, isAlert: true);
+            Guid.NewGuid().ToString(), "SenderUser", "Hello", [], DateTime.UtcNow, tag: "ALERT");
         Assert.True(format.GetIsAlert(incoming.Message));
 
         MessageEntity sent = await service.StoreSentMessage(
-            Guid.NewGuid().ToString("N"), "Subj", [], DateTime.UtcNow, [], isAlert: true);
+            Guid.NewGuid().ToString("N"), "Subj", [], DateTime.UtcNow, [], tag: "ALERT");
         Assert.True(format.GetIsAlert(sent.Message));
     }
 
@@ -336,8 +426,8 @@ public sealed class EntryServiceTests : IDisposable
     [Fact]
     public async Task GetMessagesAsync_FilterAlertOnly_ExcludesNonAlerts()
     {
-        await service.StoreIncomingMessage(Guid.NewGuid().ToString(), "S", "Urgent", [], DateTime.UtcNow, isAlert: true);
-        await service.StoreIncomingMessage(Guid.NewGuid().ToString(), "S", "Routine", [], DateTime.UtcNow, isAlert: false);
+        await service.StoreIncomingMessage(Guid.NewGuid().ToString(), "S", "Urgent", [], DateTime.UtcNow, tag: "ALERT");
+        await service.StoreIncomingMessage(Guid.NewGuid().ToString(), "S", "Routine", [], DateTime.UtcNow, tag: "OTHER");
 
         (List<MessageEntity> items, int total) = await service.GetMessages("root-inbox", 1, filter: new EntryFilter { AlertOnly = true });
 

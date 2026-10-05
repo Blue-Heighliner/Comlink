@@ -43,8 +43,8 @@ internal sealed class EngineBuilder : IEngineBuilder, IAsyncDisposable
     public int? PacketSizeValue { get; set; }
     /// <summary>How many packets may be in flight at once, if stated.</summary>
     public int? PacketWindowValue { get; set; }
-    /// <summary>Whether composing alerts is on, if stated.</summary>
-    public bool? ComposeAlertsValue { get; set; }
+    /// <summary>The handler that controls how drafts are composed, if stated.</summary>
+    public ServiceRegistration<IDraftFrameHandler>? DraftHandler { get; set; }
     /// <summary>The selectable priorities, empty when none were stated.</summary>
     public List<MessagePriorityOption> PriorityOptions { get; } = [];
     /// <summary>Whether tags are shown, if stated.</summary>

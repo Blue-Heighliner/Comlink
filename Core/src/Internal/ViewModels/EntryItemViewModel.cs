@@ -20,17 +20,27 @@ internal sealed partial class EntryItemViewModel : ObservableObject
         string? secondaryText = null, string? priorityText = null, string? tagText = null, string? timeText = null, string? fixedStatusText = null, bool isOutboundMessage = false, string? securityLevelColorHex = null, bool isAlert = false)
     {
         Id = id;
-        Title = title;
+        this.title = title;
         EntryType = entryType;
         SortDate = sortDate;
         SecondaryText = secondaryText;
         PriorityText = priorityText;
         TagText = tagText;
-        TimeText = timeText;
+        this.timeText = timeText;
         FixedStatusText = fixedStatusText;
         IsOutboundMessage = isOutboundMessage;
         SecurityLevelColorHex = securityLevelColorHex;
-        IsAlert = isAlert;
+        this.isAlert = isAlert;
+    }
+
+    /// <summary>Brings this row up to date with a freshly built one for the same entry, in place, so the list keeps its selection.</summary>
+    /// <param name="updated">A row built from what was saved.</param>
+    public void Update(EntryItemViewModel updated)
+    {
+        Title = updated.Title;
+        TimeText = updated.TimeText;
+        IsAlert = updated.IsAlert;
+        SortDate = updated.SortDate;
     }
 
     [ObservableProperty] private bool isSelected;
@@ -42,22 +52,22 @@ internal sealed partial class EntryItemViewModel : ObservableObject
 
     /// <summary>Gets the unique identifier for this entry (message ID or LiteDB object-id string).</summary>
     public string Id { get; }
-    /// <summary>Gets the primary display title for this entry.</summary>
-    public string Title { get; }
+    /// <summary>Gets or sets the primary display title for this entry.</summary>
+    [ObservableProperty] private string title;
     /// <summary>Gets an optional secondary line of text shown below the title.</summary>
     public string? SecondaryText { get; }
     /// <summary>Gets an optional priority label shown below <see cref="SecondaryText"/>; see <see cref="IEngineController"/>.</summary>
     public string? PriorityText { get; }
     /// <summary>Gets an optional tag label shown next to <see cref="PriorityText"/>; see <see cref="IEngineController"/>.</summary>
     public string? TagText { get; }
-    /// <summary>Gets an optional formatted timestamp string for display.</summary>
-    public string? TimeText { get; }
+    /// <summary>Gets or sets an optional formatted timestamp string for display.</summary>
+    [ObservableProperty] private string? timeText;
     /// <summary>Gets a static status string that takes precedence when no overall status is set.</summary>
     public string? FixedStatusText { get; }
     /// <summary>Gets the type of this entry (message, draft, note, or activity).</summary>
     public EntryType EntryType { get; }
     /// <summary>Gets the date used for default chronological sorting.</summary>
-    public DateTime SortDate { get; }
+    public DateTime SortDate { get; private set; }
     /// <summary>
     /// For <see cref="EntryType.Message"/> entries, <see langword="true"/> when this row represents the
     /// Outbox (sent) record and <see langword="false"/> when it represents the Inbox (received) record. A
@@ -79,7 +89,10 @@ internal sealed partial class EntryItemViewModel : ObservableObject
     /// and activity log entries, which have no alert flag. Drives <see cref="TitleColorHex"/> and
     /// <see cref="SecondaryTextColorHex"/>.
     /// </summary>
-    public bool IsAlert { get; }
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(TitleColorHex))]
+    [NotifyPropertyChangedFor(nameof(SecondaryTextColorHex))]
+    private bool isAlert;
 
     /// <summary>
     /// Gets the hex color for <see cref="Title"/>: the default light gray, except red when <see cref="IsAlert"/>

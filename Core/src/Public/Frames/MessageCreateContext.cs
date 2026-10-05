@@ -12,9 +12,6 @@ public sealed record MessageCreateContext<TPriority, TLevel> where TPriority : s
     /// <summary>Gets the body text.</summary>
     public required string Body { get; init; }
 
-    /// <summary>Gets whether the message is an alert.</summary>
-    public required bool IsAlert { get; init; }
-
     /// <summary>Gets the message's priority level, which the handler stores as it likes, for example as the member's name.</summary>
     public required TPriority Priority { get; init; }
 

@@ -202,9 +202,6 @@ internal sealed class NetworkUserConfig
     /// <summary>Whether clicking the alert box, or pressing Space or Enter outside a text input, confirms the latest unconfirmed alert. <see langword="null"/> uses the engine default (<see langword="true"/>).</summary>
     public bool? QuickConfirmationEnabled { get; init; }
 
-    /// <summary>Whether the draft editor's alert checkbox is shown. <see langword="null"/> uses the engine default (<see langword="true"/>).</summary>
-    public bool? ComposeAlertsEnabled { get; init; }
-
     /// <summary>Whether message tags are shown anywhere in the UI. <see langword="null"/> uses the engine default (<see langword="true"/>).</summary>
     public bool? MessageTagsEnabled { get; init; }
 

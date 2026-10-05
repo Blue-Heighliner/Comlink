@@ -114,7 +114,6 @@ internal sealed class MessageStorageService : IMessageStorageService
         {
             SentAt = Utc(engineController.GetSentAt(original)),
             Body = engineController.GetBody(original),
-            IsAlert = false,
             Priority = engineController.GetMessagePriority(original),
             Tag = engineController.GetTag(original),
             SecurityLevel = engineController.GetSecurityLevel(original)

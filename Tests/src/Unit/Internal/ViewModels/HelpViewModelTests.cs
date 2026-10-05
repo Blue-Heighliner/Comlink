@@ -3,12 +3,11 @@ namespace BlueHeighliner.Comlink.Tests.Unit.Internal.ViewModels;
 /// <summary>Unit tests for <see cref="HelpViewModel"/>, whose tabs reflect the configured role and compose settings.</summary>
 public sealed class HelpViewModelTests
 {
-    private static HelpViewModel Build(UserRole role = UserRole.Client, bool tags = true, bool alerts = true)
+    private static HelpViewModel Build(UserRole role = UserRole.Client, bool tags = true)
     {
         Mock<TestEngineController> controller = new() { CallBase = true };
         controller.Setup(c => c.Role).Returns(role);
         controller.Setup(c => c.TagsEnabled).Returns(tags);
-        controller.Setup(c => c.ComposeAlertsEnabled).Returns(alerts);
         controller.Setup(c => c.TagLabel).Returns("Subject Line");
         controller.Setup(c => c.AlertLabel).Returns("FLASH");
         controller.Setup(c => c.AppName).Returns("MyApp");
@@ -61,15 +60,13 @@ public sealed class HelpViewModelTests
         Assert.Equal(tags, sending.Sections.Any(s => s.Heading == "Subject Line"));
     }
 
-    /// <summary>The alert compose section appears, named with the host's own label, only when composing alerts is enabled.</summary>
-    [Theory]
-    [InlineData(true)]
-    [InlineData(false)]
-    public void Sending_AlertSection_FollowsComposeAlertsEnabled(bool alerts)
+    /// <summary>The help explains alerts, named with the host's own label, whatever the draft view offers, since the user does not set one.</summary>
+    [Fact]
+    public void Sending_AlertSection_UsesTheAlertLabel()
     {
-        HelpTab sending = Build(alerts: alerts).Tabs.Single(t => t.Title == "Sending a message");
+        HelpTab sending = Build().Tabs.Single(t => t.Title == "Sending a message");
 
-        Assert.Equal(alerts, sending.Sections.Any(s => s.Heading == "Sending as FLASH"));
+        Assert.Contains(sending.Sections, section => section.Heading == "FLASH");
     }
 
     /// <summary>The receiving tab names alerts with the host's own label, so it matches what the title bar shows.</summary>

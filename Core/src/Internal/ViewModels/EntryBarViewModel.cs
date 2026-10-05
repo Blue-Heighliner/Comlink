@@ -96,6 +96,23 @@ internal interface IEntryBarViewModel
     Task DeleteEntry(EntryItemViewModel entry);
     /// <summary>Queues an entry ID to be auto-selected after the next refresh.</summary>
     void SetPendingSelectId(string id);
+    /// <summary>Brings the row of <paramref name="draft"/>, if the list shows it, up to date with what was saved, without selecting anything or reloading the list.</summary>
+    /// <param name="draft">The saved draft.</param>
+    void UpdateEntry(DraftEntity draft);
+    /// <summary>Brings the row of <paramref name="note"/>, if the list shows it, up to date with what was saved, without selecting anything or reloading the list.</summary>
+    /// <param name="note">The saved note.</param>
+    void UpdateEntry(NoteEntity note);
+    /// <summary>Adds the row of a draft that was just stored to the top of the list, marked as the selected one, when the list shows the folder it was stored in. Raises no selection event.</summary>
+    /// <param name="draft">The stored draft.</param>
+    void AddEntry(DraftEntity draft);
+    /// <summary>Adds the row of a note that was just stored to the top of the list, marked as the selected one, when the list shows the folder it was stored in. Raises no selection event.</summary>
+    /// <param name="note">The stored note.</param>
+    void AddEntry(NoteEntity note);
+    /// <summary>Changes the title of the row of the draft or note with the given id, if the list shows it, as it is being edited.</summary>
+    /// <param name="id">The entry's id.</param>
+    /// <param name="type">Whether the entry is a draft or a note.</param>
+    /// <param name="title">What the entry is titled: its name or first line, empty when it has neither.</param>
+    void UpdateTitle(string id, EntryType type, string title);
     /// <summary>Marks the given entry as selected, deselecting every other entry.</summary>
     void SelectEntry(EntryItemViewModel entry);
     /// <summary>
@@ -433,9 +450,7 @@ internal sealed partial class EntryBarViewModel : ObservableObject, IEntryBarVie
                     (List<DraftEntity> drafts, int total) = await entryService.GetDrafts(folder.Id, CurrentPage, IsAlphabeticalSort, Filter);
                     foreach (DraftEntity d in drafts)
                     {
-                        string title = d.Body.FirstLine;
-                        string timeText = d.ModifiedAt.ToString("dd-MMM-yyyy HH:mm").ToUpperInvariant();
-                        items.Add(new EntryItemViewModel(d.Id.ToString(), string.IsNullOrEmpty(title) ? engineController.Display("(Empty draft)") : title, EntryType.Draft, d.ModifiedAt, timeText: timeText, isAlert: d.IsAlert));
+                        items.Add(DraftItem(d));
                     }
                     return (items, total);
                 }
@@ -445,11 +460,7 @@ internal sealed partial class EntryBarViewModel : ObservableObject, IEntryBarVie
                     (List<NoteEntity> notes, int total) = await entryService.GetNotes(folder.Id, CurrentPage, IsAlphabeticalSort, Filter);
                     foreach (NoteEntity n in notes)
                     {
-                        string? title = (n.Body ?? string.Empty).Split('\n').FirstOrDefault()?.Trim();
-                        string timeText = n.ModifiedAt.ToString("dd-MMM-yyyy HH:mm").ToUpperInvariant();
-                        items.Add(new EntryItemViewModel(n.Id.ToString(),
-                            string.IsNullOrEmpty(title) ? engineController.Display("(Empty note)") : title, EntryType.Note, n.ModifiedAt,
-                            timeText: timeText));
+                        items.Add(NoteItem(n));
                     }
                     return (items, total);
                 }
@@ -479,6 +490,22 @@ internal sealed partial class EntryBarViewModel : ObservableObject, IEntryBarVie
         }
         return Task.CompletedTask;
     }
+
+    private EntryItemViewModel DraftItem(DraftEntity draft)
+    {
+        string title = string.IsNullOrWhiteSpace(draft.Name) ? (draft.Body ?? string.Empty).FirstLine : draft.Name;
+        string timeText = draft.ModifiedAt.ToString("dd-MMM-yyyy HH:mm").ToUpperInvariant();
+        return new EntryItemViewModel(draft.Id.ToString(), string.IsNullOrEmpty(title) ? engineController.Display("(Empty draft)") : title, EntryType.Draft, draft.ModifiedAt, timeText: timeText, isAlert: draft.IsAlert);
+    }
+
+    private EntryItemViewModel NoteItem(NoteEntity note)
+    {
+        string? title = string.IsNullOrWhiteSpace(note.Name) ? (note.Body ?? string.Empty).Split('\n').FirstOrDefault()?.Trim() : note.Name;
+        string timeText = note.ModifiedAt.ToString("dd-MMM-yyyy HH:mm").ToUpperInvariant();
+        return new EntryItemViewModel(note.Id.ToString(), string.IsNullOrEmpty(title) ? engineController.Display("(Empty note)") : title, EntryType.Note, note.ModifiedAt, timeText: timeText);
+    }
+
+    private void ReplaceEntry(EntryItemViewModel updated) => Entries.FirstOrDefault(entry => entry.Id == updated.Id && entry.EntryType == updated.EntryType)?.Update(updated);
 
     private void ApplyPendingSelect()
     {
@@ -553,6 +580,41 @@ internal sealed partial class EntryBarViewModel : ObservableObject, IEntryBarVie
 
     /// <summary>Queues an entry ID to be auto-selected after the next refresh.</summary>
     public void SetPendingSelectId(string id) => pendingSelectId = id;
+
+    /// <inheritdoc />
+    public void UpdateEntry(DraftEntity draft) => ReplaceEntry(DraftItem(draft));
+
+    /// <inheritdoc />
+    public void AddEntry(DraftEntity draft) => PrependEntry(DraftItem(draft), draft.FolderId);
+
+    /// <inheritdoc />
+    public void AddEntry(NoteEntity note) => PrependEntry(NoteItem(note), note.FolderId);
+
+    /// <inheritdoc />
+    public void UpdateTitle(string id, EntryType type, string title)
+    {
+        EntryItemViewModel? entry = Entries.FirstOrDefault(candidate => candidate.Id == id && candidate.EntryType == type);
+        if (entry is null) { return; }
+
+        entry.Title = string.IsNullOrEmpty(title) ? engineController.Display(type == EntryType.Draft ? "(Empty draft)" : "(Empty note)") : title;
+    }
+
+    private void PrependEntry(EntryItemViewModel added, string folderId)
+    {
+        if (currentFolder?.Id != folderId || Entries.Any(entry => entry.Id == added.Id)) { return; }
+
+        foreach (EntryItemViewModel other in Entries.Where(entry => entry.IsSelected).ToList())
+        {
+            other.IsSelected = false;
+        }
+
+        added.IsSelected = true;
+        SelectedEntry = added;
+        Entries.Insert(0, added);
+    }
+
+    /// <inheritdoc />
+    public void UpdateEntry(NoteEntity note) => ReplaceEntry(NoteItem(note));
 
     /// <inheritdoc />
     public void SelectEntry(EntryItemViewModel entry)

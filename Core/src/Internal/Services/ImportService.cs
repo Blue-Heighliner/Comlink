@@ -178,7 +178,6 @@ internal sealed class ImportService : IImportService
         {
             SentAt = data.SentAt,
             Body = data.Body,
-            IsAlert = data.IsAlert,
             Priority = engineController.PriorityOf(data.Priority),
             Tag = data.Tag,
             SecurityLevel = string.Empty
@@ -211,16 +210,17 @@ internal sealed class ImportService : IImportService
     {
         if (!engineController.Priorities.Any(level => level.Stored == data.Priority))
         {
-            logger.LogError("The draft {Name} was not imported: it has the priority value {Priority}, which is not a configured priority", data.Body.FirstLine, data.Priority);
+            logger.LogError("The draft {Name} was not imported: it has the priority value {Priority}, which is not a configured priority", data.Name ?? data.Body.FirstLine, data.Priority);
             return (false, false);
         }
 
-        string name = data.Body.FirstLine;
-        DraftEntity? existing = (await drafts.GetAll()).FirstOrDefault(d => d.Body.FirstLine == name);
+        string name = data.Name ?? data.Body.FirstLine;
+        DraftEntity? existing = (await drafts.GetAll()).FirstOrDefault(d => (d.Name ?? d.Body.FirstLine) == name);
         if (existing is null)
         {
             DraftEntity entity = new()
             {
+                Name = data.Name,
                 Body = data.Body,
                 BodySegmentsJson = data.BodySegmentsJson ?? string.Empty,
                 Addresses = ToAddressData(data.Addresses),
@@ -249,6 +249,7 @@ internal sealed class ImportService : IImportService
             setOverwriteAll(true);
         }
 
+        existing.Name = data.Name;
         existing.Body = data.Body;
         existing.BodySegmentsJson = data.BodySegmentsJson ?? string.Empty;
         existing.Addresses = ToAddressData(data.Addresses);
@@ -268,11 +269,11 @@ internal sealed class ImportService : IImportService
         Func<bool> getOverwriteAll,
         Action<bool> setOverwriteAll)
     {
-        string firstLine = data.Body.FirstLine;
-        NoteEntity? existing = (await notes.GetAll()).FirstOrDefault(n => n.Body.FirstLine == firstLine);
+        string firstLine = data.Name ?? data.Body.FirstLine;
+        NoteEntity? existing = (await notes.GetAll()).FirstOrDefault(n => (n.Name ?? n.Body.FirstLine) == firstLine);
         if (existing is null)
         {
-            NoteEntity entity = new() { Body = data.Body, FolderId = await folders.GetRootId(FolderType.Notes) };
+            NoteEntity entity = new() { Name = data.Name, Body = data.Body, FolderId = await folders.GetRootId(FolderType.Notes) };
             await notes.Insert(entity);
             return (true, false);
         }
@@ -291,6 +292,7 @@ internal sealed class ImportService : IImportService
             setOverwriteAll(true);
         }
 
+        existing.Name = data.Name;
         existing.Body = data.Body;
         existing.ModifiedAt = DateTime.UtcNow;
         await notes.Update(existing);

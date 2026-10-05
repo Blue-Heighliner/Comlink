@@ -59,7 +59,7 @@ Core/src/
     ├── Services/      Business logic
     ├── ViewModels/    MVVM layer - mostly Avalonia-agnostic (primitive types, custom interfaces),
     │                  except the Avalonia-specific converters and TextDocumentBodyDocument(Factory)
-    ├── Themes/        Avalonia dark theme resources
+    ├── Themes/        Avalonia dark theme resources; action buttons in content views use one of three styles: `positive` (blue, a major positive action such as send or save), `negative` (red, a major negative one such as delete) or `neutral` (gray, anything else)
     └── Views/         Avalonia XAML + code-behind (Client mode only; [ExcludeFromCodeCoverage])
 ```
 

@@ -86,7 +86,6 @@ internal sealed class AutoForwardService : IAutoForwardService
             {
                 SentAt = DateTime.UtcNow,
                 Body = engineController.GetBody(original),
-                IsAlert = engineController.GetIsAlert(original),
                 Priority = engineController.GetMessagePriority(original),
                 Tag = engineController.GetTag(original),
                 SecurityLevel = engineController.GetSecurityLevel(original)

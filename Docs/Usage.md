@@ -15,7 +15,6 @@ public sealed class MyFrame
     public List<(string Name, AddressType Type)> Addresses { get; set; } = [];
     public DateTime SentAt { get; set; }
     public bool IsMessage { get; set; }
-    public bool IsAlert { get; set; }
     public int Priority { get; set; }
     public string Tag { get; set; } = "";
     public int? SecurityLevel { get; set; }
@@ -41,10 +40,10 @@ A common field whose type already matches is mapped by naming the property (`m =
 public sealed class MyMessageHandler : IMessageHandler<MyFrame, MyPriority, MySecurityLevel>
 {
     public bool IsValid(MyFrame frame) => frame.IsMessage;
-    public MyFrame Create(MessageCreateContext<MyPriority, MySecurityLevel> context) => new() { IsMessage = true, SentAt = context.SentAt, Body = context.Body, IsAlert = context.IsAlert, Priority = (int)context.Priority, Tag = context.Tag, SecurityLevel = (int?)context.SecurityLevel };
+    public MyFrame Create(MessageCreateContext<MyPriority, MySecurityLevel> context) => new() { IsMessage = true, SentAt = context.SentAt, Body = context.Body, Priority = (int)context.Priority, Tag = context.Tag, SecurityLevel = (int?)context.SecurityLevel };
     public DateTime GetSentAt(MyFrame frame) => frame.SentAt;
     public string GetBody(MyFrame frame) => frame.Body;
-    public bool GetIsAlert(MyFrame frame) => frame.IsAlert;
+    public bool IsAlert(MyFrame frame) => frame.Tag == "ALERT";
     public MyPriority GetPriority(MyFrame frame) => (MyPriority)frame.Priority;
     public string GetTag(MyFrame frame) => frame.Tag;
     public MySecurityLevel? GetSecurityLevel(MyFrame frame) => (MySecurityLevel?)frame.SecurityLevel;

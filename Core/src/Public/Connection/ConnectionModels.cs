@@ -56,6 +56,8 @@ public sealed class SendMessageResult
 {
     /// <summary>Application-level identifier assigned to the sent message.</summary>
     public string MessageId { get; set; } = string.Empty;
+    /// <summary>Whether the sent message is an alert, as the host's message handler decided from its other properties.</summary>
+    public bool IsAlert { get; set; }
     /// <summary>Per-user delivery results for the send operation.</summary>
     public List<UserDeliveryResult> UserResults { get; set; } = [];
 }

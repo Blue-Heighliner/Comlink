@@ -5,6 +5,8 @@ internal sealed class DraftEntity
 {
     /// <summary>Unique document identifier.</summary>
     public ObjectId Id { get; set; } = ObjectId.NewObjectId();
+    /// <summary>The name the user gave the draft, or <c>null</c> to be named by the first line of its body.</summary>
+    public string? Name { get; set; }
     /// <summary>Plain-text body of the draft.</summary>
     public string Body { get; set; } = string.Empty;
     /// <summary>JSON-serialized array of <see cref="DraftBodySegmentData"/> segments.</summary>
@@ -25,6 +27,8 @@ internal sealed class DraftEntity
     public string Tag { get; set; } = string.Empty;
     /// <summary>Security level name this draft should be sent at; see <see cref="IEngineController.GetSecurityLevel"/>.</summary>
     public int? SecurityLevel { get; set; }
+    /// <summary>How many monospace characters wide a line of this draft is set to be, or <c>null</c> for no limit.</summary>
+    public int? LineWidth { get; set; }
     /// <summary>UTC timestamp when the draft was sent, or <c>null</c> if not yet sent.</summary>
     public DateTime? SentAt { get; set; }
     /// <summary>Identifier of the folder this draft belongs to.</summary>

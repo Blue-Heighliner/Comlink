@@ -9,9 +9,6 @@ internal sealed record MessageContent
     /// <summary>Gets the body text.</summary>
     public required string Body { get; init; }
 
-    /// <summary>Gets whether the message is an alert.</summary>
-    public required bool IsAlert { get; init; }
-
     /// <summary>Gets the message's priority level, a member of the host's priority enum.</summary>
     public required Enum Priority { get; init; }
 

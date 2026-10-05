@@ -120,10 +120,7 @@ internal sealed class HelpViewModel : IHelpViewModel
 
         sections.Add(new HelpSection("Priority", $"Choose a priority to control how urgently the message is sent when several are waiting. Higher ones go first."));
 
-        if (engineController.ComposeAlertsEnabled)
-        {
-            sections.Add(new HelpSection($"Sending as Alert", $"Tick the Alert box to make the message an alert. Every recipient's window sounds an alarm until they have read it."));
-        }
+        sections.Add(new HelpSection("Alert", "Some messages are alerts: what makes a message an alert depends on how it is composed, such as its tag, and the draft shows the Alert mark when it is one. Every recipient's window sounds an alarm until they have read it."));
 
         sections.Add(new HelpSection("Sending", "Press SEND to send it, or SAVE to keep it as a draft. A sent message moves to Outbox and shows a delivery status for each recipient, described under Receiving messages."));
         return new HelpTab("Sending a message", sections);

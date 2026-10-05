@@ -14,14 +14,10 @@
                      Watermark="Folder name"
                      FontSize="13" />
             <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" Spacing="8">
-                <Button x:Name="CancelBtn"
-                        Content="Cancel"
-                        FontSize="12"
-                        Padding="12,5" />
-                <Button x:Name="OkBtn"
-                        Content="Create"
-                        FontSize="12"
-                        Padding="12,5" />
+                <Button Classes="neutral" x:Name="CancelBtn"
+                        Content="Cancel" />
+                <Button Classes="positive" x:Name="OkBtn"
+                        Content="Create" />
             </StackPanel>
         </StackPanel>
     </Border>

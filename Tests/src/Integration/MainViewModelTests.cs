@@ -41,7 +41,6 @@ public sealed class MainViewModelTests
             BodyDocumentFactory.Setup(f => f.Create()).Returns(new StringBodyDocument());
             EngineController.Setup(p => p.Priorities).Returns([new MessagePriorityOption { Name = "Normal", Value = 0, Key = TestMessagePriority.Normal }]);
             EngineController.Setup(a => a.AlertLabel).Returns("ALERT");
-            EngineController.Setup(a => a.ComposeAlertsEnabled).Returns(true);
             EngineController.Setup(t => t.TagsEnabled).Returns(true);
             EngineController.Setup(t => t.TagLabel).Returns("Tag");
             EngineController.Setup(p => p.BlockedCombinations).Returns([]);
@@ -157,13 +156,15 @@ public sealed class MainViewModelTests
     {
         Setup s = new();
         NoteEntity note = new() { Id = new ObjectId(), Body = string.Empty, FolderId = "root-notes", ModifiedAt = DateTime.UtcNow };
-        s.EntryService.Setup(e => e.CreateNote()).ReturnsAsync(note);
+        s.EntryService.Setup(e => e.NewNote()).ReturnsAsync(note);
         object? shown = null;
         s.ContentArea.Setup(c => c.ShowEntry(It.IsAny<object>())).Callback<object>(o => shown = o);
         MainViewModel vm = s.BuildVm();
 
         await vm.CreateNoteCommand.ExecuteAsync(null);
         NoteViewModel editor = Assert.IsType<NoteViewModel>(shown);
+        editor.Body = "kept";
+        await editor.SaveCommand.ExecuteAsync(null);
         await editor.DeleteCommand.ExecuteAsync(null);
         await editor.DeleteCommand.ExecuteAsync(null);
 
@@ -624,7 +625,7 @@ public sealed class MainViewModelTests
         s.Connection.Raise(c => c.MessageReceived += null!, new MessageReceivedEvent { MessageId = "M1", FromUser = "BOB" });
         await Task.Delay(100);
 
-        s.EntryService.Verify(e => e.StoreIncomingMessage(It.IsAny<string>(), It.IsAny<string>(), It.IsAny<string>(), It.IsAny<List<AddressData>>(), It.IsAny<DateTime>(), It.IsAny<bool>(), It.IsAny<Enum?>(), It.IsAny<string>(), It.IsAny<string>()), Times.Never);
+        s.EntryService.Verify(e => e.StoreIncomingMessage(It.IsAny<string>(), It.IsAny<string>(), It.IsAny<string>(), It.IsAny<List<AddressData>>(), It.IsAny<DateTime>(), It.IsAny<Enum?>(), It.IsAny<string>(), It.IsAny<string>()), Times.Never);
         GC.KeepAlive(vm);
     }
 

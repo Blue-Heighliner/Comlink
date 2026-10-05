@@ -7,6 +7,8 @@ internal interface IContentAreaViewModel
     event Func<MessageEntity, Task>? DraftSent;
     /// <summary>Raised after the draft or note shown in the content area is deleted from its editor, once the content area has returned to the home screen.</summary>
     event Func<Task>? EntryDeleted;
+    /// <summary>Raised with the id, type and new title (its name or first line) when the draft or note shown in the content area is edited in a way that changes what the list calls it.</summary>
+    event Action<string, EntryType, string>? EntryTitleChanged;
 
     /// <summary>Gets or sets the currently displayed entry ViewModel, or <see langword="null"/> when showing the home screen.</summary>
     object? ActiveContent { get; set; }
@@ -19,6 +21,10 @@ internal interface IContentAreaViewModel
     void ShowHome();
     /// <summary>Loads and displays the full entry ViewModel for the given entry item. Discards the staged send queue if it was showing (see <see cref="StagedSendViewModel"/>).</summary>
     Task ShowEntry(EntryItemViewModel entry);
+    /// <summary>Loads and displays the draft with the given id, saving the editor it replaces first.</summary>
+    Task ShowDraft(string id);
+    /// <summary>Loads and displays the note with the given id, saving the editor it replaces first.</summary>
+    Task ShowNote(string id);
     /// <summary>Displays an already-constructed entry ViewModel directly. Discards the staged send queue if it was showing (see <see cref="StagedSendViewModel"/>).</summary>
     void ShowEntry(object entryVm);
 }
@@ -66,6 +72,7 @@ internal sealed partial class ContentAreaViewModel : ObservableObject, IContentA
         this.activityLogs = activityLogs;
         this.engineController = engineController;
         this.loggerFactory = loggerFactory;
+        logger = loggerFactory.CreateLogger("ACTIVITY");
         this.currentUserProvider = currentUserProvider;
         this.stagedSend = stagedSend;
         HomeText = engineController.HomeText;
@@ -80,6 +87,7 @@ internal sealed partial class ContentAreaViewModel : ObservableObject, IContentA
     private readonly IActivityLogRepository activityLogs;
     private readonly IEngineController engineController;
     private readonly ILoggerFactory loggerFactory;
+    private readonly ILogger logger;
     private readonly ICurrentUserProvider currentUserProvider;
     private readonly IStagedSendViewModel stagedSend;
     private readonly IBodyDocumentFactory? bodyDocumentFactory;
@@ -92,6 +100,8 @@ internal sealed partial class ContentAreaViewModel : ObservableObject, IContentA
     public event Func<MessageEntity, Task>? DraftSent;
     /// <inheritdoc />
     public event Func<Task>? EntryDeleted;
+    /// <inheritdoc />
+    public event Action<string, EntryType, string>? EntryTitleChanged;
     /// <summary>Gets the welcome text supplied by the host's home content provider.</summary>
     public string HomeText { get; }
 
@@ -118,6 +128,7 @@ internal sealed partial class ContentAreaViewModel : ObservableObject, IContentA
     /// <summary>Resets the content area to the home screen.</summary>
     public void ShowHome()
     {
+        _ = SaveLeavingEditor();
         DiscardStagedSendIfLeaving();
         showGeneration++;
         ActiveContent = null;
@@ -131,7 +142,28 @@ internal sealed partial class ContentAreaViewModel : ObservableObject, IContentA
         // finishes, this older load must not replace what they chose afterwards.
         int generation = ++showGeneration;
         IsHomeVisible = false;
+        await SaveLeavingEditor();
         object? content = await BuildEntryViewModel(entry);
+        if (generation == showGeneration)
+        {
+            DiscardStagedSendIfLeaving();
+            ActiveContent = content;
+        }
+    }
+
+    /// <inheritdoc />
+    public Task ShowDraft(string id) => ShowBuilt(BuildDraftViewModel(id));
+
+    /// <inheritdoc />
+    public Task ShowNote(string id) => ShowBuilt(BuildNoteViewModel(id));
+
+    private async Task ShowBuilt<T>(Task<T?> build)
+        where T : class
+    {
+        int generation = ++showGeneration;
+        IsHomeVisible = false;
+        await SaveLeavingEditor();
+        T? content = await build;
         if (generation == showGeneration)
         {
             DiscardStagedSendIfLeaving();
@@ -142,6 +174,7 @@ internal sealed partial class ContentAreaViewModel : ObservableObject, IContentA
     /// <summary>Displays an already-constructed entry ViewModel directly.</summary>
     public void ShowEntry(object entryVm)
     {
+        _ = SaveLeavingEditor();
         DiscardStagedSendIfLeaving();
         showGeneration++;
         IsHomeVisible = false;
@@ -157,6 +190,23 @@ internal sealed partial class ContentAreaViewModel : ObservableObject, IContentA
         if (ReferenceEquals(ActiveContent, stagedSend))
         {
             stagedSend.ClearCommand.Execute(null);
+        }
+    }
+
+    // A draft or note the user is leaving is saved as it is, so what was written is there when it is opened again, without having to press SAVE.
+    private async Task SaveLeavingEditor()
+    {
+        try
+        {
+            switch (ActiveContent)
+            {
+                case IDraftViewModel draft: await draft.SaveChanges(); break;
+                case INoteViewModel note: await note.SaveChanges(); break;
+            }
+        }
+        catch (Exception ex)
+        {
+            logger.LogError(ex, "Failed to save what was written before leaving it");
         }
     }
 
@@ -207,6 +257,8 @@ internal sealed partial class ContentAreaViewModel : ObservableObject, IContentA
             if (DraftSent is not null) { await DraftSent(msg); }
         };
         vm.Deleted += HandleEditorDeleted;
+        vm.Duplicated += ShowDraft;
+        vm.TitleChanged += title => EntryTitleChanged?.Invoke(vm.Id, EntryType.Draft, title);
         return vm;
     }
 
@@ -219,6 +271,8 @@ internal sealed partial class ContentAreaViewModel : ObservableObject, IContentA
 
         NoteViewModel vm = new(entity, entryService, engineController.CanDelete(FolderType.Notes));
         vm.Deleted += HandleEditorDeleted;
+        vm.Duplicated += ShowNote;
+        vm.TitleChanged += title => EntryTitleChanged?.Invoke(vm.Id, EntryType.Note, title);
         return vm;
     }
 

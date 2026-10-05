@@ -10,5 +10,5 @@ public sealed class EscalationController : IAutoForwardController<Frame>
     public IReadOnlyList<string> Users { get; } = ["CLIENT1", "CLIENT2"];
 
     /// <inheritdoc />
-    public bool Accepts(Frame frame) => frame.Alert || string.Equals(frame.Category, "URGENT", StringComparison.OrdinalIgnoreCase);
+    public bool Accepts(Frame frame) => string.Equals(frame.Category, "ALERT", StringComparison.OrdinalIgnoreCase) || string.Equals(frame.Category, "URGENT", StringComparison.OrdinalIgnoreCase);
 }

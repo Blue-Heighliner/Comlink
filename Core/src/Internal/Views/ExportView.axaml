@@ -22,17 +22,13 @@
                      FontSize="12"
                      Foreground="#858585"
                      VerticalAlignment="Center" />
-          <Button Content="CANCEL"
+          <Button Classes="neutral" Content="CANCEL"
                   Command="{Binding CancelExportCommand}"
-                  IsVisible="{Binding IsExporting}"
-                  FontWeight="SemiBold"
-                  FontSize="12" />
-          <Button Classes="accent"
+                  IsVisible="{Binding IsExporting}" />
+          <Button Classes="positive"
                   Content="START EXPORT"
                   Command="{Binding StartExportCommand}"
-                  IsEnabled="{Binding !IsExporting}"
-                  FontWeight="SemiBold"
-                  FontSize="12" />
+                  IsEnabled="{Binding !IsExporting}" />
           <Button Content="×"
                   Command="{Binding $parent[Window].DataContext.ShowHomeCommand}"
                   ToolTip.Tip="Close"
@@ -78,10 +74,9 @@
               </DataTemplate>
             </ComboBox.ItemTemplate>
           </ComboBox>
-          <Button Grid.Column="1"
+          <Button Classes="neutral" Grid.Column="1"
                   Content="REFRESH"
                   Command="{Binding RefreshDrivesCommand}"
-                  FontSize="12"
                   Margin="8,0,0,0" />
         </Grid>
       </StackPanel>
@@ -142,10 +137,9 @@
                    Foreground="#858585"
                    VerticalAlignment="Center"
                    IsVisible="{Binding IsCollectingEntries}" />
-        <Button Grid.Column="1"
+        <Button Classes="neutral" Grid.Column="1"
                 Content="CLEAR"
                 Command="{Binding ClearEntriesCommand}"
-                FontSize="12"
                 Margin="8,0,0,0" />
       </Grid>
       <ItemsControl ItemsSource="{Binding SelectedEntries}">

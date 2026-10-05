@@ -93,11 +93,13 @@ Stored in both Inbox (received) and Outbox (sent).
 | `Body` | `string` | Plain text representation |
 | `BodySegmentsJson` | `string` | JSON array of `DraftBodySegmentData` — used for fill-ins |
 | `Addresses` | `List<AddressData>` | |
+| `Name` | `string?` | Name the user gave the draft, shown in the list instead of the first line of the body; `null` when unnamed |
 | `IsSent` | `bool` | `true` after successful send |
 | `IsAlert` | `bool` | Whether this draft will be sent as an alert; see `Docs/Components/Peer.md#alert-messages` |
 | `Priority` | `int` | Integer value of the enum member that is the priority level this draft should be sent at (never the level's name or position, so it survives relabelling and reordering); see `Docs/Components/Configuration.md#message-composition` |
 | `Tag` | `string` | Short user-inputted tag identifying the type of this message; see `Docs/Components/Configuration.md#message-composition` |
 | `SecurityLevel` | `int?` | Integer value of the enum member that is the security level this draft should be sent at, one of `IEngineController.SecurityLevels`, or `null` when none is chosen or none are configured |
+| `LineWidth` | `int?` | How many monospace characters wide a line of this draft is set to be, within the range the draft handler states, or `null` for no limit; see `Docs/Components/Configuration.md#drafts` |
 | `SentAt` | `DateTime?` | UTC send time |
 | `ModifiedAt` | `DateTime` | UTC last edit time |
 | `FolderId` | `string` | |
@@ -112,9 +114,12 @@ Stored in both Inbox (received) and Outbox (sent).
 | Field | Type |
 |-------|------|
 | `Id` | `ObjectId` |
+| `Name` | `string?` |
 | `Body` | `string` |
 | `ModifiedAt` | `DateTime` |
 | `FolderId` | `string` |
+
+`Name`, when set, is the note's title in the list instead of the first line of the body.
 
 ### `ActivityLogEntity`
 

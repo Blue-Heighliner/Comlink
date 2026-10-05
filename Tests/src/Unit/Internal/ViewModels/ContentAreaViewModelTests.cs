@@ -18,7 +18,7 @@ public sealed class ContentAreaViewModelTests
         public Task<List<string>> GetUserNames(CancellationToken cancellation = default) => Task.FromResult(new List<string>());
         public Task<List<string>> GetConnectedUsers(CancellationToken cancellation = default) => Task.FromResult(new List<string>());
         public Task<UserInfo?> InstallUser(string userCode, CancellationToken cancellation = default) => Task.FromResult<UserInfo?>(null);
-        public Task<SendMessageResult?> SendMessage(string body, List<AddressRequest> addresses, bool isAlert = false, Enum? priority = null, string tag = "", Enum? securityLevel = null, CancellationToken cancellation = default) => Task.FromResult<SendMessageResult?>(null);
+        public Task<SendMessageResult?> SendMessage(string body, List<AddressRequest> addresses, Enum? priority = null, string tag = "", Enum? securityLevel = null, CancellationToken cancellation = default) => Task.FromResult<SendMessageResult?>(null);
 
         public Task<bool> MarkMessageRead(string messageId, CancellationToken cancellation = default)
         {
@@ -41,7 +41,6 @@ public sealed class ContentAreaViewModelTests
         mock.Setup(t => t.TagLabel).Returns("Tag");
         mock.Setup(p => p.BlockedCombinations).Returns([]);
         mock.Setup(a => a.AlertLabel).Returns("ALERT");
-        mock.Setup(a => a.ComposeAlertsEnabled).Returns(true);
         return mock.Object;
     }
 
@@ -463,5 +462,25 @@ public sealed class ContentAreaViewModelTests
         await vm.ShowEntry(new EntryItemViewModel("MSG1", "Title", EntryType.Message, DateTime.UtcNow, isOutboundMessage: true));
 
         clearCommand.Verify(c => c.Execute(null), Times.Once);
+    }
+
+    /// <summary>Leaving a draft or a note, for home or for something else, saves what was written first.</summary>
+    [Fact]
+    public async Task Leaving_ADraftOrNote_SavesIt()
+    {
+        ContentAreaViewModel vm = Build(out _);
+        Mock<IDraftViewModel> draft = new();
+        draft.Setup(d => d.SaveChanges()).Returns(Task.CompletedTask);
+        Mock<INoteViewModel> note = new();
+        note.Setup(n => n.SaveChanges()).Returns(Task.CompletedTask);
+
+        vm.ShowEntry(draft.Object);
+        vm.ShowHome();
+        vm.ShowEntry(note.Object);
+        vm.ShowEntry(new object());
+        await Task.Yield();
+
+        draft.Verify(d => d.SaveChanges(), Times.Once);
+        note.Verify(n => n.SaveChanges(), Times.Once);
     }
 }

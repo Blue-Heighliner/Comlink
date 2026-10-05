@@ -91,11 +91,45 @@
     <Setter Property="Background" Value="{StaticResource HoverBrush}" />
   </Style>
 
-  <!-- Accent Button -->
-  <Style Selector="Button.accent">
-    <Setter Property="Background" Value="{StaticResource AccentBrush}" />
-    <Setter Property="Foreground" Value="White" />
+  <!-- Plain TextBox: writing surface that stays flat, like the draft body editor, whether hovered or focused -->
+  <Style Selector="TextBox.plain /template/ Border#PART_BorderElement">
+    <Setter Property="Background" Value="Transparent" />
+    <Setter Property="BorderThickness" Value="0" />
+  </Style>
+  <Style Selector="TextBox.plain:pointerover /template/ Border#PART_BorderElement">
+    <Setter Property="Background" Value="Transparent" />
+    <Setter Property="BorderThickness" Value="0" />
+  </Style>
+  <Style Selector="TextBox.plain:focus /template/ Border#PART_BorderElement">
+    <Setter Property="Background" Value="Transparent" />
+    <Setter Property="BorderThickness" Value="0" />
+  </Style>
+
+  <!-- Action buttons: blue for a major positive action (send, save), red for a major negative one (delete), gray for anything neutral -->
+  <Style Selector="Button.positive, Button.negative, Button.neutral">
+    <Setter Property="FontSize" Value="12" />
+    <Setter Property="FontWeight" Value="SemiBold" />
     <Setter Property="Padding" Value="14,6" />
+    <Setter Property="Foreground" Value="White" />
+  </Style>
+  <Style Selector="Button.positive">
+    <Setter Property="Background" Value="#1565C0" />
+  </Style>
+  <Style Selector="Button.positive:pointerover /template/ ContentPresenter">
+    <Setter Property="Background" Value="#1976D2" />
+  </Style>
+  <Style Selector="Button.negative">
+    <Setter Property="Background" Value="#C62828" />
+  </Style>
+  <Style Selector="Button.negative:pointerover /template/ ContentPresenter">
+    <Setter Property="Background" Value="#D32F2F" />
+  </Style>
+  <Style Selector="Button.neutral">
+    <Setter Property="Background" Value="#3C3C3C" />
+    <Setter Property="Foreground" Value="#CCCCCC" />
+  </Style>
+  <Style Selector="Button.neutral:pointerover /template/ ContentPresenter">
+    <Setter Property="Background" Value="#4A4A4F" />
   </Style>
 
   <!-- TitleBar Button -->

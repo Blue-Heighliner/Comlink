@@ -121,6 +121,8 @@ internal sealed class ConfiguredEngineController : IEngineController
     /// <inheritdoc />
     public Enum RequirePriority(Enum? priority) => fallback.RequirePriority(priority);
     /// <inheritdoc />
+    public bool ComputeIsAlert(string body, Enum? priority, string tag, string securityLevel, IReadOnlyList<AddressRequest> addresses) => fallback.ComputeIsAlert(body, priority, tag, securityLevel, addresses);
+    /// <inheritdoc />
     public string? GetUnconfiguredLevelReason(object message) => fallback.GetUnconfiguredLevelReason(message);
     /// <inheritdoc />
     public void Validate() => fallback.Validate();
@@ -222,7 +224,13 @@ internal sealed class ConfiguredEngineController : IEngineController
     /// <inheritdoc />
     public bool QuickConfirmationEnabled => Current?.QuickConfirmationEnabled ?? fallback.QuickConfirmationEnabled;
     /// <inheritdoc />
-    public bool ComposeAlertsEnabled => Current?.ComposeAlertsEnabled ?? fallback.ComposeAlertsEnabled;
+    public LineWidthRange? DraftLineWidth => fallback.DraftLineWidth;
+    /// <inheritdoc />
+    public TagRules DraftTagRules => fallback.DraftTagRules;
+    /// <inheritdoc />
+    public DraftDefaults DraftDefaults => fallback.DraftDefaults;
+    /// <inheritdoc />
+    public string? GetDraftHeader(DraftContent draft) => fallback.GetDraftHeader(draft);
 
     /// <inheritdoc />
     public IReadOnlyList<MessagePriorityOption> Priorities => fallback.Priorities;

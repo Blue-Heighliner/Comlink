@@ -95,16 +95,17 @@ internal sealed class DirectServiceConnection : IServiceConnection
         => userService.Install(userCode, cancellation);
 
     /// <inheritdoc />
-    public async Task<SendMessageResult?> SendMessage(string body, List<AddressRequest> addresses, bool isAlert = false, Enum? priority = null, string tag = "", Enum? securityLevel = null, CancellationToken cancellation = default)
+    public async Task<SendMessageResult?> SendMessage(string body, List<AddressRequest> addresses, Enum? priority = null, string tag = "", Enum? securityLevel = null, CancellationToken cancellation = default)
     {
         UserInfo? userInfo = userService.GetCurrentUserInfo();
         if (userInfo is null) { return null; }
+
+        if (engineController.TagsEnabled && engineController.DraftTagRules.Validate(tag) is { } tagError) { throw new ArgumentException(tagError, nameof(tag)); }
 
         SendMessagePayload payload = new()
         {
             Body = body,
             Addresses = addresses.Select(a => new AddressPayload { UserName = a.UserName, Type = a.Type, Information = a.Information }).ToList(),
-            IsAlert = isAlert,
             Priority = priority,
             Tag = tag,
             SecurityLevel = engineController.GetSecurityLevelName(securityLevel)
@@ -114,6 +115,7 @@ internal sealed class DirectServiceConnection : IServiceConnection
         return new SendMessageResult
         {
             MessageId = messageId,
+            IsAlert = engineController.ComputeIsAlert(body, priority, tag, engineController.GetSecurityLevelName(securityLevel), addresses),
             UserResults = [.. userResults]
         };
     }

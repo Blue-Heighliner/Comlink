@@ -99,12 +99,10 @@
               <KeyBinding Gesture="Enter" Command="{Binding AddTargetCommand}" />
             </AutoCompleteBox.KeyBindings>
           </AutoCompleteBox>
-          <Button Grid.Column="1"
+          <Button Classes="neutral" Grid.Column="1"
                   Content="Add"
                   Margin="8,0,0,0"
-                  Command="{Binding AddTargetCommand}"
-                  Padding="10,4"
-                  FontSize="12" />
+                  Command="{Binding AddTargetCommand}" />
         </Grid>
       </StackPanel>
 

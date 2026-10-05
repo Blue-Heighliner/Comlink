@@ -7,31 +7,72 @@
              x:DataType="vm:DraftViewModel"
              Background="#1E1E1E">
 
-  <DockPanel Margin="24,20">
+  <UserControl.Styles>
+    <Style Selector="ListBox.types">
+      <Setter Property="Background" Value="Transparent" />
+      <Setter Property="BorderThickness" Value="0" />
+      <Setter Property="Padding" Value="0" />
+    </Style>
+    <Style Selector="ListBox.types ListBoxItem">
+      <Setter Property="Padding" Value="12,5" />
+      <Setter Property="Margin" Value="0,0,6,0" />
+      <Setter Property="HorizontalContentAlignment" Value="Center" />
+      <Setter Property="FontSize" Value="12" />
+      <Setter Property="FontWeight" Value="SemiBold" />
+      <Setter Property="Foreground" Value="#CCCCCC" />
+      <Setter Property="CornerRadius" Value="3" />
+    </Style>
+    <Style Selector="ListBox.types ListBoxItem /template/ ContentPresenter">
+      <Setter Property="Background" Value="#3C3C3C" />
+      <Setter Property="CornerRadius" Value="3" />
+    </Style>
+    <Style Selector="ListBox.types ListBoxItem:pointerover /template/ ContentPresenter">
+      <Setter Property="Background" Value="#4A4A4F" />
+    </Style>
+    <Style Selector="ListBox.types ListBoxItem:selected /template/ ContentPresenter">
+      <Setter Property="Background" Value="#1565C0" />
+      <Setter Property="Foreground" Value="White" />
+    </Style>
+    <Style Selector="ListBox.types ListBoxItem:selected:pointerover /template/ ContentPresenter">
+      <Setter Property="Background" Value="#1976D2" />
+    </Style>
+  </UserControl.Styles>
 
-    <!-- Toolbar -->
-    <Border DockPanel.Dock="Top"
+  <Grid Margin="24,20" RowDefinitions="Auto,*">
+
+    <!-- One bar: what the draft is, the draft's aspects on the left, its actions on the right, or below them when the window is too narrow for both -->
+    <Border Grid.Row="0"
             BorderBrush="#3E3E42"
             BorderThickness="0,0,0,1"
-            Padding="0,0,0,10"
+            Padding="0,0,0,8"
             Margin="0,0,0,16">
-      <DockPanel>
-        <StackPanel DockPanel.Dock="Right"
-                    Orientation="Horizontal"
-                    Spacing="8"
-                    VerticalAlignment="Center">
-          <TextBlock Text="{Binding StatusMessage}"
-                     FontSize="12"
+      <Grid x:Name="Toolbar" ColumnDefinitions="*,Auto" RowDefinitions="Auto,Auto">
+        <StackPanel x:Name="Aspects" Grid.Column="0" Orientation="Horizontal">
+          <TextBlock Text="{vm:Display 'DRAFT'}"
+                     FontSize="11"
+                     FontWeight="SemiBold"
                      Foreground="#858585"
-                     VerticalAlignment="Center" />
-          <TextBox Text="{Binding Tag}"
+                     LetterSpacing="1"
+                     VerticalAlignment="Center"
+                     Margin="0,0,14,6" />
+          <TextBox Text="{Binding Name}"
+                   Watermark="Name"
+                   Width="120"
+                   Background="#3C3C3C"
+                   BorderThickness="0"
+                   FontSize="12"
+                   Height="30"
+                   Margin="0,0,8,6"
+                   IsEnabled="{Binding !IsSent}" />
+          <TextBox x:Name="TagBox"
+                   Text="{Binding Tag}"
                    Watermark="{Binding TagLabel}"
                    Width="90"
                    Background="#3C3C3C"
                    BorderThickness="0"
                    FontSize="12"
-                   Height="26"
-                   VerticalAlignment="Center">
+                   Height="30"
+                   Margin="0,0,8,6">
             <TextBox.IsVisible>
               <MultiBinding Converter="{x:Static BoolConverters.And}">
                 <Binding Path="!IsSent" />
@@ -45,8 +86,8 @@
                     Background="#3C3C3C"
                     BorderThickness="0"
                     FontSize="12"
-                    Height="26"
-                    VerticalAlignment="Center">
+                    Height="30"
+                    Margin="0,0,8,6">
             <ComboBox.ItemTemplate>
               <DataTemplate>
                 <TextBlock Text="{Binding Name}" />
@@ -58,8 +99,8 @@
                     Background="#3C3C3C"
                     BorderThickness="0"
                     FontSize="12"
-                    Height="26"
-                    VerticalAlignment="Center">
+                    Height="30"
+                    Margin="0,0,12,6">
             <ComboBox.IsVisible>
               <MultiBinding Converter="{x:Static BoolConverters.And}">
                 <Binding Path="!IsSent" />
@@ -72,39 +113,69 @@
               </DataTemplate>
             </ComboBox.ItemTemplate>
           </ComboBox>
-          <CheckBox Content="{Binding AlertLabel}"
-                     IsChecked="{Binding IsAlert}"
+          <TextBlock Text="{Binding AlertLabel}"
+                     IsVisible="{Binding IsAlert}"
                      Foreground="#E06C75"
                      FontSize="12"
                      FontWeight="SemiBold"
-                     VerticalAlignment="Center">
-            <CheckBox.IsVisible>
-              <MultiBinding Converter="{x:Static BoolConverters.And}">
-                <Binding Path="!IsSent" />
-                <Binding Path="ComposeAlertsEnabled" />
-              </MultiBinding>
-            </CheckBox.IsVisible>
-          </CheckBox>
-          <Button Content="{Binding DeleteButtonText}"
+                     VerticalAlignment="Center"
+                     Margin="0,0,0,6" />
+        </StackPanel>
+        <StackPanel x:Name="Actions"
+                    Grid.Column="1"
+                    Orientation="Horizontal"
+                    Spacing="8"
+                    Margin="12,0,0,6"
+                    VerticalAlignment="Top">
+          <TextBlock Text="{Binding StatusMessage}"
+                     FontSize="12"
+                     Foreground="#858585"
+                     VerticalAlignment="Center" />
+          <NumericUpDown Value="{Binding LineWidthValue}"
+                         Minimum="{Binding LineWidthMinimum}"
+                         Maximum="{Binding LineWidthMaximum}"
+                         Increment="1"
+                         FormatString="0"
+                         IsVisible="{Binding IsLineWidthAvailable}"
+                         IsEnabled="{Binding !IsSent}"
+                         Width="110"
+                         Height="30"
+                         FontSize="12"
+                         VerticalAlignment="Center"
+                         ToolTip.Tip="How many characters wide a line is shown. This only changes how the text is shown, never the text." />
+          <Button Classes="neutral"
+                  x:Name="AddFillInButton"
+                  Content="FILL-IN"
+                  IsVisible="{Binding !IsSent}"
+                  Click="OnAddFillInClick" />
+          <Button Classes="neutral"
+                  x:Name="PlsoButton"
+                  Content="{Binding PlsoButtonText}"
+                  IsVisible="{Binding !IsSent}"
+                  Click="OnPlsoButtonClick"
+                  ToolTip.Tip="Phonetic Language Spell Out — click to cycle OFF → ON → SPACES. ON replaces typed letters/digits with their phonetic word (A → ALFA, 5 → FIVE); SPACES does the same and adds a trailing space after each word." />
+          <Border Width="1"
+                  Height="20"
+                  Margin="4,0"
+                  Background="#3E3E42"
+                  IsVisible="{Binding !IsSent}" />
+          <Button Classes="neutral"
+                  Content="DUPLICATE"
+                  Command="{Binding DuplicateCommand}" />
+          <Button Classes="negative"
+                  Content="{Binding DeleteButtonText}"
                   Command="{Binding DeleteCommand}"
-                  IsVisible="{Binding CanDelete}"
-                  Foreground="#E06C75"
-                  FontWeight="SemiBold"
-                  FontSize="12" />
-          <Button Classes="accent"
+                  IsVisible="{Binding CanDelete}" />
+          <Button Classes="positive"
                   Content="SAVE"
                   Command="{Binding SaveCommand}"
                   IsEnabled="{Binding !IsSaving}"
-                  FontWeight="SemiBold"
-                  FontSize="12" />
-          <Button Classes="accent"
+                  IsVisible="{Binding !IsSent}" />
+          <Button Classes="positive"
                   Content="SEND"
                   Command="{Binding SendCommand}"
                   IsEnabled="{Binding !IsSaving}"
-                  FontWeight="SemiBold"
-                  FontSize="12"
-                  IsVisible="{Binding !IsSent}"
-                  Background="#1565C0" />
+                  IsVisible="{Binding !IsSent}" />
           <TextBlock Text="SENT"
                      IsVisible="{Binding IsSent}"
                      Foreground="#4CAF50"
@@ -112,148 +183,167 @@
                      FontWeight="SemiBold"
                      VerticalAlignment="Center" />
         </StackPanel>
-        <StackPanel Orientation="Horizontal"
-                    Spacing="8"
-                    VerticalAlignment="Center">
-          <TextBlock Text="{vm:Display 'DRAFT'}"
+      </Grid>
+    </Border>
+
+    <Grid Grid.Row="1" ColumnDefinitions="*,320">
+
+      <!-- Body: the host's header, then the editor with fill-ins as inline objects -->
+      <DockPanel x:Name="BodyHost" Grid.Column="0">
+        <!-- Header: required by the host, prepended to the message when it is sent, never editable -->
+        <Border x:Name="HeaderBorder"
+                DockPanel.Dock="Top"
+                HorizontalAlignment="Left"
+                Background="#252526"
+                BorderBrush="#4A4A4F"
+                BorderThickness="0,0,1,1"
+                Padding="0,0,0,6"
+                Margin="0,0,0,6"
+                IsVisible="{Binding Header, Converter={x:Static StringConverters.IsNotNullOrEmpty}}">
+          <SelectableTextBlock x:Name="HeaderText"
+                               Text="{Binding Header}"
+                               TextWrapping="Wrap"
+                               HorizontalAlignment="Left"
+                               FontFamily="avares://BlueHeighliner.Comlink/Assets/Fonts/DejaVuSansMono.ttf#DejaVu Sans Mono"
+                               FontSize="16"
+                               Foreground="#858585" />
+        </Border>
+
+        <avaloniaEdit:TextEditor x:Name="BodyEditor"
+                                 IsReadOnly="{Binding IsSent}"
+                                 FontFamily="avares://BlueHeighliner.Comlink/Assets/Fonts/DejaVuSansMono.ttf#DejaVu Sans Mono"
+                                 FontSize="16"
+                                 WordWrap="True"
+                                 ShowLineNumbers="False"
+                                 HorizontalScrollBarVisibility="Disabled"
+                                 VerticalScrollBarVisibility="Auto" />
+      </DockPanel>
+
+      <!-- Recipients, beside the body: added ones grouped by type, then a short form to add another -->
+      <Border Grid.Column="1"
+              BorderBrush="#3E3E42"
+              BorderThickness="1,0,0,0"
+              Margin="16,0,0,0"
+              Padding="16,0,0,0">
+        <DockPanel>
+          <TextBlock DockPanel.Dock="Top"
+                     Text="RECIPIENTS"
                      FontSize="11"
                      FontWeight="SemiBold"
                      Foreground="#858585"
                      LetterSpacing="1"
-                     VerticalAlignment="Center" />
-          <Button x:Name="AddFillInButton"
-                  Content="FILL-IN"
-                  IsVisible="{Binding !IsSent}"
-                  Click="OnAddFillInClick"
-                  FontSize="11"
-                  FontWeight="SemiBold"
-                  Foreground="#858585"
-                  Padding="8,4"
-                  Margin="0,0,8,0" />
-          <Button x:Name="PlsoButton"
-                  Content="{Binding PlsoButtonText}"
-                  IsVisible="{Binding !IsSent}"
-                  Click="OnPlsoButtonClick"
-                  ToolTip.Tip="Phonetic Language Spell Out — click to cycle OFF → ON → SPACES. ON replaces typed letters/digits with their phonetic word (A → ALFA, 5 → FIVE); SPACES does the same and adds a trailing space after each word."
-                  FontSize="11"
-                  FontWeight="SemiBold"
-                  Foreground="#858585"
-                  Padding="8,4" />
-        </StackPanel>
-      </DockPanel>
-    </Border>
+                     Margin="0,0,0,10" />
 
-    <!-- Addresses -->
-    <Border DockPanel.Dock="Top"
-            BorderBrush="#3E3E42"
-            BorderThickness="0,0,0,1"
-            Margin="0,0,0,12"
-            Padding="0,0,0,12">
-      <StackPanel Spacing="6">
+          <!-- Add a recipient: pick the type, write the name, press Enter. The note is optional -->
+          <StackPanel DockPanel.Dock="Top"
+                      Spacing="6"
+                      Margin="0,0,0,14"
+                      IsVisible="{Binding !IsSent}">
+            <ListBox Classes="types"
+                     HorizontalAlignment="Stretch"
+                     ItemsSource="{Binding AddressTypes}"
+                     SelectedItem="{Binding NewAddressType}">
+              <ListBox.ItemsPanel>
+                <ItemsPanelTemplate>
+                  <UniformGrid Rows="1" />
+                </ItemsPanelTemplate>
+              </ListBox.ItemsPanel>
+              <ListBox.ItemTemplate>
+                <DataTemplate>
+                  <TextBlock Text="{Binding Label}" />
+                </DataTemplate>
+              </ListBox.ItemTemplate>
+            </ListBox>
+            <Grid ColumnDefinitions="*,Auto">
+              <AutoCompleteBox x:Name="UserInput"
+                               Grid.Column="0"
+                               Text="{Binding NewAddressUser}"
+                               Watermark="Add a recipient..."
+                               ItemsSource="{Binding AllUserNames}"
+                               FilterMode="StartsWith"
+                               MinimumPrefixLength="1"
+                               FontSize="13"
+                               Height="32" />
+              <Button Classes="neutral"
+                      Grid.Column="1"
+                      Content="Add"
+                      Margin="8,0,0,0"
+                      Command="{Binding AddAddressCommand}" />
+            </Grid>
+            <TextBox Text="{Binding NewAddressInformation}"
+                     Watermark="Note for this recipient (optional)"
+                     FontSize="12"
+                     Height="30">
+              <TextBox.KeyBindings>
+                <KeyBinding Gesture="Enter" Command="{Binding AddAddressCommand}" />
+              </TextBox.KeyBindings>
+            </TextBox>
+          </StackPanel>
 
-        <!-- Existing addresses -->
-        <ItemsControl ItemsSource="{Binding Addresses}">
-          <ItemsControl.ItemTemplate>
-            <DataTemplate>
-              <Grid ColumnDefinitions="70,Auto,*,Auto" Margin="0,2">
-                <Border Grid.Column="0"
-                        Background="#3C3C3C"
-                        CornerRadius="3"
-                        Padding="6,2"
-                        HorizontalAlignment="Left">
-                  <TextBlock FontSize="11"
-                             FontWeight="SemiBold"
-                             Foreground="#858585">
-                    <TextBlock.Text>
-                      <MultiBinding Converter="{x:Static converters:AddressTypeLabelConverter.Instance}">
-                        <Binding Path="Type" />
-                        <Binding Path="$parent[UserControl].DataContext.AddressTypes" />
-                      </MultiBinding>
-                    </TextBlock.Text>
-                  </TextBlock>
-                </Border>
-                <TextBlock Grid.Column="1"
-                           Text="{Binding UserName}"
-                           FontSize="13"
-                           Foreground="#CCCCCC"
-                           VerticalAlignment="Center"
-                           Margin="8,0" />
-                <TextBlock Grid.Column="2"
-                           Text="{Binding Information}"
-                           IsVisible="{Binding Information, Converter={x:Static StringConverters.IsNotNullOrEmpty}}"
-                           FontSize="13"
-                           FontStyle="Italic"
-                           Foreground="#858585"
-                           TextWrapping="Wrap"
-                           VerticalAlignment="Center" />
-                <Button Grid.Column="3"
-                        Content="×"
-                        Command="{Binding $parent[UserControl].DataContext.RemoveAddressCommand}"
-                        CommandParameter="{Binding}"
-                        IsVisible="{Binding $parent[UserControl].DataContext.IsSent, Converter={x:Static BoolConverters.Not}}"
-                        FontSize="14"
-                        Padding="4,0"
-                        Foreground="#858585" />
-              </Grid>
-            </DataTemplate>
-          </ItemsControl.ItemTemplate>
-        </ItemsControl>
-
-        <!-- Add address row -->
-        <Grid ColumnDefinitions="90,*,*,Auto"
-              IsVisible="{Binding !IsSent}"
-              Margin="0,4,0,0">
-          <ComboBox Grid.Column="0"
-                    ItemsSource="{Binding AddressTypes}"
-                    SelectedItem="{Binding NewAddressType}"
-                    Background="#3C3C3C"
-                    BorderThickness="0"
-                    FontSize="12"
-                    Height="30">
-            <ComboBox.ItemTemplate>
-              <DataTemplate>
-                <TextBlock Text="{Binding Label}" />
-              </DataTemplate>
-            </ComboBox.ItemTemplate>
-          </ComboBox>
-          <AutoCompleteBox Grid.Column="1"
-                           x:Name="UserInput"
-                           Text="{Binding NewAddressUser}"
-                           Watermark="User name..."
-                           ItemsSource="{Binding AllUserNames}"
-                           FilterMode="StartsWith"
-                           MinimumPrefixLength="1"
-                           FontSize="13"
-                           Margin="8,0"
-                           Height="30" />
-          <TextBox Grid.Column="2"
-                   Text="{Binding NewAddressInformation}"
-                   Watermark="Information..."
-                   FontSize="13"
-                   Height="30">
-            <TextBox.KeyBindings>
-              <KeyBinding Gesture="Enter" Command="{Binding AddAddressCommand}" />
-            </TextBox.KeyBindings>
-          </TextBox>
-          <Button Grid.Column="3"
-                  Content="Add"
-                  Margin="8,0,0,0"
-                  Command="{Binding AddAddressCommand}"
-                  Padding="10,4"
-                  FontSize="12" />
-        </Grid>
-      </StackPanel>
-    </Border>
-
-    <!-- Body: single AvaloniaEdit TextEditor with fill-ins as inline objects (fills remaining space) -->
-    <avaloniaEdit:TextEditor x:Name="BodyEditor"
-                             IsReadOnly="{Binding IsSent}"
-                             FontFamily="avares://BlueHeighliner.Comlink/Assets/Fonts/DejaVuSansMono.ttf#DejaVu Sans Mono"
-                             FontSize="16"
-                             WordWrap="True"
-                             ShowLineNumbers="False"
-                             HorizontalScrollBarVisibility="Disabled"
-                             VerticalScrollBarVisibility="Auto" />
-
-  </DockPanel>
+          <!-- Added recipients, grouped by address type -->
+          <ScrollViewer VerticalScrollBarVisibility="Auto">
+            <ItemsControl ItemsSource="{Binding AddressGroups}">
+              <ItemsControl.ItemTemplate>
+                <DataTemplate>
+                  <StackPanel Margin="0,0,0,12">
+                    <TextBlock Text="{Binding Label}"
+                               FontSize="11"
+                               FontWeight="SemiBold"
+                               Foreground="#858585"
+                               LetterSpacing="1"
+                               Margin="0,0,0,4" />
+                    <ItemsControl ItemsSource="{Binding Items}">
+                      <ItemsControl.ItemTemplate>
+                        <DataTemplate>
+                          <Grid ColumnDefinitions="*,Auto" Margin="0,2">
+                            <StackPanel Grid.Column="0" VerticalAlignment="Center">
+                              <TextBlock Text="{Binding UserName}"
+                                         FontSize="13"
+                                         Foreground="#CCCCCC" />
+                              <TextBlock Text="{Binding Information}"
+                                         IsVisible="{Binding Information, Converter={x:Static StringConverters.IsNotNullOrEmpty}}"
+                                         FontSize="12"
+                                         FontStyle="Italic"
+                                         Foreground="#858585"
+                                         TextWrapping="Wrap" />
+                            </StackPanel>
+                            <StackPanel Grid.Column="1"
+                                        Orientation="Horizontal"
+                                        VerticalAlignment="Center"
+                                        IsVisible="{Binding $parent[UserControl].DataContext.IsSent, Converter={x:Static BoolConverters.Not}}">
+                              <Button Content="▲"
+                                      ToolTip.Tip="Move up"
+                                      Command="{Binding $parent[UserControl].DataContext.MoveAddressUpCommand}"
+                                      CommandParameter="{Binding}"
+                                      FontSize="10"
+                                      Padding="6,4"
+                                      Foreground="#858585" />
+                              <Button Content="▼"
+                                      ToolTip.Tip="Move down"
+                                      Command="{Binding $parent[UserControl].DataContext.MoveAddressDownCommand}"
+                                      CommandParameter="{Binding}"
+                                      FontSize="10"
+                                      Padding="6,4"
+                                      Foreground="#858585" />
+                              <Button Content="×"
+                                      ToolTip.Tip="Remove"
+                                      Command="{Binding $parent[UserControl].DataContext.RemoveAddressCommand}"
+                                      CommandParameter="{Binding}"
+                                      FontSize="14"
+                                      Padding="6,0"
+                                      Foreground="#E06C75" />
+                            </StackPanel>
+                          </Grid>
+                        </DataTemplate>
+                      </ItemsControl.ItemTemplate>
+                    </ItemsControl>
+                  </StackPanel>
+                </DataTemplate>
+              </ItemsControl.ItemTemplate>
+            </ItemsControl>
+          </ScrollViewer>
+        </DockPanel>
+      </Border>
+    </Grid>
+  </Grid>
 </UserControl>

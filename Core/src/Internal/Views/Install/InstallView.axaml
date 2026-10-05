@@ -34,16 +34,14 @@
                    TextWrapping="Wrap" />
 
         <!-- Install button -->
-        <Button Classes="accent"
+        <Button Classes="positive"
                 Content="INSTALL"
                 Command="{Binding InstallCommand}"
                 IsEnabled="{Binding !IsLoading}"
                 HorizontalAlignment="Stretch"
                 HorizontalContentAlignment="Center"
                 VerticalContentAlignment="Center"
-                Height="38"
-                FontWeight="SemiBold"
-                FontSize="13" />
+                Height="38" />
 
         <!-- Loading indicator -->
         <TextBlock Text="Connecting..."

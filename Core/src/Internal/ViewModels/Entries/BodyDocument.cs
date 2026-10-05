@@ -3,6 +3,9 @@ namespace BlueHeighliner.Comlink;
 /// <summary>Abstraction over body text storage for a draft message, independent of any specific UI framework.</summary>
 internal interface IBodyDocument
 {
+    /// <summary>Raised after the text has changed.</summary>
+    event Action? Changed;
+
     /// <summary>Gets or sets the full text content of the document.</summary>
     string Text { get; set; }
     /// <summary>Gets the number of characters in the document.</summary>
@@ -19,13 +22,24 @@ internal sealed class StringBodyDocument : IBodyDocument
     private string text = string.Empty;
 
     /// <inheritdoc />
-    public string Text { get => text; set => text = value; }
+    public event Action? Changed;
+
+    /// <inheritdoc />
+    public string Text
+    {
+        get => text;
+        set
+        {
+            text = value;
+            Changed?.Invoke();
+        }
+    }
 
     /// <inheritdoc />
     public int TextLength => text.Length;
 
     /// <inheritdoc />
-    public void Insert(int offset, string text) => text = text.Insert(offset, text);
+    public void Insert(int offset, string text) => Text = this.text.Insert(offset, text);
 }
 
 /// <summary>Factory that creates <see cref="IBodyDocument"/> instances for use by draft ViewModels.</summary>

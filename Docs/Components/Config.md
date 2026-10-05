@@ -38,7 +38,6 @@ The file is read again while the application runs when the user right-clicks the
       "AlertText": null,
       "AlarmSoundSeconds": null,
       "QuickConfirmationEnabled": null,
-      "ComposeAlertsEnabled": null,
       "MessageTagsEnabled": null,
       "MessageTagLabel": null,
       "PrintReceivedEnabled": null
@@ -188,7 +187,7 @@ Run with no GUI, as a normal peer.
 
 **Type:** `string | null` | **Default:** `null` (`"ALERT"`)
 
-Text shown in the title bar's alert box while alarming, and the draft editor's alert checkbox label.
+Text shown in the title bar's alert box while alarming, and the mark a draft shows when it is an alert.
 
 ### `AlarmSoundSeconds`
 
@@ -201,12 +200,6 @@ Seconds the alarm sound plays after an alert is received before automatically st
 **Type:** `bool | null` | **Default:** `null` (`true`)
 
 Whether clicking the alert box, or pressing Space or Enter outside a text input, confirms the latest unconfirmed alert.
-
-### `ComposeAlertsEnabled`
-
-**Type:** `bool | null` | **Default:** `null` (`true`)
-
-Whether the draft editor's alert checkbox is shown. Disabling it never prevents receiving and alarming on alerts.
 
 ### `MessageTagsEnabled`
 

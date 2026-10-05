@@ -273,13 +273,15 @@ internal sealed partial class MainViewModel : ObservableObject, IMainViewModel
     /// <inheritdoc />
     public string AppName => engineController.AppName;
 
+    private bool isOpeningNew;
+
     private void WireEvents()
     {
         folderBar.FolderSelected += async folder =>
         {
             // While the export view is active and collecting entries ("Some" scope), browsing folders
             // refreshes the entry listing to pick more entries from without leaving the export view.
-            if (!IsExportCollectingActive())
+            if (!IsExportCollectingActive() && !isOpeningNew)
             {
                 contentArea.ShowHome();
             }
@@ -357,6 +359,32 @@ internal sealed partial class MainViewModel : ObservableObject, IMainViewModel
             }
         };
 
+        contentArea.EntryTitleChanged += entryBar.UpdateTitle;
+
+        entryService.DraftInserted += entity =>
+        {
+            entryBar.AddEntry(entity);
+            return Task.CompletedTask;
+        };
+
+        entryService.NoteInserted += entity =>
+        {
+            entryBar.AddEntry(entity);
+            return Task.CompletedTask;
+        };
+
+        entryService.DraftSavedQuietly += entity =>
+        {
+            entryBar.UpdateEntry(entity);
+            return Task.CompletedTask;
+        };
+
+        entryService.NoteSavedQuietly += entity =>
+        {
+            entryBar.UpdateEntry(entity);
+            return Task.CompletedTask;
+        };
+
         entryService.NoteUpdated += async entity =>
         {
             entryBar.SetPendingSelectId(entity.Id.ToString());
@@ -383,7 +411,7 @@ internal sealed partial class MainViewModel : ObservableObject, IMainViewModel
             MessageEntity entity = await entryService.StoreIncomingMessage(
                 evt.MessageId, evt.FromUser, evt.Body,
                 evt.Addresses.Select(a => new AddressData { UserName = a.UserName, Type = a.Type, Information = a.Information }).ToList(),
-                evt.SentAt, evt.IsAlert, evt.Priority, evt.Tag, engineController.GetSecurityLevelName(evt.SecurityLevel));
+                evt.SentAt, evt.Priority, evt.Tag, engineController.GetSecurityLevelName(evt.SecurityLevel));
 
             FolderItemViewModel? inboxFolder = folderBar.RootFolders.FirstOrDefault(f => f.RootType == FolderType.Inbox);
             if (inboxFolder is not null && folderBar.SelectedFolder?.Id == inboxFolder.Id)
@@ -481,26 +509,45 @@ internal sealed partial class MainViewModel : ObservableObject, IMainViewModel
     [RelayCommand]
     private async Task CreateDraft()
     {
-        DraftEntity entity = await entryService.CreateDraft();
+        DraftEntity entity = await entryService.NewDraft();
         List<string> userNames = await connection.GetUserNames();
         string currentSecurityLevel = engineController.GetUserSecurityLevel(currentUserProvider.UserName ?? string.Empty);
-        DraftViewModel vm = new(entity, entryService, connection, userNames, loggerFactory, engineController, bodyDocumentFactory.Create(), currentSecurityLevel: currentSecurityLevel);
+        DraftViewModel vm = new(entity, entryService, connection, userNames, loggerFactory, engineController, bodyDocumentFactory.Create(), currentSecurityLevel: currentSecurityLevel, isNew: true);
+        vm.Duplicated += contentArea.ShowDraft;
+        vm.TitleChanged += title => entryBar.UpdateTitle(vm.Id, EntryType.Draft, title);
         vm.DraftSent += async (IDraftViewModel _, MessageEntity msg) =>
         {
             contentArea.ShowEntry(new MessageViewModel(msg, engineController));
             await HandleDraftSent(msg);
         };
         vm.Deleted += HandleEntryDeleted;
-        contentArea.ShowEntry(vm);
+        OpenNew(vm, FolderType.Drafts);
+    }
+
+    private void OpenNew(object editor, FolderType folderType)
+    {
+        isOpeningNew = true;
+        try
+        {
+            contentArea.ShowEntry(editor);
+            entryBar.DeselectEntry();
+            folderBar.SelectFolderByType(folderType);
+        }
+        finally
+        {
+            isOpeningNew = false;
+        }
     }
 
     [RelayCommand]
     private async Task CreateNote()
     {
-        NoteEntity entity = await entryService.CreateNote();
-        NoteViewModel vm = new(entity, entryService, engineController.CanDelete(FolderType.Notes));
+        NoteEntity entity = await entryService.NewNote();
+        NoteViewModel vm = new(entity, entryService, engineController.CanDelete(FolderType.Notes), isNew: true);
+        vm.Duplicated += contentArea.ShowNote;
+        vm.TitleChanged += title => entryBar.UpdateTitle(vm.Id, EntryType.Note, title);
         vm.Deleted += HandleEntryDeleted;
-        contentArea.ShowEntry(vm);
+        OpenNew(vm, FolderType.Notes);
     }
 
     [RelayCommand]

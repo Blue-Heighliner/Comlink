@@ -22,14 +22,11 @@
                      FontSize="12"
                      Foreground="#858585"
                      VerticalAlignment="Center" />
-          <Button Content="CLEAR"
-                  Command="{Binding ClearCommand}"
-                  FontSize="12" />
-          <Button Classes="accent"
+          <Button Classes="neutral" Content="CLEAR"
+                  Command="{Binding ClearCommand}" />
+          <Button Classes="positive"
                   Content="SEND ALL"
-                  Command="{Binding SendAllCommand}"
-                  FontSize="12"
-                  FontWeight="SemiBold" />
+                  Command="{Binding SendAllCommand}" />
           <Button Content="×"
                   Command="{Binding $parent[Window].DataContext.ShowHomeCommand}"
                   ToolTip.Tip="Close"

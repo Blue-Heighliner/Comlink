@@ -58,8 +58,13 @@ public interface IMessageHandler<TFrame, TPriority, TLevel> where TFrame : class
     /// <summary>Gets the body text of <paramref name="frame"/>.</summary>
     string GetBody(TFrame frame);
 
-    /// <summary>Gets whether <paramref name="frame"/> is an alert, a message that makes a receiving Client-mode UI alarm until the user reads it.</summary>
-    bool GetIsAlert(TFrame frame);
+    /// <summary>
+    /// Returns whether <paramref name="frame"/> is an alert, a message that makes a receiving Client-mode UI alarm until the user reads it. It is decided from the frame's other fields alone, such as its tag or priority,
+    /// so there is nothing for the user to set and no alert flag to store: a message is an alert when, for example, it has a certain tag. The engine asks about a message it is about to send, to show it and to store it, and about every message it receives.
+    /// By default no message is an alert.
+    /// </summary>
+    /// <param name="frame">The message.</param>
+    bool IsAlert(TFrame frame) => false;
 
     /// <summary>Gets the priority level <paramref name="frame"/> was created with (see <see cref="MessageCreateContext{TPriority, TLevel}.Priority"/>), which also sets the send priority. A message received with a priority that is not a configured level is dropped, and an error logged.</summary>
     TPriority GetPriority(TFrame frame);

@@ -22,8 +22,6 @@ public sealed class Frame
     [ProtoMember(6)] public DateTime Timestamp { get; set; }
     /// <summary>Message ID this message is a read receipt for; empty for an ordinary message.</summary>
     [ProtoMember(7)] public string ReadMessageId { get; set; } = string.Empty;
-    /// <summary>Whether this message is an alert.</summary>
-    [ProtoMember(8)] public bool Alert { get; set; }
     /// <summary>Integer value of the priority level of this message, the value of a MessagePriority member.</summary>
     [ProtoMember(9)] public int Importance { get; set; }
     /// <summary>Short user-inputted tag identifying the type of this message.</summary>

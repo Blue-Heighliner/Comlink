@@ -22,30 +22,38 @@
                      FontSize="12"
                      Foreground="#858585"
                      VerticalAlignment="Center" />
-          <Button Content="{Binding DeleteButtonText}"
+          <Button Classes="neutral"
+                  Content="DUPLICATE"
+                  Command="{Binding DuplicateCommand}" />
+          <Button Classes="negative" Content="{Binding DeleteButtonText}"
                   Command="{Binding DeleteCommand}"
-                  IsVisible="{Binding CanDelete}"
-                  Foreground="#E06C75"
-                  FontWeight="SemiBold"
-                  FontSize="12" />
-          <Button Classes="accent"
+                  IsVisible="{Binding CanDelete}" />
+          <Button Classes="positive"
                   Content="SAVE"
                   Command="{Binding SaveCommand}"
-                  IsEnabled="{Binding !IsSaving}"
-                  FontWeight="SemiBold"
-                  FontSize="12" />
+                  IsEnabled="{Binding !IsSaving}" />
         </StackPanel>
         <TextBlock Text="{vm:Display 'NOTE'}"
                    FontSize="11"
                    FontWeight="SemiBold"
                    Foreground="#858585"
                    LetterSpacing="1"
-                   VerticalAlignment="Center" />
+                   VerticalAlignment="Center"
+                   Margin="0,0,14,0" />
+        <TextBox Text="{Binding Name}"
+                 Watermark="Name"
+                 Width="140"
+                 HorizontalAlignment="Left"
+                 Background="#3C3C3C"
+                 BorderThickness="0"
+                 FontSize="12"
+                 Height="30" />
       </DockPanel>
     </Border>
 
     <!-- Note Body (fills remaining space) -->
-    <TextBox Text="{Binding Body}"
+    <TextBox Classes="plain"
+             Text="{Binding Body}"
              Watermark="Start writing..."
              AcceptsReturn="True"
              TextWrapping="Wrap"

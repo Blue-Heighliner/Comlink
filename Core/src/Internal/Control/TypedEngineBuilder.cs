@@ -104,9 +104,9 @@ internal sealed class EngineBuilder<TFrame, TPacket, TPriority, TLevel> : IEngin
     }
 
     /// <inheritdoc />
-    public IEngineBuilder<TFrame, TPacket, TPriority, TLevel> ComposeAlerts(bool enabled = true)
+    public IEngineBuilder<TFrame, TPacket, TPriority, TLevel> Drafts<THandler>() where THandler : IDraftHandler<TPriority, TLevel>
     {
-        state.ComposeAlertsValue = enabled;
+        state.DraftHandler = ServiceRegistration<IDraftFrameHandler>.Of(typeof(THandler), instance => new DraftFrameHandler<TPriority, TLevel>((IDraftHandler<TPriority, TLevel>)instance, state.SecurityLevelValues));
         return this;
     }
 

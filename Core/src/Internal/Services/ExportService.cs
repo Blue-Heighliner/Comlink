@@ -33,6 +33,7 @@ internal sealed class ExportService : IExportService
     private static DraftExportData BuildDraftExportData(DraftEntity entity) => new()
     {
         Id = entity.Id.ToString(),
+        Name = entity.Name,
         Body = entity.Body,
         BodySegmentsJson = entity.BodySegmentsJson,
         Addresses = [.. entity.Addresses.Select(a => new AddressRequest { UserName = a.UserName, Type = a.Type, Information = a.Information })],
@@ -48,6 +49,7 @@ internal sealed class ExportService : IExportService
     private static NoteExportData BuildNoteExportData(NoteEntity entity) => new()
     {
         Id = entity.Id.ToString(),
+        Name = entity.Name,
         Body = entity.Body,
         CreatedAt = entity.CreatedAt,
         ModifiedAt = entity.ModifiedAt

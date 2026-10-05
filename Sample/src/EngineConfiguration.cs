@@ -12,6 +12,7 @@ namespace BlueHeighliner.Comlink.Sample;
 /// <item><description>heartbeats - a <see cref="PacketHeartbeatHandler"/> sends an empty packet flagged as a heartbeat over every IP connection to verify it, at the lowest user priority.</description></item>
 /// <item><description>priorities and blocked tags - three user priority levels and two system ones, stated in send order (which is not the order of the enum, whose explicit values are what drafts, exports and frames store), and both blocked-combination kinds.</description></item>
 /// <item><description>print count - prints an alert message twice and every other received message once.</description></item>
+/// <item><description>drafts - a <see cref="DraftHandler"/> shows a draft 60 monospace characters wide by default (the user may change it between 10 and 90; it only changes how the draft is shown, never its text), and gives each kind of message its own header: <c>ALERT - ACTION REQUIRED</c> for an alert, <c>URGENT - PLEASE REPLY</c> or <c>REPORT - FOR YOUR REVIEW</c> for those tags, plus <c>RESTRICTED - DO NOT FORWARD</c> at the restricted security level, and no header at all for any other message (a plain one, or one tagged <c>NOTICE</c>).</description></item>
 /// <item><description>deleting - a <see cref="DeleteHandler"/> lets users delete only drafts and notes can be deleted; Inbox, Outbox, and Activity are protected.</description></item>
 /// <item><description>connection identification - a <see cref="IdentityProcessor"/> carries out an initial packet exchange on every connection: the node that opens it sends a <see cref="Packet"/> whose chunk is its user name, the accepting node answers with one carrying its own, and each marks the connection connected as the user the other named, instead of by the peer's certificate or (for a serial cable) its port. Like all traffic between nodes they are serialized instances of the packet type, nothing else.</description></item>
 /// <item><description>command-line overrides - allowed, so Sample honors <c>--config</c> and <c>--user</c> (which its scenario scripts pass), unlike the engine default.</description></item>
@@ -40,6 +41,7 @@ public sealed class EngineConfiguration : IEngineConfiguration
         => engine.Types<Frame, Packet, MessagePriority, SecurityLevel>()
             .Display<DisplayHandler>()
             .Deletes<DeleteHandler>()
+            .Drafts<DraftHandler>()
             .CommandLineOverrides(true)
             .Frames()
                 .Serializer<JsonSerializer>()

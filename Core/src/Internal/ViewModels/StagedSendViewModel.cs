@@ -24,8 +24,6 @@ internal sealed record StagedSendEntry
     public required string Body { get; init; }
     /// <summary>Recipient addresses for this send.</summary>
     public required List<AddressRequest> Addresses { get; init; }
-    /// <summary>Whether this message will be sent as an alert.</summary>
-    public bool IsAlert { get; init; }
     /// <summary>Priority number this message will be sent at.</summary>
     public Enum? Priority { get; init; }
     /// <summary>Tag identifying the type of this message.</summary>
@@ -123,7 +121,6 @@ internal sealed partial class StagedSendViewModel : ObservableObject, IStagedSen
                     Id = Guid.NewGuid().ToString("N"),
                     Body = send.Body,
                     Addresses = send.Addresses,
-                    IsAlert = send.IsAlert,
                     Priority = send.Priority,
                     Tag = send.Tag,
                     SecurityLevel = send.SecurityLevel
@@ -217,7 +214,7 @@ internal sealed partial class StagedSendViewModel : ObservableObject, IStagedSen
         try
         {
             SendMessageResult? result = await connection.SendMessage(
-                entry.Body, entry.Addresses, entry.IsAlert, entry.Priority, entry.Tag, entry.SecurityLevel);
+                entry.Body, entry.Addresses, entry.Priority, entry.Tag, entry.SecurityLevel);
             if (result is null)
             {
                 SetStatus(entry.Id, StagedSendStatus.Failed, "Cannot send until a user is installed");
@@ -227,7 +224,7 @@ internal sealed partial class StagedSendViewModel : ObservableObject, IStagedSen
             List<AddressData> addresses = [.. entry.Addresses.Select(a => new AddressData { UserName = a.UserName, Type = a.Type, Information = a.Information })];
             await entryService.StoreSentMessage(
                 result.MessageId, entry.Body, addresses, DateTime.UtcNow, result.UserResults,
-                entry.IsAlert, entry.Priority, entry.Tag, engineController.GetSecurityLevelName(entry.SecurityLevel));
+                entry.Priority, entry.Tag, engineController.GetSecurityLevelName(entry.SecurityLevel));
 
             SetStatus(entry.Id, StagedSendStatus.Sent);
         }

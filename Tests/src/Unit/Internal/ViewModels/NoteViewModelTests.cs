@@ -11,6 +11,27 @@ public sealed class NoteViewModelTests
         ModifiedAt = DateTime.UtcNow
     };
 
+    /// <summary>Leaving a note saves what was written, but only when something changed, and never after the note was deleted.</summary>
+    [Fact]
+    public async Task SaveChanges_SavesOnlyWhatChanged()
+    {
+        Mock<IEntryService> svcMock = new();
+        NoteViewModel vm = new(MakeEntity("same"), svcMock.Object, confirmationWindow: TimeSpan.FromMinutes(1));
+
+        await vm.SaveChanges();
+        svcMock.Verify(s => s.SaveNoteQuietly(It.IsAny<NoteEntity>()), Times.Never);
+
+        vm.Body = "changed";
+        await vm.SaveChanges();
+        svcMock.Verify(s => s.SaveNoteQuietly(It.Is<NoteEntity>(note => note.Body == "changed")), Times.Once);
+
+        await vm.DeleteCommand.ExecuteAsync(null);
+        await vm.DeleteCommand.ExecuteAsync(null);
+        vm.Body = "after delete";
+        await vm.SaveChanges();
+        svcMock.Verify(s => s.SaveNoteQuietly(It.IsAny<NoteEntity>()), Times.Once);
+    }
+
     /// <summary>Id and Body are populated from the entity on construction.</summary>
     [Fact]
     public void Ctor_PopulatesIdAndBody()
@@ -121,5 +142,80 @@ public sealed class NoteViewModelTests
         gate.SetResult(true);
         await saveTask;
         Assert.False(vm.IsSaving);
+    }
+
+    /// <summary>A new note is not stored while unaltered or blank, and is inserted once it has content.</summary>
+    [Fact]
+    public async Task NewNote_IsStoredOnlyOnceAlteredAndNotBlank()
+    {
+        Mock<IEntryService> svcMock = new();
+        NoteViewModel vm = new(MakeEntity(string.Empty), svcMock.Object, isNew: true);
+
+        await vm.SaveChanges();
+        vm.Body = "   ";
+        await vm.SaveChanges();
+        await vm.SaveCommand.ExecuteAsync(null);
+        svcMock.Verify(s => s.InsertNote(It.IsAny<NoteEntity>()), Times.Never);
+        svcMock.Verify(s => s.SaveNoteQuietly(It.IsAny<NoteEntity>()), Times.Never);
+        Assert.Equal("Nothing to save", vm.StatusMessage);
+
+        vm.Body = "written";
+        await vm.SaveChanges();
+        await vm.SaveChanges();
+        svcMock.Verify(s => s.InsertNote(It.Is<NoteEntity>(note => note.Body == "written")), Times.Once);
+    }
+
+    /// <summary>Deleting a note that was never stored removes nothing from the data store.</summary>
+    [Fact]
+    public async Task NewNote_Delete_DoesNotTouchTheStore()
+    {
+        Mock<IEntryService> svcMock = new();
+        NoteViewModel vm = new(MakeEntity(string.Empty), svcMock.Object, confirmationWindow: TimeSpan.FromMinutes(1), isNew: true);
+
+        await vm.DeleteCommand.ExecuteAsync(null);
+        await vm.DeleteCommand.ExecuteAsync(null);
+
+        svcMock.Verify(s => s.DeleteEntry(It.IsAny<string>(), It.IsAny<EntryType>(), It.IsAny<bool>()), Times.Never);
+    }
+
+    /// <summary>A name is saved trimmed, and clearing it saves null so the first line names the note again.</summary>
+    [Fact]
+    public async Task Name_IsSavedAndCleared()
+    {
+        Mock<IEntryService> svcMock = new();
+        NoteEntity entity = MakeEntity("body");
+        NoteViewModel vm = new(entity, svcMock.Object);
+
+        vm.Name = "  Shopping  ";
+        await vm.SaveChanges();
+        Assert.Equal("Shopping", entity.Name);
+
+        vm.Name = " ";
+        await vm.SaveChanges();
+        Assert.Null(entity.Name);
+    }
+
+    /// <summary>Duplicating copies the note as it is on screen, does not save the original, and reports the copy.</summary>
+    [Fact]
+    public async Task Duplicate_CopiesCurrentStateWithoutSavingTheOriginal()
+    {
+        Mock<IEntryService> svcMock = new();
+        NoteEntity copy = MakeEntity("edited");
+        svcMock.Setup(s => s.DuplicateNote(It.IsAny<NoteEntity>())).ReturnsAsync(copy);
+        NoteViewModel vm = new(MakeEntity("original"), svcMock.Object);
+        string? shown = null;
+        vm.Duplicated += id =>
+        {
+            shown = id;
+            return Task.CompletedTask;
+        };
+
+        vm.Body = "edited";
+        await vm.DuplicateCommand.ExecuteAsync(null);
+
+        svcMock.Verify(s => s.DuplicateNote(It.Is<NoteEntity>(note => note.Body == "edited")), Times.Once);
+        svcMock.Verify(s => s.SaveNote(It.IsAny<NoteEntity>()), Times.Never);
+        svcMock.Verify(s => s.SaveNoteQuietly(It.IsAny<NoteEntity>()), Times.Never);
+        Assert.Equal(copy.Id.ToString(), shown);
     }
 }

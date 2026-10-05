@@ -15,7 +15,6 @@ public sealed class TestMessageHandler : IMessageHandler<TestFrame, TestMessageP
         {
             SentAt = context.SentAt,
             Body = context.Body,
-            IsAlert = context.IsAlert,
             Priority = context.Priority.ToString().ToUpperInvariant(),
             Tag = context.Tag,
             SecurityLevel = context.SecurityLevel?.ToString().ToUpperInvariant() ?? string.Empty
@@ -51,7 +50,7 @@ public sealed class TestMessageHandler : IMessageHandler<TestFrame, TestMessageP
     public string GetBody(TestFrame frame) => frame.Body;
 
     /// <inheritdoc />
-    public bool GetIsAlert(TestFrame frame) => frame.IsAlert;
+    public bool IsAlert(TestFrame frame) => frame.IsAlert || frame.Tag == "ALERT";
 
     /// <inheritdoc />
     public TestMessagePriority GetPriority(TestFrame frame) => Enum.TryParse(frame.Priority, ignoreCase: true, out TestMessagePriority priority) ? priority : TestMessagePriority.Normal;

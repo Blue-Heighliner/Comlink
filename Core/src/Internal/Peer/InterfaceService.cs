@@ -154,7 +154,6 @@ internal sealed class InterfaceService : IInterfaceService
         {
             Body = engineController.GetBody(message),
             Addresses = engineController.GetAddresses(message).Select(a => new AddressPayload { UserName = a.UserName, Type = a.Type.ToString(), Information = a.Information }).ToList(),
-            IsAlert = engineController.GetIsAlert(message),
             Priority = engineController.GetMessagePriority(message),
             Tag = engineController.GetTag(message),
             SecurityLevel = engineController.GetSecurityLevel(message)

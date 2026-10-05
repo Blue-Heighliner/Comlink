@@ -125,7 +125,7 @@ public sealed class NetworkConfigTests : IDisposable
                   "SecurityLevel": "HIGH", "CertificateName": "CN-ALICE",
                   "Data": { "desk": "4" },
                   "Headless": true, "AlertText": "HEY", "AlarmSoundSeconds": 5.5,
-                  "QuickConfirmationEnabled": false, "ComposeAlertsEnabled": false, "MessageTagsEnabled": false, "MessageTagLabel": "Kind", "PrintReceivedEnabled": true
+                  "QuickConfirmationEnabled": false, "MessageTagsEnabled": false, "MessageTagLabel": "Kind", "PrintReceivedEnabled": true
                 }
               }
             }
@@ -149,7 +149,7 @@ public sealed class NetworkConfigTests : IDisposable
         Assert.Equal("4", info.Data["desk"]);
         Assert.Equal(["OPS"], info.Groups);
         Assert.Equal((true, "HEY", 5.5), (node.Headless, node.AlertText, node.AlarmSoundSeconds));
-        Assert.Equal((false, false, false, "Kind", true), (node.QuickConfirmationEnabled, node.ComposeAlertsEnabled, node.MessageTagsEnabled, node.MessageTagLabel, node.PrintReceivedEnabled));
+        Assert.Equal((false, false, "Kind", true), (node.QuickConfirmationEnabled, node.MessageTagsEnabled, node.MessageTagLabel, node.PrintReceivedEnabled));
     }
 
     /// <summary>A user the file does not list has no entry and no info.</summary>

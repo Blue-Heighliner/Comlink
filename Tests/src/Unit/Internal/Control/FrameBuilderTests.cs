@@ -54,12 +54,12 @@ public sealed class FrameBuilderTests
         IMessageFrameHandler handler = Complete().Build().Message.Create(null);
         DateTime sentAt = new(2026, 9, 28, 1, 2, 3, DateTimeKind.Utc);
 
-        object message = handler.Create(new MessageContent { SentAt = sentAt, Body = "BODY", IsAlert = true, Priority = TestMessagePriority.Level7, Tag = "TAG", SecurityLevel = "SECRET" });
+        object message = handler.Create(new MessageContent { SentAt = sentAt, Body = "BODY", Priority = TestMessagePriority.Level7, Tag = "TAG", SecurityLevel = "SECRET" });
 
         Assert.IsType<TestFrame>(message);
         Assert.True(handler.IsValid(message));
         Assert.False(handler.IsValid(new TestFrame { IsHidden = true }));
-        Assert.Equal((sentAt, "BODY", true, TestMessagePriority.Level7, "TAG", "SECRET"), (handler.GetSentAt(message), handler.GetBody(message), handler.GetIsAlert(message), handler.GetPriority(message), handler.GetTag(message), handler.GetSecurityLevel(message)));
+        Assert.Equal((sentAt, "BODY", false, TestMessagePriority.Level7, "TAG", "SECRET"), (handler.GetSentAt(message), handler.GetBody(message), handler.IsAlert(message), handler.GetPriority(message), handler.GetTag(message), handler.GetSecurityLevel(message)));
     }
 
     /// <summary>The retrieval handler the host states creates a request from its criteria, recognizes it, and reads the criteria back.</summary>

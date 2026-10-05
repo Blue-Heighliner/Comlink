@@ -91,7 +91,6 @@ internal sealed class MessageRoutingService : IMessageRoutingService
         {
             SentAt = DateTime.UtcNow,
             Body = payload.Body,
-            IsAlert = payload.IsAlert,
             Priority = engineController.RequirePriority(payload.Priority),
             Tag = payload.Tag,
             SecurityLevel = payload.SecurityLevel

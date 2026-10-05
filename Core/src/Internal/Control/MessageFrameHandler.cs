@@ -25,8 +25,8 @@ internal interface IMessageFrameHandler
     DateTime GetSentAt(object frame);
     /// <summary>Gets the body text of <paramref name="frame"/>.</summary>
     string GetBody(object frame);
-    /// <summary>Gets whether <paramref name="frame"/> is an alert.</summary>
-    bool GetIsAlert(object frame);
+    /// <summary>Returns whether <paramref name="frame"/> is an alert.</summary>
+    bool IsAlert(object frame);
     /// <summary>Gets the priority number of <paramref name="frame"/>.</summary>
     Enum GetPriority(object frame);
     /// <summary>Gets how many copies of <paramref name="frame"/> are printed when received.</summary>
@@ -51,7 +51,6 @@ internal sealed class MessageFrameHandler<TFrame, TPriority, TLevel>(IMessageHan
         {
             SentAt = content.SentAt,
             Body = content.Body,
-            IsAlert = content.IsAlert,
             Priority = (TPriority)(object)content.Priority,
             Tag = content.Tag,
             SecurityLevel = ToLevel(content.SecurityLevel)
@@ -87,7 +86,7 @@ internal sealed class MessageFrameHandler<TFrame, TPriority, TLevel>(IMessageHan
     public string GetBody(object frame) => handler.GetBody((TFrame)frame);
 
     /// <inheritdoc />
-    public bool GetIsAlert(object frame) => handler.GetIsAlert((TFrame)frame);
+    public bool IsAlert(object frame) => handler.IsAlert((TFrame)frame);
 
     /// <inheritdoc />
     public Enum GetPriority(object frame) => handler.GetPriority((TFrame)frame);

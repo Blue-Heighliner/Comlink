@@ -23,14 +23,11 @@
                        FontSize="12"
                        Foreground="#858585"
                        VerticalAlignment="Center" />
-            <Button Content="RESET"
-                    Command="{Binding ResetCommand}"
-                    FontSize="12" />
-            <Button Classes="accent"
+            <Button Classes="negative" Content="RESET"
+                    Command="{Binding ResetCommand}" />
+            <Button Classes="positive"
                     Content="REQUEST"
-                    Command="{Binding RequestCommand}"
-                    FontSize="12"
-                    FontWeight="SemiBold" />
+                    Command="{Binding RequestCommand}" />
             <Button Content="×"
                     Command="{Binding $parent[Window].DataContext.ShowHomeCommand}"
                     ToolTip.Tip="Close"

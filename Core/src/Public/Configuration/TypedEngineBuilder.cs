@@ -65,8 +65,9 @@ public interface IEngineBuilder<TFrame, TPacket, TPriority, TLevel> where TFrame
     /// <summary>Sets whether clicking the alert box, or pressing Space or Enter outside a text input, confirms the latest unconfirmed alert. On by default.</summary>
     IEngineBuilder<TFrame, TPacket, TPriority, TLevel> QuickConfirmation(bool enabled = true);
 
-    /// <summary>Sets whether the draft editor lets the user send a draft as an alert. On by default; turning it off never stops alerts from being received.</summary>
-    IEngineBuilder<TFrame, TPacket, TPriority, TLevel> ComposeAlerts(bool enabled = true);
+    /// <summary>States the handler that controls how drafts are composed: how wide a line may be and the header a message must start with (see <see cref="IDraftHandler{TPriority, TLevel}"/>). Without one lines are not limited and there is no header.</summary>
+    /// <typeparam name="THandler">The handler type, instantiated through dependency injection when the engine runs: the instance registered for it in the host's services, or else one constructed from them.</typeparam>
+    IEngineBuilder<TFrame, TPacket, TPriority, TLevel> Drafts<THandler>() where THandler : IDraftHandler<TPriority, TLevel>;
 
     /// <summary>
     /// Starts stating the priority levels, members of <typeparamref name="TPriority"/>, lowest first like <see cref="SecurityLevels"/>: the position in which a level is stated is its send priority, regardless of the order of the enum, so later levels are sent before earlier ones, and a member not stated is not a level. Required unless the type is <see cref="NoPriority"/>.

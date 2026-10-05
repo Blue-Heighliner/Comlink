@@ -330,7 +330,6 @@ public sealed class ControlProviderTests
         Assert.Equal("ALERT", controller.AlertLabel);
         Assert.Equal(TimeSpan.FromSeconds(30), controller.AlarmSoundDuration);
         Assert.True(controller.QuickConfirmationEnabled);
-        Assert.True(controller.ComposeAlertsEnabled);
     }
 
     /// <summary>Falls back to the wrapped provider for every field when not configured.</summary>
@@ -341,13 +340,11 @@ public sealed class ControlProviderTests
         fallback.Setup(f => f.AlertLabel).Returns("FALLBACK");
         fallback.Setup(f => f.AlarmSoundDuration).Returns(TimeSpan.FromSeconds(12));
         fallback.Setup(f => f.QuickConfirmationEnabled).Returns(false);
-        fallback.Setup(f => f.ComposeAlertsEnabled).Returns(false);
         ConfiguredEngineController controller = new(fallback.Object, new NetworkConfig(), NoCurrentUser);
 
         Assert.Equal("FALLBACK", controller.AlertLabel);
         Assert.Equal(TimeSpan.FromSeconds(12), controller.AlarmSoundDuration);
         Assert.False(controller.QuickConfirmationEnabled);
-        Assert.False(controller.ComposeAlertsEnabled);
     }
 
     /// <summary>Every settable field reflects an explicit override from config.</summary>
@@ -358,14 +355,12 @@ public sealed class ControlProviderTests
         {
             AlertText = "URGENT",
             AlarmSoundSeconds = 5,
-            QuickConfirmationEnabled = false,
-            ComposeAlertsEnabled = false
+            QuickConfirmationEnabled = false
         }), Me);
 
         Assert.Equal("URGENT", controller.AlertLabel);
         Assert.Equal(TimeSpan.FromSeconds(5), controller.AlarmSoundDuration);
         Assert.False(controller.QuickConfirmationEnabled);
-        Assert.False(controller.ComposeAlertsEnabled);
     }
 
     /// <summary>The default implementation is disabled by default and prints every message exactly once.</summary>
