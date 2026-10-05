@@ -75,7 +75,7 @@ Internally the configuration becomes a `FrameMap` and a `PacketMap`, whose acces
 engine.AppVersion("1.2.3").KioskMode();
 ```
 
-This app's own identity and top-level presentation: the version shown in the title bar and the info popup, whether the main window runs in kiosk mode (hides window chrome and restricts navigation). The window icon is the display handler's `Icon` (see [Display Names](#display-names)): an `avares://` URI of an Avalonia asset, or else the path of an image file.
+This app's own identity and top-level presentation: the version shown in the title bar and the info popup, whether the main window runs in kiosk mode (hides window chrome and restricts navigation; the title bar's close button asks "restart" instead of "exit"). The window icon is the display handler's `Icon` (see [Display Names](#display-names)): an `avares://` URI of an Avalonia asset, or else the path of an image file.
 
 **Default:** the name comes from the entry assembly name; the version is the entry assembly's `major.minor.build` version (`1.0.0` if it has none); kiosk mode is off; the icon is the operating system's.
 

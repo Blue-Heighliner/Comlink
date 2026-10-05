@@ -256,6 +256,7 @@ internal sealed partial class DraftViewModel : ObservableObject, IDraftViewModel
         {
             await Task.Yield();
             await SaveChanges();
+            RaiseTitleChanged();
         }
         catch (Exception ex)
         {
@@ -275,7 +276,7 @@ internal sealed partial class DraftViewModel : ObservableObject, IDraftViewModel
         await insertLock.WaitAsync();
         try
         {
-            if (!isNew) { return; }
+            if (!isNew || isDeleted) { return; }
 
             await entryService.InsertDraft(entity);
             isNew = false;
@@ -584,8 +585,19 @@ internal sealed partial class DraftViewModel : ObservableObject, IDraftViewModel
     {
         if (!CanDelete || !deleteConfirmation.Confirm()) { return; }
 
-        if (!isNew) { await entryService.DeleteEntry(Id, EntryType.Draft); }
-        isDeleted = true;
+        await insertLock.WaitAsync();
+        bool wasStored;
+        try
+        {
+            wasStored = !isNew;
+            isDeleted = true;
+        }
+        finally
+        {
+            insertLock.Release();
+        }
+
+        if (wasStored) { await entryService.DeleteEntry(Id, EntryType.Draft); }
         if (Deleted is not null) { await Deleted(); }
     }
 

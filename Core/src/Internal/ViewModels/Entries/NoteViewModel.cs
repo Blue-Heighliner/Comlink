@@ -100,6 +100,7 @@ internal sealed partial class NoteViewModel : ObservableObject, INoteViewModel
         {
             await Task.Yield();
             await SaveChanges();
+            RaiseTitleChanged();
         }
         finally
         {
@@ -115,7 +116,7 @@ internal sealed partial class NoteViewModel : ObservableObject, INoteViewModel
         await insertLock.WaitAsync();
         try
         {
-            if (!isNew) { return; }
+            if (!isNew || isDeleted) { return; }
 
             await entryService.InsertNote(entity);
             isNew = false;
@@ -146,8 +147,19 @@ internal sealed partial class NoteViewModel : ObservableObject, INoteViewModel
     {
         if (!CanDelete || !deleteConfirmation.Confirm()) { return; }
 
-        if (!isNew) { await entryService.DeleteEntry(Id, EntryType.Note); }
-        isDeleted = true;
+        await insertLock.WaitAsync();
+        bool wasStored;
+        try
+        {
+            wasStored = !isNew;
+            isDeleted = true;
+        }
+        finally
+        {
+            insertLock.Release();
+        }
+
+        if (wasStored) { await entryService.DeleteEntry(Id, EntryType.Note); }
         if (Deleted is not null) { await Deleted(); }
     }
 

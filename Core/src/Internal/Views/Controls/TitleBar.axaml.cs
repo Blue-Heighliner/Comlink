@@ -407,6 +407,37 @@ internal partial class TitleBar : UserControl
         }
     }
 
+    /// <inheritdoc />
+    protected override void OnAttachedToVisualTree(VisualTreeAttachmentEventArgs e)
+    {
+        base.OnAttachedToVisualTree(e);
+
+        if (e.Root is Window window)
+        {
+            window.PropertyChanged += (_, args) =>
+            {
+                if (args.Property == Window.WindowStateProperty) { ApplyMaximizeSymbol(window); }
+            };
+            ApplyMaximizeSymbol(window);
+        }
+    }
+
+    private void ApplyMaximizeSymbol(Window window)
+    {
+        bool isMaximized = window.WindowState == WindowState.Maximized;
+        Avalonia.Controls.Shapes.Path restore = new()
+        {
+            Data = Geometry.Parse("M3,1 H10 V8 H8 M1,3 H8 V10 H1 Z"),
+            StrokeThickness = 1.2,
+            Width = 11,
+            Height = 11,
+            Stretch = Stretch.None
+        };
+        restore.Bind(Avalonia.Controls.Shapes.Shape.StrokeProperty, MaximizeButton.GetObservable(TemplatedControl.ForegroundProperty));
+        MaximizeButton.Content = isMaximized ? restore : "\u25A1";
+        ToolTip.SetTip(MaximizeButton, isMaximized ? "Restore" : "Maximize");
+    }
+
     private void ApplyKioskMode()
     {
         Button? minimize = this.FindControl<Button>("MinimizeButton");
@@ -439,8 +470,13 @@ internal partial class TitleBar : UserControl
         }
     }
 
-    private void OnClose(object? sender, Avalonia.Interactivity.RoutedEventArgs e)
+    private async void OnClose(object? sender, Avalonia.Interactivity.RoutedEventArgs e)
     {
-        if (VisualRoot is Window w) { w.Close(); }
+        if (VisualRoot is not Window w) { return; }
+
+        ConfirmDialog dialog = IsKioskMode
+            ? new("Restart", "Are you sure you want to restart?", "Restart")
+            : new("Exit", "Are you sure you want to exit?", "Exit");
+        if (await dialog.ShowDialog<bool>(w)) { w.Close(); }
     }
 }

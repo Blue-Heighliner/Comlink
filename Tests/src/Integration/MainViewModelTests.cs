@@ -163,7 +163,10 @@ public sealed class MainViewModelTests
 
         await vm.CreateNoteCommand.ExecuteAsync(null);
         NoteViewModel editor = Assert.IsType<NoteViewModel>(shown);
+        TaskCompletionSource inserted = new();
+        s.EntryService.Setup(e => e.InsertNote(It.IsAny<NoteEntity>())).Returns(Task.CompletedTask).Callback(() => inserted.TrySetResult());
         editor.Body = "kept";
+        await inserted.Task.WaitAsync(TimeSpan.FromSeconds(5));
         await editor.SaveCommand.ExecuteAsync(null);
         await editor.DeleteCommand.ExecuteAsync(null);
         await editor.DeleteCommand.ExecuteAsync(null);

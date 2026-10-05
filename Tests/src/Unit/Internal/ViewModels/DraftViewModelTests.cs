@@ -885,8 +885,10 @@ public sealed class DraftViewModelTests
         entryMock.Verify(e => e.InsertDraft(It.IsAny<DraftEntity>()), Times.Never);
         Assert.Equal("Nothing to save", vm.StatusMessage);
 
+        TaskCompletionSource inserted = new();
+        entryMock.Setup(e => e.InsertDraft(It.IsAny<DraftEntity>())).Returns(Task.CompletedTask).Callback(() => inserted.TrySetResult());
         vm.Name = "Named";
-        await vm.SaveChanges();
+        await inserted.Task.WaitAsync(TimeSpan.FromSeconds(5));
         await vm.SaveChanges();
         entryMock.Verify(e => e.InsertDraft(It.Is<DraftEntity>(draft => draft.Name == "Named")), Times.Once);
     }

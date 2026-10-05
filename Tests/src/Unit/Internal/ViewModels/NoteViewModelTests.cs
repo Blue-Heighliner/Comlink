@@ -159,8 +159,10 @@ public sealed class NoteViewModelTests
         svcMock.Verify(s => s.SaveNoteQuietly(It.IsAny<NoteEntity>()), Times.Never);
         Assert.Equal("Nothing to save", vm.StatusMessage);
 
+        TaskCompletionSource inserted = new();
+        svcMock.Setup(s => s.InsertNote(It.IsAny<NoteEntity>())).Returns(Task.CompletedTask).Callback(() => inserted.TrySetResult());
         vm.Body = "written";
-        await vm.SaveChanges();
+        await inserted.Task.WaitAsync(TimeSpan.FromSeconds(5));
         await vm.SaveChanges();
         svcMock.Verify(s => s.InsertNote(It.Is<NoteEntity>(note => note.Body == "written")), Times.Once);
     }
