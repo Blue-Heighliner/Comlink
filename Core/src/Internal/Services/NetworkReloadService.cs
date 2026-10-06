@@ -21,7 +21,6 @@ internal interface INetworkReloadService
 internal sealed class NetworkReloadService(
     NetworkConfig network,
     IEngineController engineController,
-    ICurrentUserProvider currentUserProvider,
     IRolePeerService peerService,
     IInterfaceService interfaceService,
     ILoggerFactory loggerFactory) : INetworkReloadService
@@ -68,7 +67,5 @@ internal sealed class NetworkReloadService(
     private string CertificateSettings()
         => string.Join('|',
             network.CertificateStore,
-            network.AuthorityCertificate,
-            engineController.TrustedAuthorityCertificateName,
-            currentUserProvider.UserName is { } user ? engineController.GetCertificateName(user) : null);
+            network.AuthorityCertificate);
 }

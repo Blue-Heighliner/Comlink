@@ -55,7 +55,6 @@ public sealed class HandshakePeerTransportTests
     {
         Mock<TestEngineController> controller = new() { CallBase = true };
         controller.Setup(c => c.Users).Returns(users);
-        controller.Setup(c => c.GetCertificateName(It.IsAny<string>())).Returns((string name) => $"cert-{name}");
         return controller;
     }
 
@@ -114,7 +113,7 @@ public sealed class HandshakePeerTransportTests
         Mock<TestEngineController> a = Controller("ALICE", "BOB");
         Mock<TestEngineController> b = Controller("ALICE", "BOB");
         a.Setup(c => c.GetUserData("BOB")).Returns(new Dictionary<string, string> { ["desk"] = "4" });
-        (End endA, End endB) = Pair(a.Object, b.Object, aNames: ["cert-ALICE"], bNames: ["cert-BOB"]);
+        (End endA, End endB) = Pair(a.Object, b.Object, aNames: ["ALICE"], bNames: ["BOB"]);
 
         PeerConnection connection = await endA.Transport.Connect(point);
 
@@ -142,7 +141,7 @@ public sealed class HandshakePeerTransportTests
     {
         Mock<TestEngineController> a = Controller();
         a.Setup(c => c.Servers).Returns(new Dictionary<string, ServerUserConfig> { ["Server1"] = new ServerUserConfig { Children = ["Client1"] } });
-        (End endA, _) = Pair(a.Object, Controller().Object, bNames: ["cert-Client1"]);
+        (End endA, _) = Pair(a.Object, Controller().Object, bNames: ["Client1"]);
 
         PeerConnection connection = await endA.Transport.Connect(point);
 

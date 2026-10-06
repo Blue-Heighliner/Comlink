@@ -115,17 +115,15 @@ public sealed class NetworkConfigTests : IDisposable
     {
         string path = Write("Network.json", """
             {
-              "trustedAuthorityCertificateName": "ROOT",
               "UserGroups": { "OPS": [ "alice", "BOB" ] },
               "Users": {
                 "ALICE": {
                   "Role": "server", "IpHost": "10.0.0.1", "Msmt": { "Port": 1, "HandshakeTimeout": "00:00:07" }, "Hdlc": { "Address": 3, "Ports": [ "SL0", "SL1" ], "MaxInfoField": 512 }, "InterfacePort": 2,
                   "Parent": { "User": "ROOT", "Mode": "MsmtListen" },
                   "Children": [ "BOB", { "User": "CAROL", "Mode": "Hdlc", "Port": "ignored", "Address": 5 }, { "user": "DAN", "mode": "msmtconnect" } ],
-                  "SecurityLevel": "HIGH", "CertificateName": "CN-ALICE",
+                  "SecurityLevel": "HIGH",
                   "Data": { "desk": "4" },
-                  "Headless": true, "AlertText": "HEY", "AlarmSoundSeconds": 5.5,
-                  "MessageTagsEnabled": false, "MessageTagLabel": "Kind", "PrintReceivedEnabled": true
+                  "Headless": true
                 }
               }
             }
@@ -135,7 +133,6 @@ public sealed class NetworkConfigTests : IDisposable
         UserInfo info = config.GetUserInfo("alice")!;
         NetworkUserConfig node = config.Find("Alice")!;
 
-        Assert.Equal("ROOT", config.TrustedAuthorityCertificateName);
         Assert.Equal("ALICE", info.Name);
         Assert.Equal((UserRole.Server, 2), (info.Role, info.InterfacePort));
         Assert.Equal(("10.0.0.1", 1, (byte)3), (info.IpHost, info.MsmtPort, info.HdlcAddress));
@@ -145,11 +142,10 @@ public sealed class NetworkConfigTests : IDisposable
         Assert.Equal(
             [new UserLink { User = "BOB" }, new UserLink { User = "CAROL", Mode = ConnectionMode.Hdlc }, new UserLink { User = "DAN", Mode = ConnectionMode.MsmtConnect }],
             info.Children);
-        Assert.Equal(("HIGH", "CN-ALICE"), (info.SecurityLevel, info.CertificateName));
+        Assert.Equal("HIGH", info.SecurityLevel);
         Assert.Equal("4", info.Data["desk"]);
         Assert.Equal(["OPS"], info.Groups);
-        Assert.Equal((true, "HEY", 5.5), (node.Headless, node.AlertText, node.AlarmSoundSeconds));
-        Assert.Equal((false, "Kind", true), (node.MessageTagsEnabled, node.MessageTagLabel, node.PrintReceivedEnabled));
+        Assert.True(node.Headless);
     }
 
     /// <summary>A user the file does not list has no entry and no info.</summary>

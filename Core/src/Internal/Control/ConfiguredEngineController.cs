@@ -209,10 +209,6 @@ internal sealed class ConfiguredEngineController : IEngineController
     public IReadOnlyDictionary<string, ServerUserConfig> Servers => fallback.Servers;
     /// <inheritdoc />
     public IReadOnlyDictionary<string, string> GetUserData(string userName) => fallback.GetUserData(userName);
-    /// <inheritdoc />
-    public string GetCertificateName(string userName) => fallback.GetCertificateName(userName);
-    /// <inheritdoc />
-    public string TrustedAuthorityCertificateName => fallback.TrustedAuthorityCertificateName;
 
     /// <inheritdoc />
     public int PeerPort => fallback.PeerPort;
@@ -220,13 +216,13 @@ internal sealed class ConfiguredEngineController : IEngineController
     public int InterfacePort => fallback.InterfacePort;
 
     /// <inheritdoc />
-    public string AlertPluralLabel => Current?.AlertText is { Length: > 0 } text ? (text.EndsWith('s') ? text : text + "s") : fallback.AlertPluralLabel;
+    public string AlertPluralLabel => fallback.AlertPluralLabel;
     /// <inheritdoc />
-    public string TagPluralLabel => Current?.MessageTagLabel is { Length: > 0 } label ? (label.EndsWith('s') ? label : label + "s") : fallback.TagPluralLabel;
+    public string TagPluralLabel => fallback.TagPluralLabel;
     /// <inheritdoc />
-    public string AlertLabel => Current?.AlertText is { Length: > 0 } text ? text : fallback.AlertLabel;
+    public string AlertLabel => fallback.AlertLabel;
     /// <inheritdoc />
-    public TimeSpan AlarmSoundDuration => Current?.AlarmSoundSeconds is { } seconds ? TimeSpan.FromSeconds(seconds) : fallback.AlarmSoundDuration;
+    public TimeSpan AlarmSoundDuration => fallback.AlarmSoundDuration;
     /// <inheritdoc />
     public TimeSpan DisconnectAlarmDuration => fallback.DisconnectAlarmDuration;
     /// <inheritdoc />
@@ -245,9 +241,9 @@ internal sealed class ConfiguredEngineController : IEngineController
     /// <inheritdoc />
     public IReadOnlyList<MessagePriorityOption> Priorities => fallback.Priorities;
     /// <inheritdoc />
-    public bool TagsEnabled => Current?.MessageTagsEnabled ?? fallback.TagsEnabled;
+    public bool TagsEnabled => fallback.TagsEnabled;
     /// <inheritdoc />
-    public string TagLabel => Current?.MessageTagLabel is { Length: > 0 } label ? label : fallback.TagLabel;
+    public string TagLabel => fallback.TagLabel;
     /// <inheritdoc />
     public IReadOnlyList<TagPriorityBlock> BlockedCombinations => fallback.BlockedCombinations;
     /// <inheritdoc />
@@ -258,7 +254,7 @@ internal sealed class ConfiguredEngineController : IEngineController
     public string GetUserSecurityLevel(string userName) => fallback.GetUserSecurityLevel(userName);
 
     /// <inheritdoc />
-    public bool PrintReceivedDefaultEnabled => Current?.PrintReceivedEnabled ?? fallback.PrintReceivedDefaultEnabled;
+    public bool PrintReceivedDefaultEnabled => fallback.PrintReceivedDefaultEnabled;
     /// <inheritdoc />
     public int GetPrintCount(object frame) => fallback.GetPrintCount(frame);
 
@@ -266,20 +262,16 @@ internal sealed class ConfiguredEngineController : IEngineController
     public bool CanDelete(FolderType folderType) => fallback.CanDelete(folderType);
 
     /// <inheritdoc />
-    /// <exception cref="InvalidOperationException">Only one of the network's <c>CertificateStore</c> and <c>AuthorityCertificate</c> is set - they must be set together - or there is no current user to load a certificate for.</exception>
+    /// <exception cref="InvalidOperationException">The network's <c>CertificateStore</c> or <c>AuthorityCertificate</c> is not set, or there is no current user to load a certificate for.</exception>
     public MsmtSessionPeerOptions ConnectionOptions
     {
         get
         {
             string? store = config.CertificateStore;
             string? authorityFile = config.GetAuthorityCertificatePath();
-            if (store is null && authorityFile is null)
-            {
-                return ApplyMsmt(fallback.ConnectionOptions);
-            }
             if (store is null || authorityFile is null)
             {
-                throw new InvalidOperationException("The network's CertificateStore and AuthorityCertificate must both be set together.");
+                throw new InvalidOperationException("Peer authentication requires the network's CertificateStore and AuthorityCertificate to be set.");
             }
 
             string userName = currentUserProvider.UserName ?? DebugUserName?.ToUpperInvariant() ?? throw new InvalidOperationException("Peer authentication requires a current user to load an identity certificate for.");

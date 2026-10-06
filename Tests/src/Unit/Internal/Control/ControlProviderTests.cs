@@ -257,22 +257,6 @@ public sealed class ControlProviderTests
         Assert.Same(blocks, controller.BlockedCombinations);
     }
 
-    /// <summary>TagsEnabled reflects an explicit false override from config.</summary>
-    [Fact]
-    public void ConfiguredEngineController_ReturnsFalseWhenTagsDisabledInConfig()
-    {
-        ConfiguredEngineController controller = new(new TestEngineController(), Node(new NetworkUserConfig { MessageTagsEnabled = false }), Me);
-        Assert.False(controller.TagsEnabled);
-    }
-
-    /// <summary>TagLabel reflects an explicit override from config.</summary>
-    [Fact]
-    public void ConfiguredEngineController_TagLabel_ReturnsConfiguredValue()
-    {
-        ConfiguredEngineController controller = new(new TestEngineController(), Node(new NetworkUserConfig { MessageTagLabel = "Category" }), Me);
-        Assert.Equal("Category", controller.TagLabel);
-    }
-
     /// <summary>A rule with only Tag set blocks that tag regardless of priority.</summary>
     [Theory]
     [InlineData(TestMessagePriority.Normal)]
@@ -347,20 +331,6 @@ public sealed class ControlProviderTests
         Assert.Equal(["F5"], controller.AlertQuickReadKeys);
     }
 
-    /// <summary>Every settable field reflects an explicit override from config.</summary>
-    [Fact]
-    public void ConfiguredEngineController_OverridesAlertSettingsFromConfig()
-    {
-        ConfiguredEngineController controller = new(new TestEngineController(), Node(new NetworkUserConfig
-        {
-            AlertText = "URGENT",
-            AlarmSoundSeconds = 5
-        }), Me);
-
-        Assert.Equal("URGENT", controller.AlertLabel);
-        Assert.Equal(TimeSpan.FromSeconds(5), controller.AlarmSoundDuration);
-    }
-
     /// <summary>The default implementation is disabled by default and prints every message exactly once.</summary>
     [Fact]
     public void EngineController_ReturnsHardcodedPrintPolicyDefaults()
@@ -378,14 +348,6 @@ public sealed class ControlProviderTests
         fallback.Setup(f => f.PrintReceivedDefaultEnabled).Returns(true);
         ConfiguredEngineController controller = new(fallback.Object, new NetworkConfig(), NoCurrentUser);
 
-        Assert.True(controller.PrintReceivedDefaultEnabled);
-    }
-
-    /// <summary>PrintReceivedDefaultEnabled reflects an explicit true override from config.</summary>
-    [Fact]
-    public void ConfiguredEngineController_ReturnsTruePrintPolicyWhenEnabledInConfig()
-    {
-        ConfiguredEngineController controller = new(new TestEngineController(), Node(new NetworkUserConfig { PrintReceivedEnabled = true }), Me);
         Assert.True(controller.PrintReceivedDefaultEnabled);
     }
 
@@ -422,25 +384,6 @@ public sealed class ControlProviderTests
         Assert.False(controller.CanDelete(FolderType.Drafts));
     }
 
-    /// <summary>The default implementation returns the user name unchanged, with no prefix.</summary>
-    [Fact]
-    public void EngineController_GetCertificateName_AlwaysReturnsAutoName()
-    {
-        TestEngineController controller = new();
-        Assert.Equal("ALPHA", controller.GetCertificateName("ALPHA"));
-    }
-
-    /// <summary>Null config falls back to the wrapped provider.</summary>
-    [Fact]
-    public void ConfiguredEngineController_NullPeerCertificateNameConfig_FallsBack()
-    {
-        Mock<IEngineController> fallback = new();
-        fallback.Setup(f => f.GetCertificateName("ALPHA")).Returns("FALLBACK-NAME");
-        ConfiguredEngineController controller = new(fallback.Object, new NetworkConfig(), NoCurrentUser);
-
-        Assert.Equal("FALLBACK-NAME", controller.GetCertificateName("ALPHA"));
-    }
-
     /// <summary>ConnectionOptions throws when no current user is installed, since MSMT peer authentication is mandatory and there is no user to resolve an identity certificate for.</summary>
     [Fact]
     public void EngineController_ConnectionOptions_NoCurrentUser_Throws()
@@ -450,26 +393,7 @@ public sealed class ControlProviderTests
         Assert.Throws<InvalidOperationException>(() => controller.ConnectionOptions);
     }
 
-    /// <summary>The default implementation always returns the well-known trusted authority name.</summary>
-    [Fact]
-    public void EngineController_TrustedAuthorityCertificateName_ReturnsDefaultName()
-    {
-        TestEngineController controller = new();
-        Assert.Equal("COMLINK-ROOT", controller.TrustedAuthorityCertificateName);
-    }
-
-    /// <summary>Null config falls back to the wrapped provider.</summary>
-    [Fact]
-    public void ConfiguredEngineController_NullTrustedAuthorityCertificateNameConfig_FallsBack()
-    {
-        Mock<IEngineController> fallback = new();
-        fallback.Setup(f => f.TrustedAuthorityCertificateName).Returns("FALLBACK-ROOT");
-        ConfiguredEngineController controller = new(fallback.Object, new NetworkConfig(), NoCurrentUser);
-
-        Assert.Equal("FALLBACK-ROOT", controller.TrustedAuthorityCertificateName);
-    }
-
-    /// <summary>When both the certificate store and the authority certificate are set, ConnectionOptions loads the current user's identity from {USERNAME}.pfx in the store and the authority from its file, instead of the system store.</summary>
+    /// <summary>When both the certificate store and the authority certificate are set, ConnectionOptions loads the current user's identity from {USERNAME}.pfx in the store and the authority from its file, </summary>
     [Fact]
     public void ConfiguredEngineController_StoreAndAuthoritySet_LoadsFromFiles()
     {
@@ -695,60 +619,11 @@ public sealed class ControlProviderTests
 
     /// <summary>With neither certificate file field configured, ConnectionOptions falls back to the system store lookup - and throws the same way DefaultEngineController does when no current user is registered.</summary>
     [Fact]
-    public void ConfiguredEngineController_NoCertificateFilesConfigured_FallsBackToStoreLookup()
+    public void ConfiguredEngineController_NoCertificateFilesConfigured_Throws()
     {
         ConfiguredEngineController controller = new(new TestEngineController(), new NetworkConfig(), NoCurrentUser);
 
         Assert.Throws<InvalidOperationException>(() => controller.ConnectionOptions);
-    }
-
-    /// <summary>The store-based lookup resolves a real identity certificate and trusted authority installed under their expected subject names in the current user's certificate store.</summary>
-    [Fact]
-    public void MsmtCertificateLookup_BuildPeerOptions_ResolvesFromSystemStore()
-    {
-        string identityName = $"comlink-test-identity-{Guid.NewGuid():N}";
-        string authorityName = $"comlink-test-authority-{Guid.NewGuid():N}";
-        using X509Certificate2 identityCert = SelfSignedCertificateNamed(identityName);
-        using X509Certificate2 authorityCert = SelfSignedCertificateNamed(authorityName);
-
-        using X509Store store = new(StoreName.My, StoreLocation.CurrentUser);
-        store.Open(OpenFlags.ReadWrite);
-        store.Add(identityCert);
-        store.Add(authorityCert);
-        try
-        {
-            MsmtSessionPeerOptions options = MsmtCertificateLookup.BuildPeerOptions("ALPHA", _ => identityName, authorityName);
-
-            Assert.Equal(identityCert.Thumbprint, options.Credentials.Identity.Thumbprint);
-            Assert.Single(options.Credentials.TrustedAuthorities);
-            Assert.Equal(authorityCert.Thumbprint, options.Credentials.TrustedAuthorities[0].Thumbprint);
-        }
-        finally
-        {
-            store.Remove(identityCert);
-            store.Remove(authorityCert);
-        }
-    }
-
-    /// <summary>The store-based lookup throws when the trusted authority certificate cannot be found, even though the identity certificate was.</summary>
-    [Fact]
-    public void MsmtCertificateLookup_BuildPeerOptions_AuthorityNotFound_Throws()
-    {
-        string identityName = $"comlink-test-identity-{Guid.NewGuid():N}";
-        using X509Certificate2 identityCert = SelfSignedCertificateNamed(identityName);
-
-        using X509Store store = new(StoreName.My, StoreLocation.CurrentUser);
-        store.Open(OpenFlags.ReadWrite);
-        store.Add(identityCert);
-        try
-        {
-            Assert.Throws<InvalidOperationException>(
-                () => MsmtCertificateLookup.BuildPeerOptions("ALPHA", _ => identityName, "comlink-test-missing-authority"));
-        }
-        finally
-        {
-            store.Remove(identityCert);
-        }
     }
 
     /// <summary>The file-based lookup throws when the authority file does not exist, even though the identity file does.</summary>
@@ -770,13 +645,6 @@ public sealed class ControlProviderTests
         {
             Directory.Delete(tempDir, recursive: true);
         }
-    }
-
-    private static X509Certificate2 SelfSignedCertificateNamed(string simpleName)
-    {
-        using RSA key = RSA.Create(2048);
-        CertificateRequest request = new($"CN={simpleName}", key, HashAlgorithmName.SHA256, RSASignaturePadding.Pkcs1);
-        return request.CreateSelfSigned(DateTimeOffset.UtcNow.AddMinutes(-5), DateTimeOffset.UtcNow.AddDays(1));
     }
 
     private static TestFrame Alert(string body) => new() { Body = body, IsAlert = true };

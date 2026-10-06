@@ -23,20 +23,7 @@ MSMT peer authentication is mandatory - there is no way to run without it. Every
 - **An identity certificate**.
 - **A trusted certificate authority** that every peer's identity certificate must chain to.
 
-Two independent sources are supported, chosen per user in the network configuration file:
-
-- **System certificate store** (the default): looked up by subject name via the user's `CertificateName` in
-  the network configuration file (default: the user name itself, unprefixed) and the trusted authority name
-  (the file's `TrustedAuthorityCertificateName`, default: `COMLINK-ROOT`).
-  Resolved once a current user is registered; before that (a fresh install with no installed user yet),
-  building the MSMT options throws and the peer/interface listeners simply don't start, retried
-  the next time the host restarts after a user is installed. A real deployment provisions its own
-  certificates under these subject names through whatever process manages its certificate store.
-- **Certificate files**: the network file's `CertificateStore` (a folder holding one `{USERNAME}.pfx` identity per user) and
-  `AuthorityCertificate` load the running user's PKCS#12 identity file and a public authority file directly from disk instead,
-  resolved relative to the network configuration file's own directory. See `Scripts/Scenarios/` for a working example:
-  each scenario's `Config.json` names a store folder containing every user's `.pfx`, all signed by one shared
-  `Scripts/Scenarios/Root.cer` authority. See [Config.md](Config.md) for both keys.
+The certificates always come from files, designated by the network configuration file: its `CertificateStore` is a folder holding one `{USERNAME}.pfx` PKCS#12 identity per user, from which a node loads the one named for the running user, and its `AuthorityCertificate` is the public certificate of the one authority trusted to sign every identity. Both are resolved relative to the network configuration file's own directory, and nothing is ever looked up in the system certificate store. A user's certificate carries the user's name as its common name, which is how a server recognizes who connected to it. Without both keys, or without the user's `.pfx` file or the authority file, building the MSMT options throws and the peer/interface listeners simply don't start, retried the next time the host restarts. See `Scripts/Scenarios/` for a working example: each scenario's `Config.json` names a store folder containing every user's `.pfx`, all signed by one shared `Scripts/Scenarios/Root.cer` authority. See [Config.md](Config.md) for both keys.
 
 ## Session Peer
 
@@ -100,7 +87,7 @@ back out to a connected interface client over the connection it opened in; see [
 | `MsmtPeerTransport` (`Core/src/Internal/Peer/Transport/MsmtPeerTransport.cs`) | Adapts an `IMsmtSessionPeer` to the peer transport used by `PeerService`, `ClientPeerService`, and `ServerRoutingService`, caching one outbound connection per point and sending over inbound ones as well. MSMT itself remains IP only; serial goes through `SerialPeerTransport`. |
 | `InterfaceService` (`Core/src/Internal/Peer/InterfaceService.cs`, always active) | Uses its own `IMsmtSessionPeer` to host the local interface listener described in [Interface.md](Interface.md). |
 | `ConnectionOptions` (`IEngineController`) | Builds the `MsmtSessionPeerOptions` (identity certificate, trusted authority, then the host's `Connections().Msmt` adjustment: timeouts, keep-alive, session lifetimes) used for both inbound and outbound MSMT session peer connections. See [Configuration.md](Configuration.md#msmt-certificates). |
-| `CertificateName`/`TrustedAuthorityCertificateName` (network file) | Map the local user name, and the trusted certificate authority, to certificate subject names to look up in the system store. See [Configuration.md](Configuration.md#msmt-certificates). |
+| `CertificateStore`/`AuthorityCertificate` (network file) | Designate the folder of `{USERNAME}.pfx` identities and the authority certificate file. See [Configuration.md](Configuration.md#msmt-certificates). |
 
 `EngineExtensions.UseEngine` calls the package's `AddMsmt()` to register `IMsmtSessionPeer.IFactory` (and
 `IMsmtMessagePeer.IFactory`, unused by Comlink) by convention.

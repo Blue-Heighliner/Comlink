@@ -264,7 +264,6 @@ public sealed class EngineBuilderTests
         Assert.True(controller.TagsEnabled);
         Assert.False(controller.PrintReceivedDefaultEnabled);
         Assert.Equal(UserRole.Client, controller.Role);
-        Assert.Equal("COMLINK-ROOT", controller.TrustedAuthorityCertificateName);
         Assert.False(controller.CommandLineOverridesAllowed);
         Assert.Empty(controller.OutgoingPoints);
         Assert.Empty(controller.Servers);
@@ -273,7 +272,6 @@ public sealed class EngineBuilderTests
         Assert.Null(controller.PacketType);
         Assert.Equal(Enum.GetValues<TestMessagePriority>().Length, controller.Priorities.Count);
         Assert.Equal("NORMAL", controller.Priorities[0].Name);
-        Assert.Equal("USER", controller.GetCertificateName("USER"));
         Assert.True(controller.CanDelete(FolderType.Inbox));
         Assert.Equal(1, controller.GetPrintCount(new TestFrame()));
         Assert.Equal([AddressType.To, AddressType.Cc, AddressType.External], controller.AddressTypes.Select(t => t.Type));
@@ -663,21 +661,6 @@ public sealed class EngineBuilderTests
         Assert.Equal(["C2", "C3"], Assert.Single(server.Relays).Value);
         Assert.Equal("RELAY", Assert.Single(server.Relays).Key);
         Assert.DoesNotContain("RELAY", controller.Servers.Keys);
-    }
-
-    /// <summary>Certificate names and the trusted authority come from the network file.</summary>
-    [Fact]
-    public void NetworkCertificateSettings_AreUsed()
-    {
-        (_, EngineController controller) = Build(
-            engine => engine,
-            network: Network(("BOB", new NetworkUserConfig { CertificateName = "cert-BOB" })));
-        (_, EngineController fromFile) = Build(engine => engine, network: new NetworkConfig { TrustedAuthorityCertificateName = "FILE-ROOT" });
-
-        Assert.Equal("cert-BOB", controller.GetCertificateName("BOB"));
-        Assert.Equal("CAROL", controller.GetCertificateName("CAROL"));
-        Assert.Equal("COMLINK-ROOT", controller.TrustedAuthorityCertificateName);
-        Assert.Equal("FILE-ROOT", fromFile.TrustedAuthorityCertificateName);
     }
 
     /// <summary>The stated MSMT options are used with the engine's own credentials, and the built options are used as they are when none are stated.</summary>

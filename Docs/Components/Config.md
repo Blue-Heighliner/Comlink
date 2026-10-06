@@ -1,6 +1,6 @@
 # Network Configuration File Reference
 
-The engine defines the schema of one JSON file that describes a whole network: every user, their role, ports and connections, who is in which group, and the trusted certificate authority. It is shared by every node of the network, so nothing about a user is stated in code or in per-node files. It works identically in every build configuration; `Config.json` in the working directory is always read, and whether the command-line arguments below may override it is decided solely by the host, through `IEngineBuilder.CommandLineOverrides(bool)` (see [Configuration.md](Configuration.md#command-line-overrides)); they are ignored unless the host allows them.
+The engine defines the schema of one JSON file that describes a whole network: every user, their role, ports and connections, and who is in which group. It is shared by every node of the network, so nothing about a user is stated in code or in per-node files. It works identically in every build configuration; `Config.json` in the working directory is always read, and whether the command-line arguments below may override it is decided solely by the host, through `IEngineBuilder.CommandLineOverrides(bool)` (see [Configuration.md](Configuration.md#command-line-overrides)); they are ignored unless the host allows them.
 
 ```sh
 Sample.exe --config path/to/Config.json --user CLIENT1
@@ -15,7 +15,6 @@ The file is read again while the application runs when the user right-clicks the
 
 ```json
 {
-  "TrustedAuthorityCertificateName": null,
   "AuthorityCertificate": "../Root.cer",
   "CertificateStore": ".",
   "UserGroups": {
@@ -31,15 +30,9 @@ The file is read again while the application runs when the user right-clicks the
       "Parent": null,
       "Children": [],
       "SecurityLevel": null,
-      "CertificateName": null,
       "Data": { "role": "clerk" },
 
-      "Headless": false,
-      "AlertText": null,
-      "AlarmSoundSeconds": null,
-      "MessageTagsEnabled": null,
-      "MessageTagLabel": null,
-      "PrintReceivedEnabled": null
+      "Headless": false
     }
   }
 }
@@ -47,23 +40,17 @@ The file is read again while the application runs when the user right-clicks the
 
 ## Network
 
-### `TrustedAuthorityCertificateName`
-
-**Type:** `string | null` | **Default:** `null` (uses `COMLINK-ROOT`)
-
-Subject name of the certificate authority every user's identity certificate must chain to, looked up in the system certificate store. Ignored when `AuthorityCertificate` is set.
-
 ### `AuthorityCertificate`
 
 **Type:** `string | null` | **Default:** `null`
 
-Path to a public certificate file (for example `.cer`) for that authority, used instead of a store lookup. A relative path resolves against the directory of the configuration file. It must be used together with `CertificateStore`; setting only one of the two throws when connections are set up.
+Path to a public certificate file (for example `.cer`) of the one certificate authority every identity certificate must chain to, and the only one a node trusts. A relative path resolves against the directory of the configuration file. Required for connections: without it, and `CertificateStore`, connections cannot be set up.
 
 ### `CertificateStore`
 
 **Type:** `string | null` | **Default:** `null`
 
-Path to a folder of PKCS#12 (`.pfx`) files, one per user named `{USERNAME}.pfx` (for example `CLIENT1.pfx`, matching the user name's case on a case-sensitive file system), holding each user's identity certificate and private key. A node loads the running user's own identity from it instead of a system store lookup. A relative path resolves against the directory of the configuration file. It must be used together with `AuthorityCertificate`.
+Path to a folder of PKCS#12 (`.pfx`) files, one per user named `{USERNAME}.pfx` (for example `CLIENT1.pfx`, matching the user name's case on a case-sensitive file system), holding each user's identity certificate and private key. A node loads the running user's own identity from it, and only from it; the certificate's common name is the user name, which is how a connecting node is recognized. A relative path resolves against the directory of the configuration file. Required for connections together with `AuthorityCertificate`.
 
 ### `UserGroups`
 
@@ -160,12 +147,6 @@ Instead of a plain user name, a link may be an object that forces how the connec
 
 The name of the security level the user runs at (see [Configuration.md](Configuration.md#security-levels)).
 
-### `CertificateName`
-
-**Type:** `string | null` | **Default:** `null` (the user name)
-
-The user's certificate subject name: the identity certificate to look up for the local user, and the name a connecting user's certificate must carry for others to accept it as this user.
-
 ### `Data`
 
 **Type:** `object` | **Default:** `{}`
@@ -181,36 +162,6 @@ These apply to a node running as this user; the one marked "launched" only when 
 **Type:** `bool` | **Default:** `false`
 
 Run with no GUI, as a normal peer.
-
-### `AlertText`
-
-**Type:** `string | null` | **Default:** `null` (`"ALERT"`)
-
-Text shown in the title bar's alert box while alarming, and the mark a draft shows when it is an alert.
-
-### `AlarmSoundSeconds`
-
-**Type:** `number | null` | **Default:** `null` (`30`)
-
-Seconds the alarm sound plays after an alert is received before automatically stopping; resets whenever a new alert arrives.
-
-### `MessageTagsEnabled`
-
-**Type:** `bool | null` | **Default:** `null` (`true`)
-
-Whether message tags are shown anywhere in the UI.
-
-### `MessageTagLabel`
-
-**Type:** `string | null` | **Default:** `null` (`"Tag"`)
-
-Label of the tag input's watermark in the draft editor.
-
-### `PrintReceivedEnabled`
-
-**Type:** `bool | null` | **Default:** `null` (`false`)
-
-Whether the print manager's "print received" toggle starts enabled, automatically adding every received message to the print queue.
 
 ## Examples
 
@@ -240,17 +191,6 @@ A relay sits between clients and a server: the server lists it as a child, the r
     "CLIENT1": { "Role": "Client", "Parent": "SERVER" },
     "CLIENT2": { "Role": "Client", "Parent": "RELAY" }
   }
-}
-```
-
-### Certificates from the system store
-
-Without `CertificateStore` and `AuthorityCertificate`, certificates are looked up in the system store by each user's `CertificateName` (the user name by default) and the trusted authority's name:
-
-```json
-{
-  "TrustedAuthorityCertificateName": "MY-ROOT",
-  "Users": { "USER-A": { "CertificateName": "COMLINK-USER-A" } }
 }
 ```
 

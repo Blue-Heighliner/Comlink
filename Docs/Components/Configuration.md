@@ -132,7 +132,6 @@ Everything about one user is stated on that user's entry in the [network configu
 | `Parent` | The user above this one in a hierarchy, by name or as an object forcing the connection mode (`MsmtListen`, `MsmtConnect` or `Hdlc`); by default the node dials it | none |
 | `Children` | The users below this one, for a `Server` or `Relay`, each by name or as an object forcing the connection mode; by default the node listens for them | none |
 | `SecurityLevel` | The name of the level the user runs at (see [Security Levels](#security-levels)) | the lowest configured level |
-| `CertificateName` | The certificate subject name of the user: the identity certificate to look up for the local user, and the name others' certificates must carry (see [MSMT Certificates](#msmt-certificates)) | the user name |
 | `Data` | App-specific string keys and values; the engine does not interpret them, they travel with the user's `UserIdentity` | none |
 
 The current user's info is what decides how this node behaves, so it is read once a user is installed (or named by `--user`), not when the engine starts: until then the node is a `Client` with the default ports and nothing connected, showing only the install screen. The topology a `Server` routes with, every server in the cluster and the children each owns, is every user in the [directory](#user-directory) whose role is `Server`, with its `Children`. Every node on a network uses the same file, since a node learns about other users, such as which servers store messages, from it.
@@ -181,7 +180,7 @@ The names and words the app shows its users, stated by a handler implementing `I
 
 **Default:** `AppName` and `DataFolderName` are the entry assembly's name, `"HOME"`, `"ALERT"`, `"Tag"`, `"Priority"`, `"Security Level"`, and no renames.
 
-**Network file:** the current user's entry may set `AlertText` and `MessageTagLabel`, overriding the handler's alert and tag labels. See [Config.md](Config.md). The file names security levels by their label, unlike drafts, which store the enum value: the file describes a network and is edited and redistributed quickly, while stored data must stay readable for as long as it is kept.
+**Network file:** none for the labels. The file names security levels by their label, unlike drafts, which store the enum value: the file describes a network and is edited and redistributed quickly, while stored data must stay readable for as long as it is kept.
 
 **Sample:** `DisplayHandler` states the window icon and the home text, and overrides no label.
 
@@ -205,7 +204,7 @@ How drafts are composed, stated by a handler implementing `IDraftHandler<TPriori
 
 **Line width.** The draft editor shows the body in a monospace font. With `DefaultLineWidth` or `MaxLineWidth` stated, the draft view offers a width control, the user sets how many characters wide a line is shown, between `MinLineWidth` (1 by default, and never below the header) and `MaxLineWidth` (no maximum by default). **The width is only how the draft is shown:** the editor wraps the text, and the header above it, at that many characters, at the last space that fits or in the middle of a word that is wider than a line by itself, and no line break is ever added to the text, so changing the width never changes the draft or the message that is sent. The cut-off is shown: a dashed ruler runs down the body at the last column of a line, and the header sits in a box as wide as a line. **The width can never be less than the longest line of the header**, even when `MinLineWidth` is smaller: the minimum of the width control is raised to fit it and a narrower width is raised to match, and a header wider than `MaxLineWidth` wins over the maximum. A new draft starts at `DefaultLineWidth`, or at `MaxLineWidth` when there is no default (no limit would exceed it); without a maximum the user may also clear the width to have no limit. The width is saved with the draft (`DraftEntity.LineWidth`).
 
-**Tags.** `EnableTags` (`true` by default) says whether messages carry a tag at all; when `false` no tag is shown in the draft editor, the message view or the entry list, and the network file's `MessageTagsEnabled` can still override it per user. The handler also says what a message tag may be, wherever one is entered: `TagCase` (`Mixed`, the default, leaves it as written; `Lower` and `Upper` force it as it is typed or pasted), `IsTagRequired` (`false` by default; when `true` a draft without a tag is not sent), `MinTagLength` (0 by default; the fewest characters a tag that is given may have), `MaxTagLength` (none by default; the tag box in the draft view is sized to fit exactly that many monospace characters and does not let more be typed), and `AllowTagSymbols`, `AllowTagNumbers` and `AllowTagSpaces` (all `true` by default; letters are always allowed). What is typed is filtered to what the rules allow, so a tag in the draft view is always a valid one except for being too short, which stops the send with a message. A tag passed to `IServiceConnection.SendMessage` that breaks the rules throws.
+**Tags.** `EnableTags` (`true` by default) says whether messages carry a tag at all; when `false` no tag is shown in the draft editor, the message view or the entry list. The handler also says what a message tag may be, wherever one is entered: `TagCase` (`Mixed`, the default, leaves it as written; `Lower` and `Upper` force it as it is typed or pasted), `IsTagRequired` (`false` by default; when `true` a draft without a tag is not sent), `MinTagLength` (0 by default; the fewest characters a tag that is given may have), `MaxTagLength` (none by default; the tag box in the draft view is sized to fit exactly that many monospace characters and does not let more be typed), and `AllowTagSymbols`, `AllowTagNumbers` and `AllowTagSpaces` (all `true` by default; letters are always allowed). What is typed is filtered to what the rules allow, so a tag in the draft view is always a valid one except for being too short, which stops the send with a message. A tag passed to `IServiceConnection.SendMessage` that breaks the rules throws.
 
 **Defaults.** `DefaultTag`, `DefaultPriority` and `DefaultSecurityLevel` say what a new draft starts with (none by default: no tag, the lowest priority the user may choose, and the highest security level the user may use). The tag is made to fit the tag rules, and a level the user may not choose, or a security level above their own, is brought to what they may.
 
@@ -233,7 +232,7 @@ Configuration for the alert-message feature in Client mode: how long the alarm s
 
 **Sample:** `MessageHandler.IsAlert` makes a message an alert when its tag is `ALERT`, so typing that tag in a draft is all it takes: the draft shows the alert mark and the draft handler's `ALERT - ACTION REQUIRED` header.
 
-**Network file:** the current user's entry may set `AlertText` and `AlarmSoundSeconds`, overriding what the alarm handler and the display handler state, field by field. See [Config.md](Config.md). The confirmation keys have no field in the file.
+**Network file:** none; the alert label, the alarm durations and the quick read keys are all stated in code.
 
 **Sample:** none; the default plus the network file already cover every genuinely useful case.
 
@@ -266,7 +265,7 @@ How messages are composed and displayed: the priority levels, members of the enu
 
 **Default:** the levels must be stated (the engine refuses to start otherwise), each a `User` level named by its member name in uppercase. A priority or security level is never used unless it is stated: creating a message with one that is not stated throws, a handler naming a priority that is not stated fails the engine at startup, and a received or imported message carrying one is dropped with an error logged; tags on (the draft handler's `EnableTags`) with label `"Tag"`; no blocked combinations. Stating a level again selects it without changing its place. With `NoPriority` the only level is `"NORMAL"` and everything is sent at priority 0. Nothing is ever sent with a priority outside the configured levels: a message's priority is brought within them when it is created and again when it is read, heartbeats go at the lowest level, the exchange that identifies a connection at the highest, and other traffic at the lowest.
 
-**Network file:** the current user's entry may set `MessageTagsEnabled` and `MessageTagLabel`, overriding what the draft handler's `EnableTags` and the display handler's `TagLabel` state, field by field. See [Config.md](Config.md). Priorities and blocked combinations have no field in the file.
+**Network file:** none; tags, priorities and blocked combinations are all stated in code.
 
 **Sample:** `EngineConfiguration` states its `MessagePriority` enum: three user levels (`Low`, `Medium`, `High`) and two system ones (`Retrieval`, `Receipt`, used by its handlers) instead of the default's one, and demonstrates both blocked-combination kinds: the `"SPAM"` tag is blocked regardless of priority, and `High` priority is blocked regardless of tag. Unlike Sample's other settings, the blocked combinations deliberately change default behavior from the engine's permissive "no blocks" default, since that is the only way to usefully demonstrate that part of the configuration.
 
@@ -320,7 +319,7 @@ The print manager's automatic "print received" behavior: whether its toggle star
 
 **Default:** off, one copy of each.
 
-**Network file:** the current user's entry may set `PrintReceivedEnabled`, overriding what the print handler states. See [Config.md](Config.md). The print count has no field in the file.
+**Network file:** none; whether "print received" starts on and the print count are stated in code.
 
 **Sample:** `PrintHandler` states a print count that prints an alert message twice and every other received message once, demonstrating a rule that inspects the message itself; "print received" uses the default.
 
@@ -534,19 +533,19 @@ The options every serial connection starts its HDLC peer with: line encoding, CR
 
 ### MSMT Certificates
 
-MSMT peer authentication is mandatory - there is no unauthenticated mode. A user's `CertificateName` (on their [user info](#user-info)) is their certificate's subject name (CN): for the current user, the identity certificate to present; for any other user, the name a Server expects that user's certificate to carry (and the name [connection identification](Identification.md) matches against) and the file's `TrustedAuthorityCertificateName` names the certificate authority every peer's identity certificate must chain to. Both are looked up in the system certificate store (`CurrentUser` then `LocalMachine`, `StoreName.My`).
+MSMT peer authentication is mandatory - there is no unauthenticated mode. The certificates come only from the files the network configuration file designates: its `CertificateStore` is a folder holding one `{USERNAME}.pfx` identity per user, of which a node loads the one for the current user, and its `AuthorityCertificate` is the one authority every identity certificate must chain to and the only one a node trusts. A user's certificate carries the user's name as its common name, which is the name [connection identification](Identification.md) matches against. Nothing is looked up in the system certificate store.
 
-The MSMT options (identity certificate plus trusted authorities) used for both inbound and outbound session peer connections are built from those two by default, against the current user name (via `ICurrentUserProvider`). If no current user is registered yet, or either certificate can't be found in the store, building them throws `InvalidOperationException`; callers (`PeerService`, `ClientPeerService`, `ServerRoutingService`, `InterfaceService`) catch this at startup, log it, and simply don't start their listener, retried the next time the host restarts once a user and certificates are in place. The certificate names and trusted authority are stated in the network file, so the security-sensitive credential logic is never touched by a host.
+The MSMT options (identity certificate plus trusted authority) used for both inbound and outbound session peer connections are built from those files by `ConfiguredEngineController`, for the current user (via `ICurrentUserProvider`). If either key is missing, there is no current user yet, or either file is missing, building them throws `InvalidOperationException`; callers (`PeerService`, `ClientPeerService`, `ServerRoutingService`, `InterfaceService`) catch this at startup, log it, and simply don't start their listener, retried the next time the host restarts once a user and the files are in place. A host never touches this security-sensitive credential logic.
 
-`Connections().Msmt` adjusts the other MSMT settings (handshake, stall and response timeouts, TCP keep-alive, session lifetimes and keep-alive intervals) for every IP connection, inbound and outbound, including the interface listener. It takes a `MsmtConnectionOptions` object (handshake, stall and response timeouts, TCP keep-alive time, session lifetimes and keep-alive intervals, each defaulting to the MSMT package's own value) instead of the library's session options, since those require credentials the engine supplies. Its values are laid over the options built above, after the config file's certificate file override, and the credentials and hostname rule stay the engine's:
+`Connections().Msmt` adjusts the other MSMT settings (handshake, stall and response timeouts, TCP keep-alive, session lifetimes and keep-alive intervals) for every IP connection, inbound and outbound, including the interface listener. It takes a `MsmtConnectionOptions` object (handshake, stall and response timeouts, TCP keep-alive time, session lifetimes and keep-alive intervals, each defaulting to the MSMT package's own value) instead of the library's session options, since those require credentials the engine supplies. Its values are laid over the options built above, and the credentials and hostname rule stay the engine's:
 
 ```csharp
 engine.Connections().Msmt(new MsmtConnectionOptions { HandshakeTimeout = TimeSpan.FromSeconds(20) });
 ```
 
-**Default:** the certificate name is the user name unchanged; the trusted authority is `"COMLINK-ROOT"`; the MSMT options are otherwise left at the package defaults. Sample states a 15 second handshake timeout and a 60 second response timeout through `Connections().Msmt`.
+**Default:** the MSMT options are left at the package defaults. Sample states a 15 second handshake timeout and a 60 second response timeout through `Connections().Msmt`.
 
-**Network file:** each user's entry may set `CertificateName` (the name of that user's certificate, defaulting to the user name); the file's `TrustedAuthorityCertificateName` names the trusted authority. The file's `CertificateStore` (a folder of `{USERNAME}.pfx` identity files) and `AuthorityCertificate` bypass the system store entirely, loading the running user's identity and the authority certificate directly from disk instead, set together or not at all; see [Config.md](Config.md). The options are built by `ConfiguredEngineController` for the current user, so the files are used even though they are not part of the wrapped controller.
+**Network file:** `CertificateStore` and `AuthorityCertificate` are required for connections and are the only source of certificates; see [Config.md](Config.md).
 
 **Sample:** Sample states only the `Connections().Msmt` timeouts and provisions no certificates of its own; `Scripts/Scenarios/` demonstrates the `CertificateStore`/`AuthorityCertificate` keys with `{USERNAME}.pfx` files checked in alongside each scenario's config.
 
@@ -675,7 +674,7 @@ Unlike the settings above, this is real OS-level behavior, not configuration or 
 - **Other platforms:** printer discovery returns an empty list/no default; line printing is a no-op.
 - Both platforms poll every 150ms with a 30-second-per-line safety timeout, so a stuck or offline printer cannot hang the print queue forever; discovery and printing are both best-effort - any failure (missing tooling, no printers configured, permission error) degrades gracefully (empty list / no default / a line that times out and moves on) rather than throwing.
 
-Not unit tested directly, for the same reason `ConnectionOptions`'s certificate store lookup below isn't: both are inherently environment- and OS-dependent, so a unit test could only meaningfully assert against whatever printers happen to be installed (and reachable) on the machine running the test - `Docs/Components/ViewModels.md`'s `PrintManagerViewModelTests` instead test the print queue's own logic (ordering, interruption, restart) against a mocked `IPrintDriver`/`IEngineController`.
+Not unit tested directly, since it is inherently environment- and OS-dependent, so a unit test could only meaningfully assert against whatever printers happen to be installed (and reachable) on the machine running the test - `Docs/Components/ViewModels.md`'s `PrintManagerViewModelTests` instead test the print queue's own logic (ordering, interruption, restart) against a mocked `IPrintDriver`/`IEngineController`.
 
 ---
 

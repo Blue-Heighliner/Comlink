@@ -323,8 +323,7 @@ internal sealed class HandshakePeerTransport : IPeerTransport
     {
         foreach (string user in KnownUsers())
         {
-            string expected = engineController.GetCertificateName(user);
-            if (certificateNames.Contains(expected, StringComparer.OrdinalIgnoreCase)) { return user; }
+            if (certificateNames.Contains(user, StringComparer.OrdinalIgnoreCase)) { return user; }
         }
 
         return certificateNames.FirstOrDefault();

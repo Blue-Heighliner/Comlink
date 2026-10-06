@@ -10,11 +10,6 @@ public sealed record UserInfo
     /// default) is the lowest configured level.
     /// </summary>
     public string? SecurityLevel { get; init; }
-    /// <summary>
-    /// The certificate subject name that belongs to this user: for the local user the identity certificate to look up, and for
-    /// others the name their certificate is expected to carry. <see langword="null"/> (the default) is the user name itself.
-    /// </summary>
-    public string? CertificateName { get; init; }
     /// <summary>App-specific data attached to the user. The engine does not interpret it; it travels with the user's <see cref="UserIdentity"/>. Empty by default.</summary>
     public IReadOnlyDictionary<string, string> Data { get; init; } = new Dictionary<string, string>();
     /// <summary>Names of the groups this user is a member of.</summary>

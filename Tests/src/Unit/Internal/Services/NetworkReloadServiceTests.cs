@@ -17,7 +17,7 @@ public sealed class NetworkReloadServiceTests : IDisposable
         network = NetworkConfig.Load([], directory);
         CurrentUserProvider user = new() { UserName = "ME" };
         EngineController controller = new(EngineBuilder.Build(new TestEngineConfiguration()), user, network);
-        service = new NetworkReloadService(network, controller, user, peer.Object, listener.Object, LoggerFactory.Create(_ => { }));
+        service = new NetworkReloadService(network, controller, peer.Object, listener.Object, LoggerFactory.Create(_ => { }));
     }
 
     /// <inheritdoc />

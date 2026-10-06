@@ -18,7 +18,7 @@ The engine names the user on the other end of a connection from what is known ab
 
 The user an initial packet or frame processor marked the connection connected as (below) wins. Otherwise the engine decides:
 
-- **IP**: the first user (from `Users`, and every server and child client in `Servers`) whose `CertificateName` matches one of the certificate's common names. The certificate authority already vouched for the certificate, so when none matches the connection is still accepted, as a user named after the first common name. A certificate with no common name cannot be identified.
+- **IP**: the first user (from `Users`, and every server and child client in `Servers`) whose name matches one of the certificate's common names (a user's certificate carries the user's name). The certificate authority already vouched for the certificate, so when none matches the connection is still accepted, as a user named after the first common name. A certificate with no common name cannot be identified.
 - **Serial**: the user named by the matching `Hdlc` link in the network file (matching port and address), else a user named after the port. A cable carries no certificate, so a host that needs more has its processors name the user during the initial exchange.
 
 The identity the engine builds from the name carries the `Data` on that name's user info, which is where a host attaches whatever it wants to a user (the `Data` map of a user's entry in the network configuration file). The engine never interprets it; it travels with the identity for the host's own handlers.

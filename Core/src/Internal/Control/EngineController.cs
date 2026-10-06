@@ -451,23 +451,6 @@ internal interface IEngineController
     /// </summary>
     /// <param name="folderType">The root folder type the entry or subfolder being deleted belongs to.</param>
     bool CanDelete(FolderType folderType);
-
-    /// <summary>
-    /// Returns the certificate subject name (common name) that belongs to the given user. For the current user it
-    /// is the identity certificate searched for in the system store; MSMT peer authentication is mandatory - there
-    /// is no unauthenticated mode - so when no matching certificate exists, startup throws. For any other user it is
-    /// the name that user's certificate is expected to carry, which a Server uses to recognize who connected to it.
-    /// </summary>
-    /// <param name="userName">The user name to resolve a certificate name for.</param>
-    string GetCertificateName(string userName);
-
-    /// <summary>
-    /// The certificate subject name, searched for in the system store the same way as <see
-    /// cref="GetCertificateName"/>, of the certificate authority trusted to sign every peer's identity
-    /// certificate (see <see cref="GetCertificateName"/>). When no matching certificate exists, startup
-    /// throws.
-    /// </summary>
-    string TrustedAuthorityCertificateName { get; }
 }
 
 /// <summary>
@@ -700,7 +683,7 @@ internal class EngineController(EngineBuilder builder, ICurrentUserProvider curr
     public virtual bool PrintReceivedDefaultEnabled => printHandler.Value?.PrintReceivedByDefault ?? false;
 
     /// <inheritdoc />
-    public virtual MsmtSessionPeerOptions ConnectionOptions => ConfigureConnectionOptions(MsmtCertificateLookup.BuildPeerOptions(currentUserProvider.UserName, GetCertificateName, TrustedAuthorityCertificateName));
+    public virtual MsmtSessionPeerOptions ConnectionOptions => throw new InvalidOperationException("Peer authentication requires the network's CertificateStore and AuthorityCertificate to be set.");
 
     /// <inheritdoc />
     public virtual MsmtSessionPeerOptions ConfigureConnectionOptions(MsmtSessionPeerOptions options) => builder.MsmtOptionsValue is { } stated
@@ -847,8 +830,6 @@ internal class EngineController(EngineBuilder builder, ICurrentUserProvider curr
     /// <inheritdoc />
     public virtual IReadOnlyList<AutoForwardControllerDefinition> AutoForwardControllers => autoForwardControllers.Value;
 
-    /// <inheritdoc />
-    public virtual string TrustedAuthorityCertificateName => network.TrustedAuthorityCertificateName ?? "COMLINK-ROOT";
 
     /// <inheritdoc />
     public virtual object CreateFrame() => frame.Create();
@@ -1067,8 +1048,6 @@ internal class EngineController(EngineBuilder builder, ICurrentUserProvider curr
     /// <inheritdoc />
     public virtual bool CanDelete(FolderType folderType) => deleteHandler.Value?.CanDelete(new DeleteContext { Folder = folderType }) ?? true;
 
-    /// <inheritdoc />
-    public virtual string GetCertificateName(string userName) => GetUserInfo(userName).CertificateName ?? userName;
 
     private PacketMap Packet => packet ?? throw new NotSupportedException("This engine has no packet type; state one with Packets<TPacket>(...) to enable packetization.");
 }

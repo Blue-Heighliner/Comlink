@@ -13,12 +13,6 @@ internal sealed class NetworkConfig
     private static readonly JsonSerializerOptions jsonOptions = new() { PropertyNameCaseInsensitive = true };
 
     /// <summary>
-    /// Subject name of the certificate authority trusted to sign every user's identity certificate. <see langword="null"/> uses the
-    /// engine default (<c>COMLINK-ROOT</c>). Ignored when <see cref="AuthorityCertificate"/> is set.
-    /// </summary>
-    public string? TrustedAuthorityCertificateName { get; set; }
-
-    /// <summary>
     /// Path to a public certificate file (for example <c>.cer</c>) for the certificate authority trusted to sign every user's identity
     /// certificate, used instead of a system certificate store lookup. A relative path is resolved against the directory containing
     /// the configuration file. Used together with <see cref="CertificateStore"/>.
@@ -102,7 +96,6 @@ internal sealed class NetworkConfig
     public void Reload()
     {
         NetworkConfig fresh = Load(arguments, workingDirectory);
-        TrustedAuthorityCertificateName = fresh.TrustedAuthorityCertificateName;
         AuthorityCertificate = fresh.AuthorityCertificate;
         CertificateStore = fresh.CertificateStore;
         UserGroups = fresh.UserGroups;
@@ -141,7 +134,6 @@ internal sealed class NetworkConfig
                 Parent = user.Parent?.ToLink(),
                 Children = [.. user.Children.Select(child => child.ToLink())],
                 SecurityLevel = user.SecurityLevel,
-                CertificateName = user.CertificateName,
                 Data = new Dictionary<string, string>(user.Data),
                 Groups = [.. UserGroups.Where(group => group.Value.Contains(userName, StringComparer.OrdinalIgnoreCase)).Select(group => group.Key)]
             }
@@ -184,29 +176,11 @@ internal sealed class NetworkUserConfig
     /// <summary>The name of the security level this user runs at. <see langword="null"/> is the lowest configured level.</summary>
     public string? SecurityLevel { get; init; }
 
-    /// <summary>Certificate subject name of this user. <see langword="null"/> is the user name itself.</summary>
-    public string? CertificateName { get; init; }
-
     /// <summary>App-specific string keys and values attached to this user; the engine does not interpret them.</summary>
     public Dictionary<string, string> Data { get; init; } = [];
 
     /// <summary>Run headless, as a normal peer with no GUI, when this user is the one the process is launched as (see <see cref="NetworkConfig.User"/>).</summary>
     public bool Headless { get; init; }
-
-    /// <summary>Text shown in the title bar's alert box while alarming. <see langword="null"/> uses the engine default (<c>"ALERT"</c>).</summary>
-    public string? AlertText { get; init; }
-
-    /// <summary>Seconds the alarm sound plays after an alert is received. <see langword="null"/> uses the engine default (30).</summary>
-    public double? AlarmSoundSeconds { get; init; }
-
-    /// <summary>Whether message tags are shown anywhere in the UI. <see langword="null"/> uses the engine default (<see langword="true"/>).</summary>
-    public bool? MessageTagsEnabled { get; init; }
-
-    /// <summary>Label used for the tag input's watermark in the draft editor. <see langword="null"/> or empty uses the engine default (<c>"Tag"</c>).</summary>
-    public string? MessageTagLabel { get; init; }
-
-    /// <summary>Whether the print manager's "print received" toggle starts enabled. <see langword="null"/> uses the engine default (<see langword="false"/>).</summary>
-    public bool? PrintReceivedEnabled { get; init; }
 
     /// <summary>The MSMT listen port, or <see langword="null"/> when not stated.</summary>
     public int? GetMsmtPort() => Read(Msmt, "Port") is { ValueKind: JsonValueKind.Number } port && port.TryGetInt32(out int value) ? value : null;
