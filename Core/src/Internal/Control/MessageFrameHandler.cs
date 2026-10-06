@@ -27,10 +27,10 @@ internal interface IMessageFrameHandler
     string GetBody(object frame);
     /// <summary>Returns whether <paramref name="frame"/> is an alert.</summary>
     bool IsAlert(object frame);
+    /// <summary>Gets the names of the keys that confirm the latest pending alert.</summary>
+    IReadOnlyList<string> AlertConfirmationKeys { get; }
     /// <summary>Gets the priority number of <paramref name="frame"/>.</summary>
     Enum GetPriority(object frame);
-    /// <summary>Gets how many copies of <paramref name="frame"/> are printed when received.</summary>
-    int GetPrintCount(object frame);
     /// <summary>Gets the tag of <paramref name="frame"/>.</summary>
     string GetTag(object frame);
     /// <summary>Gets the security level name of <paramref name="frame"/>, or an empty string for none.</summary>
@@ -89,10 +89,10 @@ internal sealed class MessageFrameHandler<TFrame, TPriority, TLevel>(IMessageHan
     public bool IsAlert(object frame) => handler.IsAlert((TFrame)frame);
 
     /// <inheritdoc />
-    public Enum GetPriority(object frame) => handler.GetPriority((TFrame)frame);
+    public IReadOnlyList<string> AlertConfirmationKeys => handler.AlertConfirmationKeys;
 
     /// <inheritdoc />
-    public int GetPrintCount(object frame) => handler.GetPrintCount((TFrame)frame);
+    public Enum GetPriority(object frame) => handler.GetPriority((TFrame)frame);
 
     /// <inheritdoc />
     public string GetTag(object frame) => handler.GetTag((TFrame)frame);

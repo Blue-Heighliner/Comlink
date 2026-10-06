@@ -32,24 +32,9 @@ public interface IEngineBuilder<TFrame, TPacket, TPriority, TLevel> where TFrame
     /// <typeparam name="THandler">The handler type, instantiated through dependency injection when the engine runs: the instance registered for it in the host's services, or else one constructed from them.</typeparam>
     IEngineBuilder<TFrame, TPacket, TPriority, TLevel> Display<THandler>() where THandler : IDisplayHandler;
 
-    /// <summary>Sets the application version, shown in the title bar and the info popup. Defaults to the entry assembly's version.</summary>
-    IEngineBuilder<TFrame, TPacket, TPriority, TLevel> AppVersion(string version);
-
-    /// <summary>Turns kiosk mode on or off. Kiosk mode hides window chrome and restricts navigation.</summary>
-    IEngineBuilder<TFrame, TPacket, TPriority, TLevel> KioskMode(bool enabled = true);
-
-    /// <summary>Sets a user name for development and testing, which skips the installed user lookup.</summary>
-    IEngineBuilder<TFrame, TPacket, TPriority, TLevel> DebugUser(string userName);
-
-    /// <summary>Sets how an installation code entered by the user resolves to a user name. Defaults to accepting the code <c>CODE</c> for a user named <c>TEST</c>.</summary>
-    /// <param name="resolve">Returns the user name for a code, or <see langword="null"/> when the code is not recognized.</param>
-    IEngineBuilder<TFrame, TPacket, TPriority, TLevel> UserCodes(Func<string, string?> resolve);
-
-    /// <summary>Adds user names to the directory used for address auto-complete and for connection identification. What is known about each is stated in the network configuration file.</summary>
-    IEngineBuilder<TFrame, TPacket, TPriority, TLevel> Users(params string[] names);
-
-    /// <summary>Defines a group of users, whose members may be user names or other group names.</summary>
-    IEngineBuilder<TFrame, TPacket, TPriority, TLevel> Group(string name, params string[] members);
+    /// <summary>States the handler that decides which user an installation code entered by the user installs (see <see cref="IInstallHandler"/>). Defaults to accepting the name of a user of the network, and the code <c>CODE</c> for a user named <c>TEST</c>.</summary>
+    /// <typeparam name="THandler">The handler type, instantiated through dependency injection when the engine runs: the instance registered for it in the host's services, or else one constructed from them.</typeparam>
+    IEngineBuilder<TFrame, TPacket, TPriority, TLevel> Installs<THandler>() where THandler : IInstallHandler;
 
     /// <summary>
     /// Starts stating the security levels, members of <typeparamref name="TLevel"/>, from lowest to highest: each level stated ranks higher than the one stated before it, regardless of the order of the enum, and a member
@@ -59,11 +44,9 @@ public interface IEngineBuilder<TFrame, TPacket, TPriority, TLevel> where TFrame
     /// </summary>
     ISecurityLevelsBuilder<TFrame, TPacket, TPriority, TLevel> SecurityLevels();
 
-    /// <summary>Sets how long the alarm sound plays after an alert is received. Defaults to 30 seconds.</summary>
-    IEngineBuilder<TFrame, TPacket, TPriority, TLevel> AlarmDuration(TimeSpan duration);
-
-    /// <summary>Sets whether clicking the alert box, or pressing Space or Enter outside a text input, confirms the latest unconfirmed alert. On by default.</summary>
-    IEngineBuilder<TFrame, TPacket, TPriority, TLevel> QuickConfirmation(bool enabled = true);
+    /// <summary>States the handler that controls the alarm raised when an alert is received (see <see cref="IAlarmHandler"/>). Defaults to the alarm's own defaults.</summary>
+    /// <typeparam name="THandler">The handler type, instantiated through dependency injection when the engine runs: the instance registered for it in the host's services, or else one constructed from them.</typeparam>
+    IEngineBuilder<TFrame, TPacket, TPriority, TLevel> Alarms<THandler>() where THandler : IAlarmHandler;
 
     /// <summary>States the handler that controls how drafts are composed: how wide a line may be and the header a message must start with (see <see cref="IDraftHandler{TPriority, TLevel}"/>). Without one lines are not limited and there is no header.</summary>
     /// <typeparam name="THandler">The handler type, instantiated through dependency injection when the engine runs: the instance registered for it in the host's services, or else one constructed from them.</typeparam>
@@ -78,34 +61,19 @@ public interface IEngineBuilder<TFrame, TPacket, TPriority, TLevel> where TFrame
     /// </summary>
     IPriorityBuilder<TFrame, TPacket, TPriority, TLevel> Priorities();
 
-    /// <summary>Turns message tags on or off in the user interface. On by default. The tag input's name is <see cref="IDisplayHandler.TagLabel"/>.</summary>
-    IEngineBuilder<TFrame, TPacket, TPriority, TLevel> Tags(bool enabled = true);
-
     /// <summary>Starts configuring the aspects of the address types, such as the display label shown for each in the address type picker, the per-address badge, and the message view's section headers.</summary>
     IAddressTypesBuilder<TFrame, TPacket, TPriority, TLevel> AddressTypes();
 
-    /// <summary>Sets whether the print manager's "print received" toggle starts enabled, printing every received message from startup. Off by default.</summary>
-    IEngineBuilder<TFrame, TPacket, TPriority, TLevel> PrintReceived(bool enabledByDefault = true);
+    /// <summary>States the handler that controls how the print manager behaves (see <see cref="IPrintHandler{TFrame}"/>). Defaults to the print manager's own defaults.</summary>
+    /// <typeparam name="THandler">The handler type, instantiated through dependency injection when the engine runs: the instance registered for it in the host's services, or else one constructed from them.</typeparam>
+    IEngineBuilder<TFrame, TPacket, TPriority, TLevel> Prints<THandler>() where THandler : IPrintHandler<TFrame>;
 
     /// <summary>States the handler that decides which folders and entries the user may delete (see <see cref="IDeleteHandler"/>). Defaults to allowing everything.</summary>
     /// <typeparam name="THandler">The handler type, instantiated through dependency injection when the engine runs: the instance registered for it in the host's services, or else one constructed from them.</typeparam>
     IEngineBuilder<TFrame, TPacket, TPriority, TLevel> Deletes<THandler>() where THandler : IDeleteHandler;
 
-    /// <summary>Sets the subject name of the certificate authority trusted to sign every peer's certificate. Defaults to <c>COMLINK-ROOT</c>.</summary>
-    IEngineBuilder<TFrame, TPacket, TPriority, TLevel> TrustedAuthority(string certificateName);
-
-    /// <summary>Replaces how the MSMT peer options (identity certificate and trusted authorities) are built, for custom certificate pinning or a non-store certificate source.</summary>
-    IEngineBuilder<TFrame, TPacket, TPriority, TLevel> ConnectionOptions(Func<MsmtSessionPeerOptions> options);
-
     /// <summary>Starts configuring how connections are made: the MSMT options of every IP connection and the HDLC options of every serial one.</summary>
     IConnectionsBuilder<TFrame, TPacket, TPriority, TLevel> Connections();
-
-    /// <summary>
-    /// Sets who is on the other end of a connection that has just formed, by user name. Return <see langword="null"/> to leave it to the engine, which names an
-    /// IP connection after the user whose certificate name it carries and a serial connection after the user named on its outgoing point (or else its port).
-    /// The app-specific data that travels with the identity is the named user's <see cref="UserInfo.Data"/>.
-    /// </summary>
-    IEngineBuilder<TFrame, TPacket, TPriority, TLevel> Identify(Func<IConnectionInfo, string?> identify);
 
 
     /// <summary>
@@ -119,9 +87,6 @@ public interface IEngineBuilder<TFrame, TPacket, TPriority, TLevel> where TFrame
 
     /// <summary>Adds an external system, a conduit relaying messages to and from a system outside Comlink.</summary>
     IEngineBuilder<TFrame, TPacket, TPriority, TLevel> ExternalSystem(IExternalSystem system);
-
-    /// <summary>Designates an external system as the exclusive upstream hub every outgoing message is sent to instead of the peer network. It is added like <see cref="ExternalSystem"/> when it is not already.</summary>
-    IEngineBuilder<TFrame, TPacket, TPriority, TLevel> ExternalServer(IExternalSystem system);
 
     /// <summary>Starts configuring the export formats of the client's export screen.</summary>
     IExportsBuilder<TFrame, TPacket, TPriority, TLevel> Exports();

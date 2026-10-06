@@ -84,12 +84,12 @@ internal partial class MainWindow : Window
     }
 
     /// <summary>
-    /// Quick-confirms the latest pending alert on Space/Enter, unless focus is in a text input — see
+    /// Confirms the latest pending alert on one of the message handler's alert confirmation keys, unless focus is in a text input — see
     /// <see cref="IAlertViewModel.ConfirmLatestCommand"/> and <c>Docs/Components/ViewModels.md</c>.
     /// </summary>
     private void OnWindowKeyDown(object? sender, KeyEventArgs e)
     {
-        if (e.Key is not (Key.Space or Key.Enter)) { return; }
+        if (!viewModel.Alert.ConfirmationKeys.Any(name => Enum.TryParse(name, ignoreCase: true, out Key key) && key == e.Key)) { return; }
         if (IsTextInputFocused()) { return; }
 
         IAsyncRelayCommand command = viewModel.Alert.ConfirmLatestCommand;

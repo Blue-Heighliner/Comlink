@@ -17,28 +17,16 @@ internal sealed class EngineBuilder : IEngineBuilder, IAsyncDisposable
     public FrameMap? FrameMap { get; set; }
     /// <summary>The packet mapping, or <see langword="null"/> while packetization is off.</summary>
     public PacketMap? PacketMap { get; set; }
-    /// <summary>The application version, if stated.</summary>
-    public string? AppVersionValue { get; set; }
-    /// <summary>Whether kiosk mode is on.</summary>
-    public bool IsKioskMode { get; set; }
     /// <summary>The handler for the names and words the app shows, if stated.</summary>
     public ServiceRegistration<IDisplayHandler>? DisplayHandler { get; set; }
     /// <summary>The display handler, created once the configuration has finished, from the bootstrap container when there is one.</summary>
     public IDisplayHandler? DisplayHandlerInstance { get; private set; }
-    /// <summary>The debug user name, if stated.</summary>
-    public string? DebugUserValue { get; set; }
-    /// <summary>How installation codes resolve, if stated.</summary>
-    public Func<string, string?>? UserCodeResolver { get; set; }
-    /// <summary>The user names added to the directory.</summary>
-    public List<string> UserNames { get; } = [];
-    /// <summary>The user groups.</summary>
-    public Dictionary<string, IReadOnlyList<string>> UserGroups { get; } = new(StringComparer.OrdinalIgnoreCase);
+    /// <summary>The handler that decides which user an installation code installs, if stated.</summary>
+    public ServiceRegistration<IInstallHandler>? InstallHandler { get; set; }
     /// <summary>The configured security levels, in ascending order; empty when none were stated.</summary>
     public List<SecurityLevel> SecurityLevelValues { get; } = [];
-    /// <summary>The alarm duration, if stated.</summary>
-    public TimeSpan? AlarmDurationValue { get; set; }
-    /// <summary>Whether quick confirmation is on, if stated.</summary>
-    public bool? QuickConfirmationValue { get; set; }
+    /// <summary>The handler that controls the alert alarm, if stated.</summary>
+    public ServiceRegistration<IAlarmHandler>? AlarmHandler { get; set; }
     /// <summary>The largest serialized packet, if stated.</summary>
     public int? PacketSizeValue { get; set; }
     /// <summary>How many packets may be in flight at once, if stated.</summary>
@@ -47,26 +35,18 @@ internal sealed class EngineBuilder : IEngineBuilder, IAsyncDisposable
     public ServiceRegistration<IDraftFrameHandler>? DraftHandler { get; set; }
     /// <summary>The selectable priorities, empty when none were stated.</summary>
     public List<MessagePriorityOption> PriorityOptions { get; } = [];
-    /// <summary>Whether tags are shown, if stated.</summary>
-    public bool? TagsEnabledValue { get; set; }
     /// <summary>The blocked tag and priority combinations.</summary>
     public List<TagPriorityBlock> BlockedCombinations { get; } = [];
     /// <summary>The overridden address type display labels, by address type.</summary>
     public Dictionary<AddressType, string> AddressTypeLabels { get; } = [];
-    /// <summary>Whether printing received messages starts on, if stated.</summary>
-    public bool? PrintReceivedValue { get; set; }
+    /// <summary>The handler that controls the print manager, if stated.</summary>
+    public ServiceRegistration<IPrintFrameHandler>? PrintHandler { get; set; }
     /// <summary>The handler that decides what may be deleted, if stated.</summary>
     public ServiceRegistration<IDeleteHandler>? DeleteHandler { get; set; }
-    /// <summary>The trusted authority certificate name, if stated.</summary>
-    public string? TrustedAuthorityValue { get; set; }
-    /// <summary>How the MSMT peer options are built, if stated.</summary>
-    public Func<MsmtSessionPeerOptions>? ConnectionOptionsValue { get; set; }
     /// <summary>How the MSMT peer options are adjusted, if stated.</summary>
     public MsmtConnectionOptions? MsmtOptionsValue { get; set; }
     /// <summary>How the HDLC peer options are adjusted, if stated.</summary>
     public HdlcPeerOptions? HdlcOptionsValue { get; set; }
-    /// <summary>How connections are identified, if stated.</summary>
-    public Func<IConnectionInfo, string?>? IdentifyValue { get; set; }
     /// <summary>The initial packet processor, if stated.</summary>
     public ServiceRegistration<IInitialProcessor>? InitialPacketProcessor { get; set; }
     /// <summary>The initial message processor, if stated.</summary>
@@ -75,8 +55,6 @@ internal sealed class EngineBuilder : IEngineBuilder, IAsyncDisposable
     public bool AreCommandLineOverridesAllowed { get; set; }
     /// <summary>The external systems.</summary>
     public List<IExternalSystem> ExternalSystems { get; } = [];
-    /// <summary>The designated upstream hub, if any.</summary>
-    public IExternalSystem? ExternalServerValue { get; set; }
     /// <summary>The processor that reacts to peer activity, if stated.</summary>
     public ServiceRegistration<INetworkHandler>? NetworkHandler { get; set; }
     /// <summary>The custom export formats, in the order added.</summary>

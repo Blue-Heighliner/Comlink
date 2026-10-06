@@ -10,7 +10,6 @@ Engine never reads environment variables, hardcodes paths, or calls host-specifi
 public sealed class MyEngineConfiguration : IEngineConfiguration
 {
     public void Configure(IEngineBuilder engine) => engine.Types<MyFrame, MyPriority, MySecurityLevel>()
-        .Users("ALICE", "BOB")
         .Display<MyDisplayHandler>()
         .Frames()
             // ...a handler for every kind of frame...
@@ -71,11 +70,7 @@ Internally the configuration becomes a `FrameMap` and a `PacketMap`, whose acces
 
 ### App Settings
 
-```csharp
-engine.AppVersion("1.2.3").KioskMode();
-```
-
-This app's own identity and top-level presentation: the version shown in the title bar and the info popup, whether the main window runs in kiosk mode (hides window chrome and restricts navigation; the title bar's close button asks "restart" instead of "exit"). The window icon is the display handler's `Icon` (see [Display Names](#display-names)): an `avares://` URI of an Avalonia asset, or else the path of an image file.
+This app's own identity and top-level presentation are the display handler's `AppName`, `Version`, `IsKiosk` and `Icon` (see [Display Names](#display-names)): the version is shown in the title bar and the info popup; kiosk mode hides the minimize and maximize buttons and has the close button ask "restart" instead of "exit"; the icon is an `avares://` URI of an Avalonia asset, or else the path of an image file.
 
 **Default:** the name comes from the entry assembly name; the version is the entry assembly's `major.minor.build` version (`1.0.0` if it has none); kiosk mode is off; the icon is the operating system's.
 
@@ -90,34 +85,28 @@ The data folder is not configurable: a user's persistent state (LiteDB database,
 ### User Identity
 
 ```csharp
-engine.DebugUser("TEST1").UserCodes(code => code == "CODE1" ? "TEST1" : null);
+engine.Installs<MyInstallHandler>();
 ```
 
-How this instance's own local user identity is established: a fixed debug override that bypasses the normal `State.json` lookup, and mapping a user activation code (entered during installation) to the name of the user it installs, nothing more: everything else about that user comes from [User Info](#user-info). See `UserService`.
+How this instance's own local user identity is established: the install handler (`IInstallHandler.Install`) maps a user activation code (entered during installation) to the name of the user it installs, or `null` for an unrecognized code, nothing more: everything else about that user comes from [User Info](#user-info). See `UserService`.
 
-**Default:** no debug user; the code `"CODE"` resolves to the user `"TEST"`.
+**Default:** the code `"CODE"` resolves to the user `"TEST"`.
 
-**Network file:** the `--user` argument overrides the debug user when given. See [Config.md](Config.md). Unless the host states its own code scheme, an install code is simply the name of a user of the network (case-insensitive), so `--user` and the install screen agree.
+**Network file:** the `--user` argument, when the host allows command-line overrides, bypasses the normal `State.json` lookup and runs as that user. See [Config.md](Config.md). Unless the host states an install handler, an install code is simply the name of a user of the network (case-insensitive), so `--user` and the install screen agree.
 
-**Sample:** `EngineConfiguration` states no code scheme and no debug user: an install code is the name of a user in the network file its scenario passes, and each scenario script names its user with `--user`.
+**Sample:** `EngineConfiguration` states no install handler: an install code is the name of a user in the network file its scenario passes, and each scenario script names its user with `--user`.
 
 ---
 
 ### User Directory
 
-```csharp
-engine.Users("ALICE", "BOB").Group("OPS", "ALICE", "BOB");
-```
-
-The addressable users and groups, stated in code and in the network file: the names used for the destination auto-complete in the draft editor and for [connection identification](Identification.md), and group membership for address expansion (members may be user names or other group names, enabling nested hierarchies). A name is only a name here; what is known about each user, including how a node run by that user connects, is stated through [User Info](#user-info). By convention user names are all uppercase.
+The addressable users and groups, stated only in the network file: the names used for the destination auto-complete in the draft editor and for [connection identification](Identification.md), and group membership for address expansion (members may be user names or other group names, enabling nested hierarchies). A name is only a name here; what is known about each user, including how a node run by that user connects, is stated through [User Info](#user-info). By convention user names are all uppercase.
 
 When a message is sent to a group, the Engine records which addressed groups each user was reached through. The sent message view shows this context, e.g. `USER-A (OPS)`, so the operator can see which group membership drove delivery.
 
 **Default:** no known users or groups.
 
-**Network file:** the file's `UserGroups` merge over the stated groups (a file entry replaces a same-named group; groups only stated in code still pass through), and its user and group names are added to the stated names, deduplicated. A user's info lists the groups it is a member of.
-
-**Sample:** `EngineConfiguration` states three built-in user names matching its codes; the file's names are still unioned in.
+**Network file:** the file's users and `UserGroups` are the directory (group names are listed among the users too). A user's info lists the groups it is a member of.
 
 ---
 
@@ -161,13 +150,12 @@ The current user's info is what decides how this node behaves, so it is read onc
 ```csharp
 engine
     .Frames().InitialProcessor<MyFrameIntroduction>()
-    .Packets().InitialProcessor<MyPacketIntroduction>()
-    .Identify(connection => ...);
+    .Packets().InitialProcessor<MyPacketIntroduction>();
 ```
 
-Who is on the other end of a connection, decided as the connection forms. All traffic between nodes is a serialized instance of the configured frame type, or of the packet type when packets are configured, and nothing else, so the introduction is too: an `IInitialPacketProcessor<TPacket>` (stated on the packet configuration) and an `IInitialFrameProcessor<TFrame>` (stated on the message configuration) each get `OnConnected` on both nodes when a connection forms, `OnReceived` on either node for each item the other sent, every time with a controller that can send an item, mark the connection fully connected as a user name, or disconnect it. The packet exchange runs beneath the packetizer and first, the frame exchange above it, and the name a processor marks the connection connected as wins; otherwise `Identify` is handed an `IConnectionInfo` (an `IIpConnectionInfo` for IP: the remote host, port and certificate names; an `ISerialConnectionInfo` for serial: the port and addresses; and this node's own `LocalUser`) and returns the user name, or `null` to let the engine decide. The exchange, where it sits in the transport stack, and what the engine does by default are described in [Identification.md](Identification.md). Every node on a network must be configured alike, as with packetization. Processors are stated by type and instantiated through the running engine's dependency injection container (the instance the host registered for the type, or else one constructed from the host's services), once and on first use, so a processor's constructor can take services.
+Who is on the other end of a connection, decided as the connection forms. All traffic between nodes is a serialized instance of the configured frame type, or of the packet type when packets are configured, and nothing else, so the introduction is too: an `IInitialPacketProcessor<TPacket>` (stated on the packet configuration) and an `IInitialFrameProcessor<TFrame>` (stated on the message configuration) each get `OnConnected` on both nodes when a connection forms, `OnReceived` on either node for each item the other sent, every time with a controller that can send an item, mark the connection fully connected as a user name, or disconnect it. The packet exchange runs beneath the packetizer and first, the frame exchange above it, and the name a processor marks the connection connected as wins; otherwise the engine names the user from what it knows of the connection (an `IIpConnectionInfo` for IP: the remote host, port and certificate names; an `ISerialConnectionInfo` for serial: the port and addresses; and this node's own `LocalUser`, which a processor can read). The exchange, where it sits in the transport stack, and what the engine does by default are described in [Identification.md](Identification.md). Every node on a network must be configured alike, as with packetization. Processors are stated by type and instantiated through the running engine's dependency injection container (the instance the host registered for the type, or else one constructed from the host's services), once and on first use, so a processor's constructor can take services.
 
-**Default:** the hook returns `null` (the engine identifies an IP connection by its certificate name and a serial connection by its port name), and no initial packet or message processor is stated, so no exchange takes place.
+**Default:** the engine identifies an IP connection by its certificate name and a serial connection by its port name, and no initial packet or message processor is stated, so no exchange takes place.
 
 **Network file:** none, because these are behavior, not settings.
 
@@ -189,7 +177,7 @@ public sealed class MyDisplayHandler : IDisplayHandler
 }
 ```
 
-The names and words the app shows its users, stated by a handler implementing `IDisplayHandler` (instantiated through dependency injection like the other handlers, but from the bootstrap container, which exists before the engine and holds the logging and the services the host registered, so the handler can log and can use the host's services but nothing the engine itself registers; creating it there is why the log location and the controller never wait on each other). Every member has a default of `null`, which keeps the engine's own text, so a handler overrides only what it wants: `AppName` (the title bar and log headers), `DataFolderName` (the folder under the application data root holding the app's data and logs: a member of its own so renaming the app can never move, and so appear to lose, its data; changing it after data has been stored starts from an empty folder), `Icon` (the window icon: an `avares://` URI of an Avalonia asset, or else the path of an image file), `HomeText` (the content area when no entry is selected), `AlertLabel` (the title bar's alarm box and the draft editor's alert checkbox, so both surfaces always show the same word for "alert"), `TagLabel`, `PriorityLabel` and `SecurityLevelLabel` (the concepts of tags, priorities and security levels wherever the user interface names them), each with a plural member (`TagPluralLabel` and so on) for text that names several, which defaults to the singular with an `s` added when only the singular is stated, and one member for each of the engine's other names for concepts: `InboxLabel`, `OutboxLabel`, `DraftsLabel`, `DraftLabel`, `NotesLabel`, `NoteLabel`, `ActivityLabel`, `MessagesLabel` and `MessageLabel`. These reach the whole user interface: every fixed piece of text in the GUI (the title bar, folders, editors, filters, dialogs, status messages and the help) is written with the engine's own names, and what is shown is that text with each concept name replaced by what the host calls it, in the case style of what it replaces (`NEW DRAFT` becomes `NEW MEMO`, `Drafts` becomes `Memos`). The alert, tag, priority and security level names are replaced by their own labels in the same way, so an `Alert only` filter reads `Flag only` once the alert label is `Flag`. XAML does this with the `{vm:Display '...'}` markup extension and view models with `Display(text)`. Text the host supplies itself, such as the home text, is shown as it is. An empty string counts as `null`. Everything here is presentation: a rename changes what users read, never how anything is stored or routed.
+The names and words the app shows its users, stated by a handler implementing `IDisplayHandler` (instantiated through dependency injection like the other handlers, but from the bootstrap container, which exists before the engine and holds the logging and the services the host registered, so the handler can log and can use the host's services but nothing the engine itself registers; creating it there is why the log location and the controller never wait on each other). Every member has a default of `null`, which keeps the engine's own text, so a handler overrides only what it wants: `AppName` (the title bar and log headers), `DataFolderName` (the folder under the application data root holding the app's data and logs: a member of its own so renaming the app can never move, and so appear to lose, its data; changing it after data has been stored starts from an empty folder), `Version` (shown in the title bar and the info popup), `IsKiosk` (`false` by default; kiosk mode hides the minimize and maximize buttons and has the close button restart), `Icon` (the window icon: an `avares://` URI of an Avalonia asset, or else the path of an image file), `HomeText` (the content area when no entry is selected), `AlertLabel` (the title bar's alarm box and the draft editor's alert checkbox, so both surfaces always show the same word for "alert"), `TagLabel`, `PriorityLabel` and `SecurityLevelLabel` (the concepts of tags, priorities and security levels wherever the user interface names them), each with a plural member (`TagPluralLabel` and so on) for text that names several, which defaults to the singular with an `s` added when only the singular is stated, and one member for each of the engine's other names for concepts: `InboxLabel`, `OutboxLabel`, `DraftsLabel`, `DraftLabel`, `NotesLabel`, `NoteLabel`, `ActivityLabel`, `MessagesLabel` and `MessageLabel`. These reach the whole user interface: every fixed piece of text in the GUI (the title bar, folders, editors, filters, dialogs, status messages and the help) is written with the engine's own names, and what is shown is that text with each concept name replaced by what the host calls it, in the case style of what it replaces (`NEW DRAFT` becomes `NEW MEMO`, `Drafts` becomes `Memos`). The alert, tag, priority and security level names are replaced by their own labels in the same way, so an `Alert only` filter reads `Flag only` once the alert label is `Flag`. XAML does this with the `{vm:Display '...'}` markup extension and view models with `Display(text)`. Text the host supplies itself, such as the home text, is shown as it is. An empty string counts as `null`. Everything here is presentation: a rename changes what users read, never how anything is stored or routed.
 
 **Default:** `AppName` and `DataFolderName` are the entry assembly's name, `"HOME"`, `"ALERT"`, `"Tag"`, `"Priority"`, `"Security Level"`, and no renames.
 
@@ -217,7 +205,7 @@ How drafts are composed, stated by a handler implementing `IDraftHandler<TPriori
 
 **Line width.** The draft editor shows the body in a monospace font. With `DefaultLineWidth` or `MaxLineWidth` stated, the draft view offers a width control, the user sets how many characters wide a line is shown, between `MinLineWidth` (1 by default, and never below the header) and `MaxLineWidth` (no maximum by default). **The width is only how the draft is shown:** the editor wraps the text, and the header above it, at that many characters, at the last space that fits or in the middle of a word that is wider than a line by itself, and no line break is ever added to the text, so changing the width never changes the draft or the message that is sent. The cut-off is shown: a dashed ruler runs down the body at the last column of a line, and the header sits in a box as wide as a line. **The width can never be less than the longest line of the header**, even when `MinLineWidth` is smaller: the minimum of the width control is raised to fit it and a narrower width is raised to match, and a header wider than `MaxLineWidth` wins over the maximum. A new draft starts at `DefaultLineWidth`, or at `MaxLineWidth` when there is no default (no limit would exceed it); without a maximum the user may also clear the width to have no limit. The width is saved with the draft (`DraftEntity.LineWidth`).
 
-**Tags.** The handler also says what a message tag may be, wherever one is entered: `TagCase` (`Mixed`, the default, leaves it as written; `Lower` and `Upper` force it as it is typed or pasted), `IsTagRequired` (`false` by default; when `true` a draft without a tag is not sent), `MinTagLength` (0 by default; the fewest characters a tag that is given may have), `MaxTagLength` (none by default; the tag box in the draft view is sized to fit exactly that many monospace characters and does not let more be typed), and `AllowTagSymbols`, `AllowTagNumbers` and `AllowTagSpaces` (all `true` by default; letters are always allowed). What is typed is filtered to what the rules allow, so a tag in the draft view is always a valid one except for being too short, which stops the send with a message. A tag passed to `IServiceConnection.SendMessage` that breaks the rules throws.
+**Tags.** `EnableTags` (`true` by default) says whether messages carry a tag at all; when `false` no tag is shown in the draft editor, the message view or the entry list, and the network file's `MessageTagsEnabled` can still override it per user. The handler also says what a message tag may be, wherever one is entered: `TagCase` (`Mixed`, the default, leaves it as written; `Lower` and `Upper` force it as it is typed or pasted), `IsTagRequired` (`false` by default; when `true` a draft without a tag is not sent), `MinTagLength` (0 by default; the fewest characters a tag that is given may have), `MaxTagLength` (none by default; the tag box in the draft view is sized to fit exactly that many monospace characters and does not let more be typed), and `AllowTagSymbols`, `AllowTagNumbers` and `AllowTagSpaces` (all `true` by default; letters are always allowed). What is typed is filtered to what the rules allow, so a tag in the draft view is always a valid one except for being too short, which stops the send with a message. A tag passed to `IServiceConnection.SendMessage` that breaks the rules throws.
 
 **Defaults.** `DefaultTag`, `DefaultPriority` and `DefaultSecurityLevel` say what a new draft starts with (none by default: no tag, the lowest priority the user may choose, and the highest security level the user may use). The tag is made to fit the tag rules, and a level the user may not choose, or a security level above their own, is brought to what they may.
 
@@ -234,16 +222,16 @@ How drafts are composed, stated by a handler implementing `IDraftHandler<TPriori
 ### Alert Settings
 
 ```csharp
-engine.AlarmDuration(TimeSpan.FromSeconds(30)).QuickConfirmation();
+engine.Alarms<MyAlarmHandler>();
 ```
 
-Configuration for the alert-message feature in Client mode: how long the alarm sound plays before automatically stopping (resetting whenever a new alert arrives while already alarming) and whether click/Space/Enter quick confirmation is enabled. There is no setting for composing alerts: the user does not choose whether a message is an alert. The host's message handler decides from the message's other properties (`IMessageHandler.IsAlert`, see [Frame Format](#frame-format)), and the draft view shows the alert mark when its draft is one. See [Peer.md](Peer.md#alert-messages) and `Docs/Components/ViewModels.md`. Actually playing the alarm sound is real platform behavior, not configuration, see [`IAlertSoundPlayer`](#ialertsoundplayer-not-configurable) below.
+Configuration for the alert-message feature in Client mode: how long the alarm sound plays (`IAlarmHandler.AlertDuration`) before automatically stopping (resetting whenever a new alert arrives while already alarming) and which keys confirm the latest alert (`IMessageHandler.AlertConfirmationKeys`, named as the user interface framework names keys, `Space` and `Enter` by default, none for no shortcut; pressed while focus is not in a text input, and repeating one confirms pending alerts one at a time, most recently received first; clicking the alert box confirms one too). There is no setting for composing alerts: the user does not choose whether a message is an alert. The host's message handler decides from the message's other properties (`IMessageHandler.IsAlert`, see [Frame Format](#frame-format)), and the draft view shows the alert mark when its draft is one. See [Peer.md](Peer.md#alert-messages) and `Docs/Components/ViewModels.md`. Actually playing the alarm sound is real platform behavior, not configuration, see [`IAlertSoundPlayer`](#ialertsoundplayer-not-configurable) below.
 
-**Default:** `"ALERT"` / 30 seconds / on; no message is an alert (`IMessageHandler.IsAlert` is `false` unless the handler says otherwise). A copy a storage server hands back in answer to a retrieval is an ordinary message again, so it is an alert, and alarms, if its own fields make it one.
+**Default:** `"ALERT"` / 30 seconds / `Space` and `Enter`; no message is an alert (`IMessageHandler.IsAlert` is `false` unless the handler says otherwise). A copy a storage server hands back in answer to a retrieval is an ordinary message again, so it is an alert, and alarms, if its own fields make it one.
 
 **Sample:** `MessageHandler.IsAlert` makes a message an alert when its tag is `ALERT`, so typing that tag in a draft is all it takes: the draft shows the alert mark and the draft handler's `ALERT - ACTION REQUIRED` header.
 
-**Network file:** the current user's entry may set `AlertText`, `AlarmSoundSeconds`, and `QuickConfirmationEnabled`, overriding what is stated, field by field. See [Config.md](Config.md).
+**Network file:** the current user's entry may set `AlertText` and `AlarmSoundSeconds`, overriding what the alarm handler and the display handler state, field by field. See [Config.md](Config.md). The confirmation keys have no field in the file.
 
 **Sample:** none; the default plus the network file already cover every genuinely useful case.
 
@@ -265,7 +253,6 @@ Only messages have an identifier, stated on the message handler (see [Frame Form
 
 ```csharp
 engine
-    .Tags(enabled: true)
     .Priorities()
         .Priority(MessagePriority.Receipt).Mode(PriorityMode.System)
         .Block(null, "SPAM").Block(MessagePriority.High, null);
@@ -275,9 +262,9 @@ How messages are composed and displayed: the priority levels, members of the enu
 
 `DraftViewModel` enforces the blocked-combination rules proactively rather than only at send time: `AvailablePriorities` excludes any priority blocked for the currently-entered tag, and setting `Tag` to a value blocked for the currently-selected priority is rejected outright (the value reverts), so a blocked combination can never actually be entered in the draft editor. `SendCommand` also re-checks before sending, as a defense-in-depth safety net. See `Docs/Components/ViewModels.md`.
 
-**Default:** the levels must be stated (the engine refuses to start otherwise), each a `User` level named by its member name in uppercase. A priority or security level is never used unless it is stated: creating a message with one that is not stated throws, a handler naming a priority that is not stated fails the engine at startup, and a received or imported message carrying one is dropped with an error logged; tags on with label `"Tag"`; no blocked combinations. Stating a level again selects it without changing its place. With `NoPriority` the only level is `"NORMAL"` and everything is sent at priority 0. Nothing is ever sent with a priority outside the configured levels: a message's priority is brought within them when it is created and again when it is read, heartbeats go at the lowest level, the exchange that identifies a connection at the highest, and other traffic at the lowest.
+**Default:** the levels must be stated (the engine refuses to start otherwise), each a `User` level named by its member name in uppercase. A priority or security level is never used unless it is stated: creating a message with one that is not stated throws, a handler naming a priority that is not stated fails the engine at startup, and a received or imported message carrying one is dropped with an error logged; tags on (the draft handler's `EnableTags`) with label `"Tag"`; no blocked combinations. Stating a level again selects it without changing its place. With `NoPriority` the only level is `"NORMAL"` and everything is sent at priority 0. Nothing is ever sent with a priority outside the configured levels: a message's priority is brought within them when it is created and again when it is read, heartbeats go at the lowest level, the exchange that identifies a connection at the highest, and other traffic at the lowest.
 
-**Network file:** the current user's entry may set `MessageTagsEnabled` and `MessageTagLabel`, overriding what is stated, field by field. See [Config.md](Config.md). Priorities and blocked combinations have no field in the file.
+**Network file:** the current user's entry may set `MessageTagsEnabled` and `MessageTagLabel`, overriding what the draft handler's `EnableTags` and the display handler's `TagLabel` state, field by field. See [Config.md](Config.md). Priorities and blocked combinations have no field in the file.
 
 **Sample:** `EngineConfiguration` states its `MessagePriority` enum: three user levels (`Low`, `Medium`, `High`) and two system ones (`Retrieval`, `Receipt`, used by its handlers) instead of the default's one, and demonstrates both blocked-combination kinds: the `"SPAM"` tag is blocked regardless of priority, and `High` priority is blocked regardless of tag. Unlike Sample's other settings, the blocked combinations deliberately change default behavior from the engine's permissive "no blocks" default, since that is the only way to usefully demonstrate that part of the configuration.
 
@@ -324,16 +311,16 @@ A destination user may only receive a message whose security level their own ass
 ### Print Policy
 
 ```csharp
-engine.PrintReceived();
+engine.Prints<MyPrintHandler>();  // an IPrintHandler<MyFrame>
 ```
 
-The print manager's automatic "print received" behavior: whether its toggle starts enabled, automatically adding every received message to the print queue from the moment the app starts (the user can still toggle it at any time), and how many times each received message is added to the print queue while it is (`0` to not print it, `1` once, `2` for two copies, and so on). Consulted once per received message via `IEntryService.MessageInserted`. The count is `IMessageHandler<TFrame>.GetPrintCount`, since only received messages are printed.
+The print manager's automatic "print received" behavior: whether its toggle starts enabled (`IPrintHandler<TFrame>.PrintReceivedByDefault`), automatically adding every received message to the print queue from the moment the app starts (the user can still toggle it at any time), and how many times each received message is added to the print queue while it is (`0` to not print it, `1` once, `2` for two copies, and so on). Consulted once per received message via `IEntryService.MessageInserted`. The count is `IPrintHandler<TFrame>.GetPrintCount` (default `1`), since only received messages are printed.
 
-**Default:** off.
+**Default:** off, one copy of each.
 
-**Network file:** the current user's entry may set `PrintReceivedEnabled`, overriding what is stated. See [Config.md](Config.md). The print count has no field in the file.
+**Network file:** the current user's entry may set `PrintReceivedEnabled`, overriding what the print handler states. See [Config.md](Config.md). The print count has no field in the file.
 
-**Sample:** `EngineConfiguration` states a print count that prints an alert message twice and every other received message once, demonstrating a rule that inspects the message itself; "print received" uses the default.
+**Sample:** `PrintHandler` states a print count that prints an alert message twice and every other received message once, demonstrating a rule that inspects the message itself; "print received" uses the default.
 
 ---
 
@@ -545,15 +532,11 @@ The options every serial connection starts its HDLC peer with: line encoding, CR
 
 ### MSMT Certificates
 
-```csharp
-engine.TrustedAuthority("COMLINK-ROOT").ConnectionOptions(() => options);
-```
+MSMT peer authentication is mandatory - there is no unauthenticated mode. A user's `CertificateName` (on their [user info](#user-info)) is their certificate's subject name (CN): for the current user, the identity certificate to present; for any other user, the name a Server expects that user's certificate to carry (and the name [connection identification](Identification.md) matches against) and the file's `TrustedAuthorityCertificateName` names the certificate authority every peer's identity certificate must chain to. Both are looked up in the system certificate store (`CurrentUser` then `LocalMachine`, `StoreName.My`).
 
-MSMT peer authentication is mandatory - there is no unauthenticated mode. A user's `CertificateName` (on their [user info](#user-info)) is their certificate's subject name (CN): for the current user, the identity certificate to present; for any other user, the name a Server expects that user's certificate to carry (and the name [connection identification](Identification.md) matches against); `TrustedAuthority` names the certificate authority every peer's identity certificate must chain to. Both are looked up in the system certificate store (`CurrentUser` then `LocalMachine`, `StoreName.My`).
+The MSMT options (identity certificate plus trusted authorities) used for both inbound and outbound session peer connections are built from those two by default, against the current user name (via `ICurrentUserProvider`). If no current user is registered yet, or either certificate can't be found in the store, building them throws `InvalidOperationException`; callers (`PeerService`, `ClientPeerService`, `ServerRoutingService`, `InterfaceService`) catch this at startup, log it, and simply don't start their listener, retried the next time the host restarts once a user and certificates are in place. The certificate names and trusted authority are stated in the network file, so the security-sensitive credential logic is never touched by a host.
 
-The MSMT options (identity certificate plus trusted authorities) used for both inbound and outbound session peer connections are built from those two by default, against the current user name (via `ICurrentUserProvider`). If no current user is registered yet, or either certificate can't be found in the store, building them throws `InvalidOperationException`; callers (`PeerService`, `ClientPeerService`, `ServerRoutingService`, `InterfaceService`) catch this at startup, log it, and simply don't start their listener, retried the next time the host restarts once a user and certificates are in place. `ConnectionOptions` replaces the whole policy, but for most customization needs stating `CertificateName`/`TrustedAuthority` instead is sufficient and does not require touching this security-sensitive logic at all. State `ConnectionOptions` only when you need custom certificate pinning, a non-store certificate source, or a different validation policy.
-
-`Connections().Msmt` adjusts the other MSMT settings (handshake, stall and response timeouts, TCP keep-alive, session lifetimes and keep-alive intervals) for every IP connection, inbound and outbound, including the interface listener. It takes a `MsmtConnectionOptions` object (handshake, stall and response timeouts, TCP keep-alive time, session lifetimes and keep-alive intervals, each defaulting to the MSMT package's own value) instead of the library's session options, since those require credentials the engine supplies. Its values are laid over the options built above, after `ConnectionOptions` and after the config file's certificate file override, and the credentials and hostname rule stay the engine's:
+`Connections().Msmt` adjusts the other MSMT settings (handshake, stall and response timeouts, TCP keep-alive, session lifetimes and keep-alive intervals) for every IP connection, inbound and outbound, including the interface listener. It takes a `MsmtConnectionOptions` object (handshake, stall and response timeouts, TCP keep-alive time, session lifetimes and keep-alive intervals, each defaulting to the MSMT package's own value) instead of the library's session options, since those require credentials the engine supplies. Its values are laid over the options built above, after the config file's certificate file override, and the credentials and hostname rule stay the engine's:
 
 ```csharp
 engine.Connections().Msmt(new MsmtConnectionOptions { HandshakeTimeout = TimeSpan.FromSeconds(20) });
@@ -563,7 +546,7 @@ engine.Connections().Msmt(new MsmtConnectionOptions { HandshakeTimeout = TimeSpa
 
 **Network file:** each user's entry may set `CertificateName` (the name of that user's certificate, defaulting to the user name); the file's `TrustedAuthorityCertificateName` names the trusted authority. The file's `CertificateStore` (a folder of `{USERNAME}.pfx` identity files) and `AuthorityCertificate` bypass the system store entirely, loading the running user's identity and the authority certificate directly from disk instead, set together or not at all; see [Config.md](Config.md). The options are built by `ConfiguredEngineController` for the current user, so the files are used even though they are not part of the wrapped controller.
 
-**Sample:** none, deliberately; this is the one area Sample does not state. Replacing `ConnectionOptions` would duplicate ~60 lines of security-sensitive X.509 store-lookup logic, and stating the certificate names instead is sufficient for the vast majority of customization needs. Sample itself provisions no certificates of its own; `Scripts/Scenarios/` demonstrates the `CertificateStore`/`AuthorityCertificate` keys with `{USERNAME}.pfx` files checked in alongside each scenario's config.
+**Sample:** Sample states only the `Connections().Msmt` timeouts and provisions no certificates of its own; `Scripts/Scenarios/` demonstrates the `CertificateStore`/`AuthorityCertificate` keys with `{USERNAME}.pfx` files checked in alongside each scenario's config.
 
 ---
 
@@ -601,16 +584,16 @@ Determines whether command-line arguments may override where the [network config
 ### External Systems
 
 ```csharp
-engine.ExternalSystem(new MyExternalSystem()).ExternalServer(hub);
+engine.ExternalSystem(new MyExternalSystem());
 ```
 
-`ExternalSystem` adds an external system: a conduit to a system outside Comlink (a socket, a message queue, an HTTP long-poll, etc.) this instance communicates with, resolved once at startup by `ExternalSystemsService`. `ExternalServer` designates one of them as the exclusive upstream hub every outbound message is routed through instead of the normal peer network and every other external system (and adds it if it was not already added). See `Docs/Components/ExternalSystems.md` for the full contract and behavior; the shape here is deliberately terse since that doc covers it in depth. `IExternalSystem` is already non-generic, so no cast is involved. `ExternalSystemBase<TFrame>` is available as an optional convenience base class for implementing `IExternalSystem` with less boilerplate (the connect/poll/disconnect lifecycle, filtering, etc.) but is never required; any `IExternalSystem` implementation works.
+`ExternalSystem` adds an external system: a conduit to a system outside Comlink (a socket, a message queue, an HTTP long-poll, etc.) this instance communicates with, resolved once at startup by `ExternalSystemsService`. See `Docs/Components/ExternalSystems.md` for the full contract and behavior; the shape here is deliberately terse since that doc covers it in depth. `IExternalSystem` is already non-generic, so no cast is involved. `ExternalSystemBase<TFrame>` is available as an optional convenience base class for implementing `IExternalSystem` with less boilerplate (the connect/poll/disconnect lifecycle, filtering, etc.) but is never required; any `IExternalSystem` implementation works.
 
 Each external system is constructed directly by the configuration, not resolved through DI, so a logger it is given by the configuration comes from the bootstrap container and writes to none of the engine's logs (the engine's logging providers, e.g. `DailyFileLoggerProvider`, need the configuration's output for their log file location). `ExternalSystemsService` instead calls `IExternalSystem.AttachLogger` on each system, using its own `ILoggerFactory` from the running container, before starting it, see `Docs/Components/ExternalSystems.md`.
 
-**Default:** no external systems; no gateway behavior.
+**Default:** no external systems.
 
-**Network file:** none; a system-specific connection endpoint, credential, etc. belongs to each `IExternalSystem` implementation's own constructor, not a generic config schema, and which one is the exclusive upstream hub is likewise a host-code decision, not something a deployment config toggles.
+**Network file:** none; a system-specific connection endpoint, credential, etc. belongs to each `IExternalSystem` implementation's own constructor, not a generic config schema.
 
 **Sample:** none; `EngineConfiguration` states no external system.
 

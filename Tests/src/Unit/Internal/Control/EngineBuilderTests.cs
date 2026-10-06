@@ -239,10 +239,10 @@ public sealed class EngineBuilderTests
     public void Build_RunsConfigurationOnceAndKeepsWhatItStated()
     {
         int calls = 0;
-        EngineBuilder builder = EngineBuilder.Build(new Configuration(engine => { calls++; return engine.AppVersion("1.0"); }));
+        EngineBuilder builder = EngineBuilder.Build(new Configuration(engine => { calls++; return engine.CommandLineOverrides(true); }));
 
         Assert.Equal(1, calls);
-        Assert.Equal("1.0", builder.AppVersionValue);
+        Assert.True(builder.AreCommandLineOverridesAllowed);
     }
 
     /// <summary>Settings left unstated take the engine's defaults.</summary>
@@ -259,7 +259,7 @@ public sealed class EngineBuilderTests
         Assert.Equal(50020, controller.InterfacePort);
         Assert.Equal("ALERT", controller.AlertLabel);
         Assert.Equal(TimeSpan.FromSeconds(30), controller.AlarmSoundDuration);
-        Assert.True(controller.QuickConfirmationEnabled);
+        Assert.Equal(["Space", "Enter"], controller.AlertConfirmationKeys);
         Assert.Equal("Tag", controller.TagLabel);
         Assert.True(controller.TagsEnabled);
         Assert.False(controller.PrintReceivedDefaultEnabled);
@@ -269,7 +269,6 @@ public sealed class EngineBuilderTests
         Assert.Empty(controller.OutgoingPoints);
         Assert.Empty(controller.Servers);
         Assert.Empty(controller.ExternalSystems);
-        Assert.Null(controller.ExternalServer);
         Assert.Null(controller.NetworkHandler);
         Assert.Null(controller.PacketType);
         Assert.Equal(Enum.GetValues<TestMessagePriority>().Length, controller.Priorities.Count);
@@ -287,15 +286,14 @@ public sealed class EngineBuilderTests
     {
         const string icon = "avares://Host/icon.png";
         (_, EngineController controller) = Build(engine => engine
-            .Display<TestDisplayHandler>().AppVersion("2.3.4").KioskMode()
-            .DebugUser("DEBUG").CommandLineOverrides(true));
+            .Display<TestDisplayHandler>()
+            .CommandLineOverrides(true));
 
         Assert.Equal("MyApp", controller.AppName);
         Assert.Equal("2.3.4", controller.AppVersion);
         Assert.True(controller.IsKioskMode);
         Assert.Equal("Welcome", controller.HomeText);
         Assert.Equal(icon, controller.WindowIconPath);
-        Assert.Equal("DEBUG", controller.DebugUserName);
         Assert.True(controller.CommandLineOverridesAllowed);
     }
 
@@ -318,15 +316,13 @@ public sealed class EngineBuilderTests
     public void Stated_CompositionAndAlertSettings_AreReported()
     {
         (_, EngineController controller) = Build(engine => engine
-            .Display<TestDisplayHandler>().AlarmDuration(TimeSpan.FromSeconds(5)).QuickConfirmation(false)
+            .Display<TestDisplayHandler>().Drafts<TestNoTagsDraftHandler>().Alarms<TestAlarmHandler>()
             .Priorities().Priority(TestMessagePriority.High).Label("TOP").Mode(PriorityMode.System).Block(null, "SPAM").Block(TestMessagePriority.High, null)
-            .Tags(false)
-            .PrintReceived()
+            .Prints<TestPrintHandler>()
             .Deletes<DraftsOnlyDeleteHandler>());
 
         Assert.Equal("ALARM", controller.AlertLabel);
         Assert.Equal(TimeSpan.FromSeconds(5), controller.AlarmSoundDuration);
-        Assert.False(controller.QuickConfirmationEnabled);
         Assert.Equal(["NORMAL", "TOP"], [controller.Priorities[0].Name, controller.Priorities[^1].Name]);
         Assert.Equal([PriorityMode.User, PriorityMode.System], [controller.Priorities[0].Mode, controller.Priorities[^1].Mode]);
         Assert.False(controller.TagsEnabled);
@@ -362,14 +358,14 @@ public sealed class EngineBuilderTests
         Assert.Equal("Choose an importance, classification and category.", named.Display("Choose an priority, security level and tag."));
     }
 
-    /// <summary>Turning tags on or off without a label keeps the default label.</summary>
+    /// <summary>A draft handler can turn tags off without affecting their label.</summary>
     [Fact]
-    public void Tags_WithoutLabel_KeepsTheDefaultLabel()
+    public void DraftHandler_EnableTagsFalse_TurnsTagsOff()
     {
-        (_, EngineController controller) = Build(engine => engine.Tags(false));
+        (_, EngineController controller) = Build(engine => engine.Display<TestDisplayHandler>().Drafts<TestNoTagsDraftHandler>());
 
         Assert.False(controller.TagsEnabled);
-        Assert.Equal("Tag", controller.TagLabel);
+        Assert.Equal("Category", controller.TagLabel);
     }
 
     /// <summary>An overridden address type label replaces the default for that type only; the others keep theirs.</summary>
@@ -514,22 +510,19 @@ public sealed class EngineBuilderTests
         Assert.DoesNotContain("FIRST", controller.Priorities.Select(p => p.Name));
     }
 
-    /// <summary>Users and groups from the host and the network file are merged, with the file winning for a group of the same name, and the data attached to a user comes from their entry.</summary>
+    /// <summary>Users and groups come from the network file, and the data attached to a user comes from their entry.</summary>
     [Fact]
-    public void Stated_UsersGroupsAndData_AreReported()
+    public void NetworkUsersGroupsAndData_AreReported()
     {
-        (_, EngineController controller) = Build(engine => engine
-            .Users("ALICE", "BOB").Users("CAROL")
-            .Group("OPS", "ALICE", "BOB").Group("ALL", "OPS", "CAROL"),
+        (_, EngineController controller) = Build(engine => engine,
             network: new NetworkConfig
             {
-                Users = { ["alice"] = new NetworkUserConfig { Data = new Dictionary<string, string> { ["desk"] = "4" } }, ["DAVE"] = new NetworkUserConfig() },
+                Users = { ["alice"] = new NetworkUserConfig { Data = new Dictionary<string, string> { ["desk"] = "4" } }, ["BOB"] = new NetworkUserConfig(), ["DAVE"] = new NetworkUserConfig() },
                 UserGroups = { ["OPS"] = ["ALICE", "BOB", "DAVE"], ["EXTRA"] = ["DAVE"] }
             });
 
-        Assert.Equal(["ALICE", "BOB", "CAROL", "DAVE", "OPS", "ALL", "EXTRA"], controller.Users);
+        Assert.Equal(["alice", "BOB", "DAVE", "OPS", "EXTRA"], controller.Users);
         Assert.Equal(["ALICE", "BOB", "DAVE"], controller.UserGroups["ops"]);
-        Assert.Equal(["OPS", "CAROL"], controller.UserGroups["ALL"]);
         Assert.Equal(["DAVE"], controller.UserGroups["extra"]);
         Assert.Equal("4", controller.GetUserData("ALICE")["desk"]);
         Assert.Empty(controller.GetUserData("BOB"));
@@ -545,11 +538,11 @@ public sealed class EngineBuilderTests
         Assert.Empty(controller.GetUserData("ANYONE"));
     }
 
-    /// <summary>Installation codes resolve to a user name through the stated resolver; by default a code is the name of a user of the network, and otherwise only the code CODE is recognized.</summary>
+    /// <summary>Installation codes resolve to a user name through the install handler; by default a code is the name of a user of the network, and otherwise only the code CODE is recognized.</summary>
     [Fact]
-    public void UserCodes_StatedResolverReplacesTheDefault()
+    public void InstallHandler_ReplacesTheDefault()
     {
-        (_, EngineController stated) = Build(engine => engine.UserCodes(code => code == "X" ? "XUSER" : null));
+        (_, EngineController stated) = Build(engine => engine.Installs<TestInstallHandler>());
         (_, EngineController fallback) = Build(engine => engine);
 
         Assert.Equal("XUSER", stated.ResolveUserName("X"));
@@ -557,7 +550,7 @@ public sealed class EngineBuilderTests
         Assert.Equal("TEST", fallback.ResolveUserName("code"));
         Assert.Null(fallback.ResolveUserName("X"));
 
-        (_, EngineController networked) = Build(engine => engine.Users("ALICE"), network: Network(("BOB", new NetworkUserConfig())));
+        (_, EngineController networked) = Build(engine => engine, network: Network(("ALICE", new NetworkUserConfig()), ("BOB", new NetworkUserConfig())));
         Assert.Equal("ALICE", networked.ResolveUserName("alice"));
         Assert.Equal("BOB", networked.ResolveUserName("Bob"));
         Assert.Equal("TEST", networked.ResolveUserName("CODE"));
@@ -670,21 +663,19 @@ public sealed class EngineBuilderTests
         Assert.DoesNotContain("RELAY", controller.Servers.Keys);
     }
 
-    /// <summary>Certificate settings a host states are used, including for the MSMT options when it supplies its own.</summary>
+    /// <summary>Certificate names and the trusted authority come from the network file.</summary>
     [Fact]
-    public void Stated_CertificateSettings_AreUsed()
+    public void NetworkCertificateSettings_AreUsed()
     {
-        MsmtSessionPeerOptions options = new() { Credentials = new MsmtCredentials { Identity = TestMsmtCertificates.Create().Server, TrustedAuthorities = [] } };
         (_, EngineController controller) = Build(
-            engine => engine.TrustedAuthority("MY-ROOT").ConnectionOptions(() => options),
+            engine => engine,
             network: Network(("BOB", new NetworkUserConfig { CertificateName = "cert-BOB" })));
-        (_, EngineController fromFile) = Build(engine => engine.TrustedAuthority("MY-ROOT"), network: new NetworkConfig { TrustedAuthorityCertificateName = "FILE-ROOT" });
+        (_, EngineController fromFile) = Build(engine => engine, network: new NetworkConfig { TrustedAuthorityCertificateName = "FILE-ROOT" });
 
         Assert.Equal("cert-BOB", controller.GetCertificateName("BOB"));
         Assert.Equal("CAROL", controller.GetCertificateName("CAROL"));
-        Assert.Equal("MY-ROOT", controller.TrustedAuthorityCertificateName);
+        Assert.Equal("COMLINK-ROOT", controller.TrustedAuthorityCertificateName);
         Assert.Equal("FILE-ROOT", fromFile.TrustedAuthorityCertificateName);
-        Assert.Same(options, controller.ConnectionOptions);
     }
 
     /// <summary>The stated MSMT options are used with the engine's own credentials, and the built options are used as they are when none are stated.</summary>
@@ -693,12 +684,13 @@ public sealed class EngineBuilderTests
     {
         MsmtSessionPeerOptions options = new() { Credentials = new MsmtCredentials { Identity = TestMsmtCertificates.Create().Server, TrustedAuthorities = [] } };
         (_, EngineController adjusted) = Build(engine => engine
-            .ConnectionOptions(() => options).Connections().Msmt(new MsmtConnectionOptions { HandshakeTimeout = TimeSpan.FromSeconds(7) }));
-        (_, EngineController plain) = Build(engine => engine.ConnectionOptions(() => options));
+            .Connections().Msmt(new MsmtConnectionOptions { HandshakeTimeout = TimeSpan.FromSeconds(7) }));
+        (_, EngineController plain) = Build(engine => engine);
 
-        Assert.Equal(TimeSpan.FromSeconds(7), adjusted.ConnectionOptions.HandshakeTimeout);
-        Assert.Same(options.Credentials, adjusted.ConnectionOptions.Credentials);
-        Assert.Equal(options.HandshakeTimeout, plain.ConnectionOptions.HandshakeTimeout);
+        MsmtSessionPeerOptions applied = adjusted.ConfigureConnectionOptions(options);
+        Assert.Equal(TimeSpan.FromSeconds(7), applied.HandshakeTimeout);
+        Assert.Same(options.Credentials, applied.Credentials);
+        Assert.Equal(options.HandshakeTimeout, plain.ConfigureConnectionOptions(options).HandshakeTimeout);
     }
 
     /// <summary>The stated MicroGate options are used, and the defaults when none are stated.</summary>
@@ -714,34 +706,31 @@ public sealed class EngineBuilderTests
         Assert.Equal(new HdlcPeerOptions(), plain.HdlcOptions);
     }
 
-    /// <summary>The print count comes from the message handler.</summary>
+    /// <summary>The print count comes from the print handler.</summary>
     [Fact]
-    public void PrintCount_ComesFromMessageHandler()
+    public void PrintCount_ComesFromPrintHandler()
     {
-        (_, EngineController controller) = BuildWith();
+        (_, EngineController controller) = Build(engine => engine.Prints<TestPrintHandler>());
 
         Assert.Equal(2, controller.GetPrintCount(new TestFrame { PrintCount = 2 }));
         Assert.Equal(1, controller.GetPrintCount(new TestFrame()));
     }
 
-    /// <summary>The identification hook and the initial message and packet processors are reported and used.</summary>
+    /// <summary>The initial message and packet processors are reported and used.</summary>
     [Fact]
     public void Stated_Identification_IsUsed()
     {
-        IpConnectionInfo info = new() { Host = "10.0.0.1" };
         Mock<IInitialFrameProcessor<TestFrame>> messages = new();
         Mock<IInitialPacketProcessor<TestPacket>> packets = new();
         EngineBuilder builder = EngineBuilder.Build(new TestEngineConfiguration(
             false,
             message => message.InitialProcessor<IInitialFrameProcessor<TestFrame>>(),
             packet => packet.InitialProcessor<IInitialPacketProcessor<TestPacket>>()));
-        builder.IdentifyValue = connection => ((IIpConnectionInfo)connection).Host;
         EngineController controller = new(builder, new CurrentUserProvider(), null, Services(messages.Object, packets.Object));
         Mock<IInitialSession> session = new();
         TestFrame initialMessage = new();
         TestPacket initialPacket = new();
 
-        Assert.Equal("10.0.0.1", controller.IdentifyConnection(info));
         controller.InitialFrameProcessor!.OnConnected(session.Object);
         controller.InitialFrameProcessor.OnReceived(session.Object, initialMessage);
         controller.InitialPacketProcessor!.OnReceived(session.Object, initialPacket);
@@ -792,21 +781,19 @@ public sealed class EngineBuilderTests
     {
         (_, EngineController controller) = Build(engine => engine);
 
-        Assert.Null(controller.IdentifyConnection(new IpConnectionInfo()));
         Assert.Null(controller.InitialPacketProcessor);
         Assert.Null(controller.InitialFrameProcessor);
     }
 
-    /// <summary>External systems are reported in the order added, without duplicates, and the upstream hub is added if it was not already.</summary>
+    /// <summary>External systems are reported in the order added, without duplicates.</summary>
     [Fact]
-    public void ExternalSystems_AddedOnceInOrder_AndServerIsAddedIfNew()
+    public void ExternalSystems_AddedOnceInOrder()
     {
         IExternalSystem first = Mock.Of<IExternalSystem>();
-        IExternalSystem hub = Mock.Of<IExternalSystem>();
-        (_, EngineController controller) = Build(engine => engine.ExternalSystem(first).ExternalSystem(first).ExternalServer(hub));
+        IExternalSystem second = Mock.Of<IExternalSystem>();
+        (_, EngineController controller) = Build(engine => engine.ExternalSystem(first).ExternalSystem(first).ExternalSystem(second));
 
-        Assert.Equal([first, hub], controller.ExternalSystems);
-        Assert.Same(hub, controller.ExternalServer);
+        Assert.Equal([first, second], controller.ExternalSystems);
     }
 
     /// <summary>The network processor stated with the message is reported, and runs with contexts typed with the host's message.</summary>
@@ -919,8 +906,7 @@ public sealed class EngineBuilderTests
     {
         public void Configure(IEngineBuilder engine)
             => new TestEngineConfiguration().Apply(engine)
-                .AppVersion(dependency.Name)
-                .KioskMode(loggers is not null);
+                .CommandLineOverrides(loggers is not null && dependency.Name == "from-di");
     }
 
     /// <summary>The configuration is constructed through dependency injection: it receives the services the host registered and the logging services the engine always provides.</summary>
@@ -929,8 +915,7 @@ public sealed class EngineBuilderTests
     {
         await using EngineBuilder builder = EngineBuilder.Build<InjectedConfiguration>(services => services.AddSingleton(new Dependency("from-di")));
 
-        Assert.Equal("from-di", builder.AppVersionValue);
-        Assert.True(builder.IsKioskMode);
+        Assert.True(builder.AreCommandLineOverridesAllowed);
     }
 
     /// <summary>A configuration whose dependencies were not registered cannot be constructed, and fails with the container's own error.</summary>
@@ -966,7 +951,11 @@ public sealed class EngineBuilderTests
 
     private sealed class DisposingConfiguration(DisposableService service) : IEngineConfiguration
     {
-        public void Configure(IEngineBuilder engine) => new TestEngineConfiguration().Apply(engine).UserCodes(code => service.IsDisposed ? null : code);
+        public void Configure(IEngineBuilder engine)
+        {
+            new TestEngineConfiguration().Apply(engine).Installs<TestInstallHandler>();
+            GC.KeepAlive(service);
+        }
     }
 
     /// <summary>The container the configuration was built in lives until the builder is disposed, since the configuration may have given the engine functions that use what was injected.</summary>
@@ -975,7 +964,6 @@ public sealed class EngineBuilderTests
     {
         DisposableService service = new();
         EngineBuilder builder = EngineBuilder.Build<DisposingConfiguration>(services => services.AddSingleton(_ => service));
-        Assert.Equal("X", builder.UserCodeResolver!("X"));
 
         await builder.DisposeAsync();
 
@@ -988,7 +976,7 @@ public sealed class EngineBuilderTests
     {
         TestEngineBuilder builder = new EngineBuilder().Types<TestFrame, TestPacket, TestMessagePriority, TestLevel>();
 
-        Assert.Same(builder, builder.AppVersion("1").KioskMode().Display<TestDisplayHandler>().CommandLineOverrides(false));
+        Assert.Same(builder, builder.Display<TestDisplayHandler>().CommandLineOverrides(false));
     }
 
     /// <summary>With no servers in the network there are no storage servers.</summary>

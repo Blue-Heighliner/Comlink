@@ -1,6 +1,6 @@
 namespace BlueHeighliner.Comlink;
 
-/// <summary>Configures the import formats of the client's import screen, continuing the fluent chain of the engine builder, for example <c>.Imports().Format&lt;MyImportFormat&gt;().KioskMode()</c>.</summary>
+/// <summary>Configures the import formats of the client's import screen, continuing the fluent chain of the engine builder, for example <c>.Imports().Format&lt;MyImportFormat&gt;().Display&lt;MyDisplayHandler&gt;()</c>.</summary>
 /// <typeparam name="TFrame">The host's frame type.</typeparam>
 /// <typeparam name="TPacket">The host's packet type, or <see cref="NoPacket"/>.</typeparam>
 /// <typeparam name="TPriority">The enum whose members are the priority levels.</typeparam>

@@ -9,6 +9,8 @@ internal interface IDraftFrameHandler
     int MinLineWidth { get; }
     /// <summary>Gets the widest a line may be, or <see langword="null"/> for no maximum.</summary>
     int? MaxLineWidth { get; }
+    /// <summary>Gets a value indicating whether messages carry a tag.</summary>
+    bool EnableTags { get; }
     /// <summary>Gets what message tags may be.</summary>
     TagRules TagRules { get; }
     /// <summary>Gets the tag a new draft starts with, or <see langword="null"/> for none.</summary>
@@ -33,6 +35,9 @@ internal sealed class DraftFrameHandler<TPriority, TLevel>(IDraftHandler<TPriori
 
     /// <inheritdoc />
     public int? MaxLineWidth => handler.MaxLineWidth;
+
+    /// <inheritdoc />
+    public bool EnableTags => handler.EnableTags;
 
     /// <inheritdoc />
     public TagRules TagRules => new(handler.TagCase, Math.Max(0, handler.MinTagLength), handler.MaxTagLength, handler.AllowTagSymbols, handler.AllowTagNumbers, handler.AllowTagSpaces, handler.IsTagRequired);

@@ -48,58 +48,16 @@ internal sealed class EngineBuilder<TFrame, TPacket, TPriority, TLevel> : IEngin
     }
 
     /// <inheritdoc />
-    public IEngineBuilder<TFrame, TPacket, TPriority, TLevel> AppVersion(string version)
+    public IEngineBuilder<TFrame, TPacket, TPriority, TLevel> Installs<THandler>() where THandler : IInstallHandler
     {
-        state.AppVersionValue = version;
+        state.InstallHandler = ServiceRegistration<IInstallHandler>.Of(typeof(THandler), instance => (IInstallHandler)instance);
         return this;
     }
 
     /// <inheritdoc />
-    public IEngineBuilder<TFrame, TPacket, TPriority, TLevel> KioskMode(bool enabled = true)
+    public IEngineBuilder<TFrame, TPacket, TPriority, TLevel> Alarms<THandler>() where THandler : IAlarmHandler
     {
-        state.IsKioskMode = enabled;
-        return this;
-    }
-
-    /// <inheritdoc />
-    public IEngineBuilder<TFrame, TPacket, TPriority, TLevel> DebugUser(string userName)
-    {
-        state.DebugUserValue = userName;
-        return this;
-    }
-
-    /// <inheritdoc />
-    public IEngineBuilder<TFrame, TPacket, TPriority, TLevel> UserCodes(Func<string, string?> resolve)
-    {
-        state.UserCodeResolver = resolve;
-        return this;
-    }
-
-    /// <inheritdoc />
-    public IEngineBuilder<TFrame, TPacket, TPriority, TLevel> Users(params string[] names)
-    {
-        state.UserNames.AddRange(names);
-        return this;
-    }
-
-    /// <inheritdoc />
-    public IEngineBuilder<TFrame, TPacket, TPriority, TLevel> Group(string name, params string[] members)
-    {
-        state.UserGroups[name] = members;
-        return this;
-    }
-
-    /// <inheritdoc />
-    public IEngineBuilder<TFrame, TPacket, TPriority, TLevel> AlarmDuration(TimeSpan duration)
-    {
-        state.AlarmDurationValue = duration;
-        return this;
-    }
-
-    /// <inheritdoc />
-    public IEngineBuilder<TFrame, TPacket, TPriority, TLevel> QuickConfirmation(bool enabled = true)
-    {
-        state.QuickConfirmationValue = enabled;
+        state.AlarmHandler = ServiceRegistration<IAlarmHandler>.Of(typeof(THandler), instance => (IAlarmHandler)instance);
         return this;
     }
 
@@ -111,16 +69,9 @@ internal sealed class EngineBuilder<TFrame, TPacket, TPriority, TLevel> : IEngin
     }
 
     /// <inheritdoc />
-    public IEngineBuilder<TFrame, TPacket, TPriority, TLevel> Tags(bool enabled = true)
+    public IEngineBuilder<TFrame, TPacket, TPriority, TLevel> Prints<THandler>() where THandler : IPrintHandler<TFrame>
     {
-        state.TagsEnabledValue = enabled;
-        return this;
-    }
-
-    /// <inheritdoc />
-    public IEngineBuilder<TFrame, TPacket, TPriority, TLevel> PrintReceived(bool enabledByDefault = true)
-    {
-        state.PrintReceivedValue = enabledByDefault;
+        state.PrintHandler = ServiceRegistration<IPrintFrameHandler>.Of(typeof(THandler), instance => new PrintFrameHandler<TFrame>((IPrintHandler<TFrame>)instance));
         return this;
     }
 
@@ -128,27 +79,6 @@ internal sealed class EngineBuilder<TFrame, TPacket, TPriority, TLevel> : IEngin
     public IEngineBuilder<TFrame, TPacket, TPriority, TLevel> Deletes<THandler>() where THandler : IDeleteHandler
     {
         state.DeleteHandler = ServiceRegistration<IDeleteHandler>.Of(typeof(THandler), instance => (IDeleteHandler)instance);
-        return this;
-    }
-
-    /// <inheritdoc />
-    public IEngineBuilder<TFrame, TPacket, TPriority, TLevel> TrustedAuthority(string certificateName)
-    {
-        state.TrustedAuthorityValue = certificateName;
-        return this;
-    }
-
-    /// <inheritdoc />
-    public IEngineBuilder<TFrame, TPacket, TPriority, TLevel> ConnectionOptions(Func<MsmtSessionPeerOptions> options)
-    {
-        state.ConnectionOptionsValue = options;
-        return this;
-    }
-
-    /// <inheritdoc />
-    public IEngineBuilder<TFrame, TPacket, TPriority, TLevel> Identify(Func<IConnectionInfo, string?> identify)
-    {
-        state.IdentifyValue = identify;
         return this;
     }
 
@@ -163,14 +93,6 @@ internal sealed class EngineBuilder<TFrame, TPacket, TPriority, TLevel> : IEngin
     public IEngineBuilder<TFrame, TPacket, TPriority, TLevel> ExternalSystem(IExternalSystem system)
     {
         if (!state.ExternalSystems.Contains(system)) { state.ExternalSystems.Add(system); }
-        return this;
-    }
-
-    /// <inheritdoc />
-    public IEngineBuilder<TFrame, TPacket, TPriority, TLevel> ExternalServer(IExternalSystem system)
-    {
-        ExternalSystem(system);
-        state.ExternalServerValue = system;
         return this;
     }
 

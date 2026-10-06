@@ -76,7 +76,7 @@ public interface IFrameBuilder<TFrame, TPacket, TPriority, TLevel> : IEngineBuil
     /// States how nodes introduce themselves on a new connection, with frames: the processor is told when a connection forms and given each frame that
     /// arrives until it marks the connection connected as a named user (see <see cref="IInitialFrameProcessor{TFrame}"/>). What it sends is a serialized
     /// instance of the frame type, split into packets like any frame when packets are configured, and is not stored, routed or shown. Without one, a connection
-    /// is identified by <see cref="IEngineBuilder{TFrame, TPacket, TPriority, TLevel}.Identify"/> or the engine's own rule straight away. Every node on a network must be configured alike.
+    /// is identified by the engine's own rule straight away. Every node on a network must be configured alike.
     /// </summary>
     /// <typeparam name="TProcessor">The processor type, instantiated through dependency injection when the engine runs: the instance registered for it in the host's services, or else one constructed from them.</typeparam>
     IFrameBuilder<TFrame, TPacket, TPriority, TLevel> InitialProcessor<TProcessor>() where TProcessor : IInitialFrameProcessor<TFrame>;

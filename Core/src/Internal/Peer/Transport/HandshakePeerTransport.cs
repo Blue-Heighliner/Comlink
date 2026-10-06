@@ -8,7 +8,7 @@ namespace BlueHeighliner.Comlink;
 /// packet type serialized with its own serializer and nothing is added to it, so items are recognized by position: every payload a node receives on a
 /// connection that is still in its exchange is an item, and everything after the connection is marked connected is ordinary data. The exchange has to
 /// complete within a timeout or the connection is dropped. With <c>identify</c>, the user the processor named (here or in the exchange beneath this one),
-/// else <see cref="IEngineController.IdentifyConnection"/>, else the engine's own rule (a certificate name matching a user, or the user named on the serial
+/// else the engine's own rule (a certificate name matching a user, or the user named on the serial
 /// point or else the serial port name) decides who is on the other end, and the result is set on the connection's <see cref="PeerConnection.User"/>; a
 /// connection that cannot be identified is dropped.
 /// </summary>
@@ -310,7 +310,7 @@ internal sealed class HandshakePeerTransport : IPeerTransport
     private UserIdentity? Identify(PeerConnection connection)
     {
         ConnectionInfo info = connection.Info;
-        string? name = connection.InitialUser ?? engineController.IdentifyConnection(info) ?? info switch { SerialConnectionInfo serial => SerialUser(serial), IpConnectionInfo ip => MatchCertificate(ip.CertificateNames), _ => null };
+        string? name = connection.InitialUser ?? info switch { SerialConnectionInfo serial => SerialUser(serial), IpConnectionInfo ip => MatchCertificate(ip.CertificateNames), _ => null };
         return name is null ? null : new UserIdentity { Name = name, Data = engineController.GetUserData(name) };
     }
 

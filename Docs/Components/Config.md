@@ -37,7 +37,6 @@ The file is read again while the application runs when the user right-clicks the
       "Headless": false,
       "AlertText": null,
       "AlarmSoundSeconds": null,
-      "QuickConfirmationEnabled": null,
       "MessageTagsEnabled": null,
       "MessageTagLabel": null,
       "PrintReceivedEnabled": null
@@ -50,7 +49,7 @@ The file is read again while the application runs when the user right-clicks the
 
 ### `TrustedAuthorityCertificateName`
 
-**Type:** `string | null` | **Default:** `null` (uses the host's `TrustedAuthority`, then `COMLINK-ROOT`)
+**Type:** `string | null` | **Default:** `null` (uses `COMLINK-ROOT`)
 
 Subject name of the certificate authority every user's identity certificate must chain to, looked up in the system certificate store. Ignored when `AuthorityCertificate` is set.
 
@@ -194,12 +193,6 @@ Text shown in the title bar's alert box while alarming, and the mark a draft sho
 **Type:** `number | null` | **Default:** `null` (`30`)
 
 Seconds the alarm sound plays after an alert is received before automatically stopping; resets whenever a new alert arrives.
-
-### `QuickConfirmationEnabled`
-
-**Type:** `bool | null` | **Default:** `null` (`true`)
-
-Whether clicking the alert box, or pressing Space or Enter outside a text input, confirms the latest unconfirmed alert.
 
 ### `MessageTagsEnabled`
 

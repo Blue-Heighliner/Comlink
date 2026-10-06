@@ -19,6 +19,9 @@ public interface IDraftHandler<TPriority, TLevel> where TPriority : struct, Enum
     /// <summary>Gets the widest a line may be, in monospace characters, or <see langword="null"/> (the default) for no maximum, in which case the user may also clear the width to have no limit.</summary>
     int? MaxLineWidth => null;
 
+    /// <summary>Gets a value indicating whether messages carry a tag, shown in the draft editor, the message view and the entry list. Defaults to <see langword="true"/>. The current user's entry in the network configuration file can still turn it off or on.</summary>
+    bool EnableTags => true;
+
     /// <summary>Gets which letter case message tags are kept in: <see cref="Comlink.TagCase.Mixed"/> (the default) leaves them as written, the others force them, as they are typed, to lowercase or uppercase.</summary>
     TagCase TagCase => TagCase.Mixed;
 

@@ -38,8 +38,8 @@ public abstract class ExternalSystemBase<TFrame> : IExternalSystem where TFrame 
 `IExternalSystem` is deliberately not generic over the frame type — it is declared `object`-typed on
 `Send`/`MessageReceived` so `ExternalSystemsService` (below) can hold and drive every configured external
 system uniformly, the same reasoning as the engine's message-format members (see
-[Configuration.md](Configuration.md#frame-format)). `IEngineBuilder.ExternalSystem`/`ExternalServer` (see
-[Configuration.md](Configuration.md#external-systems)) take a plain `IExternalSystem` too, so
+[Configuration.md](Configuration.md#frame-format)). `IEngineBuilder.ExternalSystem` (see
+[Configuration.md](Configuration.md#external-systems)) takes a plain `IExternalSystem` too, so
 a host is free to implement `IExternalSystem` directly if it wants full control. In practice, a host
 instead subclasses the optional convenience base class `ExternalSystemBase<TFrame>`, which implements
 `IExternalSystem` on your behalf and exposes only type-safe `TFrame`-typed members — `protected abstract`
@@ -129,32 +129,6 @@ external system.
 
 If `ExternalSystems` returns an empty list (the Engine default), `ExternalSystemsService.Start`
 returns immediately without subscribing to anything.
-
-## `ExternalServer`
-
-`ExternalServer` (see [Configuration.md](Configuration.md#external-systems)) designates one entry of
-the external systems — or none, the default — as the exclusive upstream hub for every message this instance
-would otherwise send out. When it is set, `ExternalSystemsService` changes the relay step above:
-
-- A message **not** received from `ExternalServer` (composed locally by the user and sent to a remote
-  peer, received from a genuine peer connection, or received from any other configured external system) is
-  sent exclusively to `ExternalServer`, bypassing every other external system entirely.
-- A message received **from** `ExternalServer` is relayed to every other external system exactly as it
-  would be without one configured (the normal "except the source" behavior above).
-
-Outbound peer sends are covered too: `MessageRoutingService.Route` — the entry point for a message the
-local user composes and sends — checks `ExternalServer` before dialing each remote recipient individually
-over the peer network. If set, the message is sent to `ExternalServer` **once**, regardless of how many
-remote recipients it is addressed to (since the external server, not this instance, is now responsible for
-delivering it onward), and every one of those recipients' `UserDeliveryResult.Success` reflects that single
-send's outcome. A self-addressed portion of a send is unaffected — it still delivers locally via
-`IPeerService.DeliverLocal`, exactly as it would with no `ExternalServer` configured, since it never leaves
-the instance in the first place.
-
-`ExternalServer` must be one of the same instances also returned by `ExternalSystems`, not a separate
-instance managed on the side — `ExternalSystemsService` still runs its connect/poll/receive lifecycle
-(`Start`, `AttachLogger`, `MessageReceived`) exactly like any other configured external system; the
-property only designates *which* one, if any, is treated as the exclusive hub for outbound traffic.
 
 ## Sample
 

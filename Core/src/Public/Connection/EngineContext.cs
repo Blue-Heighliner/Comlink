@@ -11,7 +11,7 @@ public interface IEngineContext
     /// <summary>Gets this instance's own installed user. Never <see langword="null"/>: a processor only ever runs once a user is installed.</summary>
     UserInfo CurrentUser { get; }
 
-    /// <summary>Gets every known user in the messaging system (see <see cref="IEngineBuilder{TFrame, TPacket, TPriority, TLevel}.Users"/>), computed lazily as enumerated rather than materialized upfront.</summary>
+    /// <summary>Gets every known user in the messaging system (the users in the network configuration file), computed lazily as enumerated rather than materialized upfront.</summary>
     IEnumerable<UserInfo> Users { get; }
 
     /// <summary>Gets the subset of <see cref="Users"/> currently reachable over at least one live peer connection, computed lazily as enumerated rather than materialized upfront.</summary>

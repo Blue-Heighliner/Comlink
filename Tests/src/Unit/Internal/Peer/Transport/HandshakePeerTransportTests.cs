@@ -162,58 +162,13 @@ public sealed class HandshakePeerTransportTests
         await WaitUntil(() => endB.Raw.Delivered.IsEmpty);
     }
 
-    /// <summary>The controller's own identification wins over the engine's, and it is told what is known about the connection.</summary>
+    /// <summary>A serial connection is named after its port by default.</summary>
     [Fact]
-    public async Task Connect_ControllerIdentification_WinsAndSeesConnectionInfo()
-    {
-        Mock<TestEngineController> a = Controller("BOB");
-        a.Setup(c => c.GetUserData("CUSTOM")).Returns(new Dictionary<string, string> { ["k"] = "v" });
-        IConnectionInfo? seen = null;
-        a.Setup(c => c.IdentifyConnection(It.IsAny<IConnectionInfo>())).Returns((IConnectionInfo info) =>
-        {
-            seen = info;
-            return "CUSTOM";
-        });
-        (End endA, _) = Pair(a.Object, Controller().Object, bNames: ["cert-BOB"]);
-
-        PeerConnection connection = await endA.Transport.Connect(point);
-
-        Assert.Equal("CUSTOM", connection.User!.Name);
-        Assert.Equal("v", connection.User.Data["k"]);
-        IIpConnectionInfo ip = Assert.IsAssignableFrom<IIpConnectionInfo>(seen);
-        Assert.Equal("10.0.0.5", ip.Host);
-        Assert.Equal(4000, ip.Port);
-        Assert.False(ip.IsInbound);
-        Assert.Equal(["cert-BOB"], ip.CertificateNames);
-        Assert.Equal("CN=cert-BOB", ip.CertificateSubject);
-    }
-
-    /// <summary>A controller whose identification throws does not take the transport down: the connection is dropped.</summary>
-    [Fact]
-    public async Task Connect_ControllerIdentificationThrows_DropsConnection()
-    {
-        Mock<TestEngineController> a = Controller("BOB");
-        a.Setup(c => c.IdentifyConnection(It.IsAny<IConnectionInfo>())).Throws(new InvalidOperationException("boom"));
-        (End endA, _) = Pair(a.Object, Controller().Object, bNames: ["cert-BOB"]);
-
-        await Assert.ThrowsAsync<IOException>(() => endA.Transport.Connect(point));
-
-        Assert.Empty(endA.Connected);
-    }
-
-    /// <summary>A serial connection is named after its port by default, and a controller can map the port and address to a user instead.</summary>
-    [Fact]
-    public async Task Connect_Serial_DefaultsToPortName_ControllerCanOverride()
+    public async Task Connect_Serial_DefaultsToPortName()
     {
         (End plainA, _) = Pair(Controller().Object, Controller().Object, serial: true);
         PeerConnection plain = await plainA.Transport.Connect(serialPoint);
         Assert.Equal("SL0", plain.User!.Name);
-
-        Mock<TestEngineController> mapped = Controller();
-        mapped.Setup(c => c.IdentifyConnection(It.Is<IConnectionInfo>(i => Matches(i)))).Returns("CONSOLE-3");
-        (End mappedA, _) = Pair(mapped.Object, Controller().Object, serial: true);
-        PeerConnection custom = await mappedA.Transport.Connect(serialPoint);
-        Assert.Equal("CONSOLE-3", custom.User!.Name);
     }
 
     /// <summary>A serial point that names its user identifies the connection as that user, matching on port and address; a point that does not, or one with another address, falls back to the port name.</summary>
@@ -263,33 +218,6 @@ public sealed class HandshakePeerTransportTests
         Assert.Single(endA.Connected);
     }
 
-    /// <summary>A serial link presents the same connection object every time it comes back, and each time is identified afresh.</summary>
-    [Fact]
-    public async Task Connected_SameConnectionObjectAgain_IsIdentifiedAgain()
-    {
-        Mock<IPeerTransport> inner = new();
-        TestObservable<PeerReceivedEventArgs> received = new();
-        TestObservable<PeerConnectionEventArgs> connected = new();
-        TestObservable<PeerConnectionEventArgs> disconnected = new();
-        inner.SetupGet(t => t.Received).Returns(received);
-        inner.SetupGet(t => t.Connected).Returns(connected);
-        inner.SetupGet(t => t.Disconnected).Returns(disconnected);
-        int identifications = 0;
-        Mock<TestEngineController> controller = Controller();
-        controller.Setup(c => c.IdentifyConnection(It.IsAny<IConnectionInfo>())).Returns(() => $"LINK-{++identifications}");
-        HandshakePeerTransport transport = new(inner.Object, controller.Object, logger, null, identify: true);
-        List<string> users = [];
-        transport.Connected.Listen(args => users.Add(args.Connection.User!.Name));
-        PeerConnection link = new(serialPoint, new SerialConnectionInfo { SerialPort = "SL0" }, () => { });
-
-        connected.Publish(new PeerConnectionEventArgs { Connection = link });
-        disconnected.Publish(new PeerConnectionEventArgs { Connection = link });
-        connected.Publish(new PeerConnectionEventArgs { Connection = link });
-
-        Assert.Equal(["LINK-1", "LINK-2"], users);
-        await Task.CompletedTask;
-    }
-
     /// <summary>Without an initial exchange payloads travel exactly as sent, in both directions, over the connection either end opened.</summary>
     [Fact]
     public async Task Request_WithoutInitialExchange_PassesPayloadsThroughUnchanged()
@@ -318,13 +246,12 @@ public sealed class HandshakePeerTransportTests
         await Assert.ThrowsAsync<IOException>(() => endA.Transport.Request(connection, new byte[] { 1 }));
     }
 
-    /// <summary>The processors decide the identity on both ends, ahead of the controller's own identification: the opener sends a message, the receiver answers and names the opener from it, and the opener names the receiver from the reply, data included.</summary>
+    /// <summary>The processors decide the identity on both ends, ahead of the engine's own identification: the opener sends a message, the receiver answers and names the opener from it, and the opener names the receiver from the reply, data included.</summary>
     [Fact]
     public async Task Handshake_IdentitiesComeFromTheProcessors()
     {
         Mock<TestEngineController> a = WithProcessor(Introduce("ALICE"));
         a.Setup(c => c.GetUserData("BOB")).Returns(new Dictionary<string, string> { ["station"] = "4" });
-        a.Setup(c => c.IdentifyConnection(It.IsAny<IConnectionInfo>())).Returns("WRONG");
         Mock<TestEngineController> b = WithProcessor(Introduce("BOB"));
         (End endA, End endB) = Pair(a.Object, b.Object);
 

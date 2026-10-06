@@ -1,7 +1,7 @@
 namespace BlueHeighliner.Comlink;
 
 /// <summary>
-/// Configures the aspects of the address types (<see cref="AddressType"/>), continuing the fluent chain of the engine builder. Name a type with <see cref="Type"/> to configure it, then continue with the next, for example <c>.AddressTypes().Type(AddressType.External).Label("OUTSIDE").KioskMode()</c>.
+/// Configures the aspects of the address types (<see cref="AddressType"/>), continuing the fluent chain of the engine builder. Name a type with <see cref="Type"/> to configure it, then continue with the next, for example <c>.AddressTypes().Type(AddressType.External).Label("OUTSIDE").Display&lt;MyDisplayHandler&gt;()</c>.
 /// A type that is not named keeps its defaults.
 /// </summary>
 /// <typeparam name="TFrame">The host's frame type.</typeparam>

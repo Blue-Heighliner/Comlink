@@ -15,6 +15,12 @@ public interface IDisplayHandler
     /// <summary>Gets the window icon: an <c>avares://</c> URI of an Avalonia asset, or else the path of an image file. Defaults to the operating system's.</summary>
     string? Icon => null;
 
+    /// <summary>Gets the application version, shown in the title bar and the info popup. Defaults to the entry assembly's <c>major.minor.build</c> version, or <c>1.0.0</c> if it has none.</summary>
+    string? Version => null;
+
+    /// <summary>Gets a value indicating whether the main window runs in kiosk mode, which hides the minimize and maximize buttons and has the close button restart rather than exit. Defaults to <see langword="false"/>.</summary>
+    bool IsKiosk => false;
+
     /// <summary>Gets the text shown in the content area when no entry is selected. Defaults to <c>HOME</c>.</summary>
     string? HomeText => null;
 

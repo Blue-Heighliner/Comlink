@@ -222,7 +222,7 @@ internal sealed class ConfiguredEngineController : IEngineController
     /// <inheritdoc />
     public TimeSpan AlarmSoundDuration => Current?.AlarmSoundSeconds is { } seconds ? TimeSpan.FromSeconds(seconds) : fallback.AlarmSoundDuration;
     /// <inheritdoc />
-    public bool QuickConfirmationEnabled => Current?.QuickConfirmationEnabled ?? fallback.QuickConfirmationEnabled;
+    public IReadOnlyList<string> AlertConfirmationKeys => fallback.AlertConfirmationKeys;
     /// <inheritdoc />
     public LineWidthRange? DraftLineWidth => fallback.DraftLineWidth;
     /// <inheritdoc />
@@ -323,7 +323,6 @@ internal sealed class ConfiguredEngineController : IEngineController
     public IReadOnlyList<IExternalSystem> ExternalSystems => fallback.ExternalSystems;
 
     /// <inheritdoc />
-    public IExternalSystem? ExternalServer => fallback.ExternalServer;
 
     /// <inheritdoc />
     public INetworkHandler? NetworkHandler => fallback.NetworkHandler;
@@ -341,8 +340,6 @@ internal sealed class ConfiguredEngineController : IEngineController
 
     /// <inheritdoc />
     public UserInfo GetUserInfo(string userName) => fallback.GetUserInfo(userName);
-    /// <inheritdoc />
-    public string? IdentifyConnection(IConnectionInfo connection) => fallback.IdentifyConnection(WithLocalUser(connection));
     /// <inheritdoc />
     public IConnectionInfo WithLocalUser(IConnectionInfo connection) => connection is ConnectionInfo info ? info with { LocalUser = currentUserProvider.UserName } : connection;
 }

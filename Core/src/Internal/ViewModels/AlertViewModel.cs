@@ -12,9 +12,9 @@ internal interface IAlertViewModel
     int PendingCount { get; }
     /// <summary>Gets the text to display in the title bar's alert box.</summary>
     string AlertText { get; }
-    /// <summary>Gets a value indicating whether click/keyboard quick confirmation is enabled.</summary>
-    bool QuickConfirmationEnabled { get; }
-    /// <summary>Confirms (marks read) the most recently received pending alert, if any and if enabled.</summary>
+    /// <summary>Gets the names of the keys that confirm the latest pending alert, from the message handler.</summary>
+    IReadOnlyList<string> ConfirmationKeys { get; }
+    /// <summary>Confirms (marks read) the most recently received pending alert, if any.</summary>
     IAsyncRelayCommand ConfirmLatestCommand { get; }
 }
 
@@ -62,7 +62,7 @@ internal sealed partial class AlertViewModel : ObservableObject, IAlertViewModel
     /// <inheritdoc />
     public string AlertText => engineController.AlertLabel;
     /// <inheritdoc />
-    public bool QuickConfirmationEnabled => engineController.QuickConfirmationEnabled;
+    public IReadOnlyList<string> ConfirmationKeys => engineController.AlertConfirmationKeys;
 
     private Task OnMessageInserted(MessageEntity entity)
     {
@@ -131,5 +131,5 @@ internal sealed partial class AlertViewModel : ObservableObject, IAlertViewModel
         await connection.MarkMessageRead(latest);
     }
 
-    private bool CanConfirmLatest() => IsAlerting && QuickConfirmationEnabled;
+    private bool CanConfirmLatest() => IsAlerting;
 }

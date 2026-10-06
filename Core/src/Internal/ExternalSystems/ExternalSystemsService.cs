@@ -5,9 +5,7 @@ namespace BlueHeighliner.Comlink;
 /// runs each one's own connect/poll/disconnect lifecycle, routes every message the app receives (from a
 /// peer, or from any other external system) out to other external systems, and processes every message
 /// received from an external system exactly like an ordinary received message — see
-/// <c>Docs/Components/ExternalSystems.md</c>. When <see cref="IEngineController.ExternalServer"/> is set, a
-/// message not received from it is instead sent exclusively to it; a message received from it is routed
-/// to every other external system exactly as it would be without one configured.
+/// <c>Docs/Components/ExternalSystems.md</c>.
 /// </summary>
 internal interface IExternalSystemsService
 {
@@ -24,14 +22,12 @@ internal sealed class ExternalSystemsService : IExternalSystemsService
         this.peerService = peerService;
         this.engineController = engineController;
         systems = engineController.ExternalSystems;
-        externalServer = engineController.ExternalServer;
         logger = loggerFactory.CreateLogger("ACTIVITY");
     }
 
     private readonly IPeerService peerService;
     private readonly IEngineController engineController;
     private readonly IReadOnlyList<IExternalSystem> systems;
-    private readonly IExternalSystem? externalServer;
     private readonly ILogger logger;
     private readonly AsyncLocal<IExternalSystem?> receivingFrom = new();
 
@@ -94,15 +90,6 @@ internal sealed class ExternalSystemsService : IExternalSystemsService
         if (!engineController.IsMessage(message)) { return; }
 
         IExternalSystem? source = receivingFrom.Value;
-
-        // A message not received from the external server (composed locally by the user, received from a
-        // peer connection, or received from any other external system) goes exclusively to it, bypassing
-        // every other configured external system.
-        if (externalServer is not null && !ReferenceEquals(source, externalServer))
-        {
-            await externalServer.Send(message);
-            return;
-        }
 
         foreach (IExternalSystem system in systems)
         {

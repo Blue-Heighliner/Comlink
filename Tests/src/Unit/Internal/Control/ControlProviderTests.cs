@@ -329,7 +329,7 @@ public sealed class ControlProviderTests
         TestEngineController controller = new();
         Assert.Equal("ALERT", controller.AlertLabel);
         Assert.Equal(TimeSpan.FromSeconds(30), controller.AlarmSoundDuration);
-        Assert.True(controller.QuickConfirmationEnabled);
+        Assert.Equal(["Space", "Enter"], controller.AlertConfirmationKeys);
     }
 
     /// <summary>Falls back to the wrapped provider for every field when not configured.</summary>
@@ -339,12 +339,12 @@ public sealed class ControlProviderTests
         Mock<IEngineController> fallback = new();
         fallback.Setup(f => f.AlertLabel).Returns("FALLBACK");
         fallback.Setup(f => f.AlarmSoundDuration).Returns(TimeSpan.FromSeconds(12));
-        fallback.Setup(f => f.QuickConfirmationEnabled).Returns(false);
+        fallback.Setup(f => f.AlertConfirmationKeys).Returns(["F5"]);
         ConfiguredEngineController controller = new(fallback.Object, new NetworkConfig(), NoCurrentUser);
 
         Assert.Equal("FALLBACK", controller.AlertLabel);
         Assert.Equal(TimeSpan.FromSeconds(12), controller.AlarmSoundDuration);
-        Assert.False(controller.QuickConfirmationEnabled);
+        Assert.Equal(["F5"], controller.AlertConfirmationKeys);
     }
 
     /// <summary>Every settable field reflects an explicit override from config.</summary>
@@ -354,13 +354,11 @@ public sealed class ControlProviderTests
         ConfiguredEngineController controller = new(new TestEngineController(), Node(new NetworkUserConfig
         {
             AlertText = "URGENT",
-            AlarmSoundSeconds = 5,
-            QuickConfirmationEnabled = false
+            AlarmSoundSeconds = 5
         }), Me);
 
         Assert.Equal("URGENT", controller.AlertLabel);
         Assert.Equal(TimeSpan.FromSeconds(5), controller.AlarmSoundDuration);
-        Assert.False(controller.QuickConfirmationEnabled);
     }
 
     /// <summary>The default implementation is disabled by default and prints every message exactly once.</summary>
@@ -564,19 +562,18 @@ public sealed class ControlProviderTests
         Assert.Empty(controller.Servers);
     }
 
-    /// <summary>By default no connection is identified by the controller (the engine decides), and no initial exchange is configured.</summary>
+    /// <summary>By default no initial exchange is configured.</summary>
     [Fact]
-    public void EngineController_NoConnectionHooks()
+    public void EngineController_NoInitialExchange()
     {
         TestEngineController controller = new();
 
-        Assert.Null(controller.IdentifyConnection(new IpConnectionInfo { Host = "10.0.0.1" }));
         Assert.Null(controller.InitialPacketProcessor);
         Assert.Null(controller.InitialFrameProcessor);
         Assert.Null(controller.NetworkHandler);
     }
 
-    /// <summary>The identification hook and every processor's connection description are told which user this node runs as, so what they send can say who is speaking.</summary>
+    /// <summary>Every processor's connection description is told which user this node runs as, so what they send can say who is speaking.</summary>
     [Fact]
     public void ConfiguredEngineController_ConnectionDescriptions_SeeTheLocalUser()
     {
@@ -584,12 +581,9 @@ public sealed class ControlProviderTests
         Mock<IEngineController> fallback = new();
         ConfiguredEngineController controller = new(fallback.Object, new NetworkConfig(), Me);
 
-        controller.IdentifyConnection(connection);
-
         IpConnectionInfo expected = connection with { LocalUser = "ME" };
         Assert.Equal("ME", controller.WithLocalUser(connection).LocalUser);
         Assert.Equal(expected, controller.WithLocalUser(connection));
-        fallback.Verify(f => f.IdentifyConnection(expected), Times.Once);
     }
 
     /// <summary>The initial exchange and network processors are not configurable from the network file and come from the wrapped provider.</summary>

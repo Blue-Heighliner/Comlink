@@ -11,7 +11,6 @@ public sealed class AlertViewModelTests
         {
             AlertSettings.Setup(c => c.AlertLabel).Returns("ALERT");
             AlertSettings.Setup(c => c.AlarmSoundDuration).Returns(TimeSpan.FromMinutes(10));
-            AlertSettings.Setup(c => c.QuickConfirmationEnabled).Returns(true);
         }
 
         public Mock<IEntryService> EntryService { get; } = new();
@@ -41,18 +40,18 @@ public sealed class AlertViewModelTests
         Assert.Equal(0, vm.PendingCount);
     }
 
-    /// <summary>AlertText and QuickConfirmationEnabled are read from IEngineController.</summary>
+    /// <summary>AlertText and ConfirmationKeys are read from IEngineController.</summary>
     [Fact]
     public void Ctor_ExposesConfigurationValues()
     {
         Setup s = new();
         s.AlertSettings.Setup(c => c.AlertLabel).Returns("INCOMING");
-        s.AlertSettings.Setup(c => c.QuickConfirmationEnabled).Returns(false);
+        s.AlertSettings.Setup(c => c.AlertConfirmationKeys).Returns(["F5"]);
 
         AlertViewModel vm = s.Build();
 
         Assert.Equal("INCOMING", vm.AlertText);
-        Assert.False(vm.QuickConfirmationEnabled);
+        Assert.Equal(["F5"], vm.ConfirmationKeys);
     }
 
     /// <summary>An inserted alert message becomes pending, starts alarming, and plays the sound.</summary>
@@ -146,18 +145,6 @@ public sealed class AlertViewModelTests
     public void ConfirmLatestCommand_NoPending_CannotExecute()
     {
         AlertViewModel vm = new Setup().Build();
-
-        Assert.False(vm.ConfirmLatestCommand.CanExecute(null));
-    }
-
-    /// <summary>ConfirmLatestCommand cannot execute when quick confirmation is disabled, even with a pending alert.</summary>
-    [Fact]
-    public void ConfirmLatestCommand_QuickConfirmationDisabled_CannotExecute()
-    {
-        Setup s = new();
-        s.AlertSettings.Setup(c => c.QuickConfirmationEnabled).Returns(false);
-        AlertViewModel vm = s.Build();
-        s.EntryService.Raise(e => e.MessageInserted += null, MakeMessage("MSG1", isAlert: true));
 
         Assert.False(vm.ConfirmLatestCommand.CanExecute(null));
     }

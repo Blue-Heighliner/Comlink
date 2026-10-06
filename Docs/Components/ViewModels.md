@@ -227,11 +227,11 @@ One-time setup screen. Registered as `IInstallViewModel → InstallViewModel` si
 
 Tracks pending (unread) alert messages and drives the title bar's alarm box and sound (see [Peer.md](Peer.md#alert-messages)). Registered as `IAlertViewModel → AlertViewModel` singleton; exposed as `MainViewModel.Alert` and bound from `MainWindow.axaml` onto `TitleBar`'s `IsAlerting`/`AlertText`/`QuickConfirmationEnabled`/`AlertCommand` styled properties.
 
-**Properties**: `IsAlerting (bool)` — `PendingCount > 0`; `PendingCount (int)`; `AlertText (string)` and `QuickConfirmationEnabled (bool)` — both read from `IEngineController`.
+**Properties**: `IsAlerting (bool)` — `PendingCount > 0`; `PendingCount (int)`; `AlertText (string)` and `ConfirmationKeys (IReadOnlyList<string>)` — both read from `IEngineController` (the keys are the message handler's `AlertConfirmationKeys`).
 
 Actually playing the alarm sound is driven through a separate `IAlertSoundPlayer` constructor dependency, not `IEngineController` — see `Docs/Components/Configuration.md`'s `IAlertSoundPlayer` entry (not a control interface; always real Engine behavior, like printer discovery/driving).
 
-**Commands**: `ConfirmLatestCommand (IAsyncRelayCommand)` — confirms (marks read via `IServiceConnection.MarkMessageRead`) the most recently received pending alert. `CanExecute` is `IsAlerting && QuickConfirmationEnabled`.
+**Commands**: `ConfirmLatestCommand (IAsyncRelayCommand)` — confirms (marks read via `IServiceConnection.MarkMessageRead`) the most recently received pending alert. `CanExecute` is `IsAlerting`.
 
 **Wiring**:
 - `IEntryService.MessageInserted` — if `IEngineController.GetIsAlert` is `true`, appends the message ID to the pending list, calls `IAlertSoundPlayer.Play()`, and (re)starts the auto-stop timer from `IEngineController.AlarmSoundDuration`
@@ -239,7 +239,7 @@ Actually playing the alarm sound is driven through a separate `IAlertSoundPlayer
 
 The auto-stop timer only stops the *sound* — the alert box itself stays visible until every pending alert has been read. A new alert received while already alarming resets the timer to the full `AlarmSoundDuration` again.
 
-**Quick confirmation**: When `QuickConfirmationEnabled`, `TitleBar`'s alert box responds to a pointer press by invoking `AlertCommand` (bound to `ConfirmLatestCommand`), and `MainWindow`'s tunnel-priority `KeyDown` handler invokes the same command on Space/Enter when focus is not in a `TextBox` or the AvaloniaEdit `TextEditor` (the draft body). Each invocation confirms one alert (the current last entry in the pending list); repeating the action — clicking or pressing the key again — confirms the next one, most-recently-received first, until none remain.
+**Confirmation shortcuts**: `TitleBar`'s alert box responds to a pointer press by invoking `AlertCommand` (bound to `ConfirmLatestCommand`), and `MainWindow`'s tunnel-priority `KeyDown` handler invokes the same command when the key is one of `ConfirmationKeys` (names parsed as Avalonia `Key` values, case-insensitive; a name that is not a key is ignored) and focus is not in a `TextBox` or the AvaloniaEdit `TextEditor` (the draft body). Each invocation confirms one alert (the current last entry in the pending list); repeating the action - clicking or pressing the key again - confirms the next one, most-recently-received first, until none remain.
 
 ---
 
@@ -373,7 +373,7 @@ A single queued print job: `Id` (unique per queue entry — the same underlying 
 
 **Queue ordering** (next-to-print first): manual entries (`IsManual = true`) always sort ahead of every automatically-queued entry, regardless of priority; among entries with the same `IsManual` value, higher `Priority` sorts first; ties break by `QueuedAt` ascending (first queued, first printed). Manual entries all share `Priority = 0`, which is irrelevant to their ordering since `IsManual` alone already places them ahead of every automatic entry.
 
-**Automatic "print received" queuing**: on `IEntryService.MessageInserted`, if `PrintReceivedEnabled` is `true`, calls `IEngineController.GetPrintCount(entity.Message)` (the message handler's `GetPrintCount`) and enqueues that many separate `PrintQueueEntry` copies (each `IsManual = false`, `Priority` set to `IEngineController.GetPriority(entity.Message)`) — `0` enqueues nothing, `2` enqueues two independent copies that print (and can be individually removed) separately.
+**Automatic "print received" queuing**: on `IEntryService.MessageInserted`, if `PrintReceivedEnabled` is `true`, calls `IEngineController.GetPrintCount(entity.Message)` (the print handler's `GetPrintCount`, `1` without one) and enqueues that many separate `PrintQueueEntry` copies (each `IsManual = false`, `Priority` set to `IEngineController.GetPriority(entity.Message)`) — `0` enqueues nothing, `2` enqueues two independent copies that print (and can be individually removed) separately.
 
 **Line-by-line printing loop**: adding to the queue, or setting `SelectedPrinter`, starts the loop if it is not already running (a `SelectedPrinter` is required — the loop stays idle otherwise). Each iteration: peek the entry at the front of the queue, load its printable lines (the `Body` for a message, draft or note, or `"HH:mm {Message}"` per entry for an activity log — each split on newlines), then print them one at a time via `IPrintDriver.PrintLine`, **awaiting each call as the confirmation that line finished printing** before checking whether the front of the queue is still the same entry. If a higher-priority entry was added (or the current one was removed/purged) while a line was printing, the loop breaks out of the entry's line list — this is the "interrupt" — and always calls `IPrintDriver.PageFeed` next, whether the entry finished normally or was interrupted partway through. If the entry finished normally (not interrupted), it is removed from the queue; if it was interrupted, it stays in the queue exactly where its priority places it, and **when it is picked up again it restarts printing from its first line** — there is no partial-progress tracking. See the `IPrintDriver` section in `Docs/Components/Configuration.md`.
 

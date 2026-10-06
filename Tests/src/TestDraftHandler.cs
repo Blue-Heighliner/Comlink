@@ -47,6 +47,13 @@ public sealed class TestTagRulesDraftHandler : IDraftHandler<TestMessagePriority
     public bool AllowTagSpaces => false;
 }
 
+/// <summary>Test <see cref="IDraftHandler{TPriority, TLevel}"/> that only turns tags off.</summary>
+public sealed class TestNoTagsDraftHandler : IDraftHandler<TestMessagePriority, TestLevel>
+{
+    /// <inheritdoc />
+    public bool EnableTags => false;
+}
+
 /// <summary>Test <see cref="IDraftHandler{TPriority, TLevel}"/> that only states a header, so the draft view offers no line width.</summary>
 public sealed class TestHeaderOnlyDraftHandler : IDraftHandler<TestMessagePriority, TestLevel>
 {

@@ -13,6 +13,12 @@ public sealed class TestDisplayHandler : IDisplayHandler
     public string? Icon => "avares://Host/icon.png";
 
     /// <inheritdoc />
+    public string? Version => "2.3.4";
+
+    /// <inheritdoc />
+    public bool IsKiosk => true;
+
+    /// <inheritdoc />
     public string? HomeText => "Welcome";
 
     /// <inheritdoc />

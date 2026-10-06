@@ -42,6 +42,7 @@ public sealed class EngineConfiguration : IEngineConfiguration
             .Display<DisplayHandler>()
             .Deletes<DeleteHandler>()
             .Drafts<DraftHandler>()
+            .Prints<PrintHandler>()
             .CommandLineOverrides(true)
             .Frames()
                 .Serializer<JsonSerializer>()

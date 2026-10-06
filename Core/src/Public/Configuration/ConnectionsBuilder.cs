@@ -2,7 +2,7 @@ namespace BlueHeighliner.Comlink;
 
 /// <summary>
 /// Configures how connections are made, continuing the fluent chain of the engine builder: <see cref="Msmt"/> for every IP connection and <see cref="Hdlc"/> for every serial one,
-/// for example <c>.Connections().Msmt(msmt).Hdlc(hdlc).KioskMode()</c>. Anything not stated keeps its default.
+/// for example <c>.Connections().Msmt(msmt).Hdlc(hdlc).Display&lt;MyDisplayHandler&gt;()</c>. Anything not stated keeps its default.
 /// </summary>
 /// <typeparam name="TFrame">The host's frame type.</typeparam>
 /// <typeparam name="TPacket">The host's packet type, or <see cref="NoPacket"/>.</typeparam>
@@ -12,7 +12,7 @@ public interface IConnectionsBuilder<TFrame, TPacket, TPriority, TLevel> : IEngi
 {
     /// <summary>
     /// States the MSMT settings used for every IP connection, inbound and outbound, including the interface listener: timeouts,
-    /// keep-alive and session lifetimes. The identity certificate and trusted authorities are still the engine's (or what <see cref="IEngineBuilder{TFrame, TPacket, TPriority, TLevel}.ConnectionOptions"/> builds).
+    /// keep-alive and session lifetimes. The identity certificate and trusted authorities are still the engine's.
     /// Defaults to the MSMT package defaults.
     /// </summary>
     /// <param name="options">The settings to use.</param>

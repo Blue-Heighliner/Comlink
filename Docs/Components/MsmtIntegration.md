@@ -27,7 +27,7 @@ Two independent sources are supported, chosen per user in the network configurat
 
 - **System certificate store** (the default): looked up by subject name via the user's `CertificateName` in
   the network configuration file (default: the user name itself, unprefixed) and the trusted authority name
-  (`TrustedAuthority` or the file's `TrustedAuthorityCertificateName`, default: `COMLINK-ROOT`).
+  (the file's `TrustedAuthorityCertificateName`, default: `COMLINK-ROOT`).
   Resolved once a current user is registered; before that (a fresh install with no installed user yet),
   building the MSMT options throws and the peer/interface listeners simply don't start, retried
   the next time the host restarts after a user is installed. A real deployment provisions its own
@@ -100,7 +100,7 @@ back out to a connected interface client over the connection it opened in; see [
 | `MsmtPeerTransport` (`Core/src/Internal/Peer/Transport/MsmtPeerTransport.cs`) | Adapts an `IMsmtSessionPeer` to the peer transport used by `PeerService`, `ClientPeerService`, and `ServerRoutingService`, caching one outbound connection per point and sending over inbound ones as well. MSMT itself remains IP only; serial goes through `SerialPeerTransport`. |
 | `InterfaceService` (`Core/src/Internal/Peer/InterfaceService.cs`, always active) | Uses its own `IMsmtSessionPeer` to host the local interface listener described in [Interface.md](Interface.md). |
 | `ConnectionOptions` (`IEngineController`) | Builds the `MsmtSessionPeerOptions` (identity certificate, trusted authority, then the host's `Connections().Msmt` adjustment: timeouts, keep-alive, session lifetimes) used for both inbound and outbound MSMT session peer connections. See [Configuration.md](Configuration.md#msmt-certificates). |
-| `CertificateName`/`TrustedAuthority` (`IEngineBuilder`) | Map the local user name, and the trusted certificate authority, to certificate subject names to look up in the system store. See [Configuration.md](Configuration.md#msmt-certificates). |
+| `CertificateName`/`TrustedAuthorityCertificateName` (network file) | Map the local user name, and the trusted certificate authority, to certificate subject names to look up in the system store. See [Configuration.md](Configuration.md#msmt-certificates). |
 
 `EngineExtensions.UseEngine` calls the package's `AddMsmt()` to register `IMsmtSessionPeer.IFactory` (and
 `IMsmtMessagePeer.IFactory`, unused by Comlink) by convention.

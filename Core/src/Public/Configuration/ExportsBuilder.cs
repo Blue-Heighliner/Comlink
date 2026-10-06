@@ -1,6 +1,6 @@
 namespace BlueHeighliner.Comlink;
 
-/// <summary>Configures the export formats of the client's export screen, continuing the fluent chain of the engine builder, for example <c>.Exports().Format&lt;MyExportFormat&gt;().KioskMode()</c>.</summary>
+/// <summary>Configures the export formats of the client's export screen, continuing the fluent chain of the engine builder, for example <c>.Exports().Format&lt;MyExportFormat&gt;().Display&lt;MyDisplayHandler&gt;()</c>.</summary>
 /// <typeparam name="TFrame">The host's frame type.</typeparam>
 /// <typeparam name="TPacket">The host's packet type, or <see cref="NoPacket"/>.</typeparam>
 /// <typeparam name="TPriority">The enum whose members are the priority levels.</typeparam>

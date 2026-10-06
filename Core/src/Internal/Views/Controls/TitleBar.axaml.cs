@@ -93,10 +93,6 @@ internal partial class TitleBar : UserControl
     public static readonly StyledProperty<string> AlertTextProperty =
         AvaloniaProperty.Register<TitleBar, string>(nameof(AlertText), "ALERT");
 
-    /// <summary>Identifies the <see cref="QuickConfirmationEnabled"/> styled property.</summary>
-    public static readonly StyledProperty<bool> QuickConfirmationEnabledProperty =
-        AvaloniaProperty.Register<TitleBar, bool>(nameof(QuickConfirmationEnabled), true);
-
     /// <summary>Identifies the <see cref="AlertCommand"/> styled property.</summary>
     public static readonly StyledProperty<ICommand?> AlertCommandProperty =
         AvaloniaProperty.Register<TitleBar, ICommand?>(nameof(AlertCommand));
@@ -259,14 +255,7 @@ internal partial class TitleBar : UserControl
         set => SetValue(AlertTextProperty, value);
     }
 
-    /// <summary>Gets or sets a value indicating whether clicking the alert box quick-confirms the latest pending alert.</summary>
-    public bool QuickConfirmationEnabled
-    {
-        get => GetValue(QuickConfirmationEnabledProperty);
-        set => SetValue(QuickConfirmationEnabledProperty, value);
-    }
-
-    /// <summary>Gets or sets the command invoked when the user clicks the alert box (subject to <see cref="QuickConfirmationEnabled"/>).</summary>
+    /// <summary>Gets or sets the command invoked when the user clicks the alert box.</summary>
     public ICommand? AlertCommand
     {
         get => GetValue(AlertCommandProperty);
@@ -400,7 +389,6 @@ internal partial class TitleBar : UserControl
 
     private void OnAlertBoxPressed(object? sender, PointerPressedEventArgs e)
     {
-        if (!QuickConfirmationEnabled) { return; }
         if (AlertCommand?.CanExecute(null) == true)
         {
             AlertCommand.Execute(null);

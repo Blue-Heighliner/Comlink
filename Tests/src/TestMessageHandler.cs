@@ -56,9 +56,6 @@ public sealed class TestMessageHandler : IMessageHandler<TestFrame, TestMessageP
     public TestMessagePriority GetPriority(TestFrame frame) => Enum.TryParse(frame.Priority, ignoreCase: true, out TestMessagePriority priority) ? priority : TestMessagePriority.Normal;
 
     /// <inheritdoc />
-    public int GetPrintCount(TestFrame frame) => frame.PrintCount;
-
-    /// <inheritdoc />
     public string GetTag(TestFrame frame) => frame.Tag;
 
     /// <inheritdoc />

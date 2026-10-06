@@ -78,7 +78,7 @@ internal interface IEngineController
     /// folders rather than in one, since it is what says whose folder to use.
     /// </summary>
     string StatePath { get; }
-    /// <summary><see langword="true"/> to enable kiosk mode, which hides window chrome and restricts navigation.</summary>
+    /// <summary><see langword="true"/> to enable kiosk mode, which hides the minimize and maximize buttons and has the close button restart rather than exit.</summary>
     bool IsKioskMode { get; }
     /// <summary>The text displayed in the content area when no entry is selected.</summary>
     string HomeText { get; }
@@ -107,11 +107,10 @@ internal interface IEngineController
     /// </summary>
     TimeSpan AlarmSoundDuration { get; }
     /// <summary>
-    /// When <see langword="true"/>, clicking the alert box, or pressing Space/Enter while focus is not in
-    /// a text input, confirms (marks read) the latest unconfirmed alert. Repeating the action confirms
-    /// pending alerts one at a time, most-recently-received first.
+    /// The names of the keys that, pressed while focus is not in a text input, confirm (mark read) the latest unconfirmed alert, from the message handler.
+    /// Repeating one confirms pending alerts one at a time, most-recently-received first.
     /// </summary>
-    bool QuickConfirmationEnabled { get; }
+    IReadOnlyList<string> AlertConfirmationKeys { get; }
     /// <summary>Gets how wide a line of a draft may be (see <see cref="IDraftHandler{TPriority, TLevel}"/>), or <see langword="null"/> when the draft view does not offer a width, which is without a draft handler or when it states neither a default nor a maximum.</summary>
     LineWidthRange? DraftLineWidth { get; }
     /// <summary>Gets what message tags may be: their case, length, and whether they may hold symbols, numbers and spaces (see <see cref="IDraftHandler{TPriority, TLevel}"/>). Unrestricted without a draft handler.</summary>
@@ -199,7 +198,7 @@ internal interface IEngineController
     /// <see cref="ConnectionMode.MsmtConnect"/>, the other user's <see cref="UserInfo.IpHost"/> and <see cref="UserInfo.MsmtPort"/>, and for the <see cref="ConnectionMode.Hdlc"/> links together one point per HDLC port
     /// the node opens (a serial cable joins two nodes and is opened from both ends); the parent's comes first.
     /// Who is on the other end of a connection is still worked out
-    /// when it forms, by <see cref="IdentifyConnection"/>.
+    /// when it forms.
     /// </summary>
     IReadOnlyList<ConnectionPoint> OutgoingPoints { get; }
     /// <summary>The name of the current user's parent, or <see langword="null"/> for none.</summary>
@@ -210,7 +209,7 @@ internal interface IEngineController
     /// The server topology a <see cref="UserRole.Server"/> instance routes with, keyed by server user name
     /// (case-insensitive): every server in the cluster, not just the local one, and the children each owns. It
     /// says who belongs where, not how to reach them, so a connection is matched to a server or child by the identity
-    /// <see cref="IdentifyConnection"/> gives it. Unused outside <see cref="UserRole.Server"/>.
+    /// the engine gives it when it forms. Unused outside <see cref="UserRole.Server"/>.
     /// </summary>
     IReadOnlyDictionary<string, ServerUserConfig> Servers { get; }
 
@@ -230,22 +229,6 @@ internal interface IEngineController
     /// <c>Docs/Components/ExternalSystems.md</c>.
     /// </summary>
     IReadOnlyList<IExternalSystem> ExternalSystems { get; }
-
-    /// <summary>
-    /// The single external system, from <see cref="ExternalSystems"/>, that should exclusively receive
-    /// every message this instance would otherwise send out — whether composed locally by the user or
-    /// received from a peer connection — instead of that message going to the normal peer network and
-    /// every other configured external system. A message received <em>from</em> this external system is,
-    /// in turn, relayed to every other external system exactly as it would be without an
-    /// <see cref="ExternalServer"/> configured — only <see cref="ExternalServer"/> itself is treated as
-    /// the exclusive upstream hub, everything else still fans out normally. <see langword="null"/> (the
-    /// default) disables this gateway behavior entirely, so every configured external system and the
-    /// normal peer network behave exactly as they would with no <see cref="ExternalServer"/> at all. Must
-    /// be one of the same instances also returned by <see cref="ExternalSystems"/>, so its own
-    /// connect/poll/receive lifecycle still runs — this property only designates which one, if any, acts
-    /// as the exclusive upstream hub. See <c>Docs/Components/ExternalSystems.md</c>.
-    /// </summary>
-    IExternalSystem? ExternalServer { get; }
 
     /// <summary>The processor that reacts to a user connecting or disconnecting and to a message being received (see <see cref="IFrameBuilder{TFrame, TPacket, TPriority, TLevel}.Processor"/>), or <see langword="null"/> for none.</summary>
     INetworkHandler? NetworkHandler { get; }
@@ -416,7 +399,7 @@ internal interface IEngineController
     /// <summary>Gets the slice of the payload <paramref name="packet"/> carries.</summary>
     ReadOnlyMemory<byte> GetPacketData(object packet);
 
-    /// <summary>Resolves <paramref name="userCode"/> to the name of the user it installs, or <see langword="null"/> if the code is unrecognized. Unless the host states its own scheme (<see cref="IEngineBuilder{TFrame, TPacket, TPriority, TLevel}.UserCodes"/>), a code is the name of a user of the network.</summary>
+    /// <summary>Resolves <paramref name="userCode"/> to the name of the user it installs, or <see langword="null"/> if the code is unrecognized. Unless the host states an install handler (<see cref="IInstallHandler"/>), a code is the name of a user of the network.</summary>
     /// <param name="userCode">The user installation code to resolve.</param>
     string? ResolveUserName(string userCode);
     /// <summary>
@@ -433,18 +416,6 @@ internal interface IEngineController
     /// </summary>
     /// <param name="userName">The user to describe.</param>
     IReadOnlyDictionary<string, string> GetUserData(string userName);
-
-    /// <summary>
-    /// Decides who is on the other end of a connection that has just formed, from what is known about it: for IP the
-    /// remote host, port and certificate names, for serial the port and addresses, and the initial packet and
-    /// message exchange when those are configured. Returns <see langword="null"/> (the default) to let the engine decide:
-    /// an IP connection is the user whose <see cref="GetCertificateName"/> matches a name in its certificate (or, when
-    /// none does, a user named after that certificate name), and a serial connection is a user named after its port.
-    /// A host overrides this to identify by anything else, such as a serial port to user table, or a user name carried
-    /// in an initial packet or message. The identity built from the returned name carries <see cref="GetUserData"/> for it.
-    /// </summary>
-    /// <param name="connection">What is known about the connection.</param>
-    string? IdentifyConnection(IConnectionInfo connection);
 
     /// <summary>Adds what the engine knows about this node, namely which user it runs as, to a description of a new connection before it is handed to a host's processor.</summary>
     /// <param name="connection">What is known about the connection.</param>
@@ -537,6 +508,9 @@ internal class EngineController(EngineBuilder builder, ICurrentUserProvider curr
     private readonly Lazy<IInitialProcessor?> initialPacketProcessor = new(() => builder.InitialPacketProcessor?.Create(services));
     private readonly Lazy<IInitialProcessor?> initialMessageProcessor = new(() => builder.InitialFrameProcessor?.Create(services));
     private readonly Lazy<IDraftFrameHandler?> draftHandler = new(() => builder.DraftHandler?.Create(services));
+    private readonly Lazy<IInstallHandler?> installHandler = new(() => builder.InstallHandler?.Create(services));
+    private readonly Lazy<IAlarmHandler?> alarmHandler = new(() => builder.AlarmHandler?.Create(services));
+    private readonly Lazy<IPrintFrameHandler?> printHandler = new(() => builder.PrintHandler?.Create(services));
     private readonly Lazy<IDeleteHandler?> deleteHandler = new(() => builder.DeleteHandler?.Create(services));
     private readonly Lazy<INetworkHandler?> networkHandler = new(() => builder.NetworkHandler?.Create(services));
     private readonly IReadOnlyList<MessagePriorityOption> defaultPriorities = [new MessagePriorityOption { Name = "NORMAL", Value = 0, Key = NoPriority.Normal }];
@@ -561,7 +535,7 @@ internal class EngineController(EngineBuilder builder, ICurrentUserProvider curr
     /// <inheritdoc />
     public virtual string AppName => builder.DisplayHandlerInstance?.AppName.OrNull() ?? Assembly.GetEntryAssembly()?.GetName().Name ?? "App";
     /// <inheritdoc />
-    public virtual string AppVersion => builder.AppVersionValue ?? (Assembly.GetEntryAssembly()?.GetName().Version is { } version ? $"{version.Major}.{version.Minor}.{version.Build}" : "1.0.0");
+    public virtual string AppVersion => builder.DisplayHandlerInstance?.Version.OrNull() ?? (Assembly.GetEntryAssembly()?.GetName().Version is { } version ? $"{version.Major}.{version.Minor}.{version.Build}" : "1.0.0");
     /// <inheritdoc />
     public virtual string AppDataRoot => Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData);
     /// <inheritdoc />
@@ -569,7 +543,7 @@ internal class EngineController(EngineBuilder builder, ICurrentUserProvider curr
     /// <inheritdoc />
     public virtual string StatePath => Path.Combine(AppDataRoot, DataFolderName, "State.json");
     /// <inheritdoc />
-    public virtual bool IsKioskMode => builder.IsKioskMode;
+    public virtual bool IsKioskMode => builder.DisplayHandlerInstance?.IsKiosk ?? false;
     /// <inheritdoc />
     public virtual string HomeText => builder.DisplayHandlerInstance?.HomeText.OrNull() ?? "HOME";
     private readonly NetworkConfig network = networkConfig ?? new();
@@ -580,13 +554,13 @@ internal class EngineController(EngineBuilder builder, ICurrentUserProvider curr
     public virtual string? WindowIconPath => builder.DisplayHandlerInstance?.Icon.OrNull();
 
     /// <inheritdoc />
-    public virtual string? DebugUserName => builder.DebugUserValue;
+    public virtual string? DebugUserName => null;
     /// <inheritdoc />
     public virtual IReadOnlyList<string> Users
     {
         get
         {
-            List<string> names = [.. builder.UserNames];
+            List<string> names = [];
             foreach (string name in network.Users.Keys.Concat(UserGroups.Keys))
             {
                 if (!names.Contains(name, StringComparer.OrdinalIgnoreCase)) { names.Add(name); }
@@ -599,9 +573,9 @@ internal class EngineController(EngineBuilder builder, ICurrentUserProvider curr
     {
         get
         {
-            Dictionary<string, IReadOnlyList<string>> merged = new(builder.UserGroups, StringComparer.OrdinalIgnoreCase);
-            foreach ((string name, List<string> members) in network.UserGroups) { merged[name] = members; }
-            return merged;
+            Dictionary<string, IReadOnlyList<string>> groups = new(StringComparer.OrdinalIgnoreCase);
+            foreach ((string name, List<string> members) in network.UserGroups) { groups[name] = members; }
+            return groups;
         }
     }
 
@@ -613,9 +587,9 @@ internal class EngineController(EngineBuilder builder, ICurrentUserProvider curr
     /// <inheritdoc />
     public virtual string AlertLabel => builder.DisplayHandlerInstance?.AlertLabel.OrNull() ?? "ALERT";
     /// <inheritdoc />
-    public virtual TimeSpan AlarmSoundDuration => builder.AlarmDurationValue ?? TimeSpan.FromSeconds(30);
+    public virtual TimeSpan AlarmSoundDuration => alarmHandler.Value?.AlertDuration ?? TimeSpan.FromSeconds(30);
     /// <inheritdoc />
-    public virtual bool QuickConfirmationEnabled => builder.QuickConfirmationValue ?? true;
+    public virtual IReadOnlyList<string> AlertConfirmationKeys => messageHandler.Value.AlertConfirmationKeys;
     /// <inheritdoc />
     public virtual DraftDefaults DraftDefaults
         => draftHandler.Value is { } handler ? new DraftDefaults(DraftTagRules.Filter(handler.DefaultTag ?? string.Empty), handler.DefaultPriority, handler.DefaultSecurityLevel) : DraftDefaults.None;
@@ -635,7 +609,7 @@ internal class EngineController(EngineBuilder builder, ICurrentUserProvider curr
     /// <inheritdoc />
     public virtual IReadOnlyList<MessagePriorityOption> Priorities => builder.PriorityOptions.Count > 0 ? builder.PriorityOptions : defaultPriorities;
     /// <inheritdoc />
-    public virtual bool TagsEnabled => builder.TagsEnabledValue ?? true;
+    public virtual bool TagsEnabled => draftHandler.Value?.EnableTags ?? true;
     /// <inheritdoc />
     public virtual string PriorityLabel => builder.DisplayHandlerInstance?.PriorityLabel.OrNull() ?? "Priority";
     /// <inheritdoc />
@@ -681,11 +655,10 @@ internal class EngineController(EngineBuilder builder, ICurrentUserProvider curr
     }
 
     /// <inheritdoc />
-    public virtual bool PrintReceivedDefaultEnabled => builder.PrintReceivedValue ?? false;
+    public virtual bool PrintReceivedDefaultEnabled => printHandler.Value?.PrintReceivedByDefault ?? false;
 
     /// <inheritdoc />
-    public virtual MsmtSessionPeerOptions ConnectionOptions => ConfigureConnectionOptions(builder.ConnectionOptionsValue?.Invoke()
-        ?? MsmtCertificateLookup.BuildPeerOptions(currentUserProvider.UserName, GetCertificateName, TrustedAuthorityCertificateName));
+    public virtual MsmtSessionPeerOptions ConnectionOptions => ConfigureConnectionOptions(MsmtCertificateLookup.BuildPeerOptions(currentUserProvider.UserName, GetCertificateName, TrustedAuthorityCertificateName));
 
     /// <inheritdoc />
     public virtual MsmtSessionPeerOptions ConfigureConnectionOptions(MsmtSessionPeerOptions options) => builder.MsmtOptionsValue is { } stated
@@ -820,8 +793,6 @@ internal class EngineController(EngineBuilder builder, ICurrentUserProvider curr
 
     /// <inheritdoc />
     public virtual IReadOnlyList<IExternalSystem> ExternalSystems => builder.ExternalSystems;
-    /// <inheritdoc />
-    public virtual IExternalSystem? ExternalServer => builder.ExternalServerValue;
 
     /// <inheritdoc />
     public virtual INetworkHandler? NetworkHandler => networkHandler.Value;
@@ -835,7 +806,7 @@ internal class EngineController(EngineBuilder builder, ICurrentUserProvider curr
     public virtual IReadOnlyList<AutoForwardControllerDefinition> AutoForwardControllers => autoForwardControllers.Value;
 
     /// <inheritdoc />
-    public virtual string TrustedAuthorityCertificateName => network.TrustedAuthorityCertificateName ?? builder.TrustedAuthorityValue ?? "COMLINK-ROOT";
+    public virtual string TrustedAuthorityCertificateName => network.TrustedAuthorityCertificateName ?? "COMLINK-ROOT";
 
     /// <inheritdoc />
     public virtual object CreateFrame() => frame.Create();
@@ -1029,9 +1000,9 @@ internal class EngineController(EngineBuilder builder, ICurrentUserProvider curr
     /// <inheritdoc />
     public virtual string? ResolveUserName(string userCode)
     {
-        if (builder.UserCodeResolver is { } resolve) { return resolve(userCode); }
+        if (installHandler.Value is { } handler) { return handler.Install(userCode); }
 
-        string? user = builder.UserNames.Concat(network.Users.Keys).FirstOrDefault(name => string.Equals(name, userCode, StringComparison.OrdinalIgnoreCase));
+        string? user = network.Users.Keys.FirstOrDefault(name => string.Equals(name, userCode, StringComparison.OrdinalIgnoreCase));
         return user ?? (userCode.Equals("CODE", StringComparison.OrdinalIgnoreCase) ? "TEST" : null);
     }
 
@@ -1046,12 +1017,10 @@ internal class EngineController(EngineBuilder builder, ICurrentUserProvider curr
     public virtual IReadOnlyDictionary<string, string> GetUserData(string userName) => GetUserInfo(userName).Data;
 
     /// <inheritdoc />
-    public virtual string? IdentifyConnection(IConnectionInfo connection) => builder.IdentifyValue?.Invoke(connection);
-    /// <inheritdoc />
     public virtual IConnectionInfo WithLocalUser(IConnectionInfo connection) => connection;
 
     /// <inheritdoc />
-    public virtual int GetPrintCount(object value) => messageHandler.Value.GetPrintCount(value);
+    public virtual int GetPrintCount(object value) => printHandler.Value?.GetPrintCount(value) ?? 1;
 
     /// <inheritdoc />
     public virtual bool CanDelete(FolderType folderType) => deleteHandler.Value?.CanDelete(new DeleteContext { Folder = folderType }) ?? true;

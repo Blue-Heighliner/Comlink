@@ -66,11 +66,14 @@ public interface IMessageHandler<TFrame, TPriority, TLevel> where TFrame : class
     /// <param name="frame">The message.</param>
     bool IsAlert(TFrame frame) => false;
 
+    /// <summary>
+    /// Gets the keys that confirm (mark read) the latest pending alert while the alarm sounds, pressed while focus is not in a text input. Repeating one confirms pending alerts one at a time, most recently received first.
+    /// A key is named as the user interface framework names it, for example <c>Space</c>, <c>Enter</c> or <c>F5</c>; a name that is not a key is ignored. Defaults to <c>Space</c> and <c>Enter</c>; return none to have no shortcut, leaving the alert box and the message itself to confirm it.
+    /// </summary>
+    IReadOnlyList<string> AlertConfirmationKeys => ["Space", "Enter"];
+
     /// <summary>Gets the priority level <paramref name="frame"/> was created with (see <see cref="MessageCreateContext{TPriority, TLevel}.Priority"/>), which also sets the send priority. A message received with a priority that is not a configured level is dropped, and an error logged.</summary>
     TPriority GetPriority(TFrame frame);
-
-    /// <summary>Gets how many copies of the received message <paramref name="frame"/> are printed while the print manager's "print received" toggle is on: <c>0</c> to not print it, <c>1</c> to print it once, and so on.</summary>
-    int GetPrintCount(TFrame frame);
 
     /// <summary>Gets the short tag identifying the type of message <paramref name="frame"/> is, or an empty string for none.</summary>
     string GetTag(TFrame frame);

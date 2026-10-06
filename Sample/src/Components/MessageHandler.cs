@@ -60,9 +60,6 @@ public sealed class MessageHandler : IMessageHandler<Frame, MessagePriority, Sec
     public MessagePriority GetPriority(Frame frame) => (MessagePriority)frame.Importance;
 
     /// <inheritdoc />
-    public int GetPrintCount(Frame frame) => IsAlert(frame) ? 2 : 1;
-
-    /// <inheritdoc />
     public string GetTag(Frame frame) => frame.Category;
 
     /// <inheritdoc />
