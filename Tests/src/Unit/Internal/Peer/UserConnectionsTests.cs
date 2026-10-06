@@ -146,20 +146,4 @@ public sealed class UserConnectionsTests
         Assert.False(nowOffline);
     }
 
-    /// <summary>GetUsers lists every distinct user with a recorded connection, and drops one once its last connection is removed.</summary>
-    [Fact]
-    public void GetUsers_ReflectsCurrentlyRecordedUsers()
-    {
-        UserConnections connections = new();
-        PeerConnection alice = Connection("Alice");
-        PeerConnection bob = Connection("Bob");
-        connections.Add(alice);
-        connections.Add(bob);
-
-        Assert.Equal(["Alice", "Bob"], connections.GetUsers().Order());
-
-        connections.Remove(alice);
-
-        Assert.Equal(["Bob"], connections.GetUsers());
-    }
 }

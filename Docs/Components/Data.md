@@ -194,7 +194,6 @@ Same interface shape as `DraftRepository`, including `GetAll()` and `GetAllInFol
 |--------|-------------|
 | `GetPage(page)` | All logs, newest first |
 | `Count()` | Total log records |
-| `GetForToday()` | Today's log record or `null` |
 | `Get(id)` | Single by ID |
 | `Insert / Update` | |
 | `AppendEvent(eventText)` | Upserts today's record and appends one `ActivityLogEntry` |

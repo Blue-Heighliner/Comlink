@@ -47,7 +47,7 @@ public sealed class RepositoryTests : IDisposable
         ActivityLogRepository repo = new(ctx);
         await repo.AppendEvent("first event");
 
-        ActivityLogEntity? today = await repo.GetForToday();
+        ActivityLogEntity? today = (await repo.GetAll()).SingleOrDefault();
         Assert.NotNull(today);
         Assert.Single(today.EventEntries);
         Assert.Equal("first event", today.EventEntries[0].Message);
@@ -61,7 +61,7 @@ public sealed class RepositoryTests : IDisposable
         await repo.AppendEvent("A");
         await repo.AppendEvent("B");
 
-        ActivityLogEntity? today = await repo.GetForToday();
+        ActivityLogEntity? today = (await repo.GetAll()).SingleOrDefault();
         Assert.Equal(2, today!.EventEntries.Count);
     }
 

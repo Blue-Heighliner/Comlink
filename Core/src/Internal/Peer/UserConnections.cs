@@ -27,9 +27,6 @@ internal interface IUserConnections
     /// <summary>Whether any connection is identified as <paramref name="userName"/>.</summary>
     bool Has(string userName);
 
-    /// <summary>Returns the names of every user with at least one connection currently recorded.</summary>
-    IReadOnlyList<string> GetUsers();
-
     /// <summary>
     /// Records <paramref name="connection"/> under the user it is identified as, the same as <see cref="Add"/>, and
     /// atomically reports whether this was their first live connection - whether they were unreachable a moment
@@ -112,12 +109,6 @@ internal sealed class UserConnections : IUserConnections
     public bool Has(string userName)
     {
         lock (gate) { return byUser.ContainsKey(userName); }
-    }
-
-    /// <inheritdoc />
-    public IReadOnlyList<string> GetUsers()
-    {
-        lock (gate) { return [.. byUser.Keys]; }
     }
 
     /// <inheritdoc />

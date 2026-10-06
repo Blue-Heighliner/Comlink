@@ -9,8 +9,6 @@ internal interface IActivityLogRepository
     Task<int> Count();
     /// <summary>Returns every activity log document in the database.</summary>
     Task<List<ActivityLogEntity>> GetAll();
-    /// <summary>Returns the activity log document for today's UTC date, or <c>null</c> if none exists.</summary>
-    Task<ActivityLogEntity?> GetForToday();
     /// <summary>Returns the activity log document with the given identifier, or <c>null</c> if not found.</summary>
     Task<ActivityLogEntity?> Get(ObjectId id);
     /// <summary>Inserts a new activity log document and returns it.</summary>
@@ -48,14 +46,6 @@ internal sealed class ActivityLogRepository : IActivityLogRepository
     /// <inheritdoc />
     public Task<List<ActivityLogEntity>> GetAll()
         => Task.Run(() => ctx.ActivityLogs.FindAll().ToList());
-
-    /// <inheritdoc />
-    public Task<ActivityLogEntity?> GetForToday()
-        => Task.Run<ActivityLogEntity?>(() =>
-        {
-            DateTime today = DateTime.UtcNow.Date;
-            return ctx.ActivityLogs.FindOne(a => a.Date == today);
-        });
 
     /// <inheritdoc />
     public Task<ActivityLogEntity?> Get(ObjectId id)
