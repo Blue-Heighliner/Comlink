@@ -308,7 +308,7 @@ public sealed class EngineBuilderTests
         Assert.Equal(root, alice.AppDataRoot);
         Assert.Equal(Path.Combine(root, "MyApp"), noUser.AppDataPath);
         Assert.Equal(Path.Combine(root, "MyApp", "ALICE"), alice.AppDataPath);
-        Assert.Equal(Path.Combine(root, "MyApp", "State.json"), alice.StatePath);
+        Assert.Equal(Path.Combine(root, "MyApp", "User.json"), alice.UserFilePath);
     }
 
     /// <summary>Alert, tag, priority and print settings a host states replace the defaults.</summary>
@@ -538,23 +538,17 @@ public sealed class EngineBuilderTests
         Assert.Empty(controller.GetUserData("ANYONE"));
     }
 
-    /// <summary>Installation codes resolve to a user name through the install handler; by default a code is the name of a user of the network, and otherwise only the code CODE is recognized.</summary>
+    /// <summary>A user name is found among the network's users, in the spelling the file uses, and nowhere else.</summary>
     [Fact]
-    public void InstallHandler_ReplacesTheDefault()
+    public void FindUserName_FindsNetworkUsersCaseInsensitively()
     {
-        (_, EngineController stated) = Build(engine => engine.Installs<TestInstallHandler>());
-        (_, EngineController fallback) = Build(engine => engine);
-
-        Assert.Equal("XUSER", stated.ResolveUserName("X"));
-        Assert.Null(stated.ResolveUserName("CODE"));
-        Assert.Equal("TEST", fallback.ResolveUserName("code"));
-        Assert.Null(fallback.ResolveUserName("X"));
-
+        (_, EngineController none) = Build(engine => engine);
         (_, EngineController networked) = Build(engine => engine, network: Network(("ALICE", new NetworkUserConfig()), ("BOB", new NetworkUserConfig())));
-        Assert.Equal("ALICE", networked.ResolveUserName("alice"));
-        Assert.Equal("BOB", networked.ResolveUserName("Bob"));
-        Assert.Equal("TEST", networked.ResolveUserName("CODE"));
-        Assert.Null(networked.ResolveUserName("NOBODY"));
+
+        Assert.Null(none.FindUserName("CODE"));
+        Assert.Equal("ALICE", networked.FindUserName("alice"));
+        Assert.Equal("BOB", networked.FindUserName("Bob"));
+        Assert.Null(networked.FindUserName("NOBODY"));
     }
 
     /// <summary>A user the network does not list is just a name; a listed user's details are what the file says.</summary>
@@ -938,7 +932,7 @@ public sealed class EngineBuilderTests
     {
         public void Configure(IEngineBuilder engine)
         {
-            new TestEngineConfiguration().Apply(engine).Installs<TestInstallHandler>();
+            new TestEngineConfiguration().Apply(engine);
             GC.KeepAlive(service);
         }
     }

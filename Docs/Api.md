@@ -32,8 +32,7 @@ await Engine.Start<MyEngineConfiguration>(args, services => services.AddSingleto
    `InvalidOperationException` if the configuration cannot be constructed, the frame type is missing, or a logical field
    is unmapped. The bootstrap container stays alive for the life of the engine, since the configuration may have handed the
    builder functions that use what was injected.
-2. `NetworkConfig.Load` reads the network configuration from `Config.json` in the working directory and the running user from
-   `User.json` there; when the configuration allowed command-line overrides (`CommandLineOverrides`, off by default), `--config`
+2. `NetworkConfig.Load` reads the network configuration from `Config.json` in the working directory; when the configuration allowed command-line overrides (`CommandLineOverrides`, off by default), `--config`
    and `--user` take precedence, and otherwise they are ignored.
 3. If the `--user` user's entry sets `Headless`, `Engine` builds and runs an `IHost` with no UI. Otherwise
    it builds and shows the Avalonia desktop application.

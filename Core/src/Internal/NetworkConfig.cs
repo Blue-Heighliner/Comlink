@@ -5,8 +5,8 @@ namespace BlueHeighliner.Comlink;
 /// place shared by every node, instead of per-node files or code. It is read from <c>Config.json</c> in the current working directory,
 /// or, when the host allows command-line overrides (see <see cref="IEngineBuilder{TFrame, TPacket, TPriority, TLevel}.CommandLineOverrides"/>), from the path given by the
 /// <c>--config</c> argument; its absence is not an error unless <c>--config</c> names a file that does not exist.
-/// The user this process runs as, for a node that should not ask for an install code, is named by the <c>--user</c> argument (again only when
-/// overrides are allowed) or else a <c>User.json</c> in the current working directory does, holding <c>{ "User": "NAME" }</c> (or just the name as a JSON string).
+/// The user this process runs as, for a node that should not show the install screen, is named by the <c>--user</c> argument (again only when
+/// overrides are allowed); that user is checked like an installed one.
 /// </summary>
 internal sealed class NetworkConfig
 {
@@ -35,7 +35,7 @@ internal sealed class NetworkConfig
     /// <summary>Every user of the network, keyed by user name; names are matched case-insensitively.</summary>
     public Dictionary<string, NetworkUserConfig> Users { get; set; } = [];
 
-    /// <summary>The user the process runs as, from the <c>--user</c> argument or else <c>User.json</c>; <see langword="null"/> when neither names one.</summary>
+    /// <summary>The user the process runs as, from the <c>--user</c> argument; <see langword="null"/> when it is not given.</summary>
     public string? User { get; set; }
 
     /// <summary>Absolute directory containing the loaded file, used to resolve relative certificate paths. <see langword="null"/> when no file was loaded.</summary>
@@ -44,7 +44,7 @@ internal sealed class NetworkConfig
     /// <summary>The arguments this configuration was loaded with, kept so it can be read again.</summary>
     private string[] arguments = [];
 
-    /// <summary>The directory <c>Config.json</c> and <c>User.json</c> were looked for in, or <see langword="null"/> for the current working directory.</summary>
+    /// <summary>The directory <c>Config.json</c> was looked for in, or <see langword="null"/> for the current working directory.</summary>
     private string? workingDirectory;
 
     /// <summary>
@@ -71,7 +71,7 @@ internal sealed class NetworkConfig
         int userIndex = Array.IndexOf(args, "--user");
         config.arguments = args;
         config.workingDirectory = workingDirectory;
-        config.User = userIndex >= 0 && userIndex + 1 < args.Length ? args[userIndex + 1] : ReadUserFile(Path.Combine(workingDirectory ?? Directory.GetCurrentDirectory(), "User.json"));
+        config.User = userIndex >= 0 && userIndex + 1 < args.Length ? args[userIndex + 1] : null;
         return config;
     }
 
@@ -101,19 +101,6 @@ internal sealed class NetworkConfig
         UserGroups = fresh.UserGroups;
         Users = fresh.Users;
         ConfigDirectory = fresh.ConfigDirectory;
-    }
-
-    private static string? ReadUserFile(string path)
-    {
-        if (!File.Exists(path)) { return null; }
-
-        using JsonDocument document = JsonDocument.Parse(File.ReadAllText(path));
-        return document.RootElement switch
-        {
-            { ValueKind: JsonValueKind.String } name => name.GetString(),
-            { ValueKind: JsonValueKind.Object } root when root.EnumerateObject().FirstOrDefault(property => property.NameEquals("User") || string.Equals(property.Name, "User", StringComparison.OrdinalIgnoreCase)) is { Value.ValueKind: JsonValueKind.String } property => property.Value.GetString(),
-            _ => null
-        };
     }
 
     /// <summary>Returns the entry for <paramref name="userName"/>, or <see langword="null"/> when the network does not list that user.</summary>

@@ -219,7 +219,7 @@ Read-only daily activity log. Constructed with `new ActivityLogViewModel(entity)
 
 One-time setup screen. Registered as `IInstallViewModel → InstallViewModel` singleton.
 
-**Properties**: `UserCode` (auto-uppercased), `ErrorMessage`, `IsLoading`.
+**Properties**: `UserName` (auto-uppercased), `ErrorMessage` (an unknown name, or the reason the user's certificate is not in order), `IsLoading`.
 
 **Events**: `InstallSucceeded (Func<UserInfo, Task>)` — raised on success; consumed by `MainViewModel`.
 

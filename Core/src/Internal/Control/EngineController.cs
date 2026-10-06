@@ -74,10 +74,10 @@ internal interface IEngineController
     /// </summary>
     string AppDataPath { get; }
     /// <summary>
-    /// Absolute path to the file remembering which user is installed, <c>{AppDataRoot}/{AppName}/State.json</c>. It lives beside the user
-    /// folders rather than in one, since it is what says whose folder to use.
+    /// Absolute path to the file remembering which user is installed, <c>{AppDataRoot}/{AppName}/User.json</c>. It lives beside the user
+    /// folders rather than in one, since it is what says whose folder to use, and holds nothing else, so deleting it only uninstalls the user.
     /// </summary>
-    string StatePath { get; }
+    string UserFilePath { get; }
     /// <summary><see langword="true"/> to enable kiosk mode, which hides the minimize and maximize buttons and has the close button restart rather than exit.</summary>
     bool IsKioskMode { get; }
     /// <summary>Whether alert messages are kept in their own alert inbox and alert outbox, apart from the normal inbox and outbox, from the display handler.</summary>
@@ -414,15 +414,20 @@ internal interface IEngineController
     /// <summary>Gets the slice of the payload <paramref name="packet"/> carries.</summary>
     ReadOnlyMemory<byte> GetPacketData(object packet);
 
-    /// <summary>Resolves <paramref name="userCode"/> to the name of the user it installs, or <see langword="null"/> if the code is unrecognized. Unless the host states an install handler (<see cref="IInstallHandler"/>), a code is the name of a user of the network.</summary>
-    /// <param name="userCode">The user installation code to resolve.</param>
-    string? ResolveUserName(string userCode);
+    /// <summary>Returns the name, as the network configuration file spells it, of the user <paramref name="name"/> names (compared case-insensitively), or <see langword="null"/> when the network has no such user.</summary>
+    /// <param name="name">The user name to look for.</param>
+    string? FindUserName(string name);
     /// <summary>
-    /// Returns what is known about <paramref name="userName"/>: what the network configuration file states (see <see cref="IEngineBuilder{TFrame, TPacket, TPriority, TLevel}.CommandLineOverrides"/>), or a user with just
-    /// that name when it states none. For the current user this is where <see cref="Role"/>, <see cref="PeerPort"/>, <see cref="InterfacePort"/>,
-    /// <see cref="OutgoingPoints"/> and <see cref="Servers"/> come from.
+    /// Returns why <paramref name="userName"/> cannot run on this node as that user, or <see langword="null"/> when it can: the network's <c>CertificateStore</c> and <c>AuthorityCertificate</c> are set, the store holds the file <c>{userName}.pfx</c>,
+    /// the certificate in it has the user name as its subject common name, and it is signed by the authority certificate, which is the only authority trusted.
     /// </summary>
-    /// <param name="userName">The user to describe.</param>
+    /// <param name="userName">The user name to check.</param>
+    string? GetCertificateProblem(string userName);    /// <summary>
+                                                       /// Returns what is known about <paramref name="userName"/>: what the network configuration file states (see <see cref="IEngineBuilder{TFrame, TPacket, TPriority, TLevel}.CommandLineOverrides"/>), or a user with just
+                                                       /// that name when it states none. For the current user this is where <see cref="Role"/>, <see cref="PeerPort"/>, <see cref="InterfacePort"/>,
+                                                       /// <see cref="OutgoingPoints"/> and <see cref="Servers"/> come from.
+                                                       /// </summary>
+                                                       /// <param name="userName">The user to describe.</param>
     UserInfo GetUserInfo(string userName);
     /// <summary>
     /// Returns the app-specific information attached to <paramref name="userName"/>, an empty map when there is none. The
@@ -507,7 +512,6 @@ internal class EngineController(EngineBuilder builder, ICurrentUserProvider curr
     private readonly Lazy<IInitialProcessor?> initialMessageProcessor = new(() => builder.InitialFrameProcessor?.Create(services));
     private readonly Lazy<IDraftFrameHandler?> draftHandler = new(() => builder.DraftHandler?.Create(services));
     private readonly List<object> alertHistory = [];
-    private readonly Lazy<IInstallHandler?> installHandler = new(() => builder.InstallHandler?.Create(services));
     private readonly Lazy<IAlarmHandler?> alarmHandler = new(() => builder.AlarmHandler?.Create(services));
     private readonly Lazy<IPrintFrameHandler?> printHandler = new(() => builder.PrintHandler?.Create(services));
     private readonly Lazy<IDeleteHandler?> deleteHandler = new(() => builder.DeleteHandler?.Create(services));
@@ -540,7 +544,7 @@ internal class EngineController(EngineBuilder builder, ICurrentUserProvider curr
     /// <inheritdoc />
     public virtual string AppDataPath => currentUserProvider.UserName is { Length: > 0 } user ? Path.Combine(AppDataRoot, DataFolderName, user) : Path.Combine(AppDataRoot, DataFolderName);
     /// <inheritdoc />
-    public virtual string StatePath => Path.Combine(AppDataRoot, DataFolderName, "State.json");
+    public virtual string UserFilePath => Path.Combine(AppDataRoot, DataFolderName, "User.json");
     /// <inheritdoc />
     public virtual bool IsKioskMode => builder.DisplayHandlerInstance?.IsKiosk ?? false;
     /// <inheritdoc />
@@ -1021,14 +1025,11 @@ internal class EngineController(EngineBuilder builder, ICurrentUserProvider curr
     public virtual ReadOnlyMemory<byte> GetPacketData(object value) => framePacketHandler.Value.GetData(value);
 
     /// <inheritdoc />
-    public virtual string? ResolveUserName(string userCode)
-    {
-        if (installHandler.Value is { } handler) { return handler.Install(userCode); }
+    public virtual string? FindUserName(string name) => network.Users.Keys.FirstOrDefault(user => string.Equals(user, name, StringComparison.OrdinalIgnoreCase));
 
-        string? user = network.Users.Keys.FirstOrDefault(name => string.Equals(name, userCode, StringComparison.OrdinalIgnoreCase));
-        return user ?? (userCode.Equals("CODE", StringComparison.OrdinalIgnoreCase) ? "TEST" : null);
-    }
-
+    /// <inheritdoc />
+    public virtual string? GetCertificateProblem(string userName)
+        => MsmtCertificateLookup.GetProblem(network.GetCertificatePath(userName), network.GetAuthorityCertificatePath(), userName);
     /// <inheritdoc />
     public virtual UserInfo GetUserInfo(string userName)
     {

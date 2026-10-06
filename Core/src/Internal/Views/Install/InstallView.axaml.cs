@@ -4,7 +4,7 @@ namespace BlueHeighliner.Comlink;
 [ExcludeFromCodeCoverage]
 internal partial class InstallView : UserControl
 {
-    private static void OnUserCodeTextInput(object? sender, TextInputEventArgs e)
+    private static void OnUserNameTextInput(object? sender, TextInputEventArgs e)
     {
         if (e.Text is not null)
         {
@@ -12,13 +12,13 @@ internal partial class InstallView : UserControl
         }
     }
 
-    /// <summary>Initializes the control, loads the AXAML layout, and registers the user code text input handler.</summary>
+    /// <summary>Initializes the control, loads the AXAML layout, and registers the user name text input handler.</summary>
     public InstallView()
     {
         InitializeComponent();
-        UserCodeInput.AddHandler(
+        UserNameInput.AddHandler(
             InputElement.TextInputEvent,
-            OnUserCodeTextInput,
+            OnUserNameTextInput,
             RoutingStrategies.Tunnel);
     }
 }

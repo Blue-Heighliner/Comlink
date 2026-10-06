@@ -68,9 +68,9 @@ public void Configure(IEngineBuilder engine) => engine.Types<MyFrame, MyPriority
 
 A host describes its whole network in one JSON file (see [Config.md](Components/Config.md) for the schema): every user
 with their role, listen ports, outgoing connections, security level and node settings, plus groups and the trusted
-certificate authority. The engine always reads `Config.json` from the working directory, and the user the process runs
-as from `User.json` there; nothing about a user is stated in code. Stating `CommandLineOverrides(true)` additionally
-lets `--config` name another file and `--user` name the user.
+certificate authority. The engine always reads `Config.json` from the working directory; nothing about a user is stated in
+code, and the user installs by name on the install screen. Stating `CommandLineOverrides(true)` additionally
+lets `--config` name another file and `--user` name the user, who is checked like an installed one.
 
 ```csharp
 public void Configure(IEngineBuilder engine) => engine.Types<MyFrame, MyPriority, MySecurityLevel>()
@@ -81,5 +81,5 @@ public void Configure(IEngineBuilder engine) => engine.Types<MyFrame, MyPriority
 ## Running headless
 
 Set `Headless` on a user's entry in the network configuration file and run as that
-user (`User.json`, or `--user` when overrides are allowed), to run with no UI. `Engine.Start` is called exactly the same
+user (installed, or `--user` when overrides are allowed), to run with no UI. `Engine.Start` is called exactly the same
 way: the same configuration drives both modes.

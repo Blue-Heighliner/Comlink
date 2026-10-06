@@ -27,11 +27,11 @@ await Engine.Start<MyEngineConfiguration>(args);
 
 ## Network Configuration File
 
-The engine defines the schema of one network configuration file, shared by every node of a network (see [Config.md](Config.md) for every field). It holds the info for all users of the network, who is in which group, and the trusted certificate authority, so no user, port or connection is stated in code. It is read from the path given by the `--config` command-line argument, otherwise from `Config.json` in the current working directory; a missing default file is an empty network, while a `--config` path that does not exist is an error. The file can be read again while the application runs (right-click the user name in the title bar and choose "Refresh"): connections no longer defined are brought down and newly defined ones opened while unchanged connections are left alone, and the rest is applied as it is next read. The `--user` argument, or else a `User.json` in the working directory, names the user the process runs as, which lets a node skip the install screen.
+The engine defines the schema of one network configuration file, shared by every node of a network (see [Config.md](Config.md) for every field). It holds the info for all users of the network, who is in which group, and the trusted certificate authority, so no user, port or connection is stated in code. It is read from the path given by the `--config` command-line argument, otherwise from `Config.json` in the current working directory; a missing default file is an empty network, while a `--config` path that does not exist is an error. The file can be read again while the application runs (right-click the user name in the title bar and choose "Refresh"): connections no longer defined are brought down and newly defined ones opened while unchanged connections are left alone, and the rest is applied as it is next read. The `--user` argument names the user the process runs as, which lets a node skip the install screen.
 
-`EngineController` reads the file for everything about users (`GetUserInfo`, `Users`, `UserGroups`, the trusted authority name, and so on, see [User Info](#user-info)). `EngineExtensions.UseEngine` registers `IEngineController` as a `ConfiguredEngineController` wrapping it, which takes the loaded `NetworkConfig` and `ICurrentUserProvider` and applies the node settings of the current user's entry: member by member, the entry's value when it is set and the wrapped controller's value otherwise; every other member delegates straight to the wrapped controller. It is registered explicitly, never by convention scanning. The current user is the one named by `--user`, or else the installed user, except for the headless choice, which only the `--user` user decides since an installed user is not known until networking starts. The user also decides the data folder (`%APPDATA%/{AppName}/{USERNAME}`), which the decorator points at the `--user` user even before the install state has been read.
+`EngineController` reads the file for everything about users (`GetUserInfo`, `Users`, `UserGroups`, and so on, see [User Info](#user-info)). `EngineExtensions.UseEngine` registers `IEngineController` as a `ConfiguredEngineController` wrapping it, which takes the loaded `NetworkConfig` and `ICurrentUserProvider` and applies the node settings of the current user's entry: member by member, the entry's value when it is set and the wrapped controller's value otherwise; every other member delegates straight to the wrapped controller. It is registered explicitly, never by convention scanning. The current user is the one named by `--user`, or else the installed user, except for the headless choice, which only the `--user` user decides since an installed user is not known until networking starts. The user also decides the data folder (`%APPDATA%/{AppName}/{USERNAME}`), which the decorator points at the `--user` user even before the install state has been read.
 
-**Bootstrap ordering:** whether the command-line arguments may override the file and the user is itself a setting (`CommandLineOverrides`), so `Engine.Start` constructs the configuration and builds the `EngineBuilder` first, reads its `AreCommandLineOverridesAllowed`, and only then loads `NetworkConfig`, passing the arguments only if allowed. There is no field in the file for it (that would be circular), and a configuration cannot depend on the file for the same reason. When overrides are not allowed, `--config` and `--user` are ignored entirely, as if the arguments had never been passed, and only `Config.json` and `User.json` in the working directory are read.
+**Bootstrap ordering:** whether the command-line arguments may override the file and the user is itself a setting (`CommandLineOverrides`), so `Engine.Start` constructs the configuration and builds the `EngineBuilder` first, reads its `AreCommandLineOverridesAllowed`, and only then loads `NetworkConfig`, passing the arguments only if allowed. There is no field in the file for it (that would be circular), and a configuration cannot depend on the file for the same reason. When overrides are not allowed, `--config` and `--user` are ignored entirely, as if the arguments had never been passed, and only `Config.json` in the working directory is read.
 
 ## Settings
 
@@ -74,7 +74,7 @@ This app's own identity and top-level presentation are the display handler's `Ap
 
 **Default:** the name comes from the entry assembly name; the version is the entry assembly's `major.minor.build` version (`1.0.0` if it has none); kiosk mode is off; the icon is the operating system's.
 
-The data folder is not configurable: a user's persistent state (LiteDB database, logs) is always written to `%APPDATA%\{AppName}\{USERNAME}` (`IEngineController.AppDataPath`), so users sharing a machine never share data. The one thing outside it is the file remembering which user is installed, `%APPDATA%\{AppName}\State.json` (`IEngineController.StatePath`), which sits beside the user folders since it is what says whose folder to use; logged lines from before a user is installed or named go to `%APPDATA%\{AppName}\Logs`.
+The data folder is not configurable: a user's persistent state (LiteDB database, logs) is always written to `%APPDATA%\{AppName}\{USERNAME}` (`IEngineController.AppDataPath`), so users sharing a machine never share data. The one thing outside it is the file remembering which user is installed, `%APPDATA%\{AppName}\User.json` (`IEngineController.UserFilePath`), which sits beside the user folders since it is what says whose folder to use; logged lines from before a user is installed or named go to `%APPDATA%\{AppName}\Logs`.
 
 **Network file:** none; the file has no field for any of these, and none for the data folder.
 
@@ -84,17 +84,9 @@ The data folder is not configurable: a user's persistent state (LiteDB database,
 
 ### User Identity
 
-```csharp
-engine.Installs<MyInstallHandler>();
-```
+Nothing about this instance's own identity is stated in code. The user installs by name on the install screen (`UserService.Install`): the name must be a user of the network file (case-insensitive), and the user's certificate must be in order, that is the file `{USERNAME}.pfx` in the network's `CertificateStore` exists, its certificate has the user name as its common name, and it is signed by the `AuthorityCertificate`, the only authority trusted. A name that is not a user installs nothing, and a certificate that is not in order fails the install with the reason; either way nothing is persisted. The installed user is remembered in `User.json` in the app data folder, which holds nothing else, so deleting it only uninstalls the user. On every startup `UserService.Load` makes the same checks for the remembered user, and when they fail it logs why, deletes `User.json` and installs nobody, so the install screen is shown. Everything else about the user comes from [User Info](#user-info).
 
-How this instance's own local user identity is established: the install handler (`IInstallHandler.Install`) maps a user activation code (entered during installation) to the name of the user it installs, or `null` for an unrecognized code, nothing more: everything else about that user comes from [User Info](#user-info). See `UserService`.
-
-**Default:** the code `"CODE"` resolves to the user `"TEST"`.
-
-**Network file:** the `--user` argument, when the host allows command-line overrides, bypasses the normal `State.json` lookup and runs as that user. See [Config.md](Config.md). Unless the host states an install handler, an install code is simply the name of a user of the network (case-insensitive), so `--user` and the install screen agree.
-
-**Sample:** `EngineConfiguration` states no install handler: an install code is the name of a user in the network file its scenario passes, and each scenario script names its user with `--user`.
+**Network file:** the `--user` argument, when the host allows command-line overrides, bypasses the install screen and `User.json` and runs as that user, after the same checks as an install (the name is a user of the network and the certificate is in order); when they fail nobody is installed and the install screen is shown, and `User.json` is left alone. See [Config.md](Config.md).
 
 ---
 
@@ -572,7 +564,7 @@ engine.CommandLineOverrides(true);  // honor --config and --user
 engine.CommandLineOverrides(false); // ignore them (the default)
 ```
 
-Determines whether command-line arguments may override where the [network configuration file](#network-configuration-file) and the running user come from: `--config <path>` names the file instead of `Config.json` in the working directory, and `--user <name>` names the user instead of `User.json` in the working directory. The files in the working directory are always read; only the arguments are affected. Resolved once, before anything else, from the recorded configuration (see [Bootstrap ordering](#network-configuration-file) above). Because of this ordering, a configuration must never depend on `NetworkConfig`.
+Determines whether command-line arguments may override where the [network configuration file](#network-configuration-file) and the running user come from: `--config <path>` names the file instead of `Config.json` in the working directory, and `--user <name>` names the user the process runs as, checked like an installed user. `Config.json` in the working directory is always read; only the arguments are affected. Resolved once, before anything else, from the recorded configuration (see [Bootstrap ordering](#network-configuration-file) above). Because of this ordering, a configuration must never depend on `NetworkConfig`.
 
 **Default:** disallowed.
 
@@ -691,7 +683,7 @@ Task Connect(CancellationToken cancellation = default);
 Task<UserInfo?> GetUserInfo(CancellationToken cancellation = default);
 Task<List<string>> GetUserNames(CancellationToken cancellation = default);
 Task<List<string>> GetConnectedUsers(CancellationToken cancellation = default);
-Task<UserInfo?> InstallUser(string userCode, CancellationToken cancellation = default);
+Task<UserInfo?> InstallUser(string userName, CancellationToken cancellation = default);
 Task<SendMessageResult?> SendMessage(string body, List<AddressRequest> addresses, Enum? priority = null, string tag = "", Enum? securityLevel = null, CancellationToken cancellation = default);
 Task<bool> MarkMessageRead(string messageId, CancellationToken cancellation = default);
 ```

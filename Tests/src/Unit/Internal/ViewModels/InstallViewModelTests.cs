@@ -8,13 +8,13 @@ public sealed class InstallViewModelTests
         Name = name
     };
 
-    /// <summary>Empty UserCode sets ErrorMessage without calling the service.</summary>
+    /// <summary>Empty UserName sets ErrorMessage without calling the service.</summary>
     [Fact]
-    public async Task Install_EmptyUserCode_SetsErrorMessage()
+    public async Task Install_EmptyUserName_SetsErrorMessage()
     {
         Mock<IServiceConnection> connMock = new();
         InstallViewModel vm = new(connMock.Object);
-        vm.UserCode = "";
+        vm.UserName = "";
 
         await vm.InstallCommand.ExecuteAsync(null);
 
@@ -22,15 +22,15 @@ public sealed class InstallViewModelTests
         connMock.Verify(c => c.InstallUser(It.IsAny<string>(), It.IsAny<CancellationToken>()), Times.Never);
     }
 
-    /// <summary>Valid code fires InstallSucceeded with the returned UserInfo.</summary>
+    /// <summary>Valid name fires InstallSucceeded with the returned UserInfo.</summary>
     [Fact]
-    public async Task Install_ValidCode_FiresInstallSucceededWithUserInfo()
+    public async Task Install_ValidName_FiresInstallSucceededWithUserInfo()
     {
         UserInfo expectedInfo = MakeUserInfo("ALPHA");
         Mock<IServiceConnection> connMock = new();
-        connMock.Setup(c => c.InstallUser("CODE1", It.IsAny<CancellationToken>())).ReturnsAsync(expectedInfo);
+        connMock.Setup(c => c.InstallUser("USER1", It.IsAny<CancellationToken>())).ReturnsAsync(expectedInfo);
         InstallViewModel vm = new(connMock.Object);
-        vm.UserCode = "CODE1";
+        vm.UserName = "USER1";
 
         UserInfo? received = null;
         vm.InstallSucceeded += info => { received = info; return Task.CompletedTask; };
@@ -41,14 +41,14 @@ public sealed class InstallViewModelTests
         Assert.Null(vm.ErrorMessage);
     }
 
-    /// <summary>Unrecognised code (null result) sets ErrorMessage and does not fire event.</summary>
+    /// <summary>Unknown name (null result) sets ErrorMessage and does not fire event.</summary>
     [Fact]
-    public async Task Install_InvalidCode_SetsErrorMessage()
+    public async Task Install_UnknownName_SetsErrorMessage()
     {
         Mock<IServiceConnection> connMock = new();
         connMock.Setup(c => c.InstallUser(It.IsAny<string>(), It.IsAny<CancellationToken>())).ReturnsAsync((UserInfo?)null);
         InstallViewModel vm = new(connMock.Object);
-        vm.UserCode = "BADCODE";
+        vm.UserName = "NOBODY";
 
         bool eventFired = false;
         vm.InstallSucceeded += _ => { eventFired = true; return Task.CompletedTask; };
@@ -67,7 +67,7 @@ public sealed class InstallViewModelTests
         Mock<IServiceConnection> connMock = new();
         connMock.Setup(c => c.InstallUser(It.IsAny<string>(), It.IsAny<CancellationToken>())).Returns(gate.Task);
         InstallViewModel vm = new(connMock.Object);
-        vm.UserCode = "CODE1";
+        vm.UserName = "USER1";
 
         Task installTask = vm.InstallCommand.ExecuteAsync(null);
         Assert.True(vm.IsLoading);
@@ -77,15 +77,15 @@ public sealed class InstallViewModelTests
         Assert.False(vm.IsLoading);
     }
 
-    /// <summary>UserCode is automatically uppercased when set.</summary>
+    /// <summary>UserName is automatically uppercased when set.</summary>
     [Fact]
-    public void UserCode_AutoUppercased()
+    public void UserName_AutoUppercased()
     {
         Mock<IServiceConnection> connMock = new();
         InstallViewModel vm = new(connMock.Object);
 
-        vm.UserCode = "code1";
+        vm.UserName = "user1";
 
-        Assert.Equal("CODE1", vm.UserCode);
+        Assert.Equal("USER1", vm.UserName);
     }
 }

@@ -135,7 +135,7 @@ sequenceDiagram
 
 ## Startup Sequence
 
-`Engine.Start<T>(args, configureServices)` first constructs the host's `IEngineConfiguration` through dependency injection, from a bootstrap container holding logging plus the host's `configureServices` registrations, and runs it against an `EngineBuilder`, validating the result. The result says whether `--config` and `--user` may be honored at all, which is why it must exist before `NetworkConfig` does: a configuration must never depend on `NetworkConfig`, since that is exactly what it decides whether to load. `NetworkConfig.Load` reads the network configuration file (`Config.json` in the working directory) and the running user (`User.json`); if the configuration allowed command-line overrides (`CommandLineOverrides`, off by default), `--config` and `--user` take precedence, and otherwise they are ignored.
+`Engine.Start<T>(args, configureServices)` first constructs the host's `IEngineConfiguration` through dependency injection, from a bootstrap container holding logging plus the host's `configureServices` registrations, and runs it against an `EngineBuilder`, validating the result. The result says whether `--config` and `--user` may be honored at all, which is why it must exist before `NetworkConfig` does: a configuration must never depend on `NetworkConfig`, since that is exactly what it decides whether to load. `NetworkConfig.Load` reads the network configuration file (`Config.json` in the working directory); if the configuration allowed command-line overrides (`CommandLineOverrides`, off by default), `--config` and `--user` take precedence, and otherwise they are ignored.
 
 `EngineExtensions.UseEngine()` registers the core services, including the `IEngineController` built from the builder and wrapped by `ConfiguredEngineController` (which layers the current user's node settings from the network file on top of the settings that have a corresponding field, see [Configuration.md](Components/Configuration.md#network-configuration-file); the wrapped controller itself reads every user's info from the same file). For Client mode, `EngineUiExtensions.UseEngineUi()` additionally registers `MainWindow` and overrides `IBodyDocumentFactory`. The host's `configureServices` registrations run last, against the running engine's own container. `EngineHost` (an `IHostedService`) runs at startup:
 
@@ -156,7 +156,7 @@ sequenceDiagram
     EH->>IS: Start()
 ```
 
-1. `UserService.Load` - restores installed user from `State.json` (or applies the configured debug user)
+1. `UserService.Load` - restores the installed user from `User.json` (or the `--user` user), checking their certificate
 2. `PeerService.Start` — begins accepting peer connections
 3. `InterfaceService.Start` — begins accepting interface connections (always, regardless of mode)
 4. `EngineHooksService.Start` - subscribes to `IPeerService`'s connection and message events on behalf of the host's configured network processor (`IFrameBuilder<TFrame>.Processor`, see [Configuration.md](Components/Configuration.md#network-processor)); a no-op if none is configured
@@ -169,7 +169,7 @@ All persistent data lives under `%APPDATA%/{AppName}`, in a folder per user (`IE
 
 ```
 %APPDATA%/{AppName}/
-├── State.json       Installed user state (name, code): says whose folder to use
+├── User.json        Installed user (name): says whose folder to use
 └── {USERNAME}/      IEngineController.AppDataPath
     ├── Data.db      LiteDB file (messages, drafts, notes, folders, activity)
     └── Logs/

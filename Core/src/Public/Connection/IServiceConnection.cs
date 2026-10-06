@@ -15,8 +15,12 @@ public interface IServiceConnection
     Task<List<string>> GetUserNames(CancellationToken cancellation = default);
     /// <summary>Returns the names of every user currently reachable over at least one live peer connection, unlike <see cref="GetUserNames"/>'s fixed configured directory.</summary>
     Task<List<string>> GetConnectedUsers(CancellationToken cancellation = default);
-    /// <summary>Registers this instance as a user using <paramref name="userCode"/> and returns the resulting <see cref="UserInfo"/>.</summary>
-    Task<UserInfo?> InstallUser(string userCode, CancellationToken cancellation = default);
+    /// <summary>
+    /// Registers this instance as the user named <paramref name="userName"/> and returns the resulting <see cref="UserInfo"/>, or <see langword="null"/> when the network has no user of that name.
+    /// The user's certificate must be in place: the file <c>{userName}.pfx</c> in the network's certificate store, issued to that user and signed by the authority certificate.
+    /// </summary>
+    /// <exception cref="InvalidOperationException">The certificate is missing, not issued to the user or not signed by the authority certificate; nothing is installed.</exception>
+    Task<UserInfo?> InstallUser(string userName, CancellationToken cancellation = default);
     /// <summary>
     /// Sends a message with the given <paramref name="body"/> to the specified
     /// <paramref name="addresses"/>. Whether the message is an alert, which alarms recipients' Client-mode UI until it is read (see <c>Docs/Components/ViewModels.md</c>), is not

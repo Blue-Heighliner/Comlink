@@ -93,8 +93,8 @@ internal sealed class DirectServiceConnection : IServiceConnection
         => Task.FromResult<List<string>>([.. peerService.GetConnectedUsers()]);
 
     /// <inheritdoc />
-    public Task<UserInfo?> InstallUser(string userCode, CancellationToken cancellation = default)
-        => userService.Install(userCode, cancellation);
+    public Task<UserInfo?> InstallUser(string userName, CancellationToken cancellation = default)
+        => userService.Install(userName, cancellation);
 
     /// <inheritdoc />
     public async Task<SendMessageResult?> SendMessage(string body, List<AddressRequest> addresses, Enum? priority = null, string tag = "", Enum? securityLevel = null, CancellationToken cancellation = default)

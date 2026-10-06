@@ -141,7 +141,7 @@ public sealed class ControlProviderTests
         public override string AppName => "CustomApp";
     }
 
-    /// <summary>Without a user the wrapped provider's own path is used; with a user named on the command line before anyone is installed, their folder under the data root is; an installed user's folder is the wrapped provider's.</summary>
+    /// <summary>Without a user the wrapped provider's own path is used; with a network user named on the command line before anyone is installed, their folder under the data root is (a name that is not a user of the network gets none); an installed user's folder is the wrapped provider's.</summary>
     [Fact]
     public void ConfiguredEngineController_AppDataPath_FollowsTheLaunchedUser()
     {
@@ -149,9 +149,11 @@ public sealed class ControlProviderTests
         fallback.Setup(f => f.AppDataPath).Returns("/base/path");
         fallback.Setup(f => f.AppDataRoot).Returns("/base");
         fallback.Setup(f => f.AppName).Returns("App");
+        fallback.Setup(f => f.FindUserName("alice")).Returns("ALICE");
 
         Assert.Equal("/base/path", new ConfiguredEngineController(fallback.Object, new NetworkConfig(), NoCurrentUser).AppDataPath);
         Assert.Equal(Path.Combine("/base", "App", "ALICE"), new ConfiguredEngineController(fallback.Object, new NetworkConfig { User = "alice" }, NoCurrentUser).AppDataPath);
+        Assert.Equal("/base/path", new ConfiguredEngineController(fallback.Object, new NetworkConfig { User = "nobody" }, NoCurrentUser).AppDataPath);
         Assert.Equal("/base/path", new ConfiguredEngineController(fallback.Object, new NetworkConfig { User = "alice" }, Me).AppDataPath);
     }
 
@@ -172,15 +174,15 @@ public sealed class ControlProviderTests
         Assert.Equal("FALLBACK-HOME", controller.HomeText);
     }
 
-    /// <summary>The default implementation has no debug override and only resolves the hard-coded "CODE" code.</summary>
+    /// <summary>The default implementation has no debug override, and a user name is found only among the network's users.</summary>
     [Fact]
-    public void EngineController_NoDebugOverride_ResolvesOnlyCode()
+    public void EngineController_NoDebugOverride_FindsOnlyNetworkUsers()
     {
         TestEngineController controller = new();
         Assert.Null(controller.DebugUserName);
 
-        Assert.Equal("TEST", controller.ResolveUserName("CODE"));
-        Assert.Null(controller.ResolveUserName("UNKNOWN"));
+        Assert.Null(controller.FindUserName("CODE"));
+        Assert.Null(controller.FindUserName("UNKNOWN"));
     }
 
     /// <summary>DebugUserName returns the value from config.</summary>
@@ -202,17 +204,17 @@ public sealed class ControlProviderTests
         Assert.Equal("FALLBACK", controller.DebugUserName);
     }
 
-    /// <summary>Code and user info resolution are left entirely to the wrapped provider, since there is no corresponding network file field.</summary>
+    /// <summary>User lookup, the certificate check and user info are left entirely to the wrapped provider, since there is no corresponding network file field.</summary>
     [Fact]
     public void ConfiguredEngineController_UserResolution_AlwaysDelegatesToFallback()
     {
         UserInfo fallbackInfo = new() { Name = "X" };
         Mock<IEngineController> fallback = new();
-        fallback.Setup(f => f.ResolveUserName("ANY")).Returns("X");
+        fallback.Setup(f => f.FindUserName("ANY")).Returns("X");
         fallback.Setup(f => f.GetUserInfo("X")).Returns(fallbackInfo);
         ConfiguredEngineController controller = new(fallback.Object, new NetworkConfig(), NoCurrentUser);
 
-        Assert.Equal("X", controller.ResolveUserName("ANY"));
+        Assert.Equal("X", controller.FindUserName("ANY"));
         Assert.Same(fallbackInfo, controller.GetUserInfo("X"));
     }
 
@@ -682,5 +684,88 @@ public sealed class ControlProviderTests
         Assert.True(controller.AcceptAlert(Alert("B")));
 
         Assert.True(controller.AcceptAlert(Alert("DUPLICATE")));
+    }
+
+    private sealed class CertificateFiles : IDisposable
+    {
+        public CertificateFiles() => Directory.CreateDirectory(StoreDirectory);
+
+        public string StoreDirectory { get; } = Path.Combine(Path.GetTempPath(), $"comlink-cert-problem-{Guid.NewGuid():N}");
+        public string Authority => Path.Combine(StoreDirectory, "authority.cer");
+        public string Identity(string user) => Path.Combine(StoreDirectory, $"{user}.pfx");
+
+        public void WriteAuthority(X509Certificate2Collection authorities) => File.WriteAllBytes(Authority, authorities[0].Export(X509ContentType.Cert));
+        public void WriteIdentity(string user, X509Certificate2 certificate) => File.WriteAllBytes(Identity(user), certificate.Export(X509ContentType.Pfx));
+
+        public void Dispose() => Directory.Delete(StoreDirectory, recursive: true);
+    }
+
+    /// <summary>A certificate file named for the user, issued to them and signed by the authority certificate, has no problem.</summary>
+    [Fact]
+    public void CertificateProblem_GoodCertificate_IsNull()
+    {
+        using CertificateFiles files = new();
+        (Dictionary<string, X509Certificate2> identities, X509Certificate2Collection authorities) = TestMsmtCertificates.CreateNamed("ALICE");
+        files.WriteAuthority(authorities);
+        files.WriteIdentity("ALICE", identities["ALICE"]);
+
+        Assert.Null(MsmtCertificateLookup.GetProblem(files.Identity("ALICE"), files.Authority, "ALICE"));
+    }
+
+    /// <summary>Without the store or the authority, or without the user's file, there is a problem.</summary>
+    [Fact]
+    public void CertificateProblem_MissingPieces_AreReported()
+    {
+        using CertificateFiles files = new();
+        (Dictionary<string, X509Certificate2> identities, X509Certificate2Collection authorities) = TestMsmtCertificates.CreateNamed("ALICE");
+        files.WriteAuthority(authorities);
+
+        Assert.NotNull(MsmtCertificateLookup.GetProblem(null, files.Authority, "ALICE"));
+        Assert.NotNull(MsmtCertificateLookup.GetProblem(files.Identity("ALICE"), null, "ALICE"));
+        Assert.NotNull(MsmtCertificateLookup.GetProblem(files.Identity("ALICE"), files.Authority, "ALICE"));
+        files.WriteIdentity("ALICE", identities["ALICE"]);
+        Assert.NotNull(MsmtCertificateLookup.GetProblem(files.Identity("ALICE"), Path.Combine(files.StoreDirectory, "nope.cer"), "ALICE"));
+    }
+
+    /// <summary>A file named for one user that holds a certificate issued to someone else is a problem.</summary>
+    [Fact]
+    public void CertificateProblem_CertificateIssuedToSomeoneElse_IsReported()
+    {
+        using CertificateFiles files = new();
+        (Dictionary<string, X509Certificate2> identities, X509Certificate2Collection authorities) = TestMsmtCertificates.CreateNamed("ALICE", "BOB");
+        files.WriteAuthority(authorities);
+        files.WriteIdentity("ALICE", identities["BOB"]);
+
+        Assert.Contains("not issued to ALICE", MsmtCertificateLookup.GetProblem(files.Identity("ALICE"), files.Authority, "ALICE"));
+    }
+
+    /// <summary>A certificate signed by an authority other than the authority certificate is a problem.</summary>
+    [Fact]
+    public void CertificateProblem_SignedByAnotherAuthority_IsReported()
+    {
+        using CertificateFiles files = new();
+        (Dictionary<string, X509Certificate2> identities, _) = TestMsmtCertificates.CreateNamed("ALICE");
+        (_, X509Certificate2Collection otherAuthorities) = TestMsmtCertificates.CreateNamed("BOB");
+        files.WriteAuthority(otherAuthorities);
+        files.WriteIdentity("ALICE", identities["ALICE"]);
+
+        Assert.Contains("not signed by the authority certificate", MsmtCertificateLookup.GetProblem(files.Identity("ALICE"), files.Authority, "ALICE"));
+    }
+
+    /// <summary>The controller checks the files the network designates, and a network designating none has a problem for every user.</summary>
+    [Fact]
+    public void EngineController_GetCertificateProblem_UsesTheNetworksFiles()
+    {
+        using CertificateFiles files = new();
+        (Dictionary<string, X509Certificate2> identities, X509Certificate2Collection authorities) = TestMsmtCertificates.CreateNamed("ALICE");
+        files.WriteAuthority(authorities);
+        files.WriteIdentity("ALICE", identities["ALICE"]);
+
+        EngineController designated = new(EngineBuilder.Build(new TestEngineConfiguration()), new CurrentUserProvider(), new NetworkConfig { CertificateStore = files.StoreDirectory, AuthorityCertificate = files.Authority });
+        EngineController none = new(EngineBuilder.Build(new TestEngineConfiguration()), new CurrentUserProvider(), new NetworkConfig());
+
+        Assert.Null(designated.GetCertificateProblem("ALICE"));
+        Assert.NotNull(designated.GetCertificateProblem("BOB"));
+        Assert.NotNull(none.GetCertificateProblem("ALICE"));
     }
 }

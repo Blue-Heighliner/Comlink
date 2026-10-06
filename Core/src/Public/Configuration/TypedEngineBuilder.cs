@@ -32,10 +32,6 @@ public interface IEngineBuilder<TFrame, TPacket, TPriority, TLevel> where TFrame
     /// <typeparam name="THandler">The handler type, instantiated through dependency injection when the engine runs: the instance registered for it in the host's services, or else one constructed from them.</typeparam>
     IEngineBuilder<TFrame, TPacket, TPriority, TLevel> Display<THandler>() where THandler : IDisplayHandler;
 
-    /// <summary>States the handler that decides which user an installation code entered by the user installs (see <see cref="IInstallHandler"/>). Defaults to accepting the name of a user of the network, and the code <c>CODE</c> for a user named <c>TEST</c>.</summary>
-    /// <typeparam name="THandler">The handler type, instantiated through dependency injection when the engine runs: the instance registered for it in the host's services, or else one constructed from them.</typeparam>
-    IEngineBuilder<TFrame, TPacket, TPriority, TLevel> Installs<THandler>() where THandler : IInstallHandler;
-
     /// <summary>
     /// Starts stating the security levels, members of <typeparamref name="TLevel"/>, from lowest to highest: each level stated ranks higher than the one stated before it, regardless of the order of the enum, and a member
     /// not stated is not a level. The integer values of the members are how levels are stored in drafts, so a member's value must never change or be reused, even when it is no longer used. A level is named by its member name in uppercase, which is how network files refer to it, and shown in the top banner
@@ -79,8 +75,8 @@ public interface IEngineBuilder<TFrame, TPacket, TPriority, TLevel> where TFrame
     /// <summary>
     /// Sets whether command-line arguments may override where the network configuration file (the file that describes every user
     /// of the network) and the running user come from: <c>--config</c> names the file to read instead of <c>Config.json</c> in the
-    /// current working directory, and <c>--user</c> names the user the process runs as instead of <c>User.json</c> in that directory.
-    /// The files in the working directory are always read; only the arguments are ignored when this is disallowed.
+    /// current working directory, and <c>--user</c> names the user the process runs as, which is then checked like an installed user. The file
+    /// in the working directory is always read; only the arguments are ignored when this is disallowed.
     /// </summary>
     /// <param name="allowed"><see langword="true"/> to honor <c>--config</c> and <c>--user</c>, <see langword="false"/> to ignore them. Disallowed unless this is called.</param>
     IEngineBuilder<TFrame, TPacket, TPriority, TLevel> CommandLineOverrides(bool allowed);

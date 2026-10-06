@@ -21,8 +21,6 @@ internal sealed class EngineBuilder : IEngineBuilder, IAsyncDisposable
     public ServiceRegistration<IDisplayHandler>? DisplayHandler { get; set; }
     /// <summary>The display handler, created once the configuration has finished, from the bootstrap container when there is one.</summary>
     public IDisplayHandler? DisplayHandlerInstance { get; private set; }
-    /// <summary>The handler that decides which user an installation code installs, if stated.</summary>
-    public ServiceRegistration<IInstallHandler>? InstallHandler { get; set; }
     /// <summary>The configured security levels, in ascending order; empty when none were stated.</summary>
     public List<SecurityLevel> SecurityLevelValues { get; } = [];
     /// <summary>The handler that controls the alert alarm, if stated.</summary>

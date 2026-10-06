@@ -31,18 +31,20 @@ Message and delivery-status persistence (`StoreIncomingMessage`, `StoreSentMessa
 
 ## UserService
 
-Manages user installation and persists user identity to `State.json`.
+Manages user installation and persists user identity to `User.json`.
 
 **Key responsibilities**:
 - Load existing user state on startup (`Load`)
-- Install a new user by resolving a code (`Install`)
-- Apply the `--user` override (`IEngineController.DebugUserName`) that bypasses `State.json`
+- Install a new user by name, after checking their certificate (`Install`)
+- Apply the `--user` override (`IEngineController.DebugUserName`) that bypasses `User.json`
 
-**State file**: `IEngineController.StatePath` (`%APPDATA%/{AppName}/State.json`, beside the user folders since it says whose folder to use) contains `UserName`, `UserCode`. `IsInstalled` is a computed property: `true` when `UserName` is non-null. The security level shown in the title bar banner (see `MainViewModel`) is not persisted here; it is resolved fresh from `IEngineController.GetUserSecurityLevel(UserName)` each time, so a level a host reassigns to a user takes effect for an already-installed user without reinstalling.
+**State file**: `IEngineController.UserFilePath` (`%APPDATA%/{AppName}/User.json`, beside the user folders since it says whose folder to use) contains `UserName`. `IsInstalled` is a computed property: `true` when `UserName` is non-null. The security level shown in the title bar banner (see `MainViewModel`) is not persisted here; it is resolved fresh from `IEngineController.GetUserSecurityLevel(UserName)` each time, so a level a host reassigns to a user takes effect for an already-installed user without reinstalling.
+
+**Certificate check**: `IEngineController.GetCertificateProblem(userName)` (built on `MsmtCertificateLookup.GetProblem`) returns why a user's certificate is not usable, or `null`: the network's `CertificateStore` and `AuthorityCertificate` are set, `{userName}.pfx` exists in the store, its certificate has the user name as a subject common name, and it chains to the authority certificate alone (custom root trust, no revocation check). `Install` finds the name among the network's users (`FindUserName`, case-insensitive; `null` if there is none), then throws `InvalidOperationException` carrying the problem if there is one, installing and persisting nothing. `Load` makes the same checks for a remembered user and, on a problem, logs it, deletes the user file and leaves nobody installed.
 
 **Thread safety**: `Install` uses a `SemaphoreSlim(1,1)` to prevent concurrent installs.
 
-**`--user` override**: If `IEngineController.DebugUserName` (the `--user` command-line argument, when the host allows overrides) is non-null, `Load` skips the state file entirely and uses it (uppercased) as both `UserName` and `UserCode`. Useful for development without a real user code.
+**`--user` override**: If `IEngineController.DebugUserName` (the `--user` command-line argument, when the host allows overrides) is non-null, `Load` skips the user file entirely and passes that name through the same checks as an install (`FindUserName`, then `GetCertificateProblem`); when it passes, it is the user (not persisted), and when it fails nobody is installed and the user file is left alone. Useful for development without installing.
 
 ```csharp
 // Consumers call:

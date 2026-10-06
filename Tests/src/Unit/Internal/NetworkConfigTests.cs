@@ -68,21 +68,14 @@ public sealed class NetworkConfigTests : IDisposable
         Assert.Equal("CUSTOM", config.User);
     }
 
-    /// <summary>Without --user, User.json in the working directory names the user, as an object or a bare string; --user wins, and a file naming nobody is ignored.</summary>
+    /// <summary>The user comes only from --user: a User.json in the working directory is never read.</summary>
     [Fact]
-    public void Load_NoUserArgument_ReadsUserJsonFromTheWorkingDirectory()
+    public void Load_UserComesOnlyFromTheArgument()
     {
-        Assert.Null(NetworkConfig.Load([], directory).User);
-
         Write("User.json", """{ "user": "ALICE" }""");
-        Assert.Equal("ALICE", NetworkConfig.Load([], directory).User);
 
-        Write("User.json", "\"BOB\"");
-        Assert.Equal("BOB", NetworkConfig.Load([], directory).User);
-        Assert.Equal("CAROL", NetworkConfig.Load(["--user", "CAROL"], directory).User);
-
-        Write("User.json", "{ \"Other\": 1 }");
         Assert.Null(NetworkConfig.Load([], directory).User);
+        Assert.Equal("CAROL", NetworkConfig.Load(["--user", "CAROL"], directory).User);
     }
 
     /// <summary>Reload reads the file again and replaces the users, groups and certificate settings, keeps the user the process runs as, and leaves everything as it was when the file cannot be read.</summary>

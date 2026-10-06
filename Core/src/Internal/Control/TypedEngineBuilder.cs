@@ -48,13 +48,6 @@ internal sealed class EngineBuilder<TFrame, TPacket, TPriority, TLevel> : IEngin
     }
 
     /// <inheritdoc />
-    public IEngineBuilder<TFrame, TPacket, TPriority, TLevel> Installs<THandler>() where THandler : IInstallHandler
-    {
-        state.InstallHandler = ServiceRegistration<IInstallHandler>.Of(typeof(THandler), instance => (IInstallHandler)instance);
-        return this;
-    }
-
-    /// <inheritdoc />
     public IEngineBuilder<TFrame, TPacket, TPriority, TLevel> Alarms<THandler>() where THandler : IAlarmHandler
     {
         state.AlarmHandler = ServiceRegistration<IAlarmHandler>.Of(typeof(THandler), instance => (IAlarmHandler)instance);

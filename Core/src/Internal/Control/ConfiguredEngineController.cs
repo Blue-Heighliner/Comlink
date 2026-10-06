@@ -164,9 +164,9 @@ internal sealed class ConfiguredEngineController : IEngineController
     /// <inheritdoc />
     public string AppDataRoot => fallback.AppDataRoot;
     /// <inheritdoc />
-    public string AppDataPath => currentUserProvider.UserName is null && DebugUserName is { } debug ? Path.Combine(fallback.AppDataRoot, fallback.AppName, debug.ToUpperInvariant()) : fallback.AppDataPath;
+    public string AppDataPath => currentUserProvider.UserName is null && DebugUserName is { } debug && fallback.FindUserName(debug) is { } name ? Path.Combine(fallback.AppDataRoot, fallback.AppName, name) : fallback.AppDataPath;
     /// <inheritdoc />
-    public string StatePath => fallback.StatePath;
+    public string UserFilePath => fallback.UserFilePath;
     /// <inheritdoc />
     public bool IsKioskMode => fallback.IsKioskMode;
     /// <inheritdoc />
@@ -338,7 +338,9 @@ internal sealed class ConfiguredEngineController : IEngineController
     public IReadOnlyList<AutoForwardControllerDefinition> AutoForwardControllers => fallback.AutoForwardControllers;
 
     /// <inheritdoc />
-    public string? ResolveUserName(string userCode) => fallback.ResolveUserName(userCode);
+    public string? FindUserName(string name) => fallback.FindUserName(name);
+    /// <inheritdoc />
+    public string? GetCertificateProblem(string userName) => fallback.GetCertificateProblem(userName);
 
     /// <inheritdoc />
     public UserInfo GetUserInfo(string userName) => fallback.GetUserInfo(userName);
