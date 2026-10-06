@@ -6,6 +6,9 @@ namespace BlueHeighliner.Comlink;
 internal sealed class NetworkProcessorAdapter<TFrame>(INetworkProcessor<TFrame> processor) : INetworkHandler where TFrame : class
 {
     /// <inheritdoc />
+    public bool UseAutomaticNetworkIndicator(IEngineContext context) => processor.UseAutomaticNetworkIndicator(context);
+
+    /// <inheritdoc />
     public void OnConnected(INetworkUserContext context) => processor.OnConnected(new TypedNetworkConnectedContext<TFrame>(context));
 
     /// <inheritdoc />

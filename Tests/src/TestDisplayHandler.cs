@@ -16,6 +16,12 @@ public sealed class TestDisplayHandler : IDisplayHandler
     public string? Version => "2.3.4";
 
     /// <inheritdoc />
+    public string? NetworkOnlineLabel => "LINKED";
+
+    /// <inheritdoc />
+    public string? NetworkOfflineColor => "#112233";
+
+    /// <inheritdoc />
     public bool IsKiosk => true;
 
     /// <inheritdoc />

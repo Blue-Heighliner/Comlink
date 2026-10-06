@@ -7,6 +7,9 @@ internal interface INetworkEngineContext : IEngineContext
     /// <param name="frame">An instance of the configured frame type.</param>
     /// <exception cref="ArgumentException"><paramref name="frame"/> is not an instance of the configured frame type.</exception>
     void Send(object frame);
+    /// <summary>Sets the network indicator online or offline.</summary>
+    /// <param name="isOnline"><see langword="true"/> for online.</param>
+    void SetNetworkIndicator(bool isOnline);
 }
 
 /// <summary>An <see cref="INetworkEngineContext"/> for a user connecting or disconnecting.</summary>
@@ -31,8 +34,10 @@ internal abstract class NetworkEngineContext : INetworkEngineContext
     /// <param name="engineController">Validates <see cref="Send"/> against the configured frame type.</param>
     /// <param name="messageRouting">Routes a <see cref="Send"/> call on <see cref="CurrentUser"/>'s behalf.</param>
     /// <param name="logger">Logs a failed <see cref="Send"/>, since it is fire-and-forget and nothing else observes its outcome.</param>
-    protected NetworkEngineContext(IEngineContext engine, IEngineController engineController, IMessageRoutingService messageRouting, ILogger logger)
+    /// <param name="indicator">Set by <see cref="SetNetworkIndicator"/>.</param>
+    protected NetworkEngineContext(IEngineContext engine, IEngineController engineController, IMessageRoutingService messageRouting, INetworkIndicator indicator, ILogger logger)
     {
+        this.indicator = indicator;
         this.engine = engine;
         this.engineController = engineController;
         this.messageRouting = messageRouting;
@@ -42,6 +47,7 @@ internal abstract class NetworkEngineContext : INetworkEngineContext
     private readonly IEngineContext engine;
     private readonly IEngineController engineController;
     private readonly IMessageRoutingService messageRouting;
+    private readonly INetworkIndicator indicator;
     private readonly ILogger logger;
 
     /// <inheritdoc />
@@ -55,6 +61,9 @@ internal abstract class NetworkEngineContext : INetworkEngineContext
 
     /// <inheritdoc />
     public bool IsConnected(string userName) => engine.IsConnected(userName);
+
+    /// <inheritdoc />
+    public void SetNetworkIndicator(bool isOnline) => indicator.Set(isOnline);
 
     /// <inheritdoc />
     public void Send(object frame)
@@ -83,8 +92,9 @@ internal sealed class NetworkUserContext : NetworkEngineContext, INetworkUserCon
     /// <param name="engineController">Validates <see cref="NetworkEngineContext.Send"/> against the configured frame type.</param>
     /// <param name="messageRouting">Routes a <see cref="NetworkEngineContext.Send"/> call on the current user's behalf.</param>
     /// <param name="logger">Logs a failed send, since it is fire-and-forget.</param>
-    public NetworkUserContext(IEngineContext engine, string targetUser, IEngineController engineController, IMessageRoutingService messageRouting, ILogger logger)
-        : base(engine, engineController, messageRouting, logger)
+    /// <param name="indicator">Set by <see cref="NetworkEngineContext.SetNetworkIndicator"/>.</param>
+    public NetworkUserContext(IEngineContext engine, string targetUser, IEngineController engineController, IMessageRoutingService messageRouting, INetworkIndicator indicator, ILogger logger)
+        : base(engine, engineController, messageRouting, indicator, logger)
     {
         TargetUser = targetUser;
     }
@@ -102,8 +112,9 @@ internal sealed class NetworkFrameContext : NetworkEngineContext, INetworkFrameC
     /// <param name="engineController">Validates <see cref="NetworkEngineContext.Send"/> against the configured frame type.</param>
     /// <param name="messageRouting">Routes a <see cref="NetworkEngineContext.Send"/> call on the current user's behalf.</param>
     /// <param name="logger">Logs a failed send, since it is fire-and-forget.</param>
-    public NetworkFrameContext(IEngineContext engine, object frame, IEngineController engineController, IMessageRoutingService messageRouting, ILogger logger)
-        : base(engine, engineController, messageRouting, logger)
+    /// <param name="indicator">Set by <see cref="NetworkEngineContext.SetNetworkIndicator"/>.</param>
+    public NetworkFrameContext(IEngineContext engine, object frame, IEngineController engineController, IMessageRoutingService messageRouting, INetworkIndicator indicator, ILogger logger)
+        : base(engine, engineController, messageRouting, indicator, logger)
     {
         Frame = frame;
     }

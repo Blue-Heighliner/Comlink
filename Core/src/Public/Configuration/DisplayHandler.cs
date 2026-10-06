@@ -24,6 +24,18 @@ public interface IDisplayHandler
     /// <summary>Gets a value indicating whether alert messages are kept apart from the rest: the client then has an alert inbox and a normal inbox, an alert outbox and a normal outbox, and the entry lists have no alert filter. Defaults to <see langword="false"/>, where alerts are mixed in with the other messages and the lists of inboxes and outboxes can be filtered to alerts only. A draft list never has an alert filter.</summary>
     bool SeparateAlerts => false;
 
+    /// <summary>Gets the label of the network indicator in the top bar of a client or relay while it shows online. Defaults to <c>ONLINE</c>.</summary>
+    string? NetworkOnlineLabel => null;
+
+    /// <summary>Gets the label of the network indicator while it shows offline. Defaults to <c>OFFLINE</c>.</summary>
+    string? NetworkOfflineLabel => null;
+
+    /// <summary>Gets the color of the network indicator while it shows online, as a hex color such as <c>#2E7D32</c>. Defaults to green.</summary>
+    string? NetworkOnlineColor => null;
+
+    /// <summary>Gets the color of the network indicator while it shows offline, as a hex color such as <c>#D35400</c>. Defaults to orange.</summary>
+    string? NetworkOfflineColor => null;
+
     /// <summary>Gets the text shown in the content area when no entry is selected. Defaults to <c>HOME</c>.</summary>
     string? HomeText => null;
 

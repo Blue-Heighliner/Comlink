@@ -293,6 +293,8 @@ public sealed class EngineBuilderTests
         Assert.Equal("2.3.4", controller.AppVersion);
         Assert.True(controller.IsKioskMode);
         Assert.Equal("Welcome", controller.HomeText);
+        Assert.Equal(["LINKED", "OFFLINE"], [controller.GetNetworkIndicatorLabel(true), controller.GetNetworkIndicatorLabel(false)]);
+        Assert.Equal(["#2E7D32", "#112233"], [controller.GetNetworkIndicatorColor(true), controller.GetNetworkIndicatorColor(false)]);
         Assert.Equal(icon, controller.WindowIconPath);
         Assert.True(controller.CommandLineOverridesAllowed);
     }

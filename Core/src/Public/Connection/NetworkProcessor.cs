@@ -16,6 +16,13 @@ public interface INetworkProcessor<TFrame> where TFrame : class
     /// <param name="context">A snapshot of the engine taken for this event.</param>
     void OnDisconnected(INetworkDisconnectedContext<TFrame> context);
 
+    /// <summary>
+    /// Asked once when the engine starts, in a client or relay, whether the engine keeps the network indicator in the top bar up to date itself: by default it shows online while this node is directly connected to its parent (for a client whose parent is a relay,
+    /// its connection to the relay), and offline otherwise. Return <see langword="false"/> to take that over, after which the indicator only changes when the processor calls <see cref="INetworkContext{TFrame}.SetNetworkIndicator"/>. The default keeps the automatic behavior.
+    /// </summary>
+    /// <param name="context">A snapshot of the engine.</param>
+    bool UseAutomaticNetworkIndicator(IEngineContext context) => true;
+
     /// <summary>Called whenever this instance receives a new (non-receipt) frame from a peer, whether or not it is a message. <see cref="INetworkReceivedContext{TFrame}.Frame"/> carries it.</summary>
     /// <param name="context">A snapshot of the engine taken for this event.</param>
     void OnReceived(INetworkReceivedContext<TFrame> context);

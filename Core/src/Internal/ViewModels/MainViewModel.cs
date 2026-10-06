@@ -60,6 +60,8 @@ internal interface IMainViewModel
     IInstallViewModel InstallView { get; }
     /// <summary>Gets the alert ViewModel driving the title bar's alarm box and sound.</summary>
     IAlertViewModel Alert { get; }
+    /// <summary>Gets the network indicator ViewModel shown in the top bar of a client or relay.</summary>
+    INetworkIndicatorViewModel NetworkIndicator { get; }
     /// <summary>Gets the export ViewModel driving the export screen.</summary>
     IExportViewModel Export { get; }
     /// <summary>Gets the import ViewModel driving the import screen.</summary>
@@ -124,6 +126,7 @@ internal sealed partial class MainViewModel : ObservableObject, IMainViewModel
     /// <param name="contentArea">Content area ViewModel.</param>
     /// <param name="installViewModel">Install screen ViewModel.</param>
     /// <param name="alert">Alert ViewModel driving the title bar's alarm box and sound.</param>
+    /// <param name="networkIndicator">Network indicator ViewModel shown in the top bar of a client or relay.</param>
     /// <param name="export">Export ViewModel driving the export screen.</param>
     /// <param name="import">Import ViewModel driving the import screen.</param>
     /// <param name="stagedSend">Staged send ViewModel driving the staged send screen.</param>
@@ -146,6 +149,7 @@ internal sealed partial class MainViewModel : ObservableObject, IMainViewModel
         IContentAreaViewModel contentArea,
         IInstallViewModel installViewModel,
         IAlertViewModel alert,
+        INetworkIndicatorViewModel networkIndicator,
         IExportViewModel export,
         IImportViewModel import,
         IStagedSendViewModel stagedSend,
@@ -169,6 +173,7 @@ internal sealed partial class MainViewModel : ObservableObject, IMainViewModel
         this.contentArea = contentArea;
         this.installViewModel = installViewModel;
         this.alert = alert;
+        this.networkIndicator = networkIndicator;
         this.export = export;
         this.import = import;
         this.stagedSend = stagedSend;
@@ -199,6 +204,7 @@ internal sealed partial class MainViewModel : ObservableObject, IMainViewModel
     private readonly IContentAreaViewModel contentArea;
     private readonly IInstallViewModel installViewModel;
     private readonly IAlertViewModel alert;
+    private readonly INetworkIndicatorViewModel networkIndicator;
     private readonly IExportViewModel export;
     private readonly IImportViewModel import;
     private readonly IStagedSendViewModel stagedSend;
@@ -255,6 +261,8 @@ internal sealed partial class MainViewModel : ObservableObject, IMainViewModel
     public IInstallViewModel InstallView => installViewModel;
     /// <inheritdoc />
     public IAlertViewModel Alert => alert;
+    /// <inheritdoc />
+    public INetworkIndicatorViewModel NetworkIndicator => networkIndicator;
     /// <inheritdoc />
     public IExportViewModel Export => export;
     /// <inheritdoc />

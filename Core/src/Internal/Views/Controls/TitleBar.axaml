@@ -5,7 +5,7 @@
              Background="#2D2D30"
              Height="32">
 
-  <Grid ColumnDefinitions="Auto,*,Auto,Auto,Auto,Auto">
+  <Grid ColumnDefinitions="Auto,*,Auto,Auto,Auto,Auto,Auto">
 
     <!-- Left: Action buttons — never shown in Server mode, which has no drafts/notes/export/import/print UI -->
     <StackPanel x:Name="ActionButtonsPanel"
@@ -105,8 +105,21 @@
                  Foreground="White" />
     </Border>
 
+    <!-- Network indicator: always shown in a client or relay, online or offline -->
+    <Border x:Name="NetworkBox"
+            Grid.Column="3"
+            CornerRadius="3"
+            Padding="10,4"
+            Margin="0,0,8,0"
+            VerticalAlignment="Center">
+      <TextBlock x:Name="NetworkBoxText"
+                 FontWeight="Bold"
+                 FontSize="12"
+                 Foreground="White" />
+    </Border>
+
     <!-- Right side: user name + version, styled like the left-side action buttons -->
-    <StackPanel Grid.Column="3"
+    <StackPanel Grid.Column="4"
                 Orientation="Horizontal"
                 Margin="0,0,8,0">
       <TextBlock x:Name="UserNameText"
@@ -128,7 +141,7 @@
     </StackPanel>
 
     <!-- Info and help: always available, immediately left of the window controls -->
-    <StackPanel Grid.Column="4"
+    <StackPanel Grid.Column="5"
                 Orientation="Horizontal"
                 Spacing="0">
       <Button x:Name="InfoButton"
@@ -166,7 +179,7 @@
     </StackPanel>
 
     <!-- Window controls -->
-    <StackPanel Grid.Column="5"
+    <StackPanel Grid.Column="6"
                 Orientation="Horizontal"
                 Spacing="0">
       <Button x:Name="MinimizeButton"

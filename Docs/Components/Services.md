@@ -135,6 +135,10 @@ Implements `IServiceConnection`, registered in both `Client` and `Headless` mode
 
 ---
 
+## NetworkIndicatorService
+
+Keeps the network indicator (`INetworkIndicator`, which the top bar's `NetworkIndicatorViewModel` follows) in step with the node's direct connection to its parent, in a client or relay. `EngineHost` starts it with the other services; nothing runs for a server. When a network processor exists, it is first asked `UseAutomaticNetworkIndicator` with an engine context, and a `false` answer ends the service so only the processor's `SetNetworkIndicator` calls change the indicator. Otherwise it starts from `IPeerService.IsUserConnected(ParentUser)` and follows `UserConnected`/`UserDisconnected` for the parent only (names compared case-insensitively), so the connection beyond the parent never matters.
+
 ## DisconnectAlarmService
 
 Sounds an alarm in every role (Client, Server and Relay) when a connection drops, separately from the alarm for alerts. `EngineHost` starts it with the other services once networking starts; it subscribes to `IPeerService.UserDisconnected` (raised when a user's last live connection goes) and `UserConnected`, and plays its own sound through `IDisconnectAlarmPlayer`, a player of its own so it never starts or stops the alert alarm's sound or the reverse.

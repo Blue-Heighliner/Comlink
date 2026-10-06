@@ -44,7 +44,9 @@
                        IsKioskMode="{Binding IsKioskMode}"
                        IsAlerting="{Binding Alert.IsAlerting}"
                        AlertText="{Binding Alert.AlertText}"
-                       AlertCommand="{Binding Alert.OpenOldestCommand}" />
+                       AlertCommand="{Binding Alert.OpenOldestCommand}"
+                       NetworkText="{Binding NetworkIndicator.Label}"
+                       NetworkColor="{Binding NetworkIndicator.ColorHex}" />
 
     <!-- Main Content (row 2) -->
     <Panel Grid.Row="2">

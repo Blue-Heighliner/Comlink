@@ -85,6 +85,14 @@ internal partial class TitleBar : UserControl
     public static readonly StyledProperty<bool> IsKioskModeProperty =
         AvaloniaProperty.Register<TitleBar, bool>(nameof(IsKioskMode));
 
+    /// <summary>Identifies the <see cref="NetworkText"/> styled property.</summary>
+    public static readonly StyledProperty<string> NetworkTextProperty =
+        AvaloniaProperty.Register<TitleBar, string>(nameof(NetworkText), string.Empty);
+
+    /// <summary>Identifies the <see cref="NetworkColor"/> styled property.</summary>
+    public static readonly StyledProperty<string> NetworkColorProperty =
+        AvaloniaProperty.Register<TitleBar, string>(nameof(NetworkColor), string.Empty);
+
     /// <summary>Identifies the <see cref="IsAlerting"/> styled property.</summary>
     public static readonly StyledProperty<bool> IsAlertingProperty =
         AvaloniaProperty.Register<TitleBar, bool>(nameof(IsAlerting));
@@ -248,6 +256,20 @@ internal partial class TitleBar : UserControl
         set => SetValue(IsAlertingProperty, value);
     }
 
+    /// <summary>Gets or sets the label shown in the network indicator, which a client or relay always has.</summary>
+    public string NetworkText
+    {
+        get => GetValue(NetworkTextProperty);
+        set => SetValue(NetworkTextProperty, value);
+    }
+
+    /// <summary>Gets or sets the hex color of the network indicator.</summary>
+    public string NetworkColor
+    {
+        get => GetValue(NetworkColorProperty);
+        set => SetValue(NetworkColorProperty, value);
+    }
+
     /// <summary>Gets or sets the text displayed in the alert box.</summary>
     public string AlertText
     {
@@ -299,6 +321,19 @@ internal partial class TitleBar : UserControl
             ApplyAlertText();
         }
         if (change.Property == AlertTextProperty) { ApplyAlertText(); }
+        if (change.Property == NetworkTextProperty || change.Property == NetworkColorProperty || change.Property == IsServerModeProperty) { ApplyNetworkIndicator(); }
+    }
+
+    // A server has no network indicator; a client or relay always does.
+    private void ApplyNetworkIndicator()
+    {
+        Border? box = this.FindControl<Border>("NetworkBox");
+        TextBlock? text = this.FindControl<TextBlock>("NetworkBoxText");
+        if (box is null || text is null) { return; }
+
+        box.IsVisible = !IsServerMode && NetworkText.Length > 0;
+        text.Text = NetworkText;
+        if (Color.TryParse(NetworkColor, out Color color)) { box.Background = new SolidColorBrush(color); }
     }
 
     // Set whenever the box is shown as well as when the text changes, since the text alone does not change when the host's label is the default one.
@@ -405,6 +440,7 @@ internal partial class TitleBar : UserControl
         base.OnAttachedToVisualTree(e);
 
         ApplyAlertText();
+        ApplyNetworkIndicator();
 
         if (e.Root is Window window)
         {

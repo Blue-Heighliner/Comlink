@@ -170,6 +170,10 @@ internal sealed class ConfiguredEngineController : IEngineController
     /// <inheritdoc />
     public bool IsKioskMode => fallback.IsKioskMode;
     /// <inheritdoc />
+    public string GetNetworkIndicatorLabel(bool isOnline) => fallback.GetNetworkIndicatorLabel(isOnline);
+    /// <inheritdoc />
+    public string GetNetworkIndicatorColor(bool isOnline) => fallback.GetNetworkIndicatorColor(isOnline);
+    /// <inheritdoc />
     public bool SeparateAlerts => fallback.SeparateAlerts;
     /// <inheritdoc />
     public string HomeText => fallback.HomeText;

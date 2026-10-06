@@ -21,6 +21,7 @@ public sealed class MainViewModelTests
         public Mock<IContentAreaViewModel> ContentArea { get; } = new();
         public Mock<IInstallViewModel> InstallView { get; } = new();
         public Mock<IAlertViewModel> Alert { get; } = new();
+        public Mock<INetworkIndicatorViewModel> NetworkIndicator { get; } = new();
         public Mock<IExportViewModel> Export { get; } = new();
         public Mock<IImportViewModel> Import { get; } = new();
         public Mock<IStagedSendViewModel> StagedSend { get; } = new();
@@ -54,6 +55,7 @@ public sealed class MainViewModelTests
                 ContentArea.Object,
                 InstallView.Object,
                 Alert.Object,
+                NetworkIndicator.Object,
                 Export.Object,
                 Import.Object,
                 StagedSend.Object,

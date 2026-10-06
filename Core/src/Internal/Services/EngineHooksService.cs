@@ -20,8 +20,10 @@ internal sealed class EngineHooksService : IEngineHooksService
         IEngineController engineController,
         IUserService userService,
         IMessageRoutingService messageRouting,
+        INetworkIndicator networkIndicator,
         ILoggerFactory loggerFactory)
     {
+        this.networkIndicator = networkIndicator;
         this.peerService = peerService;
         this.engineController = engineController;
         this.userService = userService;
@@ -33,6 +35,7 @@ internal sealed class EngineHooksService : IEngineHooksService
     private readonly IEngineController engineController;
     private readonly IUserService userService;
     private readonly IMessageRoutingService messageRouting;
+    private readonly INetworkIndicator networkIndicator;
     private readonly ILogger logger;
 
     /// <inheritdoc />
@@ -84,10 +87,10 @@ internal sealed class EngineHooksService : IEngineHooksService
     }
 
     private INetworkUserContext BuildConnectionContext(string targetUser)
-        => new NetworkUserContext(BuildEngineContext(), targetUser, engineController, messageRouting, logger);
+        => new NetworkUserContext(BuildEngineContext(), targetUser, engineController, messageRouting, networkIndicator, logger);
 
     private INetworkFrameContext BuildFrameContext(object frame)
-        => new NetworkFrameContext(BuildEngineContext(), frame, engineController, messageRouting, logger);
+        => new NetworkFrameContext(BuildEngineContext(), frame, engineController, messageRouting, networkIndicator, logger);
 
     private EngineContext BuildEngineContext()
         => new(

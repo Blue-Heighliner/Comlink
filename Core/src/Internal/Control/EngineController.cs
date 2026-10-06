@@ -82,6 +82,12 @@ internal interface IEngineController
     bool IsKioskMode { get; }
     /// <summary>Whether alert messages are kept in their own alert inbox and alert outbox, apart from the normal inbox and outbox, from the display handler.</summary>
     bool SeparateAlerts { get; }
+    /// <summary>The label the network indicator shows while online (<paramref name="isOnline"/> is <see langword="true"/>) or offline, from the display handler.</summary>
+    /// <param name="isOnline">Whether the indicator shows online.</param>
+    string GetNetworkIndicatorLabel(bool isOnline);
+    /// <summary>The hex color the network indicator shows while online or offline, from the display handler.</summary>
+    /// <param name="isOnline">Whether the indicator shows online.</param>
+    string GetNetworkIndicatorColor(bool isOnline);
     /// <summary>The text displayed in the content area when no entry is selected.</summary>
     string HomeText { get; }
     /// <summary>Optional <c>avares://</c> URI or file path of the window icon to apply to the main window, or <see langword="null"/> to use the OS default.</summary>
@@ -554,6 +560,12 @@ internal class EngineController(EngineBuilder builder, ICurrentUserProvider curr
     public virtual string StatePath => Path.Combine(AppDataRoot, DataFolderName, "State.json");
     /// <inheritdoc />
     public virtual bool IsKioskMode => builder.DisplayHandlerInstance?.IsKiosk ?? false;
+    /// <inheritdoc />
+    public virtual string GetNetworkIndicatorLabel(bool isOnline)
+        => (isOnline ? builder.DisplayHandlerInstance?.NetworkOnlineLabel : builder.DisplayHandlerInstance?.NetworkOfflineLabel).OrNull() ?? (isOnline ? "ONLINE" : "OFFLINE");
+    /// <inheritdoc />
+    public virtual string GetNetworkIndicatorColor(bool isOnline)
+        => (isOnline ? builder.DisplayHandlerInstance?.NetworkOnlineColor : builder.DisplayHandlerInstance?.NetworkOfflineColor).OrNull() ?? (isOnline ? "#2E7D32" : "#D35400");
     /// <inheritdoc />
     public virtual bool SeparateAlerts => builder.DisplayHandlerInstance?.SeparateAlerts ?? false;
     /// <inheritdoc />

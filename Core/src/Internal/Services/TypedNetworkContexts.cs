@@ -19,6 +19,9 @@ internal class TypedNetworkContext<TFrame>(INetworkEngineContext core) : INetwor
 
     /// <inheritdoc />
     public void Send(TFrame frame) => core.Send(frame);
+
+    /// <inheritdoc />
+    public void SetNetworkIndicator(bool isOnline) => core.SetNetworkIndicator(isOnline);
 }
 
 /// <summary>Presents an <see cref="INetworkUserContext"/> to <see cref="INetworkProcessor{TFrame}.OnConnected"/>.</summary>

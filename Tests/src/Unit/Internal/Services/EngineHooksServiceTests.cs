@@ -7,6 +7,10 @@ public sealed class EngineHooksServiceTests
 
     private sealed class RecordingHandler : INetworkHandler
     {
+        public bool Automatic { get; set; } = true;
+
+        public bool UseAutomaticNetworkIndicator(IEngineContext context) => Automatic;
+
         public List<Action<INetworkUserContext>> Connected { get; } = [];
         public List<Action<INetworkUserContext>> Disconnected { get; } = [];
         public List<Action<INetworkFrameContext>> Received { get; } = [];
@@ -96,7 +100,7 @@ public sealed class EngineHooksServiceTests
         Mock<IUserService> userService = new();
         userService.Setup(u => u.GetCurrentUserInfo()).Returns(new UserInfo { Name = "ME" });
         FakeMessageRoutingService routing = new();
-        EngineHooksService service = new(peer, engineController.Object, userService.Object, routing, noLogger);
+        EngineHooksService service = new(peer, engineController.Object, userService.Object, routing, new NetworkIndicator(), noLogger);
         return (service, peer, engineController, userService, routing);
     }
 

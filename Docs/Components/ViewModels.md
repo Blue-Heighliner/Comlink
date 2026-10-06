@@ -227,6 +227,10 @@ One-time setup screen. Registered as `IInstallViewModel → InstallViewModel` si
 
 ---
 
+## INetworkIndicatorViewModel / NetworkIndicatorViewModel
+
+The network indicator in the top bar of a client or relay. Registered as `INetworkIndicatorViewModel → NetworkIndicatorViewModel` singleton; exposed as `MainViewModel.NetworkIndicator` and bound from `MainWindow.axaml` onto `TitleBar`'s `NetworkText`/`NetworkColor` styled properties. `IsOnline`, `Label` and `ColorHex` follow `INetworkIndicator.Changed` (on the UI thread), with the label and color from `IEngineController.GetNetworkIndicatorLabel`/`GetNetworkIndicatorColor`, which are the display handler's for the state, or `ONLINE`/`OFFLINE` and green/orange. The box is always shown, and only a server's title bar (`IsServerMode`) hides it.
+
 ## IAlertViewModel / AlertViewModel
 
 Tracks unread alert messages and drives the title bar's alert indicator and the alarm sound (see [Peer.md](Peer.md#alert-messages)). Registered as `IAlertViewModel → AlertViewModel` singleton; exposed as `MainViewModel.Alert` and bound from `MainWindow.axaml` onto `TitleBar`'s `IsAlerting`/`AlertText`/`AlertCommand` styled properties.
