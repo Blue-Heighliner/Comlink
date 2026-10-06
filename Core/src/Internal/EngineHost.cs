@@ -12,6 +12,7 @@ internal sealed class EngineHost : IHostedService
         IExternalSystemsService externalSystemsService,
         IEngineHooksService engineHooksService,
         IAutoForwardService autoForwardService,
+        IDisconnectAlarmService disconnectAlarmService,
         IEngineController engineController,
         EngineMode mode,
         ILoggerFactory loggerFactory)
@@ -22,6 +23,7 @@ internal sealed class EngineHost : IHostedService
         this.externalSystemsService = externalSystemsService;
         this.engineHooksService = engineHooksService;
         this.autoForwardService = autoForwardService;
+        this.disconnectAlarmService = disconnectAlarmService;
         engineController.Validate();
         logger = loggerFactory.CreateLogger("APP");
         displayName = mode == EngineMode.Headless ? $"{engineController.AppName} (Headless)" : engineController.AppName;
@@ -33,6 +35,7 @@ internal sealed class EngineHost : IHostedService
     private readonly IExternalSystemsService externalSystemsService;
     private readonly IEngineHooksService engineHooksService;
     private readonly IAutoForwardService autoForwardService;
+    private readonly IDisconnectAlarmService disconnectAlarmService;
     private readonly ILogger logger;
     private readonly string displayName;
     private CancellationTokenSource? cts;
@@ -73,6 +76,7 @@ internal sealed class EngineHost : IHostedService
         RunInBackground("External systems service", () => externalSystemsService.Start(cancellation), cancellation);
         RunInBackground("Engine hooks service", () => engineHooksService.Start(cancellation), cancellation);
         RunInBackground("Auto forward service", () => autoForwardService.Start(cancellation), cancellation);
+        RunInBackground("Disconnect alarm service", () => disconnectAlarmService.Start(cancellation), cancellation);
     }
 
     // Each service runs until cancelled, so one that ends any other way has failed, and nothing else would ever say so.

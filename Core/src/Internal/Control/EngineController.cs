@@ -106,6 +106,8 @@ internal interface IEngineController
     /// visible until every pending alert has been read.
     /// </summary>
     TimeSpan AlarmSoundDuration { get; }
+    /// <summary>How long the alarm sound plays after a connection drops (see <see cref="IDisconnectAlarmService"/>), from the alarm handler.</summary>
+    TimeSpan DisconnectAlarmDuration { get; }
     /// <summary>
     /// The names of the keys that, pressed while focus is not in a text input, confirm (mark read) the latest unconfirmed alert, from the message handler.
     /// Repeating one confirms pending alerts one at a time, most-recently-received first.
@@ -586,6 +588,8 @@ internal class EngineController(EngineBuilder builder, ICurrentUserProvider curr
 
     /// <inheritdoc />
     public virtual string AlertLabel => builder.DisplayHandlerInstance?.AlertLabel.OrNull() ?? "ALERT";
+    /// <inheritdoc />
+    public virtual TimeSpan DisconnectAlarmDuration => alarmHandler.Value?.DisconnectDuration ?? TimeSpan.FromSeconds(30);
     /// <inheritdoc />
     public virtual TimeSpan AlarmSoundDuration => alarmHandler.Value?.AlertDuration ?? TimeSpan.FromSeconds(30);
     /// <inheritdoc />

@@ -222,6 +222,8 @@ internal sealed class ConfiguredEngineController : IEngineController
     /// <inheritdoc />
     public TimeSpan AlarmSoundDuration => Current?.AlarmSoundSeconds is { } seconds ? TimeSpan.FromSeconds(seconds) : fallback.AlarmSoundDuration;
     /// <inheritdoc />
+    public TimeSpan DisconnectAlarmDuration => fallback.DisconnectAlarmDuration;
+    /// <inheritdoc />
     public IReadOnlyList<string> AlertConfirmationKeys => fallback.AlertConfirmationKeys;
     /// <inheritdoc />
     public LineWidthRange? DraftLineWidth => fallback.DraftLineWidth;
