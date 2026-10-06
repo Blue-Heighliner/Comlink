@@ -129,13 +129,13 @@ internal sealed partial class FolderBarViewModel : ObservableObject, IFolderBarV
             Folder? rootFolder = tree.FirstOrDefault(f => f.ParentId is null && f.RootType == rootType);
             if (rootFolder is null) { continue; }
 
-            bool isMessageRoot = rootType is FolderType.Inbox or FolderType.Outbox;
-            FolderItemViewModel root = BuildViewModel(rootFolder, isMessageRoot && engineController.SeparateAlerts ? false : null);
-            RootFolders.Add(root);
-            if (isMessageRoot && engineController.SeparateAlerts)
+            bool isSeparated = rootType is FolderType.Inbox or FolderType.Outbox && engineController.SeparateAlerts;
+            if (isSeparated)
             {
                 RootFolders.Add(new FolderItemViewModel($"{rootFolder.Id}-alerts", engineController.Display($"Alert {rootFolder.Name}"), rootType, alertView: true, storageId: rootFolder.Id));
             }
+
+            RootFolders.Add(BuildViewModel(rootFolder, isSeparated ? false : null));
         }
 
         if (RootFolders.Count > 0)

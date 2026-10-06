@@ -50,14 +50,17 @@ internal sealed partial class FolderItemViewModel : ObservableObject
     /// <summary>Gets the font size used to label this folder in the UI.</summary>
     public double LabelFontSize => IsRootFolder ? 15.0 : 13.0;
 
+    /// <summary>Gets a value indicating whether this is an alert inbox or alert outbox, which show a doubled arrow in the alert color.</summary>
+    public bool IsAlertView => AlertView is true;
+
     /// <summary>Gets the icon character for root folders, or an empty string for subfolders.</summary>
     public string Icon => ParentId is null ? RootType switch
     {
-        FolderType.Inbox => "↓",
-        FolderType.Outbox => "↑",
+        FolderType.Inbox => IsAlertView ? "⇊" : "↓",
+        FolderType.Outbox => IsAlertView ? "⇈" : "↑",
         FolderType.Drafts => "✎",
-        FolderType.Notes => "☰",
-        FolderType.Activity => "≡",
+        FolderType.Notes => "▤",
+        FolderType.Activity => "↻",
         _ => ""
     } : "";
 }

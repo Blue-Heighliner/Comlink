@@ -341,7 +341,7 @@ public sealed class FolderBarViewModelTests
         Assert.Single(locked.RootFolders[0].Children);
     }
 
-    /// <summary>While alerts are kept apart the inbox and the outbox each come with an alert root after them, listing the same stored folder, and neither alert root takes subfolders.</summary>
+    /// <summary>While alerts are kept apart the inbox and the outbox each come with an alert root before them, listing the same stored folder, and neither alert root takes subfolders.</summary>
     [Fact]
     public async Task Load_AlertsSeparated_AddsAnAlertInboxAndAlertOutbox()
     {
@@ -350,11 +350,11 @@ public sealed class FolderBarViewModelTests
 
         await vm.Load();
 
-        Assert.Equal(["inbox", "inbox-alerts", "outbox", "outbox-alerts", "drafts"], vm.RootFolders.Select(folder => folder.Id));
-        Assert.Equal([false, true, false, true, null], vm.RootFolders.Select(folder => folder.AlertView));
-        Assert.Equal("inbox", vm.RootFolders[1].StorageId);
-        Assert.Equal(FolderType.Outbox, vm.RootFolders[3].RootType);
-        Assert.False(vm.RootFolders[1].CanCreateSubfolder);
+        Assert.Equal(["inbox-alerts", "inbox", "outbox-alerts", "outbox", "drafts"], vm.RootFolders.Select(folder => folder.Id));
+        Assert.Equal([true, false, true, false, null], vm.RootFolders.Select(folder => folder.AlertView));
+        Assert.Equal("inbox", vm.RootFolders[0].StorageId);
+        Assert.Equal(FolderType.Outbox, vm.RootFolders[2].RootType);
+        Assert.False(vm.RootFolders[0].CanCreateSubfolder);
     }
 
     /// <summary>Without separation there are no alert roots.</summary>

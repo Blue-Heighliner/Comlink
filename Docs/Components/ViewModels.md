@@ -75,7 +75,7 @@ Left-side folder tree. Registered as `IFolderBarViewModel → FolderBarViewModel
 
 **Properties**: `SelectedFolder (FolderItemViewModel?)`, `RootFolders (ObservableCollection<FolderItemViewModel>)`.
 
-**Separated alerts.** While the display handler's `SeparateAlerts` is on, `Load` follows the stored Inbox root with an alert inbox root and the stored Outbox root with an alert outbox root (named "Alert Inbox"/"Alert Outbox" through the display handler's names). They store nothing of their own: each is a `FolderItemViewModel` of the same `RootType` with a `StorageId` of the stored root and an `AlertView` of `true` (the stored root's own item gets `false`), so `EntryBarViewModel` lists the stored folder keeping only alerts or only non-alerts, and a dropped entry is moved to the `StorageId`. The alert roots take no subfolders; subfolders hang under the normal inbox and list everything stored in them. `MainViewModel` shows a received message, and selects after a send, in the root whose `AlertView` matches whether the message is an alert.
+**Separated alerts.** While the display handler's `SeparateAlerts` is on, `Load` puts an alert inbox root above the stored Inbox root and an alert outbox root above the stored Outbox root (named "Alert Inbox"/"Alert Outbox" through the display handler's names). They store nothing of their own: each is a `FolderItemViewModel` of the same `RootType` with a `StorageId` of the stored root and an `AlertView` of `true` (the stored root's own item gets `false`), so `EntryBarViewModel` lists the stored folder keeping only alerts or only non-alerts, and a dropped entry is moved to the `StorageId`. The alert roots take no subfolders; subfolders hang under the normal inbox and list everything stored in them. `MainViewModel` shows a received message, and selects after a send, in the root whose `AlertView` matches whether the message is an alert.
 
 **Events**: `FolderSelected (Action<FolderItemViewModel>)`, `EntryMoved (Action)`.
 
@@ -438,7 +438,7 @@ Because `FillInInlineControl` is an X11 child window without keyboard focus, `Dr
 ## Supporting ViewModels (no interface)
 
 ### `FolderItemViewModel`
-Wraps a folder entity. Provides `Id`, `Name`, `RootType`, `ParentId`, `Icon`, `IsSelected`, `IsExpanded`, `Children (ObservableCollection<FolderItemViewModel>)`, `CanCreateSubfolder`, `IsRootFolder`, `IsSubfolder`. Treated as a lightweight display-model DTO — constructed freely in `FolderBarViewModel` with no DI.
+Wraps a folder entity. Provides `Id`, `Name`, `RootType`, `ParentId`, `Icon` (an arrow for the inbox and outbox, a doubled arrow, drawn in the alert color through the `IsAlertView` flag, for the alert inbox and alert outbox), `IsSelected`, `IsExpanded`, `Children (ObservableCollection<FolderItemViewModel>)`, `CanCreateSubfolder`, `IsRootFolder`, `IsSubfolder`. Treated as a lightweight display-model DTO — constructed freely in `FolderBarViewModel` with no DI.
 
 ### `EntryItemViewModel`
 Wraps a row in the entry list. Properties: `Id`, `Title`, `SecondaryText`, `PriorityText`, `TagText`, `TimeText`, `FixedStatusText`, `EntryType`, `SortDate`, `OverallStatus`, `StatusText`, `StatusColorHex` (hex string; converted to a brush in the view by `ColorHexToBrushConverter`), `IsOutboundMessage`, `SecurityLevelColorHex`, `IsAlert`, `TitleColorHex`, `SecondaryTextColorHex`. Treated as a display-model DTO.

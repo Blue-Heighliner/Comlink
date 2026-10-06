@@ -31,12 +31,27 @@ public sealed class FolderItemViewModelTests
     [InlineData(FolderType.Inbox, "↓")]
     [InlineData(FolderType.Outbox, "↑")]
     [InlineData(FolderType.Drafts, "✎")]
-    [InlineData(FolderType.Notes, "☰")]
-    [InlineData(FolderType.Activity, "≡")]
+    [InlineData(FolderType.Notes, "▤")]
+    [InlineData(FolderType.Activity, "↻")]
     public void RootFolder_Icon_MatchesType(FolderType type, string expectedIcon)
     {
         FolderItemViewModel vm = new("id", type.ToString(), type);
         Assert.Equal(expectedIcon, vm.Icon);
+    }
+
+    /// <summary>The alert inbox and alert outbox show a doubled arrow and are marked as alert views, the normal ones a single arrow.</summary>
+    [Theory]
+    [InlineData(FolderType.Inbox, "⇊")]
+    [InlineData(FolderType.Outbox, "⇈")]
+    public void AlertRoot_Icon_IsADoubledArrow(FolderType type, string expectedIcon)
+    {
+        FolderItemViewModel alert = new("id-alerts", type.ToString(), type, alertView: true, storageId: "id");
+        FolderItemViewModel normal = new("id", type.ToString(), type, alertView: false);
+
+        Assert.Equal(expectedIcon, alert.Icon);
+        Assert.True(alert.IsAlertView);
+        Assert.False(normal.IsAlertView);
+        Assert.NotEqual(alert.Icon, normal.Icon);
     }
 
     /// <summary>Subfolders always have an empty icon string.</summary>
