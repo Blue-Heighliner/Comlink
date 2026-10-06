@@ -1,43 +1,44 @@
 namespace BlueHeighliner.Comlink;
 
 /// <summary>
-/// ViewModel interface tracking pending (unread) alert messages and driving the title bar's alarm box
-/// and sound. See <see cref="IEngineController.GetIsAlert"/> and <c>Docs/Components/ViewModels.md</c>.
+/// ViewModel interface tracking unread alert messages and driving the title bar's alert indicator and the alarm sound.
+/// See <see cref="IEngineController.GetIsAlert"/> and <c>Docs/Components/ViewModels.md</c>.
 /// </summary>
 internal interface IAlertViewModel
 {
-    /// <summary>Gets a value indicating whether one or more alert messages are pending (unread).</summary>
+    /// <summary>Raised with the identifier of the oldest unread alert when <see cref="OpenOldestCommand"/> runs; whatever shows messages opens it, which reads it.</summary>
+    event Func<string, Task>? OpenRequested;
+
+    /// <summary>Gets a value indicating whether one or more alert messages are unread, which shows the indicator in the title bar.</summary>
     bool IsAlerting { get; }
-    /// <summary>Gets the number of pending (unread) alert messages.</summary>
+    /// <summary>Gets the number of unread alert messages.</summary>
     int PendingCount { get; }
-    /// <summary>Gets the text to display in the title bar's alert box.</summary>
+    /// <summary>Gets the text to display in the title bar's alert indicator.</summary>
     string AlertText { get; }
-    /// <summary>Gets the names of the keys that confirm the latest pending alert, from the message handler.</summary>
-    IReadOnlyList<string> ConfirmationKeys { get; }
-    /// <summary>Confirms (marks read) the most recently received pending alert, if any.</summary>
-    IAsyncRelayCommand ConfirmLatestCommand { get; }
+    /// <summary>Gets the names of the keys that open the oldest unread alert, from the message handler.</summary>
+    IReadOnlyList<string> QuickReadKeys { get; }
+    /// <summary>Opens the oldest unread alert, if any, which reads it.</summary>
+    IAsyncRelayCommand OpenOldestCommand { get; }
 }
 
 /// <summary>
-/// Tracks pending (unread) alert messages and drives the title bar's alarm box and sound. Subscribes to
+/// Tracks unread alert messages and drives the title bar's alert indicator and the alarm sound. Subscribes to
 /// <see cref="IEntryService.MessageInserted"/>/<see cref="IEntryService.MessageRead"/> so it reflects
-/// alerts regardless of whether they are read by opening the message normally or via quick confirmation.
+/// alerts however they are read. The alarm sounds for the alarm handler's alert duration, starting the time again when another alert arrives while it sounds,
+/// and stops early once every alert that set off the current alarm has been read.
 /// </summary>
 internal sealed partial class AlertViewModel : ObservableObject, IAlertViewModel
 {
     /// <summary>Initializes a new <see cref="AlertViewModel"/> and subscribes to entry read/insert events.</summary>
-    /// <param name="entryService">Entry service raising the insert/read events that drive the pending list.</param>
-    /// <param name="connection">Service connection used to mark an alert read via quick confirmation.</param>
-    /// <param name="engineController">Maps logical fields onto a message entity's stored message; provides alert box text, alarm sound duration, and quick-confirmation setting.</param>
+    /// <param name="entryService">Entry service raising the insert/read events that drive the unread list.</param>
+    /// <param name="engineController">Maps logical fields onto a message entity's stored message; provides the indicator text, the alarm sound duration and the quick read keys.</param>
     /// <param name="soundPlayer">Plays and stops the alarm sound.</param>
     public AlertViewModel(
         IEntryService entryService,
-        IServiceConnection connection,
         IEngineController engineController,
         IAlertSoundPlayer soundPlayer)
     {
         this.entryService = entryService;
-        this.connection = connection;
         this.engineController = engineController;
         this.soundPlayer = soundPlayer;
 
@@ -46,23 +47,26 @@ internal sealed partial class AlertViewModel : ObservableObject, IAlertViewModel
     }
 
     private readonly IEntryService entryService;
-    private readonly IServiceConnection connection;
     private readonly IEngineController engineController;
     private readonly IAlertSoundPlayer soundPlayer;
     private readonly List<string> pending = [];
+    private readonly HashSet<string> alarming = [];
     private Timer? soundTimer;
 
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(IsAlerting))]
-    [NotifyCanExecuteChangedFor(nameof(ConfirmLatestCommand))]
+    [NotifyCanExecuteChangedFor(nameof(OpenOldestCommand))]
     private int pendingCount;
+
+    /// <inheritdoc />
+    public event Func<string, Task>? OpenRequested;
 
     /// <inheritdoc />
     public bool IsAlerting => PendingCount > 0;
     /// <inheritdoc />
     public string AlertText => engineController.AlertLabel;
     /// <inheritdoc />
-    public IReadOnlyList<string> ConfirmationKeys => engineController.AlertConfirmationKeys;
+    public IReadOnlyList<string> QuickReadKeys => engineController.AlertQuickReadKeys;
 
     private Task OnMessageInserted(MessageEntity entity)
     {
@@ -75,6 +79,7 @@ internal sealed partial class AlertViewModel : ObservableObject, IAlertViewModel
         lock (pending)
         {
             pending.Add(entity.MessageId);
+            alarming.Add(entity.MessageId);
             count = pending.Count;
             ResetSoundTimer();
         }
@@ -87,20 +92,22 @@ internal sealed partial class AlertViewModel : ObservableObject, IAlertViewModel
     private Task OnMessageRead(MessageEntity entity)
     {
         int count;
+        bool silence = false;
         lock (pending)
         {
             if (!pending.Remove(entity.MessageId)) { return Task.CompletedTask; }
 
             count = pending.Count;
-            if (count == 0)
+            if (alarming.Remove(entity.MessageId) && alarming.Count == 0 && soundTimer is not null)
             {
-                soundTimer?.Dispose();
+                soundTimer.Dispose();
                 soundTimer = null;
+                silence = true;
             }
         }
 
         PendingCount = count;
-        if (count == 0) { soundPlayer.Stop(); }
+        if (silence) { soundPlayer.Stop(); }
         return Task.CompletedTask;
     }
 
@@ -109,7 +116,7 @@ internal sealed partial class AlertViewModel : ObservableObject, IAlertViewModel
         TimeSpan duration = engineController.AlarmSoundDuration;
         if (soundTimer is null)
         {
-            soundTimer = new Timer(_ => soundPlayer.Stop(), null, duration, Timeout.InfiniteTimeSpan);
+            soundTimer = new Timer(_ => EndAlarm(), null, duration, Timeout.InfiniteTimeSpan);
         }
         else
         {
@@ -117,19 +124,31 @@ internal sealed partial class AlertViewModel : ObservableObject, IAlertViewModel
         }
     }
 
-    /// <summary>Confirms (marks read) the most recently received pending alert, if any and if enabled.</summary>
-    [RelayCommand(CanExecute = nameof(CanConfirmLatest))]
-    private async Task ConfirmLatest()
+    private void EndAlarm()
     {
-        string? latest;
         lock (pending)
         {
-            latest = pending.Count > 0 ? pending[^1] : null;
+            soundTimer?.Dispose();
+            soundTimer = null;
+            alarming.Clear();
         }
 
-        if (latest is null) { return; }
-        await connection.MarkMessageRead(latest);
+        soundPlayer.Stop();
     }
 
-    private bool CanConfirmLatest() => IsAlerting;
+    /// <summary>Opens the oldest unread alert, if any.</summary>
+    [RelayCommand(CanExecute = nameof(CanOpenOldest))]
+    private async Task OpenOldest()
+    {
+        string? oldest;
+        lock (pending)
+        {
+            oldest = pending.Count > 0 ? pending[0] : null;
+        }
+
+        if (oldest is null || OpenRequested is null) { return; }
+        await OpenRequested.InvokeAll(oldest);
+    }
+
+    private bool CanOpenOldest() => IsAlerting;
 }

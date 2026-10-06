@@ -259,7 +259,7 @@ public sealed class EngineBuilderTests
         Assert.Equal(50020, controller.InterfacePort);
         Assert.Equal("ALERT", controller.AlertLabel);
         Assert.Equal(TimeSpan.FromSeconds(30), controller.AlarmSoundDuration);
-        Assert.Equal(["Space", "Enter"], controller.AlertConfirmationKeys);
+        Assert.Equal(["Space", "Enter"], controller.AlertQuickReadKeys);
         Assert.Equal("Tag", controller.TagLabel);
         Assert.True(controller.TagsEnabled);
         Assert.False(controller.PrintReceivedDefaultEnabled);

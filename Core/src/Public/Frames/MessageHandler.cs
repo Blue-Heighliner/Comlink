@@ -67,10 +67,21 @@ public interface IMessageHandler<TFrame, TPriority, TLevel> where TFrame : class
     bool IsAlert(TFrame frame) => false;
 
     /// <summary>
-    /// Gets the keys that confirm (mark read) the latest pending alert while the alarm sounds, pressed while focus is not in a text input. Repeating one confirms pending alerts one at a time, most recently received first.
-    /// A key is named as the user interface framework names it, for example <c>Space</c>, <c>Enter</c> or <c>F5</c>; a name that is not a key is ignored. Defaults to <c>Space</c> and <c>Enter</c>; return none to have no shortcut, leaving the alert box and the message itself to confirm it.
+    /// Gets the keys that open the oldest unread alert, pressed while focus is not in a text input (the alert indicator in the top bar does the same when clicked). Opening an alert reads it, so repeating a key works through the unread alerts oldest first.
+    /// A key is named as the user interface framework names it, for example <c>Space</c>, <c>Enter</c> or <c>F5</c>; a name that is not a key is ignored. Defaults to <c>Space</c> and <c>Enter</c>; return none to have no shortcut.
     /// </summary>
-    IReadOnlyList<string> AlertConfirmationKeys => ["Space", "Enter"];
+    IReadOnlyList<string> AlertQuickReadKeys => ["Space", "Enter"];
+
+    /// <summary>Gets how many of the alerts the engine has received it keeps for <see cref="FilterAlerts"/> to compare a new alert with. Once the limit is reached a newly kept alert replaces the oldest. Defaults to <c>10</c>; <c>0</c> keeps none.</summary>
+    int AlertHistoryLimit => 10;
+
+    /// <summary>
+    /// Decides whether a received alert is kept. <paramref name="previousAlerts"/> are the alerts the engine kept before it, oldest first, at most <see cref="AlertHistoryLimit"/> of them, so a handler can throw away one that repeats an earlier alert. Returning <see langword="false"/>
+    /// throws the received alert away: it is not stored, shown or alarmed on. An alert that is kept is added to the history. It is only asked about messages <see cref="IsAlert"/> says are alerts. By default every alert is kept.
+    /// </summary>
+    /// <param name="previousAlerts">The alerts kept before this one, oldest first.</param>
+    /// <param name="received">The alert that has just been received.</param>
+    bool FilterAlerts(IReadOnlyList<TFrame> previousAlerts, TFrame received) => true;
 
     /// <summary>Gets the priority level <paramref name="frame"/> was created with (see <see cref="MessageCreateContext{TPriority, TLevel}.Priority"/>), which also sets the send priority. A message received with a priority that is not a configured level is dropped, and an error logged.</summary>
     TPriority GetPriority(TFrame frame);

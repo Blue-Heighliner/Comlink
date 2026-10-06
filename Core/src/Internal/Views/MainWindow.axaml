@@ -44,7 +44,7 @@
                        IsKioskMode="{Binding IsKioskMode}"
                        IsAlerting="{Binding Alert.IsAlerting}"
                        AlertText="{Binding Alert.AlertText}"
-                       AlertCommand="{Binding Alert.ConfirmLatestCommand}" />
+                       AlertCommand="{Binding Alert.OpenOldestCommand}" />
 
     <!-- Main Content (row 2) -->
     <Panel Grid.Row="2">

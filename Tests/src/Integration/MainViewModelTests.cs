@@ -176,6 +176,70 @@ public sealed class MainViewModelTests
         s.EntryBar.Verify(e => e.Refresh(), Times.Once);
     }
 
+    private static FolderItemViewModel Folder(string id, FolderType type, bool? alertView = null, string? storageId = null)
+        => new(id, id, type, alertView: alertView, storageId: storageId);
+
+    /// <summary>An entry that is opened is shown in the listings: the folder that holds it is selected and the entry is queued to be selected in it.</summary>
+    [Fact]
+    public async Task EntryOpened_SelectsTheFolderAndQueuesTheEntry()
+    {
+        Setup s = new();
+        FolderItemViewModel drafts = Folder("root-drafts", FolderType.Drafts);
+        s.EntryService.Setup(e => e.Locate("D1", EntryType.Draft, false)).ReturnsAsync(new EntryLocation("root-drafts", false));
+        s.BuildVm();
+        s.FolderBar.Setup(f => f.RootFolders).Returns([Folder("root-inbox", FolderType.Inbox), drafts]);
+
+        await s.ContentArea.RaiseAsync(c => c.EntryOpened += null, EntryType.Draft, "D1", false);
+
+        s.EntryBar.Verify(e => e.SetPendingSelectId("D1"), Times.Once);
+        s.FolderBar.Verify(f => f.SelectFolder(drafts), Times.Once);
+    }
+
+    /// <summary>While alerts are kept apart an opened alert is shown in the alert inbox, and one that is not an alert in the normal inbox.</summary>
+    [Fact]
+    public async Task EntryOpened_AlertsSeparated_SelectsTheMatchingInbox()
+    {
+        Setup s = new();
+        FolderItemViewModel normal = Folder("root-inbox", FolderType.Inbox, alertView: false);
+        FolderItemViewModel alerts = Folder("root-inbox-alerts", FolderType.Inbox, alertView: true, storageId: "root-inbox");
+        s.EntryService.Setup(e => e.Locate("A1", EntryType.Message, false)).ReturnsAsync(new EntryLocation("root-inbox", true));
+        s.EntryService.Setup(e => e.Locate("M1", EntryType.Message, false)).ReturnsAsync(new EntryLocation("root-inbox", false));
+        s.BuildVm();
+        s.FolderBar.Setup(f => f.RootFolders).Returns([normal, alerts]);
+
+        await s.ContentArea.RaiseAsync(c => c.EntryOpened += null, EntryType.Message, "A1", false);
+        await s.ContentArea.RaiseAsync(c => c.EntryOpened += null, EntryType.Message, "M1", false);
+
+        s.FolderBar.Verify(f => f.SelectFolder(alerts), Times.Once);
+        s.FolderBar.Verify(f => f.SelectFolder(normal), Times.Once);
+    }
+
+    /// <summary>An entry that is already selected in its list is left alone.</summary>
+    [Fact]
+    public async Task EntryOpened_AlreadySelected_DoesNothing()
+    {
+        Setup s = new();
+        EntryItemViewModel entry = new("D1", "Draft", EntryType.Draft, DateTime.UtcNow) { IsSelected = true };
+        s.EntryBar.Setup(e => e.Entries).Returns([entry]);
+        s.BuildVm();
+
+        await s.ContentArea.RaiseAsync(c => c.EntryOpened += null, EntryType.Draft, "D1", false);
+
+        s.EntryService.Verify(e => e.Locate(It.IsAny<string>(), It.IsAny<EntryType>(), It.IsAny<bool>()), Times.Never);
+    }
+
+    /// <summary>Opening an alert from the indicator or a quick read key opens that message in the content area.</summary>
+    [Fact]
+    public async Task AlertOpenRequested_OpensTheMessageInTheContentArea()
+    {
+        Setup s = new();
+        s.BuildVm();
+
+        await s.Alert.RaiseAsync(a => a.OpenRequested += null, "ALERT1");
+
+        s.ContentArea.Verify(c => c.ShowEntry(It.Is<EntryItemViewModel>(item => item.Id == "ALERT1" && item.EntryType == EntryType.Message && !item.IsOutboundMessage)), Times.Once);
+    }
+
     /// <summary>IsKioskMode reflects the value from IEngineController at construction time.</summary>
     [Fact]
     public void IsKioskMode_ReflectsProvider()

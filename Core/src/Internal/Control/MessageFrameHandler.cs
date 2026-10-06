@@ -27,8 +27,14 @@ internal interface IMessageFrameHandler
     string GetBody(object frame);
     /// <summary>Returns whether <paramref name="frame"/> is an alert.</summary>
     bool IsAlert(object frame);
-    /// <summary>Gets the names of the keys that confirm the latest pending alert.</summary>
-    IReadOnlyList<string> AlertConfirmationKeys { get; }
+    /// <summary>Gets the names of the keys that open the oldest unread alert.</summary>
+    IReadOnlyList<string> AlertQuickReadKeys { get; }
+    /// <summary>Gets how many alerts are kept for <see cref="FilterAlerts"/>.</summary>
+    int AlertHistoryLimit { get; }
+    /// <summary>Returns whether the alert <paramref name="received"/> is kept, given the alerts kept before it.</summary>
+    /// <param name="previousAlerts">The alerts kept before it, oldest first.</param>
+    /// <param name="received">The received alert.</param>
+    bool FilterAlerts(IReadOnlyList<object> previousAlerts, object received);
     /// <summary>Gets the priority number of <paramref name="frame"/>.</summary>
     Enum GetPriority(object frame);
     /// <summary>Gets the tag of <paramref name="frame"/>.</summary>
@@ -89,7 +95,13 @@ internal sealed class MessageFrameHandler<TFrame, TPriority, TLevel>(IMessageHan
     public bool IsAlert(object frame) => handler.IsAlert((TFrame)frame);
 
     /// <inheritdoc />
-    public IReadOnlyList<string> AlertConfirmationKeys => handler.AlertConfirmationKeys;
+    public IReadOnlyList<string> AlertQuickReadKeys => handler.AlertQuickReadKeys;
+
+    /// <inheritdoc />
+    public int AlertHistoryLimit => handler.AlertHistoryLimit;
+
+    /// <inheritdoc />
+    public bool FilterAlerts(IReadOnlyList<object> previousAlerts, object received) => handler.FilterAlerts([.. previousAlerts.Cast<TFrame>()], (TFrame)received);
 
     /// <inheritdoc />
     public Enum GetPriority(object frame) => handler.GetPriority((TFrame)frame);

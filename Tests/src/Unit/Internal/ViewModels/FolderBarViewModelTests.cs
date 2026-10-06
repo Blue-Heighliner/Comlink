@@ -14,12 +14,13 @@ public sealed class FolderBarViewModelTests
         };
 
     private static (FolderBarViewModel Vm, Mock<IFolderRepository> FoldersMock, Mock<IEntryService> ServiceMock) Build(
-        List<Folder>? tree = null, bool canDelete = true)
+        List<Folder>? tree = null, bool canDelete = true, bool separateAlerts = false)
     {
         Mock<IFolderRepository> foldersMock = new();
         Mock<IEntryService> serviceMock = new();
         Mock<IEngineController> controllerMock = new();
         controllerMock.Setup(c => c.CanDelete(It.IsAny<FolderType>())).Returns(canDelete);
+        controllerMock.Setup(c => c.SeparateAlerts).Returns(separateAlerts);
         foldersMock.Setup(f => f.GetTree()).ReturnsAsync(tree ?? []);
         return (new FolderBarViewModel(foldersMock.Object, serviceMock.Object, controllerMock.Object), foldersMock, serviceMock);
     }
@@ -338,5 +339,34 @@ public sealed class FolderBarViewModelTests
         lockedService.Verify(s => s.DeleteFolderContents(It.IsAny<string>()), Times.Never);
         lockedFolders.Verify(f => f.Delete(It.IsAny<string>()), Times.Never);
         Assert.Single(locked.RootFolders[0].Children);
+    }
+
+    /// <summary>While alerts are kept apart the inbox and the outbox each come with an alert root after them, listing the same stored folder, and neither alert root takes subfolders.</summary>
+    [Fact]
+    public async Task Load_AlertsSeparated_AddsAnAlertInboxAndAlertOutbox()
+    {
+        List<Folder> tree = [MakeFolder("inbox", FolderType.Inbox), MakeFolder("outbox", FolderType.Outbox), MakeFolder("drafts", FolderType.Drafts)];
+        (FolderBarViewModel vm, _, _) = Build(tree, separateAlerts: true);
+
+        await vm.Load();
+
+        Assert.Equal(["inbox", "inbox-alerts", "outbox", "outbox-alerts", "drafts"], vm.RootFolders.Select(folder => folder.Id));
+        Assert.Equal([false, true, false, true, null], vm.RootFolders.Select(folder => folder.AlertView));
+        Assert.Equal("inbox", vm.RootFolders[1].StorageId);
+        Assert.Equal(FolderType.Outbox, vm.RootFolders[3].RootType);
+        Assert.False(vm.RootFolders[1].CanCreateSubfolder);
+    }
+
+    /// <summary>Without separation there are no alert roots.</summary>
+    [Fact]
+    public async Task Load_AlertsNotSeparated_HasNoAlertRoots()
+    {
+        List<Folder> tree = [MakeFolder("inbox", FolderType.Inbox), MakeFolder("outbox", FolderType.Outbox)];
+        (FolderBarViewModel vm, _, _) = Build(tree);
+
+        await vm.Load();
+
+        Assert.Equal(["inbox", "outbox"], vm.RootFolders.Select(folder => folder.Id));
+        Assert.All(vm.RootFolders, folder => Assert.Null(folder.AlertView));
     }
 }

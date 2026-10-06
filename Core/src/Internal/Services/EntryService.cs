@@ -57,8 +57,8 @@ internal interface IEntryService
     /// Returns a page of messages from the specified folder together with the total message count. A non-empty
     /// <paramref name="filter"/> matches <see cref="EntryFilter.Search"/> case-insensitively against the message's
     /// body, sender, destinations, tag, priority label and security level name; <see cref="EntryFilter.DateFrom"/>/<see cref="EntryFilter.DateTo"/>
-    /// bound its received date; <see cref="EntryFilter.Author"/> matches its sender and <see cref="EntryFilter.Destination"/> any addressee (both by substring); <see cref="EntryFilter.SecurityLevel"/>/<see cref="EntryFilter.Priority"/>/<see cref="EntryFilter.AlertOnly"/>
-    /// match exactly. Filtering loads the whole folder rather than paginating the LiteDB query directly, since a
+    /// bound its received date; <see cref="EntryFilter.Author"/> matches its sender and <see cref="EntryFilter.Destination"/> any addressee (both by substring); <see cref="EntryFilter.SecurityLevel"/>/<see cref="EntryFilter.Priority"/> match exactly and <see cref="EntryFilter.Alert"/> keeps only alerts or only non-alerts.
+    ///  Filtering loads the whole folder rather than paginating the LiteDB query directly, since a
     /// message's fields live inside the host's own opaque frame type and cannot be queried in the database.
     /// </summary>
     Task<(List<MessageEntity> Items, int Total)> GetMessages(string folderId, int page, EntryFilter? filter = null);
@@ -67,7 +67,7 @@ internal interface IEntryService
     /// <paramref name="filter"/> matches <see cref="EntryFilter.Search"/> against body or tag;
     /// <see cref="EntryFilter.DateFrom"/>/<see cref="EntryFilter.DateTo"/> bound the last-modified date;
     /// <see cref="EntryFilter.Destination"/> matches any addressee by substring;
-    /// <see cref="EntryFilter.SecurityLevel"/>/<see cref="EntryFilter.Priority"/>/<see cref="EntryFilter.AlertOnly"/> match exactly.
+    /// <see cref="EntryFilter.SecurityLevel"/>/<see cref="EntryFilter.Priority"/> match exactly.
     /// </summary>
     Task<(List<DraftEntity> Items, int Total)> GetDrafts(string folderId, int page, bool alphabetical, EntryFilter? filter = null);
     /// <summary>
@@ -90,6 +90,8 @@ internal interface IEntryService
     /// see <see cref="DeleteEntry"/>.
     /// </summary>
     Task MoveEntry(string entryId, EntryType entryType, string targetFolderId, bool isOutboundMessage = false);
+    /// <summary>Finds the folder that holds the specified entry, or <see langword="null"/> when there is no such entry or it has no folder (an activity log). <paramref name="isOutboundMessage"/> disambiguates which document is meant for a message; see <see cref="DeleteEntry"/>.</summary>
+    Task<EntryLocation?> Locate(string id, EntryType entryType, bool isOutboundMessage = false);
     /// <summary>Permanently deletes every message, draft, and note in <paramref name="folderId"/>.</summary>
     Task DeleteFolderContents(string folderId);
     /// <summary>Returns a page of activity log entries together with the total entry count.</summary>
@@ -449,7 +451,7 @@ internal sealed class EntryService : IEntryService
         if (filter.DateFrom is { } from && entity.ReceivedAt < from) { return false; }
         if (filter.DateTo is { } to && entity.ReceivedAt > to) { return false; }
         if (filter.Priority is { } priority && !engineController.GetMessagePriority(message).Equals(priority)) { return false; }
-        if (filter.AlertOnly is true && !engineController.GetIsAlert(message)) { return false; }
+        if (filter.Alert is { } alert && engineController.GetIsAlert(message) != alert) { return false; }
         if (filter.SecurityLevel is { } level && !string.Equals(engineController.GetSecurityLevel(message), level, StringComparison.OrdinalIgnoreCase)) { return false; }
         if (!string.IsNullOrWhiteSpace(filter.Author) && !Contains(engineController.GetFromUser(message), filter.Author.Trim())) { return false; }
         if (!string.IsNullOrWhiteSpace(filter.Destination) && !engineController.GetAddresses(message).Any(a => Contains(a.UserName, filter.Destination.Trim()))) { return false; }
@@ -471,7 +473,6 @@ internal sealed class EntryService : IEntryService
         if (filter.DateFrom is { } from && entity.ModifiedAt < from) { return false; }
         if (filter.DateTo is { } to && entity.ModifiedAt > to) { return false; }
         if (filter.Priority is { } priority && !engineController.PriorityOf(entity.Priority).Equals(priority)) { return false; }
-        if (filter.AlertOnly is true && !entity.IsAlert) { return false; }
         if (filter.SecurityLevel is { } level && !string.Equals(engineController.SecurityLevels.FirstOrDefault(candidate => candidate.Value == entity.SecurityLevel)?.Name, level, StringComparison.OrdinalIgnoreCase)) { return false; }
         if (!string.IsNullOrWhiteSpace(filter.Destination) && !entity.Addresses.Any(a => Contains(a.UserName, filter.Destination.Trim()))) { return false; }
         return string.IsNullOrWhiteSpace(filter.Search) || Contains(entity.Body, filter.Search) || Contains(entity.Tag, filter.Search) || Contains(entity.Name ?? string.Empty, filter.Search);
@@ -512,6 +513,22 @@ internal sealed class EntryService : IEntryService
         await messages.DeleteAll(folderId);
         await drafts.DeleteAll(folderId);
         await notes.DeleteAll(folderId);
+    }
+
+    /// <inheritdoc />
+    public async Task<EntryLocation?> Locate(string id, EntryType entryType, bool isOutboundMessage = false)
+    {
+        switch (entryType)
+        {
+            case EntryType.Message:
+                return await messages.Get(id, isOutboundMessage) is { } message ? new EntryLocation(message.FolderId, engineController.GetIsAlert(message.Message)) : null;
+            case EntryType.Draft:
+                return await drafts.Get(new ObjectId(id)) is { } draft ? new EntryLocation(draft.FolderId, false) : null;
+            case EntryType.Note:
+                return await notes.Get(new ObjectId(id)) is { } note ? new EntryLocation(note.FolderId, false) : null;
+            default:
+                return null;
+        }
     }
 
     /// <inheritdoc />

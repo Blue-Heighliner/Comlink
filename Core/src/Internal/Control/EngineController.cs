@@ -80,6 +80,8 @@ internal interface IEngineController
     string StatePath { get; }
     /// <summary><see langword="true"/> to enable kiosk mode, which hides the minimize and maximize buttons and has the close button restart rather than exit.</summary>
     bool IsKioskMode { get; }
+    /// <summary>Whether alert messages are kept in their own alert inbox and alert outbox, apart from the normal inbox and outbox, from the display handler.</summary>
+    bool SeparateAlerts { get; }
     /// <summary>The text displayed in the content area when no entry is selected.</summary>
     string HomeText { get; }
     /// <summary>Optional <c>avares://</c> URI or file path of the window icon to apply to the main window, or <see langword="null"/> to use the OS default.</summary>
@@ -109,10 +111,15 @@ internal interface IEngineController
     /// <summary>How long the alarm sound plays after a connection drops (see <see cref="IDisconnectAlarmService"/>), from the alarm handler.</summary>
     TimeSpan DisconnectAlarmDuration { get; }
     /// <summary>
-    /// The names of the keys that, pressed while focus is not in a text input, confirm (mark read) the latest unconfirmed alert, from the message handler.
-    /// Repeating one confirms pending alerts one at a time, most-recently-received first.
+    /// The names of the keys that, pressed while focus is not in a text input, open the oldest unread alert, from the message handler.
     /// </summary>
-    IReadOnlyList<string> AlertConfirmationKeys { get; }
+    IReadOnlyList<string> AlertQuickReadKeys { get; }
+    /// <summary>
+    /// Returns whether the received message <paramref name="message"/> is kept. A message that is not an alert always is. An alert is put to the message handler's <c>FilterAlerts</c> with the alerts kept before it; one that is kept is added
+    /// to that history, dropping the oldest once it holds <c>AlertHistoryLimit</c> of them, and one that is not is to be thrown away.
+    /// </summary>
+    /// <param name="message">An instance of <see cref="FrameType"/> that was received.</param>
+    bool AcceptAlert(object message);
     /// <summary>Gets how wide a line of a draft may be (see <see cref="IDraftHandler{TPriority, TLevel}"/>), or <see langword="null"/> when the draft view does not offer a width, which is without a draft handler or when it states neither a default nor a maximum.</summary>
     LineWidthRange? DraftLineWidth { get; }
     /// <summary>Gets what message tags may be: their case, length, and whether they may hold symbols, numbers and spaces (see <see cref="IDraftHandler{TPriority, TLevel}"/>). Unrestricted without a draft handler.</summary>
@@ -510,6 +517,7 @@ internal class EngineController(EngineBuilder builder, ICurrentUserProvider curr
     private readonly Lazy<IInitialProcessor?> initialPacketProcessor = new(() => builder.InitialPacketProcessor?.Create(services));
     private readonly Lazy<IInitialProcessor?> initialMessageProcessor = new(() => builder.InitialFrameProcessor?.Create(services));
     private readonly Lazy<IDraftFrameHandler?> draftHandler = new(() => builder.DraftHandler?.Create(services));
+    private readonly List<object> alertHistory = [];
     private readonly Lazy<IInstallHandler?> installHandler = new(() => builder.InstallHandler?.Create(services));
     private readonly Lazy<IAlarmHandler?> alarmHandler = new(() => builder.AlarmHandler?.Create(services));
     private readonly Lazy<IPrintFrameHandler?> printHandler = new(() => builder.PrintHandler?.Create(services));
@@ -546,6 +554,8 @@ internal class EngineController(EngineBuilder builder, ICurrentUserProvider curr
     public virtual string StatePath => Path.Combine(AppDataRoot, DataFolderName, "State.json");
     /// <inheritdoc />
     public virtual bool IsKioskMode => builder.DisplayHandlerInstance?.IsKiosk ?? false;
+    /// <inheritdoc />
+    public virtual bool SeparateAlerts => builder.DisplayHandlerInstance?.SeparateAlerts ?? false;
     /// <inheritdoc />
     public virtual string HomeText => builder.DisplayHandlerInstance?.HomeText.OrNull() ?? "HOME";
     private readonly NetworkConfig network = networkConfig ?? new();
@@ -593,7 +603,23 @@ internal class EngineController(EngineBuilder builder, ICurrentUserProvider curr
     /// <inheritdoc />
     public virtual TimeSpan AlarmSoundDuration => alarmHandler.Value?.AlertDuration ?? TimeSpan.FromSeconds(30);
     /// <inheritdoc />
-    public virtual IReadOnlyList<string> AlertConfirmationKeys => messageHandler.Value.AlertConfirmationKeys;
+    public virtual IReadOnlyList<string> AlertQuickReadKeys => messageHandler.Value.AlertQuickReadKeys;
+    /// <inheritdoc />
+    public virtual bool AcceptAlert(object message)
+    {
+        if (!GetIsAlert(message)) { return true; }
+
+        lock (alertHistory)
+        {
+            bool kept = messageHandler.Value.FilterAlerts([.. alertHistory], message);
+            if (!kept) { return false; }
+
+            int limit = Math.Max(0, messageHandler.Value.AlertHistoryLimit);
+            alertHistory.Add(message);
+            while (alertHistory.Count > limit) { alertHistory.RemoveAt(0); }
+            return true;
+        }
+    }
     /// <inheritdoc />
     public virtual DraftDefaults DraftDefaults
         => draftHandler.Value is { } handler ? new DraftDefaults(DraftTagRules.Filter(handler.DefaultTag ?? string.Empty), handler.DefaultPriority, handler.DefaultSecurityLevel) : DraftDefaults.None;

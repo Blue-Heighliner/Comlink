@@ -14,12 +14,11 @@ public sealed class AlertViewModelTests
         }
 
         public Mock<IEntryService> EntryService { get; } = new();
-        public Mock<IServiceConnection> Connection { get; } = new();
         public Mock<TestEngineController> AlertSettings { get; } = new() { CallBase = true };
         public Mock<IAlertSoundPlayer> SoundPlayer { get; } = new();
 
         public AlertViewModel Build()
-            => new(EntryService.Object, Connection.Object, AlertSettings.Object, SoundPlayer.Object);
+            => new(EntryService.Object, AlertSettings.Object, SoundPlayer.Object);
     }
 
     private static MessageEntity MakeMessage(string messageId, bool isAlert)
@@ -40,18 +39,18 @@ public sealed class AlertViewModelTests
         Assert.Equal(0, vm.PendingCount);
     }
 
-    /// <summary>AlertText and ConfirmationKeys are read from IEngineController.</summary>
+    /// <summary>AlertText and QuickReadKeys are read from IEngineController.</summary>
     [Fact]
     public void Ctor_ExposesConfigurationValues()
     {
         Setup s = new();
         s.AlertSettings.Setup(c => c.AlertLabel).Returns("INCOMING");
-        s.AlertSettings.Setup(c => c.AlertConfirmationKeys).Returns(["F5"]);
+        s.AlertSettings.Setup(c => c.AlertQuickReadKeys).Returns(["F5"]);
 
         AlertViewModel vm = s.Build();
 
         Assert.Equal("INCOMING", vm.AlertText);
-        Assert.Equal(["F5"], vm.ConfirmationKeys);
+        Assert.Equal(["F5"], vm.QuickReadKeys);
     }
 
     /// <summary>An inserted alert message becomes pending, starts alarming, and plays the sound.</summary>
@@ -140,56 +139,78 @@ public sealed class AlertViewModelTests
         Assert.Equal(0, vm.PendingCount);
     }
 
-    /// <summary>ConfirmLatestCommand cannot execute while no alerts are pending.</summary>
+    /// <summary>OpenOldestCommand cannot execute while no alerts are unread.</summary>
     [Fact]
-    public void ConfirmLatestCommand_NoPending_CannotExecute()
+    public void OpenOldestCommand_NoPending_CannotExecute()
     {
         AlertViewModel vm = new Setup().Build();
 
-        Assert.False(vm.ConfirmLatestCommand.CanExecute(null));
+        Assert.False(vm.OpenOldestCommand.CanExecute(null));
     }
 
-    /// <summary>Executing ConfirmLatestCommand marks the most recently received pending alert read via the connection.</summary>
+    /// <summary>OpenOldestCommand asks for the oldest unread alert to be opened, and keeps doing so until it has been read.</summary>
     [Fact]
-    public async Task ConfirmLatestCommand_Execute_MarksMostRecentPendingAlertRead()
+    public async Task OpenOldestCommand_Execute_RequestsTheOldestUnreadAlert()
     {
         Setup s = new();
-        s.Connection.Setup(c => c.MarkMessageRead(It.IsAny<string>(), It.IsAny<CancellationToken>())).ReturnsAsync(true);
         AlertViewModel vm = s.Build();
+        List<string> opened = [];
+        vm.OpenRequested += id =>
+        {
+            opened.Add(id);
+            return Task.CompletedTask;
+        };
         s.EntryService.Raise(e => e.MessageInserted += null, MakeMessage("MSG1", isAlert: true));
         s.EntryService.Raise(e => e.MessageInserted += null, MakeMessage("MSG2", isAlert: true));
 
-        Assert.True(vm.ConfirmLatestCommand.CanExecute(null));
-        await vm.ConfirmLatestCommand.ExecuteAsync(null);
-
-        s.Connection.Verify(c => c.MarkMessageRead("MSG2", It.IsAny<CancellationToken>()), Times.Once);
-    }
-
-    /// <summary>Pressing confirm repeatedly confirms each pending alert, most-recent-first, until none remain.</summary>
-    [Fact]
-    public async Task ConfirmLatestCommand_ExecutedForEachPending_ConfirmsAllMostRecentFirst()
-    {
-        Setup s = new();
-        s.Connection.Setup(c => c.MarkMessageRead(It.IsAny<string>(), It.IsAny<CancellationToken>())).ReturnsAsync(true);
-        AlertViewModel vm = s.Build();
-        s.EntryService.Raise(e => e.MessageInserted += null, MakeMessage("MSG1", isAlert: true));
-        s.EntryService.Raise(e => e.MessageInserted += null, MakeMessage("MSG2", isAlert: true));
-        s.EntryService.Raise(e => e.MessageInserted += null, MakeMessage("MSG3", isAlert: true));
-
-        // Each press confirms one; the ViewModel's own pending count only actually drops once
-        // EntryService reports the read back via its MessageRead event (mirroring production wiring).
-        await vm.ConfirmLatestCommand.ExecuteAsync(null);
-        s.EntryService.Raise(e => e.MessageRead += null, MakeMessage("MSG3", isAlert: true));
-
-        await vm.ConfirmLatestCommand.ExecuteAsync(null);
-        s.EntryService.Raise(e => e.MessageRead += null, MakeMessage("MSG2", isAlert: true));
-
-        await vm.ConfirmLatestCommand.ExecuteAsync(null);
+        Assert.True(vm.OpenOldestCommand.CanExecute(null));
+        await vm.OpenOldestCommand.ExecuteAsync(null);
         s.EntryService.Raise(e => e.MessageRead += null, MakeMessage("MSG1", isAlert: true));
+        await vm.OpenOldestCommand.ExecuteAsync(null);
 
-        s.Connection.Verify(c => c.MarkMessageRead("MSG3", It.IsAny<CancellationToken>()), Times.Once);
-        s.Connection.Verify(c => c.MarkMessageRead("MSG2", It.IsAny<CancellationToken>()), Times.Once);
-        s.Connection.Verify(c => c.MarkMessageRead("MSG1", It.IsAny<CancellationToken>()), Times.Once);
-        Assert.False(vm.IsAlerting);
+        Assert.Equal(["MSG1", "MSG2"], opened);
+    }
+
+    /// <summary>Another alert while the alarm sounds starts the time again, so the sound outlasts the first alert's duration.</summary>
+    [Fact]
+    public async Task MessageInserted_WhileSounding_RestartsTheDuration()
+    {
+        Setup s = new();
+        s.AlertSettings.Setup(c => c.AlarmSoundDuration).Returns(TimeSpan.FromMilliseconds(400));
+        s.Build();
+
+        s.EntryService.Raise(e => e.MessageInserted += null, MakeMessage("MSG1", isAlert: true));
+        await Task.Delay(250);
+        s.EntryService.Raise(e => e.MessageInserted += null, MakeMessage("MSG2", isAlert: true));
+        await Task.Delay(250);
+
+        s.SoundPlayer.Verify(p => p.Stop(), Times.Never);
+
+        await Task.Delay(400);
+        s.SoundPlayer.Verify(p => p.Stop(), Times.Once);
+    }
+
+    /// <summary>The alarm stops early only once every alert that set it off has been read, however many other alerts are still unread.</summary>
+    [Fact]
+    public async Task MessageRead_AllAlertsOfTheCurrentAlarm_StopsEarlyEvenWithOlderUnread()
+    {
+        Setup s = new();
+        s.AlertSettings.Setup(c => c.AlarmSoundDuration).Returns(TimeSpan.FromMilliseconds(150));
+        AlertViewModel vm = s.Build();
+        s.EntryService.Raise(e => e.MessageInserted += null, MakeMessage("OLD", isAlert: true));
+        await Task.Delay(400);
+        s.SoundPlayer.Verify(p => p.Stop(), Times.Once);
+
+        s.AlertSettings.Setup(c => c.AlarmSoundDuration).Returns(TimeSpan.FromMinutes(10));
+        s.EntryService.Raise(e => e.MessageInserted += null, MakeMessage("NEW1", isAlert: true));
+        s.EntryService.Raise(e => e.MessageInserted += null, MakeMessage("NEW2", isAlert: true));
+        s.EntryService.Raise(e => e.MessageRead += null, MakeMessage("NEW1", isAlert: true));
+        s.SoundPlayer.Verify(p => p.Stop(), Times.Once);
+
+        s.EntryService.Raise(e => e.MessageRead += null, MakeMessage("NEW2", isAlert: true));
+
+        s.SoundPlayer.Verify(p => p.Stop(), Times.Exactly(2));
+        Assert.Equal(1, vm.PendingCount);
+        Assert.True(vm.IsAlerting);
     }
 }

@@ -170,6 +170,8 @@ internal sealed class ConfiguredEngineController : IEngineController
     /// <inheritdoc />
     public bool IsKioskMode => fallback.IsKioskMode;
     /// <inheritdoc />
+    public bool SeparateAlerts => fallback.SeparateAlerts;
+    /// <inheritdoc />
     public string HomeText => fallback.HomeText;
     /// <inheritdoc />
     public string PriorityLabel => fallback.PriorityLabel;
@@ -224,7 +226,9 @@ internal sealed class ConfiguredEngineController : IEngineController
     /// <inheritdoc />
     public TimeSpan DisconnectAlarmDuration => fallback.DisconnectAlarmDuration;
     /// <inheritdoc />
-    public IReadOnlyList<string> AlertConfirmationKeys => fallback.AlertConfirmationKeys;
+    public IReadOnlyList<string> AlertQuickReadKeys => fallback.AlertQuickReadKeys;
+    /// <inheritdoc />
+    public bool AcceptAlert(object message) => fallback.AcceptAlert(message);
     /// <inheritdoc />
     public LineWidthRange? DraftLineWidth => fallback.DraftLineWidth;
     /// <inheritdoc />

@@ -7,6 +7,13 @@ public sealed class TestMessageHandler : IMessageHandler<TestFrame, TestMessageP
     public Func<string?, string>? Ids { get; init; }
 
     /// <inheritdoc />
+    public int AlertHistoryLimit => 2;
+
+    /// <inheritdoc />
+    public bool FilterAlerts(IReadOnlyList<TestFrame> previousAlerts, TestFrame received)
+        => received.Body != "DUPLICATE" || !previousAlerts.Any(previous => previous.Body == "DUPLICATE");
+
+    /// <inheritdoc />
     public bool IsValid(TestFrame frame) => !frame.IsHidden;
 
     /// <inheritdoc />

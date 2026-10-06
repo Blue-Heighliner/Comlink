@@ -84,15 +84,15 @@ internal partial class MainWindow : Window
     }
 
     /// <summary>
-    /// Confirms the latest pending alert on one of the message handler's alert confirmation keys, unless focus is in a text input — see
-    /// <see cref="IAlertViewModel.ConfirmLatestCommand"/> and <c>Docs/Components/ViewModels.md</c>.
+    /// Opens the oldest unread alert on one of the message handler's alert quick read keys, unless focus is in a text input — see
+    /// <see cref="IAlertViewModel.OpenOldestCommand"/> and <c>Docs/Components/ViewModels.md</c>.
     /// </summary>
     private void OnWindowKeyDown(object? sender, KeyEventArgs e)
     {
-        if (!viewModel.Alert.ConfirmationKeys.Any(name => Enum.TryParse(name, ignoreCase: true, out Key key) && key == e.Key)) { return; }
+        if (!viewModel.Alert.QuickReadKeys.Any(name => Enum.TryParse(name, ignoreCase: true, out Key key) && key == e.Key)) { return; }
         if (IsTextInputFocused()) { return; }
 
-        IAsyncRelayCommand command = viewModel.Alert.ConfirmLatestCommand;
+        IAsyncRelayCommand command = viewModel.Alert.OpenOldestCommand;
         if (!command.CanExecute(null)) { return; }
 
         command.Execute(null);

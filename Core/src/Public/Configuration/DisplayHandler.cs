@@ -21,6 +21,9 @@ public interface IDisplayHandler
     /// <summary>Gets a value indicating whether the main window runs in kiosk mode, which hides the minimize and maximize buttons and has the close button restart rather than exit. Defaults to <see langword="false"/>.</summary>
     bool IsKiosk => false;
 
+    /// <summary>Gets a value indicating whether alert messages are kept apart from the rest: the client then has an alert inbox and a normal inbox, an alert outbox and a normal outbox, and the entry lists have no alert filter. Defaults to <see langword="false"/>, where alerts are mixed in with the other messages and the lists of inboxes and outboxes can be filtered to alerts only. A draft list never has an alert filter.</summary>
+    bool SeparateAlerts => false;
+
     /// <summary>Gets the text shown in the content area when no entry is selected. Defaults to <c>HOME</c>.</summary>
     string? HomeText => null;
 

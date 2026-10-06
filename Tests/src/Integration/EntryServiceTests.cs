@@ -422,14 +422,27 @@ public sealed class EntryServiceTests : IDisposable
         Assert.Equal("High priority", format.GetBody(Assert.Single(items).Message));
     }
 
-    /// <summary>A message filter's AlertOnly excludes every non-alert message.</summary>
+    /// <summary>A message filter's Alert of false keeps only non-alert messages.</summary>
+    [Fact]
+    public async Task GetMessagesAsync_FilterNotAlert_ExcludesAlerts()
+    {
+        await service.StoreIncomingMessage(Guid.NewGuid().ToString(), "S", "Urgent", [], DateTime.UtcNow, tag: "ALERT");
+        await service.StoreIncomingMessage(Guid.NewGuid().ToString(), "S", "Routine", [], DateTime.UtcNow, tag: "OTHER");
+
+        (List<MessageEntity> items, int total) = await service.GetMessages("root-inbox", 1, filter: new EntryFilter { Alert = false });
+
+        Assert.Equal(1, total);
+        Assert.Equal("Routine", format.GetBody(Assert.Single(items).Message));
+    }
+
+    /// <summary>A message filter's Alert of true excludes every non-alert message.</summary>
     [Fact]
     public async Task GetMessagesAsync_FilterAlertOnly_ExcludesNonAlerts()
     {
         await service.StoreIncomingMessage(Guid.NewGuid().ToString(), "S", "Urgent", [], DateTime.UtcNow, tag: "ALERT");
         await service.StoreIncomingMessage(Guid.NewGuid().ToString(), "S", "Routine", [], DateTime.UtcNow, tag: "OTHER");
 
-        (List<MessageEntity> items, int total) = await service.GetMessages("root-inbox", 1, filter: new EntryFilter { AlertOnly = true });
+        (List<MessageEntity> items, int total) = await service.GetMessages("root-inbox", 1, filter: new EntryFilter { Alert = true });
 
         Assert.Equal(1, total);
         Assert.Equal("Urgent", format.GetBody(Assert.Single(items).Message));
@@ -500,7 +513,7 @@ public sealed class EntryServiceTests : IDisposable
         await service.SaveDraft(other);
 
         (List<DraftEntity> items, int total) = await service.GetDrafts("root-drafts", 1, alphabetical: false,
-            filter: new EntryFilter { Priority = TestMessagePriority.Level2, SecurityLevel = "RESTRICTED", AlertOnly = true });
+            filter: new EntryFilter { Priority = TestMessagePriority.Level2, SecurityLevel = "RESTRICTED" });
 
         Assert.Equal(1, total);
         Assert.Equal("Match", Assert.Single(items).Body);

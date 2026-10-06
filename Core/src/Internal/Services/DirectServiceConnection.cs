@@ -43,6 +43,8 @@ internal sealed class DirectServiceConnection : IServiceConnection
         if (!engineController.IsMessage(payload)) { return; }
 
         await SendReceiveReceipt(payload);
+        if (!engineController.AcceptAlert(payload)) { return; }
+
         if (MessageReceived is null) { return; }
         await MessageReceived.InvokeAll(engineController.ToMessageReceivedEvent(payload));
     }

@@ -216,7 +216,17 @@ internal sealed partial class EntryBarViewModel : ObservableObject, IEntryBarVie
     {
         get
         {
-            EntryFilter filter = new()
+            EntryFilter filter = UserFilter with { Alert = currentFolder?.AlertView ?? (AlertOnlyFilter ? true : null) };
+            return filter.IsEmpty ? null : filter;
+        }
+    }
+
+    // What the user typed into the list's filters, without the alert view of an alert inbox or outbox, which is not theirs to change.
+    private EntryFilter UserFilter
+    {
+        get
+        {
+            return new EntryFilter
             {
                 Search = Search,
                 DateFrom = CombinedDateFrom,
@@ -224,10 +234,8 @@ internal sealed partial class EntryBarViewModel : ObservableObject, IEntryBarVie
                 Author = ShowAuthorFilter && !string.IsNullOrWhiteSpace(AuthorFilter) ? AuthorFilter.Trim() : null,
                 Destination = ShowDestinationFilter && !string.IsNullOrWhiteSpace(DestinationFilter) ? DestinationFilter.Trim() : null,
                 SecurityLevel = SelectedSecurityLevelFilter.Name,
-                Priority = SelectedPriorityFilter.Value,
-                AlertOnly = AlertOnlyFilter ? true : null
+                Priority = SelectedPriorityFilter.Value
             };
-            return filter.IsEmpty ? null : filter;
         }
     }
 
@@ -316,7 +324,7 @@ internal sealed partial class EntryBarViewModel : ObservableObject, IEntryBarVie
             ShowDestinationFilter = folder.RootType is FolderType.Outbox or FolderType.Drafts;
             ShowSecurityLevelFilter = isMessageOrDraftFolder && engineController.SecurityLevels.Count > 0;
             ShowPriorityFilter = isMessageOrDraftFolder;
-            ShowAlertFilter = isMessageOrDraftFolder;
+            ShowAlertFilter = folder.RootType is FolderType.Inbox or FolderType.Outbox && !engineController.SeparateAlerts;
             CanDeleteEntries = engineController.CanDelete(folder.RootType);
             SearchText = string.Empty;
             ResetFilterCriteria();
@@ -416,7 +424,7 @@ internal sealed partial class EntryBarViewModel : ObservableObject, IEntryBarVie
         {
             case FolderType.Inbox:
                 {
-                    (List<MessageEntity> messages, int total) = await entryService.GetMessages(folder.Id, CurrentPage, Filter);
+                    (List<MessageEntity> messages, int total) = await entryService.GetMessages(folder.StorageId, CurrentPage, Filter);
                     foreach (MessageEntity m in messages)
                     {
                         string timeText = m.ReceivedAt.ToString("dd-MMM-yyyy HH:mm").ToUpperInvariant();
@@ -431,7 +439,7 @@ internal sealed partial class EntryBarViewModel : ObservableObject, IEntryBarVie
 
             case FolderType.Outbox:
                 {
-                    (List<MessageEntity> messages, int total) = await entryService.GetMessages(folder.Id, CurrentPage, Filter);
+                    (List<MessageEntity> messages, int total) = await entryService.GetMessages(folder.StorageId, CurrentPage, Filter);
                     foreach (MessageEntity m in messages)
                     {
                         string destinations = string.Join(", ", engineController.GetAddresses(m.Message).Select(a => a.UserName).Distinct());
@@ -537,7 +545,7 @@ internal sealed partial class EntryBarViewModel : ObservableObject, IEntryBarVie
         // While any filter is active, whether the new entry matches it can only be answered by IEntryService
         // (its match rules read fields this ViewModel does not itself decode), so it is left out of the visible
         // page rather than risked as a false positive; RefreshPaginationCounts below still reflects it if it does match.
-        if (CurrentPage == 1 && Filter is null)
+        if (CurrentPage == 1 && UserFilter.IsEmpty && (currentFolder.AlertView is not { } alertView || entry.IsAlert == alertView) && !AlertOnlyFilter)
         {
             Entries.Insert(0, entry);
             if (Entries.Count > PageSize)
@@ -554,7 +562,7 @@ internal sealed partial class EntryBarViewModel : ObservableObject, IEntryBarVie
         if (currentFolder is null) { return; }
         int total = currentFolder.RootType switch
         {
-            FolderType.Inbox or FolderType.Outbox => (await entryService.GetMessages(currentFolder.Id, 1, Filter)).Total,
+            FolderType.Inbox or FolderType.Outbox => (await entryService.GetMessages(currentFolder.StorageId, 1, Filter)).Total,
             FolderType.Drafts => (await entryService.GetDrafts(currentFolder.Id, 1, IsAlphabeticalSort, Filter)).Total,
             FolderType.Notes => (await entryService.GetNotes(currentFolder.Id, 1, IsAlphabeticalSort, Filter)).Total,
             FolderType.Activity => (await entryService.GetActivityLogs(1)).Total,

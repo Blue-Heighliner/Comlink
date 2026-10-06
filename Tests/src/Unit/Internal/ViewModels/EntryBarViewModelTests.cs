@@ -262,7 +262,7 @@ public sealed class EntryBarViewModelTests
 
         vm.AlertOnlyFilter = true;
 
-        svc.Verify(s => s.GetMessages("root-inbox", 1, new EntryFilter { AlertOnly = true }), Times.Once);
+        svc.Verify(s => s.GetMessages("root-inbox", 1, new EntryFilter { Alert = true }), Times.Once);
     }
 
     /// <summary>The author filter is shown for the Inbox only and passes the trimmed text through as EntryFilter.Author.</summary>
@@ -376,7 +376,7 @@ public sealed class EntryBarViewModelTests
 
         Assert.False(vm.IsFiltersExpanded);
         Assert.True(vm.AlertOnlyFilter);
-        svc.Verify(s => s.GetMessages("root-inbox", 1, new EntryFilter { AlertOnly = true }), Times.AtLeastOnce);
+        svc.Verify(s => s.GetMessages("root-inbox", 1, new EntryFilter { Alert = true }), Times.AtLeastOnce);
     }
 
     /// <summary>ActiveFilterCount and HasActiveFilters reflect exactly the filter section's own criteria, not SearchText.</summary>
@@ -413,7 +413,7 @@ public sealed class EntryBarViewModelTests
 
         vm.SearchText = "report";
 
-        svc.Verify(s => s.GetMessages("root-inbox", 1, new EntryFilter { Search = "report", AlertOnly = true }), Times.Once);
+        svc.Verify(s => s.GetMessages("root-inbox", 1, new EntryFilter { Search = "report", Alert = true }), Times.Once);
     }
 
     /// <summary>Inbox, Outbox and Draft entries carry IsAlert through from the stored message/draft, driving the entry's title color.</summary>
@@ -1106,5 +1106,56 @@ public sealed class EntryBarViewModelTests
         await vm.DeleteEntry(vm.Entries[0]);
 
         Assert.Equal(1, vm.TotalPages);
+    }
+
+    /// <summary>The alert filter is offered in an inbox and an outbox, and never in drafts or notes.</summary>
+    [Theory]
+    [InlineData(FolderType.Inbox, true)]
+    [InlineData(FolderType.Outbox, true)]
+    [InlineData(FolderType.Drafts, false)]
+    [InlineData(FolderType.Notes, false)]
+    public async Task LoadFolder_AlertFilter_OnlyInInboxAndOutbox(FolderType type, bool expected)
+    {
+        Mock<IEntryService> svc = new();
+        svc.Setup(s => s.GetMessages(It.IsAny<string>(), It.IsAny<int>(), It.IsAny<EntryFilter>())).ReturnsAsync((Items: new List<MessageEntity>(), Total: 0));
+        svc.Setup(s => s.GetDrafts(It.IsAny<string>(), It.IsAny<int>(), It.IsAny<bool>(), It.IsAny<EntryFilter>())).ReturnsAsync((Items: new List<DraftEntity>(), Total: 0));
+        svc.Setup(s => s.GetNotes(It.IsAny<string>(), It.IsAny<int>(), It.IsAny<bool>(), It.IsAny<EntryFilter>())).ReturnsAsync((Items: new List<NoteEntity>(), Total: 0));
+        EntryBarViewModel vm = new(svc.Object, format);
+
+        await vm.LoadFolder(MakeFolder("root", type));
+
+        Assert.Equal(expected, vm.ShowAlertFilter);
+    }
+
+    /// <summary>While alerts are kept apart there is no alert filter in an inbox or an outbox.</summary>
+    [Theory]
+    [InlineData(FolderType.Inbox)]
+    [InlineData(FolderType.Outbox)]
+    public async Task LoadFolder_AlertsSeparated_HasNoAlertFilter(FolderType type)
+    {
+        Mock<IEntryService> svc = new();
+        svc.Setup(s => s.GetMessages(It.IsAny<string>(), It.IsAny<int>(), It.IsAny<EntryFilter>())).ReturnsAsync((Items: new List<MessageEntity>(), Total: 0));
+        Mock<TestEngineController> controller = new() { CallBase = true };
+        controller.Setup(c => c.SeparateAlerts).Returns(true);
+        EntryBarViewModel vm = new(svc.Object, controller.Object);
+
+        await vm.LoadFolder(MakeFolder("root", type));
+
+        Assert.False(vm.ShowAlertFilter);
+    }
+
+    /// <summary>An alert inbox lists the stored inbox keeping only alerts, and the normal inbox keeps only non-alerts.</summary>
+    [Fact]
+    public async Task LoadFolder_AlertView_ListsTheStoredFolderFilteredByAlert()
+    {
+        Mock<IEntryService> svc = new();
+        svc.Setup(s => s.GetMessages(It.IsAny<string>(), It.IsAny<int>(), It.IsAny<EntryFilter>())).ReturnsAsync((Items: new List<MessageEntity>(), Total: 0));
+        EntryBarViewModel vm = new(svc.Object, format);
+
+        await vm.LoadFolder(new FolderItemViewModel("root-inbox-alerts", "Alert Inbox", FolderType.Inbox, alertView: true, storageId: "root-inbox"));
+        await vm.LoadFolder(new FolderItemViewModel("root-inbox", "Inbox", FolderType.Inbox, alertView: false));
+
+        svc.Verify(s => s.GetMessages("root-inbox", 1, new EntryFilter { Alert = true }), Times.Once);
+        svc.Verify(s => s.GetMessages("root-inbox", 1, new EntryFilter { Alert = false }), Times.Once);
     }
 }

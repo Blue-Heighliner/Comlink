@@ -167,6 +167,21 @@ public sealed class DirectServiceConnectionTests
         Assert.Equal(0, raised);
     }
 
+    /// <summary>An alert the message handler's filter throws away is not raised as received, while one it keeps is.</summary>
+    [Fact]
+    public async Task Connect_ThenRepeatedAlertDelivered_IsThrownAway()
+    {
+        DirectServiceConnection conn = Build(out FakePeerService peer, out _, out _, out _, out _);
+        await conn.Connect();
+        int raised = 0;
+        conn.MessageReceived += _ => { raised++; return Task.CompletedTask; };
+
+        await peer.FireMessageDelivered(new TestFrame { MessageId = "A1", FromUser = "REMOTE", Body = "DUPLICATE", IsAlert = true });
+        await peer.FireMessageDelivered(new TestFrame { MessageId = "A2", FromUser = "REMOTE", Body = "DUPLICATE", IsAlert = true });
+
+        Assert.Equal(1, raised);
+    }
+
     /// <summary>A message from another user is answered with a receive receipt frame addressed back to its sender.</summary>
     [Fact]
     public async Task MessageDelivered_FromAnotherUser_SendsReceiveReceiptToSender()

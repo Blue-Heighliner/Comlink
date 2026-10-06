@@ -30,13 +30,13 @@ internal sealed record EntryFilter
     public string? SecurityLevel { get; init; }
     /// <summary>Matches only entries sent/composed at this priority level. Messages and drafts; ignored for notes.</summary>
     public Enum? Priority { get; init; }
-    /// <summary>When <see langword="true"/>, matches only entries flagged as an alert. Messages and drafts; ignored for notes.</summary>
-    public bool? AlertOnly { get; init; }
+    /// <summary>When <see langword="true"/>, matches only messages that are alerts; when <see langword="false"/>, only messages that are not. <see langword="null"/> matches both. Messages only; ignored for drafts and notes.</summary>
+    public bool? Alert { get; init; }
 
     /// <summary>
     /// Gets a value indicating whether every criterion is unset. <see cref="IEntryService"/> skips filtering
     /// entirely in this case and paginates the folder's LiteDB query directly, rather than loading the whole
     /// folder to filter in memory.
     /// </summary>
-    public bool IsEmpty => string.IsNullOrWhiteSpace(Search) && DateFrom is null && DateTo is null && string.IsNullOrWhiteSpace(Author) && string.IsNullOrWhiteSpace(Destination) && SecurityLevel is null && Priority is null && AlertOnly is null;
+    public bool IsEmpty => string.IsNullOrWhiteSpace(Search) && DateFrom is null && DateTo is null && string.IsNullOrWhiteSpace(Author) && string.IsNullOrWhiteSpace(Destination) && SecurityLevel is null && Priority is null && Alert is null;
 }

@@ -5,6 +5,8 @@ internal interface IMessageViewModel
 {
     /// <summary>Gets the unique message identifier.</summary>
     string MessageId { get; }
+    /// <summary>Gets a value indicating whether this is the sent (Outbox) record of the message rather than the received (Inbox) one.</summary>
+    bool IsOutbound { get; }
     /// <summary>Gets the message body text.</summary>
     string Body { get; }
     /// <summary>Gets the name of the user that originated the message.</summary>
@@ -103,6 +105,7 @@ internal sealed partial class MessageViewModel : ObservableObject, IMessageViewM
     public MessageViewModel(MessageEntity entity, IEngineController engineController)
     {
         MessageId = entity.MessageId;
+        IsOutbound = entity.IsOutbound;
         Body = engineController.GetBody(entity.Message);
         FromUser = engineController.GetFromUser(entity.Message);
         ReceivedAt = entity.ReceivedAt;
@@ -143,6 +146,8 @@ internal sealed partial class MessageViewModel : ObservableObject, IMessageViewM
 
     /// <summary>Gets the unique message identifier.</summary>
     public string MessageId { get; }
+    /// <summary>Gets a value indicating whether this is the sent (Outbox) record of the message rather than the received (Inbox) one.</summary>
+    public bool IsOutbound { get; }
     /// <summary>Gets the message body text.</summary>
     public string Body { get; }
     /// <summary>Gets the name of the user that originated the message.</summary>

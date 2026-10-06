@@ -329,7 +329,7 @@ public sealed class ControlProviderTests
         TestEngineController controller = new();
         Assert.Equal("ALERT", controller.AlertLabel);
         Assert.Equal(TimeSpan.FromSeconds(30), controller.AlarmSoundDuration);
-        Assert.Equal(["Space", "Enter"], controller.AlertConfirmationKeys);
+        Assert.Equal(["Space", "Enter"], controller.AlertQuickReadKeys);
     }
 
     /// <summary>Falls back to the wrapped provider for every field when not configured.</summary>
@@ -339,12 +339,12 @@ public sealed class ControlProviderTests
         Mock<IEngineController> fallback = new();
         fallback.Setup(f => f.AlertLabel).Returns("FALLBACK");
         fallback.Setup(f => f.AlarmSoundDuration).Returns(TimeSpan.FromSeconds(12));
-        fallback.Setup(f => f.AlertConfirmationKeys).Returns(["F5"]);
+        fallback.Setup(f => f.AlertQuickReadKeys).Returns(["F5"]);
         ConfiguredEngineController controller = new(fallback.Object, new NetworkConfig(), NoCurrentUser);
 
         Assert.Equal("FALLBACK", controller.AlertLabel);
         Assert.Equal(TimeSpan.FromSeconds(12), controller.AlarmSoundDuration);
-        Assert.Equal(["F5"], controller.AlertConfirmationKeys);
+        Assert.Equal(["F5"], controller.AlertQuickReadKeys);
     }
 
     /// <summary>Every settable field reflects an explicit override from config.</summary>
@@ -777,5 +777,42 @@ public sealed class ControlProviderTests
         using RSA key = RSA.Create(2048);
         CertificateRequest request = new($"CN={simpleName}", key, HashAlgorithmName.SHA256, RSASignaturePadding.Pkcs1);
         return request.CreateSelfSigned(DateTimeOffset.UtcNow.AddMinutes(-5), DateTimeOffset.UtcNow.AddDays(1));
+    }
+
+    private static TestFrame Alert(string body) => new() { Body = body, IsAlert = true };
+
+    /// <summary>A message that is not an alert is always kept, and does not enter the alert history.</summary>
+    [Fact]
+    public void EngineController_AcceptAlert_NonAlertIsAlwaysKept()
+    {
+        TestEngineController controller = new();
+
+        Assert.True(controller.AcceptAlert(new TestFrame { Body = "DUPLICATE" }));
+        Assert.True(controller.AcceptAlert(new TestFrame { Body = "DUPLICATE" }));
+    }
+
+    /// <summary>An alert the handler's filter refuses, given the alerts kept before it, is thrown away and not added to the history.</summary>
+    [Fact]
+    public void EngineController_AcceptAlert_RepeatedAlertIsThrownAway()
+    {
+        TestEngineController controller = new();
+
+        Assert.True(controller.AcceptAlert(Alert("DUPLICATE")));
+        Assert.False(controller.AcceptAlert(Alert("DUPLICATE")));
+        Assert.True(controller.AcceptAlert(Alert("OTHER")));
+    }
+
+    /// <summary>The history holds only as many alerts as the handler's limit, a newly kept alert replacing the oldest.</summary>
+    [Fact]
+    public void EngineController_AcceptAlert_HistoryDropsTheOldestAtTheLimit()
+    {
+        TestEngineController controller = new();
+
+        Assert.True(controller.AcceptAlert(Alert("DUPLICATE")));
+        Assert.True(controller.AcceptAlert(Alert("A")));
+        Assert.False(controller.AcceptAlert(Alert("DUPLICATE")));
+        Assert.True(controller.AcceptAlert(Alert("B")));
+
+        Assert.True(controller.AcceptAlert(Alert("DUPLICATE")));
     }
 }

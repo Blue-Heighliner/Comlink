@@ -273,7 +273,7 @@ internal sealed partial class MainViewModel : ObservableObject, IMainViewModel
     /// <inheritdoc />
     public string AppName => engineController.AppName;
 
-    private bool isOpeningNew;
+    private bool isRevealing;
 
     private void WireEvents()
     {
@@ -281,7 +281,7 @@ internal sealed partial class MainViewModel : ObservableObject, IMainViewModel
         {
             // While the export view is active and collecting entries ("Some" scope), browsing folders
             // refreshes the entry listing to pick more entries from without leaving the export view.
-            if (!IsExportCollectingActive() && !isOpeningNew)
+            if (!IsExportCollectingActive() && !isRevealing)
             {
                 contentArea.ShowHome();
             }
@@ -300,11 +300,15 @@ internal sealed partial class MainViewModel : ObservableObject, IMainViewModel
                     export.AddEntry(entry);
                 }
             }
-            else if (entries.Count == 1)
+            else if (entries.Count == 1 && !IsShown(entries[0]))
             {
                 await contentArea.ShowEntry(entries[0]);
             }
         };
+
+        alert.OpenRequested += id => contentArea.ShowEntry(new EntryItemViewModel(id, string.Empty, EntryType.Message, DateTime.UtcNow));
+
+        contentArea.EntryOpened += Reveal;
 
         entryBar.EntryDeleted += entry =>
         {
@@ -413,7 +417,7 @@ internal sealed partial class MainViewModel : ObservableObject, IMainViewModel
                 evt.Addresses.Select(a => new AddressData { UserName = a.UserName, Type = a.Type, Information = a.Information }).ToList(),
                 evt.SentAt, evt.Priority, evt.Tag, engineController.GetSecurityLevelName(evt.SecurityLevel));
 
-            FolderItemViewModel? inboxFolder = folderBar.RootFolders.FirstOrDefault(f => f.RootType == FolderType.Inbox);
+            FolderItemViewModel? inboxFolder = FindMessageRoot(FolderType.Inbox, evt.IsAlert);
             if (inboxFolder is not null && folderBar.SelectedFolder?.Id == inboxFolder.Id)
             {
                 string timeText = entity.ReceivedAt.ToString("dd-MMM-yyyy HH:mm").ToUpperInvariant();
@@ -492,7 +496,7 @@ internal sealed partial class MainViewModel : ObservableObject, IMainViewModel
 
     private async Task HandleDraftSent(MessageEntity msg)
     {
-        FolderItemViewModel? outboxFolder = folderBar.RootFolders.FirstOrDefault(f => f.RootType == FolderType.Outbox);
+        FolderItemViewModel? outboxFolder = FindMessageRoot(FolderType.Outbox, engineController.GetIsAlert(msg.Message));
         if (outboxFolder is null) { return; }
 
         entryBar.SetPendingSelectId(msg.MessageId);
@@ -502,9 +506,56 @@ internal sealed partial class MainViewModel : ObservableObject, IMainViewModel
         }
         else
         {
-            folderBar.SelectFolderByType(FolderType.Outbox);
+            folderBar.SelectFolder(outboxFolder);
         }
     }
+
+    private bool IsShown(EntryItemViewModel entry) => contentArea.ActiveContent switch
+    {
+        IMessageViewModel message => entry.EntryType == EntryType.Message && message.MessageId == entry.Id && message.IsOutbound == entry.IsOutboundMessage,
+        IDraftViewModel draft => entry.EntryType == EntryType.Draft && draft.Id == entry.Id,
+        INoteViewModel note => entry.EntryType == EntryType.Note && note.Id == entry.Id,
+        _ => false
+    };
+
+    // Whatever is opened in the content area, however it got there, is shown in the listings as well: its folder is selected and it is selected in that folder's list.
+    private async Task Reveal(EntryType type, string id, bool isOutbound)
+    {
+        if (entryBar.Entries?.Any(entry => entry.IsSelected && entry.Id == id && entry.EntryType == type) == true) { return; }
+
+        EntryLocation? location = await entryService.Locate(id, type, isOutbound);
+        if (location is null) { return; }
+
+        FolderItemViewModel? folder = FindFolder(folderBar.RootFolders, location.FolderId);
+        if (folder is { IsRootFolder: true, AlertView: not null }) { folder = FindMessageRoot(folder.RootType, location.IsAlert) ?? folder; }
+        if (folder is null) { return; }
+
+        entryBar.SetPendingSelectId(id);
+        if (folderBar.SelectedFolder?.Id == folder.Id)
+        {
+            await entryBar.Refresh();
+            return;
+        }
+
+        isRevealing = true;
+        try { folderBar.SelectFolder(folder); }
+        finally { isRevealing = false; }
+    }
+
+    private static FolderItemViewModel? FindFolder(IEnumerable<FolderItemViewModel> folders, string storageId)
+    {
+        foreach (FolderItemViewModel folder in folders)
+        {
+            if (folder.StorageId == storageId && folder.AlertView is not true) { return folder; }
+            if (FindFolder(folder.Children, storageId) is { } found) { return found; }
+        }
+
+        return null;
+    }
+
+    // While alerts are kept apart the inbox and the outbox each come as two roots, one for alerts and one for the rest; otherwise there is one.
+    private FolderItemViewModel? FindMessageRoot(FolderType type, bool isAlert)
+        => folderBar.RootFolders.FirstOrDefault(folder => folder.RootType == type && folder.IsRootFolder && (folder.AlertView is null || folder.AlertView == isAlert));
 
     [RelayCommand]
     private async Task CreateDraft()
@@ -526,7 +577,7 @@ internal sealed partial class MainViewModel : ObservableObject, IMainViewModel
 
     private void OpenNew(object editor, FolderType folderType)
     {
-        isOpeningNew = true;
+        isRevealing = true;
         try
         {
             contentArea.ShowEntry(editor);
@@ -535,7 +586,7 @@ internal sealed partial class MainViewModel : ObservableObject, IMainViewModel
         }
         finally
         {
-            isOpeningNew = false;
+            isRevealing = false;
         }
     }
 

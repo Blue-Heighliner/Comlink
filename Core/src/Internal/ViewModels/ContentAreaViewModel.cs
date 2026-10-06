@@ -10,6 +10,9 @@ internal interface IContentAreaViewModel
     /// <summary>Raised with the id, type and new title (its name or first line) when the draft or note shown in the content area is edited in a way that changes what the list calls it.</summary>
     event Action<string, EntryType, string>? EntryTitleChanged;
 
+    /// <summary>Raised with the type, identifier and direction (whether it is a sent message; meaningless otherwise) of a message, draft or note after it has been opened in the content area, so the listings can show where it is.</summary>
+    event Func<EntryType, string, bool, Task>? EntryOpened;
+
     /// <summary>Gets or sets the currently displayed entry ViewModel, or <see langword="null"/> when showing the home screen.</summary>
     object? ActiveContent { get; set; }
     /// <summary>Gets or sets a value indicating whether the home screen placeholder is visible.</summary>
@@ -101,6 +104,8 @@ internal sealed partial class ContentAreaViewModel : ObservableObject, IContentA
     /// <inheritdoc />
     public event Func<Task>? EntryDeleted;
     /// <inheritdoc />
+    public event Func<EntryType, string, bool, Task>? EntryOpened;
+    /// <inheritdoc />
     public event Action<string, EntryType, string>? EntryTitleChanged;
     /// <summary>Gets the welcome text supplied by the host's home content provider.</summary>
     public string HomeText { get; }
@@ -148,6 +153,7 @@ internal sealed partial class ContentAreaViewModel : ObservableObject, IContentA
         {
             DiscardStagedSendIfLeaving();
             ActiveContent = content;
+            await NotifyOpened();
         }
     }
 
@@ -168,6 +174,7 @@ internal sealed partial class ContentAreaViewModel : ObservableObject, IContentA
         {
             DiscardStagedSendIfLeaving();
             ActiveContent = content;
+            await NotifyOpened();
         }
     }
 
@@ -179,6 +186,24 @@ internal sealed partial class ContentAreaViewModel : ObservableObject, IContentA
         showGeneration++;
         IsHomeVisible = false;
         ActiveContent = entryVm;
+        _ = NotifyOpened();
+    }
+
+    private async Task NotifyOpened()
+    {
+        if (EntryOpened is null) { return; }
+
+        (EntryType Type, string Id, bool IsOutbound)? opened = ActiveContent switch
+        {
+            IMessageViewModel message => (EntryType.Message, message.MessageId, message.IsOutbound),
+            IDraftViewModel draft => (EntryType.Draft, draft.Id, false),
+            INoteViewModel note => (EntryType.Note, note.Id, false),
+            _ => null
+        };
+        if (opened is not var (type, id, isOutbound)) { return; }
+
+        try { await EntryOpened.InvokeAll(type, id, isOutbound); }
+        catch (Exception ex) { logger.LogError(ex, "Failed to show where the opened entry is kept"); }
     }
 
     // The staged send screen only ever exists as the automatic result of an import - there is no way to navigate

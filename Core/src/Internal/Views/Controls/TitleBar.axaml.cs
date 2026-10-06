@@ -296,12 +296,16 @@ internal partial class TitleBar : UserControl
         {
             Border? box = this.FindControl<Border>("AlertBox");
             if (box is not null) { box.IsVisible = IsAlerting; }
+            ApplyAlertText();
         }
-        if (change.Property == AlertTextProperty)
-        {
-            TextBlock? tb = this.FindControl<TextBlock>("AlertBoxText");
-            if (tb is not null) { tb.Text = AlertText; }
-        }
+        if (change.Property == AlertTextProperty) { ApplyAlertText(); }
+    }
+
+    // Set whenever the box is shown as well as when the text changes, since the text alone does not change when the host's label is the default one.
+    private void ApplyAlertText()
+    {
+        TextBlock? text = this.FindControl<TextBlock>("AlertBoxText");
+        if (text is not null) { text.Text = AlertText.ToUpperInvariant(); }
     }
 
     private void UpdateActionButtonsVisibility()
@@ -399,6 +403,8 @@ internal partial class TitleBar : UserControl
     protected override void OnAttachedToVisualTree(VisualTreeAttachmentEventArgs e)
     {
         base.OnAttachedToVisualTree(e);
+
+        ApplyAlertText();
 
         if (e.Root is Window window)
         {

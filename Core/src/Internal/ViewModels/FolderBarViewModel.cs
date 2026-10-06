@@ -39,9 +39,9 @@ internal interface IFolderBarViewModel
 /// <summary>ViewModel for the folder tree panel, managing folder loading, selection, and drag-and-drop moves.</summary>
 internal sealed partial class FolderBarViewModel : ObservableObject, IFolderBarViewModel
 {
-    private FolderItemViewModel BuildViewModel(Folder folder)
+    private FolderItemViewModel BuildViewModel(Folder folder, bool? alertView = null)
     {
-        FolderItemViewModel vm = new(folder.Id, folder.ParentId is null ? engineController.Display(folder.Name) : folder.Name, folder.RootType, folder.ParentId);
+        FolderItemViewModel vm = new(folder.Id, folder.ParentId is null ? engineController.Display(folder.Name) : folder.Name, folder.RootType, folder.ParentId, alertView);
         foreach (Folder child in folder.Children)
         {
             vm.Children.Add(BuildViewModel(child));
@@ -127,9 +127,14 @@ internal sealed partial class FolderBarViewModel : ObservableObject, IFolderBarV
         foreach (FolderType rootType in rootOrder)
         {
             Folder? rootFolder = tree.FirstOrDefault(f => f.ParentId is null && f.RootType == rootType);
-            if (rootFolder is not null)
+            if (rootFolder is null) { continue; }
+
+            bool isMessageRoot = rootType is FolderType.Inbox or FolderType.Outbox;
+            FolderItemViewModel root = BuildViewModel(rootFolder, isMessageRoot && engineController.SeparateAlerts ? false : null);
+            RootFolders.Add(root);
+            if (isMessageRoot && engineController.SeparateAlerts)
             {
-                RootFolders.Add(BuildViewModel(rootFolder));
+                RootFolders.Add(new FolderItemViewModel($"{rootFolder.Id}-alerts", engineController.Display($"Alert {rootFolder.Name}"), rootType, alertView: true, storageId: rootFolder.Id));
             }
         }
 
@@ -173,7 +178,7 @@ internal sealed partial class FolderBarViewModel : ObservableObject, IFolderBarV
     public async Task MoveEntry(EntryItemViewModel entry, FolderItemViewModel targetFolder)
     {
         if (!IsCompatibleMove(entry.EntryType, targetFolder.RootType, entry.IsOutboundMessage)) { return; }
-        await entryService.MoveEntry(entry.Id, entry.EntryType, targetFolder.Id, entry.IsOutboundMessage);
+        await entryService.MoveEntry(entry.Id, entry.EntryType, targetFolder.StorageId, entry.IsOutboundMessage);
         EntryMoved?.Invoke();
     }
 
