@@ -1,6 +1,6 @@
 namespace BlueHeighliner.Comlink;
 
-/// <summary>Generates frame identifiers through the host's <see cref="IMessageHandler{TFrame, TPriority, TLevel}.NextId"/>, handing it the identifier generated last, which it keeps between restarts.</summary>
+/// <summary>Generates frame identifiers through the host's <see cref="IMessageHandler{TFrame, TPriority, TLevel, TAspect}.NextId"/>, handing it the identifier generated last, which it keeps between restarts.</summary>
 internal interface IIdGenerator
 {
     /// <summary>Generates the next identifier and remembers it as the last one.</summary>

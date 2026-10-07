@@ -5,7 +5,7 @@ namespace BlueHeighliner.Comlink;
 /// locally-saved target list (added to and removed from freely, persisted between restarts). Whenever this instance receives a message (a frame the message handler recognizes;
 /// other frames are never forwarded) that <see cref="Accepts"/> accepts, it is automatically forwarded, unchanged in body, to every user currently on that target list, with no action needed beyond
 /// having set the target list up once. <see cref="Accepts"/> is never consulted for a user with no access, or with an empty target list, so an inaccessible or unconfigured controller costs nothing per
-/// received message beyond that one check. Added with <see cref="IFrameBuilder{TFrame, TPacket, TPriority, TLevel}.AutoForward{TController}"/>.
+/// received message beyond that one check. Added with <see cref="IFrameBuilder{TFrame, TPacket, TPriority, TLevel, TAspect}.AutoForward{TController}"/>.
 /// </summary>
 /// <typeparam name="TFrame">The host's frame type.</typeparam>
 public interface IAutoForwardController<TFrame> where TFrame : class

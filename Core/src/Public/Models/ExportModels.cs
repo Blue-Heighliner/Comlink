@@ -2,7 +2,7 @@ namespace BlueHeighliner.Comlink;
 
 /// <summary>
 /// Exported representation of a message entry: what the engine's own built-in JSON export writes, and what a
-/// custom export format's serializer (see <see cref="IExportsBuilder{TFrame, TPacket, TPriority, TLevel}.Format{TFormat}"/>) receives for a message.
+/// custom export format's serializer (see <see cref="IExportsBuilder{TFrame, TPacket, TPriority, TLevel, TAspect}.Format{TFormat}"/>) receives for a message.
 /// </summary>
 public sealed record MessageExportData
 {
@@ -45,7 +45,7 @@ public sealed record MessageDeliveryStatus
 
 /// <summary>
 /// Exported representation of a draft entry: what the engine's own built-in JSON export writes, and what a
-/// custom export format's serializer (see <see cref="IExportsBuilder{TFrame, TPacket, TPriority, TLevel}.Format{TFormat}"/>) receives for a draft.
+/// custom export format's serializer (see <see cref="IExportsBuilder{TFrame, TPacket, TPriority, TLevel, TAspect}.Format{TFormat}"/>) receives for a draft.
 /// </summary>
 public sealed record DraftExportData
 {
@@ -67,6 +67,10 @@ public sealed record DraftExportData
     public required int Priority { get; init; }
     /// <summary>Tag identifying the type of this draft; see <see cref="IEngineController.GetTag"/>.</summary>
     public required string Tag { get; init; }
+    /// <summary>Integer value of the message level the draft is set to be sent at, a member of the enum the host stated for its message levels, or <see langword="null"/> for none.</summary>
+    public int? MessageLevel { get; init; }
+    /// <summary>Integer value of the message aspect the draft is set to be sent with, a member of the enum the host stated for its message aspects, or <see langword="null"/> for none.</summary>
+    public int? MessageAspect { get; init; }
     /// <summary>UTC timestamp when the draft was sent, or <see langword="null"/> if not yet sent.</summary>
     public DateTime? SentAt { get; init; }
     /// <summary>UTC timestamp when this draft was first created.</summary>
@@ -77,7 +81,7 @@ public sealed record DraftExportData
 
 /// <summary>
 /// Exported representation of a note entry: what the engine's own built-in JSON export writes, and what a
-/// custom export format's serializer (see <see cref="IExportsBuilder{TFrame, TPacket, TPriority, TLevel}.Format{TFormat}"/>) receives for a note.
+/// custom export format's serializer (see <see cref="IExportsBuilder{TFrame, TPacket, TPriority, TLevel, TAspect}.Format{TFormat}"/>) receives for a note.
 /// </summary>
 public sealed record NoteExportData
 {
@@ -95,7 +99,7 @@ public sealed record NoteExportData
 
 /// <summary>
 /// Exported representation of an activity log entry: what the engine's own built-in JSON export writes, and what
-/// a custom export format's serializer (see <see cref="IExportsBuilder{TFrame, TPacket, TPriority, TLevel}.Format{TFormat}"/>) receives for an activity log.
+/// a custom export format's serializer (see <see cref="IExportsBuilder{TFrame, TPacket, TPriority, TLevel, TAspect}.Format{TFormat}"/>) receives for an activity log.
 /// </summary>
 public sealed record ActivityLogExportData
 {
@@ -114,6 +118,6 @@ public sealed record ActivityLogEventEntry
     public required DateTime At { get; init; }
     /// <summary>Human-readable description of the event.</summary>
     public required string Message { get; init; }
-    /// <summary>The unique identifier of the kind of event this is, or <c>0</c> for an entry that has none, such as one from a package written before events had identifiers.</summary>
+    /// <summary>The unique identifier of the kind of event this is, or <c>0</c> for an entry that has none.</summary>
     public int EventId { get; init; }
 }

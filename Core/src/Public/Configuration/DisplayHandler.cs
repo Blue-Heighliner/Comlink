@@ -1,7 +1,7 @@
 namespace BlueHeighliner.Comlink;
 
 /// <summary>
-/// Names and words the app shows its users. State one with <see cref="IEngineBuilder{TFrame, TPacket, TPriority, TLevel}.Display{THandler}"/>. Every member is optional: returning <see langword="null"/> (or an empty string) keeps the engine's own
+/// Names and words the app shows its users. State one with <see cref="IEngineBuilder{TFrame, TPacket, TPriority, TLevel, TAspect}.Display{THandler}"/>. Every member is optional: returning <see langword="null"/> (or an empty string) keeps the engine's own
 /// text, so a handler overrides only what it wants to.
 /// </summary>
 public interface IDisplayHandler
@@ -54,8 +54,14 @@ public interface IDisplayHandler
     /// <summary>Gets the name of the priority concept, as the entry list's priority filter and the help call it. Defaults to <c>Priority</c>.</summary>
     string? PriorityLabel => null;
 
-    /// <summary>Gets the name of the security level concept, as the entry list's security level filter calls it. Defaults to <c>Security Level</c>.</summary>
-    string? SecurityLevelLabel => null;
+    /// <summary>Gets the name of the message level concept, as the entry list's message level filter calls it. Defaults to <c>Message Level</c>.</summary>
+    string? MessageLevelLabel => null;
+
+    /// <summary>Gets the name of the message aspect concept, as the draft view's selector calls it. Defaults to <c>Message Aspect</c>.</summary>
+    string? MessageAspectLabel => null;
+
+    /// <summary>Gets the plural of <see cref="MessageAspectLabel"/>. Defaults to <see cref="MessageAspectLabel"/> with an <c>s</c> added when that is stated, otherwise <c>Message Aspects</c>.</summary>
+    string? MessageAspectPluralLabel => null;
 
     /// <summary>Gets the plural of <see cref="AlertLabel"/>, for text such as "Alerts". Defaults to <see cref="AlertLabel"/> with an <c>s</c> added when that is stated, otherwise <c>ALERTS</c>.</summary>
     string? AlertPluralLabel => null;
@@ -66,8 +72,8 @@ public interface IDisplayHandler
     /// <summary>Gets the plural of <see cref="PriorityLabel"/>. Defaults to <see cref="PriorityLabel"/> with an <c>s</c> added when that is stated, otherwise <c>Priorities</c>.</summary>
     string? PriorityPluralLabel => null;
 
-    /// <summary>Gets the plural of <see cref="SecurityLevelLabel"/>. Defaults to <see cref="SecurityLevelLabel"/> with an <c>s</c> added when that is stated, otherwise <c>Security Levels</c>.</summary>
-    string? SecurityLevelPluralLabel => null;
+    /// <summary>Gets the plural of <see cref="MessageLevelLabel"/>. Defaults to <see cref="MessageLevelLabel"/> with an <c>s</c> added when that is stated, otherwise <c>Message Levels</c>.</summary>
+    string? MessageLevelPluralLabel => null;
 
     /// <summary>Gets what the app calls <c>Inbox</c> wherever the user interface mentions it, in the case style of the text it replaces. Defaults to <c>Inbox</c>.</summary>
     string? InboxLabel => null;

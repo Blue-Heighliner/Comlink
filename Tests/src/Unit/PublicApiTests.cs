@@ -14,12 +14,16 @@ public sealed class PublicApiTests
 
         Assert.Equal(
             [
-                "ActivityLogEventEntry", "ActivityLogExportData", "AddressRequest", "AddressType", "ConnectionMode", "ConnectionPoint",
-                "DeleteContext", "DeliveryStatusChangedEvent", "DestinationStatus", "DraftExportData", "DraftState`2",
-                "Engine", "ExternalSystemBase`1", "FolderType", "FramePacketCreateContext", "FrameSerializer`2", "HdlcRemote", "IAddressTypeBuilder`4", "IAddressTypesBuilder`4", "IAlarmHandler", "IAutoForwardController`1", "IConnectionInfo", "IConnectionsBuilder`4", "IDeleteHandler", "IDisplayHandler", "IDraftHandler`2", "IEngineBuilder", "IEngineBuilder`4", "IEngineConfiguration", "IEngineContext", "IExportFormat", "IExportsBuilder`4", "IExternalSystem", "IFrameBuilder`4", "IFramePacketHandler`1", "IFrameSerializer", "IHeartbeatHandler`2",
-                "IImportFormat", "IImportFormatContext", "IImportsBuilder`4", "IInitialFrameContext`1", "IInitialFrameProcessor`1", "IInitialPacketContext`1", "IInitialPacketProcessor`1", "IIpConnectionInfo", "ILogHandler", "IMessageHandler`3", "INetworkConnectedContext`1", "INetworkContext`1", "INetworkDisconnectedContext`1", "INetworkProcessor`1", "INetworkReceivedContext`1", "IPacketBuilder`4", "IPacketSerializer", "IPrintHandler`1", "IPriorityBuilder`4", "IPriorityLevelBuilder`4", "IReadReceiptHandler`2", "IReceiveReceiptHandler`2", "IRetrievalHandler`2", "ISecurityLevelBuilder`4", "ISecurityLevelsBuilder`4", "ISerialConnectionInfo", "IServiceConnection",
-                "MessageCreateContext`2", "MessageDeliveryStatus", "MessageExportData", "MessageReceivedEvent", "MsmtConnectionOptions", "NoPacket", "NoPriority", "NoSecurityLevel", "NoteExportData", "PacketSerializer`2", "PooledBufferWriter", "PriorityMode", "ProtobufSerializer", "ReceiptCreateContext", "RetrievalCreateContext", "SendMessageResult",
-                "StagedSendData", "StagedSendMode", "TagCase", "UserDeliveryResult", "UserIdentity", "UserInfo", "UserLink", "UserRole"
+                "ActivityLogEventEntry", "ActivityLogExportData", "AddressRequest", "AddressType", "ConnectionMode", "ConnectionPoint", "DeleteContext", "DeliveryStatusChangedEvent", "DestinationStatus", "DraftExportData",
+                "DraftState`3", "Engine", "ExternalSystemBase`1", "FolderType", "FramePacketCreateContext", "FrameSerializer`2", "HdlcRemote", "IAddressTypeBuilder`5", "IAddressTypesBuilder`5", "IAlarmHandler",
+                "IAutoForwardController`1", "IConnectionInfo", "IConnectionsBuilder`5", "IDeleteHandler", "IDisplayHandler", "IDraftHandler`3", "IEngineBuilder", "IEngineBuilder`5", "IEngineConfiguration", "IEngineContext",
+                "IExportFormat", "IExportsBuilder`5", "IExternalSystem", "IFrameBuilder`5", "IFramePacketHandler`1", "IFrameSerializer", "IHeartbeatHandler`2", "IImportFormat", "IImportFormatContext", "IImportsBuilder`5",
+                "IInitialFrameContext`1", "IInitialFrameProcessor`1", "IInitialPacketContext`1", "IInitialPacketProcessor`1", "IIpConnectionInfo", "ILogHandler", "IMessageAspectBuilder`5", "IMessageAspectsBuilder`5",
+                "IMessageHandler`4", "IMessageLevelBuilder`5", "IMessageLevelsBuilder`5", "INetworkConnectedContext`1", "INetworkContext`1", "INetworkDisconnectedContext`1", "INetworkProcessor`1", "INetworkReceivedContext`1",
+                "IPacketBuilder`5", "IPacketSerializer", "IPrintHandler`1", "IPriorityBuilder`5", "IPriorityLevelBuilder`5", "IReadReceiptHandler`2", "IReceiveReceiptHandler`2", "IRetrievalHandler`2", "ISerialConnectionInfo",
+                "IServiceConnection", "MessageCreateContext`3", "MessageDeliveryStatus", "MessageExportData", "MessageReceivedEvent", "MsmtConnectionOptions", "NoMessageAspect", "NoMessageLevel", "NoPacket", "NoPriority",
+                "NoteExportData", "PacketSerializer`2", "PooledBufferWriter", "PriorityMode", "ProtobufSerializer", "ReceiptCreateContext", "RetrievalCreateContext", "SendMessageResult", "StagedSendData", "StagedSendMode",
+                "TagCase", "UserDeliveryResult", "UserIdentity", "UserInfo", "UserLink", "UserRole"
             ],
             exported);
     }

@@ -21,7 +21,7 @@ internal interface IMessageStorageService
     /// <summary>
     /// Finds the stored messages fitting the criteria in <paramref name="request"/>, whoever sent or received them,
     /// and returns a copy of each addressed to <paramref name="requester"/> alone, ordered by sent time. A copy keeps the original's
-    /// identifier, sender, sent time, body, priority, tag and security level, but is never an alert (so old
+    /// identifier, sender, sent time, body, priority, tag and message level, but is never an alert (so old
     /// alerts do not alarm again) and carries only the requester as its address, since servers route purely by
     /// address list. Returns an empty list when storage is not enabled, or the request's criteria are unreadable.
     /// </summary>
@@ -116,7 +116,7 @@ internal sealed class MessageStorageService : IMessageStorageService
             Body = engineController.GetBody(original),
             Priority = engineController.GetMessagePriority(original),
             Tag = engineController.GetTag(original),
-            SecurityLevel = engineController.GetSecurityLevel(original)
+            MessageLevel = engineController.GetMessageLevel(original)
         });
         engineController.SetMessageId(copy, engineController.GetMessageId(original));
         engineController.SetFromUser(copy, engineController.GetFromUser(original));

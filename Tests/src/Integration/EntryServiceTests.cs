@@ -75,19 +75,19 @@ public sealed class EntryServiceTests : IDisposable
         Assert.NotNull(note.FolderId);
     }
 
-    /// <summary>A new draft starts with the tag, priority and security level the draft handler states.</summary>
+    /// <summary>A new draft starts with the tag, priority and message level the draft handler states.</summary>
     [Fact]
     public async Task CreateDraft_StartsWithTheHandlersDefaults()
     {
         Mock<TestEngineController> controller = new() { CallBase = true };
-        controller.Setup(c => c.DraftDefaults).Returns(new DraftDefaults("NOTICE", TestMessagePriority.Level3, TestLevel.Restricted));
+        controller.Setup(c => c.DraftDefaults).Returns(new DraftDefaults("NOTICE", TestMessagePriority.Level3, TestLevel.Restricted, null));
         EntryService defaulted = new(new MessageRepository(ctx), new DraftRepository(ctx), new NoteRepository(ctx), new ActivityLogRepository(ctx), new FolderRepository(ctx), new CurrentUserProvider(), controller.Object);
 
         DraftEntity draft = await defaulted.CreateDraft();
         DraftEntity plain = await service.CreateDraft();
 
-        Assert.Equal(("NOTICE", (int)TestMessagePriority.Level3, (int?)(int)TestLevel.Restricted), (draft.Tag, draft.Priority, draft.SecurityLevel));
-        Assert.Equal((string.Empty, 0, (int?)null), (plain.Tag, plain.Priority, plain.SecurityLevel));
+        Assert.Equal(("NOTICE", (int)TestMessagePriority.Level3, (int?)(int)TestLevel.Restricted), (draft.Tag, draft.Priority, draft.MessageLevel));
+        Assert.Equal((string.Empty, 0, (int?)null), (plain.Tag, plain.Priority, plain.MessageLevel));
     }
 
     /// <summary>A draft or note saved quietly is written and reported without the update event that would bring it back to the user's attention.</summary>
@@ -339,14 +339,14 @@ public sealed class EntryServiceTests : IDisposable
         Assert.Equal("Remember to call the client back", Assert.Single(items).Body);
     }
 
-    /// <summary>A message filter's SecurityLevel matches exactly, case-insensitively, not as a substring.</summary>
+    /// <summary>A message filter's MessageLevel matches exactly, case-insensitively, not as a substring.</summary>
     [Fact]
-    public async Task GetMessagesAsync_FilterMatchesSecurityLevelExactly()
+    public async Task GetMessagesAsync_FilterMatchesMessageLevelExactly()
     {
-        await service.StoreIncomingMessage(Guid.NewGuid().ToString(), "S", "Restricted memo", [], DateTime.UtcNow, securityLevel: "RESTRICTED");
-        await service.StoreIncomingMessage(Guid.NewGuid().ToString(), "S", "Public memo", [], DateTime.UtcNow, securityLevel: "PUBLIC");
+        await service.StoreIncomingMessage(Guid.NewGuid().ToString(), "S", "Restricted memo", [], DateTime.UtcNow, messageLevel: "RESTRICTED");
+        await service.StoreIncomingMessage(Guid.NewGuid().ToString(), "S", "Public memo", [], DateTime.UtcNow, messageLevel: "PUBLIC");
 
-        (List<MessageEntity> items, int total) = await service.GetMessages("root-inbox", 1, filter: new EntryFilter { SecurityLevel = "restricted" });
+        (List<MessageEntity> items, int total) = await service.GetMessages("root-inbox", 1, filter: new EntryFilter { MessageLevel = "restricted" });
 
         Assert.Equal(1, total);
         Assert.Equal("Restricted memo", format.GetBody(Assert.Single(items).Message));
@@ -488,24 +488,24 @@ public sealed class EntryServiceTests : IDisposable
     [Fact]
     public async Task GetMessagesAsync_MultipleCriteria_CombineWithAnd()
     {
-        await service.StoreIncomingMessage(Guid.NewGuid().ToString(), "S", "Match", [], DateTime.UtcNow, priority: TestMessagePriority.Level2, securityLevel: "RESTRICTED");
-        await service.StoreIncomingMessage(Guid.NewGuid().ToString(), "S", "WrongPriority", [], DateTime.UtcNow, priority: TestMessagePriority.Normal, securityLevel: "RESTRICTED");
-        await service.StoreIncomingMessage(Guid.NewGuid().ToString(), "S", "WrongLevel", [], DateTime.UtcNow, priority: TestMessagePriority.Level2, securityLevel: "PUBLIC");
+        await service.StoreIncomingMessage(Guid.NewGuid().ToString(), "S", "Match", [], DateTime.UtcNow, priority: TestMessagePriority.Level2, messageLevel: "RESTRICTED");
+        await service.StoreIncomingMessage(Guid.NewGuid().ToString(), "S", "WrongPriority", [], DateTime.UtcNow, priority: TestMessagePriority.Normal, messageLevel: "RESTRICTED");
+        await service.StoreIncomingMessage(Guid.NewGuid().ToString(), "S", "WrongLevel", [], DateTime.UtcNow, priority: TestMessagePriority.Level2, messageLevel: "PUBLIC");
 
-        (List<MessageEntity> items, int total) = await service.GetMessages("root-inbox", 1, filter: new EntryFilter { Priority = TestMessagePriority.Level2, SecurityLevel = "RESTRICTED" });
+        (List<MessageEntity> items, int total) = await service.GetMessages("root-inbox", 1, filter: new EntryFilter { Priority = TestMessagePriority.Level2, MessageLevel = "RESTRICTED" });
 
         Assert.Equal(1, total);
         Assert.Equal("Match", format.GetBody(Assert.Single(items).Message));
     }
 
-    /// <summary>A draft filter matches SecurityLevel, Priority and AlertOnly directly against the stored fields, the same way a message filter matches the decoded message.</summary>
+    /// <summary>A draft filter matches MessageLevel, Priority and AlertOnly directly against the stored fields, the same way a message filter matches the decoded message.</summary>
     [Fact]
-    public async Task GetDraftsAsync_FilterMatchesSecurityLevelPriorityAndAlert()
+    public async Task GetDraftsAsync_FilterMatchesMessageLevelPriorityAndAlert()
     {
         DraftEntity match = await service.CreateDraft();
         match.Body = "Match";
         match.Priority = 2;
-        match.SecurityLevel = (int)TestLevel.Restricted;
+        match.MessageLevel = (int)TestLevel.Restricted;
         match.IsAlert = true;
         await service.SaveDraft(match);
         DraftEntity other = await service.CreateDraft();
@@ -513,7 +513,7 @@ public sealed class EntryServiceTests : IDisposable
         await service.SaveDraft(other);
 
         (List<DraftEntity> items, int total) = await service.GetDrafts("root-drafts", 1, alphabetical: false,
-            filter: new EntryFilter { Priority = TestMessagePriority.Level2, SecurityLevel = "RESTRICTED" });
+            filter: new EntryFilter { Priority = TestMessagePriority.Level2, MessageLevel = "RESTRICTED" });
 
         Assert.Equal(1, total);
         Assert.Equal("Match", Assert.Single(items).Body);

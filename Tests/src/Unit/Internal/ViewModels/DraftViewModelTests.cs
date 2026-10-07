@@ -25,7 +25,8 @@ public sealed class DraftViewModelTests
             new AddressTypeOption { Type = AddressType.Cc, Label = "Cc" },
             new AddressTypeOption { Type = AddressType.External, Label = "External" }
         ]);
-        mock.Setup(a => a.SecurityLevels).Returns([]);
+        mock.Setup(a => a.MessageLevels).Returns([]);
+        mock.Setup(a => a.MessageAspects).Returns([]);
         return mock.Object;
     }
 
@@ -544,7 +545,7 @@ public sealed class DraftViewModelTests
         await vm.SendCommand.ExecuteAsync(null);
 
         Assert.Contains("required", vm.StatusMessage);
-        connMock.Verify(c => c.SendMessage(It.IsAny<string>(), It.IsAny<List<AddressRequest>>(), It.IsAny<Enum?>(), It.IsAny<string>(), It.IsAny<Enum?>(), It.IsAny<CancellationToken>()), Times.Never);
+        connMock.Verify(c => c.SendMessage(It.IsAny<string>(), It.IsAny<List<AddressRequest>>(), It.IsAny<Enum?>(), It.IsAny<string>(), It.IsAny<Enum?>(), It.IsAny<Enum?>(), It.IsAny<CancellationToken>()), Times.Never);
     }
 
     /// <summary>Recipients are grouped by address type in the order of the types, and moving one swaps it with the next of its own type, skipping the others.</summary>
@@ -601,7 +602,7 @@ public sealed class DraftViewModelTests
         await vm.SendCommand.ExecuteAsync(null);
 
         Assert.Contains("at least 6", vm.StatusMessage);
-        connMock.Verify(c => c.SendMessage(It.IsAny<string>(), It.IsAny<List<AddressRequest>>(), It.IsAny<Enum?>(), It.IsAny<string>(), It.IsAny<Enum?>(), It.IsAny<CancellationToken>()), Times.Never);
+        connMock.Verify(c => c.SendMessage(It.IsAny<string>(), It.IsAny<List<AddressRequest>>(), It.IsAny<Enum?>(), It.IsAny<string>(), It.IsAny<Enum?>(), It.IsAny<Enum?>(), It.IsAny<CancellationToken>()), Times.Never);
     }
 
     /// <summary>The line width can never be less than the longest line of the header, even when the handler's minimum is smaller, and a header wider than the handler's maximum wins.</summary>
@@ -634,7 +635,7 @@ public sealed class DraftViewModelTests
     public async Task Send_PutsTheHeaderInFrontOfTheBody()
     {
         DraftViewModel vm = BuildWithHandler(out Mock<IEntryService> entryMock, out Mock<IServiceConnection> connMock);
-        connMock.Setup(c => c.SendMessage(It.IsAny<string>(), It.IsAny<List<AddressRequest>>(), It.IsAny<Enum?>(), It.IsAny<string>(), It.IsAny<Enum?>(), It.IsAny<CancellationToken>()))
+        connMock.Setup(c => c.SendMessage(It.IsAny<string>(), It.IsAny<List<AddressRequest>>(), It.IsAny<Enum?>(), It.IsAny<string>(), It.IsAny<Enum?>(), It.IsAny<Enum?>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync(new SendMessageResult { MessageId = "M", UserResults = [] });
         entryMock.Setup(e => e.StoreSentMessage(It.IsAny<string>(), It.IsAny<string>(), It.IsAny<List<AddressData>>(), It.IsAny<DateTime>(), It.IsAny<IReadOnlyList<UserDeliveryResult>>(), It.IsAny<Enum?>(), It.IsAny<string>(), It.IsAny<string>()))
             .ReturnsAsync(new MessageEntity());
@@ -644,7 +645,7 @@ public sealed class DraftViewModelTests
 
         await vm.SendCommand.ExecuteAsync(null);
 
-        connMock.Verify(c => c.SendMessage("HEADER URGENT False 1 30\nthe body", It.IsAny<List<AddressRequest>>(), It.IsAny<Enum?>(), "URGENT", It.IsAny<Enum?>(), It.IsAny<CancellationToken>()), Times.Once);
+        connMock.Verify(c => c.SendMessage("HEADER URGENT False 1 30\nthe body", It.IsAny<List<AddressRequest>>(), It.IsAny<Enum?>(), "URGENT", It.IsAny<Enum?>(), It.IsAny<Enum?>(), It.IsAny<CancellationToken>()), Times.Once);
         entryMock.Verify(e => e.SaveDraft(It.Is<DraftEntity>(d => d.Body == "the body")), Times.AtLeastOnce);
     }
 
@@ -713,7 +714,7 @@ public sealed class DraftViewModelTests
         await vm.SendCommand.ExecuteAsync(null);
 
         Assert.Equal("Add at least one recipient", vm.StatusMessage);
-        connMock.Verify(c => c.SendMessage(It.IsAny<string>(), It.IsAny<List<AddressRequest>>(), It.IsAny<Enum?>(), It.IsAny<string>(), It.IsAny<Enum?>(), It.IsAny<CancellationToken>()), Times.Never);
+        connMock.Verify(c => c.SendMessage(It.IsAny<string>(), It.IsAny<List<AddressRequest>>(), It.IsAny<Enum?>(), It.IsAny<string>(), It.IsAny<Enum?>(), It.IsAny<Enum?>(), It.IsAny<CancellationToken>()), Times.Never);
     }
 
     /// <summary>SendCommand reports that no user is installed when the send is refused for that reason, rather than failing on a missing result.</summary>
@@ -722,7 +723,7 @@ public sealed class DraftViewModelTests
     {
         DraftEntity entity = new() { Body = "World", Addresses = [new AddressData { UserName = "ALPHA", Type = "To" }], FolderId = "root-drafts" };
         DraftViewModel vm = Build(out Mock<IEntryService> entryMock, out Mock<IServiceConnection> connMock, entity: entity);
-        connMock.Setup(c => c.SendMessage(It.IsAny<string>(), It.IsAny<List<AddressRequest>>(), It.IsAny<Enum?>(), It.IsAny<string>(), It.IsAny<Enum?>(), It.IsAny<CancellationToken>()))
+        connMock.Setup(c => c.SendMessage(It.IsAny<string>(), It.IsAny<List<AddressRequest>>(), It.IsAny<Enum?>(), It.IsAny<string>(), It.IsAny<Enum?>(), It.IsAny<Enum?>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync((SendMessageResult?)null);
 
         await vm.SendCommand.ExecuteAsync(null);
@@ -750,7 +751,7 @@ public sealed class DraftViewModelTests
             UserResults = [new UserDeliveryResult { UserName = "ALPHA", Success = true, AddressedVia = [] }]
         };
         connMock.Setup(c => c.SendMessage(It.IsAny<string>(),
-                It.IsAny<List<AddressRequest>>(), It.IsAny<Enum?>(), It.IsAny<string>(), It.IsAny<Enum?>(), It.IsAny<CancellationToken>()))
+                It.IsAny<List<AddressRequest>>(), It.IsAny<Enum?>(), It.IsAny<string>(), It.IsAny<Enum?>(), It.IsAny<Enum?>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync(sendResult);
 
         MessageEntity sentMessage = new() { MessageId = "MSG-001" };
@@ -786,7 +787,7 @@ public sealed class DraftViewModelTests
             UserResults = [new UserDeliveryResult { UserName = "ALPHA", Success = true, AddressedVia = [] }]
         };
         connMock.Setup(c => c.SendMessage(It.IsAny<string>(),
-                It.IsAny<List<AddressRequest>>(), TestMessagePriority.Flash, It.IsAny<string>(), It.IsAny<Enum?>(), It.IsAny<CancellationToken>()))
+                It.IsAny<List<AddressRequest>>(), TestMessagePriority.Flash, It.IsAny<string>(), It.IsAny<Enum?>(), It.IsAny<Enum?>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync(sendResult);
 
         MessageEntity sentMessage = new() { MessageId = "MSG-001" };
@@ -799,7 +800,7 @@ public sealed class DraftViewModelTests
         await vm.SendCommand.ExecuteAsync(null);
 
         connMock.Verify(c => c.SendMessage(It.IsAny<string>(),
-            It.IsAny<List<AddressRequest>>(), TestMessagePriority.Flash, It.IsAny<string>(), It.IsAny<Enum?>(), It.IsAny<CancellationToken>()), Times.Once);
+            It.IsAny<List<AddressRequest>>(), TestMessagePriority.Flash, It.IsAny<string>(), It.IsAny<Enum?>(), It.IsAny<Enum?>(), It.IsAny<CancellationToken>()), Times.Once);
         entryMock.Verify(e => e.StoreSentMessage(It.IsAny<string>(), It.IsAny<string>(),
             It.IsAny<List<AddressData>>(), It.IsAny<DateTime>(),
             It.IsAny<IReadOnlyList<UserDeliveryResult>>(), TestMessagePriority.Flash, It.IsAny<string>()), Times.Once);
@@ -825,7 +826,7 @@ public sealed class DraftViewModelTests
             UserResults = [new UserDeliveryResult { UserName = "ALPHA", Success = true, AddressedVia = [] }]
         };
         connMock.Setup(c => c.SendMessage(It.IsAny<string>(),
-                It.IsAny<List<AddressRequest>>(), It.IsAny<Enum?>(), "URGENT", It.IsAny<Enum?>(), It.IsAny<CancellationToken>()))
+                It.IsAny<List<AddressRequest>>(), It.IsAny<Enum?>(), "URGENT", It.IsAny<Enum?>(), It.IsAny<Enum?>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync(sendResult);
 
         MessageEntity sentMessage = new() { MessageId = "MSG-001" };
@@ -838,7 +839,7 @@ public sealed class DraftViewModelTests
         await vm.SendCommand.ExecuteAsync(null);
 
         connMock.Verify(c => c.SendMessage(It.IsAny<string>(),
-            It.IsAny<List<AddressRequest>>(), It.IsAny<Enum?>(), "URGENT", It.IsAny<Enum?>(), It.IsAny<CancellationToken>()), Times.Once);
+            It.IsAny<List<AddressRequest>>(), It.IsAny<Enum?>(), "URGENT", It.IsAny<Enum?>(), It.IsAny<Enum?>(), It.IsAny<CancellationToken>()), Times.Once);
         entryMock.Verify(e => e.StoreSentMessage(It.IsAny<string>(), It.IsAny<string>(),
             It.IsAny<List<AddressData>>(), It.IsAny<DateTime>(),
             It.IsAny<IReadOnlyList<UserDeliveryResult>>(), It.IsAny<Enum?>(), "URGENT"), Times.Once);
@@ -866,7 +867,7 @@ public sealed class DraftViewModelTests
         await vm.SendCommand.ExecuteAsync(null);
 
         Assert.Equal("This tag/priority combination is not allowed", vm.StatusMessage);
-        connMock.Verify(c => c.SendMessage(It.IsAny<string>(), It.IsAny<List<AddressRequest>>(), It.IsAny<Enum?>(), It.IsAny<string>(), It.IsAny<Enum?>(), It.IsAny<CancellationToken>()), Times.Never);
+        connMock.Verify(c => c.SendMessage(It.IsAny<string>(), It.IsAny<List<AddressRequest>>(), It.IsAny<Enum?>(), It.IsAny<string>(), It.IsAny<Enum?>(), It.IsAny<Enum?>(), It.IsAny<CancellationToken>()), Times.Never);
     }
 
     /// <summary>A new draft is not stored while unaltered or blank, and is inserted once it has content.</summary>
@@ -946,5 +947,56 @@ public sealed class DraftViewModelTests
         vm.Name = "";
 
         Assert.Equal(["First", "Named", "First"], titles);
+    }
+
+    private static (DraftViewModel Vm, Mock<IServiceConnection> Connection, Mock<IEntryService> Entries, DraftEntity Entity) BuildWithAspects(int? storedAspect = null)
+    {
+        Mock<IEngineController> controller = Mock.Get(MakeEngineController());
+        controller.Setup(c => c.MessageAspects).Returns([new MessageAspect { Name = "ENCRYPTED", Key = TestAspect.Encrypted }, new MessageAspect { Name = "SIGNED", Key = TestAspect.Signed }]);
+        Mock<IEntryService> entries = new();
+        Mock<IServiceConnection> connection = new();
+        connection.Setup(c => c.SendMessage(It.IsAny<string>(), It.IsAny<List<AddressRequest>>(), It.IsAny<Enum?>(), It.IsAny<string>(), It.IsAny<Enum?>(), It.IsAny<Enum?>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new SendMessageResult { MessageId = "M1", UserResults = [] });
+        DraftEntity entity = new() { Body = "B", Addresses = [new AddressData { UserName = "BOB", Type = "To" }], FolderId = "root-drafts", MessageAspect = storedAspect };
+        return (new DraftViewModel(entity, entries.Object, connection.Object, [], noLogger, controller.Object), connection, entries, entity);
+    }
+
+    /// <summary>With aspects configured the picker offers none first and then each aspect, and a draft with no stored aspect starts on none; without aspects it is empty.</summary>
+    [Fact]
+    public void MessageAspects_PickerOffersNoneThenEachAspect()
+    {
+        (DraftViewModel vm, _, _, _) = BuildWithAspects();
+
+        Assert.Equal(["ENCRYPTED", "SIGNED"], vm.AvailableMessageAspects.Skip(1).Select(option => option.Label));
+        Assert.Null(vm.AvailableMessageAspects[0].Aspect);
+        Assert.Equal(string.Empty, vm.AvailableMessageAspects[0].Label);
+        Assert.Null(vm.SelectedMessageAspect?.Aspect);
+        Assert.Empty(Build(out _, out _).AvailableMessageAspects);
+    }
+
+    /// <summary>A stored aspect is selected again when the draft is opened.</summary>
+    [Fact]
+    public void MessageAspects_StoredAspectIsSelected()
+    {
+        (DraftViewModel vm, _, _, _) = BuildWithAspects(storedAspect: (int)TestAspect.Signed);
+
+        Assert.Equal("SIGNED", vm.SelectedMessageAspect?.Aspect?.Name);
+    }
+
+    /// <summary>The chosen aspect is sent with the message, and with none chosen none is sent.</summary>
+    [Fact]
+    public async Task Send_PassesTheSelectedMessageAspect()
+    {
+        (DraftViewModel vm, Mock<IServiceConnection> connection, _, DraftEntity entity) = BuildWithAspects();
+        vm.SelectedMessageAspect = vm.AvailableMessageAspects.Single(option => option.Label == "ENCRYPTED");
+
+        await vm.SendCommand.ExecuteAsync(null);
+
+        connection.Verify(c => c.SendMessage(It.IsAny<string>(), It.IsAny<List<AddressRequest>>(), It.IsAny<Enum?>(), It.IsAny<string>(), It.IsAny<Enum?>(), TestAspect.Encrypted, It.IsAny<CancellationToken>()), Times.Once);
+        Assert.Equal((int)TestAspect.Encrypted, entity.MessageAspect);
+
+        (DraftViewModel plain, Mock<IServiceConnection> plainConnection, _, _) = BuildWithAspects();
+        await plain.SendCommand.ExecuteAsync(null);
+        plainConnection.Verify(c => c.SendMessage(It.IsAny<string>(), It.IsAny<List<AddressRequest>>(), It.IsAny<Enum?>(), It.IsAny<string>(), It.IsAny<Enum?>(), null, It.IsAny<CancellationToken>()), Times.Once);
     }
 }

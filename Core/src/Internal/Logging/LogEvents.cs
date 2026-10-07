@@ -98,8 +98,8 @@ internal static class LogEvents
     /// <summary>A node that is not a storage server receives a retrieval request.</summary>
     public static EventId RetrievalIgnored { get; } = Define(50, nameof(RetrievalIgnored), LogCategories.App);
 
-    /// <summary>A send or a relay leaves out recipients whose security level is too low.</summary>
-    public static EventId BlockedBySecurityLevel { get; } = Define(51, nameof(BlockedBySecurityLevel), LogCategories.Activity);
+    /// <summary>A send or a relay leaves out recipients whose message level is too low.</summary>
+    public static EventId BlockedByMessageLevel { get; } = Define(51, nameof(BlockedByMessageLevel), LogCategories.Activity);
 
     /// <summary>A relay has no connection to its server to forward over.</summary>
     public static EventId CannotForwardServerUnreachable { get; } = Define(53, nameof(CannotForwardServerUnreachable), LogCategories.App);
@@ -236,8 +236,8 @@ internal static class LogEvents
     /// <summary>A server or relay connection to a parent, a child or a sibling server comes up or goes down.</summary>
     public static EventId PeerConnectionChanged { get; } = Define(109, nameof(PeerConnectionChanged), LogCategories.App);
 
-    /// <summary>A server leaves out recipients whose security level is too low when relaying.</summary>
-    public static EventId RelayBlockedBySecurityLevel { get; } = Define(110, nameof(RelayBlockedBySecurityLevel), LogCategories.App);
+    /// <summary>A server leaves out recipients whose message level is too low when relaying.</summary>
+    public static EventId RelayBlockedByMessageLevel { get; } = Define(110, nameof(RelayBlockedByMessageLevel), LogCategories.App);
 
     /// <summary>A frame is handed to the connection, traced as its serialized bytes with the user it goes to.</summary>
     public static EventId FrameSent { get; } = Define(111, nameof(FrameSent), LogCategories.Frames);

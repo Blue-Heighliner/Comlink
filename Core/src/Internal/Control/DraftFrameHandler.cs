@@ -1,6 +1,6 @@
 namespace BlueHeighliner.Comlink;
 
-/// <summary>The engine's untyped view of the host's <see cref="IDraftHandler{TPriority, TLevel}"/>.</summary>
+/// <summary>The engine's untyped view of the host's <see cref="IDraftHandler{TPriority, TLevel, TAspect}"/>.</summary>
 internal interface IDraftFrameHandler
 {
     /// <summary>Gets how wide a line of a new draft is, or <see langword="null"/> for no limit.</summary>
@@ -17,15 +17,17 @@ internal interface IDraftFrameHandler
     string? DefaultTag { get; }
     /// <summary>Gets the priority a new draft starts at as the host's enum member, or <see langword="null"/> for the lowest the user may choose.</summary>
     Enum? DefaultPriority { get; }
-    /// <summary>Gets the security level a new draft starts at as the host's enum member, or <see langword="null"/> for the highest the user may use.</summary>
-    Enum? DefaultSecurityLevel { get; }
+    /// <summary>Gets the message level a new draft starts at as the host's enum member, or <see langword="null"/> for the highest the user may use.</summary>
+    Enum? DefaultMessageLevel { get; }
+    /// <summary>Gets the message aspect a new draft starts with as the host's enum member, or <see langword="null"/> for none.</summary>
+    Enum? DefaultMessageAspect { get; }
     /// <summary>Returns the header a message sent from the draft in <paramref name="content"/> must start with, or <see langword="null"/> for none.</summary>
     /// <param name="content">The draft as it currently is.</param>
     string? GetHeader(DraftContent content);
 }
 
-/// <summary>Adapts a typed <see cref="IDraftHandler{TPriority, TLevel}"/> to <see cref="IDraftFrameHandler"/>.</summary>
-internal sealed class DraftFrameHandler<TPriority, TLevel>(IDraftHandler<TPriority, TLevel> handler, IReadOnlyList<SecurityLevel> securityLevels) : IDraftFrameHandler where TPriority : struct, Enum where TLevel : struct, Enum
+/// <summary>Adapts a typed <see cref="IDraftHandler{TPriority, TLevel, TAspect}"/> to <see cref="IDraftFrameHandler"/>.</summary>
+internal sealed class DraftFrameHandler<TPriority, TLevel, TAspect>(IDraftHandler<TPriority, TLevel, TAspect> handler, IReadOnlyList<MessageLevel> messageLevels, IReadOnlyList<MessageAspect> messageAspects) : IDraftFrameHandler where TPriority : struct, Enum where TLevel : struct, Enum where TAspect : struct, Enum
 {
     /// <inheritdoc />
     public int? DefaultLineWidth => handler.DefaultLineWidth;
@@ -49,15 +51,19 @@ internal sealed class DraftFrameHandler<TPriority, TLevel>(IDraftHandler<TPriori
     public Enum? DefaultPriority => handler.DefaultPriority is { } priority ? priority : null;
 
     /// <inheritdoc />
-    public Enum? DefaultSecurityLevel => handler.DefaultSecurityLevel is { } level ? level : null;
+    public Enum? DefaultMessageLevel => handler.DefaultMessageLevel is { } level ? level : null;
+
+    /// <inheritdoc />
+    public Enum? DefaultMessageAspect => handler.DefaultMessageAspect is { } aspect ? aspect : null;
 
     /// <inheritdoc />
     public string? GetHeader(DraftContent content)
-        => handler.GetHeader(new DraftState<TPriority, TLevel>
+        => handler.GetHeader(new DraftState<TPriority, TLevel, TAspect>
         {
             Tag = content.Tag,
             Priority = (TPriority)(object)content.Priority,
-            SecurityLevel = string.IsNullOrEmpty(content.SecurityLevel) ? null : securityLevels.FirstOrDefault(level => string.Equals(level.Name, content.SecurityLevel, StringComparison.OrdinalIgnoreCase))?.Key is TLevel key ? key : null,
+            MessageLevel = string.IsNullOrEmpty(content.MessageLevel) ? null : messageLevels.FirstOrDefault(level => string.Equals(level.Name, content.MessageLevel, StringComparison.OrdinalIgnoreCase))?.Key is TLevel key ? key : null,
+            MessageAspect = string.IsNullOrEmpty(content.MessageAspect) ? null : messageAspects.FirstOrDefault(aspect => string.Equals(aspect.Name, content.MessageAspect, StringComparison.OrdinalIgnoreCase))?.Key is TAspect aspectKey ? aspectKey : null,
             IsAlert = content.IsAlert,
             Addresses = content.Addresses,
             LineWidth = content.LineWidth

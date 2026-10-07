@@ -94,7 +94,7 @@ What a user reads in the in-app activity log: general, in plain words, with no e
 | ID | Content | Scenario |
 |----|---------|----------|
 | 31 | `{Item} was not imported: its priority is not supported` | An import finds a message or draft with a priority that is not configured. |
-| 51 | `{Subject} blocked for {Users}: {Reason}` | A send (subject the message ID) or a server's relay leaves out recipients whose security level is too low. |
+| 51 | `{Subject} blocked for {Users}: {Reason}` | A send (subject the message ID) or a server's relay leaves out recipients whose message level is too low. |
 | 55 | `Install of {UserName} failed: {Reason}` | An install on the install screen is refused: the name is not a user of the network, or the user's certificate is missing, not issued to them or not signed by the authority. |
 | 65 | `{AppName} starting` | The host starts. |
 | 66 | `{AppName} started` | Startup is done, once the networking services are launched or deferred until a user is installed, or once a user is installed on the install screen and the main window opens. |
@@ -169,7 +169,7 @@ Technical events of the running application: connections, the wire and the netwo
 | 77 | `{MessageId} delivered locally from {FromUser}` | A client or server hands a message to the local node. |
 | 84 | `Retrieval for {Requester} found {Count} stored message(s)` | A storage server answers a retrieval request. |
 | 109 | `{Change} {UserName}` | A server or relay connection to a parent, a child or a sibling server comes up (`Connected to`) or goes down (`Disconnected from`). |
-| 110 | `{Subject} blocked for {Users}: {Reason}` | A server leaves out recipients whose security level is too low when relaying. |
+| 110 | `{Subject} blocked for {Users}: {Reason}` | A server leaves out recipients whose message level is too low when relaying. |
 
 ### ERROR
 
@@ -181,7 +181,7 @@ Something failed. The technical detail of a problem that also has an `ACTIVITY` 
 | 3 | `Invalid configuration file: {Problem}` | The network configuration file is invalid for the role: a client or relay has no parent (at start or after a reload), or a server is missing from its own server map. |
 | 8 | `Interface listener cannot start: {Message}` | The local interface listener cannot be built, for example because a certificate file is missing. |
 | 11 | `A payload of {Length} bytes cannot be sent over {Point}: {Reason}` | A send is larger than the connection can carry: MSMT's largest message with packetization off, what the packetizer can split, or one HDLC frame (the reason says which and how to fix it). |
-| 14 | `A message from {Source} is invalid and was dropped: it {Reason}` | A message received from a peer, a server or child, a relay's server, the interface or an external system has no identifier or carries a priority or security level that is not configured. |
+| 14 | `A message from {Source} is invalid and was dropped: it {Reason}` | A message received from a peer, a server or child, a relay's server, the interface or an external system has no identifier or carries a priority or message level that is not configured. |
 | 19 | `Failed to {Action}` | Routing a message received on the local interface, forwarding one on a relay or relaying one on a server throws. |
 | 22 | `Failed to handle {UserName} {Action}` | A handler of a user connecting or disconnecting throws. |
 | 23 | `Failed to store received message from {FromUser}` | Storing a message received while the UI runs throws. |

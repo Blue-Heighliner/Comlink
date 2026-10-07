@@ -1,7 +1,7 @@
 namespace BlueHeighliner.Comlink;
 
 /// <summary>
-/// Controls the layout of the log lines the engine writes. State one with <see cref="IEngineBuilder{TFrame, TPacket, TPriority, TLevel}.Logs{THandler}"/>. Each field of a line (category, user and event ID) can be given a fixed width so
+/// Controls the layout of the log lines the engine writes. State one with <see cref="IEngineBuilder{TFrame, TPacket, TPriority, TLevel, TAspect}.Logs{THandler}"/>. Each field of a line (category, user and event ID) can be given a fixed width so
 /// that lines align field by field. By default no field is fixed: each is written at its natural length. Text in a fixed field is padded on the right with hyphens up to the width, and one that is longer is cut to it, except
 /// the event ID, which is never cut since cutting it would name another event.
 /// </summary>

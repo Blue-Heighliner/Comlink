@@ -14,11 +14,11 @@ public sealed class TestEngineConfiguration(bool packets = false, Action<TestFra
     /// <param name="engine">The builder to configure.</param>
     public TestEngineBuilder Apply(IEngineBuilder engine)
     {
-        TestEngineBuilder typed = engine.Types<TestFrame, TestPacket, TestMessagePriority, TestLevel>();
-        IPriorityBuilder<TestFrame, TestPacket, TestMessagePriority, TestLevel> priorities = typed.Priorities();
+        TestEngineBuilder typed = engine.Types<TestFrame, TestPacket, TestMessagePriority, TestLevel, TestAspect>();
+        IPriorityBuilder<TestFrame, TestPacket, TestMessagePriority, TestLevel, TestAspect> priorities = typed.Priorities();
         foreach (TestMessagePriority priority in Enum.GetValues<TestMessagePriority>()) { priorities.Priority(priority); }
 
-        ISecurityLevelsBuilder<TestFrame, TestPacket, TestMessagePriority, TestLevel> levels = typed.SecurityLevels();
+        IMessageLevelsBuilder<TestFrame, TestPacket, TestMessagePriority, TestLevel, TestAspect> levels = typed.MessageLevels();
         foreach (TestLevel level in Enum.GetValues<TestLevel>()) { levels.Level(level); }
 
         TestFrameBuilder message = typed.Frames()

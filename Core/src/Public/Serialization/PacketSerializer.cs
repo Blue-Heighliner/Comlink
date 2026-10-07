@@ -1,8 +1,8 @@
 namespace BlueHeighliner.Comlink;
 
 /// <summary>
-/// Serializes and deserializes instances of the host's packet type (see <see cref="IEngineBuilder{TFrame, TPacket, TPriority, TLevel}.Packets"/>) to and from the bytes sent across
-/// the network. State your own with <see cref="IPacketBuilder{TFrame, TPacket, TPriority, TLevel}.Serializer{TSerializer}"/>; every node on a network must use a matching one. Derive from
+/// Serializes and deserializes instances of the host's packet type (see <see cref="IEngineBuilder{TFrame, TPacket, TPriority, TLevel, TAspect}.Packets"/>) to and from the bytes sent across
+/// the network. State your own with <see cref="IPacketBuilder{TFrame, TPacket, TPriority, TLevel, TAspect}.Serializer{TSerializer}"/>; every node on a network must use a matching one. Derive from
 /// <see cref="PacketSerializer{TFrame, TPacket}"/> to work with the packet and frame types rather than <see cref="object"/>.
 /// </summary>
 public interface IPacketSerializer

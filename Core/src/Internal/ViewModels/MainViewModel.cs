@@ -9,10 +9,10 @@ internal interface IMainViewModel
     bool IsKioskMode { get; set; }
     /// <summary>Gets or sets the local user name displayed in the title bar.</summary>
     string UserName { get; set; }
-    /// <summary>Gets or sets the current user's security level name displayed in the title bar banner; see <see cref="IEngineController.GetUserSecurityLevel"/>.</summary>
-    string SecurityLevelName { get; set; }
-    /// <summary>Gets or sets the current user's security level accent color as a hex string.</summary>
-    string SecurityLevelColor { get; set; }
+    /// <summary>Gets or sets the current user's message level name displayed in the title bar banner; see <see cref="IEngineController.GetUserMessageLevel"/>.</summary>
+    string MessageLevelName { get; set; }
+    /// <summary>Gets or sets the current user's message level accent color as a hex string.</summary>
+    string MessageLevelColor { get; set; }
     /// <summary>Gets or sets the application version string.</summary>
     string AppVersion { get; set; }
     /// <summary>Gets the application name, shown in the title bar's info popup.</summary>
@@ -99,7 +99,7 @@ internal interface IMainViewModel
     IRelayCommand ShowPrintManagerCommand { get; }
     /// <summary>
     /// Re-reads the configuration files and applies what changed: the network file (connections are brought down or opened as it now defines them, and the
-    /// role, security level and access shown in the UI are updated), <c>Logging.json</c> and <c>User.json</c> (another user, or none, is switched to after the checks
+    /// role, message level and access shown in the UI are updated), <c>Logging.json</c> and <c>User.json</c> (another user, or none, is switched to after the checks
     /// of an install, and the UI follows). A network file that cannot be read is logged and leaves everything as it was.
     /// </summary>
     IAsyncRelayCommand RefreshCommand { get; }
@@ -237,8 +237,8 @@ internal sealed partial class MainViewModel : ObservableObject, IMainViewModel
     private bool isServerActivityViewActive;
     [ObservableProperty] private bool isKioskMode;
     [ObservableProperty] private string userName = string.Empty;
-    [ObservableProperty] private string securityLevelName = string.Empty;
-    [ObservableProperty] private string securityLevelColor = "#1565C0";
+    [ObservableProperty] private string messageLevelName = string.Empty;
+    [ObservableProperty] private string messageLevelColor = "#1565C0";
     [ObservableProperty] private string appVersion;
     [ObservableProperty] private bool hasAutoForwardAccess;
 
@@ -422,7 +422,7 @@ internal sealed partial class MainViewModel : ObservableObject, IMainViewModel
             MessageEntity entity = await entryService.StoreIncomingMessage(
                 evt.MessageId, evt.FromUser, evt.Body,
                 evt.Addresses.Select(a => new AddressData { UserName = a.UserName, Type = a.Type, Information = a.Information }).ToList(),
-                evt.SentAt, evt.Priority, evt.Tag, engineController.GetSecurityLevelName(evt.SecurityLevel));
+                evt.SentAt, evt.Priority, evt.Tag, engineController.GetMessageLevelName(evt.MessageLevel));
 
             FolderItemViewModel? inboxFolder = FindMessageRoot(FolderType.Inbox, evt.IsAlert);
             if (inboxFolder is not null && folderBar.SelectedFolder?.Id == inboxFolder.Id)
@@ -430,10 +430,10 @@ internal sealed partial class MainViewModel : ObservableObject, IMainViewModel
                 string timeText = entity.ReceivedAt.ToString("dd-MMM-yyyy HH:mm").ToUpperInvariant();
                 string priorityText = engineController.NameOf(engineController.ResolvePriority(evt.Priority));
                 string? tagText = engineController.TagsEnabled && !string.IsNullOrEmpty(evt.Tag) ? evt.Tag : null;
-                string securityLevelName = engineController.GetSecurityLevelName(evt.SecurityLevel);
-                string? securityLevelColor = engineController.SecurityLevels.IsRecognized(securityLevelName) ? engineController.SecurityLevels.GetColor(securityLevelName) : null;
+                string messageLevelName = engineController.GetMessageLevelName(evt.MessageLevel);
+                string? messageLevelColor = engineController.MessageLevels.IsRecognized(messageLevelName) ? engineController.MessageLevels.GetColor(messageLevelName) : null;
                 EntryItemViewModel item = new(entity.MessageId, evt.FromUser, EntryType.Message, entity.ReceivedAt,
-                    secondaryText: evt.Body.FirstLine, priorityText: priorityText, tagText: tagText, timeText: timeText, securityLevelColorHex: securityLevelColor, isAlert: evt.IsAlert);
+                    secondaryText: evt.Body.FirstLine, priorityText: priorityText, tagText: tagText, timeText: timeText, messageLevelColorHex: messageLevelColor, isAlert: evt.IsAlert);
                 item.OverallStatus = entity.ReadStatus;
                 await entryBar.PrependEntry(item);
             }
@@ -495,7 +495,7 @@ internal sealed partial class MainViewModel : ObservableObject, IMainViewModel
             DeselectFolderAndEntry();
             contentArea.ShowHome();
             UserName = string.Empty;
-            SecurityLevelName = string.Empty;
+            MessageLevelName = string.Empty;
             HasAutoForwardAccess = false;
             IsInstallScreenVisible = true;
             return;
@@ -519,9 +519,9 @@ internal sealed partial class MainViewModel : ObservableObject, IMainViewModel
     {
         UserName = info.Name;
         ApplyRole();
-        string level = engineController.GetUserSecurityLevel(info.Name);
-        SecurityLevelName = level;
-        SecurityLevelColor = engineController.SecurityLevels.GetColor(level);
+        string level = engineController.GetUserMessageLevel(info.Name);
+        MessageLevelName = level;
+        MessageLevelColor = engineController.MessageLevels.GetColor(level);
         HasAutoForwardAccess = engineController.AutoForwardControllers.Any(c => c.Users.Contains(info.Name, StringComparer.OrdinalIgnoreCase));
         return Task.CompletedTask;
     }
@@ -600,8 +600,8 @@ internal sealed partial class MainViewModel : ObservableObject, IMainViewModel
     {
         DraftEntity entity = await entryService.NewDraft();
         List<string> userNames = await connection.GetUserNames();
-        string currentSecurityLevel = engineController.GetUserSecurityLevel(currentUserProvider.UserName ?? string.Empty);
-        DraftViewModel vm = new(entity, entryService, connection, userNames, loggerFactory, engineController, bodyDocumentFactory.Create(), currentSecurityLevel: currentSecurityLevel, isNew: true);
+        string currentMessageLevel = engineController.GetUserMessageLevel(currentUserProvider.UserName ?? string.Empty);
+        DraftViewModel vm = new(entity, entryService, connection, userNames, loggerFactory, engineController, bodyDocumentFactory.Create(), currentMessageLevel: currentMessageLevel, isNew: true);
         vm.Duplicated += contentArea.ShowDraft;
         vm.TitleChanged += title => entryBar.UpdateTitle(vm.Id, EntryType.Draft, title);
         vm.DraftSent += async (IDraftViewModel _, MessageEntity msg) =>

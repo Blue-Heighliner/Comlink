@@ -1,6 +1,6 @@
 namespace BlueHeighliner.Comlink;
 
-/// <summary>The engine's untyped content of a message to create, which a <see cref="IMessageFrameHandler"/> turns into the host's typed <see cref="MessageCreateContext{TPriority, TLevel}"/>.</summary>
+/// <summary>The engine's untyped content of a message to create, which a <see cref="IMessageFrameHandler"/> turns into the host's typed <see cref="MessageCreateContext{TPriority, TLevel, TAspect}"/>.</summary>
 internal sealed record MessageContent
 {
     /// <summary>Gets the UTC time the message was sent.</summary>
@@ -15,6 +15,9 @@ internal sealed record MessageContent
     /// <summary>Gets the short tag identifying the type of message, or an empty string for none.</summary>
     public required string Tag { get; init; }
 
-    /// <summary>Gets the security level name the message is sent at, or an empty string when none are configured.</summary>
-    public required string SecurityLevel { get; init; }
+    /// <summary>Gets the message level name the message is sent at, or an empty string when none are configured.</summary>
+    public required string MessageLevel { get; init; }
+
+    /// <summary>Gets the message aspect name the message carries, or an empty string for none.</summary>
+    public string MessageAspect { get; init; } = string.Empty;
 }

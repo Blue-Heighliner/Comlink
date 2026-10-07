@@ -30,7 +30,7 @@ The file is read again while the application runs when the user presses "Refresh
       "InterfacePort": 50020,
       "Parent": null,
       "Children": [],
-      "SecurityLevel": null,
+      "MessageLevel": null,
       "Data": { "role": "clerk" },
 
       "Headless": false
@@ -142,11 +142,11 @@ Instead of a plain user name, a link may be an object that forces how the connec
 "CLIENT1": { "Role": "Client", "Hdlc": { "Address": 2, "Ports": [ "ttyUSB0" ] }, "Parent": { "User": "SERVER", "Mode": "Hdlc" } }
 ```
 
-### `SecurityLevel`
+### `MessageLevel`
 
 **Type:** `string | null` | **Default:** `null` (the lowest configured level)
 
-The name of the security level the user runs at (see [Configuration.md](Configuration.md#security-levels)).
+The name of the message level the user runs at (see [Configuration.md](Configuration.md#message-levels)).
 
 ### `Data`
 
@@ -175,9 +175,9 @@ One server with two clients that each name it as their parent, the server storin
   "AuthorityCertificate": "../Root.cer",
   "CertificateStore": ".",
   "Users": {
-    "SERVER":  { "Role": "Server", "IpHost": "127.0.0.1", "Msmt": { "Port": 50121 }, "InterfacePort": 50120, "Children": [ "CLIENT1", "CLIENT2" ], "SecurityLevel": "RESTRICTED" },
-    "CLIENT1": { "Role": "Client", "InterfacePort": 50122, "Parent": "SERVER", "SecurityLevel": "INTERNAL" },
-    "CLIENT2": { "Role": "Client", "InterfacePort": 50124, "Parent": "SERVER", "SecurityLevel": "INTERNAL" }
+    "SERVER":  { "Role": "Server", "IpHost": "127.0.0.1", "Msmt": { "Port": 50121 }, "InterfacePort": 50120, "Children": [ "CLIENT1", "CLIENT2" ], "MessageLevel": "RESTRICTED" },
+    "CLIENT1": { "Role": "Client", "InterfacePort": 50122, "Parent": "SERVER", "MessageLevel": "INTERNAL" },
+    "CLIENT2": { "Role": "Client", "InterfacePort": 50124, "Parent": "SERVER", "MessageLevel": "INTERNAL" }
   }
 }
 ```

@@ -90,7 +90,7 @@ internal sealed class AutoForwardService : IAutoForwardService
                 Body = engineController.GetBody(original),
                 Priority = engineController.GetMessagePriority(original),
                 Tag = engineController.GetTag(original),
-                SecurityLevel = engineController.GetSecurityLevel(original)
+                MessageLevel = engineController.GetMessageLevel(original)
             });
             engineController.SetAddresses(forwarded, [.. recipients.Select(name => new MessageAddress { UserName = name, Type = AddressType.To })]);
 

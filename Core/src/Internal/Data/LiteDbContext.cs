@@ -120,7 +120,7 @@ internal sealed class LiteDbContext : ILiteDbContext
             });
             mapper.ToDocument(new DraftEntity { Addresses = [new AddressData { UserName = string.Empty, Type = string.Empty, Information = string.Empty }] });
             mapper.ToDocument(new NoteEntity());
-            mapper.ToDocument(new ActivityLogEntity { Events = [string.Empty], EventEntries = [new ActivityLogEntry()] });
+            mapper.ToDocument(new ActivityLogEntity { EventEntries = [new ActivityLogEntry()] });
             mapper.ToDocument(new FolderEntity { Id = string.Empty, Name = string.Empty });
             mapper.ToDocument(new StoredMessageEntity { MessageId = string.Empty, Message = message });
             mapper.ToDocument(new AutoForwardTargetsEntity { Id = string.Empty, Targets = [string.Empty] });
@@ -142,9 +142,6 @@ internal sealed class LiteDbContext : ILiteDbContext
 
     private void EnsureRootFolders()
     {
-        // Remove legacy folder IDs from renamed enum values (delete by ID without deserialization)
-        Folders.Delete("root-logs");
-
         (FolderType, string)[] rootTypes = new[]
         {
             (FolderType.Inbox, "Inbox"),

@@ -9,7 +9,7 @@
       "InterfacePort": 50220,
       "Parent": "SERVER2",
       "Children": [ "CLIENT1" ],
-      "SecurityLevel": "RESTRICTED"
+      "MessageLevel": "RESTRICTED"
     },
     "SERVER2": {
       "Role": "Server",
@@ -17,19 +17,19 @@
       "Msmt": { "Port": 50223 },
       "InterfacePort": 50222,
       "Children": [ "CLIENT2" ],
-      "SecurityLevel": "RESTRICTED"
+      "MessageLevel": "RESTRICTED"
     },
     "CLIENT1": {
       "Role": "Client",
       "InterfacePort": 50224,
       "Parent": "SERVER1",
-      "SecurityLevel": "INTERNAL"
+      "MessageLevel": "INTERNAL"
     },
     "CLIENT2": {
       "Role": "Client",
       "InterfacePort": 50226,
       "Parent": "SERVER2",
-      "SecurityLevel": "INTERNAL"
+      "MessageLevel": "INTERNAL"
     }
   }
 }

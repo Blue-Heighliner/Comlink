@@ -98,7 +98,8 @@ Stored in both Inbox (received) and Outbox (sent).
 | `IsAlert` | `bool` | Whether this draft will be sent as an alert; see `Docs/Components/Peer.md#alert-messages` |
 | `Priority` | `int` | Integer value of the enum member that is the priority level this draft should be sent at (never the level's name or position, so it survives relabelling and reordering); see `Docs/Components/Configuration.md#message-composition` |
 | `Tag` | `string` | Short user-inputted tag identifying the type of this message; see `Docs/Components/Configuration.md#message-composition` |
-| `SecurityLevel` | `int?` | Integer value of the enum member that is the security level this draft should be sent at, one of `IEngineController.SecurityLevels`, or `null` when none is chosen or none are configured |
+| `MessageLevel` | `int?` | Integer value of the enum member that is the message level this draft should be sent at, one of `IEngineController.MessageLevels`, or `null` when none is chosen or none are configured |
+| `MessageAspect` | `int?` | Integer value of the enum member that is the message aspect this draft should be sent with, one of `IEngineController.MessageAspects`, or `null` for none |
 | `LineWidth` | `int?` | How many monospace characters wide a line of this draft is set to be, within the range the draft handler states, or `null` for no limit; see `Docs/Components/Configuration.md#drafts` |
 | `SentAt` | `DateTime?` | UTC send time |
 | `ModifiedAt` | `DateTime` | UTC last edit time |
@@ -129,8 +130,7 @@ One record per day, accumulated throughout the day.
 |-------|------|
 | `Id` | `ObjectId` |
 | `Date` | `DateOnly` |
-| `Events` | `List<string>` | Legacy plain-string events |
-| `EventEntries` | `List<ActivityLogEntry>` | Structured events: `{ At, Message }` |
+| `EventEntries` | `List<ActivityLogEntry>` | The day's events: `{ At, Message, EventId }`, where `EventId` is the identifier of the kind of event (`0` for none) |
 | `FolderId` | `string` |
 
 ### `FolderEntity`

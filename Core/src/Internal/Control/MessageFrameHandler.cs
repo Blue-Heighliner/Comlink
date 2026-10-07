@@ -1,6 +1,6 @@
 namespace BlueHeighliner.Comlink;
 
-/// <summary>The engine's untyped view of the host's <see cref="IMessageHandler{TFrame, TPriority, TLevel}"/>, working on frames as <see cref="object"/>.</summary>
+/// <summary>The engine's untyped view of the host's <see cref="IMessageHandler{TFrame, TPriority, TLevel, TAspect}"/>, working on frames as <see cref="object"/>.</summary>
 internal interface IMessageFrameHandler
 {
     /// <summary>Returns whether <paramref name="frame"/> is a message.</summary>
@@ -39,27 +39,30 @@ internal interface IMessageFrameHandler
     Enum GetPriority(object frame);
     /// <summary>Gets the tag of <paramref name="frame"/>.</summary>
     string GetTag(object frame);
-    /// <summary>Gets the security level name of <paramref name="frame"/>, or an empty string for none.</summary>
-    string GetSecurityLevel(object frame);
-    /// <summary>Gets the security level <paramref name="frame"/> carries as the host's enum member, whether or not it is a configured one, or <see langword="null"/> for none.</summary>
-    Enum? GetSecurityLevelKey(object frame);
+    /// <summary>Gets the message level name of <paramref name="frame"/>, or an empty string for none.</summary>
+    string GetMessageLevel(object frame);
+    /// <summary>Gets the message level <paramref name="frame"/> carries as the host's enum member, whether or not it is a configured one, or <see langword="null"/> for none.</summary>
+    Enum? GetMessageLevelKey(object frame);
+    /// <summary>Gets the message aspect name of <paramref name="frame"/>, or an empty string for none.</summary>
+    string GetMessageAspect(object frame);
 }
 
-/// <summary>Adapts a typed <see cref="IMessageHandler{TFrame, TPriority, TLevel}"/> to <see cref="IMessageFrameHandler"/>.</summary>
-internal sealed class MessageFrameHandler<TFrame, TPriority, TLevel>(IMessageHandler<TFrame, TPriority, TLevel> handler, IReadOnlyList<SecurityLevel> securityLevels) : IMessageFrameHandler where TFrame : class where TPriority : struct, Enum where TLevel : struct, Enum
+/// <summary>Adapts a typed <see cref="IMessageHandler{TFrame, TPriority, TLevel, TAspect}"/> to <see cref="IMessageFrameHandler"/>.</summary>
+internal sealed class MessageFrameHandler<TFrame, TPriority, TLevel, TAspect>(IMessageHandler<TFrame, TPriority, TLevel, TAspect> handler, IReadOnlyList<MessageLevel> messageLevels, IReadOnlyList<MessageAspect> messageAspects) : IMessageFrameHandler where TFrame : class where TPriority : struct, Enum where TLevel : struct, Enum where TAspect : struct, Enum
 {
     /// <inheritdoc />
     public bool IsValid(object frame) => handler.IsValid((TFrame)frame);
 
     /// <inheritdoc />
     public object Create(MessageContent content)
-        => handler.Create(new MessageCreateContext<TPriority, TLevel>
+        => handler.Create(new MessageCreateContext<TPriority, TLevel, TAspect>
         {
             SentAt = content.SentAt,
             Body = content.Body,
             Priority = (TPriority)(object)content.Priority,
             Tag = content.Tag,
-            SecurityLevel = ToLevel(content.SecurityLevel)
+            MessageLevel = ToLevel(content.MessageLevel),
+            MessageAspect = ToAspect(content.MessageAspect)
         });
 
     /// <inheritdoc />
@@ -110,14 +113,23 @@ internal sealed class MessageFrameHandler<TFrame, TPriority, TLevel>(IMessageHan
     public string GetTag(object frame) => handler.GetTag((TFrame)frame);
 
     /// <inheritdoc />
-    public string GetSecurityLevel(object frame)
-        => handler.GetSecurityLevel((TFrame)frame) is { } level ? securityLevels.FirstOrDefault(candidate => candidate.Key?.Equals(level) == true)?.Name ?? string.Empty : string.Empty;
+    public string GetMessageLevel(object frame)
+        => handler.GetMessageLevel((TFrame)frame) is { } level ? messageLevels.FirstOrDefault(candidate => candidate.Key?.Equals(level) == true)?.Name ?? string.Empty : string.Empty;
 
     /// <inheritdoc />
-    public Enum? GetSecurityLevelKey(object frame) => handler.GetSecurityLevel((TFrame)frame) is { } level ? level : null;
+    public Enum? GetMessageLevelKey(object frame) => handler.GetMessageLevel((TFrame)frame) is { } level ? level : null;
+
+    /// <inheritdoc />
+    public string GetMessageAspect(object frame)
+        => handler.GetMessageAspect((TFrame)frame) is { } aspect ? messageAspects.FirstOrDefault(candidate => candidate.Key.Equals(aspect))?.Name ?? string.Empty : string.Empty;
+
+    private TAspect? ToAspect(string name)
+        => string.IsNullOrEmpty(name) ? null
+        : messageAspects.FirstOrDefault(aspect => string.Equals(aspect.Name, name, StringComparison.OrdinalIgnoreCase))?.Key is TAspect key ? key
+        : throw new ArgumentException($"The message aspect \"{name}\" is not one of the configured message aspects: {string.Join(", ", messageAspects.Select(aspect => aspect.Name))}", nameof(name));
 
     private TLevel? ToLevel(string name)
         => string.IsNullOrEmpty(name) ? null
-        : securityLevels.FirstOrDefault(level => string.Equals(level.Name, name, StringComparison.OrdinalIgnoreCase))?.Key is TLevel key ? key
-        : throw new ArgumentException($"The security level \"{name}\" is not one of the configured security levels: {string.Join(", ", securityLevels.Select(level => level.Name))}", nameof(name));
+        : messageLevels.FirstOrDefault(level => string.Equals(level.Name, name, StringComparison.OrdinalIgnoreCase))?.Key is TLevel key ? key
+        : throw new ArgumentException($"The message level \"{name}\" is not one of the configured message levels: {string.Join(", ", messageLevels.Select(level => level.Name))}", nameof(name));
 }

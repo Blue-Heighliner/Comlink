@@ -10,7 +10,7 @@ internal interface INetworkReloadService
     /// Reads the network configuration file again, then changes only what the new file makes necessary. A changed listen port restarts only the
     /// listener, outgoing points no longer defined are closed and newly defined ones opened while the others keep their connections, and a server's
     /// topology is updated in place; only a changed role or changed certificates restart the peer layer, and only a changed port or certificates
-    /// restart the local interface listener. Everything else, such as users, groups, security levels and node settings, is read on demand and so is
+    /// restart the local interface listener. Everything else, such as users, groups, message levels and node settings, is read on demand and so is
     /// current as soon as the file has been read.
     /// </summary>
     /// <remarks>

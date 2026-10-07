@@ -33,10 +33,12 @@ internal interface IMessageViewModel
     bool TagsEnabled { get; }
     /// <summary>Gets the short, user-inputted tag identifying the type of this message, or an empty string if none was set.</summary>
     string Tag { get; }
-    /// <summary>Gets the security level name this message was sent at, or an empty string when no security levels are configured.</summary>
-    string SecurityLevelName { get; }
-    /// <summary>Gets the hex color for <see cref="SecurityLevelName"/>, or <see langword="null"/> when it has none recognized.</summary>
-    string? SecurityLevelColorHex { get; }
+    /// <summary>Gets the message level name this message was sent at, or an empty string when no message levels are configured.</summary>
+    string MessageLevelName { get; }
+    /// <summary>Gets the hex color for <see cref="MessageLevelName"/>, or <see langword="null"/> when it has none recognized.</summary>
+    string? MessageLevelColorHex { get; }
+    /// <summary>Gets the message aspect name this message carries, or an empty string for none.</summary>
+    string MessageAspectName { get; }
     /// <summary>
     /// Gets or sets this Inbox message's own read status (<c>Received</c>/<c>Read</c>); <see langword="null"/>
     /// for an Outbox message, which tracks read state per-destination in <see cref="DeliveryStatuses"/> instead.
@@ -113,8 +115,9 @@ internal sealed partial class MessageViewModel : ObservableObject, IMessageViewM
         PriorityLabel = engineController.NameOf(engineController.GetMessagePriority(entity.Message));
         TagsEnabled = engineController.TagsEnabled;
         Tag = engineController.GetTag(entity.Message);
-        SecurityLevelName = engineController.GetSecurityLevel(entity.Message);
-        SecurityLevelColorHex = engineController.SecurityLevels.IsRecognized(SecurityLevelName) ? engineController.SecurityLevels.GetColor(SecurityLevelName) : null;
+        MessageLevelName = engineController.GetMessageLevel(entity.Message);
+        MessageLevelColorHex = engineController.MessageLevels.IsRecognized(MessageLevelName) ? engineController.MessageLevels.GetColor(MessageLevelName) : null;
+        MessageAspectName = engineController.GetMessageAspect(entity.Message);
         List<MessageAddress> addresses = engineController.GetAddresses(entity.Message);
         IReadOnlyList<AddressTypeOption> addressTypes = engineController.AddressTypes;
         ToLabel = addressTypes.GetLabel(AddressType.To).ToUpperInvariant();
@@ -174,10 +177,12 @@ internal sealed partial class MessageViewModel : ObservableObject, IMessageViewM
     public bool TagsEnabled { get; }
     /// <summary>Gets the short, user-inputted tag identifying the type of this message, or an empty string if none was set.</summary>
     public string Tag { get; }
-    /// <summary>Gets the security level name this message was sent at, or an empty string when no security levels are configured.</summary>
-    public string SecurityLevelName { get; }
-    /// <summary>Gets the hex color for <see cref="SecurityLevelName"/>, or <see langword="null"/> when it has none recognized.</summary>
-    public string? SecurityLevelColorHex { get; }
+    /// <summary>Gets the message level name this message was sent at, or an empty string when no message levels are configured.</summary>
+    public string MessageLevelName { get; }
+    /// <summary>Gets the hex color for <see cref="MessageLevelName"/>, or <see langword="null"/> when it has none recognized.</summary>
+    public string? MessageLevelColorHex { get; }
+    /// <inheritdoc />
+    public string MessageAspectName { get; }
     /// <summary>Gets the uppercase display text for <see cref="ReadStatus"/>, or empty if <see langword="null"/>.</summary>
     public string ReadStatusText => ReadStatus?.ToString().ToUpperInvariant() ?? string.Empty;
     /// <summary>Gets a value indicating whether this message has any per-user delivery status rows.</summary>

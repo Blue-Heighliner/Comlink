@@ -26,8 +26,8 @@ internal sealed record EntryFilter
     public string? Author { get; init; }
     /// <summary>Case-insensitive substring match against any addressee's user name (To, Cc or External). Messages and drafts (used for the Outbox and Drafts); ignored for notes. Whitespace-only is treated the same as <see langword="null"/>.</summary>
     public string? Destination { get; init; }
-    /// <summary>Matches only entries sent/composed at this exact security level name. Messages and drafts; ignored for notes.</summary>
-    public string? SecurityLevel { get; init; }
+    /// <summary>Matches only entries sent/composed at this exact message level name. Messages and drafts; ignored for notes.</summary>
+    public string? MessageLevel { get; init; }
     /// <summary>Matches only entries sent/composed at this priority level. Messages and drafts; ignored for notes.</summary>
     public Enum? Priority { get; init; }
     /// <summary>When <see langword="true"/>, matches only messages that are alerts; when <see langword="false"/>, only messages that are not. <see langword="null"/> matches both. Messages only; ignored for drafts and notes.</summary>
@@ -38,5 +38,5 @@ internal sealed record EntryFilter
     /// entirely in this case and paginates the folder's LiteDB query directly, rather than loading the whole
     /// folder to filter in memory.
     /// </summary>
-    public bool IsEmpty => string.IsNullOrWhiteSpace(Search) && DateFrom is null && DateTo is null && string.IsNullOrWhiteSpace(Author) && string.IsNullOrWhiteSpace(Destination) && SecurityLevel is null && Priority is null && Alert is null;
+    public bool IsEmpty => string.IsNullOrWhiteSpace(Search) && DateFrom is null && DateTo is null && string.IsNullOrWhiteSpace(Author) && string.IsNullOrWhiteSpace(Destination) && MessageLevel is null && Priority is null && Alert is null;
 }

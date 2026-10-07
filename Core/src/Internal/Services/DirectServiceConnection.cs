@@ -97,7 +97,7 @@ internal sealed class DirectServiceConnection : IServiceConnection
         => userService.Install(userName, cancellation);
 
     /// <inheritdoc />
-    public async Task<SendMessageResult?> SendMessage(string body, List<AddressRequest> addresses, Enum? priority = null, string tag = "", Enum? securityLevel = null, CancellationToken cancellation = default)
+    public async Task<SendMessageResult?> SendMessage(string body, List<AddressRequest> addresses, Enum? priority = null, string tag = "", Enum? messageLevel = null, Enum? messageAspect = null, CancellationToken cancellation = default)
     {
         UserInfo? userInfo = userService.GetCurrentUserInfo();
         if (userInfo is null) { return null; }
@@ -110,14 +110,15 @@ internal sealed class DirectServiceConnection : IServiceConnection
             Addresses = addresses.Select(a => new AddressPayload { UserName = a.UserName, Type = a.Type, Information = a.Information }).ToList(),
             Priority = priority,
             Tag = tag,
-            SecurityLevel = engineController.GetSecurityLevelName(securityLevel)
+            MessageLevel = engineController.GetMessageLevelName(messageLevel),
+            MessageAspect = engineController.GetMessageAspectName(messageAspect)
         };
 
         (string messageId, IReadOnlyList<UserDeliveryResult> userResults) = await messageRouting.Route(userInfo.Name, payload, cancellation);
         return new SendMessageResult
         {
             MessageId = messageId,
-            IsAlert = engineController.ComputeIsAlert(body, priority, tag, engineController.GetSecurityLevelName(securityLevel), addresses),
+            IsAlert = engineController.ComputeIsAlert(body, priority, tag, engineController.GetMessageLevelName(messageLevel), addresses),
             UserResults = [.. userResults]
         };
     }

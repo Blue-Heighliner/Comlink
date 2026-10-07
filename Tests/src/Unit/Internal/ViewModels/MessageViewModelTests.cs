@@ -13,7 +13,7 @@ public sealed class MessageViewModelTests
         DeliveryStatus[]? deliveryStatuses = null,
         int priority = 0,
         string tag = "",
-        string securityLevel = "")
+        string messageLevel = "")
     {
         string id = messageId ?? Guid.NewGuid().ToString("N").ToUpperInvariant();
         object message = format.CreateFrame();
@@ -22,7 +22,7 @@ public sealed class MessageViewModelTests
         format.SetFromUser(message, fromUser);
         ((TestFrame)message).Priority = priority == 0 ? "NORMAL" : $"LEVEL{priority}";
         ((TestFrame)message).Tag = tag;
-        ((TestFrame)message).SecurityLevel = securityLevel;
+        ((TestFrame)message).MessageLevel = messageLevel;
         format.SetAddresses(message, [.. (addresses ?? [new AddressData { UserName = "DEST", Type = "To" }])
             .Select(a => new MessageAddress { UserName = a.UserName, Type = a.Type.ParseAddressType(), Information = a.Information })]);
         return new MessageEntity
@@ -80,11 +80,11 @@ public sealed class MessageViewModelTests
         mock.Setup(e => e.GetIsAlert(It.IsAny<object>())).Returns(format.GetIsAlert);
         mock.Setup(e => e.GetPriority(It.IsAny<object>())).Returns(format.GetPriority);
         mock.Setup(e => e.GetTag(It.IsAny<object>())).Returns(format.GetTag);
-        mock.Setup(e => e.GetSecurityLevel(It.IsAny<object>())).Returns(format.GetSecurityLevel);
+        mock.Setup(e => e.GetMessageLevel(It.IsAny<object>())).Returns(format.GetMessageLevel);
         mock.Setup(e => e.Priorities).Returns(format.Priorities);
         mock.Setup(e => e.TagsEnabled).Returns(format.TagsEnabled);
         mock.Setup(e => e.TagLabel).Returns(format.TagLabel);
-        mock.Setup(e => e.SecurityLevels).Returns(format.SecurityLevels);
+        mock.Setup(e => e.MessageLevels).Returns(format.MessageLevels);
         mock.Setup(e => e.GetAddresses(It.IsAny<object>())).Returns(format.GetAddresses);
         mock.Setup(e => e.AddressTypes).Returns([
             new AddressTypeOption { Type = AddressType.To, Label = "To" },
@@ -317,30 +317,30 @@ public sealed class MessageViewModelTests
         Assert.Equal("URGENT", vm.Tag);
     }
 
-    /// <summary>An empty or unrecognized security level (no security levels configured) yields a null SecurityLevelColorHex rather than a fallback color.</summary>
+    /// <summary>An empty or unrecognized message level (no message levels configured) yields a null MessageLevelColorHex rather than a fallback color.</summary>
     [Fact]
-    public void Ctor_NoSecurityLevel_SecurityLevelColorHexIsNull()
+    public void Ctor_NoMessageLevel_MessageLevelColorHexIsNull()
     {
         MessageEntity entity = MakeEntity();
 
         MessageViewModel vm = new(entity, format);
 
-        Assert.Equal("", vm.SecurityLevelName);
-        Assert.Null(vm.SecurityLevelColorHex);
+        Assert.Equal("", vm.MessageLevelName);
+        Assert.Null(vm.MessageLevelColorHex);
     }
 
-    /// <summary>A recognized security level exposes both its name and its configured color.</summary>
+    /// <summary>A recognized message level exposes both its name and its configured color.</summary>
     [Fact]
-    public void Ctor_RecognizedSecurityLevel_ExposesNameAndColor()
+    public void Ctor_RecognizedMessageLevel_ExposesNameAndColor()
     {
         Mock<TestEngineController> controller = new() { CallBase = true };
-        controller.Setup(c => c.SecurityLevels).Returns([new SecurityLevel { Name = "RESTRICTED", Color = "#C62828" }]);
-        MessageEntity entity = MakeEntity(securityLevel: "RESTRICTED");
+        controller.Setup(c => c.MessageLevels).Returns([new MessageLevel { Name = "RESTRICTED", Color = "#C62828" }]);
+        MessageEntity entity = MakeEntity(messageLevel: "RESTRICTED");
 
         MessageViewModel vm = new(entity, controller.Object);
 
-        Assert.Equal("RESTRICTED", vm.SecurityLevelName);
-        Assert.Equal("#C62828", vm.SecurityLevelColorHex);
+        Assert.Equal("RESTRICTED", vm.MessageLevelName);
+        Assert.Equal("#C62828", vm.MessageLevelColorHex);
     }
 
     /// <summary>DeliveryStatusRow.StatusText is the uppercase status name, and DisplayName includes addressed group context when present.</summary>

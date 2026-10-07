@@ -41,6 +41,8 @@ internal sealed class ExportService : IExportService
         IsAlert = entity.IsAlert,
         Priority = entity.Priority,
         Tag = entity.Tag,
+        MessageLevel = entity.MessageLevel,
+        MessageAspect = entity.MessageAspect,
         SentAt = entity.SentAt,
         CreatedAt = entity.CreatedAt,
         ModifiedAt = entity.ModifiedAt

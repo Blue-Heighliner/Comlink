@@ -34,15 +34,14 @@ internal sealed class ActivityEventRow
 [ConstructedManually]
 internal sealed partial class ActivityLogViewModel : ObservableObject, IActivityLogViewModel
 {
-    /// <summary>Initializes the ViewModel from the given entity, merging legacy and structured event data.</summary>
+    /// <summary>Initializes the ViewModel from the given entity, ordering its entries newest-first.</summary>
     /// <param name="entity">The day's activity log.</param>
     /// <param name="idWidth">The width the log handler fixes the event ID field to, which an ID is padded to with hyphens, or <see langword="null"/> for none.</param>
     public ActivityLogViewModel(ActivityLogEntity entity, int? idWidth = null)
     {
         Date = entity.Date.ToString("dd-MMM-yyyy").ToUpperInvariant();
 
-        IEnumerable<ActivityLogEntry> legacy = entity.Events.Select(msg => new ActivityLogEntry { At = entity.Date, Message = msg });
-        Events = entity.EventEntries.Concat(legacy)
+        Events = entity.EventEntries
             .OrderByDescending(e => e.At)
             .Select(e => new ActivityEventRow(e, idWidth))
             .ToList();

@@ -458,14 +458,14 @@ internal sealed class ServerRoutingService : IPeerService, IConnectionStatusServ
     {
         HashSet<string> addressed = new(engineController.Route(message), StringComparer.OrdinalIgnoreCase);
 
-        IReadOnlyList<SecurityLevel> securityLevels = engineController.SecurityLevels;
-        int messageLevelRank = securityLevels.GetRank(engineController.GetSecurityLevel(message));
+        IReadOnlyList<MessageLevel> messageLevels = engineController.MessageLevels;
+        int messageLevelRank = messageLevels.GetRank(engineController.GetMessageLevel(message));
         if (messageLevelRank < 0) { return addressed; }
 
-        List<string> blocked = [.. addressed.Where(user => securityLevels.GetRank(engineController.GetUserSecurityLevel(user)) < messageLevelRank)];
+        List<string> blocked = [.. addressed.Where(user => messageLevels.GetRank(engineController.GetUserMessageLevel(user)) < messageLevelRank)];
         if (blocked.Count > 0)
         {
-            logger.Record(LogEvents.RelayBlockedBySecurityLevel, "{Subject} blocked for {Users}: {Reason}", "Relay", string.Join(", ", blocked), "security level not supported by destination");
+            logger.Record(LogEvents.RelayBlockedByMessageLevel, "{Subject} blocked for {Users}: {Reason}", "Relay", string.Join(", ", blocked), "message level not supported by destination");
             addressed.ExceptWith(blocked);
         }
 

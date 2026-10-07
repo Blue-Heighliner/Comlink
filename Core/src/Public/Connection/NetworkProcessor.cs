@@ -3,7 +3,7 @@ namespace BlueHeighliner.Comlink;
 /// <summary>
 /// Runs host code in reaction to peer activity, independent of any UI. Each method is handed a simplified snapshot of the engine (see
 /// <see cref="IEngineContext"/>) that can also originate new frames. A method runs in the background: it is not awaited
-/// by the engine, and an exception it throws is logged rather than thrown back. State one with <see cref="IFrameBuilder{TFrame, TPacket, TPriority, TLevel}.Processor"/>.
+/// by the engine, and an exception it throws is logged rather than thrown back. State one with <see cref="IFrameBuilder{TFrame, TPacket, TPriority, TLevel, TAspect}.Processor"/>.
 /// </summary>
 /// <typeparam name="TFrame">The host's frame type.</typeparam>
 public interface INetworkProcessor<TFrame> where TFrame : class

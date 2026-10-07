@@ -8,7 +8,7 @@ public sealed class EntryBarViewModelTests
     private static FolderItemViewModel MakeFolder(string id, FolderType type)
         => new(id, type.ToString(), type, null);
 
-    private static MessageEntity MakeMessage(string id = "MSG1", string fromUser = "ALPHA", string body = "Hello", int priority = 0, string tag = "", string securityLevel = "", bool isAlert = false)
+    private static MessageEntity MakeMessage(string id = "MSG1", string fromUser = "ALPHA", string body = "Hello", int priority = 0, string tag = "", string messageLevel = "", bool isAlert = false)
     {
         object message = format.CreateFrame();
         ((TestFrame)message).MessageId = id;
@@ -16,7 +16,7 @@ public sealed class EntryBarViewModelTests
         ((TestFrame)message).Body = body;
         ((TestFrame)message).Priority = priority switch { 0 => "NORMAL", 1 => "Medium", 2 => "High", _ => $"LEVEL{priority}" };
         ((TestFrame)message).Tag = tag;
-        ((TestFrame)message).SecurityLevel = securityLevel;
+        ((TestFrame)message).MessageLevel = messageLevel;
         ((TestFrame)message).IsAlert = isAlert;
         return new MessageEntity
         {
@@ -171,17 +171,17 @@ public sealed class EntryBarViewModelTests
         svc.Verify(s => s.GetMessages("root-inbox", 1, null), Times.AtLeastOnce);
     }
 
-    /// <summary>AvailableSecurityLevelFilters is a leading "Any" option followed by every configured security level.</summary>
+    /// <summary>AvailableMessageLevelFilters is a leading "Any" option followed by every configured message level.</summary>
     [Fact]
-    public void AvailableSecurityLevelFilters_IsAnyFollowedByEveryConfiguredLevel()
+    public void AvailableMessageLevelFilters_IsAnyFollowedByEveryConfiguredLevel()
     {
         Mock<TestEngineController> controller = new() { CallBase = true };
-        controller.Setup(c => c.SecurityLevels).Returns([new SecurityLevel { Name = "PUBLIC", Color = "#2E7D32" }, new SecurityLevel { Name = "RESTRICTED", Color = "#C62828" }]);
+        controller.Setup(c => c.MessageLevels).Returns([new MessageLevel { Name = "PUBLIC", Color = "#2E7D32" }, new MessageLevel { Name = "RESTRICTED", Color = "#C62828" }]);
         EntryBarViewModel vm = new(new Mock<IEntryService>().Object, controller.Object);
 
-        Assert.Equal(["Any", "PUBLIC", "RESTRICTED"], vm.AvailableSecurityLevelFilters.Select(f => f.Label));
-        Assert.Equal([null, "PUBLIC", "RESTRICTED"], vm.AvailableSecurityLevelFilters.Select(f => f.Name));
-        Assert.Same(vm.AvailableSecurityLevelFilters[0], vm.SelectedSecurityLevelFilter);
+        Assert.Equal(["Any", "PUBLIC", "RESTRICTED"], vm.AvailableMessageLevelFilters.Select(f => f.Label));
+        Assert.Equal([null, "PUBLIC", "RESTRICTED"], vm.AvailableMessageLevelFilters.Select(f => f.Name));
+        Assert.Same(vm.AvailableMessageLevelFilters[0], vm.SelectedMessageLevelFilter);
     }
 
     /// <summary>AvailablePriorityFilters is a leading "Any" option followed by every configured priority.</summary>
@@ -195,17 +195,17 @@ public sealed class EntryBarViewModelTests
         Assert.Same(vm.AvailablePriorityFilters[0], vm.SelectedPriorityFilter);
     }
 
-    /// <summary>ShowSecurityLevelFilter is true only for Inbox, Outbox and Drafts, and only when at least one security level is configured.</summary>
+    /// <summary>ShowMessageLevelFilter is true only for Inbox, Outbox and Drafts, and only when at least one message level is configured.</summary>
     [Theory]
     [InlineData(FolderType.Inbox, true)]
     [InlineData(FolderType.Outbox, true)]
     [InlineData(FolderType.Drafts, true)]
     [InlineData(FolderType.Notes, false)]
     [InlineData(FolderType.Activity, false)]
-    public async Task LoadFolder_SetsShowSecurityLevelFilterWhenLevelsConfigured(FolderType folderType, bool expected)
+    public async Task LoadFolder_SetsShowMessageLevelFilterWhenLevelsConfigured(FolderType folderType, bool expected)
     {
         Mock<TestEngineController> controller = new() { CallBase = true };
-        controller.Setup(c => c.SecurityLevels).Returns([new SecurityLevel { Name = "PUBLIC", Color = "#2E7D32" }]);
+        controller.Setup(c => c.MessageLevels).Returns([new MessageLevel { Name = "PUBLIC", Color = "#2E7D32" }]);
         Mock<IEntryService> svc = new();
         svc.Setup(s => s.GetMessages(It.IsAny<string>(), It.IsAny<int>(), It.IsAny<EntryFilter>())).ReturnsAsync((Items: new List<MessageEntity>(), Total: 0));
         svc.Setup(s => s.GetDrafts(It.IsAny<string>(), It.IsAny<int>(), It.IsAny<bool>(), It.IsAny<EntryFilter>())).ReturnsAsync((Items: new List<DraftEntity>(), Total: 0));
@@ -215,22 +215,22 @@ public sealed class EntryBarViewModelTests
 
         await vm.LoadFolder(MakeFolder("root", folderType));
 
-        Assert.Equal(expected, vm.ShowSecurityLevelFilter);
+        Assert.Equal(expected, vm.ShowMessageLevelFilter);
     }
 
-    /// <summary>ShowSecurityLevelFilter is false for a message folder when no security levels are configured, even though ShowPriorityFilter and ShowAlertFilter still apply.</summary>
+    /// <summary>ShowMessageLevelFilter is false for a message folder when no message levels are configured, even though ShowPriorityFilter and ShowAlertFilter still apply.</summary>
     [Fact]
-    public async Task LoadFolder_NoSecurityLevelsConfigured_HidesSecurityLevelFilterOnly()
+    public async Task LoadFolder_NoMessageLevelsConfigured_HidesMessageLevelFilterOnly()
     {
         Mock<IEntryService> svc = new();
         svc.Setup(s => s.GetMessages(It.IsAny<string>(), It.IsAny<int>(), It.IsAny<EntryFilter>())).ReturnsAsync((Items: new List<MessageEntity>(), Total: 0));
         Mock<TestEngineController> controller = new() { CallBase = true };
-        controller.Setup(c => c.SecurityLevels).Returns([]);
+        controller.Setup(c => c.MessageLevels).Returns([]);
         EntryBarViewModel vm = new(svc.Object, controller.Object);
 
         await vm.LoadFolder(MakeFolder("root-inbox", FolderType.Inbox));
 
-        Assert.False(vm.ShowSecurityLevelFilter);
+        Assert.False(vm.ShowMessageLevelFilter);
         Assert.True(vm.ShowPriorityFilter);
         Assert.True(vm.ShowAlertFilter);
     }
@@ -512,7 +512,7 @@ public sealed class EntryBarViewModelTests
         Assert.Null(vm.DateTo);
         Assert.Null(vm.TimeTo);
         Assert.False(vm.AlertOnlyFilter);
-        Assert.Same(vm.AvailableSecurityLevelFilters[0], vm.SelectedSecurityLevelFilter);
+        Assert.Same(vm.AvailableMessageLevelFilters[0], vm.SelectedMessageLevelFilter);
         Assert.Same(vm.AvailablePriorityFilters[0], vm.SelectedPriorityFilter);
         Assert.Equal(1, vm.CurrentPage);
         Assert.Equal(0, vm.ActiveFilterCount);
@@ -865,41 +865,41 @@ public sealed class EntryBarViewModelTests
         Assert.Null(vm.Entries[0].TagText);
     }
 
-    /// <summary>Inbox entries carry a SecurityLevelColorHex resolved from the message's stored security level.</summary>
+    /// <summary>Inbox entries carry a MessageLevelColorHex resolved from the message's stored message level.</summary>
     [Fact]
-    public async Task LoadFolder_Inbox_RecognizedSecurityLevel_SetsSecurityLevelColorHex()
+    public async Task LoadFolder_Inbox_RecognizedMessageLevel_SetsMessageLevelColorHex()
     {
-        Mock<TestEngineController> securityLevelProvider = new() { CallBase = true };
-        securityLevelProvider.Setup(p => p.SecurityLevels).Returns([new SecurityLevel { Name = "RESTRICTED", Color = "#C62828" }]);
+        Mock<TestEngineController> messageLevelProvider = new() { CallBase = true };
+        messageLevelProvider.Setup(p => p.MessageLevels).Returns([new MessageLevel { Name = "RESTRICTED", Color = "#C62828" }]);
         Mock<IEntryService> svc = new();
         svc.Setup(s => s.GetMessages(It.IsAny<string>(), It.IsAny<int>()))
-           .ReturnsAsync((Items: new List<MessageEntity> { MakeMessage("M1", securityLevel: "RESTRICTED") }, Total: 1));
-        EntryBarViewModel vm = new(svc.Object, securityLevelProvider.Object);
+           .ReturnsAsync((Items: new List<MessageEntity> { MakeMessage("M1", messageLevel: "RESTRICTED") }, Total: 1));
+        EntryBarViewModel vm = new(svc.Object, messageLevelProvider.Object);
 
         await vm.LoadFolder(MakeFolder("root-inbox", FolderType.Inbox));
 
-        Assert.Equal("#C62828", vm.Entries[0].SecurityLevelColorHex);
+        Assert.Equal("#C62828", vm.Entries[0].MessageLevelColorHex);
     }
 
-    /// <summary>Outbox entries carry a SecurityLevelColorHex the same way as Inbox entries.</summary>
+    /// <summary>Outbox entries carry a MessageLevelColorHex the same way as Inbox entries.</summary>
     [Fact]
-    public async Task LoadFolder_Outbox_RecognizedSecurityLevel_SetsSecurityLevelColorHex()
+    public async Task LoadFolder_Outbox_RecognizedMessageLevel_SetsMessageLevelColorHex()
     {
-        Mock<TestEngineController> securityLevelProvider = new() { CallBase = true };
-        securityLevelProvider.Setup(p => p.SecurityLevels).Returns([new SecurityLevel { Name = "RESTRICTED", Color = "#C62828" }]);
+        Mock<TestEngineController> messageLevelProvider = new() { CallBase = true };
+        messageLevelProvider.Setup(p => p.MessageLevels).Returns([new MessageLevel { Name = "RESTRICTED", Color = "#C62828" }]);
         Mock<IEntryService> svc = new();
         svc.Setup(s => s.GetMessages(It.IsAny<string>(), It.IsAny<int>()))
-           .ReturnsAsync((Items: new List<MessageEntity> { MakeMessage("M1", securityLevel: "RESTRICTED") }, Total: 1));
-        EntryBarViewModel vm = new(svc.Object, securityLevelProvider.Object);
+           .ReturnsAsync((Items: new List<MessageEntity> { MakeMessage("M1", messageLevel: "RESTRICTED") }, Total: 1));
+        EntryBarViewModel vm = new(svc.Object, messageLevelProvider.Object);
 
         await vm.LoadFolder(MakeFolder("root-outbox", FolderType.Outbox));
 
-        Assert.Equal("#C62828", vm.Entries[0].SecurityLevelColorHex);
+        Assert.Equal("#C62828", vm.Entries[0].MessageLevelColorHex);
     }
 
-    /// <summary>An unrecognized or empty stored security level yields a null SecurityLevelColorHex rather than a fallback color.</summary>
+    /// <summary>An unrecognized or empty stored message level yields a null MessageLevelColorHex rather than a fallback color.</summary>
     [Fact]
-    public async Task LoadFolder_Inbox_NoSecurityLevel_SecurityLevelColorHexIsNull()
+    public async Task LoadFolder_Inbox_NoMessageLevel_MessageLevelColorHexIsNull()
     {
         Mock<IEntryService> svc = new();
         svc.Setup(s => s.GetMessages(It.IsAny<string>(), It.IsAny<int>()))
@@ -908,7 +908,7 @@ public sealed class EntryBarViewModelTests
 
         await vm.LoadFolder(MakeFolder("root-inbox", FolderType.Inbox));
 
-        Assert.Null(vm.Entries[0].SecurityLevelColorHex);
+        Assert.Null(vm.Entries[0].MessageLevelColorHex);
     }
 
     /// <summary>DeleteEntry passes the entry's IsOutboundMessage flag through to the service so self-addressed duplicates are disambiguated.</summary>

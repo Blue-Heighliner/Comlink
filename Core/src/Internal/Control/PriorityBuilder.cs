@@ -1,6 +1,6 @@
 namespace BlueHeighliner.Comlink;
 
-/// <summary>Collects what is stated through <see cref="IPriorityBuilder{TFrame, TPacket, TPriority, TLevel}"/> and <see cref="IPriorityLevelBuilder{TFrame, TPacket, TPriority, TLevel}"/>, recording what is stated about each level and turning it into the engine's priority options.</summary>
+/// <summary>Collects what is stated through <see cref="IPriorityBuilder{TFrame, TPacket, TPriority, TLevel, TAspect}"/> and <see cref="IPriorityLevelBuilder{TFrame, TPacket, TPriority, TLevel, TAspect}"/>, recording what is stated about each level and turning it into the engine's priority options.</summary>
 internal sealed class PriorityBuilder<TPriority> where TPriority : struct, Enum
 {
     private readonly Dictionary<TPriority, (string? Label, PriorityMode? Mode)> options = [];
@@ -11,7 +11,7 @@ internal sealed class PriorityBuilder<TPriority> where TPriority : struct, Enum
     /// <summary>The blocked tag and priority combinations that were stated.</summary>
     public IReadOnlyList<TagPriorityBlock> Blocks => blocks;
 
-    /// <inheritdoc cref="IPriorityBuilder{TFrame, TPacket, TPriority, TLevel}.Priority(TPriority)"/>
+    /// <inheritdoc cref="IPriorityBuilder{TFrame, TPacket, TPriority, TLevel, TAspect}.Priority(TPriority)"/>
     public PriorityBuilder<TPriority> Priority(TPriority priority)
     {
         current = priority;
@@ -19,21 +19,21 @@ internal sealed class PriorityBuilder<TPriority> where TPriority : struct, Enum
         return this;
     }
 
-    /// <inheritdoc cref="IPriorityLevelBuilder{TFrame, TPacket, TPriority, TLevel}.Label"/>
+    /// <inheritdoc cref="IPriorityLevelBuilder{TFrame, TPacket, TPriority, TLevel, TAspect}.Label"/>
     public PriorityBuilder<TPriority> Label(string label)
     {
         options[current] = (label, options.GetValueOrDefault(current).Mode);
         return this;
     }
 
-    /// <inheritdoc cref="IPriorityLevelBuilder{TFrame, TPacket, TPriority, TLevel}.Mode"/>
+    /// <inheritdoc cref="IPriorityLevelBuilder{TFrame, TPacket, TPriority, TLevel, TAspect}.Mode"/>
     public PriorityBuilder<TPriority> Mode(PriorityMode mode)
     {
         options[current] = (options.GetValueOrDefault(current).Label, mode);
         return this;
     }
 
-    /// <inheritdoc cref="IPriorityBuilder{TFrame, TPacket, TPriority, TLevel}.Block"/>
+    /// <inheritdoc cref="IPriorityBuilder{TFrame, TPacket, TPriority, TLevel, TAspect}.Block"/>
     public PriorityBuilder<TPriority> Block(TPriority? priority, string? tag)
     {
         blocks.Add(new TagPriorityBlock { Tag = tag, Priority = priority });

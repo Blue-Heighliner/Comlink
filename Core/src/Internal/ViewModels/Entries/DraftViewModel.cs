@@ -33,14 +33,21 @@ internal interface IDraftViewModel
     /// <summary>Gets or sets the priority level this draft will be sent at.</summary>
     MessagePriorityOption SelectedPriority { get; set; }
     /// <summary>
-    /// Gets the security levels available to send this draft at: every level configured with
-    /// <see cref="IEngineBuilder{TFrame, TPacket, TPriority, TLevel}.SecurityLevels"/> up to and including the current user's own assigned level (see
-    /// <see cref="IEngineController.GetUserSecurityLevel"/>): a user can declassify to a lower level but never send
-    /// above their own clearance. Empty when no security levels are configured, in which case the picker is hidden.
+    /// Gets the message levels available to send this draft at: every level configured with
+    /// <see cref="IEngineBuilder{TFrame, TPacket, TPriority, TLevel, TAspect}.MessageLevels"/> up to and including the current user's own assigned level (see
+    /// <see cref="IEngineController.GetUserMessageLevel"/>): a user can declassify to a lower level but never send
+    /// above their own clearance. Empty when no message levels are configured, in which case the picker is hidden.
     /// </summary>
-    IReadOnlyList<SecurityLevel> AvailableSecurityLevels { get; }
-    /// <summary>Gets or sets the security level this draft will be sent at, or <see langword="null"/> when no security levels are configured.</summary>
-    SecurityLevel? SelectedSecurityLevel { get; set; }
+    IReadOnlyList<MessageLevel> AvailableMessageLevels { get; }
+    /// <summary>Gets or sets the message level this draft will be sent at, or <see langword="null"/> when no message levels are configured.</summary>
+    MessageLevel? SelectedMessageLevel { get; set; }
+    /// <summary>
+    /// Gets the choices for the message aspect this draft carries: none, then each aspect configured with <see cref="IEngineBuilder{TFrame, TPacket, TPriority, TLevel, TAspect}.MessageAspects"/>.
+    /// Empty when no message aspects are configured, in which case the picker is hidden.
+    /// </summary>
+    IReadOnlyList<MessageAspectOption> AvailableMessageAspects { get; }
+    /// <summary>Gets or sets the choice for the message aspect this draft will be sent with, or <see langword="null"/> when no message aspects are configured.</summary>
+    MessageAspectOption? SelectedMessageAspect { get; set; }
     /// <summary>
     /// Gets or sets the short, user-inputted tag identifying the type of this message; see
     /// <see cref="IEngineController.GetTag"/>. Setting a tag that <see cref="IEngineController.BlockedCombinations"/>
@@ -164,7 +171,7 @@ internal sealed partial class DraftViewModel : ObservableObject, IDraftViewModel
     /// <param name="engineController">Provides the shared alert label text, whether the alert checkbox is shown, the available message priority levels, tag input visibility/label, and blocked tag/priority combinations enforced on send.</param>
     /// <param name="bodyDocument">Optional body document implementation; defaults to <see cref="StringBodyDocument"/> when <see langword="null"/>.</param>
     /// <param name="confirmationWindow">How long an armed delete waits for its confirming press; defaults to a few seconds.</param>
-    /// <param name="currentSecurityLevel">The current user's own assigned security level name; see <see cref="IEngineController.GetUserSecurityLevel"/>.</param>
+    /// <param name="currentMessageLevel">The current user's own assigned message level name; see <see cref="IEngineController.GetUserMessageLevel"/>.</param>
     /// <param name="isNew">Whether the draft has not been stored yet; it is only stored once it is altered and not blank.</param>
     public DraftViewModel(
         DraftEntity entity,
@@ -175,7 +182,7 @@ internal sealed partial class DraftViewModel : ObservableObject, IDraftViewModel
         IEngineController engineController,
         IBodyDocument? bodyDocument = null,
         TimeSpan? confirmationWindow = null,
-        string currentSecurityLevel = "",
+        string currentMessageLevel = "",
         bool isNew = false)
     {
         this.entity = entity;
@@ -205,11 +212,14 @@ internal sealed partial class DraftViewModel : ObservableObject, IDraftViewModel
             ?? AvailablePriorities.FirstOrDefault()
             ?? allPriorities[0];
 
-        IReadOnlyList<SecurityLevel> allSecurityLevels = engineController.SecurityLevels;
-        int ownRank = allSecurityLevels.GetRank(currentSecurityLevel);
-        AvailableSecurityLevels = ownRank < 0 ? [] : [.. allSecurityLevels.Take(ownRank + 1)];
-        selectedSecurityLevel = AvailableSecurityLevels.FirstOrDefault(l => l.Value == entity.SecurityLevel)
-            ?? AvailableSecurityLevels.LastOrDefault();
+        IReadOnlyList<MessageLevel> allMessageLevels = engineController.MessageLevels;
+        int ownRank = allMessageLevels.GetRank(currentMessageLevel);
+        AvailableMessageLevels = ownRank < 0 ? [] : [.. allMessageLevels.Take(ownRank + 1)];
+        selectedMessageLevel = AvailableMessageLevels.FirstOrDefault(l => l.Value == entity.MessageLevel)
+            ?? AvailableMessageLevels.LastOrDefault();
+
+        AvailableMessageAspects = engineController.MessageAspects.Count == 0 ? [] : [new MessageAspectOption { Label = string.Empty }, .. engineController.MessageAspects.Select(aspect => new MessageAspectOption { Label = aspect.Name, Aspect = aspect })];
+        selectedMessageAspect = AvailableMessageAspects.FirstOrDefault(option => option.Aspect is not null && option.Aspect.Value == entity.MessageAspect) ?? AvailableMessageAspects.FirstOrDefault();
 
         foreach (AddressData a in entity.Addresses)
         {
@@ -315,7 +325,8 @@ internal sealed partial class DraftViewModel : ObservableObject, IDraftViewModel
     private bool isAlert;
     [ObservableProperty] private MessagePriorityOption selectedPriority;
     [ObservableProperty] private IReadOnlyList<MessagePriorityOption> availablePriorities = [];
-    [ObservableProperty] private SecurityLevel? selectedSecurityLevel;
+    [ObservableProperty] private MessageLevel? selectedMessageLevel;
+    [ObservableProperty] private MessageAspectOption? selectedMessageAspect;
     [ObservableProperty] private string tag = string.Empty;
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(LineWidthValue))]
@@ -358,7 +369,9 @@ internal sealed partial class DraftViewModel : ObservableObject, IDraftViewModel
     /// <inheritdoc />
     public IReadOnlyList<AddressTypeOption> AddressTypes { get; }
     /// <inheritdoc />
-    public IReadOnlyList<SecurityLevel> AvailableSecurityLevels { get; }
+    public IReadOnlyList<MessageLevel> AvailableMessageLevels { get; }
+    /// <inheritdoc />
+    public IReadOnlyList<MessageAspectOption> AvailableMessageAspects { get; }
     /// <inheritdoc />
     public string FilterTag(string tag) => engineController.DraftTagRules.Filter(tag);
 
@@ -468,7 +481,9 @@ internal sealed partial class DraftViewModel : ObservableObject, IDraftViewModel
 
     partial void OnSelectedPriorityChanged(MessagePriorityOption value) => UpdateHeader();
 
-    partial void OnSelectedSecurityLevelChanged(SecurityLevel? value) => UpdateHeader();
+    partial void OnSelectedMessageLevelChanged(MessageLevel? value) => UpdateHeader();
+
+    partial void OnSelectedMessageAspectChanged(MessageAspectOption? value) => UpdateHeader();
 
     partial void OnLineWidthChanged(int? value) => UpdateHeader();
 
@@ -486,12 +501,13 @@ internal sealed partial class DraftViewModel : ObservableObject, IDraftViewModel
             // The header can depend on the width and the width can not be less than the header, so this settles by raising the width until the header fits.
             for (int pass = 0; pass < 8; pass++)
             {
-                IsAlert = engineController.ComputeIsAlert(string.Empty, SelectedPriority.Key, Tag, SelectedSecurityLevel?.Name ?? string.Empty, [.. Addresses.Select(a => new AddressRequest { UserName = a.UserName, Type = a.Type, Information = a.Information })]);
+                IsAlert = engineController.ComputeIsAlert(string.Empty, SelectedPriority.Key, Tag, SelectedMessageLevel?.Name ?? string.Empty, [.. Addresses.Select(a => new AddressRequest { UserName = a.UserName, Type = a.Type, Information = a.Information })]);
                 string? text = engineController.GetDraftHeader(new DraftContent
                 {
                     Tag = Tag,
                     Priority = SelectedPriority.Key,
-                    SecurityLevel = SelectedSecurityLevel?.Name ?? string.Empty,
+                    MessageLevel = SelectedMessageLevel?.Name ?? string.Empty,
+                    MessageAspect = SelectedMessageAspect?.Aspect?.Name ?? string.Empty,
                     IsAlert = IsAlert,
                     Addresses = [.. Addresses.Select(a => new AddressRequest { UserName = a.UserName, Type = a.Type, Information = a.Information })],
                     LineWidth = LineWidth
@@ -644,7 +660,8 @@ internal sealed partial class DraftViewModel : ObservableObject, IDraftViewModel
         entity.IsAlert = IsAlert;
         entity.Priority = SelectedPriority.Stored;
         entity.Tag = Tag;
-        entity.SecurityLevel = SelectedSecurityLevel?.Value;
+        entity.MessageLevel = SelectedMessageLevel?.Value;
+        entity.MessageAspect = SelectedMessageAspect?.Aspect?.Value;
         entity.LineWidth = LineWidth;
     }
 
@@ -669,7 +686,7 @@ internal sealed partial class DraftViewModel : ObservableObject, IDraftViewModel
 
     // Everything a save writes, so leaving a draft that was only looked at does not save it and move it to the top of the list.
     private string Snapshot()
-        => string.Join('\u001F', Name, SerializeBody(), Tag, SelectedPriority.Stored, SelectedSecurityLevel?.Value, LineWidth, string.Join('\u001E', Addresses.Select(address => $"{address.UserName}\u001D{address.Type}\u001D{address.Information}")));
+        => string.Join('\u001F', Name, SerializeBody(), Tag, SelectedPriority.Stored, SelectedMessageLevel?.Value, SelectedMessageAspect?.Aspect?.Value, LineWidth, string.Join('\u001E', Addresses.Select(address => $"{address.UserName}\u001D{address.Type}\u001D{address.Information}")));
 
     [RelayCommand]
     private async Task Send()
@@ -703,7 +720,7 @@ internal sealed partial class DraftViewModel : ObservableObject, IDraftViewModel
             SendMessageResult? result = await connection.SendMessage(
                 body,
                 Addresses.Select(a => new AddressRequest { UserName = a.UserName, Type = a.Type, Information = a.Information }).ToList(),
-                SelectedPriority.Key, Tag, SelectedSecurityLevel?.Key);
+                SelectedPriority.Key, Tag, SelectedMessageLevel?.Key, SelectedMessageAspect?.Aspect?.Key);
             if (result is null)
             {
                 StatusMessage = engineController.Display("Cannot send until a user is installed");
@@ -718,7 +735,7 @@ internal sealed partial class DraftViewModel : ObservableObject, IDraftViewModel
 
             DateTime sentAt = entity.SentAt ?? DateTime.UtcNow;
             MessageEntity sentMessage = await entryService.StoreSentMessage(
-                result.MessageId, body, [.. Addresses], sentAt, result.UserResults, SelectedPriority.Key, Tag, SelectedSecurityLevel?.Name ?? string.Empty);
+                result.MessageId, body, [.. Addresses], sentAt, result.UserResults, SelectedPriority.Key, Tag, SelectedMessageLevel?.Name ?? string.Empty, SelectedMessageAspect?.Aspect?.Name ?? string.Empty);
 
             IsSent = true;
             StatusMessage = "Sent";

@@ -14,7 +14,7 @@ public sealed class UserInfoTests
 
         Assert.Equal("TestNode", info.Name);
         Assert.Null(info.Role);
-        Assert.Null(info.SecurityLevel);
+        Assert.Null(info.MessageLevel);
         Assert.Null(info.IpHost);
         Assert.Null(info.MsmtPort);
         Assert.Null(info.HdlcAddress);

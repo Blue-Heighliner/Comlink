@@ -15,7 +15,7 @@ internal interface IMessageRoutingService
     Task<(string MessageId, IReadOnlyList<UserDeliveryResult> UserResults)> Route(string fromUser, SendMessagePayload payload, CancellationToken cancellation);
 
     /// <summary>
-    /// The same as <see cref="Route"/>, except every field this reads (security level) comes straight from
+    /// The same as <see cref="Route"/>, except every field this reads (message level) comes straight from
     /// <paramref name="message"/> itself, via <see cref="IEngineController"/>'s Get accessors, and who it goes to from
     /// <see cref="IEngineController.Route"/>, rather than from a <see cref="SendMessagePayload"/> - so the caller builds the whole frame (an instance of
     /// <see cref="IEngineController.FrameType"/>) itself instead of stating loose fields. Its sender is overwritten with <paramref name="fromUser"/>,
@@ -93,12 +93,13 @@ internal sealed class MessageRoutingService : IMessageRoutingService
             Body = payload.Body,
             Priority = engineController.RequirePriority(payload.Priority),
             Tag = payload.Tag,
-            SecurityLevel = payload.SecurityLevel
+            MessageLevel = payload.MessageLevel,
+            MessageAspect = payload.MessageAspect
         });
         engineController.SetFromUser(message, fromUser);
         engineController.SetAddresses(message, addresses);
 
-        return await RouteBuiltMessage(fromUser, await EnsureId(message), message, payload.SecurityLevel, cancellation);
+        return await RouteBuiltMessage(fromUser, await EnsureId(message), message, payload.MessageLevel, cancellation);
     }
 
     /// <inheritdoc />
@@ -106,7 +107,7 @@ internal sealed class MessageRoutingService : IMessageRoutingService
     {
         engineController.SetFromUser(message, fromUser);
 
-        return await RouteBuiltMessage(fromUser, await EnsureId(message), message, engineController.GetSecurityLevel(message), cancellation);
+        return await RouteBuiltMessage(fromUser, await EnsureId(message), message, engineController.GetMessageLevel(message), cancellation);
     }
 
     private async Task<string> EnsureId(object message)
@@ -119,7 +120,7 @@ internal sealed class MessageRoutingService : IMessageRoutingService
     }
 
     private async Task<(string MessageId, IReadOnlyList<UserDeliveryResult> UserResults)> RouteBuiltMessage(
-        string fromUser, string messageId, object message, string securityLevel, CancellationToken cancellation)
+        string fromUser, string messageId, object message, string messageLevel, CancellationToken cancellation)
     {
         IReadOnlyDictionary<string, IReadOnlyList<string>> groupMap = engineController.UserGroups;
 
@@ -152,17 +153,17 @@ internal sealed class MessageRoutingService : IMessageRoutingService
 
         List<string> targetUsers = [.. userAddressedVia.Keys];
 
-        IReadOnlyList<SecurityLevel> securityLevels = engineController.SecurityLevels;
-        int messageLevelRank = securityLevels.GetRank(securityLevel);
+        IReadOnlyList<MessageLevel> messageLevels = engineController.MessageLevels;
+        int messageLevelRank = messageLevels.GetRank(messageLevel);
         List<string> blockedUsers = messageLevelRank < 0
             ? []
-            : [.. targetUsers.Where(user => securityLevels.GetRank(engineController.GetUserSecurityLevel(user)) < messageLevelRank)];
+            : [.. targetUsers.Where(user => messageLevels.GetRank(engineController.GetUserMessageLevel(user)) < messageLevelRank)];
         if (blockedUsers.Count > 0)
         {
             targetUsers = [.. targetUsers.Except(blockedUsers, StringComparer.OrdinalIgnoreCase)];
             logger.Record(
-                LogEvents.BlockedBySecurityLevel, "{Subject} blocked for {Users}: {Reason}",
-                messageId, string.Join(", ", blockedUsers), $"security level {securityLevel} not supported by destination");
+                LogEvents.BlockedByMessageLevel, "{Subject} blocked for {Users}: {Reason}",
+                messageId, string.Join(", ", blockedUsers), $"message level {messageLevel} not supported by destination");
         }
 
         logger.Record(LogEvents.MessageSending, "{MessageId} sending to {Destinations}", messageId, string.Join(", ", targetUsers));

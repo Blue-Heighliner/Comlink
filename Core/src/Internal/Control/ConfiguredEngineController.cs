@@ -121,7 +121,7 @@ internal sealed class ConfiguredEngineController : IEngineController
     /// <inheritdoc />
     public Enum RequirePriority(Enum? priority) => fallback.RequirePriority(priority);
     /// <inheritdoc />
-    public bool ComputeIsAlert(string body, Enum? priority, string tag, string securityLevel, IReadOnlyList<AddressRequest> addresses) => fallback.ComputeIsAlert(body, priority, tag, securityLevel, addresses);
+    public bool ComputeIsAlert(string body, Enum? priority, string tag, string messageLevel, IReadOnlyList<AddressRequest> addresses) => fallback.ComputeIsAlert(body, priority, tag, messageLevel, addresses);
     /// <inheritdoc />
     public string? GetUnconfiguredLevelReason(object message) => fallback.GetUnconfiguredLevelReason(message);
     /// <inheritdoc />
@@ -137,11 +137,11 @@ internal sealed class ConfiguredEngineController : IEngineController
     /// <inheritdoc />
     public string GetTag(object frame) => fallback.GetTag(frame);
     /// <inheritdoc />
-    public string GetSecurityLevel(object frame) => fallback.GetSecurityLevel(frame);
+    public string GetMessageLevel(object frame) => fallback.GetMessageLevel(frame);
     /// <inheritdoc />
-    public Enum? GetSecurityLevelKey(object frame) => fallback.GetSecurityLevelKey(frame);
+    public Enum? GetMessageLevelKey(object frame) => fallback.GetMessageLevelKey(frame);
     /// <inheritdoc />
-    public string GetSecurityLevelName(Enum? level) => fallback.GetSecurityLevelName(level);
+    public string GetMessageLevelName(Enum? level) => fallback.GetMessageLevelName(level);
     /// <inheritdoc />
     public object CreateFramePacket(FramePacketCreateContext context) => fallback.CreateFramePacket(context);
     /// <inheritdoc />
@@ -186,9 +186,19 @@ internal sealed class ConfiguredEngineController : IEngineController
     /// <inheritdoc />
     public string PriorityPluralLabel => fallback.PriorityPluralLabel;
     /// <inheritdoc />
-    public string SecurityLevelPluralLabel => fallback.SecurityLevelPluralLabel;
+    public string MessageLevelPluralLabel => fallback.MessageLevelPluralLabel;
     /// <inheritdoc />
-    public string SecurityLevelLabel => fallback.SecurityLevelLabel;
+    public string MessageLevelLabel => fallback.MessageLevelLabel;
+    /// <inheritdoc />
+    public string MessageAspectLabel => fallback.MessageAspectLabel;
+    /// <inheritdoc />
+    public string MessageAspectPluralLabel => fallback.MessageAspectPluralLabel;
+    /// <inheritdoc />
+    public IReadOnlyList<MessageAspect> MessageAspects => fallback.MessageAspects;
+    /// <inheritdoc />
+    public string GetMessageAspect(object frame) => fallback.GetMessageAspect(frame);
+    /// <inheritdoc />
+    public string GetMessageAspectName(Enum? aspect) => fallback.GetMessageAspectName(aspect);
     /// <inheritdoc />
     public string UserLabel => fallback.UserLabel;
     /// <inheritdoc />
@@ -257,9 +267,9 @@ internal sealed class ConfiguredEngineController : IEngineController
     /// <inheritdoc />
     public IReadOnlyList<AddressTypeOption> AddressTypes => fallback.AddressTypes;
     /// <inheritdoc />
-    public IReadOnlyList<SecurityLevel> SecurityLevels => fallback.SecurityLevels;
+    public IReadOnlyList<MessageLevel> MessageLevels => fallback.MessageLevels;
     /// <inheritdoc />
-    public string GetUserSecurityLevel(string userName) => fallback.GetUserSecurityLevel(userName);
+    public string GetUserMessageLevel(string userName) => fallback.GetUserMessageLevel(userName);
 
     /// <inheritdoc />
     public bool PrintReceivedDefaultEnabled => fallback.PrintReceivedDefaultEnabled;

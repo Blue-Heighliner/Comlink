@@ -1,6 +1,6 @@
 namespace BlueHeighliner.Comlink;
 
-/// <summary>Collects what is stated through <see cref="IPacketBuilder{TFrame, TPacket, TPriority, TLevel}"/>, collecting the mappings and turning them into a <see cref="PacketMap"/>.</summary>
+/// <summary>Collects what is stated through <see cref="IPacketBuilder{TFrame, TPacket, TPriority, TLevel, TAspect}"/>, collecting the mappings and turning them into a <see cref="PacketMap"/>.</summary>
 internal sealed class PacketBuilder<TPacket, TPriority> where TPacket : class, new() where TPriority : struct, Enum
 {
     private ServiceRegistration<IPacketSerializer> serializer = new(_ => new ProtobufSerializer(typeof(TPacket)));
@@ -10,28 +10,28 @@ internal sealed class PacketBuilder<TPacket, TPriority> where TPacket : class, n
     /// <summary>The initial packet processor, if stated.</summary>
     public ServiceRegistration<IInitialProcessor>? Initial { get; private set; }
 
-    /// <inheritdoc cref="IPacketBuilder{TFrame, TPacket, TPriority, TLevel}.Frame{THandler}"/>
+    /// <inheritdoc cref="IPacketBuilder{TFrame, TPacket, TPriority, TLevel, TAspect}.Frame{THandler}"/>
     public PacketBuilder<TPacket, TPriority> Frame<THandler>() where THandler : IFramePacketHandler<TPacket>
     {
         framePacket = ServiceRegistration<IFramePacketAdapter>.Of(typeof(THandler), handler => new FramePacketAdapter<TPacket>((IFramePacketHandler<TPacket>)handler));
         return this;
     }
 
-    /// <inheritdoc cref="IPacketBuilder{TFrame, TPacket, TPriority, TLevel}.Serializer{TSerializer}"/>
+    /// <inheritdoc cref="IPacketBuilder{TFrame, TPacket, TPriority, TLevel, TAspect}.Serializer{TSerializer}"/>
     public PacketBuilder<TPacket, TPriority> Serializer<TSerializer>() where TSerializer : IPacketSerializer
     {
         serializer = ServiceRegistration<IPacketSerializer>.Of(typeof(TSerializer), instance => (IPacketSerializer)instance);
         return this;
     }
 
-    /// <inheritdoc cref="IPacketBuilder{TFrame, TPacket, TPriority, TLevel}.InitialProcessor{TProcessor}"/>
+    /// <inheritdoc cref="IPacketBuilder{TFrame, TPacket, TPriority, TLevel, TAspect}.InitialProcessor{TProcessor}"/>
     public PacketBuilder<TPacket, TPriority> InitialProcessor<TProcessor>() where TProcessor : IInitialPacketProcessor<TPacket>
     {
         Initial = ServiceRegistration<IInitialProcessor>.Of(typeof(TProcessor), processor => new InitialPacketProcessorAdapter<TPacket>((IInitialPacketProcessor<TPacket>)processor));
         return this;
     }
 
-    /// <inheritdoc cref="IPacketBuilder{TFrame, TPacket, TPriority, TLevel}.Heartbeat{THandler}"/>
+    /// <inheritdoc cref="IPacketBuilder{TFrame, TPacket, TPriority, TLevel, TAspect}.Heartbeat{THandler}"/>
     public PacketBuilder<TPacket, TPriority> Heartbeat<THandler>() where THandler : IHeartbeatHandler<TPacket, TPriority>
     {
         heartbeat = ServiceRegistration<IHeartbeatFrameHandler>.Of(typeof(THandler), handler => new HeartbeatFrameHandler<TPacket, TPriority>((IHeartbeatHandler<TPacket, TPriority>)handler));

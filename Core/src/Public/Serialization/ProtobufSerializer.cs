@@ -2,7 +2,7 @@ namespace BlueHeighliner.Comlink;
 
 /// <summary>
 /// The default <see cref="IFrameSerializer"/> and <see cref="IPacketSerializer"/>: protobuf-net, matching the frame or packet type given to
-/// <see cref="IEngineBuilder{TFrame, TPacket, TPriority, TLevel}.Frames"/> or <see cref="IEngineBuilder{TFrame, TPacket, TPriority, TLevel}.Packets"/>, which (when this serializer is used) is required to carry <c>[ProtoContract]</c>/<c>[ProtoMember]</c> attributes.
+/// <see cref="IEngineBuilder{TFrame, TPacket, TPriority, TLevel, TAspect}.Frames"/> or <see cref="IEngineBuilder{TFrame, TPacket, TPriority, TLevel, TAspect}.Packets"/>, which (when this serializer is used) is required to carry <c>[ProtoContract]</c>/<c>[ProtoMember]</c> attributes.
 /// Every serialized value is wrapped in a single outer <see cref="ProtobufEnvelope"/> that always has the same
 /// shape and records the value's runtime type by name, with the value's own protobuf-net encoding nested inside
 /// it as opaque bytes - this is what lets <see cref="Deserialize(ReadOnlyMemory{byte})"/> reconstruct the correct concrete type from
@@ -15,7 +15,7 @@ public sealed class ProtobufSerializer : IFrameSerializer, IPacketSerializer
     /// <param name="knownTypes">
     /// The only types <see cref="Deserialize(ReadOnlyMemory{byte})"/> will build. The type an envelope names comes from the remote sender, so
     /// without this it would build whatever <c>[ProtoContract]</c> type the sender names that can be loaded here; the
-    /// engine passes the one type it expects (see <see cref="IFrameBuilder{TFrame, TPacket, TPriority, TLevel}.Serializer"/>), which
+    /// engine passes the one type it expects (see <see cref="IFrameBuilder{TFrame, TPacket, TPriority, TLevel, TAspect}.Serializer"/>), which
     /// leaves a sender nothing to choose and nothing to load.
     /// </param>
     public ProtobufSerializer(params Type[] knownTypes)

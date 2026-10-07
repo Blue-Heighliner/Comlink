@@ -1,7 +1,7 @@
 namespace BlueHeighliner.Comlink.Sample;
 
 /// <summary>Treats a <see cref="Frame"/> as a message when its <see cref="Frame.IsMessage"/> flag is set, mapping the message content onto the frame's own differently named fields. A message is an alert when its tag is <c>ALERT</c>: there is nothing else to set. It also numbers messages in sequence, continuing from the identifier the engine kept from the previous run: an identifier is a token chosen at random for each run, so nodes practically never collide, a dash and a counter that counts on from the previous identifier's, so it never starts over after a restart.</summary>
-public sealed class MessageHandler : IMessageHandler<Frame, MessagePriority, SecurityLevel>
+public sealed class MessageHandler : IMessageHandler<Frame, MessagePriority, MessageLevel, MessageAspect>
 {
     private readonly string run = Guid.NewGuid().ToString("N")[..16].ToUpperInvariant();
 
@@ -9,7 +9,7 @@ public sealed class MessageHandler : IMessageHandler<Frame, MessagePriority, Sec
     public bool IsValid(Frame frame) => frame.IsMessage;
 
     /// <inheritdoc />
-    public Frame Create(MessageCreateContext<MessagePriority, SecurityLevel> context)
+    public Frame Create(MessageCreateContext<MessagePriority, MessageLevel, MessageAspect> context)
         => new()
         {
             IsMessage = true,
@@ -17,7 +17,8 @@ public sealed class MessageHandler : IMessageHandler<Frame, MessagePriority, Sec
             Text = context.Body,
             Importance = (int)context.Priority,
             Category = context.Tag,
-            Confidentiality = (int?)context.SecurityLevel
+            Confidentiality = (int?)context.MessageLevel,
+            Protection = (int?)context.MessageAspect
         };
 
     /// <inheritdoc />
@@ -63,5 +64,8 @@ public sealed class MessageHandler : IMessageHandler<Frame, MessagePriority, Sec
     public string GetTag(Frame frame) => frame.Category;
 
     /// <inheritdoc />
-    public SecurityLevel? GetSecurityLevel(Frame frame) => (SecurityLevel?)frame.Confidentiality;
+    public MessageLevel? GetMessageLevel(Frame frame) => (MessageLevel?)frame.Confidentiality;
+
+    /// <inheritdoc />
+    public MessageAspect? GetMessageAspect(Frame frame) => (MessageAspect?)frame.Protection;
 }

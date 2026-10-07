@@ -7,15 +7,16 @@ namespace BlueHeighliner.Comlink;
 /// <typeparam name="TFrame">The host's frame type.</typeparam>
 /// <typeparam name="TPacket">The host's packet type, or <see cref="NoPacket"/>.</typeparam>
 /// <typeparam name="TPriority">The enum whose members are the priority levels.</typeparam>
-/// <typeparam name="TLevel">The enum whose members are the security levels.</typeparam>
-public interface IPriorityBuilder<TFrame, TPacket, TPriority, TLevel> : IEngineBuilder<TFrame, TPacket, TPriority, TLevel> where TFrame : class, new() where TPacket : class, new() where TPriority : struct, Enum where TLevel : struct, Enum
+/// <typeparam name="TLevel">The enum whose members are the message levels.</typeparam>
+/// <typeparam name="TAspect">The enum whose members are the message aspects, or <see cref="NoMessageAspect"/> for none.</typeparam>
+public interface IPriorityBuilder<TFrame, TPacket, TPriority, TLevel, TAspect> : IEngineBuilder<TFrame, TPacket, TPriority, TLevel, TAspect> where TFrame : class, new() where TPacket : class, new() where TPriority : struct, Enum where TLevel : struct, Enum where TAspect : struct, Enum
 {
     /// <summary>Selects <paramref name="priority"/> to configure its aspects.</summary>
     /// <param name="priority">The level, a member of <typeparamref name="TPriority"/>.</param>
-    IPriorityLevelBuilder<TFrame, TPacket, TPriority, TLevel> Priority(TPriority priority);
+    IPriorityLevelBuilder<TFrame, TPacket, TPriority, TLevel, TAspect> Priority(TPriority priority);
 
     /// <summary>Blocks a priority and tag combination when composing a draft. Either may be <see langword="null"/> to match any value, so a rule can block a priority whatever the tag, a tag whatever the priority, or one pair.</summary>
     /// <param name="priority">The level to block, or <see langword="null"/> for any level.</param>
     /// <param name="tag">The tag to block (case-insensitive), or <see langword="null"/> for any tag.</param>
-    IPriorityBuilder<TFrame, TPacket, TPriority, TLevel> Block(TPriority? priority, string? tag);
+    IPriorityBuilder<TFrame, TPacket, TPriority, TLevel, TAspect> Block(TPriority? priority, string? tag);
 }

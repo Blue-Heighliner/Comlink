@@ -1,7 +1,7 @@
 namespace BlueHeighliner.Comlink.Tests;
 
-/// <summary>Test <see cref="IMessageHandler{TFrame, TPriority, TLevel}"/> for <see cref="TestFrame"/>: every frame not marked hidden is a message.</summary>
-public sealed class TestMessageHandler : IMessageHandler<TestFrame, TestMessagePriority, TestLevel>
+/// <summary>Test <see cref="IMessageHandler{TFrame, TPriority, TLevel, TAspect}"/> for <see cref="TestFrame"/>: every frame not marked hidden is a message.</summary>
+public sealed class TestMessageHandler : IMessageHandler<TestFrame, TestMessagePriority, TestLevel, TestAspect>
 {
     /// <summary>Gets how the next message identifier follows the previous one, or <see langword="null"/> for the default GUIDs.</summary>
     public Func<string?, string>? Ids { get; init; }
@@ -17,14 +17,15 @@ public sealed class TestMessageHandler : IMessageHandler<TestFrame, TestMessageP
     public bool IsValid(TestFrame frame) => !frame.IsHidden;
 
     /// <inheritdoc />
-    public TestFrame Create(MessageCreateContext<TestMessagePriority, TestLevel> context)
+    public TestFrame Create(MessageCreateContext<TestMessagePriority, TestLevel, TestAspect> context)
         => new()
         {
             SentAt = context.SentAt,
             Body = context.Body,
             Priority = context.Priority.ToString().ToUpperInvariant(),
             Tag = context.Tag,
-            SecurityLevel = context.SecurityLevel?.ToString().ToUpperInvariant() ?? string.Empty
+            MessageLevel = context.MessageLevel?.ToString().ToUpperInvariant() ?? string.Empty,
+            MessageAspect = context.MessageAspect?.ToString() ?? string.Empty
         };
 
     /// <inheritdoc />
@@ -66,5 +67,8 @@ public sealed class TestMessageHandler : IMessageHandler<TestFrame, TestMessageP
     public string GetTag(TestFrame frame) => frame.Tag;
 
     /// <inheritdoc />
-    public TestLevel? GetSecurityLevel(TestFrame frame) => Enum.TryParse(frame.SecurityLevel, ignoreCase: true, out TestLevel level) ? level : null;
+    public TestAspect? GetMessageAspect(TestFrame frame) => Enum.TryParse(frame.MessageAspect, ignoreCase: true, out TestAspect aspect) ? aspect : null;
+
+    /// <inheritdoc />
+    public TestLevel? GetMessageLevel(TestFrame frame) => Enum.TryParse(frame.MessageLevel, ignoreCase: true, out TestLevel level) ? level : null;
 }

@@ -7,8 +7,9 @@ namespace BlueHeighliner.Comlink;
 /// <typeparam name="TFrame">The host's frame type.</typeparam>
 /// <typeparam name="TPacket">The host's packet type, or <see cref="NoPacket"/>.</typeparam>
 /// <typeparam name="TPriority">The enum whose members are the priority levels.</typeparam>
-/// <typeparam name="TLevel">The enum whose members are the security levels.</typeparam>
-public interface IConnectionsBuilder<TFrame, TPacket, TPriority, TLevel> : IEngineBuilder<TFrame, TPacket, TPriority, TLevel> where TFrame : class, new() where TPacket : class, new() where TPriority : struct, Enum where TLevel : struct, Enum
+/// <typeparam name="TLevel">The enum whose members are the message levels.</typeparam>
+/// <typeparam name="TAspect">The enum whose members are the message aspects, or <see cref="NoMessageAspect"/> for none.</typeparam>
+public interface IConnectionsBuilder<TFrame, TPacket, TPriority, TLevel, TAspect> : IEngineBuilder<TFrame, TPacket, TPriority, TLevel, TAspect> where TFrame : class, new() where TPacket : class, new() where TPriority : struct, Enum where TLevel : struct, Enum where TAspect : struct, Enum
 {
     /// <summary>
     /// States the MSMT settings used for every IP connection, inbound and outbound, including the interface listener: timeouts,
@@ -16,7 +17,7 @@ public interface IConnectionsBuilder<TFrame, TPacket, TPriority, TLevel> : IEngi
     /// Defaults to the MSMT package defaults.
     /// </summary>
     /// <param name="options">The settings to use.</param>
-    IConnectionsBuilder<TFrame, TPacket, TPriority, TLevel> Msmt(MsmtConnectionOptions options);
+    IConnectionsBuilder<TFrame, TPacket, TPriority, TLevel, TAspect> Msmt(MsmtConnectionOptions options);
 
     /// <summary>
     /// States the MicroGate options used for every serial connection: line encoding, CRC, clocking, frame size, windowing and
@@ -24,5 +25,5 @@ public interface IConnectionsBuilder<TFrame, TPacket, TPriority, TLevel> : IEngi
     /// connection point. Defaults to the HDLC peer defaults.
     /// </summary>
     /// <param name="options">The options to use.</param>
-    IConnectionsBuilder<TFrame, TPacket, TPriority, TLevel> Hdlc(HdlcPeerOptions options);
+    IConnectionsBuilder<TFrame, TPacket, TPriority, TLevel, TAspect> Hdlc(HdlcPeerOptions options);
 }

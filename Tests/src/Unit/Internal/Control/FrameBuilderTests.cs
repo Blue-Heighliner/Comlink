@@ -1,22 +1,22 @@
 namespace BlueHeighliner.Comlink.Tests.Unit.Internal.Control;
 
-/// <summary>Unit tests for <see cref="FrameBuilder{TFrame, TPriority, TLevel}"/> and the <see cref="FrameMap"/> it produces.</summary>
+/// <summary>Unit tests for <see cref="FrameBuilder{TFrame, TPriority, TLevel, TAspect}"/> and the <see cref="FrameMap"/> it produces.</summary>
 public sealed class FrameBuilderTests
 {
     private static EngineBuilder Types()
     {
         EngineBuilder state = new();
-        state.Types<TestFrame, TestMessagePriority, TestLevel>();
-        SecurityLevelBuilder<TestLevel> levels = new();
+        state.Types<TestFrame, TestMessagePriority, TestLevel, TestAspect>();
+        MessageLevelBuilder<TestLevel> levels = new();
         foreach (TestLevel level in Enum.GetValues<TestLevel>()) { levels.Level(level); }
 
-        state.SecurityLevelValues.AddRange(levels.Build());
+        state.MessageLevelValues.AddRange(levels.Build());
         return state;
     }
 
-    private static FrameBuilder<TestFrame, TestMessagePriority, TestLevel> Complete()
+    private static FrameBuilder<TestFrame, TestMessagePriority, TestLevel, TestAspect> Complete()
     {
-        FrameBuilder<TestFrame, TestMessagePriority, TestLevel> builder = new(Types());
+        FrameBuilder<TestFrame, TestMessagePriority, TestLevel, TestAspect> builder = new(Types());
         builder
             .Message<TestMessageHandler>()
             .Retrieval<TestRetrievalHandler>()
@@ -29,7 +29,7 @@ public sealed class FrameBuilderTests
     [Fact]
     public void Build_UnstatedFields_ThrowsNamingThem()
     {
-        FrameBuilder<TestFrame, TestMessagePriority, TestLevel> builder = new(new EngineBuilder());
+        FrameBuilder<TestFrame, TestMessagePriority, TestLevel, TestAspect> builder = new(new EngineBuilder());
         InvalidOperationException error = Assert.Throws<InvalidOperationException>(() => builder.Build());
 
         Assert.Contains("TestFrame", error.Message);
@@ -54,12 +54,12 @@ public sealed class FrameBuilderTests
         IMessageFrameHandler handler = Complete().Build().Message.Create(null);
         DateTime sentAt = new(2026, 9, 28, 1, 2, 3, DateTimeKind.Utc);
 
-        object message = handler.Create(new MessageContent { SentAt = sentAt, Body = "BODY", Priority = TestMessagePriority.Level7, Tag = "TAG", SecurityLevel = "SECRET" });
+        object message = handler.Create(new MessageContent { SentAt = sentAt, Body = "BODY", Priority = TestMessagePriority.Level7, Tag = "TAG", MessageLevel = "SECRET" });
 
         Assert.IsType<TestFrame>(message);
         Assert.True(handler.IsValid(message));
         Assert.False(handler.IsValid(new TestFrame { IsHidden = true }));
-        Assert.Equal((sentAt, "BODY", false, TestMessagePriority.Level7, "TAG", "SECRET"), (handler.GetSentAt(message), handler.GetBody(message), handler.IsAlert(message), handler.GetPriority(message), handler.GetTag(message), handler.GetSecurityLevel(message)));
+        Assert.Equal((sentAt, "BODY", false, TestMessagePriority.Level7, "TAG", "SECRET"), (handler.GetSentAt(message), handler.GetBody(message), handler.IsAlert(message), handler.GetPriority(message), handler.GetTag(message), handler.GetMessageLevel(message)));
     }
 
     /// <summary>The retrieval handler the host states creates a request from its criteria, recognizes it, and reads the criteria back.</summary>
@@ -120,7 +120,7 @@ public sealed class FrameBuilderTests
         IFrameSerializer serializer = Mock.Of<IFrameSerializer>();
         TestFrame created = new() { MessageId = "CREATED" };
 
-        FrameMap map = Complete().Serializer<IFrameSerializer>().Create(() => created) is FrameBuilder<TestFrame, TestMessagePriority, TestLevel> builder ? builder.Build() : throw new InvalidOperationException();
+        FrameMap map = Complete().Serializer<IFrameSerializer>().Create(() => created) is FrameBuilder<TestFrame, TestMessagePriority, TestLevel, TestAspect> builder ? builder.Build() : throw new InvalidOperationException();
 
         Assert.Same(serializer, map.Serializer.Create(new ServiceCollection().AddSingleton(serializer).BuildServiceProvider()));
         Assert.Same(created, map.Create());
@@ -151,7 +151,7 @@ public sealed class FrameBuilderTests
     [Fact]
     public void AutoForward_RegistersControllersByType()
     {
-        FrameBuilder<TestFrame, TestMessagePriority, TestLevel> builder = Complete();
+        FrameBuilder<TestFrame, TestMessagePriority, TestLevel, TestAspect> builder = Complete();
 
         builder.AutoForward<AlertsController>().AutoForward<OtherController>();
 

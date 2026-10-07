@@ -1,7 +1,7 @@
 namespace BlueHeighliner.Comlink;
 
 /// <summary>
-/// Implements <see cref="IEngineBuilder"/> and holds what the typed <see cref="EngineBuilder{TFrame, TPacket, TPriority, TLevel}"/> it returns collects from the host in <see cref="IEngineConfiguration.Configure"/>.
+/// Implements <see cref="IEngineBuilder"/> and holds what the typed <see cref="EngineBuilder{TFrame, TPacket, TPriority, TLevel, TAspect}"/> it returns collects from the host in <see cref="IEngineConfiguration.Configure"/>.
 /// Nothing is interpreted here; <see cref="EngineController"/> reads the collected state and applies the defaults for
 /// whatever was left unstated.
 /// </summary>
@@ -11,7 +11,7 @@ internal sealed class EngineBuilder : IEngineBuilder, IAsyncDisposable
 
     /// <summary>Work the typed builders still have to do once the configuration has finished stating things, such as turning what was collected into the frame mapping.</summary>
     public List<Action> Completions { get; } = [];
-    /// <summary>Whether <see cref="Types{TFrame, TPriority, TLevel}"/> has been called.</summary>
+    /// <summary>Whether <see cref="Types{TFrame, TPriority, TLevel, TAspect}"/> has been called.</summary>
     public bool AreTypesStated { get; private set; }
     /// <summary>The frame mapping, or <see langword="null"/> until <c>Frames</c> is called.</summary>
     public FrameMap? FrameMap { get; set; }
@@ -21,8 +21,10 @@ internal sealed class EngineBuilder : IEngineBuilder, IAsyncDisposable
     public ServiceRegistration<IDisplayHandler>? DisplayHandler { get; set; }
     /// <summary>The display handler, created once the configuration has finished, from the bootstrap container when there is one.</summary>
     public IDisplayHandler? DisplayHandlerInstance { get; private set; }
-    /// <summary>The configured security levels, in ascending order; empty when none were stated.</summary>
-    public List<SecurityLevel> SecurityLevelValues { get; } = [];
+    /// <summary>The configured message levels, in ascending order; empty when none were stated.</summary>
+    public List<MessageLevel> MessageLevelValues { get; } = [];
+    /// <summary>The configured message aspects, in the order stated; empty when none were stated.</summary>
+    public List<MessageAspect> MessageAspectValues { get; } = [];
     /// <summary>The handler that controls the alert alarm, if stated.</summary>
     public ServiceRegistration<IAlarmHandler>? AlarmHandler { get; set; }
     /// <summary>The largest serialized packet, if stated.</summary>
@@ -108,18 +110,18 @@ internal sealed class EngineBuilder : IEngineBuilder, IAsyncDisposable
     }
 
     /// <inheritdoc />
-    public IEngineBuilder<TFrame, NoPacket, TPriority, TLevel> Types<TFrame, TPriority, TLevel>() where TFrame : class, new() where TPriority : struct, Enum where TLevel : struct, Enum
-        => Types<TFrame, NoPacket, TPriority, TLevel>();
+    public IEngineBuilder<TFrame, NoPacket, TPriority, TLevel, TAspect> Types<TFrame, TPriority, TLevel, TAspect>() where TFrame : class, new() where TPriority : struct, Enum where TLevel : struct, Enum where TAspect : struct, Enum
+        => Types<TFrame, NoPacket, TPriority, TLevel, TAspect>();
 
     /// <inheritdoc />
-    public IEngineBuilder<TFrame, TPacket, TPriority, TLevel> Types<TFrame, TPacket, TPriority, TLevel>() where TFrame : class, new() where TPacket : class, new() where TPriority : struct, Enum where TLevel : struct, Enum
+    public IEngineBuilder<TFrame, TPacket, TPriority, TLevel, TAspect> Types<TFrame, TPacket, TPriority, TLevel, TAspect>() where TFrame : class, new() where TPacket : class, new() where TPriority : struct, Enum where TLevel : struct, Enum where TAspect : struct, Enum
     {
         if (AreTypesStated) { throw new InvalidOperationException("The engine configuration states its types more than once."); }
 
         AreTypesStated = true;
         if (typeof(TPriority) == typeof(NoPriority)) { PriorityOptions.AddRange(new PriorityBuilder<TPriority>().Priority(default).Build()); }
 
-        return new EngineBuilder<TFrame, TPacket, TPriority, TLevel>(this);
+        return new EngineBuilder<TFrame, TPacket, TPriority, TLevel, TAspect>(this);
     }
 
     /// <inheritdoc />

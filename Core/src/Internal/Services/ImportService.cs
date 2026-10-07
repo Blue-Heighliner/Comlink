@@ -180,7 +180,7 @@ internal sealed class ImportService : IImportService
             Body = data.Body,
             Priority = engineController.PriorityOf(data.Priority),
             Tag = data.Tag,
-            SecurityLevel = string.Empty
+            MessageLevel = string.Empty
         });
         engineController.SetMessageId(message, data.MessageId);
         engineController.SetFromUser(message, data.FromUser);
@@ -228,6 +228,8 @@ internal sealed class ImportService : IImportService
                 IsAlert = data.IsAlert,
                 Priority = data.Priority,
                 Tag = data.Tag,
+                MessageLevel = ConfiguredLevel(data.MessageLevel),
+                MessageAspect = ConfiguredAspect(data.MessageAspect),
                 SentAt = data.SentAt,
                 FolderId = await folders.GetRootId(FolderType.Drafts)
             };
@@ -257,11 +259,18 @@ internal sealed class ImportService : IImportService
         existing.IsAlert = data.IsAlert;
         existing.Priority = data.Priority;
         existing.Tag = data.Tag;
+        existing.MessageLevel = ConfiguredLevel(data.MessageLevel);
+        existing.MessageAspect = ConfiguredAspect(data.MessageAspect);
         existing.SentAt = data.SentAt;
         existing.ModifiedAt = DateTime.UtcNow;
         await drafts.Update(existing);
         return (false, true);
     }
+
+    // A value that is not a configured member (a package from a network that states other levels or aspects) is left unset rather than stored, since nothing could name it.
+    private int? ConfiguredLevel(int? value) => engineController.MessageLevels.Any(level => level.Value == value) ? value : null;
+
+    private int? ConfiguredAspect(int? value) => engineController.MessageAspects.Any(aspect => aspect.Value == value) ? value : null;
 
     private async Task<(bool Imported, bool Overwritten)> ApplyNote(
         NoteExportData data,

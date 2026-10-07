@@ -13,7 +13,7 @@ internal interface IExportViewModel
     IReadOnlyList<ExternalDriveInfo> AvailableDrives { get; }
     /// <summary>Gets or sets the drive selected as the export destination.</summary>
     ExternalDriveInfo? SelectedDrive { get; set; }
-    /// <summary>Gets the built-in JSON format plus every custom format added via <see cref="IExportsBuilder{TFrame, TPacket, TPriority, TLevel}.Format{TFormat}"/>.</summary>
+    /// <summary>Gets the built-in JSON format plus every custom format added via <see cref="IExportsBuilder{TFrame, TPacket, TPriority, TLevel, TAspect}.Format{TFormat}"/>.</summary>
     IReadOnlyList<ExportFormatOption> AvailableFormats { get; }
     /// <summary>Gets or sets the format to export with; defaults to the built-in JSON format.</summary>
     ExportFormatOption SelectedFormat { get; set; }
@@ -68,7 +68,7 @@ internal sealed partial class ExportViewModel : ObservableObject, IExportViewMod
     /// <summary>Initializes a new <see cref="ExportViewModel"/> with the drive provider, export service, and every configured export format.</summary>
     /// <param name="driveProvider">Enumerates available external drives.</param>
     /// <param name="exportService">Builds the full entry list and writes the zip archive.</param>
-    /// <param name="engineController">Supplies the custom export formats added via <see cref="IExportsBuilder{TFrame, TPacket, TPriority, TLevel}.Format{TFormat}"/>.</param>
+    /// <param name="engineController">Supplies the custom export formats added via <see cref="IExportsBuilder{TFrame, TPacket, TPriority, TLevel, TAspect}.Format{TFormat}"/>.</param>
     public ExportViewModel(IExternalDriveProvider driveProvider, IExportService exportService, IEngineController engineController)
     {
         this.driveProvider = driveProvider;

@@ -114,7 +114,7 @@ public sealed class NetworkConfigTests : IDisposable
                   "Role": "server", "IpHost": "10.0.0.1", "Msmt": { "Port": 1, "HandshakeTimeout": "00:00:07" }, "Hdlc": { "Address": 3, "Ports": [ "SL0", "SL1" ], "MaxInfoField": 512 }, "InterfacePort": 2,
                   "Parent": { "User": "ROOT", "Mode": "MsmtListen" },
                   "Children": [ "BOB", { "User": "CAROL", "Mode": "Hdlc", "Port": "ignored", "Address": 5 }, { "user": "DAN", "mode": "msmtconnect" } ],
-                  "SecurityLevel": "HIGH",
+                  "MessageLevel": "HIGH",
                   "Data": { "desk": "4" },
                   "Headless": true
                 }
@@ -135,7 +135,7 @@ public sealed class NetworkConfigTests : IDisposable
         Assert.Equal(
             [new UserLink { User = "BOB" }, new UserLink { User = "CAROL", Mode = ConnectionMode.Hdlc }, new UserLink { User = "DAN", Mode = ConnectionMode.MsmtConnect }],
             info.Children);
-        Assert.Equal("HIGH", info.SecurityLevel);
+        Assert.Equal("HIGH", info.MessageLevel);
         Assert.Equal("4", info.Data["desk"]);
         Assert.Equal(["OPS"], info.Groups);
         Assert.True(node.Headless);

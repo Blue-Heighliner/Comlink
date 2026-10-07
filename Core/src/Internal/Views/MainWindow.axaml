@@ -14,11 +14,11 @@
 
   <Grid RowDefinitions="Auto,Auto,*,Auto">
 
-    <!-- Security Level Banner (row 0) -->
-    <controls:SecurityLevelBanner Grid.Row="0"
-                                  Title="{Binding SecurityLevelName}"
-                                  BannerColor="{Binding SecurityLevelColor}"
-                                  IsVisible="{Binding SecurityLevelName, Converter={x:Static StringConverters.IsNotNullOrEmpty}}" />
+    <!-- Message Level Banner (row 0) -->
+    <controls:MessageLevelBanner Grid.Row="0"
+                                  Title="{Binding MessageLevelName}"
+                                  BannerColor="{Binding MessageLevelColor}"
+                                  IsVisible="{Binding MessageLevelName, Converter={x:Static StringConverters.IsNotNullOrEmpty}}" />
 
     <!-- Custom Title Bar (row 1) - always shown; Server mode swaps the left-side drafts/notes/export/
          import/print action buttons for the right-side CONNECTIONS/ACTIVITY view switcher (see IsServerMode) -->

@@ -3,7 +3,7 @@ namespace BlueHeighliner.Comlink;
 /// <summary>
 /// The schema of the network configuration file: everything the engine needs to know about the users of one network, in one
 /// place shared by every node, instead of per-node files or code. It is read from <c>Config.json</c> in the current working directory,
-/// or, when the host allows command-line overrides (see <see cref="IEngineBuilder{TFrame, TPacket, TPriority, TLevel}.CommandLineOverrides"/>), from the path given by the
+/// or, when the host allows command-line overrides (see <see cref="IEngineBuilder{TFrame, TPacket, TPriority, TLevel, TAspect}.CommandLineOverrides"/>), from the path given by the
 /// <c>--config</c> argument; its absence is not an error unless <c>--config</c> names a file that does not exist.
 /// The user this process runs as, for a node that should not show the install screen, is named by the <c>--user</c> argument (again only when
 /// overrides are allowed); that user is checked like an installed one. The <c>--log</c> argument names log categories to turn on (see <see cref="EnabledLogCategories"/>).
@@ -125,7 +125,7 @@ internal sealed class NetworkConfig
                 InterfacePort = user.InterfacePort,
                 Parent = user.Parent?.ToLink(),
                 Children = [.. user.Children.Select(child => child.ToLink())],
-                SecurityLevel = user.SecurityLevel,
+                MessageLevel = user.MessageLevel,
                 Data = new Dictionary<string, string>(user.Data),
                 Groups = [.. UserGroups.Where(group => group.Value.Contains(userName, StringComparer.OrdinalIgnoreCase)).Select(group => group.Key)]
             }
@@ -165,8 +165,8 @@ internal sealed class NetworkUserConfig
     /// <summary>The user's children: each a user name, or an object that also forces the connection mode.</summary>
     public List<NetworkLinkConfig> Children { get; init; } = [];
 
-    /// <summary>The name of the security level this user runs at. <see langword="null"/> is the lowest configured level.</summary>
-    public string? SecurityLevel { get; init; }
+    /// <summary>The name of the message level this user runs at. <see langword="null"/> is the lowest configured level.</summary>
+    public string? MessageLevel { get; init; }
 
     /// <summary>App-specific string keys and values attached to this user; the engine does not interpret them.</summary>
     public Dictionary<string, string> Data { get; init; } = [];

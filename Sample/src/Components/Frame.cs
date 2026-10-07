@@ -26,8 +26,10 @@ public sealed class Frame
     [ProtoMember(9)] public int Importance { get; set; }
     /// <summary>Short user-inputted tag identifying the type of this message.</summary>
     [ProtoMember(10)] public string Category { get; set; } = string.Empty;
-    /// <summary>Integer value of the security level this message was sent at, the value of a SecurityLevel member, or <see langword="null"/> for none.</summary>
+    /// <summary>Integer value of the message level this message was sent at, the value of a MessageLevel member, or <see langword="null"/> for none.</summary>
     [ProtoMember(11)] public int? Confidentiality { get; set; }
+    /// <summary>Integer value of the message aspect this message carries, the value of a MessageAspect member, or <see langword="null"/> for none.</summary>
+    [ProtoMember(22)] public int? Protection { get; set; }
     /// <summary>Whether this message is a retrieval request to a storage server.</summary>
     [ProtoMember(12)] public bool IsRetrieval { get; set; }
     /// <summary>Retrieval request lower sent-time bound.</summary>

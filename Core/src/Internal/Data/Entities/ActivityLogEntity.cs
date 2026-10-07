@@ -7,8 +7,6 @@ internal sealed class ActivityLogEntity
     public ObjectId Id { get; set; } = ObjectId.NewObjectId();
     /// <summary>The UTC calendar date this log covers.</summary>
     public DateTime Date { get; set; }
-    /// <summary>Legacy plain-text event strings (superseded by <see cref="EventEntries"/>).</summary>
-    public List<string> Events { get; set; } = [];
     /// <summary>Structured log entries recorded for this day.</summary>
     public List<ActivityLogEntry> EventEntries { get; set; } = [];
     /// <summary>UTC timestamp when this document was first created.</summary>

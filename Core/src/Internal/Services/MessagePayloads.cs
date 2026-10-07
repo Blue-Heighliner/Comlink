@@ -12,8 +12,10 @@ internal sealed class SendMessagePayload
     public Enum? Priority { get; set; }
     /// <summary>Tag identifying the type of this message; see <see cref="IEngineController.GetTag"/>.</summary>
     public string Tag { get; set; } = string.Empty;
-    /// <summary>Security level name this message is sent at; see <see cref="IEngineController.GetSecurityLevel"/>.</summary>
-    public string SecurityLevel { get; set; } = string.Empty;
+    /// <summary>Message level name this message is sent at; see <see cref="IEngineController.GetMessageLevel"/>.</summary>
+    public string MessageLevel { get; set; } = string.Empty;
+    /// <summary>Message aspect name this message carries, or an empty string for none; see <see cref="IEngineController.GetMessageAspectName"/>.</summary>
+    public string MessageAspect { get; set; } = string.Empty;
 }
 
 /// <summary>A single recipient address entry used in <see cref="SendMessagePayload"/>.</summary>

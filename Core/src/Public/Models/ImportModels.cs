@@ -1,7 +1,7 @@
 namespace BlueHeighliner.Comlink;
 
 /// <summary>
-/// A message a custom import format's reader (see <see cref="IImportsBuilder{TFrame, TPacket, TPriority, TLevel}.Format{TFormat}"/>) has prepared
+/// A message a custom import format's reader (see <see cref="IImportsBuilder{TFrame, TPacket, TPriority, TLevel, TAspect}.Format{TFormat}"/>) has prepared
 /// to send, added via <see cref="IImportFormatContext.AddStagedSend"/>. Shown to the user in the staged
 /// send screen for review, and sent only once they press its final send button - never sent automatically.
 /// </summary>
@@ -15,6 +15,6 @@ public sealed record StagedSendData
     public Enum? Priority { get; init; }
     /// <summary>Tag identifying the type of this message; see <see cref="IEngineController.GetTag"/>.</summary>
     public string Tag { get; init; } = string.Empty;
-    /// <summary>Security level this message will be sent at, a member of the enum the host stated for its security levels, or <see langword="null"/> for none; one that is not a configured level fails the send.</summary>
-    public Enum? SecurityLevel { get; init; }
+    /// <summary>Message level this message will be sent at, a member of the enum the host stated for its message levels, or <see langword="null"/> for none; one that is not a configured level fails the send.</summary>
+    public Enum? MessageLevel { get; init; }
 }

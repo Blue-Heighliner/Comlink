@@ -6,10 +6,10 @@ public sealed record UserInfo
     /// <summary>Canonical name of the user. By convention user names are all uppercase.</summary>
     public required string Name { get; init; }
     /// <summary>
-    /// The name of the security level (see <see cref="IEngineBuilder{TFrame, TPacket, TPriority, TLevel}.SecurityLevels"/>) this user runs at. <see langword="null"/> (the
+    /// The name of the message level (see <see cref="IEngineBuilder{TFrame, TPacket, TPriority, TLevel, TAspect}.MessageLevels"/>) this user runs at. <see langword="null"/> (the
     /// default) is the lowest configured level.
     /// </summary>
-    public string? SecurityLevel { get; init; }
+    public string? MessageLevel { get; init; }
     /// <summary>App-specific data attached to the user. The engine does not interpret it; it travels with the user's <see cref="UserIdentity"/>. Empty by default.</summary>
     public IReadOnlyDictionary<string, string> Data { get; init; } = new Dictionary<string, string>();
     /// <summary>Names of the groups this user is a member of.</summary>

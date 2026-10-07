@@ -3,7 +3,7 @@ namespace BlueHeighliner.Comlink;
 /// <summary>
 /// Handles the frames of the host's frame type, or the packets of its packet type, <typeparamref name="TFrame"/> that are heartbeats: sent by a node over each of its MSMT connections to check that the connection is really up and
 /// to keep it live. A heartbeat is not a message, and the receiving node only acknowledges it. Heartbeats are optional: without a handler none are sent and a connection counts as up once it is
-/// established. They are never sent over HDLC. See <see cref="IFrameBuilder{TFrame, TPacket, TPriority, TLevel}.Heartbeat{THandler}"/> and <see cref="IPacketBuilder{TFrame, TPacket, TPriority, TLevel}.Heartbeat{THandler}"/>, the latter of which sends the heartbeat as a packet of its own, beneath packetization, and takes precedence.
+/// established. They are never sent over HDLC. See <see cref="IFrameBuilder{TFrame, TPacket, TPriority, TLevel, TAspect}.Heartbeat{THandler}"/> and <see cref="IPacketBuilder{TFrame, TPacket, TPriority, TLevel, TAspect}.Heartbeat{THandler}"/>, the latter of which sends the heartbeat as a packet of its own, beneath packetization, and takes precedence.
 /// </summary>
 /// <typeparam name="TFrame">The host's frame type, or its packet type for a packet heartbeat.</typeparam>
 /// <typeparam name="TPriority">The enum whose members are the priority levels.</typeparam>

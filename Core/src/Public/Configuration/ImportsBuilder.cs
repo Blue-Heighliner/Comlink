@@ -4,10 +4,11 @@ namespace BlueHeighliner.Comlink;
 /// <typeparam name="TFrame">The host's frame type.</typeparam>
 /// <typeparam name="TPacket">The host's packet type, or <see cref="NoPacket"/>.</typeparam>
 /// <typeparam name="TPriority">The enum whose members are the priority levels.</typeparam>
-/// <typeparam name="TLevel">The enum whose members are the security levels.</typeparam>
-public interface IImportsBuilder<TFrame, TPacket, TPriority, TLevel> : IEngineBuilder<TFrame, TPacket, TPriority, TLevel> where TFrame : class, new() where TPacket : class, new() where TPriority : struct, Enum where TLevel : struct, Enum
+/// <typeparam name="TLevel">The enum whose members are the message levels.</typeparam>
+/// <typeparam name="TAspect">The enum whose members are the message aspects, or <see cref="NoMessageAspect"/> for none.</typeparam>
+public interface IImportsBuilder<TFrame, TPacket, TPriority, TLevel, TAspect> : IEngineBuilder<TFrame, TPacket, TPriority, TLevel, TAspect> where TFrame : class, new() where TPacket : class, new() where TPriority : struct, Enum where TLevel : struct, Enum where TAspect : struct, Enum
 {
     /// <summary>Adds a custom import format, shown as an option alongside the built-in package format in the client's import screen (see <see cref="IImportFormat"/>). Adding another with the same name replaces the earlier one in place.</summary>
     /// <typeparam name="TFormat">The format type, instantiated through dependency injection when the engine runs: the instance registered for it in the host's services, or else one constructed from them.</typeparam>
-    IImportsBuilder<TFrame, TPacket, TPriority, TLevel> Format<TFormat>() where TFormat : IImportFormat;
+    IImportsBuilder<TFrame, TPacket, TPriority, TLevel, TAspect> Format<TFormat>() where TFormat : IImportFormat;
 }

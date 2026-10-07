@@ -114,9 +114,9 @@ public sealed class MainViewModelTests
         Setup s = new();
         s.EngineController.SetupGet(e => e.Role).Returns(UserRole.Server);
         s.EngineController.Setup(e => e.GetUserInfo("ALICE")).Returns(new UserInfo { Name = "ALICE", Role = UserRole.Client });
-        s.EngineController.SetupGet(e => e.SecurityLevels).Returns([]);
+        s.EngineController.SetupGet(e => e.MessageLevels).Returns([]);
         s.EngineController.SetupGet(e => e.AutoForwardControllers).Returns([]);
-        s.EngineController.Setup(e => e.GetUserSecurityLevel("ALICE")).Returns(string.Empty);
+        s.EngineController.Setup(e => e.GetUserMessageLevel("ALICE")).Returns(string.Empty);
         s.UserProvider.SetupGet(u => u.UserName).Returns("ALICE");
         MainViewModel vm = s.BuildVm();
         vm.UserName = "ALICE";
@@ -280,8 +280,8 @@ public sealed class MainViewModelTests
         s.Connection.Setup(c => c.Connect(It.IsAny<CancellationToken>())).Returns(Task.CompletedTask);
         s.Connection.Setup(c => c.GetUserInfo(It.IsAny<CancellationToken>())).ReturnsAsync(MakeUserInfo("BETA"));
         s.FolderBar.Setup(f => f.Load()).Returns(Task.CompletedTask);
-        s.EngineController.Setup(e => e.GetUserSecurityLevel("BETA")).Returns("INTERNAL");
-        s.EngineController.Setup(e => e.SecurityLevels).Returns([new SecurityLevel { Name = "INTERNAL", Color = "#1565C0" }]);
+        s.EngineController.Setup(e => e.GetUserMessageLevel("BETA")).Returns("INTERNAL");
+        s.EngineController.Setup(e => e.MessageLevels).Returns([new MessageLevel { Name = "INTERNAL", Color = "#1565C0" }]);
         MainViewModel vm = s.BuildVm();
 
         await vm.Initialize();
@@ -290,8 +290,8 @@ public sealed class MainViewModelTests
         s.Db.Verify(d => d.Initialize(), Times.Once);
         s.FolderBar.Verify(f => f.Load(), Times.Once);
         Assert.Equal("BETA", vm.UserName);
-        Assert.Equal("INTERNAL", vm.SecurityLevelName);
-        Assert.Equal("#1565C0", vm.SecurityLevelColor);
+        Assert.Equal("INTERNAL", vm.MessageLevelName);
+        Assert.Equal("#1565C0", vm.MessageLevelColor);
         Assert.False(vm.IsInstallScreenVisible);
     }
 

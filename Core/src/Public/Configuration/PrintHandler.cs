@@ -1,6 +1,6 @@
 namespace BlueHeighliner.Comlink;
 
-/// <summary>Controls how the print manager behaves. State one with <see cref="IEngineBuilder{TFrame, TPacket, TPriority, TLevel}.Prints{THandler}"/>. Every member is optional.</summary>
+/// <summary>Controls how the print manager behaves. State one with <see cref="IEngineBuilder{TFrame, TPacket, TPriority, TLevel, TAspect}.Prints{THandler}"/>. Every member is optional.</summary>
 /// <typeparam name="TFrame">The host's frame type.</typeparam>
 public interface IPrintHandler<TFrame> where TFrame : class, new()
 {

@@ -9,8 +9,8 @@ already covered in the source itself.
 
 A host implements `IEngineConfiguration`, whose single `Configure` method receives an `IEngineBuilder` and states, through
 fluent calls, how the engine should run. It starts with `Types`, which fixes the frame type, the optional packet type, the
-priority enum and the security level enum, and returns the typed builder every other setting is stated on, so handlers,
-priorities and security levels are all checked against those types. After `Types`, the handlers for each kind of frame are
+priority enum and the message level enum, and returns the typed builder every other setting is stated on, so handlers,
+priorities and message levels are all checked against those types. After `Types`, the handlers for each kind of frame are
 required and anything else that should differ from the engine's defaults is optional (see [Configuration.md](Components/Configuration.md)).
 Core has no frame DTO of its own.
 

@@ -1,11 +1,12 @@
 namespace BlueHeighliner.Comlink;
 
 /// <summary>
-/// Controls how drafts are composed: how wide a line may be, and a header every message must start with. State one with <see cref="IEngineBuilder{TFrame, TPacket, TPriority, TLevel}.Drafts{THandler}"/>. Every member is optional.
+/// Controls how drafts are composed: how wide a line may be, and a header every message must start with. State one with <see cref="IEngineBuilder{TFrame, TPacket, TPriority, TLevel, TAspect}.Drafts{THandler}"/>. Every member is optional.
 /// </summary>
 /// <typeparam name="TPriority">The enum whose members are the priority levels.</typeparam>
-/// <typeparam name="TLevel">The enum whose members are the security levels.</typeparam>
-public interface IDraftHandler<TPriority, TLevel> where TPriority : struct, Enum where TLevel : struct, Enum
+/// <typeparam name="TLevel">The enum whose members are the message levels.</typeparam>
+/// <typeparam name="TAspect">The enum whose members are the message aspects, or <see cref="NoMessageAspect"/> for none.</typeparam>
+public interface IDraftHandler<TPriority, TLevel, TAspect> where TPriority : struct, Enum where TLevel : struct, Enum where TAspect : struct, Enum
 {
     /// <summary>
     /// Gets how many monospace characters wide a line of a new draft is shown, which the user can change in the draft view between <see cref="MinLineWidth"/> and <see cref="MaxLineWidth"/>. <see langword="null"/> (the default) is no limit,
@@ -34,8 +35,11 @@ public interface IDraftHandler<TPriority, TLevel> where TPriority : struct, Enum
     /// <summary>Gets the priority level a new draft starts at, or <see langword="null"/> (the default) for the lowest level the user may choose.</summary>
     TPriority? DefaultPriority => null;
 
-    /// <summary>Gets the security level a new draft starts at, or <see langword="null"/> (the default) for the highest level the user may use. A level above what the user may use is brought down to it.</summary>
-    TLevel? DefaultSecurityLevel => null;
+    /// <summary>Gets the message level a new draft starts at, or <see langword="null"/> (the default) for the highest level the user may use. A level above what the user may use is brought down to it.</summary>
+    TLevel? DefaultMessageLevel => null;
+
+    /// <summary>Gets the message aspect a new draft starts with, or <see langword="null"/> (the default) for none.</summary>
+    TAspect? DefaultMessageAspect => null;
 
     /// <summary>Gets the fewest characters a message tag may have once it is given. Defaults to <c>0</c>. Use <see cref="IsTagRequired"/> to require a tag at all.</summary>
     int MinTagLength => 0;
@@ -54,9 +58,9 @@ public interface IDraftHandler<TPriority, TLevel> where TPriority : struct, Enum
 
     /// <summary>
     /// Returns the header every message sent from the draft in <paramref name="state"/> must start with, or <see langword="null"/> (the default) for none. The engine asks again whenever one of the draft's aspects
-    /// (its tag, priority, security level, alert flag, recipients or line width) changes. The draft view shows a header above the body, where the user cannot edit it, and it is put in front of the body, followed by a line break, when the draft is sent.
+    /// (its tag, priority, message level, alert flag, recipients or line width) changes. The draft view shows a header above the body, where the user cannot edit it, and it is put in front of the body, followed by a line break, when the draft is sent.
     /// It is shown wrapped to the line width like the body, but only shown so: no line break is added to it or to the body.
     /// </summary>
     /// <param name="state">The draft as it currently is.</param>
-    string? GetHeader(DraftState<TPriority, TLevel> state) => null;
+    string? GetHeader(DraftState<TPriority, TLevel, TAspect> state) => null;
 }

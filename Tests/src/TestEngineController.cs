@@ -25,8 +25,9 @@ public sealed class TestFrame
     [ProtoMember(9)] public string Priority { get; set; } = string.Empty;
     /// <summary>Tag identifying the type of this message.</summary>
     [ProtoMember(10)] public string Tag { get; set; } = string.Empty;
-    /// <summary>Security level name this message was sent at.</summary>
-    [ProtoMember(11)] public string SecurityLevel { get; set; } = string.Empty;
+    /// <summary>Message level name this message was sent at.</summary>
+    [ProtoMember(11)] public string MessageLevel { get; set; } = string.Empty;
+    [ProtoMember(40)] public string MessageAspect { get; set; } = string.Empty;
     /// <summary>Whether this message is a retrieval request to a storage server.</summary>
     [ProtoMember(12)] public bool IsRetrieval { get; set; }
     /// <summary>Retrieval request lower sent-time bound.</summary>
@@ -77,9 +78,9 @@ internal class TestEngineController : EngineController
     {
     }
 
-    /// <summary>Gets the security level name the frame carries, as it is.</summary>
+    /// <summary>Gets the message level name the frame carries, as it is.</summary>
     /// <param name="value">The frame.</param>
-    public override string GetSecurityLevel(object value) => value is TestFrame frame ? frame.SecurityLevel : string.Empty;
+    public override string GetMessageLevel(object value) => value is TestFrame frame ? frame.MessageLevel : string.Empty;
 
     /// <summary>Gets ten priority levels, so tests may use any priority from 0 to 9 without it being brought within range.</summary>
     public override IReadOnlyList<MessagePriorityOption> Priorities { get; } = [.. Enum.GetValues<TestMessagePriority>().Take(10).Select((key, value) => new MessagePriorityOption { Name = key.ToString().ToUpperInvariant(), Value = value, Key = key })];

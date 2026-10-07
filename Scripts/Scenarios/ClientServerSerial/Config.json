@@ -12,20 +12,20 @@
         { "User": "CLIENT1", "Mode": "Hdlc" },
         "CLIENT2"
       ],
-      "SecurityLevel": "RESTRICTED"
+      "MessageLevel": "RESTRICTED"
     },
     "CLIENT1": {
       "Role": "Client",
       "InterfacePort": 50322,
       "Hdlc": { "Address": 2, "Ports": [ "ttyUSB0" ] },
       "Parent": { "User": "SERVER", "Mode": "Hdlc" },
-      "SecurityLevel": "INTERNAL"
+      "MessageLevel": "INTERNAL"
     },
     "CLIENT2": {
       "Role": "Client",
       "InterfacePort": 50324,
       "Parent": "SERVER",
-      "SecurityLevel": "INTERNAL"
+      "MessageLevel": "INTERNAL"
     }
   }
 }

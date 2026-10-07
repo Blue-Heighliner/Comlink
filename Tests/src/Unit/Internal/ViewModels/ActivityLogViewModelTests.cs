@@ -3,11 +3,10 @@ namespace BlueHeighliner.Comlink.Tests.Unit.Internal.ViewModels;
 /// <summary>Unit tests for <see cref="ActivityLogViewModel"/>.</summary>
 public sealed class ActivityLogViewModelTests
 {
-    private static ActivityLogEntity MakeEntity(DateTime date, List<string>? legacyEvents = null, List<ActivityLogEntry>? structured = null)
+    private static ActivityLogEntity MakeEntity(DateTime date, List<ActivityLogEntry>? structured = null)
         => new()
         {
             Date = date,
-            Events = legacyEvents ?? [],
             EventEntries = structured ?? []
         };
 
@@ -42,28 +41,6 @@ public sealed class ActivityLogViewModelTests
         Assert.Equal("First", vm.Events[1].Message);
     }
 
-    /// <summary>Legacy string events are merged with structured entries and ordered correctly.</summary>
-    [Fact]
-    public void Events_LegacyAndStructured_MergedAndOrdered()
-    {
-        DateTime date = new(2025, 7, 4);
-        ActivityLogEntity entity = new()
-        {
-            Date = date,
-            Events = ["Legacy message"],
-            EventEntries =
-            [
-                new ActivityLogEntry { At = new DateTime(2025, 7, 4, 12, 0, 0, DateTimeKind.Utc), Message = "Structured" }
-            ]
-        };
-
-        ActivityLogViewModel vm = new(entity);
-
-        Assert.Equal(2, vm.Events.Count);
-        Assert.Equal("Structured", vm.Events[0].Message);
-        Assert.Equal("Legacy message", vm.Events[1].Message);
-    }
-
     /// <summary>TimeText on an event row is only the hour and minute, since the day is the title of the view.</summary>
     [Fact]
     public void EventRow_TimeText_IsFormattedCorrectly()
@@ -79,15 +56,18 @@ public sealed class ActivityLogViewModelTests
         Assert.Equal("09:30", vm.Events[0].TimeText);
     }
 
-    /// <summary>An event's ID is shown in its own column, padded with hyphens to the fixed width when the log handler states one, and a legacy entry has none.</summary>
+    /// <summary>An event's ID is shown in its own column, padded with hyphens to the fixed width when the log handler states one, and an entry without one has none.</summary>
     [Fact]
     public void IdText_FollowsTheFixedIdWidth()
     {
         ActivityLogEntity entity = new()
         {
             Date = new DateTime(2025, 7, 4),
-            Events = ["Legacy"],
-            EventEntries = [new ActivityLogEntry { At = new DateTime(2025, 7, 4, 12, 0, 0, DateTimeKind.Utc), Message = "Structured", EventId = 7 }]
+            EventEntries =
+            [
+                new ActivityLogEntry { At = new DateTime(2025, 7, 4, 12, 0, 0, DateTimeKind.Utc), Message = "Structured", EventId = 7 },
+                new ActivityLogEntry { At = new DateTime(2025, 7, 4, 11, 0, 0, DateTimeKind.Utc), Message = "NoId" }
+            ]
         };
 
         ActivityLogViewModel natural = new(entity);
@@ -95,6 +75,6 @@ public sealed class ActivityLogViewModelTests
 
         Assert.Equal("7", natural.Events.Single(row => row.Message == "Structured").IdText);
         Assert.Equal("7--", fixedWidth.Events.Single(row => row.Message == "Structured").IdText);
-        Assert.Equal(string.Empty, fixedWidth.Events.Single(row => row.Message == "Legacy").IdText);
+        Assert.Equal(string.Empty, fixedWidth.Events.Single(row => row.Message == "NoId").IdText);
     }
 }

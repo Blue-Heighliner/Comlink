@@ -1,19 +1,19 @@
 namespace BlueHeighliner.Comlink;
 
-/// <summary>User control that displays a colored security level banner with a title and supports window drag.</summary>
+/// <summary>User control that displays a colored message level banner with a title and supports window drag.</summary>
 [ExcludeFromCodeCoverage]
-internal partial class SecurityLevelBanner : UserControl
+internal partial class MessageLevelBanner : UserControl
 {
     /// <summary>Identifies the <see cref="Title"/> styled property.</summary>
     public static readonly StyledProperty<string> TitleProperty =
-        AvaloniaProperty.Register<SecurityLevelBanner, string>(nameof(Title), string.Empty);
+        AvaloniaProperty.Register<MessageLevelBanner, string>(nameof(Title), string.Empty);
 
     /// <summary>Identifies the <see cref="BannerColor"/> styled property.</summary>
     public static readonly StyledProperty<string> BannerColorProperty =
-        AvaloniaProperty.Register<SecurityLevelBanner, string>(nameof(BannerColor), "#1565C0");
+        AvaloniaProperty.Register<MessageLevelBanner, string>(nameof(BannerColor), "#1565C0");
 
     /// <summary>Initializes the control, loads the AXAML layout, and applies the initial banner color.</summary>
-    public SecurityLevelBanner()
+    public MessageLevelBanner()
     {
         InitializeComponent();
         ApplyColor();

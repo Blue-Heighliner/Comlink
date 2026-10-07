@@ -2,7 +2,7 @@ namespace BlueHeighliner.Comlink;
 
 /// <summary>
 /// Handles the frames of the host's frame type <typeparamref name="TFrame"/> that are receive receipts: sent back to the sender of a message as soon as its recipient's node receives it, so the
-/// sender's delivery status for that recipient advances to received. A receipt is not a message. See <see cref="IFrameBuilder{TFrame, TPacket, TPriority, TLevel}.ReceiveReceipt{THandler}"/>.
+/// sender's delivery status for that recipient advances to received. A receipt is not a message. See <see cref="IFrameBuilder{TFrame, TPacket, TPriority, TLevel, TAspect}.ReceiveReceipt{THandler}"/>.
 /// </summary>
 /// <typeparam name="TFrame">The host's frame type.</typeparam>
 /// <typeparam name="TPriority">The enum whose members are the priority levels.</typeparam>

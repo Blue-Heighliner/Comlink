@@ -131,11 +131,11 @@ internal interface IEngineController
     /// </summary>
     /// <param name="message">An instance of <see cref="FrameType"/> that was received.</param>
     bool AcceptAlert(object message);
-    /// <summary>Gets how wide a line of a draft may be (see <see cref="IDraftHandler{TPriority, TLevel}"/>), or <see langword="null"/> when the draft view does not offer a width, which is without a draft handler or when it states neither a default nor a maximum.</summary>
+    /// <summary>Gets how wide a line of a draft may be (see <see cref="IDraftHandler{TPriority, TLevel, TAspect}"/>), or <see langword="null"/> when the draft view does not offer a width, which is without a draft handler or when it states neither a default nor a maximum.</summary>
     LineWidthRange? DraftLineWidth { get; }
-    /// <summary>Gets what message tags may be: their case, length, and whether they may hold symbols, numbers and spaces (see <see cref="IDraftHandler{TPriority, TLevel}"/>). Unrestricted without a draft handler.</summary>
+    /// <summary>Gets what message tags may be: their case, length, and whether they may hold symbols, numbers and spaces (see <see cref="IDraftHandler{TPriority, TLevel, TAspect}"/>). Unrestricted without a draft handler.</summary>
     TagRules DraftTagRules { get; }
-    /// <summary>Gets what a new draft starts with: its tag, priority and security level (see <see cref="IDraftHandler{TPriority, TLevel}"/>).</summary>
+    /// <summary>Gets what a new draft starts with: its tag, priority and message level (see <see cref="IDraftHandler{TPriority, TLevel, TAspect}"/>).</summary>
     DraftDefaults DraftDefaults { get; }
     /// <summary>Returns the header a message sent from the draft described by <paramref name="draft"/> must start with, or <see langword="null"/> for none (always the case without a draft handler).</summary>
     /// <param name="draft">The draft as it currently is.</param>
@@ -157,8 +157,23 @@ internal interface IEngineController
     string TagLabel { get; }
     /// <summary>Gets the name of the priority concept in the user interface (see <see cref="IDisplayHandler.PriorityLabel"/>).</summary>
     string PriorityLabel { get; }
-    /// <summary>Gets the name of the security level concept in the user interface (see <see cref="IDisplayHandler.SecurityLevelLabel"/>).</summary>
-    string SecurityLevelLabel { get; }
+    /// <summary>Gets the name of the message level concept in the user interface (see <see cref="IDisplayHandler.MessageLevelLabel"/>).</summary>
+    string MessageLevelLabel { get; }
+    /// <summary>Gets the name of the message aspect concept in the user interface (see <see cref="IDisplayHandler.MessageAspectLabel"/>).</summary>
+    string MessageAspectLabel { get; }
+    /// <summary>Gets the plural of <see cref="MessageAspectLabel"/>.</summary>
+    string MessageAspectPluralLabel { get; }
+    /// <summary>
+    /// Gets the message aspects a message can carry, in the order stated with <see cref="IEngineBuilder{TFrame, TPacket, TPriority, TLevel, TAspect}.MessageAspects"/>; empty when none were stated, which turns the feature off.
+    /// </summary>
+    IReadOnlyList<MessageAspect> MessageAspects { get; }
+    /// <summary>Gets the message aspect name <paramref name="frame"/> carries, one of <see cref="MessageAspects"/>, or an empty string for none or when it is not a message.</summary>
+    /// <param name="frame">An instance of <see cref="FrameType"/>.</param>
+    string GetMessageAspect(object frame);
+    /// <summary>Gets the name of the configured message aspect <paramref name="aspect"/>, or an empty string for <see langword="null"/>.</summary>
+    /// <param name="aspect">The aspect, a member of the enum stated for the message aspects, or <see langword="null"/> for none.</param>
+    /// <exception cref="ArgumentException"><paramref name="aspect"/> is not a configured message aspect.</exception>
+    string GetMessageAspectName(Enum? aspect);
     /// <summary>Gets the word the user interface uses for a user of the network (see <see cref="IDisplayHandler.UserLabel"/>).</summary>
     string UserLabel { get; }
     /// <summary>Gets the plural of <see cref="UserLabel"/>.</summary>
@@ -169,8 +184,8 @@ internal interface IEngineController
     string TagPluralLabel { get; }
     /// <summary>Gets the plural of <see cref="PriorityLabel"/>.</summary>
     string PriorityPluralLabel { get; }
-    /// <summary>Gets the plural of <see cref="SecurityLevelLabel"/>.</summary>
-    string SecurityLevelPluralLabel { get; }
+    /// <summary>Gets the plural of <see cref="MessageLevelLabel"/>.</summary>
+    string MessageLevelPluralLabel { get; }
     /// <summary>Returns the text to show for <paramref name="label"/>, the engine's own name for a concept of the app: what the host's display handler calls it (see <see cref="IDisplayHandler.InboxLabel"/> and the members like it), or <paramref name="label"/> itself.</summary>
     /// <param name="label">The engine's name for the concept.</param>
     string Rename(string label);
@@ -180,24 +195,24 @@ internal interface IEngineController
     /// Every address type, in a fixed order (<see cref="AddressType.To"/>, <see cref="AddressType.Cc"/>,
     /// <see cref="AddressType.External"/>), paired with its display label - shown in the address type picker, the
     /// per-address badge, and the message view's section headers. A label defaults to the enum name unless overridden
-    /// with <see cref="IAddressTypeBuilder{TFrame, TPacket, TPriority, TLevel}.Label"/>.
+    /// with <see cref="IAddressTypeBuilder{TFrame, TPacket, TPriority, TLevel, TAspect}.Label"/>.
     /// </summary>
     IReadOnlyList<AddressTypeOption> AddressTypes { get; }
     /// <summary>
-    /// Every configured security level, in ascending order (index 0 is lowest); empty when
-    /// <see cref="IEngineBuilder{TFrame, TPacket, TPriority, TLevel}.SecurityLevels"/> was never stated, which turns the whole feature off. A
+    /// Every configured message level, in ascending order (index 0 is lowest); empty when
+    /// <see cref="IEngineBuilder{TFrame, TPacket, TPriority, TLevel, TAspect}.MessageLevels"/> was never stated, which turns the whole feature off. A
     /// message may only be sent at one of these levels, and a destination user's own assigned level (see
-    /// <see cref="GetUserSecurityLevel"/>) must rank at or above it.
+    /// <see cref="GetUserMessageLevel"/>) must rank at or above it.
     /// </summary>
-    IReadOnlyList<SecurityLevel> SecurityLevels { get; }
+    IReadOnlyList<MessageLevel> MessageLevels { get; }
 
     /// <summary>
-    /// Returns the security level name the given user runs at; see <see cref="UserInfo.SecurityLevel"/>.
-    /// Defaults to the lowest configured level for a user with no assignment, or an empty string when no security
+    /// Returns the message level name the given user runs at; see <see cref="UserInfo.MessageLevel"/>.
+    /// Defaults to the lowest configured level for a user with no assignment, or an empty string when no message
     /// levels are configured at all.
     /// </summary>
-    /// <param name="userName">The user name to resolve a security level for.</param>
-    string GetUserSecurityLevel(string userName);
+    /// <param name="userName">The user name to resolve a message level for.</param>
+    string GetUserMessageLevel(string userName);
 
     /// <summary>
     /// When <see langword="true"/>, the print manager's "print received" toggle (<see cref="IPrintManagerViewModel.PrintReceivedEnabled"/>)
@@ -209,10 +224,10 @@ internal interface IEngineController
     /// <summary>The peer options - including TLS identity certificate and trusted certificate authorities - used for both inbound and outbound MSMT session peer connections.</summary>
     MsmtSessionPeerOptions ConnectionOptions { get; }
 
-    /// <summary>Applies the host's adjustment of the MSMT options (see <see cref="IConnectionsBuilder{TFrame, TPacket, TPriority, TLevel}.Msmt(MsmtConnectionOptions)"/>) to <paramref name="options"/>, returning them unchanged if none was stated.</summary>
+    /// <summary>Applies the host's adjustment of the MSMT options (see <see cref="IConnectionsBuilder{TFrame, TPacket, TPriority, TLevel, TAspect}.Msmt(MsmtConnectionOptions)"/>) to <paramref name="options"/>, returning them unchanged if none was stated.</summary>
     MsmtSessionPeerOptions ConfigureConnectionOptions(MsmtSessionPeerOptions options);
 
-    /// <summary>The options used for every MicroGate serial connection, after the host's adjustment (see <see cref="IConnectionsBuilder{TFrame, TPacket, TPriority, TLevel}.Hdlc(HdlcPeerOptions)"/>).</summary>
+    /// <summary>The options used for every MicroGate serial connection, after the host's adjustment (see <see cref="IConnectionsBuilder{TFrame, TPacket, TPriority, TLevel, TAspect}.Hdlc(HdlcPeerOptions)"/>).</summary>
     HdlcPeerOptions HdlcOptions { get; }
 
     /// <summary>The configured role for this instance.</summary>
@@ -237,11 +252,11 @@ internal interface IEngineController
     /// </summary>
     IReadOnlyDictionary<string, ServerUserConfig> Servers { get; }
 
-    /// <summary>Gets the processor that carries out the initial packet exchange on each new connection (see <see cref="IPacketBuilder{TFrame, TPacket, TPriority, TLevel}.InitialProcessor"/>), or <see langword="null"/> for none. Requires <see cref="PacketType"/>.</summary>
+    /// <summary>Gets the processor that carries out the initial packet exchange on each new connection (see <see cref="IPacketBuilder{TFrame, TPacket, TPriority, TLevel, TAspect}.InitialProcessor"/>), or <see langword="null"/> for none. Requires <see cref="PacketType"/>.</summary>
     IInitialProcessor? InitialPacketProcessor { get; }
-    /// <summary>Gets the processor that carries out the initial message exchange on each new connection (see <see cref="IFrameBuilder{TFrame, TPacket, TPriority, TLevel}.InitialProcessor"/>), or <see langword="null"/> for none.</summary>
+    /// <summary>Gets the processor that carries out the initial message exchange on each new connection (see <see cref="IFrameBuilder{TFrame, TPacket, TPriority, TLevel, TAspect}.InitialProcessor"/>), or <see langword="null"/> for none.</summary>
     IInitialProcessor? InitialFrameProcessor { get; }
-    /// <summary>When <see langword="true"/>, the <c>--config</c> and <c>--user</c> command-line arguments override where the network configuration file and the running user come from (see <see cref="IEngineBuilder{TFrame, TPacket, TPriority, TLevel}.CommandLineOverrides"/>); when <see langword="false"/> (the default) they are ignored and only <c>Config.json</c> and <c>User.json</c> in the working directory are used.</summary>
+    /// <summary>When <see langword="true"/>, the <c>--config</c> and <c>--user</c> command-line arguments override where the network configuration file and the running user come from (see <see cref="IEngineBuilder{TFrame, TPacket, TPriority, TLevel, TAspect}.CommandLineOverrides"/>); when <see langword="false"/> (the default) they are ignored and only <c>Config.json</c> and <c>User.json</c> in the working directory are used.</summary>
     bool CommandLineOverridesAllowed { get; }
 
     /// <summary>
@@ -254,19 +269,19 @@ internal interface IEngineController
     /// </summary>
     IReadOnlyList<IExternalSystem> ExternalSystems { get; }
 
-    /// <summary>The processor that reacts to a user connecting or disconnecting and to a message being received (see <see cref="IFrameBuilder{TFrame, TPacket, TPriority, TLevel}.Processor"/>), or <see langword="null"/> for none.</summary>
+    /// <summary>The processor that reacts to a user connecting or disconnecting and to a message being received (see <see cref="IFrameBuilder{TFrame, TPacket, TPriority, TLevel, TAspect}.Processor"/>), or <see langword="null"/> for none.</summary>
     INetworkHandler? NetworkHandler { get; }
 
-    /// <summary>Every custom export format added via <see cref="IExportsBuilder{TFrame, TPacket, TPriority, TLevel}.Format{TFormat}"/>, in the order added; empty if none.</summary>
+    /// <summary>Every custom export format added via <see cref="IExportsBuilder{TFrame, TPacket, TPriority, TLevel, TAspect}.Format{TFormat}"/>, in the order added; empty if none.</summary>
     IReadOnlyList<ExportFormatDefinition> ExportFormats { get; }
 
-    /// <summary>Every custom import format added via <see cref="IImportsBuilder{TFrame, TPacket, TPriority, TLevel}.Format{TFormat}"/>, in the order added; empty if none.</summary>
+    /// <summary>Every custom import format added via <see cref="IImportsBuilder{TFrame, TPacket, TPriority, TLevel, TAspect}.Format{TFormat}"/>, in the order added; empty if none.</summary>
     IReadOnlyList<ImportFormatDefinition> ImportFormats { get; }
 
     /// <summary>Every server user, from <see cref="Servers"/>: each keeps a copy of every message one of its own children sends and answers retrieval requests for them, so a retrieval names the server the message is stored on. Empty if none.</summary>
     IReadOnlyList<string> StorageServers { get; }
 
-    /// <summary>Every custom auto forward controller added via <see cref="IFrameBuilder{TFrame, TPacket, TPriority, TLevel}.AutoForward{TController}"/>, in the order added; empty if none.</summary>
+    /// <summary>Every custom auto forward controller added via <see cref="IFrameBuilder{TFrame, TPacket, TPriority, TLevel, TAspect}.AutoForward{TController}"/>, in the order added; empty if none.</summary>
     IReadOnlyList<AutoForwardControllerDefinition> AutoForwardControllers { get; }
 
     /// <summary>Creates a new, empty instance of <see cref="FrameType"/>.</summary>
@@ -322,7 +337,7 @@ internal interface IEngineController
     /// <summary>Returns whether <paramref name="frame"/> is a heartbeat, which is acknowledged and otherwise ignored; always <see langword="false"/> when no heartbeat handler is stated.</summary>
     /// <param name="frame">A received instance of <see cref="FrameType"/>.</param>
     bool IsHeartbeat(object frame);
-    /// <summary>Gets whether <paramref name="frame"/> is a retrieval request; see <see cref="IFrameBuilder{TFrame, TPacket, TPriority, TLevel}.Retrieval{THandler}"/>.</summary>
+    /// <summary>Gets whether <paramref name="frame"/> is a retrieval request; see <see cref="IFrameBuilder{TFrame, TPacket, TPriority, TLevel, TAspect}.Retrieval{THandler}"/>.</summary>
     bool IsRetrieval(object frame);
     /// <summary>Reads the criteria a retrieval request carries from its mapped fields. Meaningful only when <see cref="IsRetrieval"/> is <see langword="true"/>.</summary>
     RetrievalCriteria GetRetrieval(object frame);
@@ -368,11 +383,11 @@ internal interface IEngineController
     /// <param name="body">The body text, which a draft being composed does not have yet (an empty string).</param>
     /// <param name="priority">The priority level, a member of the enum stated for the priorities, or <see langword="null"/> for the lowest.</param>
     /// <param name="tag">The tag, or an empty string for none.</param>
-    /// <param name="securityLevel">The security level name, or an empty string for none.</param>
+    /// <param name="messageLevel">The message level name, or an empty string for none.</param>
     /// <param name="addresses">The recipients.</param>
-    /// <exception cref="ArgumentException">The priority or security level is not a configured one.</exception>
-    bool ComputeIsAlert(string body, Enum? priority, string tag, string securityLevel, IReadOnlyList<AddressRequest> addresses);
-    /// <summary>Returns why the received message <paramref name="message"/> carries a priority or security level that is not a configured one, or <see langword="null"/> when it does not (or it is not a message).</summary>
+    /// <exception cref="ArgumentException">The priority or message level is not a configured one.</exception>
+    bool ComputeIsAlert(string body, Enum? priority, string tag, string messageLevel, IReadOnlyList<AddressRequest> addresses);
+    /// <summary>Returns why the received message <paramref name="message"/> carries a priority or message level that is not a configured one, or <see langword="null"/> when it does not (or it is not a message).</summary>
     /// <param name="message">An instance of <see cref="FrameType"/>.</param>
     string? GetUnconfiguredLevelReason(object message);
     /// <summary>Checks what the engine can only check once its handlers exist: that every priority a handler names is a configured level. Called when the engine starts.</summary>
@@ -396,17 +411,17 @@ internal interface IEngineController
     /// </summary>
     string GetTag(object frame);
     /// <summary>
-    /// Gets the security level name <paramref name="frame"/> was sent at, one of <see cref="SecurityLevels"/>, or
-    /// an empty string when no security levels are configured.
+    /// Gets the message level name <paramref name="frame"/> was sent at, one of <see cref="MessageLevels"/>, or
+    /// an empty string when no message levels are configured.
     /// </summary>
-    string GetSecurityLevel(object frame);
-    /// <summary>Gets the security level <paramref name="frame"/> carries as the host's enum member, or <see langword="null"/> for none or when it is not a message.</summary>
+    string GetMessageLevel(object frame);
+    /// <summary>Gets the message level <paramref name="frame"/> carries as the host's enum member, or <see langword="null"/> for none or when it is not a message.</summary>
     /// <param name="frame">An instance of <see cref="FrameType"/>.</param>
-    Enum? GetSecurityLevelKey(object frame);
-    /// <summary>Gets the name of the configured security level <paramref name="level"/>, or an empty string for <see langword="null"/>.</summary>
-    /// <param name="level">The level, a member of the enum stated for the security levels, or <see langword="null"/> for none.</param>
-    /// <exception cref="ArgumentException"><paramref name="level"/> is not a configured security level.</exception>
-    string GetSecurityLevelName(Enum? level);
+    Enum? GetMessageLevelKey(object frame);
+    /// <summary>Gets the name of the configured message level <paramref name="level"/>, or an empty string for <see langword="null"/>.</summary>
+    /// <param name="level">The level, a member of the enum stated for the message levels, or <see langword="null"/> for none.</param>
+    /// <exception cref="ArgumentException"><paramref name="level"/> is not a configured message level.</exception>
+    string GetMessageLevelName(Enum? level);
 
     /// <summary>Creates a frame packet carrying <paramref name="context"/> through the host's frame packet handler. Only called while <see cref="PacketType"/> is set.</summary>
     object CreateFramePacket(FramePacketCreateContext context);
@@ -432,7 +447,7 @@ internal interface IEngineController
     /// </summary>
     /// <param name="userName">The user name to check.</param>
     string? GetCertificateProblem(string userName);    /// <summary>
-                                                       /// Returns what is known about <paramref name="userName"/>: what the network configuration file states (see <see cref="IEngineBuilder{TFrame, TPacket, TPriority, TLevel}.CommandLineOverrides"/>), or a user with just
+                                                       /// Returns what is known about <paramref name="userName"/>: what the network configuration file states (see <see cref="IEngineBuilder{TFrame, TPacket, TPriority, TLevel, TAspect}.CommandLineOverrides"/>), or a user with just
                                                        /// that name when it states none. For the current user this is where <see cref="Role"/>, <see cref="PeerPort"/>, <see cref="InterfacePort"/>,
                                                        /// <see cref="OutgoingPoints"/> and <see cref="Servers"/> come from.
                                                        /// </summary>
@@ -635,7 +650,7 @@ internal class EngineController(EngineBuilder builder, ICurrentUserProvider curr
     }
     /// <inheritdoc />
     public virtual DraftDefaults DraftDefaults
-        => draftHandler.Value is { } handler ? new DraftDefaults(DraftTagRules.Filter(handler.DefaultTag ?? string.Empty), handler.DefaultPriority, handler.DefaultSecurityLevel) : DraftDefaults.None;
+        => draftHandler.Value is { } handler ? new DraftDefaults(DraftTagRules.Filter(handler.DefaultTag ?? string.Empty), handler.DefaultPriority, handler.DefaultMessageLevel, handler.DefaultMessageAspect) : DraftDefaults.None;
 
     /// <inheritdoc />
     public virtual TagRules DraftTagRules => draftHandler.Value?.TagRules ?? TagRules.Unrestricted;
@@ -660,7 +675,20 @@ internal class EngineController(EngineBuilder builder, ICurrentUserProvider curr
     /// <inheritdoc />
     public virtual string UserPluralLabel => PluralOf(builder.DisplayHandlerInstance?.UserPluralLabel, builder.DisplayHandlerInstance?.UserLabel, "Users");
     /// <inheritdoc />
-    public virtual string SecurityLevelLabel => builder.DisplayHandlerInstance?.SecurityLevelLabel.OrNull() ?? "Security Level";
+    public virtual string MessageAspectLabel => builder.DisplayHandlerInstance?.MessageAspectLabel.OrNull() ?? "Message Aspect";
+    /// <inheritdoc />
+    public virtual string MessageAspectPluralLabel => PluralOf(builder.DisplayHandlerInstance?.MessageAspectPluralLabel, builder.DisplayHandlerInstance?.MessageAspectLabel, "Message Aspects");
+    /// <inheritdoc />
+    public virtual IReadOnlyList<MessageAspect> MessageAspects => builder.MessageAspectValues;
+    /// <inheritdoc />
+    public virtual string GetMessageAspect(object value) => IsMessage(value) ? messageHandler.Value.GetMessageAspect(value) : string.Empty;
+    /// <inheritdoc />
+    public virtual string GetMessageAspectName(Enum? aspect)
+        => aspect is null ? string.Empty
+        : MessageAspects.FirstOrDefault(candidate => aspect.Equals(candidate.Key))?.Name
+            ?? throw new ArgumentException($"A message aspect of {aspect.GetType().Name}.{aspect} is used, which is not one of the configured message aspects: {string.Join(", ", MessageAspects.Select(candidate => candidate.Name))}", nameof(aspect));
+    /// <inheritdoc />
+    public virtual string MessageLevelLabel => builder.DisplayHandlerInstance?.MessageLevelLabel.OrNull() ?? "Message Level";
     /// <inheritdoc />
     public virtual string Rename(string label)
         => (builder.DisplayHandlerInstance is { } display ? label switch
@@ -683,7 +711,7 @@ internal class EngineController(EngineBuilder builder, ICurrentUserProvider curr
     /// <inheritdoc />
     public virtual string PriorityPluralLabel => PluralOf(builder.DisplayHandlerInstance?.PriorityPluralLabel, builder.DisplayHandlerInstance?.PriorityLabel, "Priorities");
     /// <inheritdoc />
-    public virtual string SecurityLevelPluralLabel => PluralOf(builder.DisplayHandlerInstance?.SecurityLevelPluralLabel, builder.DisplayHandlerInstance?.SecurityLevelLabel, "Security Levels");
+    public virtual string MessageLevelPluralLabel => PluralOf(builder.DisplayHandlerInstance?.MessageLevelPluralLabel, builder.DisplayHandlerInstance?.MessageLevelLabel, "Message Levels");
     /// <inheritdoc />
     public virtual string TagLabel => builder.DisplayHandlerInstance?.TagLabel.OrNull() ?? "Tag";
     /// <inheritdoc />
@@ -692,13 +720,13 @@ internal class EngineController(EngineBuilder builder, ICurrentUserProvider curr
     public virtual IReadOnlyList<AddressTypeOption> AddressTypes
         => [.. addressTypeOrder.Select(type => new AddressTypeOption { Type = type, Label = builder.AddressTypeLabels.TryGetValue(type, out string? label) ? label : type.ToString() })];
     /// <inheritdoc />
-    public virtual IReadOnlyList<SecurityLevel> SecurityLevels => builder.SecurityLevelValues;
+    public virtual IReadOnlyList<MessageLevel> MessageLevels => builder.MessageLevelValues;
 
     /// <inheritdoc />
-    public virtual string GetUserSecurityLevel(string userName)
+    public virtual string GetUserMessageLevel(string userName)
     {
-        if (GetUserInfo(userName).SecurityLevel is { } stated) { return stated; }
-        return builder.SecurityLevelValues.Count > 0 ? builder.SecurityLevelValues[0].Name : string.Empty;
+        if (GetUserInfo(userName).MessageLevel is { } stated) { return stated; }
+        return builder.MessageLevelValues.Count > 0 ? builder.MessageLevelValues[0].Name : string.Empty;
     }
 
     /// <inheritdoc />
@@ -909,9 +937,9 @@ internal class EngineController(EngineBuilder builder, ICurrentUserProvider curr
     /// <inheritdoc />
     public virtual Enum ResolvePriority(Enum? priority) => (Priorities.FirstOrDefault(level => priority is not null && priority.Equals(level.Key)) ?? Priorities[0]).Key;
     /// <inheritdoc />
-    public virtual bool ComputeIsAlert(string body, Enum? priority, string tag, string securityLevel, IReadOnlyList<AddressRequest> addresses)
+    public virtual bool ComputeIsAlert(string body, Enum? priority, string tag, string messageLevel, IReadOnlyList<AddressRequest> addresses)
     {
-        object message = CreateMessage(new MessageContent { SentAt = DateTime.UtcNow, Body = body, Priority = RequirePriority(priority), Tag = tag, SecurityLevel = securityLevel });
+        object message = CreateMessage(new MessageContent { SentAt = DateTime.UtcNow, Body = body, Priority = RequirePriority(priority), Tag = tag, MessageLevel = messageLevel });
         SetAddresses(message, [.. addresses.Select(a => new MessageAddress { UserName = a.UserName, Type = a.Type.ParseAddressType(), Information = a.Information })]);
         return messageHandler.Value.IsAlert(message);
     }
@@ -930,8 +958,8 @@ internal class EngineController(EngineBuilder builder, ICurrentUserProvider curr
         Enum priority = messageHandler.Value.GetPriority(message);
         if (!Priorities.Any(level => priority.Equals(level.Key))) { return $"has the priority {priority.GetType().Name}.{priority}, which is not a configured priority"; }
 
-        return messageHandler.Value.GetSecurityLevelKey(message) is { } security && !SecurityLevels.Any(level => security.Equals(level.Key))
-            ? $"has the security level {security.GetType().Name}.{security}, which is not a configured security level"
+        return messageHandler.Value.GetMessageLevelKey(message) is { } security && !MessageLevels.Any(level => security.Equals(level.Key))
+            ? $"has the message level {security.GetType().Name}.{security}, which is not a configured message level"
             : null;
     }
 
@@ -965,16 +993,16 @@ internal class EngineController(EngineBuilder builder, ICurrentUserProvider curr
     /// <inheritdoc />
     public virtual string GetTag(object value) => messageHandler.Value.GetTag(value);
     /// <inheritdoc />
-    public virtual Enum? GetSecurityLevelKey(object value) => IsMessage(value) ? messageHandler.Value.GetSecurityLevelKey(value) : null;
+    public virtual Enum? GetMessageLevelKey(object value) => IsMessage(value) ? messageHandler.Value.GetMessageLevelKey(value) : null;
 
     /// <inheritdoc />
-    public virtual string GetSecurityLevelName(Enum? level)
+    public virtual string GetMessageLevelName(Enum? level)
         => level is null ? string.Empty
-        : SecurityLevels.FirstOrDefault(candidate => level.Equals(candidate.Key))?.Name
-            ?? throw new ArgumentException($"A security level of {level.GetType().Name}.{level} is used, which is not one of the configured security levels: {string.Join(", ", SecurityLevels.Select(candidate => candidate.Name))}", nameof(level));
+        : MessageLevels.FirstOrDefault(candidate => level.Equals(candidate.Key))?.Name
+            ?? throw new ArgumentException($"A message level of {level.GetType().Name}.{level} is used, which is not one of the configured message levels: {string.Join(", ", MessageLevels.Select(candidate => candidate.Name))}", nameof(level));
 
     /// <inheritdoc />
-    public virtual string GetSecurityLevel(object value) => IsMessage(value) ? messageHandler.Value.GetSecurityLevel(value) : string.Empty;
+    public virtual string GetMessageLevel(object value) => IsMessage(value) ? messageHandler.Value.GetMessageLevel(value) : string.Empty;
     /// <inheritdoc />
     public virtual bool IsReadReceipt(object value) => readReceiptHandler.Value.IsValid(value);
     /// <inheritdoc />
@@ -1074,18 +1102,18 @@ internal class EngineController(EngineBuilder builder, ICurrentUserProvider curr
 /// <summary>Extension members for <see cref="IEngineController"/>.</summary>
 internal static class EngineControllerExtensions
 {
-    private static readonly Regex conceptPattern = new(@"\b(Security Levels|Security Level|Priorities|Priority|Alerts|Alert|Users|User|Tags|Tag|Inbox|Outbox|Drafts|Draft|Notes|Note|Activity|Messages|Message)\b", RegexOptions.IgnoreCase | RegexOptions.Compiled);
+    private static readonly Regex conceptPattern = new(@"\b(Message Aspects|Message Aspect|Message Levels|Message Level|Priorities|Priority|Alerts|Alert|Users|User|Tags|Tag|Inbox|Outbox|Drafts|Draft|Notes|Note|Activity|Messages|Message)\b", RegexOptions.IgnoreCase | RegexOptions.Compiled);
 
     extension(IEngineController engineController)
     {
-        /// <summary>Returns why <paramref name="frameValue"/> is an invalid message, which is dropped with an error logged, or <see langword="null"/> when it is valid or not a message. A message always has an identifier before it is sent, and only carries priorities and security levels the configuration defines.</summary>
+        /// <summary>Returns why <paramref name="frameValue"/> is an invalid message, which is dropped with an error logged, or <see langword="null"/> when it is valid or not a message. A message always has an identifier before it is sent, and only carries priorities and message levels the configuration defines.</summary>
         /// <param name="frameValue">An instance of <see cref="IEngineController.FrameType"/>.</param>
         public string? GetInvalidMessageReason(object frameValue)
             => !engineController.IsMessage(frameValue) ? null
             : string.IsNullOrEmpty(engineController.GetMessageId(frameValue)) ? "has no identifier"
             : engineController.GetUnconfiguredLevelReason(frameValue);
 
-        /// <summary>Returns <paramref name="text"/>, a fixed piece of the user interface written with the engine's own names for concepts, with each concept name replaced by what the host calls it: the root folders, drafts, notes, messages and activity through the display handler's members for them, and alerts, tags, priorities and security levels through their own labels. A replacement keeps the case style of what it replaces (all capitals, all lowercase, or as written). Text with none of them, or with no host names for them, comes back as it is.</summary>
+        /// <summary>Returns <paramref name="text"/>, a fixed piece of the user interface written with the engine's own names for concepts, with each concept name replaced by what the host calls it: the root folders, drafts, notes, messages and activity through the display handler's members for them, and alerts, tags, priorities and message levels through their own labels. A replacement keeps the case style of what it replaces (all capitals, all lowercase, or as written). Text with none of them, or with no host names for them, comes back as it is.</summary>
         /// <param name="text">The text, written with the engine's own names.</param>
         public string Display(string text)
         {
@@ -1093,8 +1121,10 @@ internal static class EngineControllerExtensions
 
             Dictionary<string, string?> replacements = new(StringComparer.OrdinalIgnoreCase)
             {
-                ["Security Levels"] = engineController.SecurityLevelPluralLabel,
-                ["Security Level"] = engineController.SecurityLevelLabel,
+                ["Message Aspects"] = engineController.MessageAspectPluralLabel,
+                ["Message Aspect"] = engineController.MessageAspectLabel,
+                ["Message Levels"] = engineController.MessageLevelPluralLabel,
+                ["Message Level"] = engineController.MessageLevelLabel,
                 ["Priorities"] = engineController.PriorityPluralLabel,
                 ["Priority"] = engineController.PriorityLabel,
                 ["Users"] = engineController.UserPluralLabel,
@@ -1140,7 +1170,7 @@ internal static class EngineControllerExtensions
             IsAlert = engineController.GetIsAlert(payload),
             Priority = engineController.GetMessagePriority(payload),
             Tag = engineController.GetTag(payload),
-            SecurityLevel = engineController.GetSecurityLevelKey(payload)
+            MessageLevel = engineController.GetMessageLevelKey(payload)
         };
     }
 }

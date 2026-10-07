@@ -1,6 +1,6 @@
 namespace BlueHeighliner.Comlink.Tests;
 
-/// <summary>The security levels the test configuration states, lowest first, covering the names tests send messages at.</summary>
+/// <summary>The message levels the test configuration states, lowest first, covering the names tests send messages at.</summary>
 public enum TestLevel
 {
     /// <summary>The lowest level.</summary>

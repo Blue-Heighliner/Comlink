@@ -87,7 +87,7 @@
           </Grid>
         </Button>
 
-        <!-- Search, date range, security level, priority and alert-only (shown when the section above is
+        <!-- Search, date range, message level, priority and alert-only (shown when the section above is
              expanded). Each control gets its own full-width row rather than sharing one, since a
              DatePicker/TimePicker's segmented layout does not shrink to fit and gets cut off when squeezed into
              a narrower column. -->
@@ -129,10 +129,10 @@
                      Height="26" />
           </StackPanel>
 
-          <StackPanel Spacing="3" IsVisible="{Binding ShowSecurityLevelFilter}">
-            <TextBlock Text="{vm:Display 'SECURITY LEVEL'}" FontSize="10" Foreground="#5A5A5A" FontWeight="SemiBold" LetterSpacing="1" />
-            <ComboBox ItemsSource="{Binding AvailableSecurityLevelFilters}"
-                      SelectedItem="{Binding SelectedSecurityLevelFilter}"
+          <StackPanel Spacing="3" IsVisible="{Binding ShowMessageLevelFilter}">
+            <TextBlock Text="{vm:Display 'MESSAGE LEVEL'}" FontSize="10" Foreground="#5A5A5A" FontWeight="SemiBold" LetterSpacing="1" />
+            <ComboBox ItemsSource="{Binding AvailableMessageLevelFilters}"
+                      SelectedItem="{Binding SelectedMessageLevelFilter}"
                       Background="#3C3C3C"
                       BorderThickness="0"
                       FontSize="12"
@@ -213,8 +213,8 @@
             <Border DockPanel.Dock="Top"
                     Height="3"
                     Margin="0,0,0,4"
-                    Background="{Binding SecurityLevelColorHex, Converter={x:Static vm:ColorHexToBrushConverter.Instance}}"
-                    IsVisible="{Binding SecurityLevelColorHex, Converter={x:Static StringConverters.IsNotNullOrEmpty}}" />
+                    Background="{Binding MessageLevelColorHex, Converter={x:Static vm:ColorHexToBrushConverter.Instance}}"
+                    IsVisible="{Binding MessageLevelColorHex, Converter={x:Static StringConverters.IsNotNullOrEmpty}}" />
             <Grid ColumnDefinitions="*,Auto" Background="Transparent">
               <Grid.ContextMenu>
                 <ContextMenu>

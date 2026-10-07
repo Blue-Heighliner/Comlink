@@ -18,7 +18,7 @@ public sealed class ContentAreaViewModelTests
         public Task<List<string>> GetUserNames(CancellationToken cancellation = default) => Task.FromResult(new List<string>());
         public Task<List<string>> GetConnectedUsers(CancellationToken cancellation = default) => Task.FromResult(new List<string>());
         public Task<UserInfo?> InstallUser(string userCode, CancellationToken cancellation = default) => Task.FromResult<UserInfo?>(null);
-        public Task<SendMessageResult?> SendMessage(string body, List<AddressRequest> addresses, Enum? priority = null, string tag = "", Enum? securityLevel = null, CancellationToken cancellation = default) => Task.FromResult<SendMessageResult?>(null);
+        public Task<SendMessageResult?> SendMessage(string body, List<AddressRequest> addresses, Enum? priority = null, string tag = "", Enum? messageLevel = null, Enum? messageAspect = null, CancellationToken cancellation = default) => Task.FromResult<SendMessageResult?>(null);
 
         public Task<bool> MarkMessageRead(string messageId, CancellationToken cancellation = default)
         {

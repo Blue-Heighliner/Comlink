@@ -360,7 +360,7 @@ public sealed class MessageRoutingServiceTests
         Assert.Equal(("MSG1", "ALPHA", DestinationStatus.Received), Assert.Single(changes));
     }
 
-    /// <summary>RouteFrame reads its addresses and security level from the message object itself, via IEngineController, rather than from a SendMessagePayload.</summary>
+    /// <summary>RouteFrame reads its addresses and message level from the message object itself, via IEngineController, rather than from a SendMessagePayload.</summary>
     [Fact]
     public async Task RouteMessage_ReadsAddressesFromMessageItself()
     {
@@ -409,17 +409,17 @@ public sealed class MessageRoutingServiceTests
         Assert.Equal(messageId, fake.Sent[0].Message.MessageId);
     }
 
-    /// <summary>RouteFrame applies the same security-level filtering as Route, reading the blocking level from the message itself.</summary>
+    /// <summary>RouteFrame applies the same message-level filtering as Route, reading the blocking level from the message itself.</summary>
     [Fact]
-    public async Task RouteMessage_BlocksDestinationsBelowTheMessagesSecurityLevel()
+    public async Task RouteMessage_BlocksDestinationsBelowTheMessagesMessageLevel()
     {
         Mock<TestEngineController> controller = new() { CallBase = true };
-        controller.Setup(c => c.SecurityLevels).Returns((IReadOnlyList<SecurityLevel>)[new SecurityLevel { Name = "LOW", Color = "#000" }, new SecurityLevel { Name = "HIGH", Color = "#000" }]);
-        controller.Setup(c => c.GetUserSecurityLevel("Cleared")).Returns("HIGH");
-        controller.Setup(c => c.GetUserSecurityLevel("Blocked")).Returns("LOW");
+        controller.Setup(c => c.MessageLevels).Returns((IReadOnlyList<MessageLevel>)[new MessageLevel { Name = "LOW", Color = "#000" }, new MessageLevel { Name = "HIGH", Color = "#000" }]);
+        controller.Setup(c => c.GetUserMessageLevel("Cleared")).Returns("HIGH");
+        controller.Setup(c => c.GetUserMessageLevel("Blocked")).Returns("LOW");
         FakePeerService fake = new();
         MessageRoutingService service = new(fake, controller.Object, TestIdGenerator.Instance, loggerFactory);
-        TestFrame message = new() { Body = "Body", SecurityLevel = "HIGH" };
+        TestFrame message = new() { Body = "Body", MessageLevel = "HIGH" };
         controller.Object.SetAddresses(message, [new MessageAddress { UserName = "Cleared", Type = AddressType.To }, new MessageAddress { UserName = "Blocked", Type = AddressType.To }]);
 
         (_, IReadOnlyList<UserDeliveryResult> results) = await service.RouteFrame("SourceUser", message, default);

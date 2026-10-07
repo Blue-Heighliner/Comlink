@@ -50,7 +50,7 @@ internal sealed partial class ContentAreaViewModel : ObservableObject, IContentA
     /// <param name="notes">Repository for loading note entries.</param>
     /// <param name="activityLogs">Repository for loading activity log entries.</param>
     /// <param name="loggerFactory">Factory for creating named loggers.</param>
-    /// <param name="currentUserProvider">Tracks the current user's name, read to resolve their own security level for a newly opened draft.</param>
+    /// <param name="currentUserProvider">Tracks the current user's name, read to resolve their own message level for a newly opened draft.</param>
     /// <param name="stagedSend">The staged send ViewModel; its queue is discarded whenever the content area navigates away from it.</param>
     /// <param name="bodyDocumentFactory">Factory for the body document of a draft opened from the list; must match the one used for new drafts, or the draft editor cannot bind it. Defaults to plain string documents when <see langword="null"/>.</param>
     public ContentAreaViewModel(
@@ -275,8 +275,8 @@ internal sealed partial class ContentAreaViewModel : ObservableObject, IContentA
         DraftEntity? entity = await drafts.Get(oid);
         if (entity is null) { return null; }
         List<string> userNames = await connection.GetUserNames();
-        string currentSecurityLevel = engineController.GetUserSecurityLevel(currentUserProvider.UserName ?? string.Empty);
-        DraftViewModel vm = new(entity, entryService, connection, userNames, loggerFactory, engineController, bodyDocumentFactory?.Create(), currentSecurityLevel: currentSecurityLevel);
+        string currentMessageLevel = engineController.GetUserMessageLevel(currentUserProvider.UserName ?? string.Empty);
+        DraftViewModel vm = new(entity, entryService, connection, userNames, loggerFactory, engineController, bodyDocumentFactory?.Create(), currentMessageLevel: currentMessageLevel);
         vm.DraftSent += async (IDraftViewModel _, MessageEntity msg) =>
         {
             ShowEntry(new MessageViewModel(msg, engineController));

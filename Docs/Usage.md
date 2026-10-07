@@ -17,12 +17,12 @@ public sealed class MyFrame
     public bool IsMessage { get; set; }
     public int Priority { get; set; }
     public string Tag { get; set; } = "";
-    public int? SecurityLevel { get; set; }
+    public int? MessageLevel { get; set; }
 }
 
 public sealed class MyEngineConfiguration : IEngineConfiguration
 {
-    public void Configure(IEngineBuilder engine) => engine.Types<MyFrame, MyPriority, MySecurityLevel>()
+    public void Configure(IEngineBuilder engine) => engine.Types<MyFrame, MyPriority, MyMessageLevel, MyMessageAspect>()
         .Priorities().Priority(MyPriority.Normal)
         .Frames()
             .Message<MyMessageHandler>()
@@ -37,16 +37,16 @@ await Engine.Start<MyEngineConfiguration>(args);
 A common field whose type already matches is mapped by naming the property (`m => m.Id`), which builds the setter for you; when the type differs (a host's own recipient shape for the addresses, or a packet's data) the getter and setter are given explicitly, as `Addresses` is above. Each kind of frame is handled by a class implementing the matching handler interface; for example:
 
 ```csharp
-public sealed class MyMessageHandler : IMessageHandler<MyFrame, MyPriority, MySecurityLevel>
+public sealed class MyMessageHandler : IMessageHandler<MyFrame, MyPriority, MyMessageLevel, MyMessageAspect>
 {
     public bool IsValid(MyFrame frame) => frame.IsMessage;
-    public MyFrame Create(MessageCreateContext<MyPriority, MySecurityLevel> context) => new() { IsMessage = true, SentAt = context.SentAt, Body = context.Body, Priority = (int)context.Priority, Tag = context.Tag, SecurityLevel = (int?)context.SecurityLevel };
+    public MyFrame Create(MessageCreateContext<MyPriority, MyMessageLevel, MyMessageAspect> context) => new() { IsMessage = true, SentAt = context.SentAt, Body = context.Body, Priority = (int)context.Priority, Tag = context.Tag, MessageLevel = (int?)context.MessageLevel };
     public DateTime GetSentAt(MyFrame frame) => frame.SentAt;
     public string GetBody(MyFrame frame) => frame.Body;
     public bool IsAlert(MyFrame frame) => frame.Tag == "ALERT";
     public MyPriority GetPriority(MyFrame frame) => (MyPriority)frame.Priority;
     public string GetTag(MyFrame frame) => frame.Tag;
-    public MySecurityLevel? GetSecurityLevel(MyFrame frame) => (MySecurityLevel?)frame.SecurityLevel;
+    public MyMessageLevel? GetMessageLevel(MyFrame frame) => (MyMessageLevel?)frame.MessageLevel;
 }
 ```
 
@@ -59,7 +59,7 @@ unless stated) and no window icon (the display handler's `Icon` is the operating
 A host only states what it needs distinct behavior for; every other setting keeps the engine's default.
 
 ```csharp
-public void Configure(IEngineBuilder engine) => engine.Types<MyFrame, MyPriority, MySecurityLevel>()
+public void Configure(IEngineBuilder engine) => engine.Types<MyFrame, MyPriority, MyMessageLevel, MyMessageAspect>()
     .Display<MyDisplayHandler>()
     .Frames() /* ...required handlers from above... */;
 ```
@@ -67,13 +67,13 @@ public void Configure(IEngineBuilder engine) => engine.Types<MyFrame, MyPriority
 ## The network configuration file
 
 A host describes its whole network in one JSON file (see [Config.md](Components/Config.md) for the schema): every user
-with their role, listen ports, outgoing connections, security level and node settings, plus groups and the trusted
+with their role, listen ports, outgoing connections, message level and node settings, plus groups and the trusted
 certificate authority. The engine always reads `Config.json` from the working directory; nothing about a user is stated in
 code, and the user installs by name on the install screen. Stating `CommandLineOverrides(true)` additionally
 lets `--config` name another file and `--user` name the user, who is checked like an installed one.
 
 ```csharp
-public void Configure(IEngineBuilder engine) => engine.Types<MyFrame, MyPriority, MySecurityLevel>()
+public void Configure(IEngineBuilder engine) => engine.Types<MyFrame, MyPriority, MyMessageLevel, MyMessageAspect>()
     .Frames() /* ...required handlers... */
     .CommandLineOverrides(true);
 ```

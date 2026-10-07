@@ -1,13 +1,14 @@
 namespace BlueHeighliner.Comlink;
 
-/// <summary>Implements <see cref="IEngineBuilder{TFrame, TPacket, TPriority, TLevel}"/> and every sub-configuration chained off it (frames, packets, priorities and security levels), recording what the host states in the <see cref="EngineBuilder"/> that created it. They are one object, so a sub-configuration continues straight into the settings of the engine builder.</summary>
-internal sealed class EngineBuilder<TFrame, TPacket, TPriority, TLevel> : IEngineBuilder<TFrame, TPacket, TPriority, TLevel>, IFrameBuilder<TFrame, TPacket, TPriority, TLevel>, IPacketBuilder<TFrame, TPacket, TPriority, TLevel>, IPriorityLevelBuilder<TFrame, TPacket, TPriority, TLevel>, ISecurityLevelBuilder<TFrame, TPacket, TPriority, TLevel>, IAddressTypeBuilder<TFrame, TPacket, TPriority, TLevel>, IConnectionsBuilder<TFrame, TPacket, TPriority, TLevel>, IExportsBuilder<TFrame, TPacket, TPriority, TLevel>, IImportsBuilder<TFrame, TPacket, TPriority, TLevel> where TFrame : class, new() where TPacket : class, new() where TPriority : struct, Enum where TLevel : struct, Enum
+/// <summary>Implements <see cref="IEngineBuilder{TFrame, TPacket, TPriority, TLevel, TAspect}"/> and every sub-configuration chained off it (frames, packets, priorities and message levels), recording what the host states in the <see cref="EngineBuilder"/> that created it. They are one object, so a sub-configuration continues straight into the settings of the engine builder.</summary>
+internal sealed class EngineBuilder<TFrame, TPacket, TPriority, TLevel, TAspect> : IEngineBuilder<TFrame, TPacket, TPriority, TLevel, TAspect>, IFrameBuilder<TFrame, TPacket, TPriority, TLevel, TAspect>, IPacketBuilder<TFrame, TPacket, TPriority, TLevel, TAspect>, IPriorityLevelBuilder<TFrame, TPacket, TPriority, TLevel, TAspect>, IMessageLevelBuilder<TFrame, TPacket, TPriority, TLevel, TAspect>, IMessageAspectBuilder<TFrame, TPacket, TPriority, TLevel, TAspect>, IAddressTypeBuilder<TFrame, TPacket, TPriority, TLevel, TAspect>, IConnectionsBuilder<TFrame, TPacket, TPriority, TLevel, TAspect>, IExportsBuilder<TFrame, TPacket, TPriority, TLevel, TAspect>, IImportsBuilder<TFrame, TPacket, TPriority, TLevel, TAspect> where TFrame : class, new() where TPacket : class, new() where TPriority : struct, Enum where TLevel : struct, Enum where TAspect : struct, Enum
 {
     private readonly EngineBuilder state;
     private readonly PriorityBuilder<TPriority> priorities = new();
-    private readonly SecurityLevelBuilder<TLevel> levels = new();
+    private readonly MessageLevelBuilder<TLevel> levels = new();
+    private readonly MessageAspectBuilder<TAspect> aspects = new();
     private AddressType currentAddressType;
-    private FrameBuilder<TFrame, TPriority, TLevel>? frames;
+    private FrameBuilder<TFrame, TPriority, TLevel, TAspect>? frames;
     private PacketBuilder<TPacket, TPriority>? packets;
 
     /// <summary>Creates the builder over <paramref name="state"/>, which completes it when the configuration has finished.</summary>
@@ -19,14 +20,14 @@ internal sealed class EngineBuilder<TFrame, TPacket, TPriority, TLevel> : IEngin
     }
 
     /// <inheritdoc />
-    public IFrameBuilder<TFrame, TPacket, TPriority, TLevel> Frames()
+    public IFrameBuilder<TFrame, TPacket, TPriority, TLevel, TAspect> Frames()
     {
         frames ??= new(state);
         return this;
     }
 
     /// <inheritdoc />
-    public IPacketBuilder<TFrame, TPacket, TPriority, TLevel> Packets()
+    public IPacketBuilder<TFrame, TPacket, TPriority, TLevel, TAspect> Packets()
     {
         if (typeof(TPacket) == typeof(NoPacket)) { throw new InvalidOperationException("Packets cannot be stated for a configuration whose types state no packet type."); }
 
@@ -35,283 +36,300 @@ internal sealed class EngineBuilder<TFrame, TPacket, TPriority, TLevel> : IEngin
     }
 
     /// <inheritdoc />
-    public ISecurityLevelsBuilder<TFrame, TPacket, TPriority, TLevel> SecurityLevels() => this;
+    public IMessageLevelsBuilder<TFrame, TPacket, TPriority, TLevel, TAspect> MessageLevels() => this;
 
     /// <inheritdoc />
-    public IPriorityBuilder<TFrame, TPacket, TPriority, TLevel> Priorities() => this;
+    public IMessageAspectsBuilder<TFrame, TPacket, TPriority, TLevel, TAspect> MessageAspects() => this;
 
     /// <inheritdoc />
-    public IEngineBuilder<TFrame, TPacket, TPriority, TLevel> Display<THandler>() where THandler : IDisplayHandler
+    public IPriorityBuilder<TFrame, TPacket, TPriority, TLevel, TAspect> Priorities() => this;
+
+    /// <inheritdoc />
+    public IEngineBuilder<TFrame, TPacket, TPriority, TLevel, TAspect> Display<THandler>() where THandler : IDisplayHandler
     {
         state.DisplayHandler = ServiceRegistration<IDisplayHandler>.Of(typeof(THandler), instance => (IDisplayHandler)instance);
         return this;
     }
 
     /// <inheritdoc />
-    public IEngineBuilder<TFrame, TPacket, TPriority, TLevel> Alarms<THandler>() where THandler : IAlarmHandler
+    public IEngineBuilder<TFrame, TPacket, TPriority, TLevel, TAspect> Alarms<THandler>() where THandler : IAlarmHandler
     {
         state.AlarmHandler = ServiceRegistration<IAlarmHandler>.Of(typeof(THandler), instance => (IAlarmHandler)instance);
         return this;
     }
 
     /// <inheritdoc />
-    public IEngineBuilder<TFrame, TPacket, TPriority, TLevel> Drafts<THandler>() where THandler : IDraftHandler<TPriority, TLevel>
+    public IEngineBuilder<TFrame, TPacket, TPriority, TLevel, TAspect> Drafts<THandler>() where THandler : IDraftHandler<TPriority, TLevel, TAspect>
     {
-        state.DraftHandler = ServiceRegistration<IDraftFrameHandler>.Of(typeof(THandler), instance => new DraftFrameHandler<TPriority, TLevel>((IDraftHandler<TPriority, TLevel>)instance, state.SecurityLevelValues));
+        state.DraftHandler = ServiceRegistration<IDraftFrameHandler>.Of(typeof(THandler), instance => new DraftFrameHandler<TPriority, TLevel, TAspect>((IDraftHandler<TPriority, TLevel, TAspect>)instance, state.MessageLevelValues, state.MessageAspectValues));
         return this;
     }
 
     /// <inheritdoc />
-    public IEngineBuilder<TFrame, TPacket, TPriority, TLevel> Logs<THandler>() where THandler : ILogHandler
+    public IEngineBuilder<TFrame, TPacket, TPriority, TLevel, TAspect> Logs<THandler>() where THandler : ILogHandler
     {
         state.LogHandler = ServiceRegistration<ILogHandler>.Of(typeof(THandler), instance => (ILogHandler)instance);
         return this;
     }
 
     /// <inheritdoc />
-    public IEngineBuilder<TFrame, TPacket, TPriority, TLevel> Prints<THandler>() where THandler : IPrintHandler<TFrame>
+    public IEngineBuilder<TFrame, TPacket, TPriority, TLevel, TAspect> Prints<THandler>() where THandler : IPrintHandler<TFrame>
     {
         state.PrintHandler = ServiceRegistration<IPrintFrameHandler>.Of(typeof(THandler), instance => new PrintFrameHandler<TFrame>((IPrintHandler<TFrame>)instance));
         return this;
     }
 
     /// <inheritdoc />
-    public IEngineBuilder<TFrame, TPacket, TPriority, TLevel> Deletes<THandler>() where THandler : IDeleteHandler
+    public IEngineBuilder<TFrame, TPacket, TPriority, TLevel, TAspect> Deletes<THandler>() where THandler : IDeleteHandler
     {
         state.DeleteHandler = ServiceRegistration<IDeleteHandler>.Of(typeof(THandler), instance => (IDeleteHandler)instance);
         return this;
     }
 
     /// <inheritdoc />
-    public IEngineBuilder<TFrame, TPacket, TPriority, TLevel> CommandLineOverrides(bool allowed)
+    public IEngineBuilder<TFrame, TPacket, TPriority, TLevel, TAspect> CommandLineOverrides(bool allowed)
     {
         state.AreCommandLineOverridesAllowed = allowed;
         return this;
     }
 
     /// <inheritdoc />
-    public IEngineBuilder<TFrame, TPacket, TPriority, TLevel> ExternalSystem(IExternalSystem system)
+    public IEngineBuilder<TFrame, TPacket, TPriority, TLevel, TAspect> ExternalSystem(IExternalSystem system)
     {
         if (!state.ExternalSystems.Contains(system)) { state.ExternalSystems.Add(system); }
         return this;
     }
 
     /// <inheritdoc />
-    public IExportsBuilder<TFrame, TPacket, TPriority, TLevel> Exports() => this;
+    public IExportsBuilder<TFrame, TPacket, TPriority, TLevel, TAspect> Exports() => this;
 
     /// <inheritdoc />
-    public IImportsBuilder<TFrame, TPacket, TPriority, TLevel> Imports() => this;
+    public IImportsBuilder<TFrame, TPacket, TPriority, TLevel, TAspect> Imports() => this;
 
     /// <inheritdoc />
-    IExportsBuilder<TFrame, TPacket, TPriority, TLevel> IExportsBuilder<TFrame, TPacket, TPriority, TLevel>.Format<TFormat>()
+    IExportsBuilder<TFrame, TPacket, TPriority, TLevel, TAspect> IExportsBuilder<TFrame, TPacket, TPriority, TLevel, TAspect>.Format<TFormat>()
     {
         state.ExportFormats.Add(ServiceRegistration<IExportFormat>.Of(typeof(TFormat), instance => (IExportFormat)instance));
         return this;
     }
 
     /// <inheritdoc />
-    IImportsBuilder<TFrame, TPacket, TPriority, TLevel> IImportsBuilder<TFrame, TPacket, TPriority, TLevel>.Format<TFormat>()
+    IImportsBuilder<TFrame, TPacket, TPriority, TLevel, TAspect> IImportsBuilder<TFrame, TPacket, TPriority, TLevel, TAspect>.Format<TFormat>()
     {
         state.ImportFormats.Add(ServiceRegistration<IImportFormat>.Of(typeof(TFormat), instance => (IImportFormat)instance));
         return this;
     }
 
-    /// <inheritdoc cref="IFrameBuilder{TFrame, TPacket, TPriority, TLevel}.Message{THandler}"/>
-    public IFrameBuilder<TFrame, TPacket, TPriority, TLevel> Message<THandler>() where THandler : IMessageHandler<TFrame, TPriority, TLevel>
+    /// <inheritdoc cref="IFrameBuilder{TFrame, TPacket, TPriority, TLevel, TAspect}.Message{THandler}"/>
+    public IFrameBuilder<TFrame, TPacket, TPriority, TLevel, TAspect> Message<THandler>() where THandler : IMessageHandler<TFrame, TPriority, TLevel, TAspect>
     {
         RequireFrames().Message<THandler>();
         return this;
     }
 
-    /// <inheritdoc cref="IFrameBuilder{TFrame, TPacket, TPriority, TLevel}.AutoForward{TController}"/>
-    public IFrameBuilder<TFrame, TPacket, TPriority, TLevel> AutoForward<TController>() where TController : IAutoForwardController<TFrame>
+    /// <inheritdoc cref="IFrameBuilder{TFrame, TPacket, TPriority, TLevel, TAspect}.AutoForward{TController}"/>
+    public IFrameBuilder<TFrame, TPacket, TPriority, TLevel, TAspect> AutoForward<TController>() where TController : IAutoForwardController<TFrame>
     {
         RequireFrames().AutoForward<TController>();
         return this;
     }
 
-    /// <inheritdoc cref="IFrameBuilder{TFrame, TPacket, TPriority, TLevel}.Retrieval{THandler}"/>
-    public IFrameBuilder<TFrame, TPacket, TPriority, TLevel> Retrieval<THandler>() where THandler : IRetrievalHandler<TFrame, TPriority>
+    /// <inheritdoc cref="IFrameBuilder{TFrame, TPacket, TPriority, TLevel, TAspect}.Retrieval{THandler}"/>
+    public IFrameBuilder<TFrame, TPacket, TPriority, TLevel, TAspect> Retrieval<THandler>() where THandler : IRetrievalHandler<TFrame, TPriority>
     {
         RequireFrames().Retrieval<THandler>();
         return this;
     }
 
-    /// <inheritdoc cref="IFrameBuilder{TFrame, TPacket, TPriority, TLevel}.ReadReceipt{THandler}"/>
-    public IFrameBuilder<TFrame, TPacket, TPriority, TLevel> ReadReceipt<THandler>() where THandler : IReadReceiptHandler<TFrame, TPriority>
+    /// <inheritdoc cref="IFrameBuilder{TFrame, TPacket, TPriority, TLevel, TAspect}.ReadReceipt{THandler}"/>
+    public IFrameBuilder<TFrame, TPacket, TPriority, TLevel, TAspect> ReadReceipt<THandler>() where THandler : IReadReceiptHandler<TFrame, TPriority>
     {
         RequireFrames().ReadReceipt<THandler>();
         return this;
     }
 
-    /// <inheritdoc cref="IFrameBuilder{TFrame, TPacket, TPriority, TLevel}.ReceiveReceipt{THandler}"/>
-    public IFrameBuilder<TFrame, TPacket, TPriority, TLevel> ReceiveReceipt<THandler>() where THandler : IReceiveReceiptHandler<TFrame, TPriority>
+    /// <inheritdoc cref="IFrameBuilder{TFrame, TPacket, TPriority, TLevel, TAspect}.ReceiveReceipt{THandler}"/>
+    public IFrameBuilder<TFrame, TPacket, TPriority, TLevel, TAspect> ReceiveReceipt<THandler>() where THandler : IReceiveReceiptHandler<TFrame, TPriority>
     {
         RequireFrames().ReceiveReceipt<THandler>();
         return this;
     }
 
-    /// <inheritdoc cref="IFrameBuilder{TFrame, TPacket, TPriority, TLevel}.Create"/>
-    public IFrameBuilder<TFrame, TPacket, TPriority, TLevel> Create(Func<TFrame> create)
+    /// <inheritdoc cref="IFrameBuilder{TFrame, TPacket, TPriority, TLevel, TAspect}.Create"/>
+    public IFrameBuilder<TFrame, TPacket, TPriority, TLevel, TAspect> Create(Func<TFrame> create)
     {
         RequireFrames().Create(create);
         return this;
     }
 
-    /// <inheritdoc cref="IFrameBuilder{TFrame, TPacket, TPriority, TLevel}.Processor{TProcessor}"/>
-    public IFrameBuilder<TFrame, TPacket, TPriority, TLevel> Processor<TProcessor>() where TProcessor : INetworkProcessor<TFrame>
+    /// <inheritdoc cref="IFrameBuilder{TFrame, TPacket, TPriority, TLevel, TAspect}.Processor{TProcessor}"/>
+    public IFrameBuilder<TFrame, TPacket, TPriority, TLevel, TAspect> Processor<TProcessor>() where TProcessor : INetworkProcessor<TFrame>
     {
         RequireFrames().Processor<TProcessor>();
         return this;
     }
 
     /// <inheritdoc />
-    IFrameBuilder<TFrame, TPacket, TPriority, TLevel> IFrameBuilder<TFrame, TPacket, TPriority, TLevel>.Heartbeat<THandler>()
+    IFrameBuilder<TFrame, TPacket, TPriority, TLevel, TAspect> IFrameBuilder<TFrame, TPacket, TPriority, TLevel, TAspect>.Heartbeat<THandler>()
     {
         RequireFrames().Heartbeat<THandler>();
         return this;
     }
 
     /// <inheritdoc />
-    IFrameBuilder<TFrame, TPacket, TPriority, TLevel> IFrameBuilder<TFrame, TPacket, TPriority, TLevel>.Serializer<TSerializer>()
+    IFrameBuilder<TFrame, TPacket, TPriority, TLevel, TAspect> IFrameBuilder<TFrame, TPacket, TPriority, TLevel, TAspect>.Serializer<TSerializer>()
     {
         RequireFrames().Serializer<TSerializer>();
         return this;
     }
 
     /// <inheritdoc />
-    IFrameBuilder<TFrame, TPacket, TPriority, TLevel> IFrameBuilder<TFrame, TPacket, TPriority, TLevel>.InitialProcessor<TProcessor>()
+    IFrameBuilder<TFrame, TPacket, TPriority, TLevel, TAspect> IFrameBuilder<TFrame, TPacket, TPriority, TLevel, TAspect>.InitialProcessor<TProcessor>()
     {
         RequireFrames().InitialProcessor<TProcessor>();
         return this;
     }
 
-    /// <inheritdoc cref="IPacketBuilder{TFrame, TPacket, TPriority, TLevel}.Frame{THandler}"/>
-    public IPacketBuilder<TFrame, TPacket, TPriority, TLevel> Frame<THandler>() where THandler : IFramePacketHandler<TPacket>
+    /// <inheritdoc cref="IPacketBuilder{TFrame, TPacket, TPriority, TLevel, TAspect}.Frame{THandler}"/>
+    public IPacketBuilder<TFrame, TPacket, TPriority, TLevel, TAspect> Frame<THandler>() where THandler : IFramePacketHandler<TPacket>
     {
         RequirePackets().Frame<THandler>();
         return this;
     }
 
     /// <inheritdoc />
-    IPacketBuilder<TFrame, TPacket, TPriority, TLevel> IPacketBuilder<TFrame, TPacket, TPriority, TLevel>.Heartbeat<THandler>()
+    IPacketBuilder<TFrame, TPacket, TPriority, TLevel, TAspect> IPacketBuilder<TFrame, TPacket, TPriority, TLevel, TAspect>.Heartbeat<THandler>()
     {
         RequirePackets().Heartbeat<THandler>();
         return this;
     }
 
     /// <inheritdoc />
-    IPacketBuilder<TFrame, TPacket, TPriority, TLevel> IPacketBuilder<TFrame, TPacket, TPriority, TLevel>.Serializer<TSerializer>()
+    IPacketBuilder<TFrame, TPacket, TPriority, TLevel, TAspect> IPacketBuilder<TFrame, TPacket, TPriority, TLevel, TAspect>.Serializer<TSerializer>()
     {
         RequirePackets().Serializer<TSerializer>();
         return this;
     }
 
     /// <inheritdoc />
-    IPacketBuilder<TFrame, TPacket, TPriority, TLevel> IPacketBuilder<TFrame, TPacket, TPriority, TLevel>.InitialProcessor<TProcessor>()
+    IPacketBuilder<TFrame, TPacket, TPriority, TLevel, TAspect> IPacketBuilder<TFrame, TPacket, TPriority, TLevel, TAspect>.InitialProcessor<TProcessor>()
     {
         RequirePackets().InitialProcessor<TProcessor>();
         return this;
     }
 
     /// <inheritdoc />
-    public IPacketBuilder<TFrame, TPacket, TPriority, TLevel> Size(int bytes)
+    public IPacketBuilder<TFrame, TPacket, TPriority, TLevel, TAspect> Size(int bytes)
     {
         state.PacketSizeValue = bytes;
         return this;
     }
 
     /// <inheritdoc />
-    public IPacketBuilder<TFrame, TPacket, TPriority, TLevel> Window(int packets)
+    public IPacketBuilder<TFrame, TPacket, TPriority, TLevel, TAspect> Window(int packets)
     {
         state.PacketWindowValue = packets;
         return this;
     }
 
     /// <inheritdoc />
-    public IPriorityLevelBuilder<TFrame, TPacket, TPriority, TLevel> Priority(TPriority priority)
+    public IPriorityLevelBuilder<TFrame, TPacket, TPriority, TLevel, TAspect> Priority(TPriority priority)
     {
         priorities.Priority(priority);
         return this;
     }
 
     /// <inheritdoc />
-    public IPriorityBuilder<TFrame, TPacket, TPriority, TLevel> Block(TPriority? priority, string? tag)
+    public IPriorityBuilder<TFrame, TPacket, TPriority, TLevel, TAspect> Block(TPriority? priority, string? tag)
     {
         priorities.Block(priority, tag);
         return this;
     }
 
     /// <inheritdoc />
-    public IPriorityLevelBuilder<TFrame, TPacket, TPriority, TLevel> Mode(PriorityMode mode)
+    public IPriorityLevelBuilder<TFrame, TPacket, TPriority, TLevel, TAspect> Mode(PriorityMode mode)
     {
         priorities.Mode(mode);
         return this;
     }
 
     /// <inheritdoc />
-    IPriorityLevelBuilder<TFrame, TPacket, TPriority, TLevel> IPriorityLevelBuilder<TFrame, TPacket, TPriority, TLevel>.Label(string label)
+    IPriorityLevelBuilder<TFrame, TPacket, TPriority, TLevel, TAspect> IPriorityLevelBuilder<TFrame, TPacket, TPriority, TLevel, TAspect>.Label(string label)
     {
         priorities.Label(label);
         return this;
     }
 
     /// <inheritdoc />
-    public IConnectionsBuilder<TFrame, TPacket, TPriority, TLevel> Connections() => this;
+    public IConnectionsBuilder<TFrame, TPacket, TPriority, TLevel, TAspect> Connections() => this;
 
     /// <inheritdoc />
-    public IConnectionsBuilder<TFrame, TPacket, TPriority, TLevel> Msmt(MsmtConnectionOptions options)
+    public IConnectionsBuilder<TFrame, TPacket, TPriority, TLevel, TAspect> Msmt(MsmtConnectionOptions options)
     {
         state.MsmtOptionsValue = options;
         return this;
     }
 
     /// <inheritdoc />
-    public IConnectionsBuilder<TFrame, TPacket, TPriority, TLevel> Hdlc(HdlcPeerOptions options)
+    public IConnectionsBuilder<TFrame, TPacket, TPriority, TLevel, TAspect> Hdlc(HdlcPeerOptions options)
     {
         state.HdlcOptionsValue = options;
         return this;
     }
 
     /// <inheritdoc />
-    public IAddressTypesBuilder<TFrame, TPacket, TPriority, TLevel> AddressTypes() => this;
+    public IAddressTypesBuilder<TFrame, TPacket, TPriority, TLevel, TAspect> AddressTypes() => this;
 
     /// <inheritdoc />
-    public IAddressTypeBuilder<TFrame, TPacket, TPriority, TLevel> Type(AddressType type)
+    public IAddressTypeBuilder<TFrame, TPacket, TPriority, TLevel, TAspect> Type(AddressType type)
     {
         currentAddressType = type;
         return this;
     }
 
     /// <inheritdoc />
-    IAddressTypeBuilder<TFrame, TPacket, TPriority, TLevel> IAddressTypeBuilder<TFrame, TPacket, TPriority, TLevel>.Label(string label)
+    IAddressTypeBuilder<TFrame, TPacket, TPriority, TLevel, TAspect> IAddressTypeBuilder<TFrame, TPacket, TPriority, TLevel, TAspect>.Label(string label)
     {
         state.AddressTypeLabels[currentAddressType] = label;
         return this;
     }
 
     /// <inheritdoc />
-    public ISecurityLevelBuilder<TFrame, TPacket, TPriority, TLevel> Level(TLevel level)
+    public IMessageAspectBuilder<TFrame, TPacket, TPriority, TLevel, TAspect> Aspect(TAspect aspect)
+    {
+        aspects.Aspect(aspect);
+        return this;
+    }
+
+    /// <inheritdoc />
+    IMessageAspectBuilder<TFrame, TPacket, TPriority, TLevel, TAspect> IMessageAspectBuilder<TFrame, TPacket, TPriority, TLevel, TAspect>.Label(string label)
+    {
+        aspects.Label(label);
+        return this;
+    }
+
+    /// <inheritdoc />
+    public IMessageLevelBuilder<TFrame, TPacket, TPriority, TLevel, TAspect> Level(TLevel level)
     {
         levels.Level(level);
         return this;
     }
 
     /// <inheritdoc />
-    public ISecurityLevelBuilder<TFrame, TPacket, TPriority, TLevel> Color(string color)
+    public IMessageLevelBuilder<TFrame, TPacket, TPriority, TLevel, TAspect> Color(string color)
     {
         levels.Color(color);
         return this;
     }
 
     /// <inheritdoc />
-    ISecurityLevelBuilder<TFrame, TPacket, TPriority, TLevel> ISecurityLevelBuilder<TFrame, TPacket, TPriority, TLevel>.Label(string label)
+    IMessageLevelBuilder<TFrame, TPacket, TPriority, TLevel, TAspect> IMessageLevelBuilder<TFrame, TPacket, TPriority, TLevel, TAspect>.Label(string label)
     {
         levels.Label(label);
         return this;
     }
 
-    private FrameBuilder<TFrame, TPriority, TLevel> RequireFrames() => frames ?? throw new InvalidOperationException("Frames() must be called before the frame handlers are stated.");
+    private FrameBuilder<TFrame, TPriority, TLevel, TAspect> RequireFrames() => frames ?? throw new InvalidOperationException("Frames() must be called before the frame handlers are stated.");
 
     private PacketBuilder<TPacket, TPriority> RequirePackets() => packets ?? throw new InvalidOperationException("Packets() must be called before the packet handlers are stated.");
 
@@ -332,11 +350,18 @@ internal sealed class EngineBuilder<TFrame, TPacket, TPriority, TLevel> : IEngin
             state.InitialPacketProcessor = packets.Initial;
         }
 
-        List<SecurityLevel> builtLevels = levels.Build();
+        List<MessageLevel> builtLevels = levels.Build();
         if (builtLevels.Count > 0)
         {
-            state.SecurityLevelValues.Clear();
-            state.SecurityLevelValues.AddRange(builtLevels);
+            state.MessageLevelValues.Clear();
+            state.MessageLevelValues.AddRange(builtLevels);
+        }
+
+        List<MessageAspect> builtAspects = aspects.Build();
+        if (builtAspects.Count > 0)
+        {
+            state.MessageAspectValues.Clear();
+            state.MessageAspectValues.AddRange(builtAspects);
         }
 
         List<MessagePriorityOption> builtPriorities = priorities.Build();

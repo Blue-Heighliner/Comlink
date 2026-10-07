@@ -15,7 +15,7 @@ public sealed class NetworkReloadServiceTests : IDisposable
     public NetworkReloadServiceTests()
     {
         Directory.CreateDirectory(directory);
-        Write("""{ "Users": { "ME": { "PeerPort": 1000, "InterfacePort": 2000, "OutgoingPoints": [ { "IpAddress": "10.0.0.1", "Port": 1 } ], "SecurityLevel": "LOW" } } }""");
+        Write("""{ "Users": { "ME": { "PeerPort": 1000, "InterfacePort": 2000, "OutgoingPoints": [ { "IpAddress": "10.0.0.1", "Port": 1 } ], "MessageLevel": "LOW" } } }""");
         network = NetworkConfig.Load([], directory);
         CurrentUserProvider user = new() { UserName = "ME" };
         EngineController controller = new(EngineBuilder.Build(new TestEngineConfiguration()), user, network);
@@ -27,19 +27,19 @@ public sealed class NetworkReloadServiceTests : IDisposable
 
     private void Write(string json) => File.WriteAllText(Path.Combine(directory, "Config.json"), json);
 
-    /// <summary>A change that does not affect connections, such as a security level, restarts and reconfigures nothing that matters but is still read and announced.</summary>
+    /// <summary>A change that does not affect connections, such as a message level, restarts and reconfigures nothing that matters but is still read and announced.</summary>
     [Fact]
     public async Task Reload_UnrelatedChange_RestartsNothing_ButIsAppliedAndAnnounced()
     {
         int announced = 0;
         service.Reloaded += () => announced++;
-        Write("""{ "Users": { "ME": { "PeerPort": 1000, "InterfacePort": 2000, "OutgoingPoints": [ { "IpAddress": "10.0.0.1", "Port": 1 } ], "SecurityLevel": "HIGH" } } }""");
+        Write("""{ "Users": { "ME": { "PeerPort": 1000, "InterfacePort": 2000, "OutgoingPoints": [ { "IpAddress": "10.0.0.1", "Port": 1 } ], "MessageLevel": "HIGH" } } }""");
 
         await service.Reload();
 
         peer.Verify(p => p.Restart(), Times.Never);
         listener.Verify(l => l.Restart(), Times.Never);
-        Assert.Equal("HIGH", network.Find("ME")!.SecurityLevel);
+        Assert.Equal("HIGH", network.Find("ME")!.MessageLevel);
         Assert.Equal(1, announced);
     }
 
@@ -103,7 +103,7 @@ public sealed class NetworkReloadServiceTests : IDisposable
 
         await Assert.ThrowsAnyAsync<Exception>(() => service.Reload());
 
-        Assert.Equal("LOW", network.Find("ME")!.SecurityLevel);
+        Assert.Equal("LOW", network.Find("ME")!.MessageLevel);
         peer.Verify(p => p.Restart(), Times.Never);
         peer.Verify(p => p.Reconfigure(), Times.Never);
         listener.Verify(l => l.Restart(), Times.Never);
