@@ -29,7 +29,7 @@ internal sealed class AutoForwardService : IAutoForwardService
         this.userService = userService;
         this.messageRouting = messageRouting;
         this.targetsRepository = targetsRepository;
-        logger = loggerFactory.CreateLogger("ACTIVITY");
+        logger = loggerFactory.CreateLogger(LogCategories.App);
     }
 
     private readonly IPeerService peerService;
@@ -65,7 +65,9 @@ internal sealed class AutoForwardService : IAutoForwardService
             try { matches = controller.Filter(message); }
             catch (Exception ex)
             {
-                logger.LogError(ex, "Auto forward controller {Controller} filter failed for {MessageId}", controller.Name, engineController.GetMessageId(message));
+                string filteredId = engineController.GetMessageId(message);
+                logger.Record(LogEvents.AutoForwardFailed, ex, "Auto forward controller {Controller} failed to {Action} {MessageId}", controller.Name, "filter", filteredId);
+                logger.Record(LogEvents.AutoForwardNotDone, "Message {MessageId} could not be forwarded automatically", filteredId);
                 continue;
             }
             if (!matches) { continue; }
@@ -96,7 +98,9 @@ internal sealed class AutoForwardService : IAutoForwardService
         }
         catch (Exception ex)
         {
-            logger.LogError(ex, "Auto forward controller {Controller} failed to forward {MessageId}", controllerName, engineController.GetMessageId(original));
+            string forwardedId = engineController.GetMessageId(original);
+            logger.Record(LogEvents.AutoForwardFailed, ex, "Auto forward controller {Controller} failed to {Action} {MessageId}", controllerName, "forward", forwardedId);
+            logger.Record(LogEvents.AutoForwardNotDone, "Message {MessageId} could not be forwarded automatically", forwardedId);
         }
     }
 }

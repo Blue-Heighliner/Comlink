@@ -64,7 +64,7 @@ internal sealed class PacketizingPeerTransport : IPeerTransport
         try { packets = packetizer.Split(data, options?.Priority ?? 0, options?.Frame); }
         catch (ArgumentOutOfRangeException ex)
         {
-            logger.LogError(ex, "A payload of {Length} bytes cannot be sent over {Point}: it is too large to be split into packets, so nothing is sent", data.Length, connection.Point);
+            logger.Record(LogEvents.PayloadTooLarge, ex, "A payload of {Length} bytes cannot be sent over {Point}: {Reason}", data.Length, connection.Point, "it is too large to be split into packets, so nothing is sent");
             return false;
         }
 
@@ -113,7 +113,7 @@ internal sealed class PacketizingPeerTransport : IPeerTransport
         }
         catch (Exception ex)
         {
-            logger.LogWarning("Dropped a packet that could not be assembled: {Message}", ex.Message);
+            logger.Record(LogEvents.PacketDropped, "Dropped a packet that could not be assembled: {Message}", ex.Message);
             return;
         }
 

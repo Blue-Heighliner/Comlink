@@ -6,7 +6,7 @@ namespace BlueHeighliner.Comlink;
 /// or, when the host allows command-line overrides (see <see cref="IEngineBuilder{TFrame, TPacket, TPriority, TLevel}.CommandLineOverrides"/>), from the path given by the
 /// <c>--config</c> argument; its absence is not an error unless <c>--config</c> names a file that does not exist.
 /// The user this process runs as, for a node that should not show the install screen, is named by the <c>--user</c> argument (again only when
-/// overrides are allowed); that user is checked like an installed one.
+/// overrides are allowed); that user is checked like an installed one. The <c>--log</c> argument names log categories to turn on (see <see cref="EnabledLogCategories"/>).
 /// </summary>
 internal sealed class NetworkConfig
 {
@@ -37,6 +37,9 @@ internal sealed class NetworkConfig
 
     /// <summary>The user the process runs as, from the <c>--user</c> argument; <see langword="null"/> when it is not given.</summary>
     public string? User { get; set; }
+
+    /// <summary>The log categories named by the <c>--log</c> argument, a comma separated list, to write although they are off by default; empty when it is not given.</summary>
+    public IReadOnlyList<string> EnabledLogCategories { get; private set; } = [];
 
     /// <summary>Absolute directory containing the loaded file, used to resolve relative certificate paths. <see langword="null"/> when no file was loaded.</summary>
     private string? ConfigDirectory { get; set; }
@@ -72,6 +75,8 @@ internal sealed class NetworkConfig
         config.arguments = args;
         config.workingDirectory = workingDirectory;
         config.User = userIndex >= 0 && userIndex + 1 < args.Length ? args[userIndex + 1] : null;
+        int logIndex = Array.IndexOf(args, "--log");
+        config.EnabledLogCategories = logIndex >= 0 && logIndex + 1 < args.Length ? [.. args[logIndex + 1].Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)] : [];
         return config;
     }
 

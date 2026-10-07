@@ -7,7 +7,7 @@ public sealed class NetworkIndicatorViewModelTests
     [Fact]
     public void FollowsTheIndicatorWithDefaultLabelsAndColors()
     {
-        NetworkIndicator indicator = new();
+        NetworkIndicator indicator = new(LoggerFactory.Create(_ => { }));
         NetworkIndicatorViewModel vm = new(indicator, new TestEngineController());
 
         Assert.Equal(("OFFLINE", "#D35400", false), (vm.Label, vm.ColorHex, vm.IsOnline));
@@ -24,7 +24,7 @@ public sealed class NetworkIndicatorViewModelTests
         Mock<TestEngineController> controller = new() { CallBase = true };
         controller.Setup(c => c.GetNetworkIndicatorLabel(true)).Returns("LINKED");
         controller.Setup(c => c.GetNetworkIndicatorColor(true)).Returns("#112233");
-        NetworkIndicator indicator = new();
+        NetworkIndicator indicator = new(LoggerFactory.Create(_ => { }));
         indicator.Set(true);
 
         NetworkIndicatorViewModel vm = new(indicator, controller.Object);

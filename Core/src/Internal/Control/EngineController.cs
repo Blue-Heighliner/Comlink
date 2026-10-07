@@ -78,6 +78,8 @@ internal interface IEngineController
     /// folders rather than in one, since it is what says whose folder to use, and holds nothing else, so deleting it only uninstalls the user.
     /// </summary>
     string UserFilePath { get; }
+    /// <summary>Absolute path to <c>Logging.json</c>, which turns on the log categories that are off by default; it lives beside <c>User.json</c> and need not exist.</summary>
+    string LoggingFilePath { get; }
     /// <summary><see langword="true"/> to enable kiosk mode, which hides the minimize and maximize buttons and has the close button restart rather than exit.</summary>
     bool IsKioskMode { get; }
     /// <summary>Whether alert messages are kept in their own alert inbox and alert outbox, apart from the normal inbox and outbox, from the display handler.</summary>
@@ -88,6 +90,9 @@ internal interface IEngineController
     /// <summary>The hex color the network indicator shows while online or offline, from the display handler.</summary>
     /// <param name="isOnline">Whether the indicator shows online.</param>
     string GetNetworkIndicatorColor(bool isOnline);
+    /// <summary>The fixed widths of the fields of a log line, from the log handler; no field is fixed without one.</summary>
+    LogFieldWidths LogWidths { get; }
+
     /// <summary>The text displayed in the content area when no entry is selected.</summary>
     string HomeText { get; }
     /// <summary>Optional <c>avares://</c> URI or file path of the window icon to apply to the main window, or <see langword="null"/> to use the OS default.</summary>
@@ -154,6 +159,10 @@ internal interface IEngineController
     string PriorityLabel { get; }
     /// <summary>Gets the name of the security level concept in the user interface (see <see cref="IDisplayHandler.SecurityLevelLabel"/>).</summary>
     string SecurityLevelLabel { get; }
+    /// <summary>Gets the word the user interface uses for a user of the network (see <see cref="IDisplayHandler.UserLabel"/>).</summary>
+    string UserLabel { get; }
+    /// <summary>Gets the plural of <see cref="UserLabel"/>.</summary>
+    string UserPluralLabel { get; }
     /// <summary>Gets the plural of <see cref="AlertLabel"/>.</summary>
     string AlertPluralLabel { get; }
     /// <summary>Gets the plural of <see cref="TagLabel"/>.</summary>
@@ -513,6 +522,7 @@ internal class EngineController(EngineBuilder builder, ICurrentUserProvider curr
     private readonly Lazy<IDraftFrameHandler?> draftHandler = new(() => builder.DraftHandler?.Create(services));
     private readonly List<object> alertHistory = [];
     private readonly Lazy<IAlarmHandler?> alarmHandler = new(() => builder.AlarmHandler?.Create(services));
+    private readonly Lazy<ILogHandler?> logHandler = new(() => builder.LogHandler?.Create(services));
     private readonly Lazy<IPrintFrameHandler?> printHandler = new(() => builder.PrintHandler?.Create(services));
     private readonly Lazy<IDeleteHandler?> deleteHandler = new(() => builder.DeleteHandler?.Create(services));
     private readonly Lazy<INetworkHandler?> networkHandler = new(() => builder.NetworkHandler?.Create(services));
@@ -546,6 +556,8 @@ internal class EngineController(EngineBuilder builder, ICurrentUserProvider curr
     /// <inheritdoc />
     public virtual string UserFilePath => Path.Combine(AppDataRoot, DataFolderName, "User.json");
     /// <inheritdoc />
+    public virtual string LoggingFilePath => Path.Combine(AppDataRoot, DataFolderName, "Logging.json");
+    /// <inheritdoc />
     public virtual bool IsKioskMode => builder.DisplayHandlerInstance?.IsKiosk ?? false;
     /// <inheritdoc />
     public virtual string GetNetworkIndicatorLabel(bool isOnline)
@@ -553,6 +565,8 @@ internal class EngineController(EngineBuilder builder, ICurrentUserProvider curr
     /// <inheritdoc />
     public virtual string GetNetworkIndicatorColor(bool isOnline)
         => (isOnline ? builder.DisplayHandlerInstance?.NetworkOnlineColor : builder.DisplayHandlerInstance?.NetworkOfflineColor).OrNull() ?? (isOnline ? "#2E7D32" : "#D35400");
+    /// <inheritdoc />
+    public virtual LogFieldWidths LogWidths => logHandler.Value is { } handler ? new LogFieldWidths(handler.CategoryWidth, handler.UserWidth, handler.IdWidth) : LogFieldWidths.None;
     /// <inheritdoc />
     public virtual bool SeparateAlerts => builder.DisplayHandlerInstance?.SeparateAlerts ?? false;
     /// <inheritdoc />
@@ -641,6 +655,10 @@ internal class EngineController(EngineBuilder builder, ICurrentUserProvider curr
     public virtual bool TagsEnabled => draftHandler.Value?.EnableTags ?? true;
     /// <inheritdoc />
     public virtual string PriorityLabel => builder.DisplayHandlerInstance?.PriorityLabel.OrNull() ?? "Priority";
+    /// <inheritdoc />
+    public virtual string UserLabel => builder.DisplayHandlerInstance?.UserLabel.OrNull() ?? "User";
+    /// <inheritdoc />
+    public virtual string UserPluralLabel => PluralOf(builder.DisplayHandlerInstance?.UserPluralLabel, builder.DisplayHandlerInstance?.UserLabel, "Users");
     /// <inheritdoc />
     public virtual string SecurityLevelLabel => builder.DisplayHandlerInstance?.SecurityLevelLabel.OrNull() ?? "Security Level";
     /// <inheritdoc />
@@ -1056,7 +1074,7 @@ internal class EngineController(EngineBuilder builder, ICurrentUserProvider curr
 /// <summary>Extension members for <see cref="IEngineController"/>.</summary>
 internal static class EngineControllerExtensions
 {
-    private static readonly Regex conceptPattern = new(@"\b(Security Levels|Security Level|Priorities|Priority|Alerts|Alert|Tags|Tag|Inbox|Outbox|Drafts|Draft|Notes|Note|Activity|Messages|Message)\b", RegexOptions.IgnoreCase | RegexOptions.Compiled);
+    private static readonly Regex conceptPattern = new(@"\b(Security Levels|Security Level|Priorities|Priority|Alerts|Alert|Users|User|Tags|Tag|Inbox|Outbox|Drafts|Draft|Notes|Note|Activity|Messages|Message)\b", RegexOptions.IgnoreCase | RegexOptions.Compiled);
 
     extension(IEngineController engineController)
     {
@@ -1079,6 +1097,8 @@ internal static class EngineControllerExtensions
                 ["Security Level"] = engineController.SecurityLevelLabel,
                 ["Priorities"] = engineController.PriorityPluralLabel,
                 ["Priority"] = engineController.PriorityLabel,
+                ["Users"] = engineController.UserPluralLabel,
+                ["User"] = engineController.UserLabel,
                 ["Alerts"] = engineController.AlertPluralLabel,
                 ["Alert"] = engineController.AlertLabel,
                 ["Tags"] = engineController.TagPluralLabel,

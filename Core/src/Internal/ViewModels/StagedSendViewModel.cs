@@ -81,14 +81,14 @@ internal sealed partial class StagedSendViewModel : ObservableObject, IStagedSen
         this.connection = connection;
         this.entryService = entryService;
         this.engineController = engineController;
-        activityLogger = loggerFactory.CreateLogger("ACTIVITY");
+        logger = loggerFactory.CreateLogger(LogCategories.App);
         Queue.CollectionChanged += (_, _) => OnPropertyChanged(nameof(HasQueue));
     }
 
     private readonly IEngineController engineController;
     private readonly IServiceConnection connection;
     private readonly IEntryService entryService;
-    private readonly ILogger activityLogger;
+    private readonly ILogger logger;
     private readonly List<StagedSendEntry> queue = [];
     private readonly Lock gate = new();
     private StagedSendMode mode = StagedSendMode.Sequential;
@@ -217,7 +217,7 @@ internal sealed partial class StagedSendViewModel : ObservableObject, IStagedSen
                 entry.Body, entry.Addresses, entry.Priority, entry.Tag, entry.SecurityLevel);
             if (result is null)
             {
-                SetStatus(entry.Id, StagedSendStatus.Failed, "Cannot send until a user is installed");
+                SetStatus(entry.Id, StagedSendStatus.Failed, engineController.Display("Cannot send until a user is installed"));
                 return;
             }
 
@@ -230,7 +230,8 @@ internal sealed partial class StagedSendViewModel : ObservableObject, IStagedSen
         }
         catch (Exception ex)
         {
-            activityLogger.LogError(ex, "Staged send transmission failed for {Preview}", entry.Preview);
+            logger.Record(LogEvents.SendFailed, ex, "{Kind} transmission failed for {Preview}", "Staged send", entry.Preview);
+            logger.Record(LogEvents.MessageNotSent, "Could not send {Preview}", entry.Preview);
             SetStatus(entry.Id, StagedSendStatus.Failed, ex.Message);
         }
     }

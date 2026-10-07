@@ -461,7 +461,7 @@ public sealed class HandshakePeerTransportTests
         Mock<TestEngineController> controller = Controller();
         controller.Setup(c => c.InitialPacketProcessor).Returns(new Scripted());
 
-        Assert.Throws<InvalidOperationException>(() => Handshake.ForPackets(controller.Object));
+        Assert.Throws<InvalidEngineConfigurationException>(() => Handshake.ForPackets(controller.Object));
         Assert.Null(Handshake.ForPackets(Controller().Object));
         Assert.Null(Handshake.ForFrames(Controller().Object));
     }

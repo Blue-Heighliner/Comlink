@@ -41,7 +41,7 @@ public sealed class NetworkIndicatorServiceTests : IAsyncLifetime
     private readonly Mock<TestEngineController> controller = new() { CallBase = true };
     private readonly Mock<IEngineContextFactory> contexts = new();
     private readonly Mock<INetworkHandler> handler = new();
-    private readonly NetworkIndicator indicator = new();
+    private readonly NetworkIndicator indicator = new(LoggerFactory.Create(_ => { }));
     private readonly CancellationTokenSource cancellation = new();
     private Task start = Task.CompletedTask;
 
@@ -83,6 +83,43 @@ public sealed class NetworkIndicatorServiceTests : IAsyncLifetime
         indicator.Set(false);
 
         Assert.Equal([true, false], changes);
+    }
+
+    /// <summary>Going online and offline is written to the activity log, and setting the state it already has is not.</summary>
+    [Fact]
+    public void Indicator_ActivityLogsEachChange()
+    {
+        List<(string Category, string Message)> entries = [];
+        NetworkIndicator logged = new(LoggerFactory.Create(builder => builder.AddProvider(new RecordingProvider(entries))));
+
+        logged.Set(false);
+        logged.Set(true);
+        logged.Set(true);
+        logged.Set(false);
+
+        Assert.Equal([("ACTIVITY", "Network online"), ("ACTIVITY", "Network offline")], entries);
+    }
+
+    private sealed class RecordingProvider(List<(string Category, string Message)> entries) : ILoggerProvider
+    {
+        public ILogger CreateLogger(string categoryName) => new RecordingLogger(categoryName, entries);
+
+        public void Dispose()
+        {
+        }
+
+        private sealed class RecordingLogger(string category, List<(string Category, string Message)> entries) : ILogger
+        {
+            public IDisposable? BeginScope<TState>(TState state) where TState : notnull => null;
+
+            public bool IsEnabled(LogLevel logLevel) => true;
+
+            public void Log<TState>(LogLevel logLevel, EventId eventId, TState state, Exception? exception, Func<TState, Exception?, string> formatter)
+            {
+                Assert.Equal(LogLevel.Information, logLevel);
+                entries.Add((LogEvents.CategoryOf(eventId) ?? category, formatter(state, exception)));
+            }
+        }
     }
 
     /// <summary>By default the indicator follows the node's direct connection to its parent, and only that one.</summary>

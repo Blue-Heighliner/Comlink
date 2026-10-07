@@ -75,7 +75,7 @@ internal sealed partial class ContentAreaViewModel : ObservableObject, IContentA
         this.activityLogs = activityLogs;
         this.engineController = engineController;
         this.loggerFactory = loggerFactory;
-        logger = loggerFactory.CreateLogger("ACTIVITY");
+        logger = loggerFactory.CreateLogger(LogCategories.App);
         this.currentUserProvider = currentUserProvider;
         this.stagedSend = stagedSend;
         HomeText = engineController.HomeText;
@@ -203,7 +203,7 @@ internal sealed partial class ContentAreaViewModel : ObservableObject, IContentA
         if (opened is not var (type, id, isOutbound)) { return; }
 
         try { await EntryOpened.InvokeAll(type, id, isOutbound); }
-        catch (Exception ex) { logger.LogError(ex, "Failed to show where the opened entry is kept"); }
+        catch (Exception ex) { logger.Record(LogEvents.RevealOpenedEntryFailed, ex, "Failed to show where the opened entry is kept"); }
     }
 
     // The staged send screen only ever exists as the automatic result of an import - there is no way to navigate
@@ -231,7 +231,8 @@ internal sealed partial class ContentAreaViewModel : ObservableObject, IContentA
         }
         catch (Exception ex)
         {
-            logger.LogError(ex, "Failed to save what was written before leaving it");
+            logger.Record(LogEvents.SaveOnLeavingFailed, ex, "Failed to save what was written before leaving it");
+            logger.Record(LogEvents.EntryNotSaved, "What you were writing could not be saved");
         }
     }
 
@@ -312,6 +313,6 @@ internal sealed partial class ContentAreaViewModel : ObservableObject, IContentA
         ObjectId? oid = TryParseObjectId(id);
         if (oid is null) { return null; }
         ActivityLogEntity? entity = await activityLogs.Get(oid);
-        return entity is null ? null : new ActivityLogViewModel(entity);
+        return entity is null ? null : new ActivityLogViewModel(entity, engineController.LogWidths.Id);
     }
 }

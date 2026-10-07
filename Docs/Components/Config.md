@@ -7,9 +7,10 @@ Sample.exe --config path/to/Config.json --user CLIENT1
 ```
 
 - `--config <path>` names the file (only when the host allows command-line overrides). When omitted, `Config.json` in the current working directory is used if it exists, and otherwise the network is empty. A `--config` path that does not exist or cannot be read makes the process throw at startup.
+- `--log <categories>` (also only when overrides are allowed) turns on log categories that are off by default, as a comma separated list such as `Frames,Packets`, in addition to those named by `Logging.json`; see the logging component.
 - `--user <name>` (also only when overrides are allowed) names the user this process runs as, so a node starts as that user without the install screen and uses that user's `Headless` choice. The named user must be a user of this file and have their certificate in order, exactly as when installing; otherwise nobody is installed and the install screen is shown. Without the argument the user is the one installed through the install screen (the name of a user in this file, case-insensitive, whose certificate must be in order), which is remembered between runs.
 
-The file is read again while the application runs when the user right-clicks their name in the title bar and chooses "Refresh"; see [Configuration.md](Configuration.md#network-configuration-file) for what that applies. Property names are PascalCase; deserialization is case-insensitive, and so are user names. Unrecognised fields are silently ignored and missing fields use their defaults. An empty file (`{}`) is an empty network. By convention user names are all uppercase.
+The file is read again while the application runs when the user presses "Refresh configuration" in the info panel of the title bar; see [Configuration.md](Configuration.md#network-configuration-file) for what that applies. Property names are PascalCase; deserialization is case-insensitive, and so are user names. Unrecognised fields are silently ignored and missing fields use their defaults. An empty file (`{}`) is an empty network. By convention user names are all uppercase.
 
 ## Schema
 

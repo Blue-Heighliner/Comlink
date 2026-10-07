@@ -15,8 +15,8 @@ internal interface IActivityLogRepository
     Task<ActivityLogEntity> Insert(ActivityLogEntity entity);
     /// <summary>Persists changes to an existing activity log document.</summary>
     Task Update(ActivityLogEntity entity);
-    /// <summary>Appends an event string to today's activity log, creating the document if necessary.</summary>
-    Task AppendEvent(string eventText);
+    /// <summary>Appends an event string, tagged with the identifier of its kind of event, to today's activity log, creating the document if necessary.</summary>
+    Task AppendEvent(string eventText, int eventId);
 }
 
 /// <summary>Provides data-access operations for <see cref="ActivityLogEntity"/> documents.</summary>
@@ -25,10 +25,16 @@ internal sealed class ActivityLogRepository : IActivityLogRepository
     private const int PageSize = 50;
 
     /// <summary>Initializes a new <see cref="ActivityLogRepository"/> backed by the given database context.</summary>
-    public ActivityLogRepository(ILiteDbContext ctx) => this.ctx = ctx;
+    public ActivityLogRepository(ILiteDbContext ctx)
+    {
+        this.ctx = ctx;
+        ctx.Opened += () => _ = WritePending();
+    }
 
     private readonly ILiteDbContext ctx;
     private readonly SemaphoreSlim appendLock = new(1, 1);
+    private readonly List<ActivityLogEntry> pending = [];
+    private readonly Lock pendingLock = new();
 
     /// <inheritdoc />
     public Task<List<ActivityLogEntity>> GetPage(int page)
@@ -60,13 +66,44 @@ internal sealed class ActivityLogRepository : IActivityLogRepository
         => Task.Run(() => ctx.ActivityLogs.Update(entity));
 
     /// <inheritdoc />
-    public async Task AppendEvent(string eventText)
+    public async Task AppendEvent(string eventText, int eventId)
+    {
+        ActivityLogEntry entry = new() { At = DateTime.UtcNow, Message = eventText, EventId = eventId };
+        lock (pendingLock)
+        {
+            // The database is opened on the user's data folder, which is not known until a user is installed or named, so what is logged before then waits and is written, with its own time, once it is open.
+            if (!ctx.IsOpen)
+            {
+                pending.Add(entry);
+                return;
+            }
+        }
+
+        await Write(entry);
+    }
+
+    private async Task WritePending()
+    {
+        List<ActivityLogEntry> entries;
+        lock (pendingLock)
+        {
+            entries = [.. pending];
+            pending.Clear();
+        }
+
+        foreach (ActivityLogEntry entry in entries)
+        {
+            try { await Write(entry); }
+            catch { }
+        }
+    }
+
+    private async Task Write(ActivityLogEntry entry)
     {
         await appendLock.WaitAsync();
         try
         {
-            DateTime today = DateTime.UtcNow.Date;
-            ActivityLogEntry entry = new() { At = DateTime.UtcNow, Message = eventText };
+            DateTime today = entry.At.Date;
             ActivityLogEntity? log = ctx.ActivityLogs.FindOne(a => a.Date == today);
             if (log is null)
             {

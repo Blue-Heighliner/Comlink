@@ -118,26 +118,13 @@
                  Foreground="White" />
     </Border>
 
-    <!-- Right side: user name + version, styled like the left-side action buttons -->
+    <!-- Right side: user name, styled like the left-side action buttons -->
     <StackPanel Grid.Column="4"
                 Orientation="Horizontal"
                 Margin="0,0,8,0">
       <TextBlock x:Name="UserNameText"
                  Classes="titlebar-info"
-                 VerticalAlignment="Center">
-        <TextBlock.ContextMenu>
-          <ContextMenu>
-            <MenuItem Header="Refresh" Click="OnRefreshClick" />
-          </ContextMenu>
-        </TextBlock.ContextMenu>
-      </TextBlock>
-      <Border x:Name="UserInfoSeparator"
-              Classes="titlebar-separator"
-              IsVisible="False" />
-      <TextBlock x:Name="VersionText"
-                 Classes="titlebar-info"
-                 VerticalAlignment="Center"
-                 IsVisible="False" />
+                 VerticalAlignment="Center" />
     </StackPanel>
 
     <!-- Info and help: always available, immediately left of the window controls -->

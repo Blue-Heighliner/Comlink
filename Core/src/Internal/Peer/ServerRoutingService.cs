@@ -34,7 +34,7 @@ internal sealed class ServerRoutingService : IPeerService, IConnectionStatusServ
         maintenance = new PointMaintenance(new PeerConnectionMonitor(engineController));
         this.currentUserProvider = currentUserProvider;
         this.storage = storage;
-        logger = loggerFactory.CreateLogger("ACTIVITY");
+        logger = loggerFactory.CreateLogger(LogCategories.App);
     }
 
     private readonly IPeerTransportFactory transportFactory;
@@ -95,7 +95,7 @@ internal sealed class ServerRoutingService : IPeerService, IConnectionStatusServ
         string myName = currentUserProvider.UserName ?? string.Empty;
         if (!userMap.ContainsKey(myName))
         {
-            logger.LogError("Server user {UserName} not found in the configured server user map; routing cannot start", myName);
+            logger.Record(LogEvents.InvalidConfigurationFile, "Invalid configuration file: {Problem}", $"server user {myName} not found in the configured server user map; routing cannot start");
             return;
         }
 
@@ -218,8 +218,7 @@ internal sealed class ServerRoutingService : IPeerService, IConnectionStatusServ
             }
         }
 
-        if (connected) { logger.LogInformation("Connected to child client {ClientName}", childName); }
-        else { logger.LogWarning("Child client {ClientName} unreachable", childName); }
+        logger.Record(LogEvents.PeerConnectionChanged, "{Change} {UserName}", connected ? "Connected to" : "Disconnected from", childName);
         StatusesChanged?.Invoke();
         PeerConnectionNotifier.Raise(connected ? UserConnected : UserDisconnected, childName, connected ? "connecting" : "disconnecting", logger);
     }
@@ -242,8 +241,7 @@ internal sealed class ServerRoutingService : IPeerService, IConnectionStatusServ
             }
         }
 
-        if (connected) { logger.LogInformation("Connected to server {ServerName}", serverName); }
-        else { logger.LogWarning("Server {ServerName} unreachable", serverName); }
+        logger.Record(LogEvents.PeerConnectionChanged, "{Change} {UserName}", connected ? "Connected to" : "Disconnected from", serverName);
         StatusesChanged?.Invoke();
         PeerConnectionNotifier.Raise(connected ? UserConnected : UserDisconnected, serverName, connected ? "connecting" : "disconnecting", logger);
     }
@@ -254,7 +252,7 @@ internal sealed class ServerRoutingService : IPeerService, IConnectionStatusServ
         string name = connection.User?.Name ?? string.Empty;
         if (!IsChild(name) && !IsSiblingServer(name))
         {
-            logger.LogWarning("Rejected connection from {Name}, which is neither a child client nor another server in the cluster", name);
+            logger.Record(LogEvents.RejectedConnection, "Rejected connection from {Name}, which is neither {Expected}", name, "a child client nor another server in the cluster");
             connection.Drop();
             return;
         }
@@ -337,7 +335,7 @@ internal sealed class ServerRoutingService : IPeerService, IConnectionStatusServ
     private async Task Relay(Func<Task> relay)
     {
         try { await relay(); }
-        catch (Exception ex) { logger.LogError(ex, "Failed to relay a message"); }
+        catch (Exception ex) { logger.Record(LogEvents.RouteFailed, ex, "Failed to {Action}", "relay a message"); }
     }
 
     private async Task HandleFromChild(string childName, ReadOnlyMemory<byte> data, object? packet = null)
@@ -347,7 +345,7 @@ internal sealed class ServerRoutingService : IPeerService, IConnectionStatusServ
 
         if (engineController.GetInvalidMessageReason(message) is { } invalid)
         {
-            logger.LogError("A message from {User} is invalid and was dropped: it {Reason}", childName, invalid);
+            logger.Record(LogEvents.InvalidMessage, "A message from {Source} is invalid and was dropped: it {Reason}", childName, invalid);
             return;
         }
 
@@ -405,7 +403,7 @@ internal sealed class ServerRoutingService : IPeerService, IConnectionStatusServ
 
         if (engineController.GetInvalidMessageReason(message) is { } invalid)
         {
-            logger.LogError("A message from {User} is invalid and was dropped: it {Reason}", serverName, invalid);
+            logger.Record(LogEvents.InvalidMessage, "A message from {Source} is invalid and was dropped: it {Reason}", serverName, invalid);
             return;
         }
 
@@ -467,7 +465,7 @@ internal sealed class ServerRoutingService : IPeerService, IConnectionStatusServ
         List<string> blocked = [.. addressed.Where(user => securityLevels.GetRank(engineController.GetUserSecurityLevel(user)) < messageLevelRank)];
         if (blocked.Count > 0)
         {
-            logger.LogWarning("Blocked relay to {Users}: security level not supported by destination", string.Join(", ", blocked));
+            logger.Record(LogEvents.RelayBlockedBySecurityLevel, "{Subject} blocked for {Users}: {Reason}", "Relay", string.Join(", ", blocked), "security level not supported by destination");
             addressed.ExceptWith(blocked);
         }
 
@@ -495,7 +493,7 @@ internal sealed class ServerRoutingService : IPeerService, IConnectionStatusServ
         if (transport is null || closedNames.ContainsKey(userName)) { return; }
         if (connections.Get(userName) is not { } connection)
         {
-            logger.LogWarning("Cannot deliver to {User}: no connection is identified as them", userName);
+            logger.Record(LogEvents.CannotDeliverNoConnection, "Cannot deliver to {User}: no connection is identified as them", userName);
             return;
         }
 
@@ -615,7 +613,7 @@ internal sealed class ServerRoutingService : IPeerService, IConnectionStatusServ
     /// <inheritdoc />
     public async Task DeliverLocal(object payload)
     {
-        logger.LogInformation("{MessageId} delivered locally from {FromUser}", engineController.GetIdentifier(payload), engineController.GetFromUser(payload));
+        logger.Record(LogEvents.MessageDeliveredLocally, "{MessageId} delivered locally from {FromUser}", engineController.GetIdentifier(payload), engineController.GetFromUser(payload));
         await FrameDelivered.InvokeAll(payload);
     }
 

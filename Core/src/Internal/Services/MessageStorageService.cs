@@ -41,7 +41,7 @@ internal sealed class MessageStorageService : IMessageStorageService
         this.repository = repository;
         this.engineController = engineController;
         this.currentUserProvider = currentUserProvider;
-        logger = loggerFactory.CreateLogger("ACTIVITY");
+        logger = loggerFactory.CreateLogger(LogCategories.App);
     }
 
     private readonly IStoredMessageRepository repository;
@@ -64,7 +64,7 @@ internal sealed class MessageStorageService : IMessageStorageService
         }
         catch (Exception ex)
         {
-            logger.LogError(ex, "Failed to store a copy of {MessageId}", engineController.GetMessageId(message));
+            logger.Record(LogEvents.StoreMessageCopyFailed, ex, "Failed to store a copy of {MessageId}", engineController.GetMessageId(message));
         }
     }
 
@@ -82,12 +82,12 @@ internal sealed class MessageStorageService : IMessageStorageService
                 .Where(message => Fits(message, criteria))
                 .OrderBy(message => Utc(engineController.GetSentAt(message)))
                 .Select(message => CopyFor(message, requester))];
-            logger.LogInformation("Retrieval for {Requester} found {Count} stored message(s)", requester, copies.Count);
+            logger.Record(LogEvents.RetrievalAnswered, "Retrieval for {Requester} found {Count} stored message(s)", requester, copies.Count);
             return copies;
         }
         catch (Exception ex)
         {
-            logger.LogError(ex, "Failed to read stored messages for a retrieval by {Requester}", requester);
+            logger.Record(LogEvents.ReadStoredMessagesFailed, ex, "Failed to read stored messages for a retrieval by {Requester}", requester);
             return [];
         }
     }

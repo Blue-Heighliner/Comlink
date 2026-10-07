@@ -7,4 +7,6 @@ internal sealed class ActivityLogEntry
     public DateTime At { get; set; }
     /// <summary>Human-readable description of the event.</summary>
     public string Message { get; set; } = string.Empty;
+    /// <summary>The unique identifier of the kind of event this is (see <see cref="LogEvents"/>), or <c>0</c> for an entry that has none.</summary>
+    public int EventId { get; set; }
 }

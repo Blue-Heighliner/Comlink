@@ -186,7 +186,7 @@ internal sealed partial class DraftViewModel : ObservableObject, IDraftViewModel
         this.entryService = entryService;
         this.connection = connection;
         this.engineController = engineController;
-        activityLogger = loggerFactory.CreateLogger("ACTIVITY");
+        logger = loggerFactory.CreateLogger(LogCategories.App);
         isSent = entity.IsSent;
         // LiteDB reads an empty string back as null.
         tag = engineController.DraftTagRules.Filter(entity.Tag ?? string.Empty);
@@ -260,7 +260,8 @@ internal sealed partial class DraftViewModel : ObservableObject, IDraftViewModel
         }
         catch (Exception ex)
         {
-            activityLogger.LogError(ex, "Failed to store a new draft");
+            logger.Record(LogEvents.StoreNewDraftFailed, ex, "Failed to store a new draft");
+            logger.Record(LogEvents.DraftNotSaved, "A new draft could not be saved");
         }
         finally
         {
@@ -301,7 +302,7 @@ internal sealed partial class DraftViewModel : ObservableObject, IDraftViewModel
     private readonly IServiceConnection connection;
     private readonly IEngineController engineController;
     private readonly IReadOnlyList<MessagePriorityOption> allPriorities;
-    private readonly ILogger activityLogger;
+    private readonly ILogger logger;
     private DraftEntity entity;
     private string lastValidTag = string.Empty;
     private bool isReady;
@@ -705,7 +706,7 @@ internal sealed partial class DraftViewModel : ObservableObject, IDraftViewModel
                 SelectedPriority.Key, Tag, SelectedSecurityLevel?.Key);
             if (result is null)
             {
-                StatusMessage = "Cannot send until a user is installed";
+                StatusMessage = engineController.Display("Cannot send until a user is installed");
                 return;
             }
 
@@ -729,7 +730,9 @@ internal sealed partial class DraftViewModel : ObservableObject, IDraftViewModel
         }
         catch (Exception ex)
         {
-            activityLogger.LogError(ex, "Message transmission failed for {Preview}", BuildPlainBody().FirstLine);
+            string preview = BuildPlainBody().FirstLine;
+            logger.Record(LogEvents.SendFailed, ex, "{Kind} transmission failed for {Preview}", "Message", preview);
+            logger.Record(LogEvents.MessageNotSent, "Could not send {Preview}", preview);
             StatusMessage = $"Send failed: {ex.Message}";
         }
         finally

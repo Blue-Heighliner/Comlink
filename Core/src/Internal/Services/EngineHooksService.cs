@@ -28,7 +28,7 @@ internal sealed class EngineHooksService : IEngineHooksService
         this.engineController = engineController;
         this.userService = userService;
         this.messageRouting = messageRouting;
-        logger = loggerFactory.CreateLogger("ACTIVITY");
+        logger = loggerFactory.CreateLogger(LogCategories.App);
     }
 
     private readonly IPeerService peerService;
@@ -83,7 +83,7 @@ internal sealed class EngineHooksService : IEngineHooksService
         if (engineController.NetworkHandler is not { } handler) { return; }
 
         try { run(handler); }
-        catch (Exception ex) { logger.LogError(ex, "The network processor's {Name} failed for {Subject}", name, subject); }
+        catch (Exception ex) { logger.Record(LogEvents.NetworkProcessorFailed, ex, "The network processor's {Name} failed for {Subject}", name, subject); }
     }
 
     private INetworkUserContext BuildConnectionContext(string targetUser)

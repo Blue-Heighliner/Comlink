@@ -15,7 +15,7 @@ internal static class PeerFrameDispatcher
     /// </summary>
     /// <param name="data">The raw, already-received frame payload.</param>
     /// <param name="engineController">Maps logical fields onto the engine's frame type.</param>
-    /// <param name="logger">Logger for activity messages.</param>
+    /// <param name="logger">Logger for what is logged.</param>
     /// <param name="frameDelivered">Raised with the deserialized frame when it is not a receipt.</param>
     /// <param name="readReceiptReceived">Raised with the message ID and reading user when it is a read receipt.</param>
     /// <param name="receiveReceiptReceived">Raised with the message ID and receiving user when it is a receive receipt.</param>
@@ -38,7 +38,8 @@ internal static class PeerFrameDispatcher
 
             if (engineController.GetInvalidMessageReason(frame) is { } invalid)
             {
-                logger.LogError("A message from {FromUser} is invalid and was dropped: it {Reason}", engineController.GetFromUser(frame), invalid);
+                logger.Record(LogEvents.InvalidMessage, "A message from {Source} is invalid and was dropped: it {Reason}", engineController.GetFromUser(frame), invalid);
+                logger.Record(LogEvents.MessageDropped, "A message from {Source} was dropped because it was not valid", engineController.GetFromUser(frame));
                 return false;
             }
 
@@ -46,7 +47,7 @@ internal static class PeerFrameDispatcher
             {
                 string readMessageId = engineController.GetReadReceiptMessageId(frame);
                 string readingUser = engineController.GetFromUser(frame);
-                logger.LogInformation("{MessageId} read receipt received from {User}", readMessageId, readingUser);
+                logger.Record(LogEvents.ReceiptReceived, "{MessageId} {Kind} receipt received from {User}", readMessageId, "read", readingUser);
                 await readReceiptReceived.InvokeAll(readMessageId, readingUser);
                 return true;
             }
@@ -55,18 +56,18 @@ internal static class PeerFrameDispatcher
             {
                 string receivedMessageId = engineController.GetReceiveReceiptMessageId(frame);
                 string receivingUser = engineController.GetFromUser(frame);
-                logger.LogInformation("{MessageId} receive receipt received from {User}", receivedMessageId, receivingUser);
+                logger.Record(LogEvents.ReceiptReceived, "{MessageId} {Kind} receipt received from {User}", receivedMessageId, "receive", receivingUser);
                 await receiveReceiptReceived.InvokeAll(receivedMessageId, receivingUser);
                 return true;
             }
 
             if (engineController.IsRetrieval(frame))
             {
-                logger.LogWarning("{MessageId} retrieval request from {User} ignored: only a storage server answers one", engineController.GetIdentifier(frame), engineController.GetFromUser(frame));
+                logger.Record(LogEvents.RetrievalIgnored, "{MessageId} retrieval request from {User} ignored: only a storage server answers one", engineController.GetIdentifier(frame), engineController.GetFromUser(frame));
                 return true;
             }
 
-            logger.LogInformation("{MessageId} received from {FromUser}", engineController.GetIdentifier(frame), engineController.GetFromUser(frame));
+            logger.Record(LogEvents.MessageReceived, "{MessageId} received from {FromUser}", engineController.GetIdentifier(frame), engineController.GetFromUser(frame));
             await frameDelivered.InvokeAll(frame);
             return true;
         }

@@ -164,7 +164,7 @@ internal sealed class ConfiguredEngineController : IEngineController
     /// <inheritdoc />
     public string AppDataRoot => fallback.AppDataRoot;
     /// <inheritdoc />
-    public string AppDataPath => currentUserProvider.UserName is null && DebugUserName is { } debug && fallback.FindUserName(debug) is { } name ? Path.Combine(fallback.AppDataRoot, fallback.AppName, name) : fallback.AppDataPath;
+    public string AppDataPath => currentUserProvider.UserName is null && DebugUserName is { } debug && fallback.FindUserName(debug) is { } name ? Path.Combine(Path.GetDirectoryName(fallback.UserFilePath)!, name) : fallback.AppDataPath;
     /// <inheritdoc />
     public string UserFilePath => fallback.UserFilePath;
     /// <inheritdoc />
@@ -173,6 +173,10 @@ internal sealed class ConfiguredEngineController : IEngineController
     public string GetNetworkIndicatorLabel(bool isOnline) => fallback.GetNetworkIndicatorLabel(isOnline);
     /// <inheritdoc />
     public string GetNetworkIndicatorColor(bool isOnline) => fallback.GetNetworkIndicatorColor(isOnline);
+    /// <inheritdoc />
+    public LogFieldWidths LogWidths => fallback.LogWidths;
+    /// <inheritdoc />
+    public string LoggingFilePath => fallback.LoggingFilePath;
     /// <inheritdoc />
     public bool SeparateAlerts => fallback.SeparateAlerts;
     /// <inheritdoc />
@@ -185,6 +189,10 @@ internal sealed class ConfiguredEngineController : IEngineController
     public string SecurityLevelPluralLabel => fallback.SecurityLevelPluralLabel;
     /// <inheritdoc />
     public string SecurityLevelLabel => fallback.SecurityLevelLabel;
+    /// <inheritdoc />
+    public string UserLabel => fallback.UserLabel;
+    /// <inheritdoc />
+    public string UserPluralLabel => fallback.UserPluralLabel;
     /// <inheritdoc />
     public string Rename(string label) => fallback.Rename(label);
     /// <inheritdoc />

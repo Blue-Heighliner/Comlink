@@ -89,7 +89,7 @@
         <Grid ColumnDefinitions="*,Auto" Margin="0,4,0,0">
           <AutoCompleteBox Grid.Column="0"
                            Text="{Binding NewTargetUser}"
-                           Watermark="User name..."
+                           Watermark="{vm:Display 'User name...'}"
                            ItemsSource="{Binding AllUserNames}"
                            FilterMode="StartsWith"
                            MinimumPrefixLength="1"

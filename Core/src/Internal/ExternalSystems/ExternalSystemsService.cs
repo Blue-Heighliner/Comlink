@@ -22,13 +22,14 @@ internal sealed class ExternalSystemsService : IExternalSystemsService
         this.peerService = peerService;
         this.engineController = engineController;
         systems = engineController.ExternalSystems;
-        logger = loggerFactory.CreateLogger("ACTIVITY");
+        logger = loggerFactory.CreateLogger(LogCategories.App);
     }
 
     private readonly IPeerService peerService;
     private readonly IEngineController engineController;
     private readonly IReadOnlyList<IExternalSystem> systems;
     private readonly ILogger logger;
+    private readonly HashSet<IExternalSystem> attached = [];
     private readonly AsyncLocal<IExternalSystem?> receivingFrom = new();
 
     /// <inheritdoc />
@@ -40,7 +41,7 @@ internal sealed class ExternalSystemsService : IExternalSystemsService
         foreach (IExternalSystem system in systems)
         {
             system.AttachLogger(logger);
-            system.MessageReceived += message => OnExternalSystemMessageReceived(system, message);
+            if (attached.Add(system)) { system.MessageReceived += message => OnExternalSystemMessageReceived(system, message); }
         }
 
         try
@@ -57,7 +58,11 @@ internal sealed class ExternalSystemsService : IExternalSystemsService
     {
         try { await system.Start(cancellation); }
         catch (OperationCanceledException) { }
-        catch (Exception ex) { logger.LogError(ex, "External system {Name} stopped unexpectedly", system.Name); }
+        catch (Exception ex)
+        {
+            logger.Record(LogEvents.ExternalSystemStoppedUnexpectedly, ex, "External system {Name} stopped unexpectedly", system.Name);
+            logger.Record(LogEvents.ExternalSystemStopped, "External system {Name} stopped working", system.Name);
+        }
     }
 
     private async Task OnExternalSystemMessageReceived(IExternalSystem source, object message)
@@ -68,7 +73,8 @@ internal sealed class ExternalSystemsService : IExternalSystemsService
         // external system receives a message concurrently.
         if (engineController.GetInvalidMessageReason(message) is { } invalid)
         {
-            logger.LogError("A message from external system {Name} is invalid and was dropped: it {Reason}", source.Name, invalid);
+            logger.Record(LogEvents.InvalidMessage, "A message from {Source} is invalid and was dropped: it {Reason}", $"external system {source.Name}", invalid);
+            logger.Record(LogEvents.MessageDropped, "A message from {Source} was dropped because it was not valid", $"external system {source.Name}");
             return;
         }
 

@@ -63,7 +63,7 @@ internal sealed class ImportService : IImportService
         IEngineController engineController,
         ILoggerFactory loggerFactory)
     {
-        logger = loggerFactory.CreateLogger("ACTIVITY");
+        logger = loggerFactory.CreateLogger(LogCategories.App);
         this.messages = messages;
         this.drafts = drafts;
         this.notes = notes;
@@ -170,7 +170,7 @@ internal sealed class ImportService : IImportService
 
         if (!engineController.Priorities.Any(level => level.Stored == data.Priority))
         {
-            logger.LogError("Message {MessageId} from {FromUser} was not imported: it has the priority value {Priority}, which is not a configured priority", data.MessageId, data.FromUser, data.Priority);
+            logger.Record(LogEvents.ImportPriorityRejected, "{Item} was not imported: its priority is not supported", $"Message {data.MessageId} from {data.FromUser}");
             return false;
         }
 
@@ -210,7 +210,7 @@ internal sealed class ImportService : IImportService
     {
         if (!engineController.Priorities.Any(level => level.Stored == data.Priority))
         {
-            logger.LogError("The draft {Name} was not imported: it has the priority value {Priority}, which is not a configured priority", data.Name ?? data.Body.FirstLine, data.Priority);
+            logger.Record(LogEvents.ImportPriorityRejected, "{Item} was not imported: its priority is not supported", $"The draft {data.Name ?? data.Body.FirstLine}");
             return (false, false);
         }
 
@@ -307,7 +307,7 @@ internal sealed class ImportService : IImportService
         ActivityLogEntity? existing = (await activityLogs.GetAll()).FirstOrDefault(a => a.Date == data.Date);
         if (existing is null)
         {
-            ActivityLogEntity entity = new() { Date = data.Date, EventEntries = [.. data.EventEntries.Select(e => new ActivityLogEntry { At = e.At, Message = e.Message })] };
+            ActivityLogEntity entity = new() { Date = data.Date, EventEntries = [.. data.EventEntries.Select(e => new ActivityLogEntry { At = e.At, Message = e.Message, EventId = e.EventId })] };
             await activityLogs.Insert(entity);
             return;
         }
@@ -319,7 +319,7 @@ internal sealed class ImportService : IImportService
                 continue;
             }
 
-            ActivityLogEntry converted = new() { At = entry.At, Message = entry.Message };
+            ActivityLogEntry converted = new() { At = entry.At, Message = entry.Message, EventId = entry.EventId };
             int insertIndex = existing.EventEntries.FindIndex(e => e.At > entry.At);
             if (insertIndex < 0)
             {

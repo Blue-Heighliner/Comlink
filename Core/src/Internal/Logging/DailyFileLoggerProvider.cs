@@ -5,14 +5,18 @@ namespace BlueHeighliner.Comlink;
 internal sealed class DailyFileLoggerProvider : ILoggerProvider
 {
     /// <summary>Initializes a new <see cref="DailyFileLoggerProvider"/> using the provided path and user providers.</summary>
-    public DailyFileLoggerProvider(IEngineController engineController, ICurrentUserProvider currentUser)
+    public DailyFileLoggerProvider(IEngineController engineController, ICurrentUserProvider currentUser, ILogLineFormatter lineFormatter, ILogSettings settings)
     {
+        this.settings = settings;
+        this.lineFormatter = lineFormatter;
         this.engineController = engineController;
         this.currentUser = currentUser;
     }
 
+    private readonly ILogSettings settings;
     private readonly IEngineController engineController;
     private readonly ICurrentUserProvider currentUser;
+    private readonly ILogLineFormatter lineFormatter;
 
     private readonly ConcurrentDictionary<string, DailyFileLogger> loggers = new();
 
@@ -46,7 +50,11 @@ internal sealed class DailyFileLoggerProvider : ILoggerProvider
 
     /// <inheritdoc />
     public ILogger CreateLogger(string categoryName)
-        => loggers.GetOrAdd(categoryName, name => new DailyFileLogger(name, this, currentUser));
+        => loggers.GetOrAdd(categoryName, name => new DailyFileLogger(name, this, currentUser, lineFormatter));
+
+    /// <summary>Returns whether entries of <paramref name="category"/> are written at all.</summary>
+    /// <param name="category">The category.</param>
+    internal bool IsEnabled(string category) => settings.IsEnabled(category);
 
     /// <summary>Writes a formatted log line to the console and to the current daily file (under a cross-process mutex). Never throws: if the file cannot be written, the line still reaches the console.</summary>
     internal void Write(string line)
@@ -124,8 +132,9 @@ internal sealed class DailyFileLoggerProvider : ILoggerProvider
 internal sealed class DailyFileLogger : ILogger, IDisposable
 {
     /// <summary>Initializes a new <see cref="DailyFileLogger"/> for the specified category.</summary>
-    public DailyFileLogger(string categoryName, DailyFileLoggerProvider provider, ICurrentUserProvider currentUser)
+    public DailyFileLogger(string categoryName, DailyFileLoggerProvider provider, ICurrentUserProvider currentUser, ILogLineFormatter lineFormatter)
     {
+        this.lineFormatter = lineFormatter;
         this.categoryName = categoryName;
         this.provider = provider;
         this.currentUser = currentUser;
@@ -134,24 +143,22 @@ internal sealed class DailyFileLogger : ILogger, IDisposable
     private readonly string categoryName;
     private readonly DailyFileLoggerProvider provider;
     private readonly ICurrentUserProvider currentUser;
+    private readonly ILogLineFormatter lineFormatter;
 
     /// <inheritdoc />
     public IDisposable? BeginScope<TState>(TState state) where TState : notnull => null;
 
     /// <inheritdoc />
-    public bool IsEnabled(LogLevel logLevel) => logLevel >= LogLevel.Debug;
+    public bool IsEnabled(LogLevel logLevel) => true;
 
     /// <inheritdoc />
     public void Log<TState>(LogLevel logLevel, EventId eventId, TState state, Exception? exception, Func<TState, Exception?, string> formatter)
     {
         if (!IsEnabled(logLevel)) { return; }
-        string message = formatter(state, exception);
-        string? user = currentUser.UserName;
-        DateTime dt = DateTime.Now;
-        string dateStr = dt.ToString("dd-MMM-yyyy HH:mm:ss.fff", CultureInfo.InvariantCulture).ToUpperInvariant();
-        string level = logLevel == LogLevel.Information ? "INFO" : logLevel.ToString().ToUpperInvariant();
-        string category = categoryName.ToUpperInvariant();
-        string line = $"[{dateStr}] [{level}] [{category}] [{user ?? "----"}] {message}";
+        string category = LogEvents.CategoryOf(eventId) ?? categoryName;
+        if (!provider.IsEnabled(category)) { return; }
+
+        string line = lineFormatter.Format(DateTime.Now, category, currentUser.UserName, eventId, formatter(state, exception));
         if (exception is not null)
         {
             line += Environment.NewLine + exception;

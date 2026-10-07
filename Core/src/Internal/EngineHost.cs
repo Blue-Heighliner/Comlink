@@ -27,7 +27,7 @@ internal sealed class EngineHost : IHostedService
         this.disconnectAlarmService = disconnectAlarmService;
         this.networkIndicatorService = networkIndicatorService;
         engineController.Validate();
-        logger = loggerFactory.CreateLogger("APP");
+        logger = loggerFactory.CreateLogger(LogCategories.App);
         displayName = mode == EngineMode.Headless ? $"{engineController.AppName} (Headless)" : engineController.AppName;
     }
 
@@ -47,7 +47,7 @@ internal sealed class EngineHost : IHostedService
     /// <inheritdoc />
     public async Task StartAsync(CancellationToken cancellationToken)
     {
-        logger.LogInformation("{AppName} starting...", displayName);
+        logger.Record(LogEvents.AppStarting, "{AppName} starting", displayName);
         await userService.Load(cancellationToken);
 
         cts = new CancellationTokenSource();
@@ -56,22 +56,29 @@ internal sealed class EngineHost : IHostedService
         // a first run it waits for the install screen instead of starting without one and staying offline until the
         // next restart. Subscribing before checking means an install that lands in between is not missed.
         userService.Installed += StartNetworking;
+        userService.Changed += RestartNetworking;
         if (userService.GetCurrentUserInfo() is not null)
         {
             StartNetworking();
         }
-        else
-        {
-            logger.LogInformation("{AppName} will connect once a user is installed", displayName);
-        }
 
-        logger.LogInformation("{AppName} started", displayName);
+        logger.Record(LogEvents.AppStarted, "{AppName} started", displayName);
+    }
+
+    // Every service that runs on a user's behalf (identity certificate, role, connections) ends with the token it was given and can be started again, so another user, or none, is a stop and a start.
+    private void RestartNetworking()
+    {
+        if (cts is null) { return; }
+
+        cts.Cancel();
+        cts = new CancellationTokenSource();
+        Interlocked.Exchange(ref networkingStarted, 0);
+        if (userService.GetCurrentUserInfo() is not null) { StartNetworking(); }
     }
 
     private void StartNetworking()
     {
         if (Interlocked.Exchange(ref networkingStarted, 1) != 0) { return; }
-        userService.Installed -= StartNetworking;
 
         CancellationToken cancellation = cts!.Token;
         RunInBackground("Peer service", () => peerService.Start(cancellation), cancellation);
@@ -89,13 +96,19 @@ internal sealed class EngineHost : IHostedService
         {
             try { await run(); }
             catch (OperationCanceledException) when (cancellation.IsCancellationRequested) { }
-            catch (Exception ex) { logger.LogCritical(ex, "{Service} stopped unexpectedly", name); }
+            catch (Exception ex)
+            {
+                logger.Record(LogEvents.ServiceStoppedUnexpectedly, ex, "{Service} stopped unexpectedly", name);
+                logger.Record(LogEvents.ServiceStopped, "Part of the application stopped working unexpectedly");
+            }
         }, cancellation);
 
     /// <inheritdoc />
     public Task StopAsync(CancellationToken cancellationToken)
     {
+        logger.Record(LogEvents.AppExited, "{AppName} exited", displayName);
         userService.Installed -= StartNetworking;
+        userService.Changed -= RestartNetworking;
         cts?.Cancel();
         return Task.CompletedTask;
     }

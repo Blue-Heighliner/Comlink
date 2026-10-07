@@ -100,7 +100,7 @@ public sealed class EngineHooksServiceTests
         Mock<IUserService> userService = new();
         userService.Setup(u => u.GetCurrentUserInfo()).Returns(new UserInfo { Name = "ME" });
         FakeMessageRoutingService routing = new();
-        EngineHooksService service = new(peer, engineController.Object, userService.Object, routing, new NetworkIndicator(), noLogger);
+        EngineHooksService service = new(peer, engineController.Object, userService.Object, routing, new NetworkIndicator(LoggerFactory.Create(_ => { })), noLogger);
         return (service, peer, engineController, userService, routing);
     }
 

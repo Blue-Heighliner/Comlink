@@ -197,7 +197,7 @@ internal partial class TitleBar : UserControl
         set => SetValue(HasAutoForwardAccessProperty, value);
     }
 
-    /// <summary>Gets or sets the command invoked by the user name label's right-click "Refresh" option, which re-reads the network configuration file.</summary>
+    /// <summary>Gets or sets the command invoked by the "Refresh configuration" button of the info panel, which re-reads the configuration files.</summary>
     public ICommand? RefreshCommand
     {
         get => GetValue(RefreshCommandProperty);
@@ -288,7 +288,7 @@ internal partial class TitleBar : UserControl
     protected override void OnPropertyChanged(AvaloniaPropertyChangedEventArgs change)
     {
         base.OnPropertyChanged(change);
-        if (change.Property == UserNameProperty || change.Property == AppVersionProperty)
+        if (change.Property == UserNameProperty)
         {
             UpdateUserInfo();
         }
@@ -321,17 +321,17 @@ internal partial class TitleBar : UserControl
             ApplyAlertText();
         }
         if (change.Property == AlertTextProperty) { ApplyAlertText(); }
-        if (change.Property == NetworkTextProperty || change.Property == NetworkColorProperty || change.Property == IsServerModeProperty) { ApplyNetworkIndicator(); }
+        if (change.Property == NetworkTextProperty || change.Property == NetworkColorProperty || change.Property == IsServerModeProperty || change.Property == IsInstallScreenVisibleProperty) { ApplyNetworkIndicator(); }
     }
 
-    // A server has no network indicator; a client or relay always does.
+    // A server has no network indicator, and nobody is connected on the install screen; a client or relay otherwise always has one.
     private void ApplyNetworkIndicator()
     {
         Border? box = this.FindControl<Border>("NetworkBox");
         TextBlock? text = this.FindControl<TextBlock>("NetworkBoxText");
         if (box is null || text is null) { return; }
 
-        box.IsVisible = !IsServerMode && NetworkText.Length > 0;
+        box.IsVisible = !IsServerMode && !IsInstallScreenVisible && NetworkText.Length > 0;
         text.Text = NetworkText;
         if (Color.TryParse(NetworkColor, out Color color)) { box.Background = new SolidColorBrush(color); }
     }
@@ -355,16 +355,6 @@ internal partial class TitleBar : UserControl
     {
         TextBlock? userNameText = this.FindControl<TextBlock>("UserNameText");
         if (userNameText is not null) { userNameText.Text = UserName; }
-
-        bool hasVersion = !string.IsNullOrEmpty(AppVersion);
-        Border? separator = this.FindControl<Border>("UserInfoSeparator");
-        if (separator is not null) { separator.IsVisible = hasVersion; }
-        TextBlock? versionText = this.FindControl<TextBlock>("VersionText");
-        if (versionText is not null)
-        {
-            versionText.IsVisible = hasVersion;
-            versionText.Text = hasVersion ? $"v{AppVersion}" : string.Empty;
-        }
     }
 
     private void OnInfoClick(object? sender, Avalonia.Interactivity.RoutedEventArgs e)
@@ -378,7 +368,15 @@ internal partial class TitleBar : UserControl
             content.Children.Add(new TextBlock { Text = $"Version {AppVersion}", FontSize = 12, Foreground = new SolidColorBrush(Color.Parse("#AAAAAA")) });
         }
 
-        new Flyout { Content = content, Placement = PlacementMode.BottomEdgeAlignedRight }.ShowAt(anchor);
+        Flyout flyout = new() { Content = content, Placement = PlacementMode.BottomEdgeAlignedRight };
+        Button refresh = new() { Content = "Refresh configuration", Margin = new Thickness(0, 8, 0, 0), HorizontalAlignment = HorizontalAlignment.Stretch, IsEnabled = RefreshCommand?.CanExecute(null) ?? false };
+        refresh.Click += (_, _) =>
+        {
+            flyout.Hide();
+            RefreshCommand?.Execute(null);
+        };
+        content.Children.Add(refresh);
+        flyout.ShowAt(anchor);
     }
 
     private void OnHelpClick(object? sender, Avalonia.Interactivity.RoutedEventArgs e)
@@ -413,9 +411,6 @@ internal partial class TitleBar : UserControl
 
     private void OnAutoForwardClick(object? sender, Avalonia.Interactivity.RoutedEventArgs e)
         => ShowAutoForwardCommand?.Execute(null);
-
-    private void OnRefreshClick(object? sender, Avalonia.Interactivity.RoutedEventArgs e)
-        => RefreshCommand?.Execute(null);
 
     private void OnPrintManagerClick(object? sender, Avalonia.Interactivity.RoutedEventArgs e)
         => ShowPrintManagerCommand?.Execute(null);

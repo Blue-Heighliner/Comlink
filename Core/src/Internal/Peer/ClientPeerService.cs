@@ -21,7 +21,7 @@ internal sealed class ClientPeerService : IPeerService, IConnectionStatusService
         this.transportFactory = transportFactory;
         this.engineController = engineController;
         points = new PointMaintenance(new PeerConnectionMonitor(engineController));
-        logger = loggerFactory.CreateLogger("ACTIVITY");
+        logger = loggerFactory.CreateLogger(LogCategories.App);
     }
 
     private readonly IPeerTransportFactory transportFactory;
@@ -84,7 +84,8 @@ internal sealed class ClientPeerService : IPeerService, IConnectionStatusService
         IReadOnlyList<ConnectionPoint> parentPoints = engineController.ParentPoints;
         if (parentPoints.Count == 0 && engineController.ParentUser is null)
         {
-            logger.LogError("Client role requires a parent (its server); none was provided");
+            logger.Record(LogEvents.InvalidConfigurationFile, "Invalid configuration file: {Problem}", "client role requires a parent (its server); none was provided");
+            logger.Record(LogEvents.NetworkingNotWorking, "Networking is not working: {Reason}", "the network configuration is not valid");
             return;
         }
 
@@ -153,7 +154,11 @@ internal sealed class ClientPeerService : IPeerService, IConnectionStatusService
             if (transport is null || lifetime == default) { return; }
 
             IReadOnlyList<ConnectionPoint> wanted = engineController.ParentPoints;
-            if (wanted.Count == 0 && engineController.ParentUser is null) { logger.LogError("Client role requires a parent (its server); none is defined any more"); }
+            if (wanted.Count == 0 && engineController.ParentUser is null)
+            {
+                logger.Record(LogEvents.InvalidConfigurationFile, "Invalid configuration file: {Problem}", "client role requires a parent (its server); none is defined any more");
+                logger.Record(LogEvents.NetworkingNotWorking, "Networking is not working: {Reason}", "the network configuration is not valid");
+            }
             if (wanted.Count == 0 && engineController.ParentUser is not null && engineController.PeerPort != listenPort)
             {
                 transport.StopListener();
@@ -246,7 +251,7 @@ internal sealed class ClientPeerService : IPeerService, IConnectionStatusService
     /// <inheritdoc />
     public async Task DeliverLocal(object payload)
     {
-        logger.LogInformation("{MessageId} delivered locally from {FromUser}", engineController.GetIdentifier(payload), engineController.GetFromUser(payload));
+        logger.Record(LogEvents.MessageDeliveredLocally, "{MessageId} delivered locally from {FromUser}", engineController.GetIdentifier(payload), engineController.GetFromUser(payload));
         await FrameDelivered.InvokeAll(payload);
     }
 
@@ -302,8 +307,7 @@ internal sealed class ClientPeerService : IPeerService, IConnectionStatusService
             else { lastDisconnectedAt = DateTime.UtcNow; }
         }
 
-        if (connected) { logger.LogInformation("Connected to server"); }
-        else { logger.LogWarning("Server unreachable"); }
+        logger.Record(LogEvents.ConnectionChanged, "{Change} {UserName}", connected ? "Connected to" : "Disconnected from", serverName);
         StatusesChanged?.Invoke();
         PeerConnectionNotifier.Raise(connected ? UserConnected : UserDisconnected, serverName, connected ? "connecting" : "disconnecting", logger);
     }

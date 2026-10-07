@@ -27,9 +27,9 @@ internal partial class EngineApp : Application
             Exception? ex = e.ExceptionObject as Exception;
             try
             {
-                host.Services.GetService<ILoggerFactory>()
-                    ?.CreateLogger("ACTIVITY")
-                    ?.LogCritical(ex, "Unhandled exception: {Message}", ex?.Message ?? "Unknown error");
+                ILogger? logger = host.Services.GetService<ILoggerFactory>()?.CreateLogger(LogCategories.App);
+                logger?.Record(LogEvents.UnhandledException, ex, "Unhandled exception: {Message}", ex?.Message ?? "Unknown error");
+                logger?.Record(LogEvents.UnexpectedError, "The application ran into an unexpected error");
             }
             catch { }
         };

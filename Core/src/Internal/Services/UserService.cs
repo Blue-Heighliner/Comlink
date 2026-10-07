@@ -5,6 +5,8 @@ internal interface IUserService
 {
     /// <summary>Raised after <see cref="Install"/> registers a user, once the user is current and its state is saved.</summary>
     event Action? Installed;
+    /// <summary>Raised after <see cref="Refresh"/> changed who the current user is, including to nobody, once the new user is current.</summary>
+    event Action? Changed;
     /// <summary>Gets the currently loaded user state.</summary>
     UserState CurrentState { get; }
     /// <summary>Returns a <see cref="UserInfo"/> for the current user, or <see langword="null"/> if no user is installed.</summary>
@@ -14,6 +16,12 @@ internal interface IUserService
     /// (see <see cref="IEngineController.GetCertificateProblem"/>), and when it is not nobody is installed, so the install screen is shown; a remembered user that fails is also uninstalled, by deleting <c>User.json</c>.
     /// </summary>
     Task Load(CancellationToken cancellation = default);
+    /// <summary>
+    /// Reads <c>User.json</c> again while the engine runs. A file that names another user than the current one makes that user current once it passes the checks of <see cref="Load"/>, one that fails them is uninstalled
+    /// (the file is deleted) like a remembered user that fails at startup, and a file that is gone uninstalls the current user. Does nothing when the user is fixed by <c>--user</c> or the file still names the current user.
+    /// </summary>
+    /// <returns><see langword="true"/> when the current user changed, was installed or was uninstalled, which <see cref="Changed"/> has then announced.</returns>
+    Task<bool> Refresh(CancellationToken cancellation = default);
     /// <summary>Installs the user named <paramref name="userName"/>, updates the local state, and persists it to disk.</summary>
     /// <returns>The installed user, or <see langword="null"/> when the network has no user of that name.</returns>
     /// <exception cref="InvalidOperationException">The user's certificate is missing, is not issued to them or is not signed by the authority certificate; nothing is installed.</exception>
@@ -31,7 +39,7 @@ internal sealed class UserService : IUserService
     {
         this.engineController = engineController;
         this.currentUserProvider = currentUserProvider;
-        logger = loggerFactory.CreateLogger("APP");
+        logger = loggerFactory.CreateLogger(LogCategories.App);
     }
 
     private readonly IEngineController engineController;
@@ -44,6 +52,9 @@ internal sealed class UserService : IUserService
 
     /// <inheritdoc />
     public event Action? Installed;
+
+    /// <inheritdoc />
+    public event Action? Changed;
 
     /// <summary>Gets the currently loaded user state.</summary>
     public UserState CurrentState => state;
@@ -89,7 +100,57 @@ internal sealed class UserService : IUserService
                 File.Delete(userFilePath);
             }
         }
-        catch (Exception ex) { logger.LogError(ex, "Failed to load user state"); }
+        catch (Exception ex)
+        {
+            logger.Record(LogEvents.LoadUserStateFailed, ex, "Failed to load user state");
+            logger.Record(LogEvents.UserSettingsUnreadable, "The saved settings for the last user could not be read");
+        }
+    }
+
+    /// <inheritdoc />
+    public async Task<bool> Refresh(CancellationToken cancellation = default)
+    {
+        if (engineController.DebugUserName is not null) { return false; }
+
+        bool changed = false;
+        await lockObject.WaitAsync(cancellation);
+        try
+        {
+            string? current = state.IsInstalled ? state.UserName : null;
+            string? remembered = null;
+            string userFilePath = UserFilePath;
+            if (File.Exists(userFilePath))
+            {
+                try
+                {
+                    UserState read = JsonSerializer.Deserialize<UserState>(await File.ReadAllTextAsync(userFilePath, cancellation)) ?? new UserState();
+                    remembered = read.IsInstalled ? read.UserName : null;
+                }
+                catch (Exception ex) when (ex is JsonException or IOException)
+                {
+                    logger.Record(LogEvents.LoadUserStateFailed, ex, "Failed to load user state");
+                    logger.Record(LogEvents.UserSettingsUnreadable, "The saved settings for the last user could not be read");
+                    return false;
+                }
+            }
+
+            if (string.Equals(current, remembered, StringComparison.OrdinalIgnoreCase)) { return false; }
+
+            string? accepted = remembered is null ? null : Accept(remembered);
+            if (remembered is not null && accepted is null) { File.Delete(userFilePath); }
+            if (string.Equals(current, accepted, StringComparison.OrdinalIgnoreCase)) { return false; }
+
+            state = accepted is null ? new UserState() : new UserState { UserName = accepted };
+            currentUserProvider.UserName = accepted;
+            changed = true;
+        }
+        finally
+        {
+            lockObject.Release();
+        }
+
+        if (changed) { Changed?.Invoke(); }
+        return changed;
     }
 
     // The checks every way of becoming the user goes through: the network lists the user and the user's certificate is in order.
@@ -97,13 +158,13 @@ internal sealed class UserService : IUserService
     {
         if (engineController.FindUserName(requested) is not { } name)
         {
-            logger.LogWarning("{UserName} is not a user of the network, so nobody is installed", requested);
+            logger.Record(LogEvents.NotInstalled, "{UserName} is not installed: {Problem}", requested, "it is not a user of the network");
             return null;
         }
 
         if (engineController.GetCertificateProblem(name) is { } problem)
         {
-            logger.LogWarning("{UserName} is not installed: {Problem}", name, problem);
+            logger.Record(LogEvents.NotInstalled, "{UserName} is not installed: {Problem}", name, problem);
             return null;
         }
 

@@ -281,7 +281,7 @@ internal sealed class HandshakePeerTransport : IPeerTransport
             session.Pending.Clear();
         }
 
-        logger.LogWarning("Dropped a connection that {Reason}", reason);
+        logger.Record(LogEvents.ConnectionDropped, "Dropped a connection that {Reason}", reason);
         session.Established.TrySetResult(false);
         session.Deadline.Cancel();
         session.Aborted.Cancel();

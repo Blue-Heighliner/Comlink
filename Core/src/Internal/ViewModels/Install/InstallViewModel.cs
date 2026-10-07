@@ -21,12 +21,18 @@ internal sealed partial class InstallViewModel : ObservableObject, IInstallViewM
 {
     /// <summary>Initializes a new <see cref="InstallViewModel"/> with the required service connection.</summary>
     /// <param name="connection">Service connection used to install the user.</param>
-    public InstallViewModel(IServiceConnection connection)
+    /// <param name="loggerFactory">Factory for the activity logger that records why an install failed.</param>
+    /// <param name="engineController">Words the messages shown with the host's name for a user.</param>
+    public InstallViewModel(IServiceConnection connection, ILoggerFactory loggerFactory, IEngineController engineController)
     {
         this.connection = connection;
+        this.engineController = engineController;
+        logger = loggerFactory.CreateLogger(LogCategories.App);
     }
 
     private readonly IServiceConnection connection;
+    private readonly IEngineController engineController;
+    private readonly ILogger logger;
 
     [ObservableProperty] private string userName = string.Empty;
     [ObservableProperty] private string? errorMessage;
@@ -46,7 +52,7 @@ internal sealed partial class InstallViewModel : ObservableObject, IInstallViewM
     {
         if (string.IsNullOrWhiteSpace(UserName))
         {
-            ErrorMessage = "Please enter a user name.";
+            ErrorMessage = engineController.Display("Please enter a user name.");
             return;
         }
 
@@ -58,7 +64,8 @@ internal sealed partial class InstallViewModel : ObservableObject, IInstallViewM
             UserInfo? userInfo = await connection.InstallUser(UserName.Trim());
             if (userInfo is null)
             {
-                ErrorMessage = "No such user. Please try again.";
+                ErrorMessage = engineController.Display("No such user. Please try again.");
+                logger.Record(LogEvents.InstallFailed, "Install of {UserName} failed: {Reason}", UserName.Trim(), "the network has no such user");
                 return;
             }
 
@@ -70,6 +77,7 @@ internal sealed partial class InstallViewModel : ObservableObject, IInstallViewM
         catch (Exception ex)
         {
             ErrorMessage = $"Install failed: {ex.Message}";
+            logger.Record(LogEvents.InstallFailed, "Install of {UserName} failed: {Reason}", UserName.Trim(), ex.Message);
         }
         finally
         {

@@ -90,7 +90,7 @@ internal sealed class MsmtPeerTransport : IPeerTransport
         }
         catch (ArgumentOutOfRangeException ex)
         {
-            logger.LogError(ex, "A payload of {Length} bytes cannot be sent over {Point}: it exceeds the largest message MSMT can carry, so lower the packet size or enable packetization", data.Length, connection.Point);
+            logger.Record(LogEvents.PayloadTooLarge, ex, "A payload of {Length} bytes cannot be sent over {Point}: {Reason}", data.Length, connection.Point, "it exceeds the largest message MSMT can carry, so lower the packet size or enable packetization");
             return false;
         }
         catch (Exception ex) when (ex is ObjectDisposedException or TimeoutException)

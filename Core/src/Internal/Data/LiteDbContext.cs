@@ -19,6 +19,10 @@ internal interface ILiteDbContext : IDisposable
     ILiteCollection<StoredMessageEntity> StoredMessages { get; }
     /// <summary>Collection holding the last generated frame identifier.</summary>
     ILiteCollection<LastIdEntity> LastIds { get; }
+    /// <summary>Raised after the database has been opened on a data folder, which is when what was waiting for it can be written.</summary>
+    event Action? Opened;
+    /// <summary>Gets a value indicating whether the database has been opened, which is not until the current user's data folder is known.</summary>
+    bool IsOpen { get; }
     /// <summary>Opens the database file in the current user's data folder, binds all collections, and ensures indexes and root folders exist. Does nothing when it is already open on that folder, so it is safe to call from anywhere that needs the database, and reopens when the folder has changed.</summary>
     void Initialize();
 }
@@ -57,6 +61,12 @@ internal sealed class LiteDbContext : ILiteDbContext
     public ILiteCollection<LastIdEntity> LastIds { get; private set; } = null!;
 
 
+    /// <inheritdoc />
+    public event Action? Opened;
+
+    /// <inheritdoc />
+    public bool IsOpen => db is not null;
+
     /// <summary>Opens the database file, binds all collections, and ensures indexes and root folders exist.</summary>
     public void Initialize()
     {
@@ -72,6 +82,8 @@ internal sealed class LiteDbContext : ILiteDbContext
             openedDirectory = dataDir;
             Open();
         }
+
+        Opened?.Invoke();
     }
 
     private void Open()

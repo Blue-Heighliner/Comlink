@@ -94,7 +94,7 @@ internal sealed partial class PrintManagerViewModel : ObservableObject, IPrintMa
         this.activityLogs = activityLogs;
         this.engineController = engineController;
         this.printDriver = printDriver;
-        activityLogger = loggerFactory.CreateLogger("ACTIVITY");
+        logger = loggerFactory.CreateLogger(LogCategories.App);
 
         printReceivedEnabled = engineController.PrintReceivedDefaultEnabled;
         AvailablePrinters = printDriver.GetAvailablePrinters();
@@ -109,7 +109,7 @@ internal sealed partial class PrintManagerViewModel : ObservableObject, IPrintMa
     private readonly IActivityLogRepository activityLogs;
     private readonly IEngineController engineController;
     private readonly IPrintDriver printDriver;
-    private readonly ILogger activityLogger;
+    private readonly ILogger logger;
     private readonly List<PrintQueueEntry> queue = [];
     private readonly Lock gate = new();
     private bool isProcessing;
@@ -257,7 +257,8 @@ internal sealed partial class PrintManagerViewModel : ObservableObject, IPrintMa
             }
             catch (Exception ex)
             {
-                activityLogger.LogError(ex, "Failed to load print content for {EntryId}", job.EntryId);
+                logger.Record(LogEvents.PrintContentLoadFailed, ex, "Failed to load print content for {EntryId}", job.EntryId);
+                logger.Record(LogEvents.PrintJobFailed, "A print job could not be completed");
                 lock (gate)
                 {
                     queue.RemoveAll(j => j.Id == job.Id);
@@ -286,7 +287,8 @@ internal sealed partial class PrintManagerViewModel : ObservableObject, IPrintMa
             {
                 // Left in the queue for the next attempt, which the next job queued or printer chosen starts; an
                 // exception escaping this fire-and-forget loop would otherwise leave printing stuck until restart.
-                activityLogger.LogError(ex, "Printing {EntryId} on {Printer} failed", job.EntryId, printer);
+                logger.Record(LogEvents.PrintFailed, ex, "Printing {EntryId} on {Printer} failed", job.EntryId, printer);
+                logger.Record(LogEvents.PrintJobFailed, "A print job could not be completed");
                 lock (gate) { isProcessing = false; }
                 return;
             }

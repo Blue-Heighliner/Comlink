@@ -18,7 +18,7 @@ internal sealed class RelayPeerService : IPeerService, IConnectionStatusService,
         this.engineController = engineController;
         this.currentUserProvider = currentUserProvider;
         points = new PointMaintenance(new PeerConnectionMonitor(engineController));
-        logger = loggerFactory.CreateLogger("ACTIVITY");
+        logger = loggerFactory.CreateLogger(LogCategories.App);
     }
 
     private readonly IPeerTransportFactory transportFactory;
@@ -80,7 +80,7 @@ internal sealed class RelayPeerService : IPeerService, IConnectionStatusService,
     {
         if (engineController.ParentUser is null)
         {
-            logger.LogError("Relay role requires a parent (its server); none was provided");
+            logger.Record(LogEvents.InvalidConfigurationFile, "Invalid configuration file: {Problem}", "relay role requires a parent (its server); none was provided");
             return;
         }
 
@@ -118,7 +118,7 @@ internal sealed class RelayPeerService : IPeerService, IConnectionStatusService,
                 transport.StartListener(listenPort);
             }
 
-            if (engineController.ParentUser is null) { logger.LogError("Relay role requires a parent (its server); none is defined any more"); }
+            if (engineController.ParentUser is null) { logger.Record(LogEvents.InvalidConfigurationFile, "Invalid configuration file: {Problem}", "relay role requires a parent (its server); none is defined any more"); }
 
             HashSet<string> parentKeys = [.. engineController.ParentPoints.Select(point => point.Key)];
             (IReadOnlyList<ConnectionPoint> removed, IReadOnlyList<(ConnectionPoint Point, PeerLinkControl Control)> started) = points.Sync(transport, engineController.OutgoingPoints, lifetime, OnHeartbeatAcknowledged, point => { if (parentKeys.Contains(point.Key)) { parentLinks.Track(point); } });
@@ -186,7 +186,7 @@ internal sealed class RelayPeerService : IPeerService, IConnectionStatusService,
         string name = connection.User?.Name ?? string.Empty;
         if (FindChild(name) is not { } child)
         {
-            logger.LogWarning("Rejected connection from {Name}, which is neither its parent nor one of its children", name);
+            logger.Record(LogEvents.RejectedConnection, "Rejected connection from {Name}, which is neither {Expected}", name, "its parent nor one of its children");
             connection.Drop();
             return;
         }
@@ -241,8 +241,7 @@ internal sealed class RelayPeerService : IPeerService, IConnectionStatusService,
             else { serverLastDisconnectedAt = DateTime.UtcNow; }
         }
 
-        if (connected) { logger.LogInformation("Connected to server"); }
-        else { logger.LogWarning("Server unreachable"); }
+        logger.Record(LogEvents.PeerConnectionChanged, "{Change} {UserName}", connected ? "Connected to" : "Disconnected from", serverName);
         StatusesChanged?.Invoke();
         PeerConnectionNotifier.Raise(connected ? UserConnected : UserDisconnected, serverName, connected ? "connecting" : "disconnecting", logger);
     }
@@ -265,8 +264,7 @@ internal sealed class RelayPeerService : IPeerService, IConnectionStatusService,
             }
         }
 
-        if (connected) { logger.LogInformation("Connected to child client {ClientName}", childName); }
-        else { logger.LogWarning("Child client {ClientName} unreachable", childName); }
+        logger.Record(LogEvents.PeerConnectionChanged, "{Change} {UserName}", connected ? "Connected to" : "Disconnected from", childName);
         StatusesChanged?.Invoke();
         PeerConnectionNotifier.Raise(connected ? UserConnected : UserDisconnected, childName, connected ? "connecting" : "disconnecting", logger);
     }
@@ -288,7 +286,7 @@ internal sealed class RelayPeerService : IPeerService, IConnectionStatusService,
     private async Task Relay(Func<Task> relay)
     {
         try { await relay(); }
-        catch (Exception ex) { logger.LogError(ex, "Failed to forward a message"); }
+        catch (Exception ex) { logger.Record(LogEvents.RouteFailed, ex, "Failed to {Action}", "forward a message"); }
     }
 
     private async Task ForwardFromChild(ReadOnlyMemory<byte> data, object? packet)
@@ -299,13 +297,13 @@ internal sealed class RelayPeerService : IPeerService, IConnectionStatusService,
 
         if (engineController.GetInvalidMessageReason(frame) is { } invalid)
         {
-            logger.LogError("A message from {FromUser} is invalid and was dropped: it {Reason}", engineController.GetFromUser(frame), invalid);
+            logger.Record(LogEvents.InvalidMessage, "A message from {Source} is invalid and was dropped: it {Reason}", engineController.GetFromUser(frame), invalid);
             return;
         }
 
         if (transport is null || connection is null || isServerClosed)
         {
-            logger.LogWarning("Cannot forward {MessageId} from {FromUser}: the server is unreachable", engineController.GetIdentifier(frame), engineController.GetFromUser(frame));
+            logger.Record(LogEvents.CannotForwardServerUnreachable, "Cannot forward {MessageId} from {FromUser}: the server is unreachable", engineController.GetIdentifier(frame), engineController.GetFromUser(frame));
             return;
         }
 
@@ -320,7 +318,7 @@ internal sealed class RelayPeerService : IPeerService, IConnectionStatusService,
 
         if (engineController.GetInvalidMessageReason(frame) is { } invalid)
         {
-            logger.LogError("A message from the server for {Users} is invalid and was dropped: it {Reason}", string.Join(", ", engineController.Route(frame)), invalid);
+            logger.Record(LogEvents.InvalidMessage, "A message from {Source} is invalid and was dropped: it {Reason}", $"the server for {string.Join(", ", engineController.Route(frame))}", invalid);
             return;
         }
 
@@ -338,7 +336,7 @@ internal sealed class RelayPeerService : IPeerService, IConnectionStatusService,
     {
         if (connections.Get(child) is not { } connection)
         {
-            logger.LogWarning("Cannot deliver to {User}: no connection is identified as them", child);
+            logger.Record(LogEvents.CannotDeliverNoConnection, "Cannot deliver to {User}: no connection is identified as them", child);
             return;
         }
 

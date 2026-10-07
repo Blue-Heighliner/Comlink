@@ -147,12 +147,11 @@ public sealed class ControlProviderTests
     {
         Mock<IEngineController> fallback = new();
         fallback.Setup(f => f.AppDataPath).Returns("/base/path");
-        fallback.Setup(f => f.AppDataRoot).Returns("/base");
-        fallback.Setup(f => f.AppName).Returns("App");
+        fallback.Setup(f => f.UserFilePath).Returns(Path.Combine("/base", "Data", "User.json"));
         fallback.Setup(f => f.FindUserName("alice")).Returns("ALICE");
 
         Assert.Equal("/base/path", new ConfiguredEngineController(fallback.Object, new NetworkConfig(), NoCurrentUser).AppDataPath);
-        Assert.Equal(Path.Combine("/base", "App", "ALICE"), new ConfiguredEngineController(fallback.Object, new NetworkConfig { User = "alice" }, NoCurrentUser).AppDataPath);
+        Assert.Equal(Path.Combine("/base", "Data", "ALICE"), new ConfiguredEngineController(fallback.Object, new NetworkConfig { User = "alice" }, NoCurrentUser).AppDataPath);
         Assert.Equal("/base/path", new ConfiguredEngineController(fallback.Object, new NetworkConfig { User = "nobody" }, NoCurrentUser).AppDataPath);
         Assert.Equal("/base/path", new ConfiguredEngineController(fallback.Object, new NetworkConfig { User = "alice" }, Me).AppDataPath);
     }

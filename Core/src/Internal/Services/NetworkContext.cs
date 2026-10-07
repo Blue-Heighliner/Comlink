@@ -79,7 +79,7 @@ internal abstract class NetworkEngineContext : INetworkEngineContext
     private async Task SendInBackground(object frame)
     {
         try { await messageRouting.RouteFrame(CurrentUser.Name, frame, CancellationToken.None); }
-        catch (Exception ex) { logger.LogError(ex, "A processor-originated frame send failed"); }
+        catch (Exception ex) { logger.Record(LogEvents.ProcessorSendFailed, ex, "A processor-originated frame send failed"); }
     }
 }
 

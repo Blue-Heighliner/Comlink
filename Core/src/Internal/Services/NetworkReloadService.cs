@@ -1,6 +1,6 @@
 namespace BlueHeighliner.Comlink;
 
-/// <summary>Re-reads the network configuration file while the engine runs and applies what changed.</summary>
+/// <summary>Re-reads the configuration files while the engine runs (the network file, <c>Logging.json</c> and <c>User.json</c>) and applies what changed.</summary>
 internal interface INetworkReloadService
 {
     /// <summary>Raised after the file has been read again and whatever needed restarting has been restarted, so the UI can pick up the new values.</summary>
@@ -13,8 +13,12 @@ internal interface INetworkReloadService
     /// restart the local interface listener. Everything else, such as users, groups, security levels and node settings, is read on demand and so is
     /// current as soon as the file has been read.
     /// </summary>
-    /// <exception cref="Exception">The file can no longer be read or parsed; the engine keeps running on the configuration it had.</exception>
-    void Reload();
+    /// <remarks>
+    /// <c>Logging.json</c> is read again too, so the log categories it turns on take effect at once, and so is <c>User.json</c>: when it now names another user, or none, the current user changes
+    /// (see <see cref="IUserService.Refresh"/>), and the connections are then started again for the new user instead of being adjusted.
+    /// </remarks>
+    /// <exception cref="Exception">The network file can no longer be read or parsed; the engine keeps running on the configuration it had.</exception>
+    Task Reload();
 }
 
 /// <inheritdoc />
@@ -23,25 +27,36 @@ internal sealed class NetworkReloadService(
     IEngineController engineController,
     IRolePeerService peerService,
     IInterfaceService interfaceService,
+    ILogSettings logSettings,
+    IUserService userService,
     ILoggerFactory loggerFactory) : INetworkReloadService
 {
-    private readonly ILogger logger = loggerFactory.CreateLogger("ACTIVITY");
+    private readonly ILogger logger = loggerFactory.CreateLogger(LogCategories.App);
 
     /// <inheritdoc />
     public event Action? Reloaded;
 
     /// <inheritdoc />
-    public void Reload()
+    public async Task Reload()
     {
         string restartBefore = RestartsPeers();
         string interfaceBefore = InterfaceSettings();
 
         network.Reload();
-        logger.LogInformation("Network configuration reloaded");
+        logSettings.Reload();
+        logger.Record(LogEvents.NetworkConfigurationReloaded, "Network configuration reloaded");
 
+        // A new user's connections are started again from scratch, which reads the new configuration anyway.
+        if (!await userService.Refresh()) { Apply(restartBefore, interfaceBefore); }
+
+        Reloaded?.Invoke();
+    }
+
+    private void Apply(string restartBefore, string interfaceBefore)
+    {
         if (restartBefore != RestartsPeers())
         {
-            logger.LogInformation("Role or certificates changed, restarting connections");
+            logger.Record(LogEvents.PeersRestarting, "Role or certificates changed, restarting connections");
             peerService.Restart();
         }
         else
@@ -51,11 +66,9 @@ internal sealed class NetworkReloadService(
 
         if (interfaceBefore != InterfaceSettings())
         {
-            logger.LogInformation("Interface listener changed, restarting it");
+            logger.Record(LogEvents.InterfaceRestarting, "Interface listener changed, restarting it");
             interfaceService.Restart();
         }
-
-        Reloaded?.Invoke();
     }
 
     // What cannot be changed on a running implementation: a different role is a different implementation, and the certificates are fixed when it is created.

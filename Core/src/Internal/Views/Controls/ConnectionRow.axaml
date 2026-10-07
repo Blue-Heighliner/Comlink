@@ -16,7 +16,7 @@
     <Grid ColumnDefinitions="*,80,180,180">
       <TextBlock Grid.Column="0"
                  Text="{Binding UserName}"
-                 ToolTip.Tip="User"
+                 ToolTip.Tip="{vm:Display 'User'}"
                  FontSize="13"
                  FontWeight="SemiBold"
                  Foreground="#1E1E1E"

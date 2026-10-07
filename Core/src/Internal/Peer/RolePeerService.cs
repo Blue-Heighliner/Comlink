@@ -72,9 +72,11 @@ internal sealed class RolePeerService(IServiceProvider services, IEngineControll
             StatusesChanged?.Invoke();
             try { await created.Start(run.Token); }
             catch (OperationCanceledException) when (run.IsCancellationRequested) { }
-            catch (InvalidOperationException ex)
+            catch (InvalidOperationException ex) when (ex is not InvalidEngineConfigurationException)
             {
-                services.GetService<ILoggerFactory>()?.CreateLogger("ACTIVITY").LogError("Networking could not start: {Message}", ex.Message);
+                ILogger? logger = services.GetService<ILoggerFactory>()?.CreateLogger(LogCategories.App);
+                logger?.Record(LogEvents.NetworkingCouldNotStart, "Networking could not start: {Message}", ex.Message);
+                logger?.Record(LogEvents.NetworkingNotWorking, "Networking is not working: {Reason}", "its certificates or settings could not be used");
             }
 
             if (created is IAsyncDisposable disposable) { await disposable.DisposeAsync(); }

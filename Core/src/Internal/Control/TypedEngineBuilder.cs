@@ -62,6 +62,13 @@ internal sealed class EngineBuilder<TFrame, TPacket, TPriority, TLevel> : IEngin
     }
 
     /// <inheritdoc />
+    public IEngineBuilder<TFrame, TPacket, TPriority, TLevel> Logs<THandler>() where THandler : ILogHandler
+    {
+        state.LogHandler = ServiceRegistration<ILogHandler>.Of(typeof(THandler), instance => (ILogHandler)instance);
+        return this;
+    }
+
+    /// <inheritdoc />
     public IEngineBuilder<TFrame, TPacket, TPriority, TLevel> Prints<THandler>() where THandler : IPrintHandler<TFrame>
     {
         state.PrintHandler = ServiceRegistration<IPrintFrameHandler>.Of(typeof(THandler), instance => new PrintFrameHandler<TFrame>((IPrintHandler<TFrame>)instance));

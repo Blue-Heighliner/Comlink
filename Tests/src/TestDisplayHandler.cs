@@ -34,6 +34,9 @@ public sealed class TestDisplayHandler : IDisplayHandler
     public string? TagLabel => "Category";
 
     /// <inheritdoc />
+    public string? UserLabel => "Operator";
+
+    /// <inheritdoc />
     public string? TagPluralLabel => "Categories";
 
     /// <inheritdoc />

@@ -3,6 +3,27 @@ namespace BlueHeighliner.Comlink.Tests.Unit.Internal.ViewModels;
 /// <summary>Unit tests for <see cref="InstallViewModel"/>.</summary>
 public sealed class InstallViewModelTests
 {
+    private sealed class RecordingLoggerProvider : ILoggerProvider
+    {
+        public List<(string Category, LogLevel Level, string Message)> Entries { get; } = [];
+
+        public ILogger CreateLogger(string categoryName) => new RecordingLogger(categoryName, Entries);
+
+        public void Dispose()
+        {
+        }
+
+        private sealed class RecordingLogger(string category, List<(string Category, LogLevel Level, string Message)> entries) : ILogger
+        {
+            public IDisposable? BeginScope<TState>(TState state) where TState : notnull => null;
+
+            public bool IsEnabled(LogLevel logLevel) => true;
+
+            public void Log<TState>(LogLevel logLevel, EventId eventId, TState state, Exception? exception, Func<TState, Exception?, string> formatter)
+                => entries.Add((LogEvents.CategoryOf(eventId) ?? category, logLevel, formatter(state, exception)));
+        }
+    }
+
     private static UserInfo MakeUserInfo(string name) => new()
     {
         Name = name
@@ -13,7 +34,7 @@ public sealed class InstallViewModelTests
     public async Task Install_EmptyUserName_SetsErrorMessage()
     {
         Mock<IServiceConnection> connMock = new();
-        InstallViewModel vm = new(connMock.Object);
+        InstallViewModel vm = new(connMock.Object, LoggerFactory.Create(_ => { }), new TestEngineController());
         vm.UserName = "";
 
         await vm.InstallCommand.ExecuteAsync(null);
@@ -29,7 +50,7 @@ public sealed class InstallViewModelTests
         UserInfo expectedInfo = MakeUserInfo("ALPHA");
         Mock<IServiceConnection> connMock = new();
         connMock.Setup(c => c.InstallUser("USER1", It.IsAny<CancellationToken>())).ReturnsAsync(expectedInfo);
-        InstallViewModel vm = new(connMock.Object);
+        InstallViewModel vm = new(connMock.Object, LoggerFactory.Create(_ => { }), new TestEngineController());
         vm.UserName = "USER1";
 
         UserInfo? received = null;
@@ -47,7 +68,7 @@ public sealed class InstallViewModelTests
     {
         Mock<IServiceConnection> connMock = new();
         connMock.Setup(c => c.InstallUser(It.IsAny<string>(), It.IsAny<CancellationToken>())).ReturnsAsync((UserInfo?)null);
-        InstallViewModel vm = new(connMock.Object);
+        InstallViewModel vm = new(connMock.Object, LoggerFactory.Create(_ => { }), new TestEngineController());
         vm.UserName = "NOBODY";
 
         bool eventFired = false;
@@ -66,7 +87,7 @@ public sealed class InstallViewModelTests
         TaskCompletionSource<UserInfo?> gate = new();
         Mock<IServiceConnection> connMock = new();
         connMock.Setup(c => c.InstallUser(It.IsAny<string>(), It.IsAny<CancellationToken>())).Returns(gate.Task);
-        InstallViewModel vm = new(connMock.Object);
+        InstallViewModel vm = new(connMock.Object, LoggerFactory.Create(_ => { }), new TestEngineController());
         vm.UserName = "USER1";
 
         Task installTask = vm.InstallCommand.ExecuteAsync(null);
@@ -82,10 +103,30 @@ public sealed class InstallViewModelTests
     public void UserName_AutoUppercased()
     {
         Mock<IServiceConnection> connMock = new();
-        InstallViewModel vm = new(connMock.Object);
+        InstallViewModel vm = new(connMock.Object, LoggerFactory.Create(_ => { }), new TestEngineController());
 
         vm.UserName = "user1";
 
         Assert.Equal("USER1", vm.UserName);
+    }
+
+    /// <summary>A failed install is written to the activity log, whether the name is unknown or the user's certificate is not in order.</summary>
+    [Fact]
+    public async Task Install_Failures_AreActivityLogged()
+    {
+        RecordingLoggerProvider provider = new();
+        Mock<IServiceConnection> connMock = new();
+        connMock.Setup(c => c.InstallUser("NOBODY", It.IsAny<CancellationToken>())).ReturnsAsync((UserInfo?)null);
+        connMock.Setup(c => c.InstallUser("ALICE", It.IsAny<CancellationToken>())).ThrowsAsync(new InvalidOperationException("no certificate"));
+        InstallViewModel vm = new(connMock.Object, LoggerFactory.Create(builder => builder.AddProvider(provider)), new TestEngineController());
+
+        vm.UserName = "NOBODY";
+        await vm.InstallCommand.ExecuteAsync(null);
+        vm.UserName = "ALICE";
+        await vm.InstallCommand.ExecuteAsync(null);
+
+        Assert.All(provider.Entries, entry => Assert.Equal("ACTIVITY", entry.Category));
+        Assert.Contains(provider.Entries, entry => entry.Message.Contains("NOBODY") && entry.Message.Contains("no such user"));
+        Assert.Contains(provider.Entries, entry => entry.Message.Contains("ALICE") && entry.Message.Contains("no certificate"));
     }
 }

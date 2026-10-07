@@ -18,8 +18,9 @@ internal interface INetworkIndicator
 }
 
 /// <inheritdoc cref="INetworkIndicator" />
-internal sealed class NetworkIndicator : INetworkIndicator
+internal sealed class NetworkIndicator(ILoggerFactory loggerFactory) : INetworkIndicator
 {
+    private readonly ILogger logger = loggerFactory.CreateLogger(LogCategories.App);
     private readonly Lock gate = new();
     private bool isOnline;
 
@@ -45,6 +46,7 @@ internal sealed class NetworkIndicator : INetworkIndicator
             this.isOnline = isOnline;
         }
 
+        logger.Record(LogEvents.NetworkStatusChanged, "Network {Status}", isOnline ? "online" : "offline");
         Changed?.Invoke(isOnline);
     }
 }

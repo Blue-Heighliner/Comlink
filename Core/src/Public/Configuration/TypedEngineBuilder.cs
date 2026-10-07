@@ -60,6 +60,10 @@ public interface IEngineBuilder<TFrame, TPacket, TPriority, TLevel> where TFrame
     /// <summary>Starts configuring the aspects of the address types, such as the display label shown for each in the address type picker, the per-address badge, and the message view's section headers.</summary>
     IAddressTypesBuilder<TFrame, TPacket, TPriority, TLevel> AddressTypes();
 
+    /// <summary>States the handler that controls the layout of log lines (see <see cref="ILogHandler"/>). Defaults to no field having a fixed width.</summary>
+    /// <typeparam name="THandler">The handler type, instantiated through dependency injection when the engine runs: the instance registered for it in the host's services, or else one constructed from them.</typeparam>
+    IEngineBuilder<TFrame, TPacket, TPriority, TLevel> Logs<THandler>() where THandler : ILogHandler;
+
     /// <summary>States the handler that controls how the print manager behaves (see <see cref="IPrintHandler{TFrame}"/>). Defaults to the print manager's own defaults.</summary>
     /// <typeparam name="THandler">The handler type, instantiated through dependency injection when the engine runs: the instance registered for it in the host's services, or else one constructed from them.</typeparam>
     IEngineBuilder<TFrame, TPacket, TPriority, TLevel> Prints<THandler>() where THandler : IPrintHandler<TFrame>;
@@ -75,10 +79,10 @@ public interface IEngineBuilder<TFrame, TPacket, TPriority, TLevel> where TFrame
     /// <summary>
     /// Sets whether command-line arguments may override where the network configuration file (the file that describes every user
     /// of the network) and the running user come from: <c>--config</c> names the file to read instead of <c>Config.json</c> in the
-    /// current working directory, and <c>--user</c> names the user the process runs as, which is then checked like an installed user. The file
+    /// current working directory, and <c>--user</c> names the user the process runs as, which is then checked like an installed user, and <c>--log</c> names log categories to turn on beyond the defaults (a comma separated list). The file
     /// in the working directory is always read; only the arguments are ignored when this is disallowed.
     /// </summary>
-    /// <param name="allowed"><see langword="true"/> to honor <c>--config</c> and <c>--user</c>, <see langword="false"/> to ignore them. Disallowed unless this is called.</param>
+    /// <param name="allowed"><see langword="true"/> to honor <c>--config</c>, <c>--user</c> and <c>--log</c>, <see langword="false"/> to ignore them. Disallowed unless this is called.</param>
     IEngineBuilder<TFrame, TPacket, TPriority, TLevel> CommandLineOverrides(bool allowed);
 
     /// <summary>Adds an external system, a conduit relaying messages to and from a system outside Comlink.</summary>

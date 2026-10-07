@@ -18,7 +18,7 @@ internal static class PeerConnectionNotifier
         _ = Task.Run(async () =>
         {
             try { await subscribers.InvokeAll(userName); }
-            catch (Exception ex) { logger.LogError(ex, "Failed to handle {UserName} {Action}", userName, action); }
+            catch (Exception ex) { logger.Record(LogEvents.ConnectionEventHandlerFailed, ex, "Failed to handle {UserName} {Action}", userName, action); }
         });
     }
 }

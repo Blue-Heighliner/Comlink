@@ -3,44 +3,10 @@ namespace BlueHeighliner.Comlink.Tests.Unit.Internal.Logging;
 /// <summary>Unit tests for <see cref="ActivityLogger"/> and <see cref="ActivityLoggerProvider"/>.</summary>
 public sealed class ActivityLoggerTests
 {
-
-    /// <summary>ACTIVITY category at Info level is enabled.</summary>
-    [Fact]
-    public void IsEnabled_ActivityCategory_InfoLevel_ReturnsTrue()
+    private static ActivityLogger Build(Mock<IActivityLogRepository> repo, string category = "APP")
     {
-        Mock<IActivityLogRepository> repo = new();
-        ActivityLogger logger = new("ACTIVITY", repo.Object);
-        Assert.True(logger.IsEnabled(LogLevel.Information));
-    }
-
-    /// <summary>ACTIVITY category at Debug level is disabled.</summary>
-    [Fact]
-    public void IsEnabled_ActivityCategory_DebugLevel_ReturnsFalse()
-    {
-        Mock<IActivityLogRepository> repo = new();
-        ActivityLogger logger = new("ACTIVITY", repo.Object);
-        Assert.False(logger.IsEnabled(LogLevel.Debug));
-    }
-
-    /// <summary>Non-ACTIVITY category is always disabled.</summary>
-    [Theory]
-    [InlineData("APP")]
-    [InlineData("OTHER")]
-    [InlineData("")]
-    public void IsEnabled_NonActivityCategory_ReturnsFalse(string category)
-    {
-        Mock<IActivityLogRepository> repo = new();
-        ActivityLogger logger = new(category, repo.Object);
-        Assert.False(logger.IsEnabled(LogLevel.Information));
-    }
-
-    /// <summary>Category comparison is case-insensitive.</summary>
-    [Fact]
-    public void IsEnabled_ActivityCategoryLowercase_ReturnsTrue()
-    {
-        Mock<IActivityLogRepository> repo = new();
-        ActivityLogger logger = new("activity", repo.Object);
-        Assert.True(logger.IsEnabled(LogLevel.Information));
+        repo.Setup(r => r.AppendEvent(It.IsAny<string>(), It.IsAny<int>())).Returns(Task.CompletedTask);
+        return new ActivityLogger(category, repo.Object);
     }
 
     /// <summary>BeginScope always returns null.</summary>
@@ -48,48 +14,54 @@ public sealed class ActivityLoggerTests
     public void BeginScope_ReturnsNull()
     {
         Mock<IActivityLogRepository> repo = new();
-        ActivityLogger logger = new("ACTIVITY", repo.Object);
-        Assert.Null(logger.BeginScope("state"));
+        Assert.Null(Build(repo).BeginScope("state"));
     }
 
-    /// <summary>Log at Info level calls AppendEvent on the repository.</summary>
+    /// <summary>An event of the activity category is appended to the activity log with its identifier, whatever logger it was written through.</summary>
     [Fact]
-    public async Task Log_InfoLevel_CallsAppendEvent()
+    public async Task Log_ActivityEvent_IsAppendedWithItsId()
     {
         Mock<IActivityLogRepository> repo = new();
-        repo.Setup(r => r.AppendEvent(It.IsAny<string>())).Returns(Task.CompletedTask);
-        ActivityLogger logger = new("ACTIVITY", repo.Object);
+        ActivityLogger logger = Build(repo);
 
-        logger.Log(LogLevel.Information, default, "test message", null, (s, _) => s);
+        logger.Log(LogLevel.Information, LogEvents.AppStarted, "started", null, (s, _) => s);
 
         await Task.Delay(50);
-        repo.Verify(r => r.AppendEvent("test message"), Times.Once);
+        repo.Verify(r => r.AppendEvent("started", LogEvents.AppStarted.Id), Times.Once);
     }
 
-    /// <summary>Log below Info level does not call AppendEvent.</summary>
-    [Fact]
-    public async Task Log_DebugLevel_DoesNotCallAppendEvent()
+    /// <summary>An event of any other category is not appended.</summary>
+    [Theory]
+    [MemberData(nameof(OtherCategoryEvents))]
+    public async Task Log_EventOfAnotherCategory_IsNotAppended(EventId id)
     {
         Mock<IActivityLogRepository> repo = new();
-        ActivityLogger logger = new("ACTIVITY", repo.Object);
+        ActivityLogger logger = Build(repo, "ACTIVITY");
 
-        logger.Log(LogLevel.Debug, default, "debug msg", null, (s, _) => s);
+        logger.Log(LogLevel.Information, id, "msg", null, (s, _) => s);
 
         await Task.Delay(50);
-        repo.Verify(r => r.AppendEvent(It.IsAny<string>()), Times.Never);
+        repo.Verify(r => r.AppendEvent(It.IsAny<string>(), It.IsAny<int>()), Times.Never);
     }
 
-    /// <summary>Log on non-ACTIVITY category does not call AppendEvent.</summary>
-    [Fact]
-    public async Task Log_NonActivityCategory_DoesNotCallAppendEvent()
+    public static IEnumerable<object[]> OtherCategoryEvents() => [[LogEvents.UnhandledException], [LogEvents.ConnectionEventHandlerFailed], [LogEvents.RetrievalIgnored], [LogEvents.FrameSent], [LogEvents.PacketReceived]];
+
+    /// <summary>A message with no event of the engine is classified by the category of its logger, case-insensitively.</summary>
+    [Theory]
+    [InlineData("ACTIVITY", 1)]
+    [InlineData("activity", 1)]
+    [InlineData("APP", 0)]
+    [InlineData("OTHER", 0)]
+    [InlineData("", 0)]
+    public async Task Log_WithoutAnEngineEvent_FollowsTheLoggerCategory(string category, int appended)
     {
         Mock<IActivityLogRepository> repo = new();
-        ActivityLogger logger = new("APP", repo.Object);
+        ActivityLogger logger = Build(repo, category);
 
         logger.Log(LogLevel.Information, default, "msg", null, (s, _) => s);
 
         await Task.Delay(50);
-        repo.Verify(r => r.AppendEvent(It.IsAny<string>()), Times.Never);
+        repo.Verify(r => r.AppendEvent("msg", 0), appended == 1 ? Times.Once() : Times.Never());
     }
 
     /// <summary>CreateLogger returns an ActivityLogger instance.</summary>

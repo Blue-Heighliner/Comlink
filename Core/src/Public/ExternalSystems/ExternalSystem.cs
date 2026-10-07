@@ -32,13 +32,13 @@ public interface IExternalSystem
     /// <returns><see langword="true"/> if the message was sent successfully; <see langword="false"/> if not currently connected, or the send failed.</returns>
     Task<bool> Send(object message);
     /// <summary>
-    /// Assigns the logger this external system uses to report connection lifecycle events. Called once by
+    /// Assigns the logger this external system uses to report what happens to it. Called once by
     /// <see cref="ExternalSystemsService"/>, using its own <see cref="ILoggerFactory"/>, before <see cref="Start"/>
     /// — an external system is constructed directly by the host's <see cref="IEngineConfiguration"/>
     /// rather than resolved from the running engine's container, and any logger the configuration was injected with comes
     /// from the container it was built in, which writes to none of the engine's logs. This logger is the engine's own.
     /// </summary>
-    /// <param name="logger">The logger to use for connection lifecycle events from this point on.</param>
+    /// <param name="logger">The logger to use from this point on.</param>
     void AttachLogger(ILogger logger);
 }
 
@@ -95,7 +95,8 @@ public abstract class ExternalSystemBase<TFrame>(string name, TimeSpan? connectR
                     try { connected = await TryConnect(cancellation); }
                     catch (Exception ex) when (ex is not OperationCanceledException)
                     {
-                        logger.LogWarning(ex, "External system {Name} failed to connect", Name);
+                        logger.Record(LogEvents.ExternalSystemFailed, ex, "External system {Name} failed to {Action}", Name, "connect");
+                        logger.Record(LogEvents.ExternalSystemProblem, "External system {Name} {Problem}", Name, "could not connect");
                         connected = false;
                     }
 
@@ -103,7 +104,7 @@ public abstract class ExternalSystemBase<TFrame>(string name, TimeSpan? connectR
                     {
                         IsConnected = true;
                         disconnectSignal = CancellationTokenSource.CreateLinkedTokenSource(cancellation);
-                        logger.LogInformation("External system {Name} connected", Name);
+                        logger.Record(LogEvents.ExternalSystemConnectionChanged, "External system {Name} {Change}", Name, "connected");
                     }
                     else
                     {
@@ -126,7 +127,7 @@ public abstract class ExternalSystemBase<TFrame>(string name, TimeSpan? connectR
                 }
                 catch (Exception ex) when (ex is not OperationCanceledException)
                 {
-                    logger.LogWarning(ex, "External system {Name} failed to poll connection status", Name);
+                    logger.Record(LogEvents.ExternalSystemFailed, ex, "External system {Name} failed to {Action}", Name, "poll connection status");
                     stillConnected = false;
                 }
 
@@ -135,11 +136,11 @@ public abstract class ExternalSystemBase<TFrame>(string name, TimeSpan? connectR
                     IsConnected = false;
                     disconnectSignal?.Dispose();
                     disconnectSignal = null;
-                    logger.LogInformation("External system {Name} disconnected", Name);
+                    logger.Record(LogEvents.ExternalSystemConnectionChanged, "External system {Name} {Change}", Name, "disconnected");
                     try { await Disconnect(); }
                     catch (Exception ex) when (ex is not OperationCanceledException)
                     {
-                        logger.LogWarning(ex, "External system {Name} failed to release its connection cleanly", Name);
+                        logger.Record(LogEvents.ExternalSystemFailed, ex, "External system {Name} failed to {Action}", Name, "release its connection cleanly");
                     }
                 }
             }
@@ -161,7 +162,7 @@ public abstract class ExternalSystemBase<TFrame>(string name, TimeSpan? connectR
         if (!IsConnected) { return false; }
         if (message is not TFrame typed)
         {
-            logger.LogWarning("External system {Name} cannot send a {Type}; it only handles {Expected}", Name, message.GetType().Name, typeof(TFrame).Name);
+            logger.Record(LogEvents.ExternalSystemWrongFrameType, "External system {Name} cannot send a {Type}; it only handles {Expected}", Name, message.GetType().Name, typeof(TFrame).Name);
             return false;
         }
 
@@ -172,7 +173,8 @@ public abstract class ExternalSystemBase<TFrame>(string name, TimeSpan? connectR
         }
         catch (Exception ex) when (ex is not OperationCanceledException)
         {
-            logger.LogWarning(ex, "External system {Name} failed to send a message", Name);
+            logger.Record(LogEvents.ExternalSystemFailed, ex, "External system {Name} failed to {Action}", Name, "send a message");
+            logger.Record(LogEvents.ExternalSystemProblem, "External system {Name} {Problem}", Name, "could not send a message");
             return false;
         }
     }
@@ -199,11 +201,11 @@ public abstract class ExternalSystemBase<TFrame>(string name, TimeSpan? connectR
         }
         catch (ChannelClosedException)
         {
-            logger.LogWarning("External system {Name} received a message while not running; dropping it", Name);
+            logger.Record(LogEvents.ExternalSystemNotRunning, "External system {Name} received a message while not running; dropping it", Name);
         }
         catch (Exception ex) when (ex is not OperationCanceledException)
         {
-            logger.LogWarning(ex, "External system {Name} failed to filter a received message", Name);
+            logger.Record(LogEvents.ExternalSystemFailed, ex, "External system {Name} failed to {Action}", Name, "filter a received message");
         }
     }
 
@@ -228,7 +230,7 @@ public abstract class ExternalSystemBase<TFrame>(string name, TimeSpan? connectR
             try { await MessageReceived(message); }
             catch (Exception ex) when (ex is not OperationCanceledException)
             {
-                logger.LogWarning(ex, "External system {Name} failed to process a received message", Name);
+                logger.Record(LogEvents.ExternalSystemFailed, ex, "External system {Name} failed to {Action}", Name, "process a received message");
             }
         }
     }

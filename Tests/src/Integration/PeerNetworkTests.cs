@@ -51,7 +51,7 @@ public sealed class PeerNetworkTests
             });
             Mock<ICurrentUserProvider> currentUser = new();
             currentUser.SetupGet(p => p.UserName).Returns(user);
-            PeerTransportFactory factory = new(new IMsmtSessionPeer.Factory(), Mock.Of<IHdlcPeerFactory>(), controller.Object, noLogger);
+            PeerTransportFactory factory = new(new IMsmtSessionPeer.Factory(), Mock.Of<IHdlcPeerFactory>(), controller.Object, noLogger, Mock.Of<ILogSettings>());
 
             (Service, Status) = role switch
             {

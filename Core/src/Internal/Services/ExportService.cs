@@ -59,7 +59,7 @@ internal sealed class ExportService : IExportService
     {
         Id = entity.Id.ToString(),
         Date = entity.Date,
-        EventEntries = [.. entity.EventEntries.Select(e => new ActivityLogEventEntry { At = e.At, Message = e.Message })]
+        EventEntries = [.. entity.EventEntries.Select(e => new ActivityLogEventEntry { At = e.At, Message = e.Message, EventId = e.EventId })]
     };
 
     private static FolderType ToFolderType(ExportEntryRef entryRef) => entryRef.EntryType switch

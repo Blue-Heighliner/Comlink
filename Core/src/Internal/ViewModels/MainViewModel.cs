@@ -98,10 +98,11 @@ internal interface IMainViewModel
     /// <summary>Displays the print manager screen in the content area.</summary>
     IRelayCommand ShowPrintManagerCommand { get; }
     /// <summary>
-    /// Re-reads the network configuration file and applies what changed: connections are brought down or opened as the file now defines them, and the
-    /// role, security level and access shown in the UI are updated. A file that cannot be read is logged and leaves everything as it was.
+    /// Re-reads the configuration files and applies what changed: the network file (connections are brought down or opened as it now defines them, and the
+    /// role, security level and access shown in the UI are updated), <c>Logging.json</c> and <c>User.json</c> (another user, or none, is switched to after the checks
+    /// of an install, and the UI follows). A network file that cannot be read is logged and leaves everything as it was.
     /// </summary>
-    IRelayCommand RefreshCommand { get; }
+    IAsyncRelayCommand RefreshCommand { get; }
     /// <summary>Restores the content area to its default (home) state, without disturbing any other ViewModel's state.</summary>
     IRelayCommand ShowHomeCommand { get; }
     /// <summary>Switches <see cref="IsServerMode"/>'s view to the connections table.</summary>
@@ -186,8 +187,7 @@ internal sealed partial class MainViewModel : ObservableObject, IMainViewModel
         this.engineController = engineController;
         this.bodyDocumentFactory = bodyDocumentFactory;
         this.loggerFactory = loggerFactory;
-        logger = loggerFactory.CreateLogger("APP");
-        activityLogger = loggerFactory.CreateLogger("ACTIVITY");
+        logger = loggerFactory.CreateLogger(LogCategories.App);
 
         isKioskMode = engineController.IsKioskMode;
         appVersion = engineController.AppVersion;
@@ -218,7 +218,6 @@ internal sealed partial class MainViewModel : ObservableObject, IMainViewModel
     private readonly IBodyDocumentFactory bodyDocumentFactory;
     private readonly ILoggerFactory loggerFactory;
     private readonly ILogger logger;
-    private readonly ILogger activityLogger;
 
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(ShowMainLayout))]
@@ -339,7 +338,7 @@ internal sealed partial class MainViewModel : ObservableObject, IMainViewModel
             currentUserProvider.UserName = info.Name;
             await ApplyUserInfo(info);
             await StartMainUi();
-            logger.LogInformation("{AppName} started", engineController.AppName);
+            logger.Record(LogEvents.AppStarted, "{AppName} started", engineController.AppName);
             IsInstallScreenVisible = false;
         };
 
@@ -441,7 +440,8 @@ internal sealed partial class MainViewModel : ObservableObject, IMainViewModel
         }
         catch (Exception ex)
         {
-            activityLogger.LogError(ex, "Failed to store received message from {FromUser}", evt.FromUser);
+            logger.Record(LogEvents.StoreReceivedMessageFailed, ex, "Failed to store received message from {FromUser}", evt.FromUser);
+            logger.Record(LogEvents.ReceivedMessageNotSaved, "A message received from {FromUser} could not be saved", evt.FromUser);
         }
     }
 
@@ -465,7 +465,11 @@ internal sealed partial class MainViewModel : ObservableObject, IMainViewModel
                 IsInstallScreenVisible = true;
             }
         }
-        catch (Exception ex) { logger.LogError(ex, "Initialization failed"); }
+        catch (Exception ex)
+        {
+            logger.Record(LogEvents.InitializationFailed, ex, "Initialization failed");
+            logger.Record(LogEvents.StartupIncomplete, "The application could not finish loading");
+        }
     }
 
     private async Task StartMainUi()
@@ -480,9 +484,35 @@ internal sealed partial class MainViewModel : ObservableObject, IMainViewModel
         CanRetrieve = IsClientMode && engineController.StorageServers.Count > 0;
     }
 
-    private void OnNetworkReloaded()
+    private void OnNetworkReloaded() => _ = ApplyReloaded();
+
+    // The reload may also have changed who the user is (see IUserService.Refresh): another user's data is another database and another set of folders, and nobody leaves the install screen.
+    private async Task ApplyReloaded()
     {
-        if (!string.IsNullOrEmpty(UserName)) { _ = ApplyUserInfo(engineController.GetUserInfo(UserName)); }
+        string? current = currentUserProvider.UserName;
+        if (string.IsNullOrEmpty(current))
+        {
+            DeselectFolderAndEntry();
+            contentArea.ShowHome();
+            UserName = string.Empty;
+            SecurityLevelName = string.Empty;
+            HasAutoForwardAccess = false;
+            IsInstallScreenVisible = true;
+            return;
+        }
+
+        if (!string.Equals(current, UserName, StringComparison.OrdinalIgnoreCase))
+        {
+            DeselectFolderAndEntry();
+            contentArea.ShowHome();
+            db.Initialize();
+            await ApplyUserInfo(engineController.GetUserInfo(current));
+            await StartMainUi();
+            IsInstallScreenVisible = false;
+            return;
+        }
+
+        await ApplyUserInfo(engineController.GetUserInfo(current));
     }
 
     private Task ApplyUserInfo(UserInfo info)
@@ -632,10 +662,14 @@ internal sealed partial class MainViewModel : ObservableObject, IMainViewModel
     }
 
     [RelayCommand]
-    private void Refresh()
+    private async Task Refresh()
     {
-        try { networkReload.Reload(); }
-        catch (Exception ex) { activityLogger.LogError(ex, "The network configuration could not be reloaded: {Message}", ex.Message); }
+        try { await networkReload.Reload(); }
+        catch (Exception ex)
+        {
+            logger.Record(LogEvents.NetworkReloadFailed, ex, "The network configuration could not be reloaded: {Message}", ex.Message);
+            logger.Record(LogEvents.NetworkReloadNotDone, "The network configuration could not be reloaded");
+        }
     }
 
     [RelayCommand]

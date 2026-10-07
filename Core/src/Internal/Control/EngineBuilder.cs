@@ -39,6 +39,8 @@ internal sealed class EngineBuilder : IEngineBuilder, IAsyncDisposable
     public Dictionary<AddressType, string> AddressTypeLabels { get; } = [];
     /// <summary>The handler that controls the print manager, if stated.</summary>
     public ServiceRegistration<IPrintFrameHandler>? PrintHandler { get; set; }
+    /// <summary>The handler that controls the layout of log lines, if stated.</summary>
+    public ServiceRegistration<ILogHandler>? LogHandler { get; set; }
     /// <summary>The handler that decides what may be deleted, if stated.</summary>
     public ServiceRegistration<IDeleteHandler>? DeleteHandler { get; set; }
     /// <summary>How the MSMT peer options are adjusted, if stated.</summary>

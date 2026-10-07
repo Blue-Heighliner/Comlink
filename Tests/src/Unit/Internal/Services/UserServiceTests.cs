@@ -167,6 +167,51 @@ public sealed class UserServiceTests : IDisposable
         Assert.True(File.Exists(engineControllerMock.Object.UserFilePath));
     }
 
+    /// <summary>Refresh follows User.json: a file that now names another user switches to that user after the checks, one that fails them uninstalls, a file that is gone uninstalls, and an unchanged file changes nothing.</summary>
+    [Fact]
+    public async Task Refresh_FollowsUserJson()
+    {
+        engineControllerMock.Setup(r => r.FindUserName("ALICE")).Returns("ALICE");
+        engineControllerMock.Setup(r => r.FindUserName("BOB")).Returns("BOB");
+        engineControllerMock.Setup(r => r.FindUserName("EVE")).Returns("EVE");
+        engineControllerMock.Setup(r => r.GetCertificateProblem("EVE")).Returns("unsigned");
+        CurrentUserProvider current = new();
+        UserService service = new(engineControllerMock.Object, current, LoggerFactory.Create(_ => { }));
+        int changes = 0;
+        service.Changed += () => changes++;
+        engineControllerMock.Setup(r => r.GetUserInfo("ALICE")).Returns(new UserInfo { Name = "ALICE" });
+        await service.Install("ALICE");
+
+        Assert.False(await service.Refresh());
+        Assert.Equal(0, changes);
+
+        await File.WriteAllTextAsync(engineControllerMock.Object.UserFilePath, """{ "UserName": "BOB" }""");
+        Assert.True(await service.Refresh());
+        Assert.Equal("BOB", current.UserName);
+        Assert.Equal(1, changes);
+
+        await File.WriteAllTextAsync(engineControllerMock.Object.UserFilePath, """{ "UserName": "EVE" }""");
+        Assert.True(await service.Refresh());
+        Assert.Null(current.UserName);
+        Assert.False(File.Exists(engineControllerMock.Object.UserFilePath));
+
+        await service.Install("ALICE");
+        File.Delete(engineControllerMock.Object.UserFilePath);
+        Assert.True(await service.Refresh());
+        Assert.Null(current.UserName);
+        Assert.Null(service.GetCurrentUserInfo());
+        Assert.False(await service.Refresh());
+    }
+
+    /// <summary>A user fixed by --user is not changed by what User.json says.</summary>
+    [Fact]
+    public async Task Refresh_WithACommandLineUser_ChangesNothing()
+    {
+        engineControllerMock.SetupGet(r => r.DebugUserName).Returns("alice");
+
+        Assert.False(await CreateService().Refresh());
+    }
+
     /// <summary>A user named on the command line is checked like an installed one: it becomes the user only when the network lists it and its certificate is in order.</summary>
     [Fact]
     public async Task Load_CommandLineUser_PassesTheSameChecks()

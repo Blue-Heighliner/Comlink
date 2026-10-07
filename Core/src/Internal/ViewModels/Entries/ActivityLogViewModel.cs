@@ -13,14 +13,19 @@ internal interface IActivityLogViewModel
 internal sealed class ActivityEventRow
 {
     /// <summary>Initializes a new row from the given log entry.</summary>
-    public ActivityEventRow(ActivityLogEntry entry)
+    /// <param name="entry">The log entry.</param>
+    /// <param name="idWidth">The fixed width of the event ID field, or <see langword="null"/> for none.</param>
+    public ActivityEventRow(ActivityLogEntry entry, int? idWidth = null)
     {
-        TimeText = entry.At.ToString("dd-MMM-yyyy HH:mm").ToUpperInvariant();
+        TimeText = entry.At.ToString("HH:mm", CultureInfo.InvariantCulture);
         Message = entry.Message;
+        IdText = entry.EventId == 0 ? string.Empty : entry.EventId.ToString(CultureInfo.InvariantCulture).PadRight(idWidth ?? 0, '-');
     }
 
     /// <summary>Gets the formatted timestamp for display.</summary>
     public string TimeText { get; }
+    /// <summary>Gets the identifier of the kind of event, padded with hyphens to the log handler's fixed ID width when it states one, or an empty string for an entry that has none.</summary>
+    public string IdText { get; }
     /// <summary>Gets the log message text.</summary>
     public string Message { get; }
 }
@@ -30,14 +35,16 @@ internal sealed class ActivityEventRow
 internal sealed partial class ActivityLogViewModel : ObservableObject, IActivityLogViewModel
 {
     /// <summary>Initializes the ViewModel from the given entity, merging legacy and structured event data.</summary>
-    public ActivityLogViewModel(ActivityLogEntity entity)
+    /// <param name="entity">The day's activity log.</param>
+    /// <param name="idWidth">The width the log handler fixes the event ID field to, which an ID is padded to with hyphens, or <see langword="null"/> for none.</param>
+    public ActivityLogViewModel(ActivityLogEntity entity, int? idWidth = null)
     {
         Date = entity.Date.ToString("dd-MMM-yyyy").ToUpperInvariant();
 
         IEnumerable<ActivityLogEntry> legacy = entity.Events.Select(msg => new ActivityLogEntry { At = entity.Date, Message = msg });
         Events = entity.EventEntries.Concat(legacy)
             .OrderByDescending(e => e.At)
-            .Select(e => new ActivityEventRow(e))
+            .Select(e => new ActivityEventRow(e, idWidth))
             .ToList();
     }
 

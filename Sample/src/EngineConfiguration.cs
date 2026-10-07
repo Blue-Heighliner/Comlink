@@ -43,6 +43,7 @@ public sealed class EngineConfiguration : IEngineConfiguration
             .Deletes<DeleteHandler>()
             .Drafts<DraftHandler>()
             .Prints<PrintHandler>()
+            .Logs<LogHandler>()
             .CommandLineOverrides(true)
             .Frames()
                 .Serializer<JsonSerializer>()

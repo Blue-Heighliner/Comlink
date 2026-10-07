@@ -1,6 +1,6 @@
 namespace BlueHeighliner.Comlink;
 
-/// <summary>Logger provider that routes ACTIVITY-category log entries into the <see cref="ActivityLogRepository"/>.</summary>
+/// <summary>Logger provider that routes the log entries of the activity category into the <see cref="ActivityLogRepository"/>.</summary>
 internal sealed class ActivityLoggerProvider : ILoggerProvider
 {
     /// <summary>Initializes a new <see cref="ActivityLoggerProvider"/> using the given repository.</summary>
@@ -15,7 +15,7 @@ internal sealed class ActivityLoggerProvider : ILoggerProvider
     public void Dispose() { }
 }
 
-/// <summary>Logger that appends messages to the daily activity log when the category is "ACTIVITY".</summary>
+/// <summary>Logger that appends messages to the daily activity log for the events whose category is "ACTIVITY".</summary>
 internal sealed class ActivityLogger : ILogger
 {
     /// <summary>Initializes a new <see cref="ActivityLogger"/> for the specified category.</summary>
@@ -32,21 +32,19 @@ internal sealed class ActivityLogger : ILogger
     public IDisposable? BeginScope<TState>(TState state) where TState : notnull => null;
 
     /// <inheritdoc />
-    public bool IsEnabled(LogLevel logLevel)
-        => string.Equals(categoryName, "ACTIVITY", StringComparison.OrdinalIgnoreCase) &&
-        logLevel >= LogLevel.Information;
+    public bool IsEnabled(LogLevel logLevel) => true;
 
     /// <inheritdoc />
     public void Log<TState>(LogLevel logLevel, EventId eventId, TState state, Exception? exception, Func<TState, Exception?, string> formatter)
     {
-        if (!IsEnabled(logLevel)) { return; }
-        string message = formatter(state, exception);
-        _ = Write(message);
+        string category = LogEvents.CategoryOf(eventId) ?? categoryName;
+        if (!string.Equals(category, LogCategories.Activity, StringComparison.OrdinalIgnoreCase)) { return; }
+        _ = Write(formatter(state, exception), eventId.Id);
     }
 
-    private async Task Write(string message)
+    private async Task Write(string message, int eventId)
     {
-        try { await repository.AppendEvent(message); }
+        try { await repository.AppendEvent(message, eventId); }
         catch { }
     }
 }

@@ -109,7 +109,7 @@ public sealed class MainViewModelTests
 
     /// <summary>Once the file has been reloaded the role-dependent flags are recomputed, so a user whose role changed gets the matching layout.</summary>
     [Fact]
-    public void NetworkReloaded_RecomputesTheUsersInfo()
+    public async Task NetworkReloaded_RecomputesTheUsersInfo()
     {
         Setup s = new();
         s.EngineController.SetupGet(e => e.Role).Returns(UserRole.Server);
@@ -117,14 +117,33 @@ public sealed class MainViewModelTests
         s.EngineController.SetupGet(e => e.SecurityLevels).Returns([]);
         s.EngineController.SetupGet(e => e.AutoForwardControllers).Returns([]);
         s.EngineController.Setup(e => e.GetUserSecurityLevel("ALICE")).Returns(string.Empty);
+        s.UserProvider.SetupGet(u => u.UserName).Returns("ALICE");
         MainViewModel vm = s.BuildVm();
         vm.UserName = "ALICE";
         Assert.False(vm.IsClientMode);
 
         s.EngineController.SetupGet(e => e.Role).Returns(UserRole.Client);
         s.NetworkReload.Raise(r => r.Reloaded += null);
+        await Task.Delay(50);
 
         Assert.True(vm.IsClientMode);
+    }
+
+    /// <summary>When the reload left nobody installed (User.json was removed or its user failed the checks) the user is cleared and the install screen is shown again.</summary>
+    [Fact]
+    public async Task NetworkReloaded_WithNoUser_ShowsTheInstallScreen()
+    {
+        Setup s = new();
+        s.UserProvider.SetupGet(u => u.UserName).Returns((string?)null);
+        MainViewModel vm = s.BuildVm();
+        vm.UserName = "ALICE";
+        vm.IsInstallScreenVisible = false;
+
+        s.NetworkReload.Raise(r => r.Reloaded += null);
+        await Task.Delay(50);
+
+        Assert.Equal(string.Empty, vm.UserName);
+        Assert.True(vm.IsInstallScreenVisible);
     }
 
     /// <summary>AppName and AppVersion come from IEngineController, for the title bar's info popup.</summary>

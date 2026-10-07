@@ -108,7 +108,7 @@ internal sealed class SerialLink : IAsyncDisposable
         IHdlcPeer peer = current ?? throw new IOException(isClosed ? $"Serial link to {point} is closed" : $"Serial link to {point} is not connected");
         if (data.Length > peer.MaxPayloadSize)
         {
-            logger.LogError("A payload of {Length} bytes cannot be sent over {Point}: an HDLC frame carries at most {Max} bytes (MaxInfoField), and each frame or packet is sent as exactly one, so lower the packet size or raise MaxInfoField", data.Length, point, peer.MaxPayloadSize);
+            logger.Record(LogEvents.PayloadTooLarge, "A payload of {Length} bytes cannot be sent over {Point}: {Reason}", data.Length, point, $"an HDLC frame carries at most {peer.MaxPayloadSize} bytes (MaxInfoField), and each frame or packet is sent as exactly one, so lower the packet size or raise MaxInfoField");
             return false;
         }
 
@@ -178,7 +178,7 @@ internal sealed class SerialLink : IAsyncDisposable
         IHdlcPeer peer = peerFactory.Create();
         TaskCompletionSource ended = new(TaskCreationOptions.RunContinuationsAsynchronously);
         peer.Receiver = OnFrame;
-        peer.Exceptions.Listen(ex => logger.LogWarning("Serial link to {Point} met an error: {Message}", point, ex.Message));
+        peer.Exceptions.Listen(ex => logger.Record(LogEvents.SerialLinkProblem, "Serial link to {Point} {Problem}", point, $"met an error: {ex.Message}"));
         peer.StateChanged.Listen(state => { if (state == HdlcPeerState.Disconnected) { ended.TrySetResult(); } }, () => ended.TrySetResult());
 
         // With several users that may be at the other end of the cable, each is tried in turn for a while, since the far end answers only the address it is given.
@@ -202,7 +202,7 @@ internal sealed class SerialLink : IAsyncDisposable
             if (!failureLogged)
             {
                 failureLogged = true;
-                logger.LogWarning("Serial link to {Point} cannot be established, retrying: {Message}", point, ex.Message);
+                logger.Record(LogEvents.SerialLinkProblem, "Serial link to {Point} {Problem}", point, $"cannot be established, retrying: {ex.Message}");
             }
 
             await DisposeQuietly(peer);
@@ -225,7 +225,7 @@ internal sealed class SerialLink : IAsyncDisposable
             return;
         }
 
-        logger.LogInformation("Serial link to {Point} connected", point);
+        logger.Record(LogEvents.SerialLinkConnected, "Serial link to {Point} connected", point);
         connected.Publish(new PeerConnectionEventArgs { Connection = connection });
 
         try { await ended.Task.WaitAsync(lifetime.Token); }
@@ -233,7 +233,7 @@ internal sealed class SerialLink : IAsyncDisposable
 
         lock (closeLock) { current = null; }
         disconnected.Publish(new PeerConnectionEventArgs { Connection = connection });
-        if (!lifetime.IsCancellationRequested && !isClosed) { logger.LogWarning("Serial link to {Point} lost", point); }
+        if (!lifetime.IsCancellationRequested && !isClosed) { logger.Record(LogEvents.SerialLinkProblem, "Serial link to {Point} {Problem}", point, "lost"); }
 
         await DisposeQuietly(peer);
         if (!isClosed) { await Delay(); }

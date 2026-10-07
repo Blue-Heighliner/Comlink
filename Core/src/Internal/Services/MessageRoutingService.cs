@@ -55,7 +55,7 @@ internal sealed class MessageRoutingService : IMessageRoutingService
         this.ids = ids;
         this.peerService = peerService;
         this.engineController = engineController;
-        logger = loggerFactory.CreateLogger("ACTIVITY");
+        logger = loggerFactory.CreateLogger(LogCategories.App);
 
         peerService.DeliveryStatusChanged += OnPeerDeliveryStatusChanged;
         peerService.ReadReceiptReceived += OnPeerReadReceiptReceived;
@@ -72,7 +72,7 @@ internal sealed class MessageRoutingService : IMessageRoutingService
 
     private async Task OnPeerDeliveryStatusChanged(string messageId, string user, DestinationStatus status)
     {
-        logger.LogInformation("{MessageId} status for {User}: {Status}", messageId, user, status);
+        logger.Record(LogEvents.DeliveryStatusChanged, "{MessageId} status for {User}: {Status}", messageId, user, status);
         await DeliveryStatusChanged.InvokeAll(messageId, user, status);
     }
 
@@ -160,18 +160,18 @@ internal sealed class MessageRoutingService : IMessageRoutingService
         if (blockedUsers.Count > 0)
         {
             targetUsers = [.. targetUsers.Except(blockedUsers, StringComparer.OrdinalIgnoreCase)];
-            logger.LogWarning(
-                "{MessageId} blocked for {Users}: security level {Level} not supported by destination",
-                messageId, string.Join(", ", blockedUsers), securityLevel);
+            logger.Record(
+                LogEvents.BlockedBySecurityLevel, "{Subject} blocked for {Users}: {Reason}",
+                messageId, string.Join(", ", blockedUsers), $"security level {securityLevel} not supported by destination");
         }
 
-        logger.LogInformation("{MessageId} sending to {Destinations}", messageId, string.Join(", ", targetUsers));
+        logger.Record(LogEvents.MessageSending, "{MessageId} sending to {Destinations}", messageId, string.Join(", ", targetUsers));
 
         UserDeliveryResult[] remoteResults = await Task.WhenAll(targetUsers.Select(async user =>
         {
             bool sent = await peerService.Send(user, message, cancellation);
             IReadOnlyList<string> via = userAddressedVia.TryGetValue(user, out List<string>? v) ? v.AsReadOnly() : Array.Empty<string>();
-            logger.LogInformation(sent ? "{MessageId} delivered to {User}" : "{MessageId} failed to {User}", messageId, user);
+            logger.Record(sent ? LogEvents.MessageDelivered : LogEvents.MessageDeliveryFailed, sent ? "{MessageId} delivered to {User}" : "{MessageId} failed to {User}", messageId, user);
             return new UserDeliveryResult { UserName = user, Success = sent, AddressedVia = [.. via] };
         }));
 

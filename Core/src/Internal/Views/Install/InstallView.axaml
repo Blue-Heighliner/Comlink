@@ -20,7 +20,7 @@
         <!-- User name input -->
         <TextBox x:Name="UserNameInput"
                  Text="{Binding UserName}"
-                 Watermark="Enter user name..."
+                 Watermark="{vm:Display 'Enter user name...'}"
                  FontSize="14"
                  Height="36"
                  TextAlignment="Center"
@@ -31,6 +31,8 @@
                    IsVisible="{Binding ErrorMessage, Converter={x:Static StringConverters.IsNotNullOrEmpty}}"
                    Foreground="#F44336"
                    FontSize="13"
+                   HorizontalAlignment="Center"
+                   TextAlignment="Center"
                    TextWrapping="Wrap" />
 
         <!-- Install button -->

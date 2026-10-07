@@ -56,7 +56,7 @@ internal sealed class HelpViewModel : IHelpViewModel
         [
             new HelpTab("Getting started",
             [
-                new HelpSection("The first time", "If the window asks for a user code, enter the code you were given and press INSTALL. This ties the application to your user name, and it only happens once."),
+                new HelpSection("The first time", "If the window asks for a user name, enter your user name and press INSTALL. This ties the application to that name, and it only happens once."),
                 new HelpSection("The three columns", "Folders are on the left, the entries in the selected folder are in the middle, and the selected entry opens on the right. Inbox holds received messages, Outbox holds sent messages, Drafts holds messages you have not sent, Notes holds your own notes, and Activity holds a log for each day."),
                 new HelpSection("Title bar", "NEW DRAFT and NEW NOTE start something new. EXPORT and IMPORT back up and restore your entries, and PRINTS opens the print queue. The i button shows the application version and the ? button opens this guide.")
             ]),

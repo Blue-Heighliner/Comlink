@@ -64,7 +64,7 @@ public sealed class ActivityLogViewModelTests
         Assert.Equal("Legacy message", vm.Events[1].Message);
     }
 
-    /// <summary>TimeText on an event row is formatted as uppercase DD-MMM-YYYY HH:mm.</summary>
+    /// <summary>TimeText on an event row is only the hour and minute, since the day is the title of the view.</summary>
     [Fact]
     public void EventRow_TimeText_IsFormattedCorrectly()
     {
@@ -76,6 +76,25 @@ public sealed class ActivityLogViewModelTests
 
         ActivityLogViewModel vm = new(entity);
 
-        Assert.Equal("04-JUL-2025 09:30", vm.Events[0].TimeText);
+        Assert.Equal("09:30", vm.Events[0].TimeText);
+    }
+
+    /// <summary>An event's ID is shown in its own column, padded with hyphens to the fixed width when the log handler states one, and a legacy entry has none.</summary>
+    [Fact]
+    public void IdText_FollowsTheFixedIdWidth()
+    {
+        ActivityLogEntity entity = new()
+        {
+            Date = new DateTime(2025, 7, 4),
+            Events = ["Legacy"],
+            EventEntries = [new ActivityLogEntry { At = new DateTime(2025, 7, 4, 12, 0, 0, DateTimeKind.Utc), Message = "Structured", EventId = 7 }]
+        };
+
+        ActivityLogViewModel natural = new(entity);
+        ActivityLogViewModel fixedWidth = new(entity, 3);
+
+        Assert.Equal("7", natural.Events.Single(row => row.Message == "Structured").IdText);
+        Assert.Equal("7--", fixedWidth.Events.Single(row => row.Message == "Structured").IdText);
+        Assert.Equal(string.Empty, fixedWidth.Events.Single(row => row.Message == "Legacy").IdText);
     }
 }

@@ -45,12 +45,45 @@ public sealed class RepositoryTests : IDisposable
     public async Task ActivityLog_AppendEvent_CreatesEntityForToday()
     {
         ActivityLogRepository repo = new(ctx);
-        await repo.AppendEvent("first event");
+        await repo.AppendEvent("first event", 7);
 
         ActivityLogEntity? today = (await repo.GetAll()).SingleOrDefault();
         Assert.NotNull(today);
         Assert.Single(today.EventEntries);
         Assert.Equal("first event", today.EventEntries[0].Message);
+        Assert.Equal(7, today.EventEntries[0].EventId);
+    }
+
+    /// <summary>What is logged before the database is open waits, and is written with the time it was logged once the database opens.</summary>
+    [Fact]
+    public async Task ActivityLog_AppendEventBeforeTheDatabaseIsOpen_IsWrittenOnceItOpens()
+    {
+        LiteDbContext closed = new(new TestAppDataPathProvider(Guid.NewGuid().ToString()));
+        try
+        {
+            ActivityLogRepository repo = new(closed);
+            DateTime before = DateTime.UtcNow;
+
+            await repo.AppendEvent("starting", 65);
+            await repo.AppendEvent("started", 66);
+            Assert.False(closed.IsOpen);
+
+            closed.Initialize();
+            DateTime deadline = DateTime.UtcNow + TimeSpan.FromSeconds(5);
+            while ((await repo.GetAll()).Count == 0 && DateTime.UtcNow < deadline) { await Task.Delay(20); }
+
+            ActivityLogEntity today = Assert.Single(await repo.GetAll());
+            Assert.Equal(["starting", "started"], today.EventEntries.Select(entry => entry.Message));
+            Assert.Equal([65, 66], today.EventEntries.Select(entry => entry.EventId));
+            Assert.All(today.EventEntries, entry => Assert.InRange(entry.At.ToUniversalTime(), before.AddSeconds(-1), DateTime.UtcNow.AddSeconds(1)));
+
+            await repo.AppendEvent("later", 67);
+            Assert.Equal(3, (await repo.GetAll()).Single().EventEntries.Count);
+        }
+        finally
+        {
+            closed.Dispose();
+        }
     }
 
     /// <summary>Appending twice adds to the same day's entity.</summary>
@@ -58,8 +91,8 @@ public sealed class RepositoryTests : IDisposable
     public async Task ActivityLog_AppendEvent_AccumulatesOnSameDay()
     {
         ActivityLogRepository repo = new(ctx);
-        await repo.AppendEvent("A");
-        await repo.AppendEvent("B");
+        await repo.AppendEvent("A", 1);
+        await repo.AppendEvent("B", 2);
 
         ActivityLogEntity? today = (await repo.GetAll()).SingleOrDefault();
         Assert.Equal(2, today!.EventEntries.Count);

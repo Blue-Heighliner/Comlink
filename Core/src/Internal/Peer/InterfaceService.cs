@@ -39,7 +39,7 @@ internal sealed class InterfaceService : IInterfaceService
         this.engineController = engineController;
         this.routingService = routingService;
         this.userService = userService;
-        logger = loggerFactory.CreateLogger("ACTIVITY");
+        logger = loggerFactory.CreateLogger(LogCategories.App);
     }
 
     private readonly IMsmtSessionPeer.IFactory peerFactory;
@@ -93,9 +93,10 @@ internal sealed class InterfaceService : IInterfaceService
         {
             options = engineController.ConnectionOptions;
         }
-        catch (InvalidOperationException ex)
+        catch (InvalidOperationException ex) when (ex is not InvalidEngineConfigurationException)
         {
-            logger.LogError("Interface listener cannot start: {Message}", ex.Message);
+            logger.Record(LogEvents.InterfaceCannotStart, "Interface listener cannot start: {Message}", ex.Message);
+            logger.Record(LogEvents.InterfaceNotWorking, "The interface for other applications is not working");
             await WaitForRestart(cancellation);
             return;
         }
@@ -146,7 +147,8 @@ internal sealed class InterfaceService : IInterfaceService
 
         if (engineController.GetUnconfiguredLevelReason(message) is { } invalid)
         {
-            logger.LogError("A message received on the interface is invalid and was dropped: it {Reason}", invalid);
+            logger.Record(LogEvents.InvalidMessage, "A message from {Source} is invalid and was dropped: it {Reason}", "the interface", invalid);
+            logger.Record(LogEvents.MessageDropped, "A message from {Source} was dropped because it was not valid", "another application");
             return;
         }
 
@@ -165,7 +167,7 @@ internal sealed class InterfaceService : IInterfaceService
         }
         catch (Exception ex)
         {
-            logger.LogError(ex, "Failed to route a message received on the interface");
+            logger.Record(LogEvents.RouteFailed, ex, "Failed to {Action}", "route a message received on the interface");
         }
     }
 

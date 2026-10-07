@@ -291,6 +291,7 @@ public sealed class EngineBuilderTests
         Assert.Equal("2.3.4", controller.AppVersion);
         Assert.True(controller.IsKioskMode);
         Assert.Equal("Welcome", controller.HomeText);
+        Assert.Equal(LogFieldWidths.None, controller.LogWidths);
         Assert.Equal(["LINKED", "OFFLINE"], [controller.GetNetworkIndicatorLabel(true), controller.GetNetworkIndicatorLabel(false)]);
         Assert.Equal(["#2E7D32", "#112233"], [controller.GetNetworkIndicatorColor(true), controller.GetNetworkIndicatorColor(false)]);
         Assert.Equal(icon, controller.WindowIconPath);
@@ -356,6 +357,9 @@ public sealed class EngineBuilderTests
         Assert.Equal("NEW DRAFT in the Received, ALARM only", named.Display("NEW DRAFT in the Inbox, Alert only"));
         Assert.Equal("Categories, importances and classifications, plus alarms.", named.Display("Tags, priorities and security levels, plus alerts."));
         Assert.Equal("Choose an importance, classification and category.", named.Display("Choose an priority, security level and tag."));
+        Assert.Equal("No such user. Users are listed.", plain.Display("No such user. Users are listed."));
+        Assert.Equal("No such operator. Operators are listed.", named.Display("No such user. Users are listed."));
+        Assert.Equal("NO SUCH OPERATOR", named.Display("NO SUCH USER"));
     }
 
     /// <summary>A draft handler can turn tags off without affecting their label.</summary>
@@ -683,6 +687,17 @@ public sealed class EngineBuilderTests
         Assert.Equal(512, adjusted.HdlcOptions.MaxInfoField);
         Assert.Equal(HdlcCrc.Crc32Ccitt, adjusted.HdlcOptions.Link.Crc);
         Assert.Equal(new HdlcPeerOptions(), plain.HdlcOptions);
+    }
+
+    /// <summary>A log handler fixes the widths of the fields it states, and without one no field is fixed.</summary>
+    [Fact]
+    public void LogHandler_FixesTheStatedWidths()
+    {
+        (_, EngineController none) = Build(engine => engine);
+        (_, EngineController fixedWidths) = Build(engine => engine.Logs<TestLogHandler>());
+
+        Assert.Equal(LogFieldWidths.None, none.LogWidths);
+        Assert.Equal(new LogFieldWidths(8, 7, 3), fixedWidths.LogWidths);
     }
 
     /// <summary>The print count comes from the print handler.</summary>

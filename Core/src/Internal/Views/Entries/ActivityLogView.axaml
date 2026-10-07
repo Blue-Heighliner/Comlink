@@ -28,7 +28,7 @@
 
     <!-- Table header -->
     <Grid DockPanel.Dock="Top"
-          ColumnDefinitions="155,*"
+          ColumnDefinitions="50,52,*"
           Margin="0,0,0,4">
       <TextBlock Grid.Column="0"
                  Text="TIME"
@@ -37,7 +37,13 @@
                  Foreground="#5A5A5A"
                  LetterSpacing="1" />
       <TextBlock Grid.Column="1"
-                 Text="EVENT"
+                 Text="ID"
+                 FontSize="11"
+                 FontWeight="SemiBold"
+                 Foreground="#5A5A5A"
+                 LetterSpacing="1" />
+      <TextBlock Grid.Column="2"
+                 Text="CONTENT"
                  FontSize="11"
                  FontWeight="SemiBold"
                  Foreground="#5A5A5A"
@@ -49,13 +55,18 @@
       <ItemsControl ItemsSource="{Binding Events}">
         <ItemsControl.ItemTemplate>
           <DataTemplate DataType="{x:Type vm:ActivityEventRow}">
-            <Grid ColumnDefinitions="155,*" Margin="0,3">
+            <Grid ColumnDefinitions="50,52,*" Margin="0,3">
               <TextBlock Grid.Column="0"
                          Text="{Binding TimeText}"
                          FontSize="13"
                          Foreground="#858585"
                          VerticalAlignment="Top" />
               <TextBlock Grid.Column="1"
+                         Text="{Binding IdText}"
+                         FontSize="13"
+                         Foreground="#858585"
+                         VerticalAlignment="Top" />
+              <TextBlock Grid.Column="2"
                          Text="{Binding Message}"
                          FontSize="13"
                          Foreground="#CCCCCC"

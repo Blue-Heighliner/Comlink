@@ -7,22 +7,23 @@ internal interface IPeerTransportFactory
     IPeerTransport Create();
 }
 
-/// <summary>Builds a <see cref="CompositePeerTransport"/> of MSMT (IP) and MicroGate (serial), leaving out IP when no identity certificate is available, wraps it in a <see cref="PacketizingPeerTransport"/> when <see cref="IEngineController.PacketType"/> is set, and finally in a <see cref="HandshakePeerTransport"/> that carries out the initial message exchange and identifies each connection. An initial packet exchange, when configured, is carried out by another <see cref="HandshakePeerTransport"/> beneath the packetizer.</summary>
+/// <summary>Builds a <see cref="CompositePeerTransport"/> of MSMT (IP) and MicroGate (serial), leaving out IP when no identity certificate is available, wraps it in a <see cref="PacketizingPeerTransport"/> when <see cref="IEngineController.PacketType"/> is set, and finally in a <see cref="HandshakePeerTransport"/> that carries out the initial message exchange and identifies each connection. An initial packet exchange, when configured, is carried out by another <see cref="HandshakePeerTransport"/> beneath the packetizer. A <see cref="TracingPeerTransport"/>, which writes only while its trace category is on, traces the packets beneath all of that and the frames between the packetizer and the final handshake.</summary>
 internal sealed class PeerTransportFactory(
     IMsmtSessionPeer.IFactory msmtFactory,
     IHdlcPeerFactory microGateFactory,
     IEngineController engineController,
     ILoggerFactory loggerFactory,
+    ILogSettings logSettings,
     IEngineContextFactory? contexts = null) : IPeerTransportFactory
 {
     /// <inheritdoc />
     public IPeerTransport Create()
     {
-        ILogger logger = loggerFactory.CreateLogger("ACTIVITY");
-        IPacketizer? packetizer = CreatePacketizer(logger);
+        ILogger logger = loggerFactory.CreateLogger(LogCategories.App);
+        IPacketizer? packetizer = CreatePacketizer();
         if (packetizer is not null && engineController.PacketSize > engineController.HdlcOptions.MaxInfoField)
         {
-            logger.LogWarning("The packet size of {PacketSize} bytes is larger than the HDLC MaxInfoField of {MaxInfoField} bytes, so packets will fail to send over serial connections", engineController.PacketSize, engineController.HdlcOptions.MaxInfoField);
+            logger.Record(LogEvents.PacketSizeExceedsHdlc, "The packet size of {PacketSize} bytes is larger than the HDLC MaxInfoField of {MaxInfoField} bytes, so packets will fail to send over serial connections", engineController.PacketSize, engineController.HdlcOptions.MaxInfoField);
         }
 
         IPeerTransport? ip = null;
@@ -32,45 +33,32 @@ internal sealed class PeerTransportFactory(
         }
         catch (InvalidOperationException ex)
         {
-            logger.LogWarning("IP connections are unavailable: {Message}", ex.Message);
+            logger.Record(LogEvents.IpConnectionsUnavailable, "IP connections are unavailable: {Message}", ex.Message);
         }
 
         IPeerTransport transport = new CompositePeerTransport(ip, new SerialPeerTransport(microGateFactory, logger, options: engineController.HdlcOptions));
-        try
+        if (packetizer is not null) { transport = new TracingPeerTransport(transport, loggerFactory.CreateLogger(LogCategories.Packets), logSettings, LogCategories.Packets, LogEvents.PacketSent, LogEvents.PacketReceived); }
+        // The initial packet travels as a packet of its own, so its exchange happens beneath the packetizer; the initial frame is a frame like
+        // any other, so its exchange, and identification, happen above it.
+        if (packetizer is null && engineController.InitialPacketProcessor is not null) { throw new InvalidEngineConfigurationException("An initial packet needs a packet type, but none is configured"); }
+        if (packetizer is not null)
         {
-            // The initial packet travels as a packet of its own, so its exchange happens beneath the packetizer; the initial frame is a frame like
-            // any other, so its exchange, and identification, happen above it.
-            if (packetizer is null && engineController.InitialPacketProcessor is not null) { throw new InvalidOperationException("An initial packet needs a packet type, but none is configured"); }
-            if (packetizer is not null)
-            {
-                if (Handshake.ForPackets(engineController) is { } initialPacket) { transport = new HandshakePeerTransport(transport, engineController, logger, initialPacket, identify: false, contexts: contexts); }
-                transport = new PacketizingPeerTransport(transport, packetizer, engineController.PacketWindow, logger);
-            }
+            if (Handshake.ForPackets(engineController) is { } initialPacket) { transport = new HandshakePeerTransport(transport, engineController, logger, initialPacket, identify: false, contexts: contexts); }
+            transport = new PacketizingPeerTransport(transport, packetizer, engineController.PacketWindow, logger);
+        }
 
-            return new HandshakePeerTransport(transport, engineController, logger, Handshake.ForFrames(engineController), identify: true, contexts: contexts);
-        }
-        catch (Exception ex)
-        {
-            logger.LogError("Connection identification is misconfigured, so networking cannot start: {Message}", ex.Message);
-            throw;
-        }
+        transport = new TracingPeerTransport(transport, loggerFactory.CreateLogger(LogCategories.Frames), logSettings, LogCategories.Frames, LogEvents.FrameSent, LogEvents.FrameReceived);
+
+        return new HandshakePeerTransport(transport, engineController, logger, Handshake.ForFrames(engineController), identify: true, contexts: contexts);
     }
 
-    // Logged as well as thrown because the peer services start on a background task, where a throw alone would go unseen.
-    private IPacketizer? CreatePacketizer(ILogger logger)
+    private IPacketizer? CreatePacketizer()
     {
         if (engineController.PacketType is null) { return null; }
 
-        try
-        {
-            if (engineController.PacketWindow < 1) { throw new InvalidOperationException($"PacketWindow {engineController.PacketWindow} must be at least 1"); }
+        if (engineController.PacketWindow < 1) { throw new InvalidEngineConfigurationException($"PacketWindow {engineController.PacketWindow} must be at least 1"); }
 
-            return new Packetizer(engineController);
-        }
-        catch (Exception ex)
-        {
-            logger.LogError("Packetization is misconfigured, so networking cannot start: {Message}", ex.Message);
-            throw;
-        }
+        try { return new Packetizer(engineController); }
+        catch (InvalidOperationException ex) when (ex is not InvalidEngineConfigurationException) { throw new InvalidEngineConfigurationException(ex.Message, ex); }
     }
 }
