@@ -152,4 +152,51 @@ public sealed class InterfaceServiceTests
 
         cts.Cancel();
     }
+
+    /// <summary>A frame sent to the interfaces reaches an interface connected over real MSMT, down the connection it opened.</summary>
+    [Fact]
+    public async Task RealMsmt_SendToInterface_ReachesAConnectedInterface()
+    {
+        int port = 45000 + Random.Shared.Next(1000);
+        (X509Certificate2 serverCertificate, X509Certificate2 clientCertificate, X509Certificate2Collection trustedAuthorities) = TestMsmtCertificates.Create();
+        Mock<IUserService> user = new();
+        user.Setup(s => s.GetCurrentUserInfo()).Returns(MakeUserInfo("LOCAL"));
+        Mock<TestEngineController> engineController = new() { CallBase = true };
+        engineController.Setup(e => e.InterfacePort).Returns(port);
+        engineController.Setup(e => e.ConnectionOptions).Returns(new MsmtSessionPeerOptions
+        {
+            Credentials = new MsmtCredentials { Identity = serverCertificate, TrustedAuthorities = trustedAuthorities },
+            RequireFullyQualifiedHostname = false
+        });
+        await using InterfaceService svc = new(new IMsmtSessionPeer.Factory(), engineController.Object, Mock.Of<INetworkProcessing>(), user.Object, noLogger);
+        using CancellationTokenSource cts = new();
+        _ = svc.Start(cts.Token);
+
+        await using IMsmtSessionPeer client = new IMsmtSessionPeer.Factory().Create(new MsmtSessionPeerOptions
+        {
+            Credentials = new MsmtCredentials { Identity = clientCertificate, TrustedAuthorities = trustedAuthorities },
+            RequireFullyQualifiedHostname = false
+        });
+        TaskCompletionSource<TestFrame> received = new();
+        client.Receiver = (_, payload, responder) =>
+        {
+            using (payload)
+            {
+                received.TrySetResult((TestFrame)serializer.Deserialize(payload.Memory));
+            }
+
+            responder?.Accept(ReadOnlyMemory<byte>.Empty);
+        };
+        IMsmtConnection connection = client.Connect(new MsmtNameTarget { Host = "127.0.0.1", Port = port, ServerName = "127.0.0.1" });
+        Assert.True(await connection.Wait());
+
+        while (!received.Task.IsCompleted)
+        {
+            await svc.Send(TestMessagePriority.Normal, new TestFrame { Body = "To the interface" });
+            await Task.Delay(100);
+        }
+
+        Assert.Equal("To the interface", (await received.Task.WaitAsync(TimeSpan.FromSeconds(10))).Body);
+        cts.Cancel();
+    }
 }

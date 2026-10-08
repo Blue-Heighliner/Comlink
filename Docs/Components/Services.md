@@ -67,7 +67,7 @@ Every context carries the operations of `NetworkEnvironment`:
 - `ReceiveMessage(message)` records a `Message` as received: it is validated against the configured priorities, levels and aspects and raised as `MessageReceived`, which `MainViewModel` stores in the Inbox and shows.
 - `SetSentStatus(messageId, user, status)` moves the stored Outbox status of one recipient, and `SetReceivedStatus(messageId, status)` marks a stored Inbox message `Read`. A status only moves forward, so a late earlier one is ignored.
 - `SetNetworkIndicator(isOnline)` is the only thing that changes the indicator.
-- `SendToExternalSystems(frame)` sends to every external system.
+- `SendInterface(priority, frame)` sends to every connected interface (`InterfaceService.Send`), and `SendToExternalSystems(frame)` to every external system.
 - `StoreMessage`/`FindStoredMessages` keep and look up messages in the server-side store (`MessageStorageService`).
 - `GetAutoForwardTargets(controllerName)` reads the targets a user chose for an auto forwarder.
 

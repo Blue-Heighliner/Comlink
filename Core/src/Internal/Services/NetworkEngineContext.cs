@@ -61,6 +61,9 @@ internal abstract class NetworkEngineContext<TFrame, TPriority, TLevel, TAspect>
     public void SetNetworkIndicator(bool isOnline) => environment.SetNetworkIndicator(isOnline);
 
     /// <inheritdoc />
+    public Task SendInterface(TPriority priority, TFrame frame) => environment.SendInterface(priority, frame);
+
+    /// <inheritdoc />
     public Task SendToExternalSystems(TFrame frame) => environment.SendToExternalSystems(frame);
 
     /// <inheritdoc />

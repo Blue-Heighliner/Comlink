@@ -619,7 +619,7 @@ Every context extends the common `IEngineContext` (`CurrentUser`, `Users` and `C
 - `SetSentStatus(messageId, user, status)` (also taking several users at once) and `SetReceivedStatus(messageId, status)`: change the delivery status of a stored sent or received message.
 - `SetNetworkIndicator(isOnline)`: the only thing that sets the network indicator.
 - `GetDestinations(minimumLevel, out excluded, targets)` / `GetDestinations(message, out excluded)`: the set of users that some user and group names, or all the non-external addresses of a message, stand for, with groups expanded to their members recursively. Users whose own message level ranks below the minimum level (the message's own level for the message overload; `null` for no minimum) are left out of the result and returned in `excluded`, for the processor to report as failed.
-- `SendToExternalSystems(frame)`, `StoreMessage(message)`, `FindStoredMessages(criteria)` and `GetAutoForwardTargets(controllerName)`.
+- `SendInterface(priority, frame)`, which sends a frame to every interface connected to the local interface listener, `SendToExternalSystems(frame)`, `StoreMessage(message)`, `FindStoredMessages(criteria)` and `GetAutoForwardTargets(controllerName)`.
 
 The processor is stated by type and instantiated through the running engine's dependency injection container, so its constructor can take services.
 

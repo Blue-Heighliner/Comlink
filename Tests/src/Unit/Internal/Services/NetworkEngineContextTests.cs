@@ -112,4 +112,17 @@ public sealed class NetworkEngineContextTests
 
         Assert.Equal(["BOB", "CAROL"], await context.GetAutoForwardTargets("Alerts"));
     }
+
+    /// <summary>Sending to the interfaces hands the priority and frame to the environment.</summary>
+    [Fact]
+    public async Task SendInterface_HandsTheFrameToTheEnvironment()
+    {
+        Mock<INetworkEnvironment> environment = new();
+        NetworkConnectedContext<TestFrame, TestMessagePriority, TestLevel, TestAspect> context = Build(environment);
+        TestFrame frame = new() { Body = "Hi" };
+
+        await context.SendInterface(TestMessagePriority.High, frame);
+
+        environment.Verify(e => e.SendInterface(TestMessagePriority.High, frame), Times.Once);
+    }
 }

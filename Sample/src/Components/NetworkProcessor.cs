@@ -4,7 +4,7 @@ namespace BlueHeighliner.Comlink.Sample;
 /// The Sample's whole protocol, because the engine itself receives, routes, receipts and retrieves nothing and keeps no network indicator. What each role does with a <see cref="Frame"/>:
 /// <list type="bullet">
 /// <item>A client turns a message the user sends (<see cref="OnSent"/>) into a frame addressed to every recipient and hands it to its server, reporting each recipient's status as it learns it. It turns a received message
-/// frame into a <see cref="Message"/> for the engine to store and show, sends the sender a receive receipt (and a read receipt when the user opens the message),
+/// frame into a <see cref="Message"/> for the engine to store and show, passes it on to every connected interface, sends the sender a receive receipt (and a read receipt when the user opens the message),
 /// forwards a message tagged <c>ALERT</c> or <c>URGENT</c> on, as the original frame, sent as the forwarding user, addressed to every user on the target list of the Escalation auto forwarder, and turns the receipts it receives into delivery statuses. It asks a storage server for stored messages when the
 /// user submits a retrieval. It shows the network online while its parent is connected.</item>
 /// <item>A server routes what its clients send: it keeps a copy of every message, expands the group addresses, leaves out recipients whose message level is too low, and sends the frame once to each local client that
@@ -122,6 +122,8 @@ public sealed class NetworkProcessor : INetworkProcessor<Frame, MessagePriority,
         {
             return;
         }
+
+        await context.SendInterface(frame.Priority, frame);
 
         await context.Send
         (

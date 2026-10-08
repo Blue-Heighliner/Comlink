@@ -15,11 +15,7 @@ whatever the host's packet type is.
 An interface connection represents no user of its own:
 
 - **Interface → processor**: every frame an interface sends is handed to the network processor's `OnReceived` with `FrameOrigin.Interface`. The engine reads nothing from it; the processor decides what it means, typically sending it on as if this user's own installed identity had composed it.
-- **Inbound → interface**: not currently supported. Mirroring a message this user receives from a peer
-  out to a connected interface would need that interface client's connection kept open and correlated to
-  its own inbound peer traffic, rather than treated as a one-way injection point - see
-  [MsmtIntegration.md](MsmtIntegration.md#no-server-initiated-delivery) for why Comlink never writes back
-  down a connection a remote party opened to it, interface connections included; not yet provided.
+- **Processor → interfaces**: the processor can send a frame to every connected interface with `SendInterface(priority, frame)`. Interface connections are bidirectional MSMT session connections, so the frame goes down the connection the interface itself opened, and an interface receives frames the same way it sends them: serialized instances of the host's frame type, with the interface's own MSMT receiver answering each. Nothing is sent to an interface unless the processor sends it; the engine never mirrors anything itself, and an interface that is not connected misses what is sent meanwhile.
 
 ## Connection
 

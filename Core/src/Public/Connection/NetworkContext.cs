@@ -47,6 +47,12 @@ public interface INetworkContext<TFrame, TPriority, TLevel, TAspect> : IEngineCo
     /// <param name="isOnline"><see langword="true"/> to show online, <see langword="false"/> to show offline.</param>
     void SetNetworkIndicator(bool isOnline);
 
+    /// <summary>Sends <paramref name="frame"/> to every interface connected to the local interface listener (see <c>Docs/Components/Interface.md</c>), over the connection each opened, and completes once each has acknowledged it or been lost. Does nothing when none is connected.</summary>
+    /// <param name="priority">The priority to send it with.</param>
+    /// <param name="frame">What to send.</param>
+    /// <exception cref="ArgumentException"><paramref name="priority"/> is not one of the configured priorities.</exception>
+    Task SendInterface(TPriority priority, TFrame frame);
+
     /// <summary>Sends <paramref name="frame"/> to every external system, each of which takes only the frames it handles.</summary>
     /// <param name="frame">What to send.</param>
     Task SendToExternalSystems(TFrame frame);

@@ -8,13 +8,8 @@ namespace BlueHeighliner.Comlink;
 /// processor decides what to do with it, for example to send it on as if this user had originated it itself.
 /// </summary>
 /// <remarks>
-/// Mirroring a frame back out to a connected interface is not implemented: doing
-/// so would need that interface client's connection kept open and correlated to its own inbound peer
-/// traffic, rather than treated as a one-way injection point, and this instance never writes back down a
-/// connection a remote party opened to it in the first place - see <c>Docs/Components/MsmtIntegration.md</c>.
-/// An interface tool would instead need to run its own MSMT listener for this instance to dial back into,
-/// a materially different integration shape than "open a socket and read" that is not yet provided. See
-/// <c>Docs/Components/Interface.md</c>.
+/// The processor can also send a frame to every connected interface (see <see cref="INetworkContext{TFrame, TPriority, TLevel, TAspect}.SendInterface"/>). Interface connections are bidirectional MSMT session connections, so the frame
+/// goes back down the connection the interface itself opened.
 /// </remarks>
 internal interface IInterfaceService : IAsyncDisposable
 {
@@ -23,6 +18,12 @@ internal interface IInterfaceService : IAsyncDisposable
 
     /// <summary>Starts the inbound interface listener and blocks until <paramref name="cancellation"/> is cancelled.</summary>
     Task Start(CancellationToken cancellation);
+
+    /// <summary>Sends <paramref name="frame"/> to every connected interface, completing once each has acknowledged it or failed. A connection that is lost while sending is skipped.</summary>
+    /// <param name="priority">A configured priority.</param>
+    /// <param name="frame">An instance of the configured frame type.</param>
+    /// <exception cref="ArgumentException"><paramref name="priority"/> is not a configured priority.</exception>
+    Task Send(Enum priority, object frame);
 }
 
 /// <inheritdoc cref="IInterfaceService" />
@@ -49,6 +50,7 @@ internal sealed class InterfaceService : IInterfaceService
     private readonly IUserService userService;
     private readonly ILogger logger;
 
+    private readonly ConcurrentDictionary<IMsmtConnection, bool> connections = new();
     private readonly Lock runLock = new();
     private IMsmtSessionPeer? peer;
     private CancellationTokenSource? current;
@@ -111,13 +113,36 @@ internal sealed class InterfaceService : IInterfaceService
         IMsmtSessionPeer listener = peerFactory.Create(options);
         peer = listener;
         listener.Receiver = OnReceived;
+        listener.Connected.Listen(connection => connections[connection] = true);
+        listener.Disconnected.Listen(disconnection => connections.TryRemove(disconnection.Connection, out _));
         listener.StartListener(engineController.InterfacePort, "127.0.0.1");
 
         await WaitForRestart(cancellation);
         await listener.DisposeAsync();
+        connections.Clear();
         if (ReferenceEquals(peer, listener))
         {
             peer = null;
+        }
+    }
+
+    public async Task Send(Enum priority, object frame)
+    {
+        using IMemoryOwner<byte> body = engineController.FrameSerializer.Serialize(frame);
+        MsmtSendOptions options = new() { Priority = engineController.SendPriority(priority) };
+        await Task.WhenAll(connections.Keys.Select(connection => Deliver(connection, body.Memory, options)));
+    }
+
+    private static async Task Deliver(IMsmtConnection connection, ReadOnlyMemory<byte> body, MsmtSendOptions options)
+    {
+        try
+        {
+            MsmtResponse response = await connection.Request(body, options);
+            response.Payload?.Dispose();
+        }
+        catch (Exception ex) when (ex is ObjectDisposedException or TimeoutException or IOException)
+        {
+            // The interface went away while the frame was being sent; the others still get it.
         }
     }
 

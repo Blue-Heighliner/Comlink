@@ -40,6 +40,12 @@ internal interface INetworkEnvironment
     /// <exception cref="ArgumentException"><paramref name="level"/> is not one of the configured message levels.</exception>
     bool IsAtLeast(string userName, Enum level);
 
+    /// <summary>Sends <paramref name="frame"/> to every connected interface.</summary>
+    /// <param name="priority">A configured priority.</param>
+    /// <param name="frame">An instance of the configured frame type.</param>
+    /// <exception cref="ArgumentException"><paramref name="priority"/> is not a configured priority.</exception>
+    Task SendInterface(Enum priority, object frame);
+
     /// <summary>Sends <paramref name="frame"/> to every external system.</summary>
     /// <param name="frame">An instance of the configured frame type.</param>
     Task SendToExternalSystems(object frame);
@@ -124,6 +130,10 @@ internal sealed class NetworkEnvironment(
     public bool IsAtLeast(string userName, Enum level)
         => engineController.MessageLevels.Count == 0
             || engineController.MessageLevels.GetRank(engineController.GetUserMessageLevel(userName)) >= engineController.MessageLevels.GetRank(engineController.GetMessageLevelName(level));
+
+    /// <inheritdoc />
+    /// <inheritdoc />
+    public Task SendInterface(Enum priority, object frame) => services.GetRequiredService<IInterfaceService>().Send(priority, frame);
 
     /// <inheritdoc />
     public Task SendToExternalSystems(object frame) => services.GetRequiredService<IExternalSystemsService>().Send(frame);
