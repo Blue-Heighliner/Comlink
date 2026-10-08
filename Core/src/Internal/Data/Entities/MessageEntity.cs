@@ -5,18 +5,10 @@ internal sealed class MessageEntity
 {
     /// <summary>Unique document identifier.</summary>
     public ObjectId Id { get; set; } = ObjectId.NewObjectId();
-    /// <summary>
-    /// Application-level message identifier shared with peers. Denormalized from <see cref="Message"/>
-    /// (via <see cref="IEngineController.GetMessageId"/>) so LiteDB can query and index on it directly,
-    /// since <see cref="Message"/>'s concrete shape is chosen by the host and not known to LiteDB's typed API.
-    /// </summary>
+    /// <summary>Application-level message identifier shared with peers, denormalized from <see cref="Message"/> so LiteDB can query and index on it directly.</summary>
     public string MessageId { get; set; } = string.Empty;
-    /// <summary>
-    /// The message content — body, sender, addresses, sent time — as an instance of
-    /// <see cref="IEngineController.FrameType"/>. This is the canonical representation of the message;
-    /// read its logical fields via the registered <see cref="IEngineController"/>.
-    /// </summary>
-    public object Message { get; set; } = default!;
+    /// <summary>The message content: body, sender, addresses, sent time, priority, tag, message level, message aspect and whether it is an alert. This is the canonical representation of the message.</summary>
+    public MessageData Message { get; set; } = new();
     /// <summary>Per-user delivery statuses for outbound messages.</summary>
     public List<DeliveryStatus> DeliveryStatuses { get; set; } = [];
     /// <summary>UTC timestamp when the message was received.</summary>
@@ -34,8 +26,7 @@ internal sealed class MessageEntity
     public bool IsOutbound { get; set; }
     /// <summary>
     /// Inbox-only read status: <see cref="DestinationStatus.Received"/> when stored, <see cref="DestinationStatus.Read"/>
-    /// once the user opens it (which also sends a read receipt frame back to <see cref="IEngineController.GetFromUser"/>
-    /// — see <c>Docs/Components/Peer.md</c>). Always <see langword="null"/> on Outbox records; per-destination read state
+    /// once the user opens it (which also tells the host's network processor, see <see cref="INetworkProcessor{TFrame, TPriority, TLevel, TAspect}.OnRead"/>). Always <see langword="null"/> on Outbox records; per-destination read state
     /// there lives in <see cref="DeliveryStatuses"/> instead.
     /// </summary>
     public DestinationStatus? ReadStatus { get; set; }
@@ -46,11 +37,26 @@ internal sealed class MessageEntity
     {
         get
         {
-            if (DeliveryStatuses.Count == 0) { return null; }
-            if (DeliveryStatuses.Any(d => d.Status == DestinationStatus.Failed)) { return DestinationStatus.Failed; }
-            if (DeliveryStatuses.All(d => d.Status == DestinationStatus.Read)) { return DestinationStatus.Read; }
-            if (DeliveryStatuses.All(d => d.Status is DestinationStatus.Received or DestinationStatus.Read)) { return DestinationStatus.Received; }
-            if (DeliveryStatuses.All(d => d.Status != DestinationStatus.Sending)) { return DestinationStatus.Sent; }
+            if (DeliveryStatuses.Count == 0)
+            {
+                return null;
+            }
+            if (DeliveryStatuses.Any(d => d.Status is DestinationStatus.Failed))
+            {
+                return DestinationStatus.Failed;
+            }
+            if (DeliveryStatuses.All(d => d.Status is DestinationStatus.Read))
+            {
+                return DestinationStatus.Read;
+            }
+            if (DeliveryStatuses.All(d => d.Status is DestinationStatus.Received or DestinationStatus.Read))
+            {
+                return DestinationStatus.Received;
+            }
+            if (DeliveryStatuses.All(d => d.Status is not DestinationStatus.Sending))
+            {
+                return DestinationStatus.Sent;
+            }
             return DestinationStatus.Sending;
         }
     }

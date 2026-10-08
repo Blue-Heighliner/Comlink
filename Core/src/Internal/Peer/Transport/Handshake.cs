@@ -15,7 +15,10 @@ internal sealed record Handshake(Func<object, IMemoryOwner<byte>> Serialize, Fun
     /// <param name="engineController">The engine configuration to read the exchange from.</param>
     public static Handshake? ForPackets(IEngineController engineController)
     {
-        if (engineController.InitialPacketProcessor is not { } processor) { return null; }
+        if (engineController.InitialPacketProcessor is not { } processor)
+        {
+            return null;
+        }
 
         IPacketSerializer serializer = engineController.PacketSerializer ?? throw new InvalidEngineConfigurationException("An initial packet processor needs a packet serializer, but the engine controller has none");
         return new Handshake(packet => serializer.Serialize(packet, null), (data, _) => serializer.Deserialize(data), false, processor);

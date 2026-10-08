@@ -1,7 +1,7 @@
 namespace BlueHeighliner.Comlink.Sample;
 
 /// <summary>
-/// Sample <see cref="IEngineConfiguration"/>: fixes the types the configuration is typed by (<see cref="Frame"/>, <see cref="Packet"/>, <see cref="MessagePriority"/> and <see cref="MessageLevel"/>), so every handler states its priority and message level as those enums, and maps the engine's logical frame fields onto <see cref="Frame"/> (including whether a frame is a message, which is what the user sees and what is stored) and
+/// Sample <see cref="IEngineConfiguration"/>: fixes the types the configuration is typed by (<see cref="Frame"/>, <see cref="Packet"/>, <see cref="MessagePriority"/> and <see cref="MessageLevel"/>), so every handler states its priority and message level as those enums, and states the <see cref="NetworkProcessor"/> that implements the protocol over <see cref="Frame"/>, maps
 /// the packet fields onto <see cref="Packet"/>, and states every other setting Sample has distinct, non-network-file
 /// behavior worth showing. Everything left unstated uses the engine's default, with the network configuration file applied on top
 /// automatically (see <c>Docs/Components/Configuration.md</c>):
@@ -20,11 +20,11 @@ namespace BlueHeighliner.Comlink.Sample;
 /// <item><description>address type labels - renames the <see cref="AddressType.External"/> label to <c>OUTSIDE</c>, matching the <c>Kind</c> vocabulary <see cref="Recipient"/> already uses for it.</description></item>
 /// <item><description>message levels - three placeholder levels (<c>PUBLIC</c>, <c>INTERNAL</c>, <c>RESTRICTED</c>), assigned to users in each scenario's network configuration; the <c>ClientServer</c>/<c>ServerCluster</c> scenarios' clients at <c>INTERNAL</c>, and their servers at <c>RESTRICTED</c>.</description></item>
 /// <item><description>custom frame serialization - <see cref="JsonSerializer"/> sends every <see cref="Frame"/> across the network as JSON instead of the default protobuf-net.</description></item>
-/// <item><description>a <see cref="NetworkProcessor"/> reacting to peer activity - any received message tagged <c>PING</c> gets an automatic <c>PONG</c> reply (via <see cref="INetworkContext{TFrame}.Send"/>), except on a server or relay, which compose nothing.</description></item>
+/// <item><description>a <see cref="NetworkProcessor"/> implementing the whole protocol over <see cref="Frame"/> - routing, receipts, retrieval, server storage, escalation forwarding and the network indicator.</description></item>
 /// <item><description>export formats - a plain-text alternative to the built-in JSON export, restricted to messages, drafts, and notes (an activity log's structured entries don't read naturally as prose).</description></item>
 /// <item><description>import formats - a CSV reader that stages one send per <c>User,Body</c> line for the user to review and send from the staged send screen, one at a time a second apart.</description></item>
 /// <item><description>server storage - every server keeps a copy of every message one of its own children sends and answers a client's RETRIEVE request, which names the server the message is stored on.</description></item>
-/// <item><description>auto forward controllers - an "Escalation" controller, open to every Client scenario site, that forwards any received alert or <c>URGENT</c>-tagged message to whichever users its target list names.</description></item>
+/// <item><description>auto forwarders - an "Escalation" auto forwarder, open to the clients that list it in their network configuration, that forwards any received alert or <c>URGENT</c>-tagged message to whichever users its target list names.</description></item>
 /// </list>
 /// Actual alarm sound playback and printer discovery and driving are real platform behavior always provided by the
 /// engine itself, not something Sample states here.
@@ -48,11 +48,7 @@ public sealed class EngineConfiguration : IEngineConfiguration
             .Frames()
                 .Serializer<JsonSerializer>()
                 .Processor<NetworkProcessor>()
-                .Message<MessageHandler>()
-                .AutoForward<EscalationController>()
-                .Retrieval<RetrievalHandler>()
-                .ReadReceipt<ReadReceiptHandler>()
-                .ReceiveReceipt<ReceiveReceiptHandler>()
+                .AutoForwarder(NetworkProcessor.EscalationForwarder)
             .Packets()
                 .InitialProcessor<IdentityProcessor>()
                 .Frame<FramePacketHandler>()

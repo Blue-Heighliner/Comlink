@@ -44,10 +44,16 @@ internal partial class FolderBar : UserControl
 
     private void OnFolderContextRequested(object? sender, ContextRequestedEventArgs e)
     {
-        if (e.Source is not Visual source) { return; }
+        if (e.Source is not Visual source)
+        {
+            return;
+        }
         TreeViewItem? treeItem = source.FindAncestorOfType<TreeViewItem>(includeSelf: true);
         FolderItemViewModel? folder = treeItem?.DataContext as FolderItemViewModel;
-        if (folder is null) { return; }
+        if (folder is null)
+        {
+            return;
+        }
 
         ContextMenu menu = new();
 
@@ -57,7 +63,10 @@ internal partial class FolderBar : UserControl
             newItem.Click += async (_, _) =>
             {
                 Window? owner = this.GetVisualRoot() as Window;
-                if (owner is null || DataContext is not IFolderBarViewModel vm) { return; }
+                if (owner is null || DataContext is not IFolderBarViewModel vm)
+                {
+                    return;
+                }
                 FolderNameDialog dialog = new();
                 string? name = await dialog.ShowDialog<string?>(owner);
                 if (name is not null)
@@ -74,7 +83,10 @@ internal partial class FolderBar : UserControl
             deleteItem.Click += async (_, _) =>
             {
                 Window? owner = this.GetVisualRoot() as Window;
-                if (owner is null || DataContext is not IFolderBarViewModel vm) { return; }
+                if (owner is null || DataContext is not IFolderBarViewModel vm)
+                {
+                    return;
+                }
                 ConfirmDialog dialog = new("Delete Folder", $"Delete \"{folder.Name}\" and everything inside it, including its subfolders and {vm.Display("all their messages, drafts and notes")}? This cannot be undone.", "Delete");
                 if (await dialog.ShowDialog<bool>(owner))
                 {
@@ -84,7 +96,10 @@ internal partial class FolderBar : UserControl
             menu.Items.Add(deleteItem);
         }
 
-        if (menu.Items.Count == 0) { return; }
+        if (menu.Items.Count == 0)
+        {
+            return;
+        }
         menu.Open(treeItem!);
         e.Handled = true;
     }
@@ -105,7 +120,11 @@ internal partial class FolderBar : UserControl
 
     private void OnFolderDragOver(object? sender, DragEventArgs e)
     {
-        if (!e.Data.Contains("entry")) { e.DragEffects = DragDropEffects.None; return; }
+        if (!e.Data.Contains("entry"))
+        {
+            e.DragEffects = DragDropEffects.None;
+            return;
+        }
         EntryItemViewModel? entry = e.Data.Get("entry") as EntryItemViewModel;
         FolderItemViewModel? folder = GetFolderAtPoint(e.GetPosition(FolderTree));
         e.DragEffects = entry is not null && folder is not null &&
@@ -116,10 +135,16 @@ internal partial class FolderBar : UserControl
 
     private async void OnFolderDrop(object? sender, DragEventArgs e)
     {
-        if (!e.Data.Contains("entry")) { return; }
+        if (!e.Data.Contains("entry"))
+        {
+            return;
+        }
         EntryItemViewModel? entry = e.Data.Get("entry") as EntryItemViewModel;
         FolderItemViewModel? folder = GetFolderAtPoint(e.GetPosition(FolderTree));
-        if (entry is null || folder is null) { return; }
+        if (entry is null || folder is null)
+        {
+            return;
+        }
         if (DataContext is IFolderBarViewModel vm)
         {
             await vm.MoveEntry(entry, folder);

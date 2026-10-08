@@ -101,7 +101,10 @@ internal sealed partial class ImportViewModel : ObservableObject, IImportViewMod
     [RelayCommand(CanExecute = nameof(CanStartImport))]
     private async Task StartImport(ImportPackageInfo? package)
     {
-        if (package is null) { return; }
+        if (package is null)
+        {
+            return;
+        }
 
         ImportFormatDefinition? format = SelectedFormat.Format;
         IsImporting = true;
@@ -114,7 +117,10 @@ internal sealed partial class ImportViewModel : ObservableObject, IImportViewMod
             if (format is not null && summary.StagedSends.Count > 0)
             {
                 stagedSend.Enqueue(summary.StagedSends, format.StagedSendMode, format.StagedSendDelay);
-                if (StagedSendsReady is not null) { await StagedSendsReady(); }
+                if (StagedSendsReady is not null)
+                {
+                    await StagedSendsReady();
+                }
             }
         }
         catch (Exception ex)

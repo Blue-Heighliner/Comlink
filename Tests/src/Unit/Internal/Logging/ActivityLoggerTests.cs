@@ -44,7 +44,7 @@ public sealed class ActivityLoggerTests
         repo.Verify(r => r.AppendEvent(It.IsAny<string>(), It.IsAny<int>()), Times.Never);
     }
 
-    public static IEnumerable<object[]> OtherCategoryEvents() => [[LogEvents.UnhandledException], [LogEvents.ConnectionEventHandlerFailed], [LogEvents.RetrievalIgnored], [LogEvents.FrameSent], [LogEvents.PacketReceived]];
+    public static IEnumerable<object[]> OtherCategoryEvents() => [[LogEvents.UnhandledException], [LogEvents.ConnectionEventHandlerFailed], [LogEvents.CannotDeliverNoConnection], [LogEvents.FrameSent], [LogEvents.PacketReceived]];
 
     /// <summary>A message with no event of the engine is classified by the category of its logger, case-insensitively.</summary>
     [Theory]

@@ -80,7 +80,7 @@ These become the user's `UserInfo` (see [Configuration.md](Configuration.md#user
 
 **Type:** `string | null` | **Default:** `null` (`"Client"`)
 
-The networking role of a node this user runs: `"Client"`, `"Server"` or `"Relay"` (case-insensitive). An unrecognized value, including the retired `"Peer"`, is an error: the file does not load, so networking does not start (and a reload keeps the previous contents). Leaving it out is a `"Client"`. See [Peer.md](Peer.md#user-roles).
+The networking role of a node this user runs: `"Client"` or `"Server"` (case-insensitive). An unrecognized value, including the retired `"Peer"`, is an error: the file does not load, so networking does not start (and a reload keeps the previous contents). Leaving it out is a `"Client"`. See [Peer.md](Peer.md#user-roles).
 
 ### `IpHost`
 
@@ -128,7 +128,7 @@ Loopback TCP port of the local interface listener, always active in every role (
 
 **Type:** `string | object | null` and `(string | object)[]` | **Default:** none
 
-The links between this user and the users it is connected to in a hierarchy. A `"Client"` or `"Relay"` names its `Parent`, the server or relay above it; a `"Server"` or `"Relay"` lists its `Children`, the clients and relays below it. A server may also name another server as its `Parent` to join a cluster. By default a user opens an outgoing MSMT connection to its parent, at the parent's `IpHost` and `Msmt.Port`, and listens on its own `Msmt.Port` for incoming connections from its children, so naming the other user is enough. A user listed in `Children` is also the only kind of user a server or relay accepts connections from (apart from other servers), and a server routes by them (see [Peer.md](Peer.md#user-roles)). A relay's own `Children` are the clients behind it, which the server learns from the relay's entry.
+The links between this user and the users it is connected to in a hierarchy. A `"Client"` names its `Parent`, the server above it; a `"Server"` lists its `Children`, the clients below it. A server may also name another server as its `Parent` to join a cluster. By default a user opens an outgoing MSMT connection to its parent, at the parent's `IpHost` and `Msmt.Port`, and listens on its own `Msmt.Port` for incoming connections from its children, so naming the other user is enough. A user listed in `Children` is also the only kind of user a server accepts connections from (apart from other servers), and a server routes by them (see [Peer.md](Peer.md#user-roles)).
 
 Instead of a plain user name, a link may be an object that forces how the connection forms. Only `User` and `Mode` are used; where and how each user is reached is stated on the users themselves (`IpHost`, `Msmt`, `Hdlc`). The other end of the link states the matching mode (a child forced to `MsmtConnect` is dialed by its parent, so that child states its `Parent` with `MsmtListen`; both ends of an HDLC cable state `Hdlc`).
 
@@ -141,6 +141,12 @@ Instead of a plain user name, a link may be an object that forces how the connec
 "SERVER":  { "Role": "Server", "Hdlc": { "Address": 1, "Ports": [ "ttyUSB3" ] }, "Children": [ { "User": "CLIENT1", "Mode": "Hdlc" }, "CLIENT2" ] },
 "CLIENT1": { "Role": "Client", "Hdlc": { "Address": 2, "Ports": [ "ttyUSB0" ] }, "Parent": { "User": "SERVER", "Mode": "Hdlc" } }
 ```
+
+### `AutoForwarders`
+
+**Type:** `string[]` | **Default:** none
+
+The names of the auto forwarders the user has access to (see [Configuration.md](Configuration.md#auto-forwarders)): each is an option in their auto forward screen, where they keep a target list for it. A name no auto forwarder of that name exists for does nothing.
 
 ### `MessageLevel`
 
@@ -178,19 +184,6 @@ One server with two clients that each name it as their parent, the server storin
     "SERVER":  { "Role": "Server", "IpHost": "127.0.0.1", "Msmt": { "Port": 50121 }, "InterfacePort": 50120, "Children": [ "CLIENT1", "CLIENT2" ], "MessageLevel": "RESTRICTED" },
     "CLIENT1": { "Role": "Client", "InterfacePort": 50122, "Parent": "SERVER", "MessageLevel": "INTERNAL" },
     "CLIENT2": { "Role": "Client", "InterfacePort": 50124, "Parent": "SERVER", "MessageLevel": "INTERNAL" }
-  }
-}
-```
-
-A relay sits between clients and a server: the server lists it as a child, the relay names the server as its parent and lists the clients behind it as its children, and those clients name the relay as their parent (`Scripts/Scenarios/ClientRelayServer/Config.json`).
-
-```json
-{
-  "Users": {
-    "SERVER":  { "Role": "Server", "IpHost": "127.0.0.1", "Msmt": { "Port": 50121 }, "Children": [ "CLIENT1", "RELAY" ] },
-    "RELAY":   { "Role": "Relay", "IpHost": "127.0.0.1", "Msmt": { "Port": 50123 }, "Parent": "SERVER", "Children": [ "CLIENT2" ] },
-    "CLIENT1": { "Role": "Client", "Parent": "SERVER" },
-    "CLIENT2": { "Role": "Client", "Parent": "RELAY" }
   }
 }
 ```

@@ -1,15 +1,30 @@
 namespace BlueHeighliner.Comlink.Sample;
 
 /// <summary>
-/// Demonstrates injecting a custom frame DTO. Field names are deliberately unlike the engine's own
-/// logical field names (<c>Id</c> vs frame id, <c>Sender</c> vs sender user, <c>Text</c> vs body, <c>Recipients</c> with a <see cref="bool"/> flag vs an address-type enum) to show
-/// that <see cref="EngineConfiguration"/>'s frame mapping is what maps the engine's logical
-/// fields onto this type's real ones — the engine itself never assumes any particular field name or
-/// shape, and requires a host to state its frame type since it has no built-in one of its own.
+/// Demonstrates injecting a custom frame DTO. Field names are deliberately unlike those of the engine's
+/// <see cref="Message"/> (<c>Id</c>, <c>Sender</c>, <c>Text</c>, <c>Recipients</c> with a <see cref="bool"/> flag vs an address-type enum):
+/// the engine never reads a frame, and this type converts to and from <see cref="Message"/> (<see cref="FromMessage"/>, <see cref="ToMessage"/>) for <see cref="NetworkProcessor"/>.
 /// </summary>
 [ProtoContract]
 public sealed class Frame
 {
+    /// <summary>Creates the frame that carries <paramref name="message"/> over the network.</summary>
+    /// <param name="message">The message to carry.</param>
+    public static Frame FromMessage(Message message)
+        => new()
+        {
+            IsMessage = true,
+            Id = message.Id,
+            Sender = message.FromUser,
+            Text = message.Body,
+            Timestamp = message.SentAt,
+            Importance = (int)message.Priority,
+            Category = message.Tag,
+            Confidentiality = (int?)message.MessageLevel,
+            Protection = (int?)message.MessageAspect,
+            Recipients = [.. message.Addresses.Select(address => new Recipient { User = address.UserName, Kind = address.Type switch { AddressType.Cc => "CC", AddressType.External => "OUTSIDE", _ => "TO" }, Note = address.Information })]
+        };
+
     /// <summary>Application-level message identifier.</summary>
     [ProtoMember(1)] public string Id { get; set; } = string.Empty;
     /// <summary>User name of the sender.</summary>
@@ -50,6 +65,30 @@ public sealed class Frame
     [ProtoMember(20)] public string ReceivedMessageId { get; set; } = string.Empty;
     /// <summary>Whether this frame is a receive receipt for the message in <see cref="ReceivedMessageId"/>.</summary>
     [ProtoMember(21)] public bool IsReceiveReceipt { get; set; }
+
+    /// <summary>Gets the priority this frame is sent with: that of a receipt or a retrieval request, or the message's own importance.</summary>
+    [ProtoIgnore]
+    [System.Text.Json.Serialization.JsonIgnore]
+    public MessagePriority Priority
+        => IsReadReceipt || IsReceiveReceipt ? MessagePriority.Receipt
+        : IsRetrieval ? MessagePriority.Retrieval
+        : (MessagePriority)Importance;
+
+    /// <summary>Turns this frame into the message the engine stores and shows.</summary>
+    public Message ToMessage()
+        => new()
+        {
+            Id = Id,
+            FromUser = Sender,
+            Body = Text,
+            SentAt = Timestamp,
+            Priority = (MessagePriority)Importance,
+            Tag = Category,
+            MessageLevel = (MessageLevel?)Confidentiality,
+            MessageAspect = (MessageAspect?)Protection,
+            IsAlert = Category is "ALERT",
+            Addresses = [.. Recipients.Select(recipient => new MessageAddress { UserName = recipient.User, Type = recipient.Kind switch { "CC" => AddressType.Cc, "OUTSIDE" => AddressType.External, _ => AddressType.To }, Information = recipient.Note })]
+        };
 }
 
 /// <summary>A single recipient entry within a <see cref="Frame"/>.</summary>

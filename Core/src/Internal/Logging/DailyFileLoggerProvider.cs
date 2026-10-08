@@ -33,7 +33,10 @@ internal sealed class DailyFileLoggerProvider : ILoggerProvider
         get
         {
             string dir = Path.Combine(engineController.AppDataPath, "Logs");
-            if (logDirectory == dir) { return dir; }
+            if (logDirectory == dir)
+            {
+                return dir;
+            }
 
             // The folder follows the user: lines logged before one is installed or named go to the application's own folder.
             Directory.CreateDirectory(dir);
@@ -72,7 +75,10 @@ internal sealed class DailyFileLoggerProvider : ILoggerProvider
         }
         catch (Exception ex)
         {
-            if (fileFailureReported) { return; }
+            if (fileFailureReported)
+            {
+                return;
+            }
             fileFailureReported = true;
             try { Console.WriteLine($"Log file unavailable, logging to the console only: {ex.Message}"); }
             catch { }
@@ -109,7 +115,10 @@ internal sealed class DailyFileLoggerProvider : ILoggerProvider
         }
         finally
         {
-            if (mutexAcquired) { mutex!.ReleaseMutex(); }
+            if (mutexAcquired)
+            {
+                mutex!.ReleaseMutex();
+            }
         }
     }
 
@@ -154,9 +163,15 @@ internal sealed class DailyFileLogger : ILogger, IDisposable
     /// <inheritdoc />
     public void Log<TState>(LogLevel logLevel, EventId eventId, TState state, Exception? exception, Func<TState, Exception?, string> formatter)
     {
-        if (!IsEnabled(logLevel)) { return; }
+        if (!IsEnabled(logLevel))
+        {
+            return;
+        }
         string category = LogEvents.CategoryOf(eventId) ?? categoryName;
-        if (!provider.IsEnabled(category)) { return; }
+        if (!provider.IsEnabled(category))
+        {
+            return;
+        }
 
         string line = lineFormatter.Format(DateTime.Now, category, currentUser.UserName, eventId, formatter(state, exception));
         if (exception is not null)

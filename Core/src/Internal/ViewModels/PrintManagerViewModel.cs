@@ -119,9 +119,15 @@ internal sealed partial class PrintManagerViewModel : ObservableObject, IPrintMa
     private readonly Comparison<PrintQueueEntry> order = (a, b) =>
     {
         int manual = b.IsManual.CompareTo(a.IsManual);
-        if (manual != 0) { return manual; }
+        if (manual != 0)
+        {
+            return manual;
+        }
         int priority = b.Priority.CompareTo(a.Priority);
-        if (priority != 0) { return priority; }
+        if (priority != 0)
+        {
+            return priority;
+        }
         return a.QueuedAt.CompareTo(b.QueuedAt);
     };
 
@@ -135,13 +141,19 @@ internal sealed partial class PrintManagerViewModel : ObservableObject, IPrintMa
 
     private Task OnMessageInserted(MessageEntity entity)
     {
-        if (!PrintReceivedEnabled) { return Task.CompletedTask; }
+        if (!PrintReceivedEnabled)
+        {
+            return Task.CompletedTask;
+        }
 
-        int count = engineController.GetPrintCount(entity.Message);
-        if (count <= 0) { return Task.CompletedTask; }
+        int count = engineController.GetPrintCount(engineController.ToMessage(entity.Message));
+        if (count <= 0)
+        {
+            return Task.CompletedTask;
+        }
 
-        int priority = engineController.GetPriority(entity.Message);
-        string title = engineController.GetBody(entity.Message).FirstLine;
+        int priority = engineController.SendPriority(engineController.PriorityOf(entity.Message.Priority));
+        string title = entity.Message.Body.FirstLine;
         for (int i = 0; i < count; i++)
         {
             Enqueue(new PrintQueueEntry
@@ -226,7 +238,10 @@ internal sealed partial class PrintManagerViewModel : ObservableObject, IPrintMa
     {
         lock (gate)
         {
-            if (isProcessing || SelectedPrinter is null || queue.Count == 0) { return; }
+            if (isProcessing || SelectedPrinter is null || queue.Count == 0)
+            {
+                return;
+            }
             isProcessing = true;
         }
         _ = RunPrintLoop();
@@ -279,7 +294,10 @@ internal sealed partial class PrintManagerViewModel : ObservableObject, IPrintMa
                         PrintQueueEntry? top = PeekTopLocked();
                         interrupted = top is null || top.Id != job.Id;
                     }
-                    if (interrupted) { break; }
+                    if (interrupted)
+                    {
+                        break;
+                    }
                 }
                 await printDriver.PageFeed(printer!);
             }
@@ -312,14 +330,20 @@ internal sealed partial class PrintManagerViewModel : ObservableObject, IPrintMa
             case EntryType.Message:
                 {
                     MessageEntity? entity = await messages.Get(job.EntryId, job.IsOutboundMessage);
-                    if (entity is null) { return []; }
-                    return [.. SplitLines(engineController.GetBody(entity.Message))];
+                    if (entity is null)
+                    {
+                        return [];
+                    }
+                    return [.. SplitLines(entity.Message.Body)];
                 }
             case EntryType.Draft:
                 {
                     ObjectId? id = TryParseObjectId(job.EntryId);
                     DraftEntity? entity = id is null ? null : await drafts.Get(id);
-                    if (entity is null) { return []; }
+                    if (entity is null)
+                    {
+                        return [];
+                    }
                     return [.. SplitLines(entity.Body)];
                 }
             case EntryType.Note:

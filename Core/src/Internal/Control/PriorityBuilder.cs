@@ -15,7 +15,10 @@ internal sealed class PriorityBuilder<TPriority> where TPriority : struct, Enum
     public PriorityBuilder<TPriority> Priority(TPriority priority)
     {
         current = priority;
-        if (!order.Contains(priority)) { order.Add(priority); }
+        if (!order.Contains(priority))
+        {
+            order.Add(priority);
+        }
         return this;
     }
 
@@ -48,11 +51,17 @@ internal sealed class PriorityBuilder<TPriority> where TPriority : struct, Enum
         [.. order.Select((priority, index) =>
         {
             (string? label, PriorityMode? mode) = options.GetValueOrDefault(priority);
-            if (Convert.ToInt64(priority) is < int.MinValue or > int.MaxValue) { throw new InvalidOperationException($"The priority {typeof(TPriority).Name}.{priority} has a value that does not fit an int, which is how priorities are stored"); }
+            if (Convert.ToInt64(priority) is < int.MinValue or > int.MaxValue)
+            {
+                throw new InvalidOperationException($"The priority {typeof(TPriority).Name}.{priority} has a value that does not fit an int, which is how priorities are stored");
+            }
 
             return new MessagePriorityOption { Name = label ?? priority.ToString().ToUpperInvariant(), Value = index, Mode = mode ?? PriorityMode.User, Key = priority };
         })];
-        if (built.GroupBy(option => option.Name, StringComparer.OrdinalIgnoreCase).FirstOrDefault(group => group.Count() > 1) is { } duplicate) { throw new InvalidOperationException($"Two priorities are named {duplicate.Key}: every priority needs its own name"); }
+        if (built.GroupBy(option => option.Name, StringComparer.OrdinalIgnoreCase).FirstOrDefault(group => group.Count() > 1) is { } duplicate)
+        {
+            throw new InvalidOperationException($"Two priorities are named {duplicate.Key}: every priority needs its own name");
+        }
 
         return built;
     }

@@ -84,7 +84,7 @@ internal sealed partial class EntryItemViewModel : ObservableObject
     public string? MessageLevelColorHex { get; }
 
     /// <summary>
-    /// Gets a value indicating whether this entry is flagged as an alert (see <see cref="IEngineController.GetIsAlert"/>
+    /// Gets a value indicating whether this entry is flagged as an alert (see <see cref="Message.IsAlert"/>
     /// for messages, or <see cref="DraftEntity.IsAlert"/> for drafts). <see langword="false"/> for notes
     /// and activity log entries, which have no alert flag. Drives <see cref="TitleColorHex"/> and
     /// <see cref="SecondaryTextColorHex"/>.

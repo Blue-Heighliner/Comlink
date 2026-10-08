@@ -5,8 +5,8 @@ public sealed class RepositoryTests : IDisposable
 {
     private static MessageEntity MakeMessage(string messageId, string folderId, bool isOutbound)
     {
-        object message = messageFormat.CreateFrame();
-        ((TestFrame)message).MessageId = messageId;
+        MessageData message = new();
+        message.Id = messageId;
         return new MessageEntity { MessageId = messageId, Message = message, FolderId = folderId, IsOutbound = isOutbound };
     }
 
@@ -37,7 +37,10 @@ public sealed class RepositoryTests : IDisposable
         ctx.Dispose();
         string dir = Path.Combine(
             Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), appName);
-        if (Directory.Exists(dir)) { Directory.Delete(dir, recursive: true); }
+        if (Directory.Exists(dir))
+        {
+            Directory.Delete(dir, recursive: true);
+        }
     }
 
     /// <summary>AppendEvent creates a new entity for today when none exists.</summary>

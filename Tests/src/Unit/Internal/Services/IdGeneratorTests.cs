@@ -8,7 +8,7 @@ public sealed class IdGeneratorTests
     public async Task Next_HandsTheHandlerThePreviousIdAndSavesTheNewOne()
     {
         Mock<IEngineController> controller = new();
-        controller.Setup(c => c.NextId(It.IsAny<string?>())).Returns((string? previous) => (previous ?? "0") + "+");
+        controller.Setup(c => c.NextMessageId(It.IsAny<string?>())).Returns((string? previous) => (previous ?? "0") + "+");
         Mock<ILastIdRepository> repository = new();
         repository.Setup(r => r.Get()).ReturnsAsync((string?)null);
         IdGenerator sut = new(controller.Object, repository.Object);
@@ -17,7 +17,7 @@ public sealed class IdGeneratorTests
         string second = await sut.Next();
 
         Assert.Equal(["0+", "0++"], [first, second]);
-        controller.Verify(c => c.NextId(null), Times.Once);
+        controller.Verify(c => c.NextMessageId(null), Times.Once);
         repository.Verify(r => r.Save("0+"), Times.Once);
         repository.Verify(r => r.Save("0++"), Times.Once);
         repository.Verify(r => r.Get(), Times.Once);
@@ -28,7 +28,7 @@ public sealed class IdGeneratorTests
     public async Task Next_AfterARestart_ContinuesFromTheSavedId()
     {
         Mock<IEngineController> controller = new();
-        controller.Setup(c => c.NextId(It.IsAny<string?>())).Returns((string? previous) => previous + "+");
+        controller.Setup(c => c.NextMessageId(It.IsAny<string?>())).Returns((string? previous) => previous + "+");
         Mock<ILastIdRepository> repository = new();
         repository.Setup(r => r.Get()).ReturnsAsync("SAVED");
         IdGenerator sut = new(controller.Object, repository.Object);

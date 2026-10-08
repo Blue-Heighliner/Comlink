@@ -62,7 +62,10 @@ internal sealed class UserService : IUserService
     /// <summary>Returns a <see cref="UserInfo"/> for the current user, or <see langword="null"/> if no user is installed.</summary>
     public UserInfo? GetCurrentUserInfo()
     {
-        if (!state.IsInstalled) { return null; }
+        if (!state.IsInstalled)
+        {
+            return null;
+        }
         return engineController.GetUserInfo(state.UserName!);
     }
 
@@ -81,13 +84,19 @@ internal sealed class UserService : IUserService
         }
 
         string userFilePath = UserFilePath;
-        if (!File.Exists(userFilePath)) { return; }
+        if (!File.Exists(userFilePath))
+        {
+            return;
+        }
 
         try
         {
             string json = await File.ReadAllTextAsync(userFilePath, cancellation).ConfigureAwait(false);
             state = JsonSerializer.Deserialize<UserState>(json) ?? new UserState();
-            if (!state.IsInstalled) { return; }
+            if (!state.IsInstalled)
+            {
+                return;
+            }
 
             if (Accept(state.UserName!) is { } name)
             {
@@ -110,7 +119,10 @@ internal sealed class UserService : IUserService
     /// <inheritdoc />
     public async Task<bool> Refresh(CancellationToken cancellation = default)
     {
-        if (engineController.DebugUserName is not null) { return false; }
+        if (engineController.DebugUserName is not null)
+        {
+            return false;
+        }
 
         bool changed = false;
         await lockObject.WaitAsync(cancellation);
@@ -134,11 +146,20 @@ internal sealed class UserService : IUserService
                 }
             }
 
-            if (string.Equals(current, remembered, StringComparison.OrdinalIgnoreCase)) { return false; }
+            if (string.Equals(current, remembered, StringComparison.OrdinalIgnoreCase))
+            {
+                return false;
+            }
 
             string? accepted = remembered is null ? null : Accept(remembered);
-            if (remembered is not null && accepted is null) { File.Delete(userFilePath); }
-            if (string.Equals(current, accepted, StringComparison.OrdinalIgnoreCase)) { return false; }
+            if (remembered is not null && accepted is null)
+            {
+                File.Delete(userFilePath);
+            }
+            if (string.Equals(current, accepted, StringComparison.OrdinalIgnoreCase))
+            {
+                return false;
+            }
 
             state = accepted is null ? new UserState() : new UserState { UserName = accepted };
             currentUserProvider.UserName = accepted;
@@ -149,7 +170,10 @@ internal sealed class UserService : IUserService
             lockObject.Release();
         }
 
-        if (changed) { Changed?.Invoke(); }
+        if (changed)
+        {
+            Changed?.Invoke();
+        }
         return changed;
     }
 
@@ -179,8 +203,14 @@ internal sealed class UserService : IUserService
         try
         {
             string? name = engineController.FindUserName(userName);
-            if (name is null) { return null; }
-            if (engineController.GetCertificateProblem(name) is { } problem) { throw new InvalidOperationException(problem); }
+            if (name is null)
+            {
+                return null;
+            }
+            if (engineController.GetCertificateProblem(name) is { } problem)
+            {
+                throw new InvalidOperationException(problem);
+            }
 
             userInfo = engineController.GetUserInfo(name);
             state = new UserState { UserName = userInfo.Name };

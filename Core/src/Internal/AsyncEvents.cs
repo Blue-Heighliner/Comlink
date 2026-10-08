@@ -28,7 +28,10 @@ internal static class AsyncEventExtensions
 
     private static async Task Run(Delegate? handlers, Func<Delegate, Task> invoke)
     {
-        if (handlers is null) { return; }
+        if (handlers is null)
+        {
+            return;
+        }
 
         List<Exception>? failures = null;
         foreach (Delegate handler in handlers.GetInvocationList())
@@ -37,8 +40,14 @@ internal static class AsyncEventExtensions
             catch (Exception ex) { (failures ??= []).Add(ex); }
         }
 
-        if (failures is null) { return; }
-        if (failures.Count == 1) { ExceptionDispatchInfo.Capture(failures[0]).Throw(); }
+        if (failures is null)
+        {
+            return;
+        }
+        if (failures.Count == 1)
+        {
+            ExceptionDispatchInfo.Capture(failures[0]).Throw();
+        }
         throw new AggregateException(failures);
     }
 }

@@ -10,8 +10,8 @@ already covered in the source itself.
 A host implements `IEngineConfiguration`, whose single `Configure` method receives an `IEngineBuilder` and states, through
 fluent calls, how the engine should run. It starts with `Types`, which fixes the frame type, the optional packet type, the
 priority enum and the message level enum, and returns the typed builder every other setting is stated on, so handlers,
-priorities and message levels are all checked against those types. After `Types`, the handlers for each kind of frame are
-required and anything else that should differ from the engine's defaults is optional (see [Configuration.md](Components/Configuration.md)).
+priorities and message levels are all checked against those types. After `Types`, the frame configuration (usually with the
+network processor that implements the protocol) is stated and anything else that should differ from the engine's defaults is optional (see [Configuration.md](Components/Configuration.md)).
 Core has no frame DTO of its own.
 
 `Engine.Start<TConfiguration>(string[] args, Action<IServiceCollection>? configureServices = null)` is the only entry
@@ -19,7 +19,7 @@ point. The host never builds an engine object: it names the type that describes 
 it through dependency injection, so a configuration can take services in its constructor (a logger, options, its own
 services) rather than reaching for them statically. The optional `configureServices` registers the host's own services:
 the ones the configuration depends on, and any others the host wants in the running engine, such as a hosted service that
-uses `IServiceConnection`.
+uses `IServiceConnection<TPriority, TLevel, TAspect>`.
 
 ```csharp
 await Engine.Start<MyEngineConfiguration>(args, services => services.AddSingleton<IClock, SystemClock>());
@@ -41,7 +41,7 @@ await Engine.Start<MyEngineConfiguration>(args, services => services.AddSingleto
    field, and the host's
    `configureServices` registrations run again against the engine's own container, so a service the configuration used
    and a service the running engine uses are separate instances.
-5. Once started, a host interacts with the running engine through `IServiceConnection`, sending
+5. Once started, a host interacts with the running engine through `IServiceConnection<TPriority, TLevel, TAspect>`, sending
    messages, observing delivery status, and reading/writing entries: the same surface whether
    running with or without a UI.
 

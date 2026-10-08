@@ -15,8 +15,8 @@ internal sealed record DraftContent
     /// <summary>Gets the name of the message aspect the draft is set to be sent with, or an empty string for none.</summary>
     public string MessageAspect { get; init; } = string.Empty;
 
-    /// <summary>Gets whether the draft is set to be sent as an alert.</summary>
-    public required bool IsAlert { get; init; }
+    /// <summary>Gets the draft's body text as it currently is.</summary>
+    public required string Body { get; init; }
 
     /// <summary>Gets the draft's recipients so far.</summary>
     public required IReadOnlyList<AddressRequest> Addresses { get; init; }

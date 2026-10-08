@@ -12,18 +12,30 @@ public sealed class IdentityProcessor : IInitialPacketProcessor<Packet>
     public TimeSpan Timeout { get; } = TimeSpan.FromSeconds(10);
 
     /// <inheritdoc />
-    public void OnConnected(IInitialPacketContext<Packet> context)
+    public async Task OnConnected(IInitialPacketContext<Packet> context)
     {
-        if (Starts(context)) { context.Send(Announce(context)); }
+        if (Starts(context))
+        {
+            await context.Send(Announce(context));
+        }
     }
 
     /// <inheritdoc />
-    public void OnReceived(IInitialPacketContext<Packet> context, Packet packet)
+    public async Task OnReceived(IInitialPacketContext<Packet> context, Packet packet)
     {
-        if (!Starts(context)) { context.Send(Announce(context)); }
+        if (!Starts(context))
+        {
+            await context.Send(Announce(context));
+        }
 
-        if (packet.Chunk.Length == 0) { context.Disconnect(); }
-        else { context.Connected(Encoding.UTF8.GetString(packet.Chunk)); }
+        if (packet.Chunk.Length == 0)
+        {
+            await context.Disconnect();
+        }
+        else
+        {
+            await context.Connected(Encoding.UTF8.GetString(packet.Chunk));
+        }
     }
 
     private bool Starts(IInitialPacketContext<Packet> context)

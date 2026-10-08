@@ -60,9 +60,15 @@ public sealed class ImportServiceTests : IDisposable
         foreach (string appName in new[] { sourceAppName, destAppName })
         {
             string dir = Path.Combine(appData, appName);
-            if (Directory.Exists(dir)) { Directory.Delete(dir, recursive: true); }
+            if (Directory.Exists(dir))
+            {
+                Directory.Delete(dir, recursive: true);
+            }
         }
-        if (Directory.Exists(packageDir)) { Directory.Delete(packageDir, recursive: true); }
+        if (Directory.Exists(packageDir))
+        {
+            Directory.Delete(packageDir, recursive: true);
+        }
     }
 
     private async Task<string> BuildPackage(params ExportEntryRef[] refs)
@@ -74,10 +80,10 @@ public sealed class ImportServiceTests : IDisposable
 
     private async Task<MessageEntity> InsertSourceMessage(string messageId, string body, bool isOutbound, DateTime? receivedAt = null, int priority = 0)
     {
-        object message = messageFormat.CreateFrame();
-        ((TestFrame)message).MessageId = messageId;
-        ((TestFrame)message).Body = body;
-        ((TestFrame)message).Priority = priority == 0 ? "NORMAL" : $"LEVEL{priority}";
+        MessageData message = new();
+        message.Id = messageId;
+        message.Body = body;
+        message.Priority = priority;
         MessageEntity entity = new()
         {
             MessageId = messageId,
@@ -132,8 +138,8 @@ public sealed class ImportServiceTests : IDisposable
         Assert.Equal(0, summary.Skipped);
         MessageEntity? imported = await destMessages.Get("M1", outbound: false);
         Assert.NotNull(imported);
-        Assert.Equal("Hello", messageFormat.GetBody(imported.Message));
-        Assert.Equal(2, messageFormat.GetPriority(imported.Message));
+        Assert.Equal("Hello", imported.Message.Body);
+        Assert.Equal(2, imported.Message.Priority);
     }
 
     /// <summary>A message matching an existing message's ID, direction, and date is skipped.</summary>
@@ -147,7 +153,7 @@ public sealed class ImportServiceTests : IDisposable
         await destMessages.Insert(new MessageEntity
         {
             MessageId = "M1",
-            Message = messageFormat.CreateFrame(),
+            Message = new MessageData(),
             FolderId = "root-inbox",
             IsOutbound = false,
             ReceivedAt = receivedAt

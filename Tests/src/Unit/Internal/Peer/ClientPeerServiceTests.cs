@@ -1,6 +1,6 @@
 namespace BlueHeighliner.Comlink.Tests.Unit.Internal.Peer;
 
-/// <summary>Unit tests for <see cref="ClientPeerService"/> connection status tracking, send coalescing, and message dispatch.</summary>
+/// <summary>Unit tests for <see cref="ClientPeerService"/> connection status tracking, sending, and handing received frames on.</summary>
 public sealed class ClientPeerServiceTests
 {
     private static readonly ILoggerFactory noLogger = LoggerFactory.Create(_ => { });
@@ -21,7 +21,10 @@ public sealed class ClientPeerServiceTests
 
         public void ComeOnce()
         {
-            if (Interlocked.Exchange(ref isUp, 1) == 0) { Come(); }
+            if (Interlocked.Exchange(ref isUp, 1) == 0)
+            {
+                Come();
+            }
         }
 
         public void Drop()
@@ -88,7 +91,10 @@ public sealed class ClientPeerServiceTests
         DateTime deadline = DateTime.UtcNow + timeout;
         while (!condition())
         {
-            if (DateTime.UtcNow > deadline) { throw new TimeoutException("Condition was not met in time."); }
+            if (DateTime.UtcNow > deadline)
+            {
+                throw new TimeoutException("Condition was not met in time.");
+            }
             await Task.Delay(10);
         }
     }
@@ -210,7 +216,7 @@ public sealed class ClientPeerServiceTests
     {
         Fixture fx = Build();
 
-        bool ok = await fx.Service.Send("ANY-USER", new TestFrame { MessageId = "M1", FromUser = "SOURCE" });
+        bool ok = await fx.Service.Send("Server1", new TestFrame { MessageId = "M1", FromUser = "SOURCE" }, 0);
 
         Assert.False(ok);
     }
@@ -224,7 +230,7 @@ public sealed class ClientPeerServiceTests
         Task startTask = fx.Service.Start(cts.Token);
         await Task.Delay(50);
 
-        bool ok = await fx.Service.Send("DEST", new TestFrame { MessageId = "M1", FromUser = "SOURCE" });
+        bool ok = await fx.Service.Send("Server1", new TestFrame { MessageId = "M1", FromUser = "SOURCE" }, 0);
 
         Assert.False(ok);
         fx.Transport.Verify(p => p.Request(It.IsAny<PeerConnection>(), It.Is<ReadOnlyMemory<byte>>(payload => !TestHeartbeat.Is(payload)), It.IsAny<PeerSendOptions>(), It.IsAny<CancellationToken>()), Times.Never);
@@ -239,7 +245,7 @@ public sealed class ClientPeerServiceTests
     {
         (Fixture fx, CancellationTokenSource cts, Task startTask) = await StartConnected();
 
-        bool ok = await fx.Service.Send("DEST", new TestFrame { MessageId = "M1", FromUser = "SOURCE" });
+        bool ok = await fx.Service.Send("Server1", new TestFrame { MessageId = "M1", FromUser = "SOURCE" }, 0);
 
         Assert.True(ok);
         fx.Transport.Verify(p => p.Request(
@@ -252,40 +258,49 @@ public sealed class ClientPeerServiceTests
         await startTask;
     }
 
-    /// <summary>
-    /// Multiple Send calls for the same message ID (e.g. one per group member expanded by
-    /// MessageRoutingService) are coalesced into a single physical transmission.
-    /// </summary>
+    /// <summary>Send transmits to the server with the priority it is given.</summary>
     [Fact]
-    public async Task Send_SameMessageIdCalledConcurrently_TransmitsOnlyOnce()
+    public async Task Send_UsesTheGivenPriority()
     {
         (Fixture fx, CancellationTokenSource cts, Task startTask) = await StartConnected();
+        TestFrame frame = new() { MessageId = "M1", FromUser = "SOURCE" };
 
-        TestFrame message = new() { MessageId = "M1", FromUser = "SOURCE" };
-        bool[] results = await Task.WhenAll(
-            fx.Service.Send("USER-A", message),
-            fx.Service.Send("USER-B", message),
-            fx.Service.Send("USER-C", message));
+        Assert.True(await fx.Service.Send("Server1", frame, 7));
+        Assert.True(await fx.Service.Send("SERVER1", frame, 3));
 
-        Assert.All(results, Assert.True);
-        fx.Transport.Verify(p => p.Request(It.IsAny<PeerConnection>(), It.Is<ReadOnlyMemory<byte>>(payload => !TestHeartbeat.Is(payload)), It.IsAny<PeerSendOptions>(), It.IsAny<CancellationToken>()), Times.Once);
+        fx.Transport.Verify(p => p.Request(fx.Server, It.Is<ReadOnlyMemory<byte>>(payload => !TestHeartbeat.Is(payload)), It.Is<PeerSendOptions>(options => options.Priority == 7 && ReferenceEquals(options.Frame, frame)), It.IsAny<CancellationToken>()), Times.Once);
+        fx.Transport.Verify(p => p.Request(fx.Server, It.Is<ReadOnlyMemory<byte>>(payload => !TestHeartbeat.Is(payload)), It.Is<PeerSendOptions>(options => options.Priority == 3), It.IsAny<CancellationToken>()), Times.Once);
 
         cts.Cancel();
         await startTask;
     }
 
-    /// <summary>A valid message received over the server connection fires FrameDelivered.</summary>
+    /// <summary>A client is directly connected only to its server, so a send to anyone else fails without transmitting.</summary>
     [Fact]
-    public async Task Received_ValidMessage_RaisesMessageDelivered()
+    public async Task Send_ToAnyoneButTheServer_ReturnsFalse()
     {
         (Fixture fx, CancellationTokenSource cts, Task startTask) = await StartConnected();
-        TaskCompletionSource<object> tcs = new();
-        fx.Service.FrameDelivered += message => { tcs.TrySetResult(message); return Task.CompletedTask; };
+
+        Assert.False(await fx.Service.Send("USER-A", new TestFrame { MessageId = "M1", FromUser = "SOURCE" }, 0));
+
+        fx.Transport.Verify(p => p.Request(fx.Server, It.Is<ReadOnlyMemory<byte>>(payload => !TestHeartbeat.Is(payload)), It.IsAny<PeerSendOptions>(), It.IsAny<CancellationToken>()), Times.Never);
+        cts.Cancel();
+        await startTask;
+    }
+
+    /// <summary>A frame received over the server connection fires FrameReceived with the server as its source.</summary>
+    [Fact]
+    public async Task Received_Frame_RaisesFrameReceivedWithTheServerAsSource()
+    {
+        (Fixture fx, CancellationTokenSource cts, Task startTask) = await StartConnected();
+        TaskCompletionSource<ReceivedFrame> tcs = new();
+        fx.Service.FrameReceived += received => { tcs.TrySetResult(received); return Task.CompletedTask; };
 
         fx.Received.Publish(new PeerReceivedEventArgs { Connection = fx.Server, Payload = Encode(new TestFrame { MessageId = "MSG1", FromUser = "REMOTE" }) });
 
-        TestFrame message = Assert.IsType<TestFrame>(await tcs.Task.WaitAsync(TimeSpan.FromSeconds(30)));
-        Assert.Equal("MSG1", message.MessageId);
+        ReceivedFrame received = await tcs.Task.WaitAsync(TimeSpan.FromSeconds(30));
+        Assert.Equal("MSG1", Assert.IsType<TestFrame>(received.Frame).MessageId);
+        Assert.Equal("Server1", received.SourceUser);
 
         cts.Cancel();
         await startTask;
@@ -297,7 +312,7 @@ public sealed class ClientPeerServiceTests
     {
         (Fixture fx, CancellationTokenSource cts, Task startTask) = await StartConnected();
         bool delivered = false;
-        fx.Service.FrameDelivered += _ => { delivered = true; return Task.CompletedTask; };
+        fx.Service.FrameReceived += _ => { delivered = true; return Task.CompletedTask; };
 
         fx.Received.Publish(new PeerReceivedEventArgs
         {
@@ -331,8 +346,8 @@ public sealed class ClientPeerServiceTests
         engineController.Setup(p => p.PeerPort).Returns(9500);
         ClientPeerService service = new(factory.Object, engineController.Object, noLogger);
         using CancellationTokenSource cts = new();
-        TaskCompletionSource<object> delivered = new();
-        service.FrameDelivered += message => { delivered.TrySetResult(message); return Task.CompletedTask; };
+        TaskCompletionSource<ReceivedFrame> delivered = new();
+        service.FrameReceived += received => { delivered.TrySetResult(received); return Task.CompletedTask; };
 
         Task startTask = service.Start(cts.Token);
         await WaitUntil(() => transport.Invocations.Any(i => i.Method.Name == nameof(IPeerTransport.StartListener)), TimeSpan.FromSeconds(30));
@@ -346,8 +361,7 @@ public sealed class ClientPeerServiceTests
         transport.Verify(p => p.StartListener(9500), Times.Once);
         transport.Verify(p => p.Connect(It.IsAny<ConnectionPoint>(), It.IsAny<CancellationToken>()), Times.Never);
         received.Publish(new PeerReceivedEventArgs { Connection = parent, Payload = Encode(new TestFrame { MessageId = "MSG1", FromUser = "REMOTE" }) });
-        TestFrame message = Assert.IsType<TestFrame>(await delivered.Task.WaitAsync(TimeSpan.FromSeconds(30)));
-        Assert.Equal("MSG1", message.MessageId);
+        Assert.Equal("MSG1", Assert.IsType<TestFrame>((await delivered.Task.WaitAsync(TimeSpan.FromSeconds(30))).Frame).MessageId);
 
         cts.Cancel();
         await startTask;
@@ -617,7 +631,7 @@ public sealed class ClientPeerServiceTests
         Assert.True(status.IsClosed);
         Assert.False(status.IsConnected);
         Assert.True(raised > 0);
-        Assert.False(await fx.Service.Send("DEST", new TestFrame { MessageId = "M1", FromUser = "SOURCE" }));
+        Assert.False(await fx.Service.Send("Server1", new TestFrame { MessageId = "M1", FromUser = "SOURCE" }, 0));
 
         cts.Cancel();
         await startTask;
@@ -665,7 +679,7 @@ public sealed class ClientPeerServiceTests
         fx.Transport.Verify(t => t.SetClosed(serverPoint, false), Times.Once);
         Assert.False(Assert.Single(fx.Service.GetStatuses()).IsClosed);
         await WaitUntil(() => fx.Service.GetStatuses().Single().IsConnected, TimeSpan.FromSeconds(30));
-        Assert.True(await fx.Service.Send("DEST", new TestFrame { MessageId = "M2", FromUser = "SOURCE" }));
+        Assert.True(await fx.Service.Send("Server1", new TestFrame { MessageId = "M2", FromUser = "SOURCE" }, 0));
 
         cts.Cancel();
         await startTask;

@@ -23,7 +23,15 @@ public sealed class DeleteConfirmationTests
     public async Task Confirm_ExpiresWhenNotConfirmedInTime()
     {
         TaskCompletionSource expired = new();
-        DeleteConfirmation confirmation = new(pending => { if (!pending) { expired.TrySetResult(); } }, TimeSpan.FromMilliseconds(50));
+        DeleteConfirmation confirmation = new(
+            pending =>
+            {
+                if (!pending)
+                {
+                    expired.TrySetResult();
+                }
+            },
+            TimeSpan.FromMilliseconds(50));
 
         Assert.False(confirmation.Confirm());
         await expired.Task.WaitAsync(TimeSpan.FromSeconds(30));

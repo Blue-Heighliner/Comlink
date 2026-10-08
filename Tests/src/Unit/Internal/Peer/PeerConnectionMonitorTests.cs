@@ -28,7 +28,10 @@ public sealed class PeerConnectionMonitorTests
         DateTime deadline = DateTime.UtcNow + timeout;
         while (!condition())
         {
-            if (DateTime.UtcNow > deadline) { throw new TimeoutException("Condition was not met in time."); }
+            if (DateTime.UtcNow > deadline)
+            {
+                throw new TimeoutException("Condition was not met in time.");
+            }
             await Task.Delay(10);
         }
     }

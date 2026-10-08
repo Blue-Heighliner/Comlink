@@ -50,7 +50,10 @@ internal sealed class PriorityLock : IPriorityLock
         {
             while (waiters.TryDequeue(out TaskCompletionSource<IDisposable>? next, out _))
             {
-                if (next.TrySetResult(new Lease(this))) { return; }
+                if (next.TrySetResult(new Lease(this)))
+                {
+                    return;
+                }
             }
 
             held = false;
@@ -63,7 +66,10 @@ internal sealed class PriorityLock : IPriorityLock
 
         public void Dispose()
         {
-            if (Interlocked.Exchange(ref released, 1) == 0) { owner.Release(); }
+            if (Interlocked.Exchange(ref released, 1) == 0)
+            {
+                owner.Release();
+            }
         }
     }
 }

@@ -63,13 +63,19 @@ internal sealed class MsmtPeerTransport : IPeerTransport
     /// <inheritdoc />
     public void Reset(ConnectionPoint point)
     {
-        if (!closed.ContainsKey(point.Key)) { DropOutbound(point); }
+        if (!closed.ContainsKey(point.Key))
+        {
+            DropOutbound(point);
+        }
     }
 
     /// <inheritdoc />
     public async Task<PeerConnection> Connect(ConnectionPoint point, CancellationToken cancellation = default)
     {
-        if (closed.ContainsKey(point.Key)) { throw new IOException($"Connection to {point} is closed"); }
+        if (closed.ContainsKey(point.Key))
+        {
+            throw new IOException($"Connection to {point} is closed");
+        }
 
         return Wrap(await GetConnection(point, cancellation));
     }
@@ -77,8 +83,14 @@ internal sealed class MsmtPeerTransport : IPeerTransport
     /// <inheritdoc />
     public async Task<bool> Request(PeerConnection connection, ReadOnlyMemory<byte> data, PeerSendOptions? options = null, CancellationToken cancellation = default)
     {
-        if (connection.Point is { } point && closed.ContainsKey(point.Key)) { throw new IOException($"Connection to {point} is closed"); }
-        if (!handles.TryGetValue(connection, out IMsmtConnection? handle) || handle.Status == MsmtConnectionStatus.Disconnected) { throw new IOException("The connection is no longer open"); }
+        if (connection.Point is { } point && closed.ContainsKey(point.Key))
+        {
+            throw new IOException($"Connection to {point} is closed");
+        }
+        if (!handles.TryGetValue(connection, out IMsmtConnection? handle) || handle.Status is MsmtConnectionStatus.Disconnected)
+        {
+            throw new IOException("The connection is no longer open");
+        }
 
         // MSMT orders sends by the negated priority, which overflows for int.MinValue and would put the lowest priority first.
         MsmtSendOptions sendOptions = new() { Priority = Math.Max(options?.Priority ?? 0, int.MinValue + 1), Tag = options?.Transmitted is { } transmitted ? new TransmittedTag(transmitted) : null };
@@ -110,7 +122,7 @@ internal sealed class MsmtPeerTransport : IPeerTransport
         IMsmtConnection connection;
         lock (outboundLock)
         {
-            created = !outbound.TryGetValue(target.Key, out connection!) || connection.Status == MsmtConnectionStatus.Disconnected;
+            created = !outbound.TryGetValue(target.Key, out connection!) || connection.Status is MsmtConnectionStatus.Disconnected;
             if (created)
             {
                 connection = peer.Connect(ToMsmtTarget(target));
@@ -123,18 +135,24 @@ internal sealed class MsmtPeerTransport : IPeerTransport
             throw new IOException($"Could not connect to {target}");
         }
 
-        if (created) { MarkConnected(connection); }
+        if (created)
+        {
+            MarkConnected(connection);
+        }
         return connection;
     }
 
     private PeerConnection Wrap(IMsmtConnection connection)
     {
-        if (connections.TryGetValue(connection, out PeerConnection? existing)) { return existing; }
+        if (connections.TryGetValue(connection, out PeerConnection? existing))
+        {
+            return existing;
+        }
 
         string? subject = connection.Identity?.Subject;
         IpConnectionInfo info = new()
         {
-            IsInbound = connection.Direction != MsmtConnectionDirection.Outgoing,
+            IsInbound = connection.Direction is not MsmtConnectionDirection.Outgoing,
             Host = connection.Remote.Host,
             Port = connection.Remote.Port,
             CertificateSubject = subject,
@@ -143,7 +161,10 @@ internal sealed class MsmtPeerTransport : IPeerTransport
         PeerConnection created = new(info.IsInbound ? null : new ConnectionPoint { IpAddress = connection.Remote.Host, Port = connection.Remote.Port }, info, connection.Dispose);
         handles[created] = connection;
         PeerConnection winner = connections.GetOrAdd(connection, created);
-        if (!ReferenceEquals(winner, created)) { handles.TryRemove(created, out _); }
+        if (!ReferenceEquals(winner, created))
+        {
+            handles.TryRemove(created, out _);
+        }
         return winner;
     }
 
@@ -151,7 +172,10 @@ internal sealed class MsmtPeerTransport : IPeerTransport
     // a moment, and the next request must not reuse it.
     private void DropOutbound(ConnectionPoint point)
     {
-        if (outbound.TryRemove(point.Key, out IMsmtConnection? connection)) { connection.Dispose(); }
+        if (outbound.TryRemove(point.Key, out IMsmtConnection? connection))
+        {
+            connection.Dispose();
+        }
     }
 
     private void MarkConnected(IMsmtConnection connection) => connected.Publish(new PeerConnectionEventArgs { Connection = Wrap(connection) });
@@ -161,7 +185,10 @@ internal sealed class MsmtPeerTransport : IPeerTransport
         if (connections.TryRemove(args.Connection, out PeerConnection? connection))
         {
             handles.TryRemove(connection, out _);
-            if (connection.Point is { } point) { outbound.TryRemove(new KeyValuePair<string, IMsmtConnection>(point.Key, args.Connection)); }
+            if (connection.Point is { } point)
+            {
+                outbound.TryRemove(new KeyValuePair<string, IMsmtConnection>(point.Key, args.Connection));
+            }
             disconnected.Publish(new PeerConnectionEventArgs { Connection = connection });
         }
     }
@@ -176,7 +203,7 @@ internal sealed class MsmtPeerTransport : IPeerTransport
 
     private static void OnPackageChanged(MsmtPackageChange args)
     {
-        if (args.Package.Tag is TransmittedTag tag && args.Status == MsmtSendStatus.PendingAcknowledgement)
+        if (args.Package.Tag is TransmittedTag tag && args.Status is MsmtSendStatus.PendingAcknowledgement)
         {
             tag.Transmitted();
         }

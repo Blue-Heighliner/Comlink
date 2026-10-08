@@ -62,7 +62,10 @@ internal sealed partial class FolderBarViewModel : ObservableObject, IFolderBarV
 
     private static FolderItemViewModel? FindParentInTree(FolderItemViewModel node, string childId)
     {
-        if (node.Children.Any(c => c.Id == childId)) { return node; }
+        if (node.Children.Any(c => c.Id == childId))
+        {
+            return node;
+        }
         foreach (FolderItemViewModel child in node.Children)
         {
             if (FindParentInTree(child, childId) is { } found)
@@ -127,7 +130,10 @@ internal sealed partial class FolderBarViewModel : ObservableObject, IFolderBarV
         foreach (FolderType rootType in rootOrder)
         {
             Folder? rootFolder = tree.FirstOrDefault(f => f.ParentId is null && f.RootType == rootType);
-            if (rootFolder is null) { continue; }
+            if (rootFolder is null)
+            {
+                continue;
+            }
 
             bool isSeparated = rootType is FolderType.Inbox or FolderType.Outbox && engineController.SeparateAlerts;
             if (isSeparated)
@@ -147,7 +153,10 @@ internal sealed partial class FolderBarViewModel : ObservableObject, IFolderBarV
     /// <summary>Marks the given folder as selected, deselecting the previously selected folder.</summary>
     public void SelectFolder(FolderItemViewModel folder)
     {
-        if (SelectedFolder == folder) { return; }
+        if (SelectedFolder == folder)
+        {
+            return;
+        }
 
         if (SelectedFolder is not null)
         {
@@ -162,7 +171,10 @@ internal sealed partial class FolderBarViewModel : ObservableObject, IFolderBarV
     /// <summary>Clears the current selection, if any, without raising <see cref="FolderSelected"/>.</summary>
     public void DeselectFolder()
     {
-        if (SelectedFolder is null) { return; }
+        if (SelectedFolder is null)
+        {
+            return;
+        }
         SelectedFolder.IsSelected = false;
         SelectedFolder = null;
     }
@@ -171,13 +183,19 @@ internal sealed partial class FolderBarViewModel : ObservableObject, IFolderBarV
     public void SelectFolderByType(FolderType type)
     {
         FolderItemViewModel? folder = RootFolders.FirstOrDefault(f => f.RootType == type);
-        if (folder is not null) { SelectFolder(folder); }
+        if (folder is not null)
+        {
+            SelectFolder(folder);
+        }
     }
 
     /// <summary>Moves the given entry to the target folder if the types are compatible.</summary>
     public async Task MoveEntry(EntryItemViewModel entry, FolderItemViewModel targetFolder)
     {
-        if (!IsCompatibleMove(entry.EntryType, targetFolder.RootType, entry.IsOutboundMessage)) { return; }
+        if (!IsCompatibleMove(entry.EntryType, targetFolder.RootType, entry.IsOutboundMessage))
+        {
+            return;
+        }
         await entryService.MoveEntry(entry.Id, entry.EntryType, targetFolder.StorageId, entry.IsOutboundMessage);
         EntryMoved?.Invoke();
     }
@@ -185,7 +203,10 @@ internal sealed partial class FolderBarViewModel : ObservableObject, IFolderBarV
     /// <summary>Creates and persists a new subfolder under the given parent, then selects it.</summary>
     public async Task AddSubfolder(FolderItemViewModel parent, string name)
     {
-        if (parent.RootType == FolderType.Activity) { return; }
+        if (parent.RootType is FolderType.Activity)
+        {
+            return;
+        }
 
         FolderEntity entity = new()
         {
@@ -212,9 +233,15 @@ internal sealed partial class FolderBarViewModel : ObservableObject, IFolderBarV
     /// <inheritdoc />
     public async Task DeleteFolder(FolderItemViewModel folder)
     {
-        if (!CanDeleteFolder(folder)) { return; }
+        if (!CanDeleteFolder(folder))
+        {
+            return;
+        }
         FolderItemViewModel? parent = FindParent(folder.Id);
-        if (parent is null) { return; }
+        if (parent is null)
+        {
+            return;
+        }
 
         List<FolderItemViewModel> doomedFolders = Flatten(folder);
         bool selectionInside = SelectedFolder is { } selected && doomedFolders.Contains(selected);

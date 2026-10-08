@@ -24,8 +24,7 @@ public sealed class MyEngineConfiguration : IEngineConfiguration
         .Display<MyDisplayHandler>()
         .Priorities().Priority(MyPriority.Normal)
         .Frames()
-            .Message<MyMessageHandler>()
-            // ...a handler for every other kind of frame...
+            .Processor<MyNetworkProcessor>()
         ;
 }
 

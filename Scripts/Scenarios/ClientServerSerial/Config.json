@@ -16,6 +16,7 @@
     },
     "CLIENT1": {
       "Role": "Client",
+      "AutoForwarders": [ "Escalation" ],
       "InterfacePort": 50322,
       "Hdlc": { "Address": 2, "Ports": [ "ttyUSB0" ] },
       "Parent": { "User": "SERVER", "Mode": "Hdlc" },
@@ -23,6 +24,7 @@
     },
     "CLIENT2": {
       "Role": "Client",
+      "AutoForwarders": [ "Escalation" ],
       "InterfacePort": 50324,
       "Parent": "SERVER",
       "MessageLevel": "INTERNAL"

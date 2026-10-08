@@ -29,6 +29,20 @@ public interface IDraftHandler<TPriority, TLevel, TAspect> where TPriority : str
     /// <summary>Gets whether a message must have a tag: a draft without one can not be sent. Defaults to <see langword="false"/>.</summary>
     bool IsTagRequired => false;
 
+    /// <summary>
+    /// Says whether a message sent from the draft in <paramref name="state"/> is an alert, which alarms the recipient's Client-mode UI until it is read. Asked as the user edits the draft, to show the alert mark, and when it is sent, to
+    /// set <see cref="Message.IsAlert"/>. Defaults to <see langword="false"/>: nothing is an alert unless the host says so.
+    /// </summary>
+    /// <param name="state">The draft as it currently is.</param>
+    bool IsAlert(DraftState<TPriority, TLevel, TAspect> state) => false;
+
+    /// <summary>
+    /// Gets the identifier of the next message the user sends, given <paramref name="previous"/>, the one the engine generated last, which it keeps between runs (<see langword="null"/> before the first). An identifier is shared
+    /// with the peers, who tell messages apart by it, so it is unique among every message in the network. Defaults to a new GUID without hyphens, which ignores <paramref name="previous"/>.
+    /// </summary>
+    /// <param name="previous">The identifier generated last, or <see langword="null"/> when there is none.</param>
+    string NextId(string? previous) => Guid.NewGuid().ToString("N");
+
     /// <summary>Gets the tag a new draft starts with, or <see langword="null"/> (the default) for none. It is made to fit the tag rules, as anything typed is.</summary>
     string? DefaultTag => null;
 

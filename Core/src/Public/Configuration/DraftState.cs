@@ -1,6 +1,6 @@
 namespace BlueHeighliner.Comlink;
 
-/// <summary>What an <see cref="IDraftHandler{TPriority, TLevel, TAspect}"/> is told about a draft when it is asked for the draft's header: the draft's aspects as they currently are, which change as the user edits it.</summary>
+/// <summary>What an <see cref="IDraftHandler{TPriority, TLevel, TAspect}"/> is told about a draft when it is asked for the draft's header: the draft as it currently is, which change as the user edits it.</summary>
 /// <typeparam name="TPriority">The enum whose members are the priority levels.</typeparam>
 /// <typeparam name="TLevel">The enum whose members are the message levels.</typeparam>
 /// <typeparam name="TAspect">The enum whose members are the message aspects, or <see cref="NoMessageAspect"/> for none.</typeparam>
@@ -18,8 +18,8 @@ public sealed record DraftState<TPriority, TLevel, TAspect> where TPriority : st
     /// <summary>Gets the message aspect the draft is set to be sent with, or <see langword="null"/> for none.</summary>
     public TAspect? MessageAspect { get; init; }
 
-    /// <summary>Gets whether the draft is set to be sent as an alert.</summary>
-    public required bool IsAlert { get; init; }
+    /// <summary>Gets the draft's body text as it currently is.</summary>
+    public required string Body { get; init; }
 
     /// <summary>Gets the draft's recipients so far.</summary>
     public required IReadOnlyList<AddressRequest> Addresses { get; init; }

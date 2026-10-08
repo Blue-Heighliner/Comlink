@@ -42,7 +42,7 @@ internal sealed partial class FolderItemViewModel : ObservableObject
     /// <summary>Gets a value indicating whether this folder is nested under a root folder.</summary>
     public bool IsSubfolder => ParentId is not null;
     /// <summary>Gets a value indicating whether a new subfolder can be created under this folder.</summary>
-    public bool CanCreateSubfolder => !(ParentId is null && (RootType == FolderType.Activity || RootType == FolderType.Outbox)) && AlertView is not true;
+    public bool CanCreateSubfolder => !(ParentId is null && (RootType is FolderType.Activity || RootType is FolderType.Outbox)) && AlertView is not true;
     /// <summary>Gets a value indicating whether this is a top-level root folder.</summary>
     public bool IsRootFolder => ParentId is null;
     /// <summary>Gets a value indicating whether the folder label should be displayed in bold (true for root folders).</summary>

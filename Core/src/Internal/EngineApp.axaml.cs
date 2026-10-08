@@ -53,7 +53,13 @@ internal partial class EngineApp : Application
             // window has to be closed from here or the process would ignore the signal and keep running.
             bool exiting = false;
             host.Services.GetRequiredService<IHostApplicationLifetime>().ApplicationStopping.Register(
-                () => Dispatcher.UIThread.Post(() => { if (!exiting) { desktop.Shutdown(); } }));
+                () => Dispatcher.UIThread.Post(() =>
+                {
+                    if (!exiting)
+                    {
+                        desktop.Shutdown();
+                    }
+                }));
 
             // Stopping and disposing the host is what releases serial ports, closes connections, and closes the
             // database. Exit is raised synchronously as the process shuts down, so an async handler would be cut off;
@@ -74,8 +80,14 @@ internal partial class EngineApp : Application
         try { await host.StopAsync(); }
         finally
         {
-            if (host is IAsyncDisposable asyncDisposable) { await asyncDisposable.DisposeAsync(); }
-            else { host.Dispose(); }
+            if (host is IAsyncDisposable asyncDisposable)
+            {
+                await asyncDisposable.DisposeAsync();
+            }
+            else
+            {
+                host.Dispose();
+            }
         }
     }
 }

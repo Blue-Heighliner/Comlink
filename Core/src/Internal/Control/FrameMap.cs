@@ -9,14 +9,6 @@ internal sealed class FrameMap
     public required ServiceRegistration<IFrameSerializer> Serializer { get; init; }
     /// <summary>Creates a new, empty frame.</summary>
     public required Func<object> Create { get; init; }
-    /// <summary>Gets how the host's message handler is instantiated.</summary>
-    public required ServiceRegistration<IMessageFrameHandler> Message { get; init; }
-    /// <summary>Gets how the host's retrieval request handler is instantiated.</summary>
-    public required ServiceRegistration<IRetrievalFrameHandler> Retrieval { get; init; }
-    /// <summary>Gets how the host's read receipt handler is instantiated.</summary>
-    public required ServiceRegistration<IReceiptFrameHandler> ReadReceipt { get; init; }
-    /// <summary>Gets how the host's receive receipt handler is instantiated.</summary>
-    public required ServiceRegistration<IReceiptFrameHandler> ReceiveReceipt { get; init; }
     /// <summary>Gets the heartbeat handler, or <see langword="null"/> when none is stated, in which case no heartbeats are sent.</summary>
     public ServiceRegistration<IHeartbeatFrameHandler>? Heartbeat { get; init; }
 }

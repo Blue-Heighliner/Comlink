@@ -1,27 +1,42 @@
 namespace BlueHeighliner.Comlink.Tests.Unit.Internal.Peer;
 
-/// <summary>Unit tests for <see cref="PeerFrameDispatcher"/>'s classification of received bytes.</summary>
+/// <summary>Unit tests for <see cref="PeerFrameDispatcher"/>'s turning received bytes into frames.</summary>
 public sealed class PeerFrameDispatcherTests
 {
-    private static readonly ILogger logger = LoggerFactory.Create(_ => { }).CreateLogger("test");
-
-    private static ReadOnlyMemory<byte> Encode(IEngineController controller, TestFrame message)
+    private static ReadOnlyMemory<byte> Encode(IEngineController controller, TestFrame frame)
     {
-        using IMemoryOwner<byte> buf = controller.FrameSerializer.Serialize(message);
+        using IMemoryOwner<byte> buf = controller.FrameSerializer.Serialize(frame);
         return buf.Memory.ToArray();
     }
 
-    /// <summary>An ordinary message is delivered.</summary>
+    /// <summary>Whatever a peer sends is a frame, so it is raised with the user it arrived from and nothing is made of what is in it.</summary>
     [Fact]
-    public async Task Dispatch_OrdinaryMessage_IsDelivered()
+    public async Task Dispatch_AnyFrame_IsRaisedWithItsSource()
     {
         TestEngineController controller = new();
-        List<object> delivered = [];
+        List<ReceivedFrame> received = [];
 
-        bool ok = await PeerFrameDispatcher.Dispatch(Encode(controller, new TestFrame { MessageId = "M1" }), controller, logger, m => { delivered.Add(m); return Task.CompletedTask; }, null, null);
+        bool ok = await PeerFrameDispatcher.Dispatch(Encode(controller, new TestFrame { MessageId = "M1" }), controller, r => { received.Add(r); return Task.CompletedTask; }, "SERVER");
 
         Assert.True(ok);
-        Assert.Single(delivered);
+        ReceivedFrame frame = Assert.Single(received);
+        Assert.Equal("SERVER", frame.SourceUser);
+        Assert.Equal("M1", Assert.IsType<TestFrame>(frame.Frame).MessageId);
+    }
+
+    /// <summary>Receipts, requests and frames with no identifier are all raised alike: the engine does not tell them apart.</summary>
+    [Fact]
+    public async Task Dispatch_ReceiptRequestAndAnonymousFrames_AreRaisedToo()
+    {
+        TestEngineController controller = new();
+        List<ReceivedFrame> received = [];
+        Func<ReceivedFrame, Task> raise = r => { received.Add(r); return Task.CompletedTask; };
+
+        await PeerFrameDispatcher.Dispatch(Encode(controller, new TestFrame { ReceiveReceiptMessageId = "M1", IsHidden = true }), controller, raise, "A");
+        await PeerFrameDispatcher.Dispatch(Encode(controller, new TestFrame { IsRetrieval = true, IsHidden = true }), controller, raise, "B");
+        await PeerFrameDispatcher.Dispatch(Encode(controller, new TestFrame { FromUser = "ALICE" }), controller, raise, "C");
+
+        Assert.Equal(["A", "B", "C"], received.Select(r => r.SourceUser));
     }
 
     /// <summary>The first packet that carried a frame is handed to the frame serializer along with the bytes.</summary>
@@ -34,89 +49,43 @@ public sealed class PeerFrameDispatcherTests
         serializer.Setup(s => s.Deserialize(It.IsAny<ReadOnlyMemory<byte>>(), packet)).Returns(frame);
         Mock<TestEngineController> controller = new() { CallBase = true };
         controller.Setup(c => c.FrameSerializer).Returns(serializer.Object);
-        List<object> delivered = [];
+        List<ReceivedFrame> received = [];
 
-        bool ok = await PeerFrameDispatcher.Dispatch(new byte[] { 1 }, controller.Object, logger, m => { delivered.Add(m); return Task.CompletedTask; }, null, null, packet);
+        bool ok = await PeerFrameDispatcher.Dispatch(new byte[] { 1 }, controller.Object, r => { received.Add(r); return Task.CompletedTask; }, "SERVER", packet);
 
         Assert.True(ok);
-        Assert.Same(frame, Assert.Single(delivered));
+        Assert.Same(frame, Assert.Single(received).Frame);
     }
 
-    /// <summary>A message with no identifier is invalid and is dropped: it is not delivered and the dispatch fails.</summary>
-    [Fact]
-    public async Task Dispatch_MessageWithoutId_IsDroppedAndFails()
-    {
-        TestEngineController controller = new();
-        List<object> delivered = [];
-        using IMemoryOwner<byte> bytes = controller.FrameSerializer.Serialize(new TestFrame { FromUser = "ALICE" });
-
-        bool ok = await PeerFrameDispatcher.Dispatch(bytes.Memory, controller, logger, m => { delivered.Add(m); return Task.CompletedTask; }, null, null);
-
-        Assert.False(ok);
-        Assert.Empty(delivered);
-    }
-
-    /// <summary>A heartbeat, an empty message, is acknowledged and neither delivered nor treated as a receipt.</summary>
+    /// <summary>A heartbeat is acknowledged and not raised, since it only keeps the connection live.</summary>
     [Fact]
     public async Task Dispatch_Heartbeat_IsAcknowledgedAndIgnored()
     {
         TestEngineController controller = new();
-        List<object> delivered = [];
-        int receipts = 0;
+        List<ReceivedFrame> received = [];
 
-        bool ok = await PeerFrameDispatcher.Dispatch(
-            TestHeartbeat.Bytes(), controller, logger,
-            m => { delivered.Add(m); return Task.CompletedTask; }, (_, _) => { receipts++; return Task.CompletedTask; }, null);
+        bool ok = await PeerFrameDispatcher.Dispatch(TestHeartbeat.Bytes(), controller, r => { received.Add(r); return Task.CompletedTask; }, "SERVER");
 
         Assert.True(ok);
-        Assert.Empty(delivered);
-        Assert.Equal(0, receipts);
+        Assert.Empty(received);
     }
 
-    /// <summary>An empty payload is not a serialized message, so it is refused rather than treated as a heartbeat.</summary>
+    /// <summary>An empty payload is not a serialized frame, so it is refused rather than treated as a heartbeat.</summary>
     [Fact]
     public async Task Dispatch_EmptyPayload_IsRefused()
-    {
-        TestEngineController controller = new();
+        => Assert.False(await PeerFrameDispatcher.Dispatch(ReadOnlyMemory<byte>.Empty, new TestEngineController(), null, "SERVER"));
 
-        Assert.False(await PeerFrameDispatcher.Dispatch(ReadOnlyMemory<byte>.Empty, controller, logger, null, null, null));
-    }
-
-    /// <summary>A retrieval request is neither delivered as a message nor treated as a receipt: only a storage server answers one.</summary>
+    /// <summary>A frame of another type than the configured one, which an incompatible sender's bytes can describe, is refused.</summary>
     [Fact]
-    public async Task Dispatch_RetrievalRequest_IsIgnored()
+    public async Task Dispatch_FrameOfAnotherType_IsRefused()
     {
-        TestEngineController controller = new();
-        List<object> delivered = [];
-        int receipts = 0;
+        Mock<IFrameSerializer> serializer = new();
+        serializer.Setup(s => s.Deserialize(It.IsAny<ReadOnlyMemory<byte>>(), null)).Returns(new object());
+        Mock<TestEngineController> controller = new() { CallBase = true };
+        controller.Setup(c => c.FrameSerializer).Returns(serializer.Object);
+        List<ReceivedFrame> received = [];
 
-        bool ok = await PeerFrameDispatcher.Dispatch(
-            Encode(controller, new TestFrame { MessageId = "R1", IsRetrieval = true }), controller, logger,
-            m => { delivered.Add(m); return Task.CompletedTask; }, (_, _) => { receipts++; return Task.CompletedTask; }, null);
-
-        Assert.True(ok);
-        Assert.Empty(delivered);
-        Assert.Equal(0, receipts);
-    }
-
-    /// <summary>A receive receipt raises only the receive receipt callback with the message id and sender.</summary>
-    [Fact]
-    public async Task Dispatch_ReceiveReceipt_RaisesReceiveReceiptOnly()
-    {
-        TestEngineController controller = new();
-        List<object> delivered = [];
-        List<(string MessageId, string User)> receive = [];
-        List<(string MessageId, string User)> read = [];
-
-        bool ok = await PeerFrameDispatcher.Dispatch(
-            Encode(controller, new TestFrame { MessageId = "R1", FromUser = "BOB", ReceiveReceiptMessageId = "M1" }), controller, logger,
-            m => { delivered.Add(m); return Task.CompletedTask; },
-            (id, user) => { read.Add((id, user)); return Task.CompletedTask; },
-            (id, user) => { receive.Add((id, user)); return Task.CompletedTask; });
-
-        Assert.True(ok);
-        Assert.Empty(delivered);
-        Assert.Empty(read);
-        Assert.Equal(("M1", "BOB"), Assert.Single(receive));
+        Assert.False(await PeerFrameDispatcher.Dispatch(new byte[] { 1 }, controller.Object, r => { received.Add(r); return Task.CompletedTask; }, "SERVER"));
+        Assert.Empty(received);
     }
 }

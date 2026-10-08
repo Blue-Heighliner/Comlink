@@ -16,7 +16,7 @@ internal interface IDraftViewModel
     string NewAddressInformation { get; set; }
     /// <summary>Gets or sets a value indicating whether this draft has been sent.</summary>
     bool IsSent { get; set; }
-    /// <summary>Gets a value indicating whether this draft will be sent as an alert, which the host's message handler decides from the draft's other properties (see <see cref="IEngineController.ComputeIsAlert"/>), so the user does not set it.</summary>
+    /// <summary>Gets a value indicating whether this draft will be sent as an alert, which the host's draft handler decides from the draft's other properties (see <see cref="IEngineController.IsAlert"/>), so the user does not set it.</summary>
     bool IsAlert { get; }
     /// <summary>
     /// Gets the label for the alert checkbox, sourced from <see cref="IEngineController.AlertLabel"/> — the
@@ -50,7 +50,7 @@ internal interface IDraftViewModel
     MessageAspectOption? SelectedMessageAspect { get; set; }
     /// <summary>
     /// Gets or sets the short, user-inputted tag identifying the type of this message; see
-    /// <see cref="IEngineController.GetTag"/>. Setting a tag that <see cref="IEngineController.BlockedCombinations"/>
+    /// the tag rules (see <see cref="IEngineController.DraftTagRules"/>). Setting a tag that <see cref="IEngineController.BlockedCombinations"/>
     /// blocks for the current <see cref="SelectedPriority"/> is rejected — the value silently reverts to the
     /// last valid tag — so a blocked combination can never be entered.
     /// </summary>
@@ -158,7 +158,10 @@ internal sealed partial class DraftViewModel : ObservableObject, IDraftViewModel
     private static string NormalizeId(string id)
     {
         string clean = id.Replace("-", "");
-        if (clean.Length >= FillInIdLength) { return clean[..FillInIdLength]; }
+        if (clean.Length >= FillInIdLength)
+        {
+            return clean[..FillInIdLength];
+        }
         return clean.PadRight(FillInIdLength, '0');
     }
 
@@ -176,7 +179,7 @@ internal sealed partial class DraftViewModel : ObservableObject, IDraftViewModel
     public DraftViewModel(
         DraftEntity entity,
         IEntryService entryService,
-        IServiceConnection connection,
+        IEngineConnection connection,
         IReadOnlyList<string> userNames,
         ILoggerFactory loggerFactory,
         IEngineController engineController,
@@ -254,7 +257,10 @@ internal sealed partial class DraftViewModel : ObservableObject, IDraftViewModel
     // The first time a new draft is altered into something worth keeping it is stored, so it shows up in the list straight away.
     private void StoreIfNew()
     {
-        if (!isNew || isStoringNew) { return; }
+        if (!isNew || isStoringNew)
+        {
+            return;
+        }
 
         _ = StoreNew();
     }
@@ -287,7 +293,10 @@ internal sealed partial class DraftViewModel : ObservableObject, IDraftViewModel
         await insertLock.WaitAsync();
         try
         {
-            if (!isNew || isDeleted) { return; }
+            if (!isNew || isDeleted)
+            {
+                return;
+            }
 
             await entryService.InsertDraft(entity);
             isNew = false;
@@ -309,7 +318,7 @@ internal sealed partial class DraftViewModel : ObservableObject, IDraftViewModel
     private string savedSnapshot = string.Empty;
     private readonly IEntryService entryService;
     private readonly DeleteConfirmation deleteConfirmation;
-    private readonly IServiceConnection connection;
+    private readonly IEngineConnection connection;
     private readonly IEngineController engineController;
     private readonly IReadOnlyList<MessagePriorityOption> allPriorities;
     private readonly ILogger logger;
@@ -442,13 +451,16 @@ internal sealed partial class DraftViewModel : ObservableObject, IDraftViewModel
     partial void OnNewAddressUserChanged(string value)
     {
         string upper = value.ToUpperInvariant();
-        if (value != upper) { NewAddressUser = upper; }
+        if (value != upper)
+        {
+            NewAddressUser = upper;
+        }
     }
 
     partial void OnPlsoModeChanged(PlsoMode value) => OnPropertyChanged(nameof(PlsoButtonText));
 
     private IReadOnlyList<MessagePriorityOption> FilterPriorities(string tag)
-        => allPriorities.Where(p => p.Mode == PriorityMode.User && !engineController.BlockedCombinations.IsBlocked(tag, p.Key)).ToList();
+        => allPriorities.Where(p => p.Mode is PriorityMode.User && !engineController.BlockedCombinations.IsBlocked(tag, p.Key)).ToList();
 
     partial void OnTagChanged(string value)
     {
@@ -493,7 +505,10 @@ internal sealed partial class DraftViewModel : ObservableObject, IDraftViewModel
 
     private void UpdateHeader()
     {
-        if (!isReady || isUpdatingHeader) { return; }
+        if (!isReady || isUpdatingHeader)
+        {
+            return;
+        }
 
         isUpdatingHeader = true;
         try
@@ -501,23 +516,27 @@ internal sealed partial class DraftViewModel : ObservableObject, IDraftViewModel
             // The header can depend on the width and the width can not be less than the header, so this settles by raising the width until the header fits.
             for (int pass = 0; pass < 8; pass++)
             {
-                IsAlert = engineController.ComputeIsAlert(string.Empty, SelectedPriority.Key, Tag, SelectedMessageLevel?.Name ?? string.Empty, [.. Addresses.Select(a => new AddressRequest { UserName = a.UserName, Type = a.Type, Information = a.Information })]);
-                string? text = engineController.GetDraftHeader(new DraftContent
+                DraftContent content = new()
                 {
                     Tag = Tag,
                     Priority = SelectedPriority.Key,
                     MessageLevel = SelectedMessageLevel?.Name ?? string.Empty,
                     MessageAspect = SelectedMessageAspect?.Aspect?.Name ?? string.Empty,
-                    IsAlert = IsAlert,
+                    Body = BuildPlainBody(),
                     Addresses = [.. Addresses.Select(a => new AddressRequest { UserName = a.UserName, Type = a.Type, Information = a.Information })],
                     LineWidth = LineWidth
-                });
+                };
+                IsAlert = engineController.IsAlert(content);
+                string? text = engineController.GetDraftHeader(content);
                 Header = text;
                 headerWidth = lineWidthRange is null || text is null ? 0 : text.Split('\n').Max(line => line.TrimEnd('\r').Length);
                 OnPropertyChanged(nameof(LineWidthMinimum));
                 OnPropertyChanged(nameof(LineWidthMaximum));
 
-                if (LineWidth is not { } width || width >= MinimumWidth) { break; }
+                if (LineWidth is not { } width || width >= MinimumWidth)
+                {
+                    break;
+                }
 
                 LineWidth = MinimumWidth;
             }
@@ -600,7 +619,10 @@ internal sealed partial class DraftViewModel : ObservableObject, IDraftViewModel
     [RelayCommand]
     private async Task Delete()
     {
-        if (!CanDelete || !deleteConfirmation.Confirm()) { return; }
+        if (!CanDelete || !deleteConfirmation.Confirm())
+        {
+            return;
+        }
 
         await insertLock.WaitAsync();
         bool wasStored;
@@ -614,8 +636,14 @@ internal sealed partial class DraftViewModel : ObservableObject, IDraftViewModel
             insertLock.Release();
         }
 
-        if (wasStored) { await entryService.DeleteEntry(Id, EntryType.Draft); }
-        if (Deleted is not null) { await Deleted(); }
+        if (wasStored)
+        {
+            await entryService.DeleteEntry(Id, EntryType.Draft);
+        }
+        if (Deleted is not null)
+        {
+            await Deleted();
+        }
     }
 
     [RelayCommand]
@@ -642,7 +670,10 @@ internal sealed partial class DraftViewModel : ObservableObject, IDraftViewModel
     /// <inheritdoc />
     public async Task SaveChanges()
     {
-        if (IsSent || isDeleted || Snapshot() == savedSnapshot || !IsWorthStoring()) { return; }
+        if (IsSent || isDeleted || Snapshot() == savedSnapshot || !IsWorthStoring())
+        {
+            return;
+        }
 
         await Persist(quietly: true);
     }
@@ -670,8 +701,14 @@ internal sealed partial class DraftViewModel : ObservableObject, IDraftViewModel
         ApplyToEntity();
         await InsertIfNew();
 
-        if (quietly) { await entryService.SaveDraftQuietly(entity); }
-        else { await entryService.SaveDraft(entity); }
+        if (quietly)
+        {
+            await entryService.SaveDraftQuietly(entity);
+        }
+        else
+        {
+            await entryService.SaveDraft(entity);
+        }
 
         savedSnapshot = Snapshot();
     }
@@ -681,7 +718,10 @@ internal sealed partial class DraftViewModel : ObservableObject, IDraftViewModel
     {
         ApplyToEntity();
         DraftEntity copy = await entryService.DuplicateDraft(entity);
-        if (Duplicated is not null) { await Duplicated(copy.Id.ToString()); }
+        if (Duplicated is not null)
+        {
+            await Duplicated(copy.Id.ToString());
+        }
     }
 
     // Everything a save writes, so leaving a draft that was only looked at does not save it and move it to the top of the list.
@@ -733,9 +773,7 @@ internal sealed partial class DraftViewModel : ObservableObject, IDraftViewModel
             await InsertIfNew();
             await entryService.SaveDraft(entity);
 
-            DateTime sentAt = entity.SentAt ?? DateTime.UtcNow;
-            MessageEntity sentMessage = await entryService.StoreSentMessage(
-                result.MessageId, body, [.. Addresses], sentAt, result.UserResults, SelectedPriority.Key, Tag, SelectedMessageLevel?.Name ?? string.Empty, SelectedMessageAspect?.Aspect?.Name ?? string.Empty);
+            MessageEntity sentMessage = await entryService.FindMessage(result.MessageId, outbound: true) ?? throw new InvalidOperationException($"The message {result.MessageId} was sent but is not stored");
 
             IsSent = true;
             StatusMessage = "Sent";
@@ -761,7 +799,10 @@ internal sealed partial class DraftViewModel : ObservableObject, IDraftViewModel
     [RelayCommand]
     private void AddAddress()
     {
-        if (string.IsNullOrWhiteSpace(NewAddressUser)) { return; }
+        if (string.IsNullOrWhiteSpace(NewAddressUser))
+        {
+            return;
+        }
         Addresses.Add(new AddressData { UserName = NewAddressUser.Trim(), Type = NewAddressType.Type.ToString(), Information = NewAddressInformation.Trim() });
         NewAddressUser = string.Empty;
         NewAddressInformation = string.Empty;
@@ -779,12 +820,18 @@ internal sealed partial class DraftViewModel : ObservableObject, IDraftViewModel
     private void MoveAddress(AddressData address, int direction)
     {
         int index = Addresses.IndexOf(address);
-        if (index < 0) { return; }
+        if (index < 0)
+        {
+            return;
+        }
 
         // The next recipient of the same type in that direction is the one to swap places with, skipping the other types in between.
         for (int other = index + direction; other >= 0 && other < Addresses.Count; other += direction)
         {
-            if (Addresses[other].Type.ParseAddressType() != address.Type.ParseAddressType()) { continue; }
+            if (Addresses[other].Type.ParseAddressType() != address.Type.ParseAddressType())
+            {
+                continue;
+            }
 
             Addresses.Move(index, other);
             return;
@@ -797,7 +844,10 @@ internal sealed partial class DraftViewModel : ObservableObject, IDraftViewModel
         foreach (AddressTypeOption type in AddressTypes)
         {
             List<AddressData> items = [.. Addresses.Where(address => address.Type.ParseAddressType() == type.Type)];
-            if (items.Count > 0) { AddressGroups.Add(new AddressGroup(type.Label, items)); }
+            if (items.Count > 0)
+            {
+                AddressGroups.Add(new AddressGroup(type.Label, items));
+            }
         }
     }
 }

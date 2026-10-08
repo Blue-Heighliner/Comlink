@@ -71,7 +71,10 @@ public sealed class SerialPeerTransportTests
         DateTime deadline = DateTime.UtcNow + timeout;
         while (!condition())
         {
-            if (DateTime.UtcNow > deadline) { throw new TimeoutException("Condition was not met in time."); }
+            if (DateTime.UtcNow > deadline)
+            {
+                throw new TimeoutException("Condition was not met in time.");
+            }
             await Task.Delay(5);
         }
     }

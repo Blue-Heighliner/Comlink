@@ -81,14 +81,14 @@ internal sealed class NetworkConfig
     }
 
     /// <summary>Checks the file for mistakes that must stop networking from starting.</summary>
-    /// <exception cref="InvalidDataException">A user's role is not <c>Client</c>, <c>Server</c> or <c>Relay</c>.</exception>
+    /// <exception cref="InvalidDataException">A user's role is not <c>Client</c> or <c>Server</c>.</exception>
     private void Validate()
     {
         foreach ((string name, NetworkUserConfig user) in Users)
         {
             if (!string.IsNullOrWhiteSpace(user.Role) && user.GetRole() is null)
             {
-                throw new InvalidDataException($"The role \"{user.Role}\" of user {name} is not recognized: it must be Client, Server or Relay");
+                throw new InvalidDataException($"The role \"{user.Role}\" of user {name} is not recognized: it must be Client or Server");
             }
         }
     }
@@ -125,6 +125,7 @@ internal sealed class NetworkConfig
                 InterfacePort = user.InterfacePort,
                 Parent = user.Parent?.ToLink(),
                 Children = [.. user.Children.Select(child => child.ToLink())],
+                AutoForwarders = [.. user.AutoForwarders],
                 MessageLevel = user.MessageLevel,
                 Data = new Dictionary<string, string>(user.Data),
                 Groups = [.. UserGroups.Where(group => group.Value.Contains(userName, StringComparer.OrdinalIgnoreCase)).Select(group => group.Key)]
@@ -144,7 +145,7 @@ internal sealed class NetworkConfig
 /// <summary>Everything the network file says about one user: the parts that become their <see cref="UserInfo"/>, and settings of the node they run.</summary>
 internal sealed class NetworkUserConfig
 {
-    /// <summary>Networking role of a node this user runs: <c>"Peer"</c>, <c>"Client"</c>, <c>"Server"</c> or <c>"Relay"</c> (case-insensitive). <see langword="null"/> or unrecognized is <c>"Peer"</c>.</summary>
+    /// <summary>Networking role of a node this user runs: <c>"Peer"</c>, <c>"Client"</c>, or <c>"Server"</c> (case-insensitive). <see langword="null"/> or unrecognized is <c>"Peer"</c>.</summary>
     public string? Role { get; init; }
 
     /// <summary>The IP address or host name others connect to in order to reach a node this user runs. <see langword="null"/> when it is not reachable that way.</summary>
@@ -164,6 +165,9 @@ internal sealed class NetworkUserConfig
 
     /// <summary>The user's children: each a user name, or an object that also forces the connection mode.</summary>
     public List<NetworkLinkConfig> Children { get; init; } = [];
+
+    /// <summary>The names of the auto forwarders this user has access to. Empty for none.</summary>
+    public List<string> AutoForwarders { get; init; } = [];
 
     /// <summary>The name of the message level this user runs at. <see langword="null"/> is the lowest configured level.</summary>
     public string? MessageLevel { get; init; }
@@ -185,7 +189,7 @@ internal sealed class NetworkUserConfig
         => Read(Hdlc, "Ports") switch
         {
             { ValueKind: JsonValueKind.String } all => [all.GetString() ?? string.Empty],
-            { ValueKind: JsonValueKind.Array } ports => [.. ports.EnumerateArray().Where(port => port.ValueKind == JsonValueKind.String).Select(port => port.GetString()!)],
+            { ValueKind: JsonValueKind.Array } ports => [.. ports.EnumerateArray().Where(port => port.ValueKind is JsonValueKind.String).Select(port => port.GetString()!)],
             _ => []
         };
 
@@ -222,7 +226,10 @@ internal sealed class NetworkLinkConfigConverter : JsonConverter<NetworkLinkConf
     /// <inheritdoc />
     public override NetworkLinkConfig Read(ref Utf8JsonReader reader, Type typeToConvert, JsonSerializerOptions options)
     {
-        if (reader.TokenType == JsonTokenType.String) { return new NetworkLinkConfig { User = reader.GetString() ?? string.Empty }; }
+        if (reader.TokenType is JsonTokenType.String)
+        {
+            return new NetworkLinkConfig { User = reader.GetString() ?? string.Empty };
+        }
 
         using JsonDocument document = JsonDocument.ParseValue(ref reader);
         JsonElement element = document.RootElement;
@@ -233,7 +240,11 @@ internal sealed class NetworkLinkConfigConverter : JsonConverter<NetworkLinkConf
     /// <inheritdoc />
     public override void Write(Utf8JsonWriter writer, NetworkLinkConfig value, JsonSerializerOptions options)
     {
-        if (value.Mode is null) { writer.WriteStringValue(value.User); return; }
+        if (value.Mode is null)
+        {
+            writer.WriteStringValue(value.User);
+            return;
+        }
 
         writer.WriteStartObject();
         writer.WriteString("User", value.User);

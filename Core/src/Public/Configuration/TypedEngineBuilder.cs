@@ -16,7 +16,7 @@ public interface IEngineBuilder<TFrame, TPacket, TPriority, TLevel, TAspect> whe
 {
     /// <summary>
     /// Starts stating how the host's frame type, the data format of all network traffic other than packets, is handled: a handler for each kind of frame, and what else depends on the frame type: the print
-    /// count, auto forward controllers, the network processor and the initial frame processor. A handler for every kind of frame is required. The type must be LiteDB-serializable for
+    /// count, auto forwarders, the network processor and the initial frame processor. A handler for every kind of frame is required. The type must be LiteDB-serializable for
     /// storage, and must satisfy whatever serializer is used for the network (by default protobuf-net, so it needs
     /// <c>[ProtoContract]</c>/<c>[ProtoMember]</c> attributes). Calling it again continues the same statement.
     /// </summary>
@@ -72,9 +72,9 @@ public interface IEngineBuilder<TFrame, TPacket, TPriority, TLevel, TAspect> whe
     /// <typeparam name="THandler">The handler type, instantiated through dependency injection when the engine runs: the instance registered for it in the host's services, or else one constructed from them.</typeparam>
     IEngineBuilder<TFrame, TPacket, TPriority, TLevel, TAspect> Logs<THandler>() where THandler : ILogHandler;
 
-    /// <summary>States the handler that controls how the print manager behaves (see <see cref="IPrintHandler{TFrame}"/>). Defaults to the print manager's own defaults.</summary>
+    /// <summary>States the handler that controls how the print manager behaves (see <see cref="IPrintHandler{TPriority, TLevel, TAspect}"/>). Defaults to the print manager's own defaults.</summary>
     /// <typeparam name="THandler">The handler type, instantiated through dependency injection when the engine runs: the instance registered for it in the host's services, or else one constructed from them.</typeparam>
-    IEngineBuilder<TFrame, TPacket, TPriority, TLevel, TAspect> Prints<THandler>() where THandler : IPrintHandler<TFrame>;
+    IEngineBuilder<TFrame, TPacket, TPriority, TLevel, TAspect> Prints<THandler>() where THandler : IPrintHandler<TPriority, TLevel, TAspect>;
 
     /// <summary>States the handler that decides which folders and entries the user may delete (see <see cref="IDeleteHandler"/>). Defaults to allowing everything.</summary>
     /// <typeparam name="THandler">The handler type, instantiated through dependency injection when the engine runs: the instance registered for it in the host's services, or else one constructed from them.</typeparam>

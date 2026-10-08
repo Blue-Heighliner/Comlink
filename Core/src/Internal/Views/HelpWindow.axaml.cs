@@ -10,7 +10,10 @@ internal partial class HelpWindow : Window
         InitializeComponent();
         KeyDown += (_, e) =>
         {
-            if (e.Key == Key.Escape) { Close(); }
+            if (e.Key is Key.Escape)
+            {
+                Close();
+            }
         };
     }
 }

@@ -29,7 +29,7 @@ internal sealed record PeerConnectionStatus
 /// <summary>
 /// Exposes live connection status for <see cref="IConnectionStatusViewModel"/> — reported by
 /// <see cref="UserRole.Client"/> (the single connection to its server), <see cref="UserRole.Server"/>
-/// (one entry per own child client, plus one entry per other server in the cluster) and <see cref="UserRole.Relay"/>. Implemented directly by <see cref="ClientPeerService"/>/<see cref="ServerRoutingService"/>
+/// (one entry per own child client, plus one entry per other server in the cluster). Implemented directly by <see cref="ClientPeerService"/>/<see cref="ServerRoutingService"/>
 /// rather than a separate tracking component, since they already own the connection state this reports on.
 /// </summary>
 internal interface IConnectionStatusService

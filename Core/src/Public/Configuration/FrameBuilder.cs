@@ -1,9 +1,9 @@
 namespace BlueHeighliner.Comlink;
 
 /// <summary>
-/// Configures the host's own frame type, continuing the fluent chain of the engine builder: every setting of the engine builder can follow on <typeparamref name="TFrame"/>. The fields every frame has (identifier, sender, addresses, sent time) are mapped with a getter and
-/// a setter, and each kind of frame (message, retrieval request, read receipt, receive receipt) is stated with a handler that creates, recognizes and reads that kind.
-/// Every one must be stated; the engine never assumes any particular field name or shape, and has no frame type of its own. See <see cref="IEngineBuilder{TFrame, TPacket, TPriority, TLevel, TAspect}.Frames"/>.
+/// Configures the host's own frame type, continuing the fluent chain of the engine builder: every setting of the engine builder can follow on <typeparamref name="TFrame"/>. The engine
+/// never looks inside a frame and has no frame type of its own: what a frame means, which of them are messages, receipts or requests, and who it goes to is the host's processor's (see <see cref="INetworkProcessor{TFrame, TPriority, TLevel, TAspect}"/>).
+/// What the engine needs of a frame is only how to serialize it, how to create an empty one, and, optionally, which one is a heartbeat. See <see cref="IEngineBuilder{TFrame, TPacket, TPriority, TLevel, TAspect}.Frames"/>.
 /// </summary>
 /// <typeparam name="TFrame">The host's frame type.</typeparam>
 /// <typeparam name="TPacket">The host's packet type, or <see cref="NoPacket"/>.</typeparam>
@@ -13,40 +13,12 @@ namespace BlueHeighliner.Comlink;
 public interface IFrameBuilder<TFrame, TPacket, TPriority, TLevel, TAspect> : IEngineBuilder<TFrame, TPacket, TPriority, TLevel, TAspect> where TFrame : class, new() where TPacket : class, new() where TPriority : struct, Enum where TLevel : struct, Enum where TAspect : struct, Enum
 {
     /// <summary>
-    /// States the handler for message frames: the ones the user reads, which are stored in the Inbox when received and in the Outbox when sent by the user. The handler creates a
-    /// message from its content, recognizes message frames and reads their content (see <see cref="IMessageHandler{TFrame, TPriority, TLevel, TAspect}"/>). A frame that is not a message
-    /// is still routed and handed to the network processor, but is never shown to the user or stored.
+    /// Adds an auto forwarder called <paramref name="name"/>, shown as an option in the client's auto forward screen to every user whose <c>AutoForwarders</c> in the network configuration file lists the name, each of whom keeps their own
+    /// target list there. The engine only keeps the lists; what an auto forwarder accepts and the forwarding are the processor's (see <see cref="INetworkContext{TFrame, TPriority, TLevel, TAspect}.GetAutoForwardTargets"/>).
+    /// Stating a name that is already an auto forwarder changes nothing.
     /// </summary>
-    /// <typeparam name="THandler">The handler type, instantiated through dependency injection when the engine runs: the instance registered for it in the host's services, or else one constructed from them.</typeparam>
-    IFrameBuilder<TFrame, TPacket, TPriority, TLevel, TAspect> Message<THandler>() where THandler : IMessageHandler<TFrame, TPriority, TLevel, TAspect>;
-
-    /// <summary>
-    /// Adds a custom auto forward controller (see <see cref="IAutoForwardController{TFrame}"/>), shown as an option in the client's auto forward screen to the users it names. Only messages
-    /// are forwarded. Adding another controller with the same name (case-insensitive) replaces the earlier one in place; a new name adds another alongside it.
-    /// </summary>
-    /// <typeparam name="TController">The controller type, instantiated through dependency injection when the engine runs: the instance registered for it in the host's services, or else one constructed from them.</typeparam>
-    IFrameBuilder<TFrame, TPacket, TPriority, TLevel, TAspect> AutoForward<TController>() where TController : IAutoForwardController<TFrame>;
-
-    /// <summary>
-    /// States the handler for retrieval request frames, what a user sends a server to ask for stored messages
-    /// (see <see cref="IRetrievalHandler{TFrame, TPriority}"/>). A request is never shown to a user as a received message and is not a message.
-    /// </summary>
-    /// <typeparam name="THandler">The handler type, instantiated through dependency injection when the engine runs: the instance registered for it in the host's services, or else one constructed from them.</typeparam>
-    IFrameBuilder<TFrame, TPacket, TPriority, TLevel, TAspect> Retrieval<THandler>() where THandler : IRetrievalHandler<TFrame, TPriority>;
-
-    /// <summary>
-    /// States the handler for read receipt frames, sent back to the sender of a message when its recipient opens it (see <see cref="IReadReceiptHandler{TFrame, TPriority}"/>).
-    /// A receipt carries only the identifier of the message it is for plus the frame's own identifier and sender, and is not a message.
-    /// </summary>
-    /// <typeparam name="THandler">The handler type, instantiated through dependency injection when the engine runs: the instance registered for it in the host's services, or else one constructed from them.</typeparam>
-    IFrameBuilder<TFrame, TPacket, TPriority, TLevel, TAspect> ReadReceipt<THandler>() where THandler : IReadReceiptHandler<TFrame, TPriority>;
-
-    /// <summary>
-    /// States the handler for receive receipt frames, sent back to the sender of a message as soon as its recipient's node receives it (see <see cref="IReceiveReceiptHandler{TFrame, TPriority}"/>).
-    /// A receipt carries only the identifier of the message it is for plus the frame's own identifier and sender, and is not a message.
-    /// </summary>
-    /// <typeparam name="THandler">The handler type, instantiated through dependency injection when the engine runs: the instance registered for it in the host's services, or else one constructed from them.</typeparam>
-    IFrameBuilder<TFrame, TPacket, TPriority, TLevel, TAspect> ReceiveReceipt<THandler>() where THandler : IReceiveReceiptHandler<TFrame, TPriority>;
+    /// <param name="name">The auto forwarder's name, which is also the key of its target lists.</param>
+    IFrameBuilder<TFrame, TPacket, TPriority, TLevel, TAspect> AutoForwarder(string name);
 
     /// <summary>
     /// States the handler for heartbeat frames (see <see cref="IHeartbeatHandler{TFrame, TPriority}"/>), which a node sends over each MSMT connection to verify it is really up and keep it live. Optional: when not
@@ -67,11 +39,11 @@ public interface IFrameBuilder<TFrame, TPacket, TPriority, TLevel, TAspect> : IE
     IFrameBuilder<TFrame, TPacket, TPriority, TLevel, TAspect> Create(Func<TFrame> create);
 
     /// <summary>
-    /// States the processor that runs host code in reaction to peer activity: a user connecting or disconnecting and a frame being received
-    /// (see <see cref="INetworkProcessor{TFrame}"/>). None by default.
+    /// States the processor that carries out the host's protocol: it reacts to a user connecting or disconnecting, a frame being received, the user sending a message, reading one or submitting a retrieval
+    /// (see <see cref="INetworkProcessor{TFrame, TPriority, TLevel, TAspect}"/>). Without one nothing is received or sent: the engine does neither itself. None by default.
     /// </summary>
     /// <typeparam name="TProcessor">The processor type, instantiated through dependency injection when the engine runs: the instance registered for it in the host's services, or else one constructed from them.</typeparam>
-    IFrameBuilder<TFrame, TPacket, TPriority, TLevel, TAspect> Processor<TProcessor>() where TProcessor : INetworkProcessor<TFrame>;
+    IFrameBuilder<TFrame, TPacket, TPriority, TLevel, TAspect> Processor<TProcessor>() where TProcessor : INetworkProcessor<TFrame, TPriority, TLevel, TAspect>;
 
     /// <summary>
     /// States how nodes introduce themselves on a new connection, with frames: the processor is told when a connection forms and given each frame that

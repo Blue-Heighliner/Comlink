@@ -28,7 +28,10 @@ internal sealed class PointMaintenance(PeerConnectionMonitor monitor)
         Action<ConnectionPoint>? starting = null)
     {
         Dictionary<string, ConnectionPoint> wanted = [];
-        foreach (ConnectionPoint point in desired) { wanted.TryAdd(point.Key, point); }
+        foreach (ConnectionPoint point in desired)
+        {
+            wanted.TryAdd(point.Key, point);
+        }
 
         List<ConnectionPoint> removed = [];
         List<(ConnectionPoint, PeerLinkControl)> started = [];
@@ -36,7 +39,10 @@ internal sealed class PointMaintenance(PeerConnectionMonitor monitor)
         {
             foreach ((string key, Entry entry) in entries.ToList())
             {
-                if (wanted.TryGetValue(key, out ConnectionPoint? point) && point.User == entry.Point.User) { continue; }
+                if (wanted.TryGetValue(key, out ConnectionPoint? point) && point.User == entry.Point.User)
+                {
+                    continue;
+                }
 
                 entry.Cancel.Cancel();
                 entry.Cancel.Dispose();
@@ -48,9 +54,15 @@ internal sealed class PointMaintenance(PeerConnectionMonitor monitor)
 
             foreach ((string key, ConnectionPoint point) in wanted)
             {
-                if (entries.ContainsKey(key)) { continue; }
+                if (entries.ContainsKey(key))
+                {
+                    continue;
+                }
 
-                if (closed.Remove(key)) { transport.SetClosed(point, false); }
+                if (closed.Remove(key))
+                {
+                    transport.SetClosed(point, false);
+                }
                 CancellationTokenSource cancel = CancellationTokenSource.CreateLinkedTokenSource(lifetime);
                 starting?.Invoke(point);
                 PeerLinkControl control = monitor.Maintain(transport, point, cancel.Token, acknowledged);

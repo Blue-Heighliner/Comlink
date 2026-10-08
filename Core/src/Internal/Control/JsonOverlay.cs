@@ -26,13 +26,22 @@ internal static class JsonOverlay
 
     private static void Merge(JsonObject target, JsonElement overrides)
     {
-        if (overrides.ValueKind != JsonValueKind.Object) { return; }
+        if (overrides.ValueKind is not JsonValueKind.Object)
+        {
+            return;
+        }
 
         foreach (JsonProperty property in overrides.EnumerateObject())
         {
             string key = target.Select(entry => entry.Key).FirstOrDefault(name => string.Equals(name, property.Name, StringComparison.OrdinalIgnoreCase)) ?? property.Name;
-            if (property.Value.ValueKind == JsonValueKind.Object && target[key] is JsonObject nested) { Merge(nested, property.Value); }
-            else { target[key] = JsonNode.Parse(property.Value.GetRawText()); }
+            if (property.Value.ValueKind is JsonValueKind.Object && target[key] is JsonObject nested)
+            {
+                Merge(nested, property.Value);
+            }
+            else
+            {
+                target[key] = JsonNode.Parse(property.Value.GetRawText());
+            }
         }
     }
 }

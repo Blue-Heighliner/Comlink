@@ -4,53 +4,59 @@ Runnable examples of `IEngineConfiguration` and `Engine.Start<T>` in different s
 
 ## Minimal host
 
-The smallest possible host: a frame DTO, a configuration mapping it, and the entry point.
+The smallest possible host: a frame DTO, a configuration, and the entry point. The engine is only transport, GUI and storage, so a host that wants messages to flow states a network processor that implements the protocol.
 
 ```csharp
+[ProtoContract]
 public sealed class MyFrame
 {
-    public string Id { get; set; } = "";
-    public string FromUser { get; set; } = "";
-    public string Body { get; set; } = "";
-    public List<(string Name, AddressType Type)> Addresses { get; set; } = [];
-    public DateTime SentAt { get; set; }
-    public bool IsMessage { get; set; }
-    public int Priority { get; set; }
-    public string Tag { get; set; } = "";
-    public int? MessageLevel { get; set; }
+    [ProtoMember(1)] public string Id { get; set; } = "";
+    [ProtoMember(2)] public string FromUser { get; set; } = "";
+    [ProtoMember(3)] public string Body { get; set; } = "";
+    [ProtoMember(4)] public List<string> To { get; set; } = [];
 }
 
 public sealed class MyEngineConfiguration : IEngineConfiguration
 {
-    public void Configure(IEngineBuilder engine) => engine.Types<MyFrame, MyPriority, MyMessageLevel, MyMessageAspect>()
+    public void Configure(IEngineBuilder engine) => engine.Types<MyFrame, MyPacket, MyPriority, MyMessageLevel, MyMessageAspect>()
         .Priorities().Priority(MyPriority.Normal)
         .Frames()
-            .Message<MyMessageHandler>()
-            .Retrieval<MyRetrievalHandler>()
-            .ReadReceipt<MyReadReceiptHandler>()
-            .ReceiveReceipt<MyReceiveReceiptHandler>();
+            .Processor<MyNetworkProcessor>();
 }
 
 await Engine.Start<MyEngineConfiguration>(args);
 ```
 
-A common field whose type already matches is mapped by naming the property (`m => m.Id`), which builds the setter for you; when the type differs (a host's own recipient shape for the addresses, or a packet's data) the getter and setter are given explicitly, as `Addresses` is above. Each kind of frame is handled by a class implementing the matching handler interface; for example:
+The processor reacts to what happens and acts through the context it is handed. For example, a client that sends each message to its server and records each frame it receives:
 
 ```csharp
-public sealed class MyMessageHandler : IMessageHandler<MyFrame, MyPriority, MyMessageLevel, MyMessageAspect>
+public sealed class MyNetworkProcessor : INetworkProcessor<MyFrame, MyPriority, MyMessageLevel, MyMessageAspect>
 {
-    public bool IsValid(MyFrame frame) => frame.IsMessage;
-    public MyFrame Create(MessageCreateContext<MyPriority, MyMessageLevel, MyMessageAspect> context) => new() { IsMessage = true, SentAt = context.SentAt, Body = context.Body, Priority = (int)context.Priority, Tag = context.Tag, MessageLevel = (int?)context.MessageLevel };
-    public DateTime GetSentAt(MyFrame frame) => frame.SentAt;
-    public string GetBody(MyFrame frame) => frame.Body;
-    public bool IsAlert(MyFrame frame) => frame.Tag == "ALERT";
-    public MyPriority GetPriority(MyFrame frame) => (MyPriority)frame.Priority;
-    public string GetTag(MyFrame frame) => frame.Tag;
-    public MyMessageLevel? GetMessageLevel(MyFrame frame) => (MyMessageLevel?)frame.MessageLevel;
+    public async Task OnSent(INetworkSentContext<MyFrame, MyPriority, MyMessageLevel, MyMessageAspect> context)
+    {
+        Message<MyPriority, MyMessageLevel, MyMessageAspect> message = context.Message;
+        MyFrame frame = new() { Id = message.Id, FromUser = message.FromUser, Body = message.Body, To = [.. message.Addresses.Select(a => a.UserName)] };
+        bool accepted = await context.Send(context.CurrentUser.Parent!.User, message.Priority, frame);
+        foreach (string user in frame.To)
+        {
+            await context.SetSentStatus(message.Id, user, accepted ? DestinationStatus.Sent : DestinationStatus.Failed);
+        }
+    }
+
+    public Task OnReceived(INetworkReceivedContext<MyFrame, MyPriority, MyMessageLevel, MyMessageAspect> context)
+        => context.ReceiveMessage(new Message<MyPriority, MyMessageLevel, MyMessageAspect>
+        {
+            Id = context.Frame.Id,
+            FromUser = context.Frame.FromUser,
+            Body = context.Frame.Body,
+            Addresses = [.. context.Frame.To.Select(user => new MessageAddress { UserName = user, Type = AddressType.To })],
+            SentAt = DateTime.UtcNow,
+            Priority = MyPriority.Normal
+        });
 }
 ```
 
-The retrieval and receipt handlers follow the same shape (`Create`, `IsValid`, and getters for their own fields). `Addresses` also has an overload taking `(string Name, AddressType Type, string Information)` tuples, for a host whose recipient shape carries custom per-address instructions (e.g. `OMAHA - Deliver to Eastside Office`); `Information` is optional and defaults to an empty string when the two-tuple overload above is used instead. The frame type also needs `[ProtoContract]`/`[ProtoMember]` attributes for the default network serializer.
+Receipts, routing through servers, retrieval and the network indicator are written the same way, in the processor; `Sample/src/Components/NetworkProcessor.cs` is a complete one. The frame type also needs `[ProtoContract]`/`[ProtoMember]` attributes for the default network serializer.
 By default this runs the Avalonia desktop UI, with command-line overrides disallowed (`CommandLineOverrides` is off
 unless stated) and no window icon (the display handler's `Icon` is the operating system's unless stated).
 
@@ -61,7 +67,7 @@ A host only states what it needs distinct behavior for; every other setting keep
 ```csharp
 public void Configure(IEngineBuilder engine) => engine.Types<MyFrame, MyPriority, MyMessageLevel, MyMessageAspect>()
     .Display<MyDisplayHandler>()
-    .Frames() /* ...required handlers from above... */;
+    .Frames() /* ...the processor from above... */;
 ```
 
 ## The network configuration file
@@ -74,7 +80,7 @@ lets `--config` name another file and `--user` name the user, who is checked lik
 
 ```csharp
 public void Configure(IEngineBuilder engine) => engine.Types<MyFrame, MyPriority, MyMessageLevel, MyMessageAspect>()
-    .Frames() /* ...required handlers... */
+    .Frames() /* ...the processor... */
     .CommandLineOverrides(true);
 ```
 

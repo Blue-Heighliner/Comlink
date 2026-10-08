@@ -1,6 +1,6 @@
 namespace BlueHeighliner.Comlink.Tests.Unit.Internal.Peer;
 
-/// <summary>Unit tests for <see cref="ServerRoutingService"/> child/server connection classification and message routing.</summary>
+/// <summary>Unit tests for <see cref="ServerRoutingService"/> connection classification, handing the frames it receives on, and sending frames.</summary>
 public sealed class ServerRoutingServiceTests
 {
     private static readonly ILoggerFactory noLogger = LoggerFactory.Create(_ => { });
@@ -63,8 +63,7 @@ public sealed class ServerRoutingServiceTests
         Action<Mock<IPeerTransport>, TestObservable<PeerConnectionEventArgs>>? configureTransport = null,
         Dictionary<string, ServerUserConfig>? userMap = null,
         IReadOnlyList<ConnectionPoint>? outgoing = null,
-        string self = "ServerA",
-        IMessageStorageService? storage = null)
+        string self = "ServerA")
     {
         userMap ??= new Dictionary<string, ServerUserConfig>(StringComparer.OrdinalIgnoreCase)
         {
@@ -93,7 +92,7 @@ public sealed class ServerRoutingServiceTests
         Mock<ICurrentUserProvider> currentUser = new();
         currentUser.SetupGet(p => p.UserName).Returns(self);
 
-        ServerRoutingService service = new(transportFactory.Object, engineController.Object, currentUser.Object, storage ?? Mock.Of<IMessageStorageService>(), noLogger);
+        ServerRoutingService service = new(transportFactory.Object, engineController.Object, currentUser.Object, noLogger);
 
         configureTransport?.Invoke(transport, connected);
 
@@ -110,7 +109,10 @@ public sealed class ServerRoutingServiceTests
         int isUp = 0;
         transport.Setup(p => p.Connect(point, It.IsAny<CancellationToken>())).Returns(() =>
         {
-            if (Interlocked.Exchange(ref isUp, 1) == 0) { connected.Publish(new PeerConnectionEventArgs { Connection = connection }); }
+            if (Interlocked.Exchange(ref isUp, 1) == 0)
+            {
+                connected.Publish(new PeerConnectionEventArgs { Connection = connection });
+            }
             return Task.FromResult(connection);
         });
     }
@@ -135,7 +137,10 @@ public sealed class ServerRoutingServiceTests
         DateTime deadline = DateTime.UtcNow + timeout;
         while (!condition())
         {
-            if (DateTime.UtcNow > deadline) { throw new TimeoutException("Condition was not met in time."); }
+            if (DateTime.UtcNow > deadline)
+            {
+                throw new TimeoutException("Condition was not met in time.");
+            }
             await Task.Delay(10);
         }
     }
@@ -164,7 +169,7 @@ public sealed class ServerRoutingServiceTests
 
         fx.Come(Inbound("ClientA1", () => drops++));
 
-        Assert.Contains(fx.Service.GetStatuses(), s => s.UserName == "ClientA1" && s.IsConnected && s.Kind == PeerConnectionKind.Client);
+        Assert.Contains(fx.Service.GetStatuses(), s => s.UserName == "ClientA1" && s.IsConnected && s.Kind is PeerConnectionKind.Client);
         Assert.Equal(0, drops);
         await Stop(fx);
     }
@@ -327,188 +332,6 @@ public sealed class ServerRoutingServiceTests
         await Stop(fx);
     }
 
-    /// <summary>A message from one child addressed to a sibling child goes straight over that sibling's connection, not to any server.</summary>
-    [Fact]
-    public async Task FromChild_AddressedToSiblingChild_RoutesToSibling()
-    {
-        Fixture fx = await BuildStarted();
-        PeerConnection clientA1 = Inbound("ClientA1");
-        PeerConnection clientA2 = Inbound("ClientA2");
-        PeerConnection serverB = Inbound("ServerB");
-        fx.Come(clientA1);
-        fx.Come(clientA2);
-        fx.Come(serverB);
-
-        fx.Receive(clientA1, Encode(MessageTo("ClientA2")));
-
-        await WaitUntil(() => SentReal(fx, clientA2), TimeSpan.FromSeconds(30));
-        Assert.Equal(1, Requests(fx, clientA2, real: true));
-        Assert.Equal(0, Requests(fx, serverB, real: true));
-        Assert.Equal(0, Requests(fx, clientA1, real: true));
-        await Stop(fx);
-    }
-
-    private static Dictionary<string, ServerUserConfig> WithRelay() => new(StringComparer.OrdinalIgnoreCase)
-    {
-        ["ServerA"] = new ServerUserConfig { Children = ["ClientA1", "RelayA"], Relays = new Dictionary<string, IReadOnlyList<string>> { ["RelayA"] = ["ClientR1", "ClientR2"] } },
-        ["ServerB"] = new ServerUserConfig { Children = ["ClientB1"] }
-    };
-
-    /// <summary>A message for clients behind a relay goes to that relay once, as the original bytes, not to the clients themselves.</summary>
-    [Fact]
-    public async Task FromChild_AddressedToClientsBehindARelay_ForwardsToTheRelayOnce()
-    {
-        Fixture fx = await BuildStarted(userMap: WithRelay());
-        PeerConnection clientA1 = Inbound("ClientA1");
-        PeerConnection relayA = Inbound("RelayA");
-        fx.Come(clientA1);
-        fx.Come(relayA);
-        ReadOnlyMemory<byte> payload = Encode(MessageTo("ClientR1", "ClientR2"));
-
-        fx.Receive(clientA1, payload);
-
-        await WaitUntil(() => SentReal(fx, relayA), TimeSpan.FromSeconds(30));
-        await Task.Delay(100);
-        Assert.Equal(1, Requests(fx, relayA, real: true));
-        Assert.Equal(0, Requests(fx, clientA1, real: true));
-        Assert.Equal(1, Requests(fx.Transport, relayA, payload));
-        await Stop(fx);
-    }
-
-    /// <summary>A message a relay forwards up from one of its clients is routed on to a client behind another relay of this server.</summary>
-    [Fact]
-    public async Task FromRelay_AddressedToLocalClient_RoutesToThatClient()
-    {
-        Fixture fx = await BuildStarted(userMap: WithRelay());
-        PeerConnection clientA1 = Inbound("ClientA1");
-        PeerConnection relayA = Inbound("RelayA");
-        fx.Come(clientA1);
-        fx.Come(relayA);
-
-        fx.Receive(relayA, Encode(MessageTo("ClientA1")));
-
-        await WaitUntil(() => SentReal(fx, clientA1), TimeSpan.FromSeconds(30));
-        Assert.Equal(0, Requests(fx, relayA, real: true));
-        await Stop(fx);
-    }
-
-    /// <summary>A message for a client behind another server's relay is forwarded to that server.</summary>
-    [Fact]
-    public async Task FromChild_AddressedToClientBehindARemoteServersRelay_ForwardsToThatServer()
-    {
-        Dictionary<string, ServerUserConfig> map = new(StringComparer.OrdinalIgnoreCase)
-        {
-            ["ServerA"] = new ServerUserConfig { Children = ["ClientA1"] },
-            ["ServerB"] = new ServerUserConfig { Children = ["RelayB"], Relays = new Dictionary<string, IReadOnlyList<string>> { ["RelayB"] = ["ClientRB1"] } }
-        };
-        Fixture fx = await BuildStarted(userMap: map);
-        PeerConnection clientA1 = Inbound("ClientA1");
-        PeerConnection serverB = Inbound("ServerB");
-        fx.Come(clientA1);
-        fx.Come(serverB);
-
-        fx.Receive(clientA1, Encode(MessageTo("ClientRB1")));
-
-        await WaitUntil(() => SentReal(fx, serverB), TimeSpan.FromSeconds(30));
-        Assert.Equal(1, Requests(fx, serverB, real: true));
-        await Stop(fx);
-    }
-
-    /// <summary>An external address is never routed, even when it is spelled like a child or a server: the server takes no action for it.</summary>
-    [Fact]
-    public async Task FromChild_ExternalAddressNamedLikeAChild_IsNotRelayed()
-    {
-        Fixture fx = await BuildStarted();
-        PeerConnection clientA1 = Inbound("ClientA1");
-        PeerConnection clientA2 = Inbound("ClientA2");
-        PeerConnection serverB = Inbound("ServerB");
-        fx.Come(clientA1);
-        fx.Come(clientA2);
-        fx.Come(serverB);
-        TestFrame message = new()
-        {
-            MessageId = "M1",
-            FromUser = "SOURCE",
-            Addresses = [new TestAddressEntry { UserName = "ClientA2", Type = "External" }, new TestAddressEntry { UserName = "ClientB1", Type = "External", Information = "By hand" }]
-        };
-
-        fx.Receive(clientA1, Encode(message));
-
-        await Task.Delay(100);
-        Assert.Equal(0, Requests(fx, clientA2, real: true));
-        Assert.Equal(0, Requests(fx, serverB, real: true));
-        await Stop(fx);
-    }
-
-    /// <summary>A message from a child addressed to a child of another server is forwarded over that server's connection once.</summary>
-    [Fact]
-    public async Task FromChild_AddressedToRemoteServersChild_ForwardsToThatServerOnce()
-    {
-        Fixture fx = await BuildStarted();
-        PeerConnection clientA1 = Inbound("ClientA1");
-        PeerConnection serverB = Inbound("ServerB");
-        fx.Come(clientA1);
-        fx.Come(serverB);
-
-        // Addressed to both of ServerB's children, which should still forward to ServerB exactly once.
-        fx.Receive(clientA1, Encode(MessageTo("ClientB1", "ClientB2")));
-
-        await WaitUntil(() => SentReal(fx, serverB), TimeSpan.FromSeconds(30));
-        await Task.Delay(50);
-        Assert.Equal(1, Requests(fx, serverB, real: true));
-        await Stop(fx);
-    }
-
-    /// <summary>A server reached over a connection this server opened is forwarded to just the same as one that opened a connection to it.</summary>
-    [Fact]
-    public async Task FromChild_ForwardToServerReachedByOutgoingPoint_UsesThatConnection()
-    {
-        PeerConnection serverB = Outbound(serverBPoint, "ServerB");
-        Fixture fx = await BuildStarted(configureTransport: (transport, connected) => Reachable(transport, connected, serverBPoint, serverB), outgoing: [serverBPoint]);
-        PeerConnection clientA1 = Inbound("ClientA1");
-        fx.Come(clientA1);
-        await WaitUntil(() => fx.Service.GetStatuses().Single(s => s.UserName == "ServerB").IsConnected, TimeSpan.FromSeconds(30));
-
-        fx.Receive(clientA1, Encode(MessageTo("ClientB1")));
-
-        await WaitUntil(() => SentReal(fx, serverB), TimeSpan.FromSeconds(30));
-        await Stop(fx);
-    }
-
-    /// <summary>A recipient with no connection identified as them is skipped, not thrown for.</summary>
-    [Fact]
-    public async Task FromChild_RecipientNotConnected_DoesNotSendOrThrow()
-    {
-        Fixture fx = await BuildStarted();
-        PeerConnection clientA1 = Inbound("ClientA1");
-        fx.Come(clientA1);
-
-        fx.Receive(clientA1, Encode(MessageTo("ClientA2")));
-
-        await Task.Delay(50);
-        fx.Transport.Verify(p => p.Request(It.IsAny<PeerConnection>(), It.Is<ReadOnlyMemory<byte>>(payload => IsRealPayload(payload)), It.IsAny<PeerSendOptions>(), It.IsAny<CancellationToken>()), Times.Never);
-        await Stop(fx);
-    }
-
-    /// <summary>A message received from another server is delivered only to local children it addresses, never re-forwarded to other servers.</summary>
-    [Fact]
-    public async Task FromServer_AddressedToLocalChild_DeliversLocallyOnlyNeverReforwarded()
-    {
-        Fixture fx = await BuildStarted();
-        PeerConnection serverB = Inbound("ServerB");
-        PeerConnection clientA1 = Inbound("ClientA1");
-        fx.Come(serverB);
-        fx.Come(clientA1);
-
-        fx.Receive(serverB, Encode(MessageTo("ClientA1", "ClientB1")));
-
-        await WaitUntil(() => SentReal(fx, clientA1), TimeSpan.FromSeconds(30));
-        await Task.Delay(50);
-        Assert.Equal(1, Requests(fx, clientA1, real: true));
-        Assert.Equal(0, Requests(fx, serverB, real: true));
-        await Stop(fx);
-    }
-
     /// <summary>GetStatuses returns one row per own child client (ClientA1, ClientA2) plus one row for the other server (ServerB), excluding this instance's own name, all initially disconnected.</summary>
     [Fact]
     public async Task GetStatuses_Started_ReturnsChildAndServerRowsDisconnected()
@@ -518,9 +341,9 @@ public sealed class ServerRoutingServiceTests
         IReadOnlyList<PeerConnectionStatus> statuses = fx.Service.GetStatuses();
 
         Assert.Equal(3, statuses.Count);
-        Assert.Contains(statuses, s => s.UserName == "ClientA1" && !s.IsConnected && s.Kind == PeerConnectionKind.Client);
+        Assert.Contains(statuses, s => s.UserName == "ClientA1" && !s.IsConnected && s.Kind is PeerConnectionKind.Client);
         Assert.Contains(statuses, s => s.UserName == "ClientA2" && !s.IsConnected);
-        Assert.Contains(statuses, s => s.UserName == "ServerB" && !s.IsConnected && s.Kind == PeerConnectionKind.Server);
+        Assert.Contains(statuses, s => s.UserName == "ServerB" && !s.IsConnected && s.Kind is PeerConnectionKind.Server);
         await Stop(fx);
     }
 
@@ -610,92 +433,6 @@ public sealed class ServerRoutingServiceTests
         await Stop(fx);
     }
 
-    /// <summary>Malformed (non-empty, non-deserializable) bytes from a recognized child are dropped silently: no relay Request happens and nothing throws.</summary>
-    [Fact]
-    public async Task FromChild_MalformedPayload_IsDroppedWithoutSendOrThrow()
-    {
-        Fixture fx = await BuildStarted();
-        PeerConnection clientA1 = Inbound("ClientA1");
-        PeerConnection clientA2 = Inbound("ClientA2");
-        fx.Come(clientA1);
-        fx.Come(clientA2);
-
-        fx.Receive(clientA1, new byte[] { 0xFF, 0xFE, 0xFD });
-
-        await Task.Delay(50);
-        fx.Transport.Verify(p => p.Request(It.IsAny<PeerConnection>(), It.Is<ReadOnlyMemory<byte>>(payload => IsRealPayload(payload)), It.IsAny<PeerSendOptions>(), It.IsAny<CancellationToken>()), Times.Never);
-        await Stop(fx);
-    }
-
-    /// <summary>A message from a child with no identifier is invalid: it is neither routed nor stored.</summary>
-    [Fact]
-    public async Task FromChild_MessageWithoutId_IsDropped()
-    {
-        Mock<IMessageStorageService> storage = new();
-        Fixture fx = await BuildStarted(storage: storage.Object);
-        PeerConnection clientA1 = Inbound("ClientA1");
-        PeerConnection clientA2 = Inbound("ClientA2");
-        fx.Come(clientA1);
-        fx.Come(clientA2);
-        TestFrame message = MessageTo("ClientA2");
-        message.MessageId = string.Empty;
-
-        fx.Receive(clientA1, Encode(message));
-
-        await Task.Delay(150);
-        Assert.Equal(0, Requests(fx, clientA2));
-        storage.Verify(s => s.Store(It.IsAny<object>()), Times.Never);
-        await Stop(fx);
-    }
-
-    /// <summary>A heartbeat (an empty message) from a child is not a real message and is not relayed or stored.</summary>
-    [Fact]
-    public async Task FromChild_Heartbeat_IsIgnored()
-    {
-        Fixture fx = await BuildStarted();
-        PeerConnection clientA1 = Inbound("ClientA1");
-        PeerConnection clientA2 = Inbound("ClientA2");
-        fx.Come(clientA1);
-        fx.Come(clientA2);
-
-        fx.Receive(clientA1, TestHeartbeat.Bytes());
-
-        await Task.Delay(50);
-        Assert.Equal(0, Requests(fx, clientA2));
-        await Stop(fx);
-    }
-
-    /// <summary>A message on a connection that was rejected, or never announced, is ignored.</summary>
-    [Fact]
-    public async Task Received_OnUnknownConnection_IsIgnored()
-    {
-        Fixture fx = await BuildStarted();
-        PeerConnection clientA2 = Inbound("ClientA2");
-        fx.Come(clientA2);
-
-        fx.Receive(Inbound("ClientA1"), Encode(MessageTo("ClientA2")));
-        fx.Receive(Inbound("Stranger"), Encode(MessageTo("ClientA2")));
-
-        await Task.Delay(50);
-        Assert.Equal(0, Requests(fx, clientA2));
-        await Stop(fx);
-    }
-
-    /// <summary>A server does not compose messages, only transports them, so sending one of its own fails and nothing goes out.</summary>
-    [Fact]
-    public async Task Send_FromTheServerItself_Fails()
-    {
-        Fixture fx = await BuildStarted();
-        PeerConnection clientA2 = Inbound("ClientA2");
-        fx.Come(clientA2);
-
-        bool ok = await fx.Service.Send("ClientA2", MessageTo("ClientA2"));
-
-        Assert.False(ok);
-        Assert.Equal(0, Requests(fx, clientA2, real: true));
-        await Stop(fx);
-    }
-
     /// <summary>A child cabled over serial is recognized by the identity its link was given, and its link coming up and going down drives its status row.</summary>
     [Fact]
     public async Task SerialChild_ConnectedThenDisconnected_TracksStatus()
@@ -704,7 +441,7 @@ public sealed class ServerRoutingServiceTests
         PeerConnection link = Serial(clientA1SerialPoint, "ClientA1");
 
         fx.Come(link);
-        Assert.Contains(fx.Service.GetStatuses(), s => s.UserName == "ClientA1" && s.IsConnected && s.Kind == PeerConnectionKind.Client);
+        Assert.Contains(fx.Service.GetStatuses(), s => s.UserName == "ClientA1" && s.IsConnected && s.Kind is PeerConnectionKind.Client);
 
         fx.Lose(link);
         PeerConnectionStatus status = Assert.Single(fx.Service.GetStatuses(), s => s.UserName == "ClientA1");
@@ -721,62 +458,10 @@ public sealed class ServerRoutingServiceTests
         PeerConnection link = Serial(serverBSerialPoint, "ServerB");
 
         fx.Come(link);
-        Assert.Contains(fx.Service.GetStatuses(), s => s.UserName == "ServerB" && s.IsConnected && s.Kind == PeerConnectionKind.Server);
+        Assert.Contains(fx.Service.GetStatuses(), s => s.UserName == "ServerB" && s.IsConnected && s.Kind is PeerConnectionKind.Server);
 
         fx.Lose(link);
         Assert.Contains(fx.Service.GetStatuses(), s => s.UserName == "ServerB" && !s.IsConnected);
-        await Stop(fx);
-    }
-
-    /// <summary>A message arriving on a child's serial link is attributed to that child and routed onward like any other child message, over the serial link to a serial server.</summary>
-    [Fact]
-    public async Task SerialChild_MessageReceived_RoutedAsFromThatChild()
-    {
-        Fixture fx = await BuildStarted();
-        PeerConnection link = Serial(clientA1SerialPoint, "ClientA1");
-        PeerConnection serverB = Serial(serverBSerialPoint, "ServerB");
-        PeerConnection clientA2 = Inbound("ClientA2");
-        fx.Come(link);
-        fx.Come(serverB);
-        fx.Come(clientA2);
-
-        fx.Receive(link, Encode(MessageTo("ClientA2", "ClientB1")));
-
-        await WaitUntil(() => SentReal(fx, clientA2) && SentReal(fx, serverB), TimeSpan.FromSeconds(30));
-        Assert.Equal(1, Requests(fx, clientA2, real: true));
-        Assert.Equal(1, Requests(fx, serverB, real: true));
-        await Stop(fx);
-    }
-
-    /// <summary>A message arriving on the serial link of a sibling server is treated as already routed: delivered to local children only, never re-forwarded.</summary>
-    [Fact]
-    public async Task SerialServer_MessageReceived_DeliversToLocalChildrenOnly()
-    {
-        Fixture fx = await BuildStarted();
-        PeerConnection serverB = Serial(serverBSerialPoint, "ServerB");
-        PeerConnection clientA2 = Inbound("ClientA2");
-        fx.Come(serverB);
-        fx.Come(clientA2);
-
-        fx.Receive(serverB, Encode(MessageTo("ClientA2", "ClientB1")));
-
-        await WaitUntil(() => SentReal(fx, clientA2), TimeSpan.FromSeconds(30));
-        Assert.Equal(0, Requests(fx, serverB, real: true));
-        await Stop(fx);
-    }
-
-    /// <summary>A message arriving on a serial link nobody has been identified on is ignored.</summary>
-    [Fact]
-    public async Task SerialUnknownLink_MessageReceived_Ignored()
-    {
-        Fixture fx = await BuildStarted();
-        PeerConnection clientA2 = Inbound("ClientA2");
-        fx.Come(clientA2);
-
-        fx.Receive(Serial(new ConnectionPoint { SerialPort = "NOPE" }, "NOPE"), Encode(MessageTo("ClientA2")));
-
-        await Task.Delay(50);
-        Assert.Equal(0, Requests(fx, clientA2));
         await Stop(fx);
     }
 
@@ -845,42 +530,6 @@ public sealed class ServerRoutingServiceTests
         PeerConnectionStatus status = Assert.Single(fx.Service.GetStatuses(), s => s.UserName == "ClientA1");
         Assert.False(status.IsClosed);
         Assert.True(status.IsConnected);
-        await Stop(fx);
-    }
-
-    /// <summary>Nothing is delivered to a closed child, while other children still receive.</summary>
-    [Fact]
-    public async Task SetClosed_Child_MessagesToItAreNotSent()
-    {
-        Fixture fx = await BuildStarted();
-        PeerConnection clientA1 = Inbound("ClientA1");
-        PeerConnection clientA2 = Inbound("ClientA2");
-        fx.Come(clientA1);
-        fx.Come(clientA2);
-        fx.Service.SetClosed(PeerConnectionKind.Client, "ClientA2", true);
-
-        fx.Receive(clientA1, Encode(MessageTo("ClientA2")));
-        await Task.Delay(100);
-
-        Assert.Equal(0, Requests(fx, clientA2, real: true));
-        await Stop(fx);
-    }
-
-    /// <summary>Nothing is forwarded to a closed sibling server.</summary>
-    [Fact]
-    public async Task SetClosed_Server_MessagesToItAreNotForwarded()
-    {
-        Fixture fx = await BuildStarted();
-        PeerConnection clientA1 = Inbound("ClientA1");
-        PeerConnection serverB = Inbound("ServerB");
-        fx.Come(clientA1);
-        fx.Come(serverB);
-        fx.Service.SetClosed(PeerConnectionKind.Server, "ServerB", true);
-
-        fx.Receive(clientA1, Encode(MessageTo("ClientB1")));
-        await Task.Delay(100);
-
-        Assert.Equal(0, Requests(fx, serverB, real: true));
         await Stop(fx);
     }
 
@@ -1006,67 +655,6 @@ public sealed class ServerRoutingServiceTests
         await Stop(fx);
     }
 
-    /// <summary>A message relayed by the server keeps the priority it was sent with, for children and for other servers alike.</summary>
-    [Fact]
-    public async Task Relay_KeepsMessagePriority()
-    {
-        Fixture fx = await BuildStarted();
-        PeerConnection clientA1 = Inbound("ClientA1");
-        PeerConnection clientA2 = Inbound("ClientA2");
-        PeerConnection serverB = Inbound("ServerB");
-        fx.Come(clientA1);
-        fx.Come(clientA2);
-        fx.Come(serverB);
-        TestFrame message = MessageTo("ClientA2", "ClientB1");
-        message.Priority = "LEVEL7";
-
-        fx.Receive(clientA1, Encode(message));
-
-        await WaitUntil(() => SentReal(fx, clientA2) && SentReal(fx, serverB), TimeSpan.FromSeconds(30));
-        fx.Transport.Verify(p => p.Request(clientA2, It.Is<ReadOnlyMemory<byte>>(payload => IsRealPayload(payload)), It.Is<PeerSendOptions>(o => o.Priority == 7), It.IsAny<CancellationToken>()), Times.Once);
-        fx.Transport.Verify(p => p.Request(serverB, It.Is<ReadOnlyMemory<byte>>(payload => IsRealPayload(payload)), It.Is<PeerSendOptions>(o => o.Priority == 7), It.IsAny<CancellationToken>()), Times.Once);
-        await Stop(fx);
-    }
-
-    /// <summary>One unreachable recipient does not hold up delivery to the others: sends go out concurrently.</summary>
-    [Fact]
-    public async Task Relay_SlowRecipient_DoesNotDelayOthers()
-    {
-        Fixture fx = await BuildStarted();
-        PeerConnection clientA1 = Inbound("ClientA1");
-        PeerConnection clientA2 = Inbound("ClientA2");
-        PeerConnection serverB = Inbound("ServerB");
-        TaskCompletionSource<bool> stuck = new();
-        fx.Transport.Setup(p => p.Request(clientA2, It.IsAny<ReadOnlyMemory<byte>>(), It.IsAny<PeerSendOptions>(), It.IsAny<CancellationToken>())).Returns(stuck.Task);
-        fx.Come(clientA1);
-        fx.Come(clientA2);
-        fx.Come(serverB);
-
-        fx.Receive(clientA1, Encode(MessageTo("ClientA2", "ClientB1")));
-
-        await WaitUntil(() => SentReal(fx, serverB), TimeSpan.FromSeconds(30));
-        stuck.SetResult(true);
-        await Stop(fx);
-    }
-
-    /// <summary>A message that arrives from a user after its connection was closed is not relayed.</summary>
-    [Fact]
-    public async Task MessageFromClosedUser_IsNotRelayed()
-    {
-        Fixture fx = await BuildStarted();
-        PeerConnection clientA1 = Inbound("ClientA1");
-        PeerConnection clientA2 = Inbound("ClientA2");
-        fx.Come(clientA1);
-        fx.Come(clientA2);
-        fx.Service.SetClosed(PeerConnectionKind.Client, "ClientA1", true);
-
-        fx.Receive(clientA1, Encode(MessageTo("ClientA2")));
-        await Task.Delay(100);
-
-        Assert.Equal(0, Requests(fx, clientA2, real: true));
-        await Stop(fx);
-    }
-
     /// <summary>Registered as both IPeerService and IConnectionStatusService, the service is disposed twice; the second is a no-op.</summary>
     [Fact]
     public async Task DisposeAsync_Twice_DisposesTransportOnce()
@@ -1105,91 +693,100 @@ public sealed class ServerRoutingServiceTests
         Addresses = [new TestAddressEntry { UserName = server, Type = "To" }]
     };
 
-    /// <summary>A message routed from a child is handed to storage.</summary>
+    /// <summary>A frame from a child is raised with the child as its source; the server itself sends nothing, since where it goes is the processor's to say.</summary>
     [Fact]
-    public async Task FromChild_Message_IsHandedToStorage()
+    public async Task FromChild_IsRaisedWithTheChildAsSource_AndNothingIsSent()
     {
-        Mock<IMessageStorageService> storage = new();
-        Fixture fx = await BuildStarted(storage: storage.Object);
-        PeerConnection clientA1 = Inbound("ClientA1");
-        fx.Come(clientA1);
+        Fixture fx = await BuildStarted();
+        PeerConnection sender = Inbound("ClientA1");
+        fx.Come(sender);
+        TaskCompletionSource<ReceivedFrame> raised = new();
+        fx.Service.FrameReceived += received => { raised.TrySetResult(received); return Task.CompletedTask; };
 
-        fx.Receive(clientA1, Encode(MessageTo("ClientA2")));
+        fx.Receive(sender, Encode(MessageTo("ClientA2")));
 
-        await WaitUntil(() => storage.Invocations.Count > 0, TimeSpan.FromSeconds(30));
-        storage.Verify(s => s.Store(It.Is<object>(m => ((TestFrame)m).MessageId == "M1")), Times.Once);
+        ReceivedFrame received = await raised.Task.WaitAsync(TimeSpan.FromSeconds(30));
+        Assert.Equal("ClientA1", received.SourceUser);
+        Assert.Equal("M1", Assert.IsType<TestFrame>(received.Frame).MessageId);
+        Assert.False(SentReal(fx, sender));
         await Stop(fx);
     }
 
-    /// <summary>A message routed from another server is not stored: a server stores only what its own children send.</summary>
+    /// <summary>A frame from another server is raised with that server as its source.</summary>
     [Fact]
-    public async Task FromServer_Message_IsNotStored()
+    public async Task FromServer_IsRaisedWithTheServerAsSource()
     {
-        Mock<IMessageStorageService> storage = new();
-        Fixture fx = await BuildStarted(storage: storage.Object);
-        PeerConnection serverB = Inbound("ServerB");
-        fx.Come(serverB);
+        PeerConnection serverB = Outbound(serverBPoint, "ServerB");
+        Fixture fx = await BuildStarted(configureTransport: (transport, connected) => Reachable(transport, connected, serverBPoint, serverB), outgoing: [serverBPoint]);
+        TaskCompletionSource<ReceivedFrame> raised = new();
+        fx.Service.FrameReceived += received => { raised.TrySetResult(received); return Task.CompletedTask; };
+        await WaitUntil(() => fx.Service.GetStatuses().Single(s => s.UserName == "ServerB").IsConnected, TimeSpan.FromSeconds(30));
 
         fx.Receive(serverB, Encode(MessageTo("ClientA1")));
 
-        await Task.Delay(300);
-        storage.Verify(s => s.Store(It.IsAny<object>()), Times.Never);
+        Assert.Equal("ServerB", (await raised.Task.WaitAsync(TimeSpan.FromSeconds(30))).SourceUser);
         await Stop(fx);
     }
 
-    /// <summary>A retrieval request addressed to this server is answered: each found copy is routed to the requesting child, and the request itself is never stored or relayed.</summary>
+    /// <summary>Heartbeats, malformed payloads and frames from a connection that was never accepted are not raised.</summary>
     [Fact]
-    public async Task FromChild_RetrievalRequestForThisServer_SendsFoundCopiesToRequester()
+    public async Task Heartbeats_MalformedPayloads_AndUnknownConnections_AreNotRaised()
     {
-        Mock<IMessageStorageService> storage = new();
-        TestFrame copy = MessageTo("ClientA1");
-        storage.Setup(s => s.Find("ClientA1", It.IsAny<object>())).ReturnsAsync(new List<object> { copy });
-        Fixture fx = await BuildStarted(storage: storage.Object);
-        PeerConnection clientA1 = Inbound("ClientA1");
-        fx.Come(clientA1);
+        Fixture fx = await BuildStarted();
+        PeerConnection child = Inbound("ClientA1");
+        fx.Come(child);
+        bool raised = false;
+        fx.Service.FrameReceived += _ => { raised = true; return Task.CompletedTask; };
 
-        fx.Receive(clientA1, Encode(RetrievalTo("ServerA", "ClientA1")));
+        fx.Receive(child, TestHeartbeat.Bytes());
+        fx.Receive(child, new byte[] { 0xFF, 0xFE, 0xFD });
+        fx.Receive(Inbound("Stranger"), Encode(MessageTo("ClientA2")));
+        await Task.Delay(150);
 
-        await WaitUntil(() => SentReal(fx, clientA1), TimeSpan.FromSeconds(30));
-        Assert.Equal(1, Requests(fx, clientA1, real: true));
-        storage.Verify(s => s.Store(It.IsAny<object>()), Times.Never);
+        Assert.False(raised);
         await Stop(fx);
     }
 
-    /// <summary>A retrieval request addressed to another server is forwarded to it and not answered here.</summary>
+    /// <summary>A frame sent to one of the server's children goes over that child's connection with the priority it is given.</summary>
     [Fact]
-    public async Task FromChild_RetrievalRequestForAnotherServer_IsForwardedNotAnswered()
+    public async Task Send_ToAChild_GoesOverItsConnectionWithThePriority()
     {
-        Mock<IMessageStorageService> storage = new();
-        Fixture fx = await BuildStarted(storage: storage.Object);
-        PeerConnection clientA1 = Inbound("ClientA1");
-        PeerConnection serverB = Inbound("ServerB");
-        fx.Come(clientA1);
-        fx.Come(serverB);
+        Fixture fx = await BuildStarted();
+        PeerConnection child = Inbound("ClientA1");
+        fx.Come(child);
 
-        fx.Receive(clientA1, Encode(RetrievalTo("ServerB", "ClientA1")));
+        Assert.True(await fx.Service.Send("ClientA1", MessageTo("ClientA1"), 4));
 
-        await WaitUntil(() => SentReal(fx, serverB), TimeSpan.FromSeconds(30));
+        fx.Transport.Verify(p => p.Request(child, It.Is<ReadOnlyMemory<byte>>(payload => !TestHeartbeat.Is(payload)), It.Is<PeerSendOptions>(options => options.Priority == 4), It.IsAny<CancellationToken>()), Times.Once);
+        await Stop(fx);
+    }
+
+    /// <summary>A frame for another server goes over the connection to that server, but one for that server's child is refused, since the child is not directly connected.</summary>
+    [Fact]
+    public async Task Send_ToAnotherServer_GoesToThatServer_ButNotToItsChild()
+    {
+        PeerConnection serverB = Outbound(serverBPoint, "ServerB");
+        Fixture fx = await BuildStarted(configureTransport: (transport, connected) => Reachable(transport, connected, serverBPoint, serverB), outgoing: [serverBPoint]);
+        await WaitUntil(() => fx.Service.GetStatuses().Single(s => s.UserName == "ServerB").IsConnected, TimeSpan.FromSeconds(30));
+
+        Assert.False(await fx.Service.Send("ClientB1", MessageTo("ClientB1"), 0));
+        Assert.True(await fx.Service.Send("ServerB", MessageTo("ClientB1"), 0));
+
         Assert.Equal(1, Requests(fx, serverB, real: true));
-        storage.Verify(s => s.Find(It.IsAny<string>(), It.IsAny<object>()), Times.Never);
-        storage.Verify(s => s.Store(It.IsAny<object>()), Times.Never);
         await Stop(fx);
     }
 
-    /// <summary>A retrieval request forwarded from another server is answered for the user named as its sender, and the copies are routed back through that server.</summary>
+    /// <summary>A frame for a user nobody reaches, or whose connection is not up, or who is closed, is not sent and the send fails without throwing.</summary>
     [Fact]
-    public async Task FromServer_RetrievalRequestForThisServer_AnswersForTheSenderAndRoutesBack()
+    public async Task Send_NoRoute_NoConnection_OrClosed_ReturnsFalse()
     {
-        Mock<IMessageStorageService> storage = new();
-        storage.Setup(s => s.Find("ClientB1", It.IsAny<object>())).ReturnsAsync(new List<object> { MessageTo("ClientB1") });
-        Fixture fx = await BuildStarted(storage: storage.Object);
-        PeerConnection serverB = Inbound("ServerB");
-        fx.Come(serverB);
+        Fixture fx = await BuildStarted();
+        fx.Come(Inbound("ClientA2"));
+        fx.Service.SetClosed(PeerConnectionKind.Client, "ClientA2", true);
 
-        fx.Receive(serverB, Encode(RetrievalTo("ServerA", "ClientB1")));
-
-        await WaitUntil(() => SentReal(fx, serverB), TimeSpan.FromSeconds(30));
-        Assert.Equal(1, Requests(fx, serverB, real: true));
+        Assert.False(await fx.Service.Send("Nobody", MessageTo("Nobody"), 0));
+        Assert.False(await fx.Service.Send("ClientA1", MessageTo("ClientA1"), 0));
+        Assert.False(await fx.Service.Send("ClientA2", MessageTo("ClientA2"), 0));
         await Stop(fx);
     }
 }

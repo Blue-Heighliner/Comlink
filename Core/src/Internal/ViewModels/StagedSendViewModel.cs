@@ -76,7 +76,7 @@ internal sealed partial class StagedSendViewModel : ObservableObject, IStagedSen
     /// <param name="entryService">Entry service used to persist each sent message to the Outbox.</param>
     /// <param name="loggerFactory">Factory for creating named loggers.</param>
     /// <param name="engineController">Resolves a staged send's message level name to the configured level.</param>
-    public StagedSendViewModel(IServiceConnection connection, IEntryService entryService, ILoggerFactory loggerFactory, IEngineController engineController)
+    public StagedSendViewModel(IEngineConnection connection, IEntryService entryService, ILoggerFactory loggerFactory, IEngineController engineController)
     {
         this.connection = connection;
         this.entryService = entryService;
@@ -86,7 +86,7 @@ internal sealed partial class StagedSendViewModel : ObservableObject, IStagedSen
     }
 
     private readonly IEngineController engineController;
-    private readonly IServiceConnection connection;
+    private readonly IEngineConnection connection;
     private readonly IEntryService entryService;
     private readonly ILogger logger;
     private readonly List<StagedSendEntry> queue = [];
@@ -159,16 +159,19 @@ internal sealed partial class StagedSendViewModel : ObservableObject, IStagedSen
         List<StagedSendEntry> pending;
         lock (gate)
         {
-            pending = queue.Where(e => e.Status == StagedSendStatus.Pending).ToList();
+            pending = queue.Where(e => e.Status is StagedSendStatus.Pending).ToList();
         }
 
-        if (pending.Count == 0) { return; }
+        if (pending.Count == 0)
+        {
+            return;
+        }
 
         IsSending = true;
         StatusMessage = null;
         try
         {
-            if (mode == StagedSendMode.Simultaneous)
+            if (mode is StagedSendMode.Simultaneous)
             {
                 await Task.WhenAll(pending.Select(SendOne));
             }
@@ -177,11 +180,14 @@ internal sealed partial class StagedSendViewModel : ObservableObject, IStagedSen
                 foreach (StagedSendEntry entry in pending)
                 {
                     await SendOne(entry);
-                    if (delay is { } d && d > TimeSpan.Zero) { await Task.Delay(d); }
+                    if (delay is { } d && d > TimeSpan.Zero)
+                    {
+                        await Task.Delay(d);
+                    }
                 }
             }
 
-            int sent = pending.Count(e => GetStatus(e.Id) == StagedSendStatus.Sent);
+            int sent = pending.Count(e => GetStatus(e.Id) is StagedSendStatus.Sent);
             StatusMessage = $"Sent {sent} of {pending.Count}";
         }
         finally
@@ -196,7 +202,7 @@ internal sealed partial class StagedSendViewModel : ObservableObject, IStagedSen
     {
         lock (gate)
         {
-            return queue.Any(e => e.Status == StagedSendStatus.Pending);
+            return queue.Any(e => e.Status is StagedSendStatus.Pending);
         }
     }
 
@@ -221,11 +227,6 @@ internal sealed partial class StagedSendViewModel : ObservableObject, IStagedSen
                 return;
             }
 
-            List<AddressData> addresses = [.. entry.Addresses.Select(a => new AddressData { UserName = a.UserName, Type = a.Type, Information = a.Information })];
-            await entryService.StoreSentMessage(
-                result.MessageId, entry.Body, addresses, DateTime.UtcNow, result.UserResults,
-                entry.Priority, entry.Tag, engineController.GetMessageLevelName(entry.MessageLevel));
-
             SetStatus(entry.Id, StagedSendStatus.Sent);
         }
         catch (Exception ex)
@@ -241,7 +242,10 @@ internal sealed partial class StagedSendViewModel : ObservableObject, IStagedSen
         lock (gate)
         {
             int index = queue.FindIndex(e => e.Id == id);
-            if (index < 0) { return; }
+            if (index < 0)
+            {
+                return;
+            }
             queue[index] = queue[index] with { Status = status, StatusMessage = statusMessage };
         }
 

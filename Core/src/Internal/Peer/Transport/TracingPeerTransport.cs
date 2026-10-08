@@ -63,7 +63,10 @@ internal sealed class TracingPeerTransport : IPeerTransport
     /// <inheritdoc />
     public Task<bool> Request(PeerConnection connection, ReadOnlyMemory<byte> data, PeerSendOptions? options = null, CancellationToken cancellation = default)
     {
-        if (settings.IsEnabled(category)) { logger.Record(sent, "Sent {Length} bytes to {User}: {Bytes}", data.Length, UserOf(connection), Convert.ToHexString(data.Span)); }
+        if (settings.IsEnabled(category))
+        {
+            logger.Record(sent, "Sent {Length} bytes to {User}: {Bytes}", data.Length, UserOf(connection), Convert.ToHexString(data.Span));
+        }
         return inner.Request(connection, data, options, cancellation);
     }
 
@@ -74,7 +77,10 @@ internal sealed class TracingPeerTransport : IPeerTransport
 
     private void OnReceived(PeerReceivedEventArgs args)
     {
-        if (settings.IsEnabled(category)) { logger.Record(receivedEvent, "Received {Length} bytes from {User}: {Bytes}", args.Payload.Length, UserOf(args.Connection), Convert.ToHexString(args.Payload.Span)); }
+        if (settings.IsEnabled(category))
+        {
+            logger.Record(receivedEvent, "Received {Length} bytes from {User}: {Bytes}", args.Payload.Length, UserOf(args.Connection), Convert.ToHexString(args.Payload.Span));
+        }
         received.Publish(args);
     }
 }

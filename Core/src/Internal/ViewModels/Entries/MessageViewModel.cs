@@ -103,22 +103,23 @@ internal sealed partial class MessageViewModel : ObservableObject, IMessageViewM
 
     /// <summary>Initializes the ViewModel from the given message entity.</summary>
     /// <param name="entity">The message entity to display.</param>
-    /// <param name="engineController">Maps logical fields onto the entity's stored message.</param>
+    /// <param name="engineController">Turns the entity's stored priority, message level and message aspect back into their names.</param>
     public MessageViewModel(MessageEntity entity, IEngineController engineController)
     {
         MessageId = entity.MessageId;
         IsOutbound = entity.IsOutbound;
-        Body = engineController.GetBody(entity.Message);
-        FromUser = engineController.GetFromUser(entity.Message);
+        MessageData message = entity.Message;
+        Body = message.Body;
+        FromUser = message.FromUser;
         ReceivedAt = entity.ReceivedAt;
-        IsAlert = engineController.GetIsAlert(entity.Message);
-        PriorityLabel = engineController.NameOf(engineController.GetMessagePriority(entity.Message));
+        IsAlert = message.IsAlert;
+        PriorityLabel = engineController.NameOf(engineController.PriorityOf(message.Priority));
         TagsEnabled = engineController.TagsEnabled;
-        Tag = engineController.GetTag(entity.Message);
-        MessageLevelName = engineController.GetMessageLevel(entity.Message);
+        Tag = message.Tag;
+        MessageLevelName = engineController.NameOfLevel(message);
         MessageLevelColorHex = engineController.MessageLevels.IsRecognized(MessageLevelName) ? engineController.MessageLevels.GetColor(MessageLevelName) : null;
-        MessageAspectName = engineController.GetMessageAspect(entity.Message);
-        List<MessageAddress> addresses = engineController.GetAddresses(entity.Message);
+        MessageAspectName = engineController.NameOfAspect(message);
+        List<MessageAddress> addresses = [.. message.Addresses.Select(a => new MessageAddress { UserName = a.UserName, Type = a.Type.ParseAddressType(), Information = a.Information })];
         IReadOnlyList<AddressTypeOption> addressTypes = engineController.AddressTypes;
         ToLabel = addressTypes.GetLabel(AddressType.To).ToUpperInvariant();
         ToList = Describe(addresses, AddressType.To);
@@ -204,17 +205,35 @@ internal sealed partial class MessageViewModel : ObservableObject, IMessageViewM
     public void UpdateDeliveryStatus(string userName, DestinationStatus status)
     {
         DeliveryStatusRow? row = DeliveryStatuses.FirstOrDefault(r => string.Equals(r.UserName, userName, StringComparison.OrdinalIgnoreCase));
-        if (row is not null) { row.Status = status; }
+        if (row is not null)
+        {
+            row.Status = status;
+        }
         OverallStatus = ComputeOverallStatus();
     }
 
     private DestinationStatus? ComputeOverallStatus()
     {
-        if (DeliveryStatuses.Count == 0) { return null; }
-        if (DeliveryStatuses.Any(d => d.Status == DestinationStatus.Failed)) { return DestinationStatus.Failed; }
-        if (DeliveryStatuses.All(d => d.Status == DestinationStatus.Read)) { return DestinationStatus.Read; }
-        if (DeliveryStatuses.All(d => d.Status is DestinationStatus.Received or DestinationStatus.Read)) { return DestinationStatus.Received; }
-        if (DeliveryStatuses.All(d => d.Status != DestinationStatus.Sending)) { return DestinationStatus.Sent; }
+        if (DeliveryStatuses.Count == 0)
+        {
+            return null;
+        }
+        if (DeliveryStatuses.Any(d => d.Status is DestinationStatus.Failed))
+        {
+            return DestinationStatus.Failed;
+        }
+        if (DeliveryStatuses.All(d => d.Status is DestinationStatus.Read))
+        {
+            return DestinationStatus.Read;
+        }
+        if (DeliveryStatuses.All(d => d.Status is DestinationStatus.Received or DestinationStatus.Read))
+        {
+            return DestinationStatus.Received;
+        }
+        if (DeliveryStatuses.All(d => d.Status is not DestinationStatus.Sending))
+        {
+            return DestinationStatus.Sent;
+        }
         return DestinationStatus.Sending;
     }
 }

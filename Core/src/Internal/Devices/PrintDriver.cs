@@ -70,29 +70,50 @@ file static class PrintOperations
 
     public static IReadOnlyList<string> GetAvailablePrinters()
     {
-        if (OperatingSystem.IsWindows()) { return GetWindowsPrinters(); }
-        if (OperatingSystem.IsLinux()) { return GetLinuxPrinters(); }
+        if (OperatingSystem.IsWindows())
+        {
+            return GetWindowsPrinters();
+        }
+        if (OperatingSystem.IsLinux())
+        {
+            return GetLinuxPrinters();
+        }
         return [];
     }
 
     public static string? GetDefaultPrinter()
     {
-        if (OperatingSystem.IsWindows()) { return GetWindowsDefaultPrinter(); }
-        if (OperatingSystem.IsLinux()) { return GetLinuxDefaultPrinter(); }
+        if (OperatingSystem.IsWindows())
+        {
+            return GetWindowsDefaultPrinter();
+        }
+        if (OperatingSystem.IsLinux())
+        {
+            return GetLinuxDefaultPrinter();
+        }
         return null;
     }
 
     public static Task PrintRaw(string printerName, string content, CancellationToken cancellation)
     {
-        if (OperatingSystem.IsWindows()) { return PrintRawWindows(printerName, content, cancellation); }
-        if (OperatingSystem.IsLinux()) { return PrintRawLinux(printerName, content, cancellation); }
+        if (OperatingSystem.IsWindows())
+        {
+            return PrintRawWindows(printerName, content, cancellation);
+        }
+        if (OperatingSystem.IsLinux())
+        {
+            return PrintRawLinux(printerName, content, cancellation);
+        }
         return Task.CompletedTask;
     }
 
     private static IReadOnlyList<string> GetWindowsPrinters()
     {
         string? output = RunPowerShell("Get-CimInstance -ClassName Win32_Printer | Select-Object -ExpandProperty Name");
-        if (output is null) { return []; }
+        if (output is null)
+        {
+            return [];
+        }
         return output.Split('\n', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries).ToList();
     }
 
@@ -100,7 +121,10 @@ file static class PrintOperations
     {
         string? output = RunPowerShell(
             "Get-CimInstance -ClassName Win32_Printer | Where-Object { $_.Default } | Select-Object -First 1 -ExpandProperty Name");
-        if (output is null) { return null; }
+        if (output is null)
+        {
+            return null;
+        }
         string name = output.Trim();
         return string.IsNullOrEmpty(name) ? null : name;
     }
@@ -170,12 +194,18 @@ file static class PrintOperations
                     pDataType = "RAW"
                 };
                 int jobId = StartDocPrinter(printerHandle, 1, ref docInfo);
-                if (jobId == 0) { return; }
+                if (jobId == 0)
+                {
+                    return;
+                }
 
                 bool wroteSuccessfully;
                 try
                 {
-                    if (!StartPagePrinter(printerHandle)) { return; }
+                    if (!StartPagePrinter(printerHandle))
+                    {
+                        return;
+                    }
                     try
                     {
                         byte[] bytes = Encoding.UTF8.GetBytes(content);
@@ -194,7 +224,10 @@ file static class PrintOperations
                     EndDocPrinter(printerHandle);
                 }
 
-                if (!wroteSuccessfully) { return; }
+                if (!wroteSuccessfully)
+                {
+                    return;
+                }
 
                 await WaitForWindowsJobCompletion(printerHandle, jobId, cancellation);
             }
@@ -220,7 +253,10 @@ file static class PrintOperations
             cancellation.ThrowIfCancellationRequested();
 
             GetJob(printerHandle, jobId, 1, 0, 0, out int needed);
-            if (needed <= 0) { return; }
+            if (needed <= 0)
+            {
+                return;
+            }
 
             nint buffer = Marshal.AllocHGlobal(needed);
             try
@@ -228,7 +264,10 @@ file static class PrintOperations
                 if (GetJob(printerHandle, jobId, 1, buffer, needed, out _))
                 {
                     JOB_INFO_1 info = Marshal.PtrToStructure<JOB_INFO_1>(buffer);
-                    if ((info.Status & TerminalStatus) != 0) { return; }
+                    if ((info.Status & TerminalStatus) != 0)
+                    {
+                        return;
+                    }
                 }
                 else
                 {
@@ -308,14 +347,23 @@ file static class PrintOperations
     private static IReadOnlyList<string> GetLinuxPrinters()
     {
         string? output = RunCommand("lpstat", "-p");
-        if (output is null) { return []; }
+        if (output is null)
+        {
+            return [];
+        }
 
         List<string> printers = [];
         foreach (string line in output.Split('\n'))
         {
-            if (!line.StartsWith("printer ", StringComparison.Ordinal)) { continue; }
+            if (!line.StartsWith("printer ", StringComparison.Ordinal))
+            {
+                continue;
+            }
             string[] parts = line.Split(' ', StringSplitOptions.RemoveEmptyEntries);
-            if (parts.Length >= 2) { printers.Add(parts[1]); }
+            if (parts.Length >= 2)
+            {
+                printers.Add(parts[1]);
+            }
         }
         return printers;
     }
@@ -323,11 +371,17 @@ file static class PrintOperations
     private static string? GetLinuxDefaultPrinter()
     {
         string? output = RunCommand("lpstat", "-d");
-        if (output is null) { return null; }
+        if (output is null)
+        {
+            return null;
+        }
 
         const string marker = "system default destination:";
         int index = output.IndexOf(marker, StringComparison.OrdinalIgnoreCase);
-        if (index < 0) { return null; }
+        if (index < 0)
+        {
+            return null;
+        }
 
         string name = output[(index + marker.Length)..].Trim();
         return string.IsNullOrEmpty(name) ? null : name;
@@ -338,7 +392,10 @@ file static class PrintOperations
         try
         {
             string? jobId = await SubmitLinuxJob(printerName, content, cancellation);
-            if (jobId is null) { return; }
+            if (jobId is null)
+            {
+                return;
+            }
 
             Stopwatch elapsed = Stopwatch.StartNew();
             while (elapsed.Elapsed < maxWait)
@@ -352,7 +409,10 @@ file static class PrintOperations
                 string? pending = RunCommand("lpstat", "-W", "not-completed", "-o", printerName);
                 bool stillPending = pending is not null &&
                     pending.Split('\n').Any(line => line.Split(' ', StringSplitOptions.RemoveEmptyEntries) is [var firstToken, ..] && firstToken == jobId);
-                if (!stillPending) { return; }
+                if (!stillPending)
+                {
+                    return;
+                }
 
                 await Task.Delay(pollInterval, cancellation);
             }
@@ -399,7 +459,10 @@ file static class PrintOperations
         // Output format: "request id is PRINTER-123 (1 file(s))"
         const string marker = "request id is ";
         int index = output.IndexOf(marker, StringComparison.OrdinalIgnoreCase);
-        if (index < 0) { return null; }
+        if (index < 0)
+        {
+            return null;
+        }
         string rest = output[(index + marker.Length)..].TrimStart();
         int spaceIndex = rest.IndexOf(' ');
         return spaceIndex < 0 ? rest.Trim() : rest[..spaceIndex];

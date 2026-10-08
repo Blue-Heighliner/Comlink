@@ -32,7 +32,7 @@
     </Border>
 
     <TextBlock DockPanel.Dock="Top"
-               Text="No auto forward controllers available"
+               Text="No auto forwarders available"
                IsVisible="{Binding !HasControllers}"
                FontSize="12"
                Foreground="#858585" />
@@ -51,7 +51,7 @@
                   FontSize="13"
                   HorizontalAlignment="Stretch">
           <ComboBox.ItemTemplate>
-            <DataTemplate DataType="{x:Type control:AutoForwardControllerDefinition}">
+            <DataTemplate DataType="{x:Type control:AutoForwarderDefinition}">
               <TextBlock Text="{Binding Name}" />
             </DataTemplate>
           </ComboBox.ItemTemplate>

@@ -57,7 +57,10 @@ internal sealed class UserConnections : IUserConnections
         string name = connection.User?.Name ?? throw new ArgumentException("The connection has not been identified", nameof(connection));
         lock (gate)
         {
-            if (byConnection.ContainsKey(connection)) { return; }
+            if (byConnection.ContainsKey(connection))
+            {
+                return;
+            }
 
             byConnection[connection] = name;
             if (!byUser.TryGetValue(name, out List<PeerConnection>? connections))
@@ -75,12 +78,18 @@ internal sealed class UserConnections : IUserConnections
     {
         lock (gate)
         {
-            if (!byConnection.Remove(connection, out string? name)) { return null; }
+            if (!byConnection.Remove(connection, out string? name))
+            {
+                return null;
+            }
 
             if (byUser.TryGetValue(name, out List<PeerConnection>? connections))
             {
                 connections.Remove(connection);
-                if (connections.Count == 0) { byUser.Remove(name); }
+                if (connections.Count == 0)
+                {
+                    byUser.Remove(name);
+                }
             }
 
             return name;
@@ -117,7 +126,10 @@ internal sealed class UserConnections : IUserConnections
         string name = connection.User?.Name ?? throw new ArgumentException("The connection has not been identified", nameof(connection));
         lock (gate)
         {
-            if (byConnection.ContainsKey(connection)) { return false; }
+            if (byConnection.ContainsKey(connection))
+            {
+                return false;
+            }
 
             bool wasOffline = !byUser.ContainsKey(name);
             byConnection[connection] = name;
@@ -137,7 +149,10 @@ internal sealed class UserConnections : IUserConnections
     {
         lock (gate)
         {
-            if (!byConnection.Remove(connection, out string? name)) { return (null, false); }
+            if (!byConnection.Remove(connection, out string? name))
+            {
+                return (null, false);
+            }
 
             bool nowOffline = false;
             if (byUser.TryGetValue(name, out List<PeerConnection>? connections))

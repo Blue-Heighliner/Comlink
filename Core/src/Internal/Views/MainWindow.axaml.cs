@@ -26,7 +26,10 @@ internal partial class MainWindow : Window
         Control? content = Content as Control;
         Content = null;
         Grid host = new();
-        if (content is not null) { host.Children.Add(content); }
+        if (content is not null)
+        {
+            host.Children.Add(content);
+        }
 
         (WindowEdge Edge, HorizontalAlignment Horizontal, VerticalAlignment Vertical, double Width, double Height, StandardCursorType Cursor)[] layout =
         [
@@ -53,7 +56,10 @@ internal partial class MainWindow : Window
             };
             grip.PointerPressed += (_, e) =>
             {
-                if (e.GetCurrentPoint(this).Properties.IsLeftButtonPressed) { BeginResizeDrag(edge, e); }
+                if (e.GetCurrentPoint(this).Properties.IsLeftButtonPressed)
+                {
+                    BeginResizeDrag(edge, e);
+                }
             };
             grips.Add(grip);
             host.Children.Add(grip);
@@ -63,16 +69,22 @@ internal partial class MainWindow : Window
         Content = frame;
         PropertyChanged += (_, e) =>
         {
-            if (e.Property == WindowStateProperty) { ApplyWindowState(); }
+            if (e.Property == WindowStateProperty)
+            {
+                ApplyWindowState();
+            }
         };
         ApplyWindowState();
     }
 
     private void ApplyWindowState()
     {
-        bool isNormal = WindowState == WindowState.Normal;
+        bool isNormal = WindowState is WindowState.Normal;
         frame.BorderThickness = new Thickness(isNormal ? 1 : 0);
-        foreach (Border grip in grips) { grip.IsVisible = isNormal; }
+        foreach (Border grip in grips)
+        {
+            grip.IsVisible = isNormal;
+        }
     }
 
     /// <inheritdoc />
@@ -84,16 +96,25 @@ internal partial class MainWindow : Window
     }
 
     /// <summary>
-    /// Opens the oldest unread alert on one of the message handler's alert quick read keys, unless focus is in a text input — see
+    /// Opens the oldest unread alert on one of the alert quick read keys, unless focus is in a text input — see
     /// <see cref="IAlertViewModel.OpenOldestCommand"/> and <c>Docs/Components/ViewModels.md</c>.
     /// </summary>
     private void OnWindowKeyDown(object? sender, KeyEventArgs e)
     {
-        if (!viewModel.Alert.QuickReadKeys.Any(name => Enum.TryParse(name, ignoreCase: true, out Key key) && key == e.Key)) { return; }
-        if (IsTextInputFocused()) { return; }
+        if (!viewModel.Alert.QuickReadKeys.Any(name => Enum.TryParse(name, ignoreCase: true, out Key key) && key == e.Key))
+        {
+            return;
+        }
+        if (IsTextInputFocused())
+        {
+            return;
+        }
 
         IAsyncRelayCommand command = viewModel.Alert.OpenOldestCommand;
-        if (!command.CanExecute(null)) { return; }
+        if (!command.CanExecute(null))
+        {
+            return;
+        }
 
         command.Execute(null);
         e.Handled = true;
@@ -102,7 +123,10 @@ internal partial class MainWindow : Window
     private bool IsTextInputFocused()
     {
         IInputElement? focused = TopLevel.GetTopLevel(this)?.FocusManager?.GetFocusedElement();
-        if (focused is TextBox) { return true; }
+        if (focused is TextBox)
+        {
+            return true;
+        }
         return focused is Visual visual && visual.FindAncestorOfType<TextEditor>() is not null;
     }
 }

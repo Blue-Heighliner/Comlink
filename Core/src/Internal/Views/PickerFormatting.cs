@@ -56,7 +56,10 @@ internal sealed class PickerFormatting : IPickerFormatting
         void Try(object? sender, EventArgs e)
         {
             List<TextBlock> blocks = [.. picker.GetVisualDescendants().OfType<TextBlock>()];
-            if (blocks.Count == 0) { return; }
+            if (blocks.Count == 0)
+            {
+                return;
+            }
 
             picker.LayoutUpdated -= Try;
             foreach (TextBlock block in blocks)

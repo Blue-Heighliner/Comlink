@@ -22,7 +22,10 @@ public sealed class RawPacketSerializer : IPacketSerializer
     /// <inheritdoc />
     public object Deserialize(ReadOnlyMemory<byte> data)
     {
-        if (data.Length < HeaderSize) { throw new InvalidDataException("too short"); }
+        if (data.Length < HeaderSize)
+        {
+            throw new InvalidDataException("too short");
+        }
 
         ReadOnlySpan<byte> span = data.Span;
         return new TestPacket

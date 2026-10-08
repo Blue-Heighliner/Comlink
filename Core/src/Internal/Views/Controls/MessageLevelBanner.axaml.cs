@@ -41,7 +41,10 @@ internal partial class MessageLevelBanner : UserControl
         if (change.Property == TitleProperty)
         {
             TextBlock? text = this.FindControl<TextBlock>("TitleText");
-            if (text is not null) { text.Text = Title.ToUpperInvariant(); }
+            if (text is not null)
+            {
+                text.Text = Title.ToUpperInvariant();
+            }
         }
 
         if (change.Property == BannerColorProperty)

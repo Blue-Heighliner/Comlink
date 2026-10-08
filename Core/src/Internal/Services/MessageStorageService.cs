@@ -1,126 +1,90 @@
 namespace BlueHeighliner.Comlink;
 
 /// <summary>
-/// The storage half of a server: keeps a copy of each
-/// message the server routes, and answers a retrieval request by finding the stored messages that fit its criteria.
-/// Any user can retrieve any stored message; nothing restricts a request to the requester's own traffic. Sending the found copies is left to the caller, since only the server's peer service
-/// knows how to reach the requester and this service must not depend on it.
+/// The storage half of a server: keeps the messages the host's network processor tells it to keep, and finds the kept messages that fit the criteria of a retrieval. The engine neither decides what is kept nor who may retrieve
+/// it, nor sends what is found: those are the processor's, through its context (see <see cref="INetworkContext{TFrame, TPriority, TLevel, TAspect}.StoreMessage"/> and <see cref="INetworkContext{TFrame, TPriority, TLevel, TAspect}.FindStoredMessages"/>).
 /// </summary>
 internal interface IMessageStorageService
 {
-    /// <summary>Gets a value indicating whether the current user is one of <see cref="IEngineController.StorageServers"/>, so <see cref="Store"/> keeps messages and <see cref="Find"/> can answer.</summary>
-    bool IsEnabled { get; }
+    /// <summary>Keeps a copy of <paramref name="message"/> unless one with the same identifier is already kept. A failure is logged, never thrown: storage must not interrupt the processor.</summary>
+    /// <param name="message">The message to keep.</param>
+    Task Store(Message message);
 
-    /// <summary>
-    /// Keeps a copy of <paramref name="message"/> unless one with the same identifier is already stored, or
-    /// storage is not <see cref="IsEnabled"/>, or the message is a receipt or a retrieval request (neither is
-    /// user content). A failure is logged, never thrown: storage must not interrupt routing.
-    /// </summary>
-    Task Store(object message);
-
-    /// <summary>
-    /// Finds the stored messages fitting the criteria in <paramref name="request"/>, whoever sent or received them,
-    /// and returns a copy of each addressed to <paramref name="requester"/> alone, ordered by sent time. A copy keeps the original's
-    /// identifier, sender, sent time, body, priority, tag and message level, but is never an alert (so old
-    /// alerts do not alarm again) and carries only the requester as its address, since servers route purely by
-    /// address list. Returns an empty list when storage is not enabled, or the request's criteria are unreadable.
-    /// </summary>
-    Task<IReadOnlyList<object>> Find(string requester, object request);
+    /// <summary>Finds the kept messages fitting <paramref name="criteria"/>, whoever sent or received them, ordered by sent time. A failure is logged and finds nothing.</summary>
+    /// <param name="criteria">What the messages must fit.</param>
+    Task<IReadOnlyList<Message>> Find(RetrievalCriteria criteria);
 }
 
 /// <inheritdoc cref="IMessageStorageService" />
 internal sealed class MessageStorageService : IMessageStorageService
 {
     /// <summary>Initializes a new <see cref="MessageStorageService"/>.</summary>
-    public MessageStorageService(
-        IStoredMessageRepository repository,
-        IEngineController engineController,
-        ICurrentUserProvider currentUserProvider,
-        ILoggerFactory loggerFactory)
+    public MessageStorageService(IStoredMessageRepository repository, IEngineController engineController, ILoggerFactory loggerFactory)
     {
         this.repository = repository;
         this.engineController = engineController;
-        this.currentUserProvider = currentUserProvider;
         logger = loggerFactory.CreateLogger(LogCategories.App);
     }
 
     private readonly IStoredMessageRepository repository;
     private readonly IEngineController engineController;
-    private readonly ICurrentUserProvider currentUserProvider;
     private readonly ILogger logger;
 
     /// <inheritdoc />
-    public bool IsEnabled => currentUserProvider.UserName is { } name && engineController.StorageServers.Contains(name, StringComparer.OrdinalIgnoreCase);
-
-    /// <inheritdoc />
-    public async Task Store(object message)
+    public async Task Store(Message message)
     {
-        if (!IsEnabled || !engineController.IsMessage(message)) { return; }
-        if (engineController.IsReadReceipt(message) || engineController.IsReceiveReceipt(message) || engineController.IsRetrieval(message)) { return; }
-
         try
         {
-            await repository.InsertIfNew(new StoredMessageEntity { MessageId = engineController.GetMessageId(message), Message = message });
+            await repository.InsertIfNew(new StoredMessageEntity { MessageId = message.Id, Message = engineController.ToData(message) });
         }
         catch (Exception ex)
         {
-            logger.Record(LogEvents.StoreMessageCopyFailed, ex, "Failed to store a copy of {MessageId}", engineController.GetMessageId(message));
+            logger.Record(LogEvents.StoreMessageCopyFailed, ex, "Failed to store a copy of {MessageId}", message.Id);
         }
     }
 
     /// <inheritdoc />
-    public async Task<IReadOnlyList<object>> Find(string requester, object request)
+    public async Task<IReadOnlyList<Message>> Find(RetrievalCriteria criteria)
     {
-        if (!IsEnabled) { return []; }
-
-        RetrievalCriteria criteria = engineController.GetRetrieval(request);
-
         try
         {
-            List<object> copies = [.. (await repository.GetAll())
+            List<Message> found = [.. (await repository.GetAll())
                 .Select(entity => entity.Message)
                 .Where(message => Fits(message, criteria))
-                .OrderBy(message => Utc(engineController.GetSentAt(message)))
-                .Select(message => CopyFor(message, requester))];
-            logger.Record(LogEvents.RetrievalAnswered, "Retrieval for {Requester} found {Count} stored message(s)", requester, copies.Count);
-            return copies;
+                .OrderBy(message => Utc(message.SentAt))
+                .Select(engineController.ToMessage)];
+            logger.Record(LogEvents.RetrievalAnswered, "Retrieval found {Count} stored message(s)", found.Count);
+            return found;
         }
         catch (Exception ex)
         {
-            logger.Record(LogEvents.ReadStoredMessagesFailed, ex, "Failed to read stored messages for a retrieval by {Requester}", requester);
+            logger.Record(LogEvents.ReadStoredMessagesFailed, ex, "Failed to read stored messages for a retrieval");
             return [];
         }
     }
 
-    // A time with no stated kind (as a serializer may hand back) is taken to be UTC, which is what every sent time and
-    // retrieval bound is written as; a local one (LiteDB reads stored times back as local) is converted.
-    private DateTime Utc(DateTime time) => time.Kind == DateTimeKind.Unspecified ? DateTime.SpecifyKind(time, DateTimeKind.Utc) : time.ToUniversalTime();
+    // A time with no stated kind is taken to be UTC, which is what every sent time and retrieval bound is written as; a local one (LiteDB reads stored times back as local) is converted.
+    private static DateTime Utc(DateTime time) => time.Kind is DateTimeKind.Unspecified ? DateTime.SpecifyKind(time, DateTimeKind.Utc) : time.ToUniversalTime();
 
-    private bool Fits(object message, RetrievalCriteria criteria)
+    private static bool Fits(MessageData message, RetrievalCriteria criteria)
     {
-        // LiteDB reads a stored DateTime back as local time, so compare as UTC instants.
-        DateTime sentAt = Utc(engineController.GetSentAt(message));
-        if (criteria.From is { } from && sentAt < Utc(from)) { return false; }
-        if (criteria.To is { } to && sentAt > Utc(to)) { return false; }
-        if (criteria.Ids.Count > 0 && !criteria.Ids.Contains(engineController.GetMessageId(message), StringComparer.OrdinalIgnoreCase)) { return false; }
-        if (criteria.Authors.Count > 0 && !criteria.Authors.Contains(engineController.GetFromUser(message), StringComparer.OrdinalIgnoreCase)) { return false; }
-        return criteria.Destinations.Count == 0
-            || engineController.GetAddresses(message).Any(address => criteria.Destinations.Contains(address.UserName, StringComparer.OrdinalIgnoreCase));
-    }
-
-    private object CopyFor(object original, string requester)
-    {
-        object copy = engineController.CreateMessage(new MessageContent
+        DateTime sentAt = Utc(message.SentAt);
+        if (criteria.From is { } from && sentAt < Utc(from))
         {
-            SentAt = Utc(engineController.GetSentAt(original)),
-            Body = engineController.GetBody(original),
-            Priority = engineController.GetMessagePriority(original),
-            Tag = engineController.GetTag(original),
-            MessageLevel = engineController.GetMessageLevel(original)
-        });
-        engineController.SetMessageId(copy, engineController.GetMessageId(original));
-        engineController.SetFromUser(copy, engineController.GetFromUser(original));
-        engineController.SetAddresses(copy, [new MessageAddress { UserName = requester, Type = AddressType.To }]);
-        return copy;
+            return false;
+        }
+        if (criteria.To is { } to && sentAt > Utc(to))
+        {
+            return false;
+        }
+        if (criteria.Ids.Count > 0 && !criteria.Ids.Contains(message.Id, StringComparer.OrdinalIgnoreCase))
+        {
+            return false;
+        }
+        if (criteria.Authors.Count > 0 && !criteria.Authors.Contains(message.FromUser, StringComparer.OrdinalIgnoreCase))
+        {
+            return false;
+        }
+        return criteria.Destinations.Count == 0 || message.Addresses.Any(address => criteria.Destinations.Contains(address.UserName, StringComparer.OrdinalIgnoreCase));
     }
 }

@@ -26,21 +26,18 @@ internal sealed class ServerRoutingService : IPeerService, IConnectionStatusServ
         IPeerTransportFactory transportFactory,
         IEngineController engineController,
         ICurrentUserProvider currentUserProvider,
-        IMessageStorageService storage,
         ILoggerFactory loggerFactory)
     {
         this.transportFactory = transportFactory;
         this.engineController = engineController;
         maintenance = new PointMaintenance(new PeerConnectionMonitor(engineController));
         this.currentUserProvider = currentUserProvider;
-        this.storage = storage;
         logger = loggerFactory.CreateLogger(LogCategories.App);
     }
 
     private readonly IPeerTransportFactory transportFactory;
     private readonly IEngineController engineController;
     private readonly ICurrentUserProvider currentUserProvider;
-    private readonly IMessageStorageService storage;
     private readonly ILogger logger;
     private readonly PointMaintenance maintenance;
     private readonly Lock reconfigureLock = new();
@@ -64,17 +61,7 @@ internal sealed class ServerRoutingService : IPeerService, IConnectionStatusServ
     private int disposed;
 
     /// <inheritdoc />
-    public event Func<object, Task>? FrameDelivered;
-#pragma warning disable CS0067 // A server relays raw message bytes without deserializing for receipt-vs-normal classification, so this never fires.
-    /// <inheritdoc />
-    public event Func<string, string, Task>? ReadReceiptReceived;
-    /// <inheritdoc />
-    public event Func<string, string, Task>? ReceiveReceiptReceived;
-#pragma warning restore CS0067
-#pragma warning disable CS0067 // No per-message delivery status is tracked across the client/server hierarchy.
-    /// <inheritdoc />
-    public event Func<string, string, DestinationStatus, Task>? DeliveryStatusChanged;
-#pragma warning restore CS0067
+    public event Func<ReceivedFrame, Task>? FrameReceived;
     /// <inheritdoc />
     public event Action? StatusesChanged;
     /// <inheritdoc />
@@ -120,7 +107,10 @@ internal sealed class ServerRoutingService : IPeerService, IConnectionStatusServ
     {
         lock (reconfigureLock)
         {
-            if (transport is null || lifetime == default) { return; }
+            if (transport is null || lifetime == default)
+            {
+                return;
+            }
 
             bool changed = ApplyTopology();
             if (engineController.PeerPort != listenPort)
@@ -131,7 +121,10 @@ internal sealed class ServerRoutingService : IPeerService, IConnectionStatusServ
             }
 
             changed |= SyncPoints();
-            if (changed) { StatusesChanged?.Invoke(); }
+            if (changed)
+            {
+                StatusesChanged?.Invoke();
+            }
         }
     }
 
@@ -159,7 +152,10 @@ internal sealed class ServerRoutingService : IPeerService, IConnectionStatusServ
     {
         IReadOnlyDictionary<string, ServerUserConfig> latest = engineController.Servers;
         bool changed = Describe(latest) != Describe(userMap);
-        if (!changed) { return false; }
+        if (!changed)
+        {
+            return false;
+        }
 
         userMap = latest;
         string myName = currentUserProvider.UserName ?? string.Empty;
@@ -176,15 +172,21 @@ internal sealed class ServerRoutingService : IPeerService, IConnectionStatusServ
 
         foreach (ConcurrentDictionary<string, DateTime> map in new[] { childLastConnectedAt, childLastDisconnectedAt, serverLastConnectedAt, serverLastDisconnectedAt })
         {
-            foreach (string name in map.Keys.Where(name => !valid.Contains(name)).ToList()) { map.TryRemove(name, out _); }
+            foreach (string name in map.Keys.Where(name => !valid.Contains(name)).ToList())
+            {
+                map.TryRemove(name, out _);
+            }
         }
 
-        foreach (string name in closedNames.Keys.Where(name => !valid.Contains(name)).ToList()) { closedNames.TryRemove(name, out _); }
+        foreach (string name in closedNames.Keys.Where(name => !valid.Contains(name)).ToList())
+        {
+            closedNames.TryRemove(name, out _);
+        }
         return true;
     }
 
     private static string Describe(IReadOnlyDictionary<string, ServerUserConfig> map)
-        => string.Join(';', map.OrderBy(server => server.Key, StringComparer.OrdinalIgnoreCase).Select(server => $"{server.Key}:{string.Join(',', server.Value.Children.Order(StringComparer.OrdinalIgnoreCase))}|{string.Join(',', server.Value.Relays.OrderBy(relay => relay.Key, StringComparer.OrdinalIgnoreCase).Select(relay => $"{relay.Key}={string.Join('+', relay.Value.Order(StringComparer.OrdinalIgnoreCase))}"))}"));
+        => string.Join(';', map.OrderBy(server => server.Key, StringComparer.OrdinalIgnoreCase).Select(server => $"{server.Key}:{string.Join(',', server.Value.Children.Order(StringComparer.OrdinalIgnoreCase))}"));
 
     private IReadOnlyList<string> GetChildNames()
         => userMap.TryGetValue(currentUserProvider.UserName ?? string.Empty, out ServerUserConfig? myConfig) ? myConfig.Children : [];
@@ -204,7 +206,10 @@ internal sealed class ServerRoutingService : IPeerService, IConnectionStatusServ
     {
         lock (statusLock)
         {
-            if (childConnected.GetValueOrDefault(childName) == connected) { return; }
+            if (childConnected.GetValueOrDefault(childName) == connected)
+            {
+                return;
+            }
 
             if (connected)
             {
@@ -227,7 +232,10 @@ internal sealed class ServerRoutingService : IPeerService, IConnectionStatusServ
     {
         lock (statusLock)
         {
-            if (serverConnected.GetValueOrDefault(serverName) == connected) { return; }
+            if (serverConnected.GetValueOrDefault(serverName) == connected)
+            {
+                return;
+            }
 
             if (connected)
             {
@@ -264,22 +272,34 @@ internal sealed class ServerRoutingService : IPeerService, IConnectionStatusServ
         }
 
         connections.Add(connection);
-        if (connection.Point is { } point) { pointUsers[point.Key] = name; }
+        if (connection.Point is { } point)
+        {
+            pointUsers[point.Key] = name;
+        }
 
         // An IP connection this node dialed only counts as up once a heartbeat is acknowledged (see
         // OnHeartbeatAcknowledged): a node that has closed the connection accepts it and drops it again without
         // answering, so counting the bare connection would flash the row green every time. A connection the other
         // node opened, or a serial link (which only comes up when the far end answers), is up straight away.
-        if (connection.IsInbound || connection.IsSerial) { UpdateStatusForName(name, true); }
+        if (connection.IsInbound || connection.IsSerial)
+        {
+            UpdateStatusForName(name, true);
+        }
     }
 
     private void OnDisconnected(PeerConnectionEventArgs args)
     {
-        if (connections.Remove(args.Connection) is not { } name) { return; }
+        if (connections.Remove(args.Connection) is not { } name)
+        {
+            return;
+        }
 
         // A user can be connected both ways at once (it dialed this node, and this node dialed it); losing one of
         // them does not make it unreachable while the other is still up.
-        if (connections.Has(name)) { return; }
+        if (connections.Has(name))
+        {
+            return;
+        }
 
         UpdateStatusForName(name, false);
 
@@ -289,7 +309,10 @@ internal sealed class ServerRoutingService : IPeerService, IConnectionStatusServ
         // report the reconnect) right away instead.
         foreach (string key in GetPointKeys(name))
         {
-            if (pointMonitors.TryGetValue(key, out PeerLinkControl? monitor)) { monitor.NotifyLost(); }
+            if (pointMonitors.TryGetValue(key, out PeerLinkControl? monitor))
+            {
+                monitor.NotifyLost();
+            }
         }
     }
 
@@ -298,8 +321,14 @@ internal sealed class ServerRoutingService : IPeerService, IConnectionStatusServ
 
     private void OnHeartbeatAcknowledged(PeerConnection connection)
     {
-        if (!connections.Contains(connection) || connection.User is not { } user) { return; }
-        if (!closedNames.ContainsKey(user.Name)) { UpdateStatusForName(user.Name, true); }
+        if (!connections.Contains(connection) || connection.User is not { } user)
+        {
+            return;
+        }
+        if (!closedNames.ContainsKey(user.Name))
+        {
+            UpdateStatusForName(user.Name, true);
+        }
     }
 
     private void UpdateStatusForName(string remoteName, bool isConnected)
@@ -316,195 +345,28 @@ internal sealed class ServerRoutingService : IPeerService, IConnectionStatusServ
 
     private void OnReceived(PeerReceivedEventArgs args)
     {
-        if (!connections.Contains(args.Connection) || args.Connection.User is not { } user) { return; }
+        if (!connections.Contains(args.Connection) || args.Connection.User is not { } user)
+        {
+            return;
+        }
         string remoteName = user.Name;
-        if (closedNames.ContainsKey(remoteName)) { return; }
+        if (closedNames.ContainsKey(remoteName))
+        {
+            return;
+        }
 
-        ReadOnlyMemory<byte> copy = args.Payload;
+        ReadOnlyMemory<byte> data = args.Payload;
         object? packet = args.Packet;
-        if (IsChild(remoteName))
-        {
-            _ = Task.Run(() => Relay(() => HandleFromChild(remoteName, copy, packet)));
-        }
-        else
-        {
-            _ = Task.Run(() => Relay(() => HandleFromServer(remoteName, copy, packet)));
-        }
-    }
-
-    private async Task Relay(Func<Task> relay)
-    {
-        try { await relay(); }
-        catch (Exception ex) { logger.Record(LogEvents.RouteFailed, ex, "Failed to {Action}", "relay a message"); }
-    }
-
-    private async Task HandleFromChild(string childName, ReadOnlyMemory<byte> data, object? packet = null)
-    {
-        object? message = TryDeserialize(data, packet);
-        if (message is null || engineController.IsHeartbeat(message)) { return; }
-
-        if (engineController.GetInvalidMessageReason(message) is { } invalid)
-        {
-            logger.Record(LogEvents.InvalidMessage, "A message from {Source} is invalid and was dropped: it {Reason}", childName, invalid);
-            return;
-        }
-
-        HashSet<string> addressedUsers = GetAddressedUsers(message);
-        int priority = engineController.GetPriority(message);
-        string myName = currentUserProvider.UserName ?? string.Empty;
-
-        if (!userMap.TryGetValue(myName, out ServerUserConfig? myConfig)) { return; }
-
-        if (engineController.IsRetrieval(message))
-        {
-            await RouteRetrieval(myConfig.Relays.ContainsKey(childName) ? engineController.GetFromUser(message) : childName, message, data, addressedUsers, priority, forward: true);
-            return;
-        }
-
-        await storage.Store(message);
-        await RouteFromChild(message, data);
-    }
-
-    // The local users a message goes to: each addressed child client directly, and, once, each relay that has an addressed client behind it, which forwards the bytes on untouched.
-    private IEnumerable<string> GetLocalTargets(ServerUserConfig config, HashSet<string> addressedUsers)
-    {
-        IEnumerable<string> direct = addressedUsers.Where(user => config.Children.Contains(user, StringComparer.OrdinalIgnoreCase));
-        IEnumerable<string> viaRelays = config.Relays.Where(relay => relay.Value.Any(addressedUsers.Contains)).Select(relay => relay.Key);
-        return direct.Concat(viaRelays).Distinct(StringComparer.OrdinalIgnoreCase);
-    }
-
-    private async Task RouteFromChild(object message, ReadOnlyMemory<byte> data)
-    {
-        HashSet<string> addressedUsers = GetAddressedUsers(message);
-        int priority = engineController.GetPriority(message);
-        string myName = currentUserProvider.UserName ?? string.Empty;
-
-        if (!userMap.TryGetValue(myName, out ServerUserConfig? myConfig)) { return; }
-
-        List<Task> sends = [.. GetLocalTargets(myConfig, addressedUsers).Select(user => TrySend(user, data, priority, message))];
-
-        foreach ((string serverName, ServerUserConfig config) in userMap)
-        {
-            if (string.Equals(serverName, myName, StringComparison.OrdinalIgnoreCase)) { continue; }
-            if (config.Children.Any(child => addressedUsers.Contains(child)) || config.Relays.Values.Any(clients => clients.Any(addressedUsers.Contains)))
-            {
-                sends.Add(TrySend(serverName, data, priority, message));
-            }
-        }
-
-        // Recipients are reached concurrently, so one that is slow or unreachable does not hold up the others.
-        await Task.WhenAll(sends);
-    }
-
-    private async Task HandleFromServer(string serverName, ReadOnlyMemory<byte> data, object? packet = null)
-    {
-        object? message = TryDeserialize(data, packet);
-        if (message is null || engineController.IsHeartbeat(message)) { return; }
-
-        if (engineController.GetInvalidMessageReason(message) is { } invalid)
-        {
-            logger.Record(LogEvents.InvalidMessage, "A message from {Source} is invalid and was dropped: it {Reason}", serverName, invalid);
-            return;
-        }
-
-        HashSet<string> addressedUsers = GetAddressedUsers(message);
-        int priority = engineController.GetPriority(message);
-        string myName = currentUserProvider.UserName ?? string.Empty;
-
-        if (!userMap.TryGetValue(myName, out ServerUserConfig? myConfig)) { return; }
-
-        if (engineController.IsRetrieval(message))
-        {
-            await RouteRetrieval(engineController.GetFromUser(message), message, data, addressedUsers, priority, forward: false);
-            return;
-        }
-
-        await Task.WhenAll(GetLocalTargets(myConfig, addressedUsers).Select(user => TrySend(user, data, priority, message)));
-    }
-
-    // A retrieval request is addressed to a server, not to any child client, so ordinary routing would drop it: this
-    // server answers it if it is addressed (and stores), and, for a request that came from a child, hands it on to
-    // every other addressed server, which answers it the same way.
-    private async Task RouteRetrieval(string requester, object request, ReadOnlyMemory<byte> data, HashSet<string> addressedUsers, int priority, bool forward)
-    {
-        string myName = currentUserProvider.UserName ?? string.Empty;
-        List<Task> work = [];
-
-        if (addressedUsers.Contains(myName))
-        {
-            work.Add(AnswerRetrieval(requester, request));
-        }
-
-        if (forward)
-        {
-            work.AddRange(userMap.Keys
-                .Where(server => !string.Equals(server, myName, StringComparison.OrdinalIgnoreCase) && addressedUsers.Contains(server))
-                .Select(server => TrySend(server, data, priority, request)));
-        }
-
-        await Task.WhenAll(work);
-    }
-
-    private async Task AnswerRetrieval(string requester, object request)
-    {
-        foreach (object copy in await storage.Find(requester, request))
-        {
-            using IMemoryOwner<byte> buf = engineController.FrameSerializer.Serialize(copy);
-            await RouteFromChild(copy, buf.Memory);
-        }
-    }
-
-    private HashSet<string> GetAddressedUsers(object message)
-    {
-        HashSet<string> addressed = new(engineController.Route(message), StringComparer.OrdinalIgnoreCase);
-
-        IReadOnlyList<MessageLevel> messageLevels = engineController.MessageLevels;
-        int messageLevelRank = messageLevels.GetRank(engineController.GetMessageLevel(message));
-        if (messageLevelRank < 0) { return addressed; }
-
-        List<string> blocked = [.. addressed.Where(user => messageLevels.GetRank(engineController.GetUserMessageLevel(user)) < messageLevelRank)];
-        if (blocked.Count > 0)
-        {
-            logger.Record(LogEvents.RelayBlockedByMessageLevel, "{Subject} blocked for {Users}: {Reason}", "Relay", string.Join(", ", blocked), "message level not supported by destination");
-            addressed.ExceptWith(blocked);
-        }
-
-        return addressed;
-    }
-
-    private object? TryDeserialize(ReadOnlyMemory<byte> data, object? packet)
-    {
-        try
-        {
-            // FrameSerializer determines the type from the data itself, so bytes from an incompatible
-            // sender could describe a type other than this instance's own FrameType; treat that the
-            // same as a failed deserialize rather than let a mismatched cast downstream throw.
-            object message = engineController.FrameSerializer.Deserialize(data, packet);
-            return message.GetType() == engineController.FrameType ? message : null;
-        }
-        catch
-        {
-            return null;
-        }
-    }
-
-    private async Task TrySend(string userName, ReadOnlyMemory<byte> data, int priority, object frame)
-    {
-        if (transport is null || closedNames.ContainsKey(userName)) { return; }
-        if (connections.Get(userName) is not { } connection)
-        {
-            logger.Record(LogEvents.CannotDeliverNoConnection, "Cannot deliver to {User}: no connection is identified as them", userName);
-            return;
-        }
-
-        try { await transport.Request(connection, data, new PeerSendOptions { Priority = priority, Frame = frame }, CancellationToken.None); }
-        catch { }
+        _ = Task.Run(() => PeerFrameDispatcher.Dispatch(data, engineController, FrameReceived, remoteName, packet));
     }
 
     /// <inheritdoc />
     public async Task<bool> SendPacket(string userName, object packet, CancellationToken cancellation = default)
     {
-        if (transport is null || closedNames.ContainsKey(userName) || connections.Get(userName) is not { } connection) { return false; }
+        if (transport is null || closedNames.ContainsKey(userName) || connections.Get(userName) is not { } connection)
+        {
+            return false;
+        }
 
         try
         {
@@ -518,7 +380,28 @@ internal sealed class ServerRoutingService : IPeerService, IConnectionStatusServ
     }
 
     /// <inheritdoc />
-    public Task<bool> Send(string userName, object message, CancellationToken cancellation = default) => Task.FromResult(false);
+    public async Task<bool> Send(string userName, object frame, int priority, CancellationToken cancellation = default)
+    {
+        if (transport is null || closedNames.ContainsKey(userName))
+        {
+            return false;
+        }
+        if (connections.Get(userName) is not { } connection)
+        {
+            logger.Record(LogEvents.CannotDeliverNoConnection, "Cannot deliver to {User}: no connection is identified as them", userName);
+            return false;
+        }
+
+        try
+        {
+            using IMemoryOwner<byte> buf = engineController.FrameSerializer.Serialize(frame);
+            return await transport.Request(connection, buf.Memory, new PeerSendOptions { Priority = priority, Frame = frame }, cancellation);
+        }
+        catch
+        {
+            return false;
+        }
+    }
 
     /// <inheritdoc />
     public IReadOnlyList<PeerConnectionStatus> GetStatuses()
@@ -544,7 +427,10 @@ internal sealed class ServerRoutingService : IPeerService, IConnectionStatusServ
 
         foreach (string serverName in userMap.Keys)
         {
-            if (string.Equals(serverName, myName, StringComparison.OrdinalIgnoreCase)) { continue; }
+            if (string.Equals(serverName, myName, StringComparison.OrdinalIgnoreCase))
+            {
+                continue;
+            }
             statuses.Add(new PeerConnectionStatus
             {
                 UserName = serverName,
@@ -562,16 +448,28 @@ internal sealed class ServerRoutingService : IPeerService, IConnectionStatusServ
     /// <inheritdoc />
     public void SetClosed(PeerConnectionKind kind, string userName, bool closed)
     {
-        if (transport is null || closedNames.ContainsKey(userName) == closed) { return; }
-        if (!IsChild(userName) && !IsSiblingServer(userName)) { return; }
+        if (transport is null || closedNames.ContainsKey(userName) == closed)
+        {
+            return;
+        }
+        if (!IsChild(userName) && !IsSiblingServer(userName))
+        {
+            return;
+        }
 
         if (closed)
         {
             closedNames[userName] = true;
             foreach (string key in GetPointKeys(userName))
             {
-                if (points.TryGetValue(key, out ConnectionPoint? point)) { transport.SetClosed(point, true); }
-                if (pointMonitors.TryGetValue(key, out PeerLinkControl? monitor)) { monitor.Close(); }
+                if (points.TryGetValue(key, out ConnectionPoint? point))
+                {
+                    transport.SetClosed(point, true);
+                }
+                if (pointMonitors.TryGetValue(key, out PeerLinkControl? monitor))
+                {
+                    monitor.Close();
+                }
             }
 
             DropConnections(userName);
@@ -582,8 +480,14 @@ internal sealed class ServerRoutingService : IPeerService, IConnectionStatusServ
             closedNames.TryRemove(userName, out _);
             foreach (string key in GetPointKeys(userName))
             {
-                if (points.TryGetValue(key, out ConnectionPoint? point)) { transport.SetClosed(point, false); }
-                if (pointMonitors.TryGetValue(key, out PeerLinkControl? monitor)) { monitor.Open(); }
+                if (points.TryGetValue(key, out ConnectionPoint? point))
+                {
+                    transport.SetClosed(point, false);
+                }
+                if (pointMonitors.TryGetValue(key, out PeerLinkControl? monitor))
+                {
+                    monitor.Open();
+                }
             }
         }
 
@@ -593,13 +497,25 @@ internal sealed class ServerRoutingService : IPeerService, IConnectionStatusServ
     /// <inheritdoc />
     public void Refresh(PeerConnectionKind kind, string userName)
     {
-        if (transport is null || closedNames.ContainsKey(userName)) { return; }
-        if (!IsChild(userName) && !IsSiblingServer(userName)) { return; }
+        if (transport is null || closedNames.ContainsKey(userName))
+        {
+            return;
+        }
+        if (!IsChild(userName) && !IsSiblingServer(userName))
+        {
+            return;
+        }
 
         foreach (string key in GetPointKeys(userName))
         {
-            if (points.TryGetValue(key, out ConnectionPoint? point)) { transport.Reset(point); }
-            if (pointMonitors.TryGetValue(key, out PeerLinkControl? monitor)) { monitor.Refresh(); }
+            if (points.TryGetValue(key, out ConnectionPoint? point))
+            {
+                transport.Reset(point);
+            }
+            if (pointMonitors.TryGetValue(key, out PeerLinkControl? monitor))
+            {
+                monitor.Refresh();
+            }
         }
 
         DropConnections(userName);
@@ -607,21 +523,23 @@ internal sealed class ServerRoutingService : IPeerService, IConnectionStatusServ
 
     private void DropConnections(string userName)
     {
-        foreach (PeerConnection connection in connections.GetAll(userName)) { connection.Drop(); }
-    }
-
-    /// <inheritdoc />
-    public async Task DeliverLocal(object payload)
-    {
-        logger.Record(LogEvents.MessageDeliveredLocally, "{MessageId} delivered locally from {FromUser}", engineController.GetIdentifier(payload), engineController.GetFromUser(payload));
-        await FrameDelivered.InvokeAll(payload);
+        foreach (PeerConnection connection in connections.GetAll(userName))
+        {
+            connection.Drop();
+        }
     }
 
     /// <inheritdoc />
     public async ValueTask DisposeAsync()
     {
         // Registered as both IPeerService and IConnectionStatusService, so the container disposes it twice.
-        if (Interlocked.Exchange(ref disposed, 1) != 0) { return; }
-        if (transport is not null) { await transport.DisposeAsync(); }
+        if (Interlocked.Exchange(ref disposed, 1) != 0)
+        {
+            return;
+        }
+        if (transport is not null)
+        {
+            await transport.DisposeAsync();
+        }
     }
 }

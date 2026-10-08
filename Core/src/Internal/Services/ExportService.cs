@@ -77,7 +77,10 @@ internal sealed class ExportService : IExportService
 
     private static string FileExtension(ExportFormatDefinition? format)
     {
-        if (format is null) { return "json"; }
+        if (format is null)
+        {
+            return "json";
+        }
 
         string sanitized = new([.. format.Name.Where(char.IsLetterOrDigit)]);
         return sanitized.Length > 0 ? sanitized.ToLowerInvariant() : "dat";
@@ -95,7 +98,14 @@ internal sealed class ExportService : IExportService
 
     private static void TryDeleteFile(string path)
     {
-        try { if (File.Exists(path)) { File.Delete(path); } } catch { }
+        try
+        {
+            if (File.Exists(path))
+            {
+                File.Delete(path);
+            }
+        }
+        catch { }
     }
 
     private static ObjectId? TryParseObjectId(string id)
@@ -178,8 +188,14 @@ internal sealed class ExportService : IExportService
                     {
                         ZipArchiveEntry zipEntry = archive.CreateEntry(BuildEntryFileName(index, entryRef, format), CompressionLevel.Optimal);
                         await using Stream entryStream = await zipEntry.OpenAsync(cancellation);
-                        if (format is null) { await JsonSerializer.SerializeAsync(entryStream, data, data.GetType(), cancellationToken: cancellation); }
-                        else { await format.Serialize(data, entryStream, cancellation); }
+                        if (format is null)
+                        {
+                            await JsonSerializer.SerializeAsync(entryStream, data, data.GetType(), cancellationToken: cancellation);
+                        }
+                        else
+                        {
+                            await format.Serialize(data, entryStream, cancellation);
+                        }
                         written++;
                     }
                     index++;
@@ -228,15 +244,15 @@ internal sealed class ExportService : IExportService
     {
         MessageId = entity.MessageId,
         IsOutbound = entity.IsOutbound,
-        FromUser = engineController.GetFromUser(entity.Message),
-        Body = engineController.GetBody(entity.Message),
-        Addresses = engineController.GetAddresses(entity.Message)
-            .Select(a => new AddressRequest { UserName = a.UserName, Type = a.Type.ToString(), Information = a.Information })
-            .ToList(),
-        SentAt = engineController.GetSentAt(entity.Message),
-        IsAlert = engineController.GetIsAlert(entity.Message),
-        Priority = engineController.StoredPriority(engineController.GetMessagePriority(entity.Message)),
-        Tag = engineController.GetTag(entity.Message),
+        FromUser = entity.Message.FromUser,
+        Body = entity.Message.Body,
+        Addresses = [.. entity.Message.Addresses.Select(a => new AddressRequest { UserName = a.UserName, Type = a.Type, Information = a.Information })],
+        SentAt = entity.Message.SentAt,
+        IsAlert = entity.Message.IsAlert,
+        Priority = entity.Message.Priority,
+        Tag = entity.Message.Tag,
+        MessageLevel = entity.Message.MessageLevel,
+        MessageAspect = entity.Message.MessageAspect,
         ReceivedAt = entity.ReceivedAt,
         ReadStatus = entity.ReadStatus,
         DeliveryStatuses = [.. entity.DeliveryStatuses.Select(d => new MessageDeliveryStatus { UserName = d.UserName, Status = d.Status, AddressedVia = d.AddressedVia })]

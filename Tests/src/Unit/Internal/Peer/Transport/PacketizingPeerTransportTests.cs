@@ -84,7 +84,10 @@ public sealed class PacketizingPeerTransportTests
         DateTime deadline = DateTime.UtcNow + TimeSpan.FromSeconds(30);
         while (!condition())
         {
-            if (DateTime.UtcNow > deadline) { throw new TimeoutException("Condition was not met in time."); }
+            if (DateTime.UtcNow > deadline)
+            {
+                throw new TimeoutException("Condition was not met in time.");
+            }
             await Task.Delay(5);
         }
     }
@@ -98,7 +101,10 @@ public sealed class PacketizingPeerTransportTests
         Packetizer packetizer = new(new RawPacketEngineController(Header + 10));
         IReadOnlyList<Packet> packets = packetizer.Split(payload, 0);
         List<byte[]> bytes = [.. packets.Select(p => p.Data.Memory.ToArray())];
-        foreach (Packet packet in packets) { packet.Dispose(); }
+        foreach (Packet packet in packets)
+        {
+            packet.Dispose();
+        }
         return bytes;
     }
 
@@ -131,7 +137,10 @@ public sealed class PacketizingPeerTransportTests
         Assert.All(fx.Sends, sent => Assert.Equal(7, sent.Options!.Priority));
         using IPacketAssembler assembler = new Packetizer(new RawPacketEngineController(Header + 10)).CreateAssembler();
         AssembledPayload? complete = null;
-        foreach (Sent sent in fx.Sends) { complete = assembler.Add(sent.Data) ?? complete; }
+        foreach (Sent sent in fx.Sends)
+        {
+            complete = assembler.Add(sent.Data) ?? complete;
+        }
         using IMemoryOwner<byte> owner = Assert.IsType<AssembledPayload>(complete).Payload;
         Assert.Equal(payload, owner.Memory.ToArray());
     }
@@ -172,7 +181,10 @@ public sealed class PacketizingPeerTransportTests
         fx.Transport.Received.Listen(published.Add);
         byte[] payload = Payload(35);
 
-        foreach (byte[] packet in Packets(payload)) { fx.Received.Publish(new PeerReceivedEventArgs { Connection = connection, Payload = packet }); }
+        foreach (byte[] packet in Packets(payload))
+        {
+            fx.Received.Publish(new PeerReceivedEventArgs { Connection = connection, Payload = packet });
+        }
 
         await WaitUntil(() => published.Count == 1);
         Assert.Equal(payload, published[0].Payload.ToArray());
@@ -239,7 +251,10 @@ public sealed class PacketizingPeerTransportTests
         for (int i = 0; i < 10; i++)
         {
             manual.Complete(i);
-            if (i < 7) { await WaitUntil(() => fx.Sends.Count == Math.Min(i + 4, 10)); }
+            if (i < 7)
+            {
+                await WaitUntil(() => fx.Sends.Count == Math.Min(i + 4, 10));
+            }
         }
 
         Assert.True(await request);
@@ -267,7 +282,10 @@ public sealed class PacketizingPeerTransportTests
         for (int i = 2; i < 6; i++)
         {
             manual.Complete(i);
-            if (i < 4) { await WaitUntil(() => fx.Sends.Count == i + 3); }
+            if (i < 4)
+            {
+                await WaitUntil(() => fx.Sends.Count == i + 3);
+            }
         }
 
         Assert.True(await low);
@@ -291,7 +309,10 @@ public sealed class PacketizingPeerTransportTests
         for (int i = 0; i < 6; i++)
         {
             manual.Complete(i);
-            if (i < 5) { await WaitUntil(() => fx.Sends.Count == i + 2); }
+            if (i < 5)
+            {
+                await WaitUntil(() => fx.Sends.Count == i + 2);
+            }
         }
 
         Assert.True(await low);

@@ -16,18 +16,23 @@ public sealed class TestEngineConfiguration(bool packets = false, Action<TestFra
     {
         TestEngineBuilder typed = engine.Types<TestFrame, TestPacket, TestMessagePriority, TestLevel, TestAspect>();
         IPriorityBuilder<TestFrame, TestPacket, TestMessagePriority, TestLevel, TestAspect> priorities = typed.Priorities();
-        foreach (TestMessagePriority priority in Enum.GetValues<TestMessagePriority>()) { priorities.Priority(priority); }
+        foreach (TestMessagePriority priority in Enum.GetValues<TestMessagePriority>())
+        {
+            priorities.Priority(priority);
+        }
 
         IMessageLevelsBuilder<TestFrame, TestPacket, TestMessagePriority, TestLevel, TestAspect> levels = typed.MessageLevels();
-        foreach (TestLevel level in Enum.GetValues<TestLevel>()) { levels.Level(level); }
+        foreach (TestLevel level in Enum.GetValues<TestLevel>())
+        {
+            levels.Level(level);
+        }
 
-        TestFrameBuilder message = typed.Frames()
-            .Message<TestMessageHandler>()
-            .Retrieval<TestRetrievalHandler>()
-            .ReadReceipt<TestReadReceiptHandler>()
-            .ReceiveReceipt<TestReceiveReceiptHandler>();
+        TestFrameBuilder message = typed.Frames();
 
-        if (heartbeats) { message.Heartbeat<TestHeartbeatHandler>(); }
+        if (heartbeats)
+        {
+            message.Heartbeat<TestHeartbeatHandler>();
+        }
 
         messageExtra?.Invoke(message);
 

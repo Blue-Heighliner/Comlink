@@ -33,7 +33,7 @@ public sealed class InstallViewModelTests
     [Fact]
     public async Task Install_EmptyUserName_SetsErrorMessage()
     {
-        Mock<IServiceConnection> connMock = new();
+        Mock<IEngineConnection> connMock = new();
         InstallViewModel vm = new(connMock.Object, LoggerFactory.Create(_ => { }), new TestEngineController());
         vm.UserName = "";
 
@@ -48,7 +48,7 @@ public sealed class InstallViewModelTests
     public async Task Install_ValidName_FiresInstallSucceededWithUserInfo()
     {
         UserInfo expectedInfo = MakeUserInfo("ALPHA");
-        Mock<IServiceConnection> connMock = new();
+        Mock<IEngineConnection> connMock = new();
         connMock.Setup(c => c.InstallUser("USER1", It.IsAny<CancellationToken>())).ReturnsAsync(expectedInfo);
         InstallViewModel vm = new(connMock.Object, LoggerFactory.Create(_ => { }), new TestEngineController());
         vm.UserName = "USER1";
@@ -66,7 +66,7 @@ public sealed class InstallViewModelTests
     [Fact]
     public async Task Install_UnknownName_SetsErrorMessage()
     {
-        Mock<IServiceConnection> connMock = new();
+        Mock<IEngineConnection> connMock = new();
         connMock.Setup(c => c.InstallUser(It.IsAny<string>(), It.IsAny<CancellationToken>())).ReturnsAsync((UserInfo?)null);
         InstallViewModel vm = new(connMock.Object, LoggerFactory.Create(_ => { }), new TestEngineController());
         vm.UserName = "NOBODY";
@@ -85,7 +85,7 @@ public sealed class InstallViewModelTests
     public async Task Install_IsLoadingLifecycle()
     {
         TaskCompletionSource<UserInfo?> gate = new();
-        Mock<IServiceConnection> connMock = new();
+        Mock<IEngineConnection> connMock = new();
         connMock.Setup(c => c.InstallUser(It.IsAny<string>(), It.IsAny<CancellationToken>())).Returns(gate.Task);
         InstallViewModel vm = new(connMock.Object, LoggerFactory.Create(_ => { }), new TestEngineController());
         vm.UserName = "USER1";
@@ -102,7 +102,7 @@ public sealed class InstallViewModelTests
     [Fact]
     public void UserName_AutoUppercased()
     {
-        Mock<IServiceConnection> connMock = new();
+        Mock<IEngineConnection> connMock = new();
         InstallViewModel vm = new(connMock.Object, LoggerFactory.Create(_ => { }), new TestEngineController());
 
         vm.UserName = "user1";
@@ -115,7 +115,7 @@ public sealed class InstallViewModelTests
     public async Task Install_Failures_AreActivityLogged()
     {
         RecordingLoggerProvider provider = new();
-        Mock<IServiceConnection> connMock = new();
+        Mock<IEngineConnection> connMock = new();
         connMock.Setup(c => c.InstallUser("NOBODY", It.IsAny<CancellationToken>())).ReturnsAsync((UserInfo?)null);
         connMock.Setup(c => c.InstallUser("ALICE", It.IsAny<CancellationToken>())).ThrowsAsync(new InvalidOperationException("no certificate"));
         InstallViewModel vm = new(connMock.Object, LoggerFactory.Create(builder => builder.AddProvider(provider)), new TestEngineController());

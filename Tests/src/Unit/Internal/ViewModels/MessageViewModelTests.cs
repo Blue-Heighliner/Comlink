@@ -16,15 +16,16 @@ public sealed class MessageViewModelTests
         string messageLevel = "")
     {
         string id = messageId ?? Guid.NewGuid().ToString("N").ToUpperInvariant();
-        object message = format.CreateFrame();
-        ((TestFrame)message).MessageId = id;
-        ((TestFrame)message).Body = body;
-        format.SetFromUser(message, fromUser);
-        ((TestFrame)message).Priority = priority == 0 ? "NORMAL" : $"LEVEL{priority}";
-        ((TestFrame)message).Tag = tag;
-        ((TestFrame)message).MessageLevel = messageLevel;
-        format.SetAddresses(message, [.. (addresses ?? [new AddressData { UserName = "DEST", Type = "To" }])
-            .Select(a => new MessageAddress { UserName = a.UserName, Type = a.Type.ParseAddressType(), Information = a.Information })]);
+        MessageData message = new()
+        {
+            Id = id,
+            Body = body,
+            FromUser = fromUser,
+            Priority = priority,
+            Tag = tag,
+            MessageLevel = Enum.TryParse(messageLevel, ignoreCase: true, out TestLevel level) ? (int)level : null,
+            Addresses = [.. addresses ?? [new AddressData { UserName = "DEST", Type = "To" }]]
+        };
         return new MessageEntity
         {
             MessageId = id,
@@ -75,17 +76,10 @@ public sealed class MessageViewModelTests
     public void Ctor_OverriddenAddressTypeLabel_IsReflectedUppercased()
     {
         Mock<IEngineController> mock = new(MockBehavior.Loose) { CallBase = false };
-        mock.Setup(e => e.GetBody(It.IsAny<object>())).Returns(format.GetBody);
-        mock.Setup(e => e.GetFromUser(It.IsAny<object>())).Returns(format.GetFromUser);
-        mock.Setup(e => e.GetIsAlert(It.IsAny<object>())).Returns(format.GetIsAlert);
-        mock.Setup(e => e.GetPriority(It.IsAny<object>())).Returns(format.GetPriority);
-        mock.Setup(e => e.GetTag(It.IsAny<object>())).Returns(format.GetTag);
-        mock.Setup(e => e.GetMessageLevel(It.IsAny<object>())).Returns(format.GetMessageLevel);
         mock.Setup(e => e.Priorities).Returns(format.Priorities);
         mock.Setup(e => e.TagsEnabled).Returns(format.TagsEnabled);
         mock.Setup(e => e.TagLabel).Returns(format.TagLabel);
         mock.Setup(e => e.MessageLevels).Returns(format.MessageLevels);
-        mock.Setup(e => e.GetAddresses(It.IsAny<object>())).Returns(format.GetAddresses);
         mock.Setup(e => e.AddressTypes).Returns([
             new AddressTypeOption { Type = AddressType.To, Label = "To" },
             new AddressTypeOption { Type = AddressType.Cc, Label = "Cc" },
@@ -297,7 +291,7 @@ public sealed class MessageViewModelTests
     public void Ctor_AlertMessage_IsAlertIsTrue()
     {
         MessageEntity entity = MakeEntity();
-        ((TestFrame)entity.Message).IsAlert = true;
+        entity.Message.IsAlert = true;
 
         MessageViewModel vm = new(entity, format);
 
@@ -334,7 +328,7 @@ public sealed class MessageViewModelTests
     public void Ctor_RecognizedMessageLevel_ExposesNameAndColor()
     {
         Mock<TestEngineController> controller = new() { CallBase = true };
-        controller.Setup(c => c.MessageLevels).Returns([new MessageLevel { Name = "RESTRICTED", Color = "#C62828" }]);
+        controller.Setup(c => c.MessageLevels).Returns([new MessageLevel { Name = "RESTRICTED", Key = TestLevel.Restricted, Color = "#C62828" }]);
         MessageEntity entity = MakeEntity(messageLevel: "RESTRICTED");
 
         MessageViewModel vm = new(entity, controller.Object);

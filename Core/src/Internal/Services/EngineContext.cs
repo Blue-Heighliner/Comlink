@@ -15,30 +15,31 @@ internal sealed class EngineContext : IEngineContext
     /// <param name="currentUser">This instance's own installed user.</param>
     /// <param name="userNames">Every known user name in the messaging system.</param>
     /// <param name="getUserInfo">Returns everything known about a user, including their role and direct group memberships, for each <see cref="Users"/> entry.</param>
-    /// <param name="isConnected">Answers <see cref="IsConnected"/> for a user name.</param>
-    public EngineContext(UserInfo currentUser, IReadOnlyList<string> userNames, Func<string, UserInfo> getUserInfo, Func<string, bool> isConnected)
+    /// <param name="isConnected">Says whether a user name is currently reachable, which decides <see cref="ConnectedUsers"/>.</param>
+    /// <param name="getGroupMembers">Answers <see cref="GetGroupMembers"/> for a group name.</param>
+    public EngineContext(UserInfo currentUser, IReadOnlyList<string> userNames, Func<string, UserInfo> getUserInfo, Func<string, bool> isConnected, Func<string, IReadOnlyList<string>> getGroupMembers)
     {
+        this.getGroupMembers = getGroupMembers;
         CurrentUser = currentUser;
-        this.userNames = userNames;
-        this.getUserInfo = getUserInfo;
-        this.isConnected = isConnected;
+        users = new(() => userNames.ToDictionary(name => name, getUserInfo));
+        connectedUsers = new(() => Users.Where(user => isConnected(user.Key)).ToDictionary(user => user.Key, user => user.Value));
     }
 
-    private readonly IReadOnlyList<string> userNames;
-    private readonly Func<string, UserInfo> getUserInfo;
-    private readonly Func<string, bool> isConnected;
+    private readonly Lazy<Dictionary<string, UserInfo>> users;
+    private readonly Lazy<Dictionary<string, UserInfo>> connectedUsers;
+    private readonly Func<string, IReadOnlyList<string>> getGroupMembers;
 
     /// <inheritdoc />
     public UserInfo CurrentUser { get; }
 
     /// <inheritdoc />
-    public IEnumerable<UserInfo> Users => userNames.Select(getUserInfo);
+    public IReadOnlyDictionary<string, UserInfo> Users => users.Value;
 
     /// <inheritdoc />
-    public IEnumerable<UserInfo> ConnectedUsers => Users.Where(user => IsConnected(user.Name));
+    public IReadOnlyDictionary<string, UserInfo> ConnectedUsers => connectedUsers.Value;
 
     /// <inheritdoc />
-    public bool IsConnected(string userName) => isConnected(userName);
+    public IReadOnlyList<string> GetGroupMembers(string groupName) => getGroupMembers(groupName);
 }
 
 /// <inheritdoc cref="IEngineContextFactory" />
@@ -53,5 +54,6 @@ internal sealed class EngineContextFactory(IServiceProvider services, IEngineCon
             userService.GetCurrentUserInfo() ?? throw new InvalidOperationException("A processor ran with no installed user, which should never happen: processors only run once one is installed."),
             engineController.Users,
             engineController.GetUserInfo,
-            userName => services.GetRequiredService<IPeerService>().IsUserConnected(userName));
+            userName => services.GetRequiredService<IPeerService>().IsUserConnected(userName),
+            engineController.GetGroupMembers);
 }

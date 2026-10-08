@@ -38,7 +38,10 @@ internal sealed class ActivityLogger : ILogger
     public void Log<TState>(LogLevel logLevel, EventId eventId, TState state, Exception? exception, Func<TState, Exception?, string> formatter)
     {
         string category = LogEvents.CategoryOf(eventId) ?? categoryName;
-        if (!string.Equals(category, LogCategories.Activity, StringComparison.OrdinalIgnoreCase)) { return; }
+        if (!string.Equals(category, LogCategories.Activity, StringComparison.OrdinalIgnoreCase))
+        {
+            return;
+        }
         _ = Write(formatter(state, exception), eventId.Id);
     }
 

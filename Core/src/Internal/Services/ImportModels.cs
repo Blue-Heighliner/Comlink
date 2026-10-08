@@ -41,6 +41,6 @@ internal sealed record ImportSummary
     public required int Skipped { get; init; }
     /// <summary>Gets the number of existing drafts/notes overwritten with imported content.</summary>
     public required int Overwritten { get; init; }
-    /// <summary>Gets the staged sends a custom format's reader added via <see cref="IImportFormatContext.AddStagedSend"/>; always empty for the built-in package format.</summary>
+    /// <summary>Gets the staged sends a custom format's reader added via <see cref="IImportContext.AddStagedSend"/>; always empty for the built-in package format.</summary>
     public IReadOnlyList<StagedSendData> StagedSends { get; init; } = [];
 }

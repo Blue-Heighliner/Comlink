@@ -61,19 +61,28 @@ internal sealed class LoopbackPeerTransport : IPeerTransport
     /// <inheritdoc />
     public void SetClosed(ConnectionPoint point, bool closed)
     {
-        if (closed && outbound.TryRemove(point.Key, out PeerConnection? connection)) { connection.Drop(); }
+        if (closed && outbound.TryRemove(point.Key, out PeerConnection? connection))
+        {
+            connection.Drop();
+        }
     }
 
     /// <inheritdoc />
     public void Reset(ConnectionPoint point)
     {
-        if (outbound.TryRemove(point.Key, out PeerConnection? connection)) { connection.Drop(); }
+        if (outbound.TryRemove(point.Key, out PeerConnection? connection))
+        {
+            connection.Drop();
+        }
     }
 
     /// <inheritdoc />
     public Task<PeerConnection> Connect(ConnectionPoint point, CancellationToken cancellation = default)
     {
-        if (outbound.TryGetValue(point.Key, out PeerConnection? existing)) { return Task.FromResult(existing); }
+        if (outbound.TryGetValue(point.Key, out PeerConnection? existing))
+        {
+            return Task.FromResult(existing);
+        }
 
         LoopbackPeerTransport far = remote!;
         PeerConnection? local = null;
@@ -101,13 +110,22 @@ internal sealed class LoopbackPeerTransport : IPeerTransport
     /// <inheritdoc />
     public async Task<bool> Request(PeerConnection connection, ReadOnlyMemory<byte> data, PeerSendOptions? options = null, CancellationToken cancellation = default)
     {
-        if (!peers.TryGetValue(connection, out PeerConnection? counterpart)) { throw new IOException("The connection is gone"); }
+        if (!peers.TryGetValue(connection, out PeerConnection? counterpart))
+        {
+            throw new IOException("The connection is gone");
+        }
 
         options?.Transmitted?.Invoke();
-        if (IsSilent) { return true; }
+        if (IsSilent)
+        {
+            return true;
+        }
 
         byte[] copy = data.ToArray();
-        if (DelayFor?.Invoke(copy) is { } delay && delay > TimeSpan.Zero) { await Task.Delay(delay, cancellation); }
+        if (DelayFor?.Invoke(copy) is { } delay && delay > TimeSpan.Zero)
+        {
+            await Task.Delay(delay, cancellation);
+        }
         await Task.Run(() =>
         {
             remote!.Delivered.Enqueue(copy);
@@ -121,11 +139,17 @@ internal sealed class LoopbackPeerTransport : IPeerTransport
 
     private void Break(PeerConnection local, PeerConnection counterpart)
     {
-        if (!peers.TryRemove(local, out _)) { return; }
+        if (!peers.TryRemove(local, out _))
+        {
+            return;
+        }
 
         LoopbackPeerTransport far = remote!;
         far.peers.TryRemove(counterpart, out _);
-        if (local.Point is { } point) { outbound.TryRemove(new KeyValuePair<string, PeerConnection>(point.Key, local)); }
+        if (local.Point is { } point)
+        {
+            outbound.TryRemove(new KeyValuePair<string, PeerConnection>(point.Key, local));
+        }
         disconnected.Publish(new PeerConnectionEventArgs { Connection = local });
         far.disconnected.Publish(new PeerConnectionEventArgs { Connection = counterpart });
     }

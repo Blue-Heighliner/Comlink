@@ -14,7 +14,7 @@ internal static class LogEvents
     /// <summary>The role's peer service cannot be built, for example because a certificate file is missing.</summary>
     public static EventId NetworkingCouldNotStart { get; } = Define(2, nameof(NetworkingCouldNotStart), LogCategories.Error);
 
-    /// <summary>The network configuration file is invalid for the role: a client or relay has no parent (at start or after a reload), or a server is missing from its own server map.</summary>
+    /// <summary>The network configuration file is invalid for the role: a client has no parent (at start or after a reload), or a server is missing from its own server map.</summary>
     public static EventId InvalidConfigurationFile { get; } = Define(3, nameof(InvalidConfigurationFile), LogCategories.Error);
 
     /// <summary>The local interface listener cannot be built, for example because a certificate file is missing.</summary>
@@ -22,12 +22,6 @@ internal static class LogEvents
 
     /// <summary>A payload is too large for the connection it is sent over, whether MSMT, the packetizer or an HDLC frame.</summary>
     public static EventId PayloadTooLarge { get; } = Define(11, nameof(PayloadTooLarge), LogCategories.Error);
-
-    /// <summary>A message received from a peer, a server, a relay, the interface or an external system is invalid and is dropped.</summary>
-    public static EventId InvalidMessage { get; } = Define(14, nameof(InvalidMessage), LogCategories.Error);
-
-    /// <summary>Routing, forwarding or relaying a message throws.</summary>
-    public static EventId RouteFailed { get; } = Define(19, nameof(RouteFailed), LogCategories.Error);
 
     /// <summary>A handler of a user connecting or disconnecting throws.</summary>
     public static EventId ConnectionEventHandlerFailed { get; } = Define(22, nameof(ConnectionEventHandlerFailed), LogCategories.Error);
@@ -62,14 +56,8 @@ internal static class LogEvents
     /// <summary>Sending a print job to the printer throws.</summary>
     public static EventId PrintFailed { get; } = Define(34, nameof(PrintFailed), LogCategories.Error);
 
-    /// <summary>An auto forward controller's filter or its forwarding throws.</summary>
-    public static EventId AutoForwardFailed { get; } = Define(35, nameof(AutoForwardFailed), LogCategories.Error);
-
     /// <summary>A method of the network processor throws.</summary>
     public static EventId NetworkProcessorFailed { get; } = Define(37, nameof(NetworkProcessorFailed), LogCategories.Error);
-
-    /// <summary>A frame sent through a processor's context fails to route.</summary>
-    public static EventId ProcessorSendFailed { get; } = Define(38, nameof(ProcessorSendFailed), LogCategories.Error);
 
     /// <summary>A reload requested by the user fails because the file cannot be read or parsed.</summary>
     public static EventId NetworkReloadFailed { get; } = Define(39, nameof(NetworkReloadFailed), LogCategories.Error);
@@ -77,7 +65,7 @@ internal static class LogEvents
     /// <summary>An external system's run loop throws.</summary>
     public static EventId ExternalSystemStoppedUnexpectedly { get; } = Define(40, nameof(ExternalSystemStoppedUnexpectedly), LogCategories.Error);
 
-    /// <summary>A relay or server gets a connection from a user it does not know.</summary>
+    /// <summary>A server gets a connection from a user it does not know.</summary>
     public static EventId RejectedConnection { get; } = Define(41, nameof(RejectedConnection), LogCategories.App);
 
     /// <summary>An IP connection cannot be identified or fails its initial exchange.</summary>
@@ -95,16 +83,7 @@ internal static class LogEvents
     /// <summary>A serial link drops, cannot be opened or reports an error.</summary>
     public static EventId SerialLinkProblem { get; } = Define(47, nameof(SerialLinkProblem), LogCategories.App);
 
-    /// <summary>A node that is not a storage server receives a retrieval request.</summary>
-    public static EventId RetrievalIgnored { get; } = Define(50, nameof(RetrievalIgnored), LogCategories.App);
-
-    /// <summary>A send or a relay leaves out recipients whose message level is too low.</summary>
-    public static EventId BlockedByMessageLevel { get; } = Define(51, nameof(BlockedByMessageLevel), LogCategories.Activity);
-
-    /// <summary>A relay has no connection to its server to forward over.</summary>
-    public static EventId CannotForwardServerUnreachable { get; } = Define(53, nameof(CannotForwardServerUnreachable), LogCategories.App);
-
-    /// <summary>A relay or server has no live connection to a recipient.</summary>
+    /// <summary>A server has no live connection to a recipient.</summary>
     public static EventId CannotDeliverNoConnection { get; } = Define(54, nameof(CannotDeliverNoConnection), LogCategories.App);
 
     /// <summary>An install on the install screen is refused: the name is not a user of the network, or the certificate is missing, not issued to them or not signed by the authority.</summary>
@@ -128,7 +107,7 @@ internal static class LogEvents
     /// <summary>The host begins shutting down, so the application is exiting.</summary>
     public static EventId AppExited { get; } = Define(67, nameof(AppExited), LogCategories.Activity);
 
-    /// <summary>A client, relay or server connection to its parent, a child or a sibling server comes up or goes down.</summary>
+    /// <summary>A client or server connection to its parent, a child or a sibling server comes up or goes down.</summary>
     public static EventId ConnectionChanged { get; } = Define(68, nameof(ConnectionChanged), LogCategories.Activity);
 
     /// <summary>The network indicator goes online or offline.</summary>
@@ -149,20 +128,8 @@ internal static class LogEvents
     /// <summary>A message arrives from a peer.</summary>
     public static EventId MessageReceived { get; } = Define(76, nameof(MessageReceived), LogCategories.Activity);
 
-    /// <summary>A client or server hands a message to the local node.</summary>
-    public static EventId MessageDeliveredLocally { get; } = Define(77, nameof(MessageDeliveredLocally), LogCategories.App);
-
-    /// <summary>A read or receive receipt arrives.</summary>
-    public static EventId ReceiptReceived { get; } = Define(78, nameof(ReceiptReceived), LogCategories.Activity);
-
     /// <summary>A message is about to be sent to its recipients.</summary>
     public static EventId MessageSending { get; } = Define(80, nameof(MessageSending), LogCategories.Activity);
-
-    /// <summary>A send to a recipient succeeded.</summary>
-    public static EventId MessageDelivered { get; } = Define(81, nameof(MessageDelivered), LogCategories.Activity);
-
-    /// <summary>A send to a recipient failed.</summary>
-    public static EventId MessageDeliveryFailed { get; } = Define(82, nameof(MessageDeliveryFailed), LogCategories.Activity);
 
     /// <summary>The delivery status of a message to a recipient changes.</summary>
     public static EventId DeliveryStatusChanged { get; } = Define(83, nameof(DeliveryStatusChanged), LogCategories.Activity);
@@ -194,9 +161,6 @@ internal static class LogEvents
     /// <summary>The local interface listener cannot start; the activity log says so in general terms.</summary>
     public static EventId InterfaceNotWorking { get; } = Define(95, nameof(InterfaceNotWorking), LogCategories.Activity);
 
-    /// <summary>A received message is invalid and dropped; the activity log says so without the reason.</summary>
-    public static EventId MessageDropped { get; } = Define(96, nameof(MessageDropped), LogCategories.Activity);
-
     /// <summary>Sending a draft or a staged message fails; the activity log says so without the cause.</summary>
     public static EventId MessageNotSent { get; } = Define(97, nameof(MessageNotSent), LogCategories.Activity);
 
@@ -224,20 +188,14 @@ internal static class LogEvents
     /// <summary>A background service ends unexpectedly; the activity log says so in general terms.</summary>
     public static EventId ServiceStopped { get; } = Define(105, nameof(ServiceStopped), LogCategories.Activity);
 
-    /// <summary>An auto forward controller fails on a message; the activity log says so without the cause.</summary>
-    public static EventId AutoForwardNotDone { get; } = Define(106, nameof(AutoForwardNotDone), LogCategories.Activity);
-
     /// <summary>An external system's run loop throws; the activity log says so without the cause.</summary>
     public static EventId ExternalSystemStopped { get; } = Define(107, nameof(ExternalSystemStopped), LogCategories.Activity);
 
     /// <summary>An external system cannot connect or cannot send a message; the activity log says so without the cause.</summary>
     public static EventId ExternalSystemProblem { get; } = Define(108, nameof(ExternalSystemProblem), LogCategories.Activity);
 
-    /// <summary>A server or relay connection to a parent, a child or a sibling server comes up or goes down.</summary>
+    /// <summary>A server connection to a parent, a child or a sibling server comes up or goes down.</summary>
     public static EventId PeerConnectionChanged { get; } = Define(109, nameof(PeerConnectionChanged), LogCategories.App);
-
-    /// <summary>A server leaves out recipients whose message level is too low when relaying.</summary>
-    public static EventId RelayBlockedByMessageLevel { get; } = Define(110, nameof(RelayBlockedByMessageLevel), LogCategories.App);
 
     /// <summary>A frame is handed to the connection, traced as its serialized bytes with the user it goes to.</summary>
     public static EventId FrameSent { get; } = Define(111, nameof(FrameSent), LogCategories.Frames);

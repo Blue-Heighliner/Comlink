@@ -58,15 +58,27 @@ internal sealed class DeleteConfirmation(Action<bool> changed, TimeSpan? window 
         lock (gate)
         {
             expired = ReferenceEquals(timer, source);
-            if (expired) { timer = null; }
+            if (expired)
+            {
+                timer = null;
+            }
         }
 
-        if (expired) { Notify(false); }
+        if (expired)
+        {
+            Notify(false);
+        }
     }
 
     private void Notify(bool pending)
     {
-        if (Dispatcher.UIThread.CheckAccess()) { changed(pending); }
-        else { Dispatcher.UIThread.Post(() => changed(pending)); }
+        if (Dispatcher.UIThread.CheckAccess())
+        {
+            changed(pending);
+        }
+        else
+        {
+            Dispatcher.UIThread.Post(() => changed(pending));
+        }
     }
 }

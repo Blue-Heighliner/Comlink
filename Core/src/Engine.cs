@@ -23,7 +23,7 @@ public static class Engine
     /// in each.
     /// </typeparam>
     /// <param name="args">Command-line arguments passed from the host entry point.</param>
-    /// <param name="configureServices">Registers the host's own services: the ones <typeparamref name="TConfiguration"/> depends on, and any others the host wants in the running engine (for example a hosted service that uses <see cref="IServiceConnection"/>).</param>
+    /// <param name="configureServices">Registers the host's own services: the ones <typeparamref name="TConfiguration"/> depends on, and any others the host wants in the running engine (for example a hosted service that uses <see cref="IServiceConnection{TPriority, TLevel, TAspect}"/>).</param>
     /// <exception cref="InvalidOperationException"><typeparamref name="TConfiguration"/> cannot be constructed, or is incomplete or contradicts itself.</exception>
     public static async Task Start<TConfiguration>(string[] args, Action<IServiceCollection>? configureServices = null) where TConfiguration : class, IEngineConfiguration
     {

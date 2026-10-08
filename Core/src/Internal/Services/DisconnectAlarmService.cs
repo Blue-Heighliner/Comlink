@@ -40,8 +40,14 @@ internal sealed class DisconnectAlarmService(IPeerService peerService, IEngineCo
         lock (gate)
         {
             dropped.Add(userName);
-            if (timer is null) { timer = new Timer(_ => Silence(), null, duration, Timeout.InfiniteTimeSpan); }
-            else { timer.Change(duration, Timeout.InfiniteTimeSpan); }
+            if (timer is null)
+            {
+                timer = new Timer(_ => Silence(), null, duration, Timeout.InfiniteTimeSpan);
+            }
+            else
+            {
+                timer.Change(duration, Timeout.InfiniteTimeSpan);
+            }
         }
 
         player.Play();
@@ -53,7 +59,10 @@ internal sealed class DisconnectAlarmService(IPeerService peerService, IEngineCo
         bool allBack;
         lock (gate) { allBack = dropped.Remove(userName) && dropped.Count == 0; }
 
-        if (allBack) { Silence(); }
+        if (allBack)
+        {
+            Silence();
+        }
         return Task.CompletedTask;
     }
 

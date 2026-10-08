@@ -40,47 +40,10 @@ internal sealed class ConfiguredEngineController : IEngineController
     public int PacketSize => fallback.PacketSize;
     /// <inheritdoc />
     public int PacketWindow => fallback.PacketWindow;
-    /// <inheritdoc />
-    public object CreateMessage(MessageContent context) => fallback.CreateMessage(context);
-
-    /// <inheritdoc />
-    public object CreateReadReceipt(string messageId, string to) => fallback.CreateReadReceipt(messageId, to);
-
-    /// <inheritdoc />
-    public object CreateReceiveReceipt(string messageId, string to) => fallback.CreateReceiveReceipt(messageId, to);
-
-    /// <inheritdoc />
-    public object CreateRetrieval(RetrievalCriteria criteria, string server) => fallback.CreateRetrieval(criteria, server);
-    /// <inheritdoc />
-    public IReadOnlyList<string> Route(object frame) => fallback.Route(frame);
 
     /// <inheritdoc />
     public object CreateFrame() => fallback.CreateFrame();
-    /// <inheritdoc />
-    public string GetMessageId(object message) => fallback.GetMessageId(message);
-    /// <inheritdoc />
-    public void SetMessageId(object message, string id) => fallback.SetMessageId(message, id);
-    /// <inheritdoc />
-    public string GetFromUser(object frame) => fallback.GetFromUser(frame);
-    /// <inheritdoc />
-    public void SetFromUser(object frame, string value) => fallback.SetFromUser(frame, value);
-    /// <inheritdoc />
-    public string GetBody(object frame) => fallback.GetBody(frame);
-    /// <inheritdoc />
-    public List<MessageAddress> GetAddresses(object frame) => fallback.GetAddresses(frame);
-    /// <inheritdoc />
-    public void SetAddresses(object frame, List<MessageAddress> value) => fallback.SetAddresses(frame, value);
-    /// <inheritdoc />
-    public DateTime GetSentAt(object frame) => fallback.GetSentAt(frame);
-    /// <inheritdoc />
-    public string GetReadReceiptMessageId(object frame) => fallback.GetReadReceiptMessageId(frame);
-    /// <inheritdoc />
-    public bool IsReadReceipt(object frame) => fallback.IsReadReceipt(frame);
-    /// <inheritdoc />
-    public string GetReceiveReceiptMessageId(object frame) => fallback.GetReceiveReceiptMessageId(frame);
 
-    /// <inheritdoc />
-    public bool IsReceiveReceipt(object frame) => fallback.IsReceiveReceipt(frame);
     /// <inheritdoc />
     public bool HeartbeatsEnabled => fallback.HeartbeatsEnabled;
     /// <inheritdoc />
@@ -101,18 +64,6 @@ internal sealed class ConfiguredEngineController : IEngineController
     public bool IsHeartbeat(object frame) => fallback.IsHeartbeat(frame);
 
     /// <inheritdoc />
-    public bool IsRetrieval(object frame) => fallback.IsRetrieval(frame);
-    /// <inheritdoc />
-    public RetrievalCriteria GetRetrieval(object frame) => fallback.GetRetrieval(frame);
-    /// <inheritdoc />
-    public bool IsMessage(object frame) => fallback.IsMessage(frame);
-    /// <inheritdoc />
-    public bool GetIsAlert(object frame) => fallback.GetIsAlert(frame);
-    /// <inheritdoc />
-    public int GetPriority(object frame) => fallback.GetPriority(frame);
-    /// <inheritdoc />
-    public string NextId(string? previous) => fallback.NextId(previous);
-    /// <inheritdoc />
     public int LowestPriority => fallback.LowestPriority;
     /// <inheritdoc />
     public int HighestPriority => fallback.HighestPriority;
@@ -120,10 +71,6 @@ internal sealed class ConfiguredEngineController : IEngineController
     public Enum ResolvePriority(Enum? priority) => fallback.ResolvePriority(priority);
     /// <inheritdoc />
     public Enum RequirePriority(Enum? priority) => fallback.RequirePriority(priority);
-    /// <inheritdoc />
-    public bool ComputeIsAlert(string body, Enum? priority, string tag, string messageLevel, IReadOnlyList<AddressRequest> addresses) => fallback.ComputeIsAlert(body, priority, tag, messageLevel, addresses);
-    /// <inheritdoc />
-    public string? GetUnconfiguredLevelReason(object message) => fallback.GetUnconfiguredLevelReason(message);
     /// <inheritdoc />
     public void Validate() => fallback.Validate();
     /// <inheritdoc />
@@ -133,13 +80,9 @@ internal sealed class ConfiguredEngineController : IEngineController
     /// <inheritdoc />
     public string NameOf(Enum priority) => fallback.NameOf(priority);
     /// <inheritdoc />
-    public Enum GetMessagePriority(object message) => fallback.GetMessagePriority(message);
+    public int HeartbeatPriority => fallback.HeartbeatPriority;
     /// <inheritdoc />
-    public string GetTag(object frame) => fallback.GetTag(frame);
-    /// <inheritdoc />
-    public string GetMessageLevel(object frame) => fallback.GetMessageLevel(frame);
-    /// <inheritdoc />
-    public Enum? GetMessageLevelKey(object frame) => fallback.GetMessageLevelKey(frame);
+    public int SendPriority(Enum? priority) => fallback.SendPriority(priority);
     /// <inheritdoc />
     public string GetMessageLevelName(Enum? level) => fallback.GetMessageLevelName(level);
     /// <inheritdoc />
@@ -196,8 +139,6 @@ internal sealed class ConfiguredEngineController : IEngineController
     /// <inheritdoc />
     public IReadOnlyList<MessageAspect> MessageAspects => fallback.MessageAspects;
     /// <inheritdoc />
-    public string GetMessageAspect(object frame) => fallback.GetMessageAspect(frame);
-    /// <inheritdoc />
     public string GetMessageAspectName(Enum? aspect) => fallback.GetMessageAspectName(aspect);
     /// <inheritdoc />
     public string UserLabel => fallback.UserLabel;
@@ -214,6 +155,8 @@ internal sealed class ConfiguredEngineController : IEngineController
     public IReadOnlyList<string> Users => fallback.Users;
     /// <inheritdoc />
     public IReadOnlyDictionary<string, IReadOnlyList<string>> UserGroups => fallback.UserGroups;
+    /// <inheritdoc />
+    public IReadOnlyList<string> GetGroupMembers(string groupName) => fallback.GetGroupMembers(groupName);
 
     /// <inheritdoc />
     public UserRole Role => fallback.Role;
@@ -244,10 +187,6 @@ internal sealed class ConfiguredEngineController : IEngineController
     /// <inheritdoc />
     public TimeSpan DisconnectAlarmDuration => fallback.DisconnectAlarmDuration;
     /// <inheritdoc />
-    public IReadOnlyList<string> AlertQuickReadKeys => fallback.AlertQuickReadKeys;
-    /// <inheritdoc />
-    public bool AcceptAlert(object message) => fallback.AcceptAlert(message);
-    /// <inheritdoc />
     public LineWidthRange? DraftLineWidth => fallback.DraftLineWidth;
     /// <inheritdoc />
     public TagRules DraftTagRules => fallback.DraftTagRules;
@@ -255,6 +194,10 @@ internal sealed class ConfiguredEngineController : IEngineController
     public DraftDefaults DraftDefaults => fallback.DraftDefaults;
     /// <inheritdoc />
     public string? GetDraftHeader(DraftContent draft) => fallback.GetDraftHeader(draft);
+    /// <inheritdoc />
+    public bool IsAlert(DraftContent draft) => fallback.IsAlert(draft);
+    /// <inheritdoc />
+    public string NextMessageId(string? previous) => fallback.NextMessageId(previous);
 
     /// <inheritdoc />
     public IReadOnlyList<MessagePriorityOption> Priorities => fallback.Priorities;
@@ -274,7 +217,7 @@ internal sealed class ConfiguredEngineController : IEngineController
     /// <inheritdoc />
     public bool PrintReceivedDefaultEnabled => fallback.PrintReceivedDefaultEnabled;
     /// <inheritdoc />
-    public int GetPrintCount(object frame) => fallback.GetPrintCount(frame);
+    public int GetPrintCount(Message message) => fallback.GetPrintCount(message);
 
     /// <inheritdoc />
     public bool CanDelete(FolderType folderType) => fallback.CanDelete(folderType);
@@ -305,7 +248,10 @@ internal sealed class ConfiguredEngineController : IEngineController
 
     private MsmtSessionPeerOptions ApplyMsmt(MsmtSessionPeerOptions options)
     {
-        if (Current?.Msmt is not { } overrides) { return options; }
+        if (Current?.Msmt is not { } overrides)
+        {
+            return options;
+        }
 
         MsmtConnectionOptions merged = new MsmtConnectionOptions
         {
@@ -353,7 +299,7 @@ internal sealed class ConfiguredEngineController : IEngineController
     /// <inheritdoc />
     public IReadOnlyList<string> StorageServers => fallback.StorageServers;
     /// <inheritdoc />
-    public IReadOnlyList<AutoForwardControllerDefinition> AutoForwardControllers => fallback.AutoForwardControllers;
+    public IReadOnlyList<AutoForwarderDefinition> AutoForwarders => fallback.AutoForwarders;
 
     /// <inheritdoc />
     public string? FindUserName(string name) => fallback.FindUserName(name);

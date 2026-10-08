@@ -58,7 +58,10 @@ internal sealed partial class ConnectionRowViewModel : ObservableObject
     [RelayCommand(CanExecute = nameof(CanRefresh))]
     private void Refresh()
     {
-        if (CanRefresh()) { refresh?.Invoke(); }
+        if (CanRefresh())
+        {
+            refresh?.Invoke();
+        }
     }
 
     private bool CanRefresh() => !IsClosed;

@@ -30,7 +30,6 @@ internal sealed class ClientPeerService : IPeerService, IConnectionStatusService
     private readonly PointMaintenance points;
     private readonly Lock reconfigureLock = new();
 
-    private readonly ConcurrentDictionary<object, Task<bool>> inFlightSends = new(ReferenceEqualityComparer.Instance);
 
     private IPeerTransport? transport;
     private readonly ParentLinkSet parentLinks = new();
@@ -46,19 +45,8 @@ internal sealed class ClientPeerService : IPeerService, IConnectionStatusService
     private int disposed;
 
     /// <inheritdoc />
-    public event Func<object, Task>? FrameDelivered;
+    public event Func<ReceivedFrame, Task>? FrameReceived;
 
-    /// <inheritdoc />
-    public event Func<string, string, Task>? ReadReceiptReceived;
-
-    /// <inheritdoc />
-    public event Func<string, string, Task>? ReceiveReceiptReceived;
-
-#pragma warning disable CS0067 // No per-message delivery status is tracked across the client/server hierarchy.
-    /// <inheritdoc />
-    public event Func<string, string, DestinationStatus, Task>? DeliveryStatusChanged;
-
-#pragma warning restore CS0067
     /// <inheritdoc />
     public event Action? StatusesChanged;
     /// <inheritdoc />
@@ -114,19 +102,23 @@ internal sealed class ClientPeerService : IPeerService, IConnectionStatusService
     }
 
     /// <inheritdoc />
-    public Task<bool> Send(string userName, object message, CancellationToken cancellation = default)
+    public async Task<bool> Send(string userName, object frame, int priority, CancellationToken cancellation = default)
     {
-        // Route()/MessageRoutingService calls Send once per resolved recipient, even for a single group
-        // address expanding to several users; since every send here goes to the one shared server
-        // regardless of userName, in-flight sends are coalesced by frame instance to avoid transmitting the
-        // same message multiple times.
-        return inFlightSends.GetOrAdd(message, _ => SendOnceAndCleanup(message, cancellation));
-    }
+        PeerConnection? connection = serverConnection;
+        if (transport is null || connection is null || isClosed || !string.Equals(userName, serverName, StringComparison.OrdinalIgnoreCase))
+        {
+            return false;
+        }
 
-    private async Task<bool> SendOnceAndCleanup(object message, CancellationToken cancellation)
-    {
-        try { return await SendOnce(message, cancellation); }
-        finally { inFlightSends.TryRemove(message, out _); }
+        try
+        {
+            using IMemoryOwner<byte> buf = engineController.FrameSerializer.Serialize(frame);
+            return await transport.Request(connection, buf.Memory, new PeerSendOptions { Priority = priority, Frame = frame }, cancellation);
+        }
+        catch
+        {
+            return false;
+        }
     }
 
     /// <inheritdoc />
@@ -151,7 +143,10 @@ internal sealed class ClientPeerService : IPeerService, IConnectionStatusService
     {
         lock (reconfigureLock)
         {
-            if (transport is null || lifetime == default) { return; }
+            if (transport is null || lifetime == default)
+            {
+                return;
+            }
 
             IReadOnlyList<ConnectionPoint> wanted = engineController.ParentPoints;
             if (wanted.Count == 0 && engineController.ParentUser is null)
@@ -167,7 +162,10 @@ internal sealed class ClientPeerService : IPeerService, IConnectionStatusService
             }
 
             (IReadOnlyList<ConnectionPoint> removed, IReadOnlyList<(ConnectionPoint Point, PeerLinkControl Control)> started) = points.Sync(transport, wanted, lifetime, OnHeartbeatAcknowledged, parentLinks.Track);
-            if (removed.Count == 0 && started.Count == 0) { return; }
+            if (removed.Count == 0 && started.Count == 0)
+            {
+                return;
+            }
 
             if (removed.Count > 0)
             {
@@ -186,7 +184,10 @@ internal sealed class ClientPeerService : IPeerService, IConnectionStatusService
     /// <inheritdoc />
     public void SetClosed(PeerConnectionKind kind, string userName, bool closed)
     {
-        if (kind != PeerConnectionKind.Server || transport is null || isClosed == closed) { return; }
+        if (kind is not PeerConnectionKind.Server || transport is null || isClosed == closed)
+        {
+            return;
+        }
 
         isClosed = closed;
         parentLinks.SetClosed(transport, closed);
@@ -202,7 +203,10 @@ internal sealed class ClientPeerService : IPeerService, IConnectionStatusService
     /// <inheritdoc />
     public void Refresh(PeerConnectionKind kind, string userName)
     {
-        if (kind != PeerConnectionKind.Server || transport is null || isClosed) { return; }
+        if (kind is not PeerConnectionKind.Server || transport is null || isClosed)
+        {
+            return;
+        }
 
         if (!parentLinks.HasPoints)
         {
@@ -213,29 +217,16 @@ internal sealed class ClientPeerService : IPeerService, IConnectionStatusService
         parentLinks.Refresh(transport);
     }
 
-    private async Task<bool> SendOnce(object message, CancellationToken cancellation)
-    {
-        PeerConnection? connection = serverConnection;
-        if (transport is null || connection is null || isClosed) { return false; }
-
-        try
-        {
-            using IMemoryOwner<byte> buf = engineController.FrameSerializer.Serialize(message);
-            return await transport.Request(connection, buf.Memory, new PeerSendOptions { Priority = engineController.GetPriority(message), Frame = message }, cancellation);
-        }
-        catch
-        {
-            return false;
-        }
-    }
-
     /// <inheritdoc />
     public async Task<bool> SendPacket(string userName, object packet, CancellationToken cancellation = default)
     {
         // Ignores userName, the same as Send: every send here goes over the one connection to the server, which
         // performs the actual user-to-connection routing.
         PeerConnection? connection = serverConnection;
-        if (transport is null || connection is null || isClosed) { return false; }
+        if (transport is null || connection is null || isClosed)
+        {
+            return false;
+        }
 
         try
         {
@@ -248,17 +239,13 @@ internal sealed class ClientPeerService : IPeerService, IConnectionStatusService
         }
     }
 
-    /// <inheritdoc />
-    public async Task DeliverLocal(object payload)
-    {
-        logger.Record(LogEvents.MessageDeliveredLocally, "{MessageId} delivered locally from {FromUser}", engineController.GetIdentifier(payload), engineController.GetFromUser(payload));
-        await FrameDelivered.InvokeAll(payload);
-    }
-
     private void OnConnected(PeerConnectionEventArgs args)
     {
         PeerConnection connection = args.Connection;
-        if (!IsServerConnection(connection)) { return; }
+        if (!IsServerConnection(connection))
+        {
+            return;
+        }
 
         if (isClosed)
         {
@@ -267,7 +254,10 @@ internal sealed class ClientPeerService : IPeerService, IConnectionStatusService
         }
 
         serverConnection = connection;
-        if (connection.User is { } user) { serverName = user.Name; }
+        if (connection.User is { } user)
+        {
+            serverName = user.Name;
+        }
 
         // An IP connection only counts as up once a heartbeat is acknowledged (see OnHeartbeatAcknowledged); a serial
         // link is cabled to exactly one node and only ever comes up when that node answers, so it is up immediately.
@@ -279,12 +269,18 @@ internal sealed class ClientPeerService : IPeerService, IConnectionStatusService
 
     private void OnHeartbeatAcknowledged(PeerConnection connection)
     {
-        if (!isClosed && ReferenceEquals(connection, serverConnection)) { UpdateConnectionStatus(true); }
+        if (!isClosed && ReferenceEquals(connection, serverConnection))
+        {
+            UpdateConnectionStatus(true);
+        }
     }
 
     private void OnDisconnected(PeerConnectionEventArgs args)
     {
-        if (!ReferenceEquals(args.Connection, serverConnection)) { return; }
+        if (!ReferenceEquals(args.Connection, serverConnection))
+        {
+            return;
+        }
 
         serverConnection = null;
         UpdateConnectionStatus(false);
@@ -300,11 +296,20 @@ internal sealed class ClientPeerService : IPeerService, IConnectionStatusService
     {
         lock (statusLock)
         {
-            if (isConnected == connected) { return; }
+            if (isConnected == connected)
+            {
+                return;
+            }
 
             isConnected = connected;
-            if (connected) { lastConnectedAt = DateTime.UtcNow; }
-            else { lastDisconnectedAt = DateTime.UtcNow; }
+            if (connected)
+            {
+                lastConnectedAt = DateTime.UtcNow;
+            }
+            else
+            {
+                lastDisconnectedAt = DateTime.UtcNow;
+            }
         }
 
         logger.Record(LogEvents.ConnectionChanged, "{Change} {UserName}", connected ? "Connected to" : "Disconnected from", serverName);
@@ -321,19 +326,28 @@ internal sealed class ClientPeerService : IPeerService, IConnectionStatusService
 
     private void OnReceived(PeerReceivedEventArgs args)
     {
-        if (!ReferenceEquals(args.Connection, serverConnection)) { return; }
+        if (!ReferenceEquals(args.Connection, serverConnection))
+        {
+            return;
+        }
 
         _ = Task.Run(() => HandleMessage(args.Payload, args.Packet));
     }
 
     internal Task<bool> HandleMessage(ReadOnlyMemory<byte> data, object? packet = null)
-        => PeerFrameDispatcher.Dispatch(data, engineController, logger, FrameDelivered, ReadReceiptReceived, ReceiveReceiptReceived, packet);
+        => PeerFrameDispatcher.Dispatch(data, engineController, FrameReceived, serverName, packet);
 
     /// <inheritdoc />
     public async ValueTask DisposeAsync()
     {
         // Registered as both IPeerService and IConnectionStatusService, so the container disposes it twice.
-        if (Interlocked.Exchange(ref disposed, 1) != 0) { return; }
-        if (transport is not null) { await transport.DisposeAsync(); }
+        if (Interlocked.Exchange(ref disposed, 1) != 0)
+        {
+            return;
+        }
+        if (transport is not null)
+        {
+            await transport.DisposeAsync();
+        }
     }
 }

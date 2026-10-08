@@ -44,7 +44,10 @@ internal sealed class PeerLinkControl
     /// </summary>
     public void NotifyLost()
     {
-        if (!isRetrying) { Wake(); }
+        if (!isRetrying)
+        {
+            Wake();
+        }
     }
 
     // Repeated presses while the monitor is busy collapse into a single wake-up rather than queuing one each.

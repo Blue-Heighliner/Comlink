@@ -39,7 +39,10 @@ internal sealed class PooledArrayBufferWriter<T> : IBufferWriter<T>, IDisposable
     private void EnsureCapacity(int sizeHint)
     {
         int needed = written + Math.Max(sizeHint, 1);
-        if (needed <= buffer.Length) { return; }
+        if (needed <= buffer.Length)
+        {
+            return;
+        }
 
         int newSize = Math.Max(buffer.Length * 2, needed);
         T[] newBuffer = ArrayPool<T>.Shared.Rent(newSize);
@@ -51,7 +54,10 @@ internal sealed class PooledArrayBufferWriter<T> : IBufferWriter<T>, IDisposable
     /// <summary>Returns the underlying pooled array to the shared pool.</summary>
     public void Dispose()
     {
-        if (disposed) { return; }
+        if (disposed)
+        {
+            return;
+        }
         disposed = true;
         ArrayPool<T>.Shared.Return(buffer);
     }

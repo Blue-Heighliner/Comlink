@@ -29,7 +29,10 @@ internal sealed class PacketScheduler(IPeerTransport transport, PeerConnection c
 
         // Registered before the packet is queued, so the pump can never finish with it before its registration exists to
         // be disposed. A token that is already cancelled cancels it on the spot, and the pump skips it.
-        if (cancellation.CanBeCanceled) { item.Registration = cancellation.Register(() => Cancel(item)); }
+        if (cancellation.CanBeCanceled)
+        {
+            item.Registration = cancellation.Register(() => Cancel(item));
+        }
 
         lock (gate)
         {
@@ -91,7 +94,10 @@ internal sealed class PacketScheduler(IPeerTransport transport, PeerConnection c
     {
         while (queue.TryDequeue(out Item? item, out _))
         {
-            if (item.Result.Task.IsCompleted) { continue; }
+            if (item.Result.Task.IsCompleted)
+            {
+                continue;
+            }
 
             if (item.Payload.IsFailed)
             {
@@ -112,7 +118,10 @@ internal sealed class PacketScheduler(IPeerTransport transport, PeerConnection c
         try
         {
             bool accepted = await transport.Request(connection, item.Packet.Data.Memory, new PeerSendOptions { Priority = item.Packet.Priority, Transmitted = item.Transmitted }, item.Cancellation);
-            if (!accepted) { item.Payload.Fail(); }
+            if (!accepted)
+            {
+                item.Payload.Fail();
+            }
             item.Result.TrySetResult(accepted);
         }
         catch (Exception ex)
@@ -131,7 +140,10 @@ internal sealed class PacketScheduler(IPeerTransport transport, PeerConnection c
     {
         lock (gate)
         {
-            if (item.Started) { return; }
+            if (item.Started)
+            {
+                return;
+            }
         }
 
         item.Result.TrySetCanceled(item.Cancellation);

@@ -31,18 +31,24 @@ public sealed class ExportServiceTests : IDisposable
     {
         ctx.Dispose();
         string dbDir = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), appName);
-        if (Directory.Exists(dbDir)) { Directory.Delete(dbDir, recursive: true); }
-        if (Directory.Exists(exportDir)) { Directory.Delete(exportDir, recursive: true); }
+        if (Directory.Exists(dbDir))
+        {
+            Directory.Delete(dbDir, recursive: true);
+        }
+        if (Directory.Exists(exportDir))
+        {
+            Directory.Delete(exportDir, recursive: true);
+        }
     }
 
     private string ZipPath() => Path.Combine(exportDir, "export" + IExportService.PackageExtension);
 
     private async Task<MessageEntity> InsertMessage(string messageId, string body, bool isOutbound, int priority = 0)
     {
-        object message = messageFormat.CreateFrame();
-        ((TestFrame)message).MessageId = messageId;
-        ((TestFrame)message).Body = body;
-        ((TestFrame)message).Priority = priority == 0 ? "NORMAL" : $"LEVEL{priority}";
+        MessageData message = new();
+        message.Id = messageId;
+        message.Body = body;
+        message.Priority = priority;
         MessageEntity entity = new() { MessageId = messageId, Message = message, FolderId = "root-inbox", IsOutbound = isOutbound };
         await messages.Insert(entity);
         return entity;
@@ -60,10 +66,10 @@ public sealed class ExportServiceTests : IDisposable
         IReadOnlyList<ExportEntryRef> refs = await service.GetAllEntryRefs();
 
         Assert.Equal(4, refs.Count);
-        Assert.Contains(refs, r => r.Id == message.MessageId && r.EntryType == EntryType.Message && !r.IsOutboundMessage);
-        Assert.Contains(refs, r => r.Id == draft.Id.ToString() && r.EntryType == EntryType.Draft);
-        Assert.Contains(refs, r => r.Id == note.Id.ToString() && r.EntryType == EntryType.Note);
-        Assert.Contains(refs, r => r.Id == log.Id.ToString() && r.EntryType == EntryType.Activity);
+        Assert.Contains(refs, r => r.Id == message.MessageId && r.EntryType is EntryType.Message && !r.IsOutboundMessage);
+        Assert.Contains(refs, r => r.Id == draft.Id.ToString() && r.EntryType is EntryType.Draft);
+        Assert.Contains(refs, r => r.Id == note.Id.ToString() && r.EntryType is EntryType.Note);
+        Assert.Contains(refs, r => r.Id == log.Id.ToString() && r.EntryType is EntryType.Activity);
     }
 
     /// <summary>GetAllEntryRefs disambiguates Inbox and Outbox records for a self-addressed message sharing a MessageId.</summary>

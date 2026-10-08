@@ -22,8 +22,12 @@ public sealed record MessageExportData
     public required bool IsAlert { get; init; }
     /// <summary>Integer value of the enum member that is the priority level of this message, one of the configured priorities.</summary>
     public required int Priority { get; init; }
-    /// <summary>Tag identifying the type of this message; see <see cref="IEngineController.GetTag"/>.</summary>
+    /// <summary>Tag identifying the type of this message.</summary>
     public required string Tag { get; init; }
+    /// <summary>Integer value of the message level the message was sent at, a member of the enum the host stated for its message levels, or <see langword="null"/> for none.</summary>
+    public int? MessageLevel { get; init; }
+    /// <summary>Integer value of the message aspect the message carries, a member of the enum the host stated for its message aspects, or <see langword="null"/> for none.</summary>
+    public int? MessageAspect { get; init; }
     /// <summary>UTC timestamp when this record was received or created.</summary>
     public required DateTime ReceivedAt { get; init; }
     /// <summary>Inbox-only read status; <see langword="null"/> on Outbox records.</summary>
@@ -65,7 +69,7 @@ public sealed record DraftExportData
     public required bool IsAlert { get; init; }
     /// <summary>Integer value of the enum member that is the priority level this draft should be sent at.</summary>
     public required int Priority { get; init; }
-    /// <summary>Tag identifying the type of this draft; see <see cref="IEngineController.GetTag"/>.</summary>
+    /// <summary>Tag identifying the type of this draft.</summary>
     public required string Tag { get; init; }
     /// <summary>Integer value of the message level the draft is set to be sent at, a member of the enum the host stated for its message levels, or <see langword="null"/> for none.</summary>
     public int? MessageLevel { get; init; }

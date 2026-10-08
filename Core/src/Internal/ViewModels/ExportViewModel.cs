@@ -108,7 +108,7 @@ internal sealed partial class ExportViewModel : ObservableObject, IExportViewMod
     /// <inheritdoc />
     public bool IsAllScope
     {
-        get => Scope == ExportScope.All;
+        get => Scope is ExportScope.All;
         set
         {
             if (value)
@@ -121,7 +121,7 @@ internal sealed partial class ExportViewModel : ObservableObject, IExportViewMod
     /// <inheritdoc />
     public bool IsSomeScope
     {
-        get => Scope == ExportScope.Some;
+        get => Scope is ExportScope.Some;
         set
         {
             if (value)
@@ -132,7 +132,7 @@ internal sealed partial class ExportViewModel : ObservableObject, IExportViewMod
     }
 
     /// <inheritdoc />
-    public bool IsCollectingEntries => Scope == ExportScope.Some && !IsExporting;
+    public bool IsCollectingEntries => Scope is ExportScope.Some && !IsExporting;
 
     [RelayCommand]
     private void RefreshDrives()
@@ -168,9 +168,21 @@ internal sealed partial class ExportViewModel : ObservableObject, IExportViewMod
     private async Task StartExport()
     {
         ExternalDriveInfo? drive = SelectedDrive;
-        if (drive is null) { StatusMessage = "Select a drive"; return; }
-        if (string.IsNullOrWhiteSpace(FileName)) { StatusMessage = "Enter a file name"; return; }
-        if (Scope == ExportScope.Some && SelectedEntries.Count == 0) { StatusMessage = "Select at least one entry to export"; return; }
+        if (drive is null)
+        {
+            StatusMessage = "Select a drive";
+            return;
+        }
+        if (string.IsNullOrWhiteSpace(FileName))
+        {
+            StatusMessage = "Enter a file name";
+            return;
+        }
+        if (Scope is ExportScope.Some && SelectedEntries.Count == 0)
+        {
+            StatusMessage = "Select at least one entry to export";
+            return;
+        }
 
         string zipPath = Path.Combine(drive.RootPath, SanitizeFileName(FileName) + IExportService.PackageExtension);
 
@@ -179,7 +191,7 @@ internal sealed partial class ExportViewModel : ObservableObject, IExportViewMod
         StatusMessage = null;
         try
         {
-            IReadOnlyList<ExportEntryRef> refs = Scope == ExportScope.All
+            IReadOnlyList<ExportEntryRef> refs = Scope is ExportScope.All
                 ? await exportService.GetAllEntryRefs()
                 : SelectedEntries
                     .Select(e => new ExportEntryRef { Id = e.Id, EntryType = e.EntryType, IsOutboundMessage = e.IsOutboundMessage })

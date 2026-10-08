@@ -1,28 +1,5 @@
 namespace BlueHeighliner.Comlink;
 
-/// <summary>Data carried by the message-received event raised when a peer delivers an inbound message.</summary>
-public sealed class MessageReceivedEvent
-{
-    /// <summary>Application-level identifier of the received message.</summary>
-    public string MessageId { get; set; } = string.Empty;
-    /// <summary>User name of the sender.</summary>
-    public string FromUser { get; set; } = string.Empty;
-    /// <summary>Message body text.</summary>
-    public string Body { get; set; } = string.Empty;
-    /// <summary>Address list associated with the message.</summary>
-    public List<AddressRequest> Addresses { get; set; } = [];
-    /// <summary>UTC timestamp when the message was originally sent.</summary>
-    public DateTime SentAt { get; set; }
-    /// <summary>Whether this message is an alert; see <see cref="IFrameBuilder{TFrame, TPacket, TPriority, TLevel, TAspect}"/>.</summary>
-    public bool IsAlert { get; set; }
-    /// <summary>Priority level of this message, a member of the enum the host stated for its priorities.</summary>
-    public Enum? Priority { get; set; }
-    /// <summary>Tag identifying the type of this message; see <see cref="IFrameBuilder{TFrame, TPacket, TPriority, TLevel, TAspect}"/>.</summary>
-    public string Tag { get; set; } = string.Empty;
-    /// <summary>Message level of this message, a member of the enum the host stated for its message levels, or <see langword="null"/> for none.</summary>
-    public Enum? MessageLevel { get; set; }
-}
-
 /// <summary>Represents a single addressee in a send or receive operation.</summary>
 public sealed class AddressRequest
 {
@@ -34,32 +11,13 @@ public sealed class AddressRequest
     public string Information { get; set; } = string.Empty;
 }
 
-/// <summary>Delivery outcome for a single destination user after a send operation.</summary>
-public sealed class UserDeliveryResult
-{
-    /// <summary>Name of the destination user.</summary>
-    public string UserName { get; set; } = string.Empty;
-    /// <summary>
-    /// Whether the message was successfully delivered to this user. For a remote user this reflects the peer
-    /// transport's own delivery status — the underlying send only completes once it has fully acknowledged the
-    /// message — so a successful send here means the message is already fully delivered, not merely queued.
-    /// For the sending user addressing itself, delivery happens in-process with no network round-trip and is
-    /// always successful.
-    /// </summary>
-    public bool Success { get; set; }
-    /// <summary>Names of the groups in the address list that contained this user.</summary>
-    public List<string> AddressedVia { get; set; } = [];
-}
-
-/// <summary>Result returned from a send-message operation, including per-user delivery outcomes.</summary>
+/// <summary>Result returned from a send-message operation. How the message fares afterwards is reported destination by destination, as delivery status changes (see <see cref="IEngineConnection.DeliveryStatusChanged"/>).</summary>
 public sealed class SendMessageResult
 {
     /// <summary>Application-level identifier assigned to the sent message.</summary>
     public string MessageId { get; set; } = string.Empty;
-    /// <summary>Whether the sent message is an alert, as the host's message handler decided from its other properties.</summary>
+    /// <summary>Whether the sent message is an alert, as the host's draft handler decided from its other properties.</summary>
     public bool IsAlert { get; set; }
-    /// <summary>Per-user delivery results for the send operation.</summary>
-    public List<UserDeliveryResult> UserResults { get; set; } = [];
 }
 
 /// <summary>Data carried by the delivery-status-changed event when a message's delivery state transitions.</summary>

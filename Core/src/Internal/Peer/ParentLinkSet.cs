@@ -1,7 +1,7 @@
 namespace BlueHeighliner.Comlink;
 
 /// <summary>
-/// The points a client or relay dials to reach its parent and the heartbeat controls of their monitors. An MSMT parent is one point; an HDLC parent is one per port the node opens, since
+/// The points a client dials to reach its parent and the heartbeat controls of their monitors. An MSMT parent is one point; an HDLC parent is one per port the node opens, since
 /// nothing says which port is cabled to it, so closing, refreshing and noticing a loss all act on every one.
 /// </summary>
 internal sealed class ParentLinkSet
@@ -20,7 +20,10 @@ internal sealed class ParentLinkSet
     /// <param name="point">The point a connection was dialed to, or <see langword="null"/> for an inbound one.</param>
     public bool Contains(ConnectionPoint? point)
     {
-        if (point is null) { return false; }
+        if (point is null)
+        {
+            return false;
+        }
 
         lock (gate) { return points.ContainsKey(point.Key); }
     }
@@ -38,7 +41,10 @@ internal sealed class ParentLinkSet
     {
         lock (gate)
         {
-            foreach ((ConnectionPoint point, PeerLinkControl control) in started) { controls[point.Key] = control; }
+            foreach ((ConnectionPoint point, PeerLinkControl control) in started)
+            {
+                controls[point.Key] = control;
+            }
         }
     }
 
@@ -74,8 +80,14 @@ internal sealed class ParentLinkSet
         foreach ((ConnectionPoint point, PeerLinkControl? control) in Snapshot())
         {
             transport.SetClosed(point, closed);
-            if (closed) { control?.Close(); }
-            else { control?.Open(); }
+            if (closed)
+            {
+                control?.Close();
+            }
+            else
+            {
+                control?.Open();
+            }
         }
     }
 
@@ -93,7 +105,10 @@ internal sealed class ParentLinkSet
     /// <summary>Wakes every monitor so it retries without waiting out its interval.</summary>
     public void NotifyLost()
     {
-        foreach ((_, PeerLinkControl? control) in Snapshot()) { control?.NotifyLost(); }
+        foreach ((_, PeerLinkControl? control) in Snapshot())
+        {
+            control?.NotifyLost();
+        }
     }
 
     private List<(ConnectionPoint Point, PeerLinkControl? Control)> Snapshot()

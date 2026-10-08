@@ -15,10 +15,10 @@ public interface IInitialPacketProcessor<TPacket> where TPacket : class
 
     /// <summary>Called on both nodes when the connection has formed, before anything has been received. A processor in which one node speaks first sends its initial packet here, on the node that decides that is it.</summary>
     /// <param name="context">Controls the connection.</param>
-    void OnConnected(IInitialPacketContext<TPacket> context);
+    Task OnConnected(IInitialPacketContext<TPacket> context);
 
     /// <summary>Called for each packet received while the connection is not yet marked connected.</summary>
     /// <param name="context">Controls the connection.</param>
     /// <param name="packet">What arrived.</param>
-    void OnReceived(IInitialPacketContext<TPacket> context, TPacket packet);
+    Task OnReceived(IInitialPacketContext<TPacket> context, TPacket packet);
 }

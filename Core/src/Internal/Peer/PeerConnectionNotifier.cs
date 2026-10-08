@@ -3,7 +3,7 @@ namespace BlueHeighliner.Comlink;
 /// <summary>
 /// Shared fire-and-forget dispatch for <see cref="IPeerService.UserConnected"/>/<see cref="IPeerService.UserDisconnected"/>:
 /// invokes every subscriber on a background task and logs, rather than throws, if any of them fail, the same way
-/// delivery-status and message-received events are raised. Used by <see cref="ClientPeerService"/>, <see cref="RelayPeerService"/> and <see cref="ServerRoutingService"/>.
+/// delivery-status and message-received events are raised. Used by <see cref="ClientPeerService"/> and <see cref="ServerRoutingService"/>.
 /// </summary>
 internal static class PeerConnectionNotifier
 {
@@ -14,7 +14,10 @@ internal static class PeerConnectionNotifier
     /// <param name="logger">Logger for a handler failure.</param>
     public static void Raise(Func<string, Task>? subscribers, string userName, string action, ILogger logger)
     {
-        if (subscribers is null || string.IsNullOrEmpty(userName)) { return; }
+        if (subscribers is null || string.IsNullOrEmpty(userName))
+        {
+            return;
+        }
         _ = Task.Run(async () =>
         {
             try { await subscribers.InvokeAll(userName); }

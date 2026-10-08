@@ -13,12 +13,15 @@ public sealed class PrintManagerViewModelTests
             PrintDriver.Setup(p => p.GetAvailablePrinters()).Returns(["PRINTER-A", "PRINTER-B"]);
             PrintDriver.Setup(p => p.GetDefaultPrinter()).Returns("PRINTER-A");
             EngineController.Setup(p => p.PrintReceivedDefaultEnabled).Returns(false);
-            EngineController.Setup(r => r.GetPrintCount(It.IsAny<TestFrame>())).Returns(1);
+            EngineController.Setup(r => r.GetPrintCount(It.IsAny<Message>())).Returns(1);
             PrintDriver.Setup(p => p.PrintLine(It.IsAny<string>(), It.IsAny<string>(), It.IsAny<CancellationToken>()))
                 .Returns<string, string, CancellationToken>(async (printer, line, _) =>
                 {
                     PrintedLines.Add((printer, line));
-                    if (OnPrintLine is not null) { await OnPrintLine(printer, line); }
+                    if (OnPrintLine is not null)
+                    {
+                        await OnPrintLine(printer, line);
+                    }
                 });
             PrintDriver.Setup(p => p.PageFeed(It.IsAny<string>(), It.IsAny<CancellationToken>()))
                 .Returns<string, CancellationToken>((printer, _) =>
@@ -52,10 +55,10 @@ public sealed class PrintManagerViewModelTests
 
     private static MessageEntity MakeMessage(string messageId, string body, int priority)
     {
-        object message = format.CreateFrame();
-        ((TestFrame)message).MessageId = messageId;
-        ((TestFrame)message).Body = body;
-        ((TestFrame)message).Priority = priority == 0 ? "NORMAL" : $"LEVEL{priority}";
+        MessageData message = new();
+        message.Id = messageId;
+        message.Body = body;
+        message.Priority = priority;
         return new MessageEntity { MessageId = messageId, Message = message };
     }
 
@@ -152,7 +155,7 @@ public sealed class PrintManagerViewModelTests
     {
         Setup s = new();
         s.PrintDriver.Setup(p => p.GetDefaultPrinter()).Returns((string?)null);
-        s.EngineController.Setup(r => r.GetPrintCount(It.IsAny<TestFrame>())).Returns(3);
+        s.EngineController.Setup(r => r.GetPrintCount(It.IsAny<Message>())).Returns(3);
         PrintManagerViewModel vm = s.Build();
         vm.PrintReceivedEnabled = true;
 
@@ -169,7 +172,7 @@ public sealed class PrintManagerViewModelTests
     {
         Setup s = new();
         s.PrintDriver.Setup(p => p.GetDefaultPrinter()).Returns((string?)null);
-        s.EngineController.Setup(r => r.GetPrintCount(It.IsAny<TestFrame>())).Returns(0);
+        s.EngineController.Setup(r => r.GetPrintCount(It.IsAny<Message>())).Returns(0);
         PrintManagerViewModel vm = s.Build();
         vm.PrintReceivedEnabled = true;
 
@@ -253,7 +256,10 @@ public sealed class PrintManagerViewModelTests
         int expectedLines = 3;
         s.OnPrintLine = (_, _) =>
         {
-            if (s.PrintedLines.Count == expectedLines) { done.TrySetResult(); }
+            if (s.PrintedLines.Count == expectedLines)
+            {
+                done.TrySetResult();
+            }
             return Task.CompletedTask;
         };
 
@@ -369,7 +375,10 @@ public sealed class PrintManagerViewModelTests
         TaskCompletionSource printed = new();
         s.OnPrintLine = (_, _) =>
         {
-            if (failing) { throw new IOException("printer offline"); }
+            if (failing)
+            {
+                throw new IOException("printer offline");
+            }
             printed.TrySetResult();
             return Task.CompletedTask;
         };

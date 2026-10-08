@@ -58,7 +58,10 @@ internal sealed class CompositePeerTransport : IPeerTransport
     /// <inheritdoc />
     public async ValueTask DisposeAsync()
     {
-        if (ip is not null) { await ip.DisposeAsync(); }
+        if (ip is not null)
+        {
+            await ip.DisposeAsync();
+        }
         await serial.DisposeAsync();
     }
 

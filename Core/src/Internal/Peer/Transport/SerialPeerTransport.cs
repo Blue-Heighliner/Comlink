@@ -53,7 +53,10 @@ internal sealed class SerialPeerTransport : IPeerTransport
     /// <inheritdoc />
     public void Reset(ConnectionPoint point)
     {
-        if (links.TryGetValue(point.Key, out Lazy<SerialLink>? link) && link.IsValueCreated) { link.Value.Reset(); }
+        if (links.TryGetValue(point.Key, out Lazy<SerialLink>? link) && link.IsValueCreated)
+        {
+            link.Value.Reset();
+        }
     }
 
     /// <inheritdoc />
@@ -80,7 +83,10 @@ internal sealed class SerialPeerTransport : IPeerTransport
 
     private SerialLink GetLink(ConnectionPoint point, bool startClosed = false)
     {
-        if (!point.IsSerial) { throw new ArgumentException("Point is not a serial point", nameof(point)); }
+        if (!point.IsSerial)
+        {
+            throw new ArgumentException("Point is not a serial point", nameof(point));
+        }
 
         return links.GetOrAdd(point.Key, _ => new Lazy<SerialLink>(() => new SerialLink(point, peerFactory, options, logger, received, connected, disconnected, reconnectDelay, startClosed, candidateTimeout))).Value;
     }

@@ -22,14 +22,17 @@ internal sealed class EngineBuilder<TFrame, TPacket, TPriority, TLevel, TAspect>
     /// <inheritdoc />
     public IFrameBuilder<TFrame, TPacket, TPriority, TLevel, TAspect> Frames()
     {
-        frames ??= new(state);
+        frames ??= new();
         return this;
     }
 
     /// <inheritdoc />
     public IPacketBuilder<TFrame, TPacket, TPriority, TLevel, TAspect> Packets()
     {
-        if (typeof(TPacket) == typeof(NoPacket)) { throw new InvalidOperationException("Packets cannot be stated for a configuration whose types state no packet type."); }
+        if (typeof(TPacket) == typeof(NoPacket))
+        {
+            throw new InvalidOperationException("Packets cannot be stated for a configuration whose types state no packet type.");
+        }
 
         packets ??= new();
         return this;
@@ -73,9 +76,9 @@ internal sealed class EngineBuilder<TFrame, TPacket, TPriority, TLevel, TAspect>
     }
 
     /// <inheritdoc />
-    public IEngineBuilder<TFrame, TPacket, TPriority, TLevel, TAspect> Prints<THandler>() where THandler : IPrintHandler<TFrame>
+    public IEngineBuilder<TFrame, TPacket, TPriority, TLevel, TAspect> Prints<THandler>() where THandler : IPrintHandler<TPriority, TLevel, TAspect>
     {
-        state.PrintHandler = ServiceRegistration<IPrintFrameHandler>.Of(typeof(THandler), instance => new PrintFrameHandler<TFrame>((IPrintHandler<TFrame>)instance));
+        state.PrintHandler = ServiceRegistration<IPrintPolicy>.Of(typeof(THandler), instance => new PrintPolicy<TPriority, TLevel, TAspect>((IPrintHandler<TPriority, TLevel, TAspect>)instance));
         return this;
     }
 
@@ -96,7 +99,10 @@ internal sealed class EngineBuilder<TFrame, TPacket, TPriority, TLevel, TAspect>
     /// <inheritdoc />
     public IEngineBuilder<TFrame, TPacket, TPriority, TLevel, TAspect> ExternalSystem(IExternalSystem system)
     {
-        if (!state.ExternalSystems.Contains(system)) { state.ExternalSystems.Add(system); }
+        if (!state.ExternalSystems.Contains(system))
+        {
+            state.ExternalSystems.Add(system);
+        }
         return this;
     }
 
@@ -116,42 +122,14 @@ internal sealed class EngineBuilder<TFrame, TPacket, TPriority, TLevel, TAspect>
     /// <inheritdoc />
     IImportsBuilder<TFrame, TPacket, TPriority, TLevel, TAspect> IImportsBuilder<TFrame, TPacket, TPriority, TLevel, TAspect>.Format<TFormat>()
     {
-        state.ImportFormats.Add(ServiceRegistration<IImportFormat>.Of(typeof(TFormat), instance => (IImportFormat)instance));
+        state.ImportFormats.Add(ServiceRegistration<IImportSource>.Of(typeof(TFormat), instance => new ImportSource<TPriority, TLevel>((IImportFormat<TPriority, TLevel>)instance)));
         return this;
     }
 
-    /// <inheritdoc cref="IFrameBuilder{TFrame, TPacket, TPriority, TLevel, TAspect}.Message{THandler}"/>
-    public IFrameBuilder<TFrame, TPacket, TPriority, TLevel, TAspect> Message<THandler>() where THandler : IMessageHandler<TFrame, TPriority, TLevel, TAspect>
+    /// <inheritdoc cref="IFrameBuilder{TFrame, TPacket, TPriority, TLevel, TAspect}.AutoForwarder"/>
+    public IFrameBuilder<TFrame, TPacket, TPriority, TLevel, TAspect> AutoForwarder(string name)
     {
-        RequireFrames().Message<THandler>();
-        return this;
-    }
-
-    /// <inheritdoc cref="IFrameBuilder{TFrame, TPacket, TPriority, TLevel, TAspect}.AutoForward{TController}"/>
-    public IFrameBuilder<TFrame, TPacket, TPriority, TLevel, TAspect> AutoForward<TController>() where TController : IAutoForwardController<TFrame>
-    {
-        RequireFrames().AutoForward<TController>();
-        return this;
-    }
-
-    /// <inheritdoc cref="IFrameBuilder{TFrame, TPacket, TPriority, TLevel, TAspect}.Retrieval{THandler}"/>
-    public IFrameBuilder<TFrame, TPacket, TPriority, TLevel, TAspect> Retrieval<THandler>() where THandler : IRetrievalHandler<TFrame, TPriority>
-    {
-        RequireFrames().Retrieval<THandler>();
-        return this;
-    }
-
-    /// <inheritdoc cref="IFrameBuilder{TFrame, TPacket, TPriority, TLevel, TAspect}.ReadReceipt{THandler}"/>
-    public IFrameBuilder<TFrame, TPacket, TPriority, TLevel, TAspect> ReadReceipt<THandler>() where THandler : IReadReceiptHandler<TFrame, TPriority>
-    {
-        RequireFrames().ReadReceipt<THandler>();
-        return this;
-    }
-
-    /// <inheritdoc cref="IFrameBuilder{TFrame, TPacket, TPriority, TLevel, TAspect}.ReceiveReceipt{THandler}"/>
-    public IFrameBuilder<TFrame, TPacket, TPriority, TLevel, TAspect> ReceiveReceipt<THandler>() where THandler : IReceiveReceiptHandler<TFrame, TPriority>
-    {
-        RequireFrames().ReceiveReceipt<THandler>();
+        RequireFrames().AutoForwarder(name);
         return this;
     }
 
@@ -163,7 +141,7 @@ internal sealed class EngineBuilder<TFrame, TPacket, TPriority, TLevel, TAspect>
     }
 
     /// <inheritdoc cref="IFrameBuilder{TFrame, TPacket, TPriority, TLevel, TAspect}.Processor{TProcessor}"/>
-    public IFrameBuilder<TFrame, TPacket, TPriority, TLevel, TAspect> Processor<TProcessor>() where TProcessor : INetworkProcessor<TFrame>
+    public IFrameBuilder<TFrame, TPacket, TPriority, TLevel, TAspect> Processor<TProcessor>() where TProcessor : INetworkProcessor<TFrame, TPriority, TLevel, TAspect>
     {
         RequireFrames().Processor<TProcessor>();
         return this;
@@ -340,8 +318,8 @@ internal sealed class EngineBuilder<TFrame, TPacket, TPriority, TLevel, TAspect>
             state.FrameMap = frames.Build();
             state.InitialFrameProcessor = frames.Initial;
             state.NetworkHandler = frames.NetworkHandler;
-            state.AutoForwardControllers.Clear();
-            state.AutoForwardControllers.AddRange(frames.AutoForwardControllers);
+            state.AutoForwarders.Clear();
+            state.AutoForwarders.AddRange(frames.AutoForwarders);
         }
 
         if (packets is not null)

@@ -19,12 +19,17 @@ internal interface IEntryService
     event Func<NoteEntity, Task>? NoteSavedQuietly;
     /// <summary>Raised after an Inbox message's <see cref="MessageEntity.ReadStatus"/> transitions from <c>Received</c> to <c>Read</c>.</summary>
     event Func<MessageEntity, Task>? MessageRead;
-    /// <summary>Persists a sent message to the Outbox folder, including per-user delivery status entries.</summary>
-    Task<MessageEntity> StoreSentMessage(string messageId, string body, List<AddressData> addresses, DateTime sentAt, IReadOnlyList<UserDeliveryResult> userResults, Enum? priority = null, string tag = "", string messageLevel = "", string messageAspect = "");
+    /// <summary>
+    /// Persists a message the user sent to the Outbox folder. It lists a delivery status, <see cref="DestinationStatus.Sending"/>, for each addressed user that is not a group and not an external address; the host's
+    /// processor reports every destination's outcome, those and the members of the groups it expanded, with <see cref="UpdateDeliveryStatus"/>.
+    /// </summary>
+    Task<MessageEntity> StoreSentMessage(Message message);
+    /// <summary>Returns the stored message with the identifier <paramref name="messageId"/> in the Outbox (<paramref name="outbound"/>) or the Inbox, or <see langword="null"/> when there is none.</summary>
+    Task<MessageEntity?> FindMessage(string messageId, bool outbound);
     /// <summary>Updates the delivery status for a specific user on the Outbox record, ignoring a status that would move it backward (for example a late "Sent" after "Confirmed"); user names match case-insensitively.</summary>
     Task<MessageEntity?> UpdateDeliveryStatus(string messageId, string userName, DestinationStatus status);
     /// <summary>Persists a received message to the Inbox folder with <see cref="MessageEntity.ReadStatus"/> set to <see cref="DestinationStatus.Received"/>, and raises <see cref="MessageInserted"/>.</summary>
-    Task<MessageEntity> StoreIncomingMessage(string messageId, string fromUser, string body, List<AddressData> addresses, DateTime sentAt, Enum? priority = null, string tag = "", string messageLevel = "", string messageAspect = "");
+    Task<MessageEntity> StoreIncomingMessage(Message message);
     /// <summary>Returns whether the Inbox already holds a record for <paramref name="messageId"/>.</summary>
     Task<bool> IncomingMessageExists(string messageId);
     /// <summary>
@@ -59,7 +64,7 @@ internal interface IEntryService
     /// body, sender, destinations, tag, priority label and message level name; <see cref="EntryFilter.DateFrom"/>/<see cref="EntryFilter.DateTo"/>
     /// bound its received date; <see cref="EntryFilter.Author"/> matches its sender and <see cref="EntryFilter.Destination"/> any addressee (both by substring); <see cref="EntryFilter.MessageLevel"/>/<see cref="EntryFilter.Priority"/> match exactly and <see cref="EntryFilter.Alert"/> keeps only alerts or only non-alerts.
     ///  Filtering loads the whole folder rather than paginating the LiteDB query directly, since a
-    /// message's fields live inside the host's own opaque frame type and cannot be queried in the database.
+    /// message's fields live in an embedded document that is not indexed.
     /// </summary>
     Task<(List<MessageEntity> Items, int Total)> GetMessages(string folderId, int page, EntryFilter? filter = null);
     /// <summary>
@@ -168,31 +173,42 @@ internal sealed class EntryService : IEntryService
         _ => 4
     };
 
-    private object BuildMessage(string messageId, string fromUser, string body, List<AddressData> addresses, DateTime sentAt, Enum? priority, string tag, string messageLevel, string messageAspect)
-    {
-        object message = engineController.CreateMessage(new MessageContent
-        {
-            SentAt = sentAt,
-            Body = body,
-            Priority = engineController.RequirePriority(priority),
-            Tag = tag,
-            MessageLevel = messageLevel,
-            MessageAspect = messageAspect
-        });
-        engineController.SetMessageId(message, messageId);
-        engineController.SetFromUser(message, fromUser);
-        engineController.SetAddresses(message, addresses.Select(a => new MessageAddress { UserName = a.UserName, Type = a.Type.ParseAddressType(), Information = a.Information }).ToList());
-        return message;
-    }
-
-    /// <summary>Persists a sent message to the Outbox folder, including per-user delivery status entries.</summary>
-    public async Task<MessageEntity> StoreSentMessage(string messageId, string body, List<AddressData> addresses, DateTime sentAt, IReadOnlyList<UserDeliveryResult> userResults, Enum? priority = null, string tag = "", string messageLevel = "", string messageAspect = "")
+    /// <inheritdoc />
+    public async Task<MessageEntity> StoreSentMessage(Message message)
     {
         string outboxId = await folders.GetRootId(FolderType.Outbox);
         await deliveryLock.WaitAsync();
         try
         {
-            return await InsertSentMessage(messageId, body, addresses, sentAt, userResults, priority, tag, messageLevel, messageAspect, outboxId);
+            IReadOnlyDictionary<string, IReadOnlyList<string>> groups = engineController.UserGroups;
+            List<DeliveryStatus> deliveryStatuses = [];
+            foreach (MessageAddress address in message.Addresses.Where(address => address.Type is not AddressType.External && !groups.ContainsKey(address.UserName)))
+            {
+                if (deliveryStatuses.Any(existing => string.Equals(existing.UserName, address.UserName, StringComparison.OrdinalIgnoreCase)))
+                {
+                    continue;
+                }
+
+                DestinationStatus status = DestinationStatus.Sending;
+                if (pendingStatuses.Remove((message.Id, address.UserName.ToUpperInvariant()), out DestinationStatus early) && DeliveryProgress(early) > DeliveryProgress(status))
+                {
+                    status = early;
+                }
+
+                deliveryStatuses.Add(new DeliveryStatus { UserName = address.UserName, Status = status });
+            }
+
+            MessageEntity entity = new()
+            {
+                MessageId = message.Id,
+                Message = engineController.ToData(message),
+                DeliveryStatuses = deliveryStatuses,
+                ReceivedAt = message.SentAt,
+                FolderId = outboxId,
+                IsOutbound = true
+            };
+            await messages.Insert(entity);
+            return entity;
         }
         finally
         {
@@ -200,32 +216,8 @@ internal sealed class EntryService : IEntryService
         }
     }
 
-    private async Task<MessageEntity> InsertSentMessage(string messageId, string body, List<AddressData> addresses, DateTime sentAt, IReadOnlyList<UserDeliveryResult> userResults, Enum? priority, string tag, string messageLevel, string messageAspect, string outboxId)
-    {
-        List<DeliveryStatus> deliveryStatuses = [];
-        foreach (UserDeliveryResult result in userResults)
-        {
-            DestinationStatus status = result.Success ? DestinationStatus.Sent : DestinationStatus.Failed;
-            if (pendingStatuses.Remove((messageId, result.UserName.ToUpperInvariant()), out DestinationStatus early) && DeliveryProgress(early) > DeliveryProgress(status))
-            {
-                status = early;
-            }
-
-            deliveryStatuses.Add(new DeliveryStatus { UserName = result.UserName, Status = status, AddressedVia = [.. result.AddressedVia] });
-        }
-
-        MessageEntity entity = new()
-        {
-            MessageId = messageId,
-            Message = BuildMessage(messageId, currentUserProvider.UserName ?? string.Empty, body, addresses, sentAt, priority, tag, messageLevel, messageAspect),
-            DeliveryStatuses = deliveryStatuses,
-            ReceivedAt = sentAt,
-            FolderId = outboxId,
-            IsOutbound = true
-        };
-        await messages.Insert(entity);
-        return entity;
-    }
+    /// <inheritdoc />
+    public async Task<MessageEntity?> FindMessage(string messageId, bool outbound) => await messages.Get(messageId, outbound);
 
     /// <inheritdoc />
     public async Task<MessageEntity?> UpdateDeliveryStatus(string messageId, string userName, DestinationStatus status)
@@ -270,15 +262,15 @@ internal sealed class EntryService : IEntryService
         }
     }
 
-    /// <summary>Persists a received message to the Inbox folder and raises <see cref="MessageInserted"/>.</summary>
-    public async Task<MessageEntity> StoreIncomingMessage(string messageId, string fromUser, string body, List<AddressData> addresses, DateTime sentAt, Enum? priority = null, string tag = "", string messageLevel = "", string messageAspect = "")
+    /// <inheritdoc />
+    public async Task<MessageEntity> StoreIncomingMessage(Message message)
     {
         string inboxId = await folders.GetRootId(FolderType.Inbox);
         MessageEntity entity = new()
         {
-            MessageId = messageId,
-            Message = BuildMessage(messageId, fromUser, body, addresses, sentAt, priority, tag, messageLevel, messageAspect),
-            ReceivedAt = sentAt,
+            MessageId = message.Id,
+            Message = engineController.ToData(message),
+            ReceivedAt = message.SentAt,
             FolderId = inboxId,
             ReadStatus = DestinationStatus.Received
         };
@@ -301,7 +293,10 @@ internal sealed class EntryService : IEntryService
     public async Task<MessageEntity?> MarkMessageRead(string messageId)
     {
         MessageEntity? entity = await messages.Get(messageId, outbound: false);
-        if (entity is null || entity.ReadStatus != DestinationStatus.Received) { return null; }
+        if (entity is null || entity.ReadStatus is not DestinationStatus.Received)
+        {
+            return null;
+        }
 
         entity.ReadStatus = DestinationStatus.Read;
         await messages.Update(entity);
@@ -379,7 +374,10 @@ internal sealed class EntryService : IEntryService
     {
         entity.ModifiedAt = DateTime.UtcNow;
         await drafts.Update(entity);
-        if (!entity.IsSent) { await DraftUpdated.InvokeAll(entity); }
+        if (!entity.IsSent)
+        {
+            await DraftUpdated.InvokeAll(entity);
+        }
     }
 
     /// <inheritdoc />
@@ -450,41 +448,87 @@ internal sealed class EntryService : IEntryService
 
     private bool MatchesMessage(MessageEntity entity, EntryFilter filter)
     {
-        object message = entity.Message;
-        if (filter.DateFrom is { } from && entity.ReceivedAt < from) { return false; }
-        if (filter.DateTo is { } to && entity.ReceivedAt > to) { return false; }
-        if (filter.Priority is { } priority && !engineController.GetMessagePriority(message).Equals(priority)) { return false; }
-        if (filter.Alert is { } alert && engineController.GetIsAlert(message) != alert) { return false; }
-        if (filter.MessageLevel is { } level && !string.Equals(engineController.GetMessageLevel(message), level, StringComparison.OrdinalIgnoreCase)) { return false; }
-        if (!string.IsNullOrWhiteSpace(filter.Author) && !Contains(engineController.GetFromUser(message), filter.Author.Trim())) { return false; }
-        if (!string.IsNullOrWhiteSpace(filter.Destination) && !engineController.GetAddresses(message).Any(a => Contains(a.UserName, filter.Destination.Trim()))) { return false; }
-        if (string.IsNullOrWhiteSpace(filter.Search)) { return true; }
+        MessageData message = entity.Message;
+        string levelName = engineController.NameOfLevel(message);
+        if (filter.DateFrom is { } from && entity.ReceivedAt < from)
+        {
+            return false;
+        }
+        if (filter.DateTo is { } to && entity.ReceivedAt > to)
+        {
+            return false;
+        }
+        if (filter.Priority is { } priority && !engineController.PriorityOf(message.Priority).Equals(priority))
+        {
+            return false;
+        }
+        if (filter.Alert is { } alert && message.IsAlert != alert)
+        {
+            return false;
+        }
+        if (filter.MessageLevel is { } level && !string.Equals(levelName, level, StringComparison.OrdinalIgnoreCase))
+        {
+            return false;
+        }
+        if (!string.IsNullOrWhiteSpace(filter.Author) && !Contains(message.FromUser, filter.Author.Trim()))
+        {
+            return false;
+        }
+        if (!string.IsNullOrWhiteSpace(filter.Destination) && !message.Addresses.Any(a => Contains(a.UserName, filter.Destination.Trim())))
+        {
+            return false;
+        }
+        if (string.IsNullOrWhiteSpace(filter.Search))
+        {
+            return true;
+        }
         string search = filter.Search;
 
-        string destinations = string.Join(" ", engineController.GetAddresses(message).Select(a => a.UserName));
-        string priorityLabel = engineController.NameOf(engineController.GetMessagePriority(message));
-        return Contains(engineController.GetBody(message), search)
-            || Contains(engineController.GetFromUser(message), search)
+        string destinations = string.Join(" ", message.Addresses.Select(a => a.UserName));
+        string priorityLabel = engineController.NameOf(engineController.PriorityOf(message.Priority));
+        return Contains(message.Body, search)
+            || Contains(message.FromUser, search)
             || Contains(destinations, search)
-            || Contains(engineController.GetTag(message), search)
+            || Contains(message.Tag, search)
             || Contains(priorityLabel, search)
-            || Contains(engineController.GetMessageLevel(message), search);
+            || Contains(levelName, search);
     }
 
     private bool MatchesDraft(DraftEntity entity, EntryFilter filter)
     {
-        if (filter.DateFrom is { } from && entity.ModifiedAt < from) { return false; }
-        if (filter.DateTo is { } to && entity.ModifiedAt > to) { return false; }
-        if (filter.Priority is { } priority && !engineController.PriorityOf(entity.Priority).Equals(priority)) { return false; }
-        if (filter.MessageLevel is { } level && !string.Equals(engineController.MessageLevels.FirstOrDefault(candidate => candidate.Value == entity.MessageLevel)?.Name, level, StringComparison.OrdinalIgnoreCase)) { return false; }
-        if (!string.IsNullOrWhiteSpace(filter.Destination) && !entity.Addresses.Any(a => Contains(a.UserName, filter.Destination.Trim()))) { return false; }
+        if (filter.DateFrom is { } from && entity.ModifiedAt < from)
+        {
+            return false;
+        }
+        if (filter.DateTo is { } to && entity.ModifiedAt > to)
+        {
+            return false;
+        }
+        if (filter.Priority is { } priority && !engineController.PriorityOf(entity.Priority).Equals(priority))
+        {
+            return false;
+        }
+        if (filter.MessageLevel is { } level && !string.Equals(engineController.MessageLevels.FirstOrDefault(candidate => candidate.Value == entity.MessageLevel)?.Name, level, StringComparison.OrdinalIgnoreCase))
+        {
+            return false;
+        }
+        if (!string.IsNullOrWhiteSpace(filter.Destination) && !entity.Addresses.Any(a => Contains(a.UserName, filter.Destination.Trim())))
+        {
+            return false;
+        }
         return string.IsNullOrWhiteSpace(filter.Search) || Contains(entity.Body, filter.Search) || Contains(entity.Tag, filter.Search) || Contains(entity.Name ?? string.Empty, filter.Search);
     }
 
     private static bool MatchesNote(NoteEntity entity, EntryFilter filter)
     {
-        if (filter.DateFrom is { } from && entity.ModifiedAt < from) { return false; }
-        if (filter.DateTo is { } to && entity.ModifiedAt > to) { return false; }
+        if (filter.DateFrom is { } from && entity.ModifiedAt < from)
+        {
+            return false;
+        }
+        if (filter.DateTo is { } to && entity.ModifiedAt > to)
+        {
+            return false;
+        }
         return string.IsNullOrWhiteSpace(filter.Search) || Contains(entity.Body, filter.Search) || Contains(entity.Name ?? string.Empty, filter.Search);
     }
 
@@ -524,7 +568,7 @@ internal sealed class EntryService : IEntryService
         switch (entryType)
         {
             case EntryType.Message:
-                return await messages.Get(id, isOutboundMessage) is { } message ? new EntryLocation(message.FolderId, engineController.GetIsAlert(message.Message)) : null;
+                return await messages.Get(id, isOutboundMessage) is { } message ? new EntryLocation(message.FolderId, message.Message.IsAlert) : null;
             case EntryType.Draft:
                 return await drafts.Get(new ObjectId(id)) is { } draft ? new EntryLocation(draft.FolderId, false) : null;
             case EntryType.Note:
@@ -541,15 +585,27 @@ internal sealed class EntryService : IEntryService
         {
             case EntryType.Message:
                 MessageEntity? msg = await messages.Get(entryId, isOutboundMessage);
-                if (msg is not null) { msg.FolderId = targetFolderId; await messages.Update(msg); }
+                if (msg is not null)
+                {
+                    msg.FolderId = targetFolderId;
+                    await messages.Update(msg);
+                }
                 break;
             case EntryType.Draft:
                 DraftEntity? draft = await drafts.Get(new ObjectId(entryId));
-                if (draft is not null) { draft.FolderId = targetFolderId; await drafts.Update(draft); }
+                if (draft is not null)
+                {
+                    draft.FolderId = targetFolderId;
+                    await drafts.Update(draft);
+                }
                 break;
             case EntryType.Note:
                 NoteEntity? note = await notes.Get(new ObjectId(entryId));
-                if (note is not null) { note.FolderId = targetFolderId; await notes.Update(note); }
+                if (note is not null)
+                {
+                    note.FolderId = targetFolderId;
+                    await notes.Update(note);
+                }
                 break;
         }
     }

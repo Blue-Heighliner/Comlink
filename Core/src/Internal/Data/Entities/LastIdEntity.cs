@@ -1,6 +1,6 @@
 namespace BlueHeighliner.Comlink;
 
-/// <summary>LiteDB document holding the identifier the engine last generated, so an <see cref="IMessageHandler{TFrame, TPriority, TLevel, TAspect}.NextId"/> can continue from it after a restart.</summary>
+/// <summary>LiteDB document holding the identifier the engine last generated, so an <see cref="IDraftHandler{TPriority, TLevel, TAspect}.NextId"/> can continue from it after a restart.</summary>
 internal sealed class LastIdEntity
 {
     /// <summary>Gets or sets the document key; there is only ever one document.</summary>

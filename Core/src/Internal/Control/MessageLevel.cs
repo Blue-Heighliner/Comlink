@@ -28,7 +28,10 @@ internal static class MessageLevelExtensions
     {
         for (int i = 0; i < levels.Count; i++)
         {
-            if (string.Equals(levels[i].Name, levelName, StringComparison.OrdinalIgnoreCase)) { return i; }
+            if (string.Equals(levels[i].Name, levelName, StringComparison.OrdinalIgnoreCase))
+            {
+                return i;
+            }
         }
         return -1;
     }

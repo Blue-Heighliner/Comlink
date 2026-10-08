@@ -1,6 +1,6 @@
 namespace BlueHeighliner.Comlink;
 
-/// <summary>ViewModel interface for the network indicator in the top bar of a client or relay: a box that always shows, online or offline, in the label and color the display handler states for each.</summary>
+/// <summary>ViewModel interface for the network indicator in the top bar of a client: a box that always shows, online or offline, in the label and color the display handler states for each.</summary>
 internal interface INetworkIndicatorViewModel
 {
     /// <summary>Gets a value indicating whether the indicator shows online.</summary>

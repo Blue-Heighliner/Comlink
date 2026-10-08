@@ -33,8 +33,14 @@ internal sealed class PacketAssembler(IEngineController engineController, int ma
     public AssembledPayload? Add(ReadOnlyMemory<byte> packet)
     {
         object decoded = serializer.Deserialize(packet);
-        if (decoded.GetType() == engineController.PacketType && engineController.IsPacketHeartbeat(decoded)) { return null; }
-        if (decoded.GetType() != engineController.PacketType || !engineController.IsFramePacket(decoded)) { throw new InvalidDataException("The bytes are not a frame packet"); }
+        if (decoded.GetType() == engineController.PacketType && engineController.IsPacketHeartbeat(decoded))
+        {
+            return null;
+        }
+        if (decoded.GetType() != engineController.PacketType || !engineController.IsFramePacket(decoded))
+        {
+            throw new InvalidDataException("The bytes are not a frame packet");
+        }
 
         int id = engineController.GetPayloadId(decoded);
         int index = engineController.GetPacketIndex(decoded);
@@ -48,7 +54,10 @@ internal sealed class PacketAssembler(IEngineController engineController, int ma
             throw new InvalidDataException("The packet's fields are inconsistent");
         }
 
-        if (!isLast && ((long)index + 1) * chunk.Length > total) { throw new InvalidDataException("The packet lies beyond the end of its payload"); }
+        if (!isLast && ((long)index + 1) * chunk.Length > total)
+        {
+            throw new InvalidDataException("The packet lies beyond the end of its payload");
+        }
 
         lock (gate)
         {
@@ -56,7 +65,10 @@ internal sealed class PacketAssembler(IEngineController engineController, int ma
 
             if (count == 1)
             {
-                if (chunk.Length != total) { throw new InvalidDataException("A single packet must hold its whole payload"); }
+                if (chunk.Length != total)
+                {
+                    throw new InvalidDataException("A single packet must hold its whole payload");
+                }
 
                 PooledMemoryOwner whole = PooledMemoryOwner.Rent(total);
                 chunk.CopyTo(whole.Memory.Span);
@@ -74,11 +86,17 @@ internal sealed class PacketAssembler(IEngineController engineController, int ma
                 throw new InvalidDataException("The packet contradicts the earlier packets of its payload");
             }
 
-            if (payload.Chunks[index] is not null) { return null; }
+            if (payload.Chunks[index] is not null)
+            {
+                return null;
+            }
 
             if (!isLast)
             {
-                if (payload.ChunkSize != 0 && payload.ChunkSize != chunk.Length) { throw new InvalidDataException("The packets of a payload differ in size"); }
+                if (payload.ChunkSize != 0 && payload.ChunkSize != chunk.Length)
+                {
+                    throw new InvalidDataException("The packets of a payload differ in size");
+                }
 
                 payload.ChunkSize = chunk.Length;
             }
@@ -86,19 +104,28 @@ internal sealed class PacketAssembler(IEngineController engineController, int ma
             PooledMemoryOwner held = PooledMemoryOwner.Rent(chunk.Length);
             chunk.CopyTo(held.Memory.Span);
             payload.Chunks[index] = held;
-            if (index == 0) { payload.FirstPacket = decoded; }
+            if (index == 0)
+            {
+                payload.FirstPacket = decoded;
+            }
             payload.ReceivedCount++;
             payload.ReceivedBytes += chunk.Length;
             pendingBytes += chunk.Length;
             while (pendingBytes > maxPendingBytes && pending.Count > 1) { EvictOldest(except: id); }
 
-            if (payload.ReceivedCount < count) { return null; }
+            if (payload.ReceivedCount < count)
+            {
+                return null;
+            }
 
             pending.Remove(id);
             pendingBytes -= payload.ReceivedBytes;
             try
             {
-                if (payload.ReceivedBytes != total) { throw new InvalidDataException("The packets of a payload do not add up to its length"); }
+                if (payload.ReceivedBytes != total)
+                {
+                    throw new InvalidDataException("The packets of a payload do not add up to its length");
+                }
 
                 PooledMemoryOwner whole = PooledMemoryOwner.Rent(total);
                 int offset = 0;
@@ -122,10 +149,16 @@ internal sealed class PacketAssembler(IEngineController engineController, int ma
     {
         lock (gate)
         {
-            if (disposed) { return; }
+            if (disposed)
+            {
+                return;
+            }
 
             disposed = true;
-            foreach (KeyValuePair<int, Pending> entry in pending) { entry.Value.Dispose(); }
+            foreach (KeyValuePair<int, Pending> entry in pending)
+            {
+                entry.Value.Dispose();
+            }
             pending.Clear();
             pendingBytes = 0;
         }
@@ -153,7 +186,10 @@ internal sealed class PacketAssembler(IEngineController engineController, int ma
 
         public void Dispose()
         {
-            foreach (PooledMemoryOwner? chunk in Chunks) { chunk?.Dispose(); }
+            foreach (PooledMemoryOwner? chunk in Chunks)
+            {
+                chunk?.Dispose();
+            }
         }
     }
 }

@@ -22,6 +22,9 @@ internal sealed class PooledMemoryOwner : IMemoryOwner<byte>
     /// <inheritdoc />
     public void Dispose()
     {
-        if (Interlocked.Exchange(ref array, null) is { } rented) { ArrayPool<byte>.Shared.Return(rented); }
+        if (Interlocked.Exchange(ref array, null) is { } rented)
+        {
+            ArrayPool<byte>.Shared.Return(rented);
+        }
     }
 }

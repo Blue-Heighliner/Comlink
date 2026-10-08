@@ -7,7 +7,9 @@ namespace BlueHeighliner.Comlink;
 /// draft/note whose name matches an existing entry prompts the user the same way, sharing that same prompt UI -
 /// so a reader only needs to build the DTO, not reimplement matching.
 /// </summary>
-public interface IImportFormatContext
+/// <typeparam name="TPriority">The enum the host stated for its priorities.</typeparam>
+/// <typeparam name="TLevel">The enum the host stated for its message levels.</typeparam>
+public interface IImportFormatContext<TPriority, TLevel> where TPriority : struct, Enum where TLevel : struct, Enum
 {
     /// <summary>
     /// Adds a message, restored into the Inbox or Outbox per <see cref="MessageExportData.IsOutbound"/>. Skipped,
@@ -32,5 +34,5 @@ public interface IImportFormatContext
     /// Adds a prepared message to the staged send screen, for the user to review and send later - never sent
     /// automatically. Fire-and-forget: only queues the send, so this returns immediately.
     /// </summary>
-    void AddStagedSend(StagedSendData send);
+    void AddStagedSend(StagedSendData<TPriority, TLevel> send);
 }

@@ -10,14 +10,14 @@ public sealed class EntryBarViewModelTests
 
     private static MessageEntity MakeMessage(string id = "MSG1", string fromUser = "ALPHA", string body = "Hello", int priority = 0, string tag = "", string messageLevel = "", bool isAlert = false)
     {
-        object message = format.CreateFrame();
-        ((TestFrame)message).MessageId = id;
-        format.SetFromUser(message, fromUser);
-        ((TestFrame)message).Body = body;
-        ((TestFrame)message).Priority = priority switch { 0 => "NORMAL", 1 => "Medium", 2 => "High", _ => $"LEVEL{priority}" };
-        ((TestFrame)message).Tag = tag;
-        ((TestFrame)message).MessageLevel = messageLevel;
-        ((TestFrame)message).IsAlert = isAlert;
+        MessageData message = new();
+        message.Id = id;
+        message.FromUser = fromUser;
+        message.Body = body;
+        message.Priority = priority;
+        message.Tag = tag;
+        message.MessageLevel = Enum.TryParse(messageLevel, ignoreCase: true, out TestLevel parsedLevel) ? (int)parsedLevel : null;
+        message.IsAlert = isAlert;
         return new MessageEntity
         {
             MessageId = id,
@@ -176,7 +176,7 @@ public sealed class EntryBarViewModelTests
     public void AvailableMessageLevelFilters_IsAnyFollowedByEveryConfiguredLevel()
     {
         Mock<TestEngineController> controller = new() { CallBase = true };
-        controller.Setup(c => c.MessageLevels).Returns([new MessageLevel { Name = "PUBLIC", Color = "#2E7D32" }, new MessageLevel { Name = "RESTRICTED", Color = "#C62828" }]);
+        controller.Setup(c => c.MessageLevels).Returns([new MessageLevel { Name = "PUBLIC", Color = "#2E7D32" }, new MessageLevel { Name = "RESTRICTED", Key = TestLevel.Restricted, Color = "#C62828" }]);
         EntryBarViewModel vm = new(new Mock<IEntryService>().Object, controller.Object);
 
         Assert.Equal(["Any", "PUBLIC", "RESTRICTED"], vm.AvailableMessageLevelFilters.Select(f => f.Label));
@@ -778,7 +778,7 @@ public sealed class EntryBarViewModelTests
         ]);
         Mock<IEntryService> svc = new();
         svc.Setup(s => s.GetMessages(It.IsAny<string>(), It.IsAny<int>()))
-           .ReturnsAsync((Items: new List<MessageEntity> { MakeMessage("M1", priority: 2) }, Total: 1));
+           .ReturnsAsync((Items: new List<MessageEntity> { MakeMessage("M1", priority: (int)TestMessagePriority.High) }, Total: 1));
         EntryBarViewModel vm = new(svc.Object, priorityProvider.Object);
 
         await vm.LoadFolder(MakeFolder("root-inbox", FolderType.Inbox));
@@ -798,7 +798,7 @@ public sealed class EntryBarViewModelTests
         ]);
         Mock<IEntryService> svc = new();
         svc.Setup(s => s.GetMessages(It.IsAny<string>(), It.IsAny<int>()))
-           .ReturnsAsync((Items: new List<MessageEntity> { MakeMessage("M1", priority: 1) }, Total: 1));
+           .ReturnsAsync((Items: new List<MessageEntity> { MakeMessage("M1", priority: (int)TestMessagePriority.Medium) }, Total: 1));
         EntryBarViewModel vm = new(svc.Object, priorityProvider.Object);
 
         await vm.LoadFolder(MakeFolder("root-outbox", FolderType.Outbox));
@@ -870,7 +870,7 @@ public sealed class EntryBarViewModelTests
     public async Task LoadFolder_Inbox_RecognizedMessageLevel_SetsMessageLevelColorHex()
     {
         Mock<TestEngineController> messageLevelProvider = new() { CallBase = true };
-        messageLevelProvider.Setup(p => p.MessageLevels).Returns([new MessageLevel { Name = "RESTRICTED", Color = "#C62828" }]);
+        messageLevelProvider.Setup(p => p.MessageLevels).Returns([new MessageLevel { Name = "RESTRICTED", Key = TestLevel.Restricted, Color = "#C62828" }]);
         Mock<IEntryService> svc = new();
         svc.Setup(s => s.GetMessages(It.IsAny<string>(), It.IsAny<int>()))
            .ReturnsAsync((Items: new List<MessageEntity> { MakeMessage("M1", messageLevel: "RESTRICTED") }, Total: 1));
@@ -886,7 +886,7 @@ public sealed class EntryBarViewModelTests
     public async Task LoadFolder_Outbox_RecognizedMessageLevel_SetsMessageLevelColorHex()
     {
         Mock<TestEngineController> messageLevelProvider = new() { CallBase = true };
-        messageLevelProvider.Setup(p => p.MessageLevels).Returns([new MessageLevel { Name = "RESTRICTED", Color = "#C62828" }]);
+        messageLevelProvider.Setup(p => p.MessageLevels).Returns([new MessageLevel { Name = "RESTRICTED", Key = TestLevel.Restricted, Color = "#C62828" }]);
         Mock<IEntryService> svc = new();
         svc.Setup(s => s.GetMessages(It.IsAny<string>(), It.IsAny<int>()))
            .ReturnsAsync((Items: new List<MessageEntity> { MakeMessage("M1", messageLevel: "RESTRICTED") }, Total: 1));

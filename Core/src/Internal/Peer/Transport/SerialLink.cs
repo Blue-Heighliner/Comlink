@@ -33,7 +33,10 @@ internal sealed class SerialLink : IAsyncDisposable
         remotes = [point.RemoteSerialAddress, .. point.OtherRemotes.Select(remote => remote.Address)];
         connection = new PeerConnection(point, new SerialConnectionInfo { SerialPort = point.SerialPort!, SerialAddress = point.SerialAddress, RemoteSerialAddress = point.RemoteSerialAddress }, () => DropPeer(current));
         isClosed = startClosed;
-        if (!startClosed) { openGate.TrySetResult(); }
+        if (!startClosed)
+        {
+            openGate.TrySetResult();
+        }
         loop = Task.Run(Run);
     }
 
@@ -82,7 +85,10 @@ internal sealed class SerialLink : IAsyncDisposable
             isClosed = closed;
             if (closed)
             {
-                if (openGate.Task.IsCompleted) { openGate = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously); }
+                if (openGate.Task.IsCompleted)
+                {
+                    openGate = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+                }
                 attempt?.Cancel();
                 toDrop = current;
             }
@@ -98,7 +104,10 @@ internal sealed class SerialLink : IAsyncDisposable
     /// <summary>Drops the current link, if there is one; the connect loop then brings up a new one.</summary>
     public void Reset()
     {
-        if (!isClosed) { DropPeer(current); }
+        if (!isClosed)
+        {
+            DropPeer(current);
+        }
     }
 
     /// <summary>Sends <paramref name="data"/> as one HDLC information frame, once the frame is on the link. Returns <see langword="false"/>, having logged why, when it does not fit one frame; enable packetization with a packet size that does.</summary>
@@ -128,7 +137,10 @@ internal sealed class SerialLink : IAsyncDisposable
     /// <inheritdoc />
     public async ValueTask DisposeAsync()
     {
-        if (Interlocked.Exchange(ref disposed, 1) != 0) { return; }
+        if (Interlocked.Exchange(ref disposed, 1) != 0)
+        {
+            return;
+        }
 
         await lifetime.CancelAsync();
         try { await loop; }
@@ -140,7 +152,10 @@ internal sealed class SerialLink : IAsyncDisposable
     // the caller's thread, which is the UI thread when a user closes or refreshes a connection.
     private static void DropPeer(IHdlcPeer? peer)
     {
-        if (peer is not null) { _ = Task.Run(() => DisposeQuietly(peer)); }
+        if (peer is not null)
+        {
+            _ = Task.Run(() => DisposeQuietly(peer));
+        }
     }
 
     private static async Task DisposeQuietly(IHdlcPeer peer)
@@ -162,7 +177,10 @@ internal sealed class SerialLink : IAsyncDisposable
             lock (closeLock)
             {
                 attempt = attemptSource;
-                if (isClosed) { attemptSource.Cancel(); }
+                if (isClosed)
+                {
+                    attemptSource.Cancel();
+                }
             }
 
             try { await RunOnce(attemptSource.Token); }
@@ -179,12 +197,23 @@ internal sealed class SerialLink : IAsyncDisposable
         TaskCompletionSource ended = new(TaskCreationOptions.RunContinuationsAsynchronously);
         peer.Receiver = OnFrame;
         peer.Exceptions.Listen(ex => logger.Record(LogEvents.SerialLinkProblem, "Serial link to {Point} {Problem}", point, $"met an error: {ex.Message}"));
-        peer.StateChanged.Listen(state => { if (state == HdlcPeerState.Disconnected) { ended.TrySetResult(); } }, () => ended.TrySetResult());
+        peer.StateChanged.Listen(
+            state =>
+            {
+                if (state is HdlcPeerState.Disconnected)
+                {
+                    ended.TrySetResult();
+                }
+            },
+            () => ended.TrySetResult());
 
         // With several users that may be at the other end of the cable, each is tried in turn for a while, since the far end answers only the address it is given.
         byte remote = remotes[nextRemote % remotes.Length];
         using CancellationTokenSource candidate = CancellationTokenSource.CreateLinkedTokenSource(attemptToken);
-        if (remotes.Length > 1) { candidate.CancelAfter(candidateTimeout); }
+        if (remotes.Length > 1)
+        {
+            candidate.CancelAfter(candidateTimeout);
+        }
 
         try
         {
@@ -194,7 +223,10 @@ internal sealed class SerialLink : IAsyncDisposable
         catch (OperationCanceledException)
         {
             await DisposeQuietly(peer);
-            if (!attemptToken.IsCancellationRequested) { nextRemote++; }
+            if (!attemptToken.IsCancellationRequested)
+            {
+                nextRemote++;
+            }
             return;
         }
         catch (Exception ex)
@@ -216,7 +248,10 @@ internal sealed class SerialLink : IAsyncDisposable
         lock (closeLock)
         {
             closedMeanwhile = isClosed;
-            if (!closedMeanwhile) { current = peer; }
+            if (!closedMeanwhile)
+            {
+                current = peer;
+            }
         }
 
         if (closedMeanwhile)
@@ -233,10 +268,16 @@ internal sealed class SerialLink : IAsyncDisposable
 
         lock (closeLock) { current = null; }
         disconnected.Publish(new PeerConnectionEventArgs { Connection = connection });
-        if (!lifetime.IsCancellationRequested && !isClosed) { logger.Record(LogEvents.SerialLinkProblem, "Serial link to {Point} {Problem}", point, "lost"); }
+        if (!lifetime.IsCancellationRequested && !isClosed)
+        {
+            logger.Record(LogEvents.SerialLinkProblem, "Serial link to {Point} {Problem}", point, "lost");
+        }
 
         await DisposeQuietly(peer);
-        if (!isClosed) { await Delay(); }
+        if (!isClosed)
+        {
+            await Delay();
+        }
     }
 
     private async Task Delay()

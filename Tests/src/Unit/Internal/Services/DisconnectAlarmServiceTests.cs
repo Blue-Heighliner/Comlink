@@ -3,30 +3,6 @@ namespace BlueHeighliner.Comlink.Tests.Unit.Internal.Services;
 /// <summary>Unit tests for <see cref="DisconnectAlarmService"/>.</summary>
 public sealed class DisconnectAlarmServiceTests : IAsyncLifetime
 {
-    private sealed class FakePeerService : IPeerService
-    {
-#pragma warning disable CS0067
-        public event Func<object, Task>? FrameDelivered;
-        public event Func<string, string, Task>? ReadReceiptReceived;
-        public event Func<string, string, Task>? ReceiveReceiptReceived;
-        public event Func<string, string, DestinationStatus, Task>? DeliveryStatusChanged;
-#pragma warning restore CS0067
-        public event Func<string, Task>? UserConnected;
-        public event Func<string, Task>? UserDisconnected;
-
-        public bool HasSubscribers => UserConnected is not null && UserDisconnected is not null;
-
-        public IReadOnlyList<string> GetConnectedUsers() => [];
-        public bool IsUserConnected(string userName) => false;
-        public Task Start(CancellationToken cancellation) => Task.CompletedTask;
-        public Task<bool> Send(string userName, object message, CancellationToken cancellation = default) => Task.FromResult(true);
-        public Task DeliverLocal(object payload) => Task.CompletedTask;
-        public Task<bool> SendPacket(string userName, object packet, CancellationToken cancellation = default) => Task.FromResult(true);
-
-        public Task Disconnect(string userName) => UserDisconnected is null ? Task.CompletedTask : UserDisconnected(userName);
-        public Task Connect(string userName) => UserConnected is null ? Task.CompletedTask : UserConnected(userName);
-    }
-
     private readonly FakePeerService peer = new();
     private readonly Mock<IEngineController> controller = new();
     private readonly Mock<IDisconnectAlarmPlayer> player = new();

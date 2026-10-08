@@ -99,13 +99,16 @@ internal sealed class HandshakePeerTransport : IPeerTransport
     {
         Session session = GetSession(connection);
         Start(session);
-        if (!await session.Established.Task.WaitAsync(cancellation)) { throw new IOException("The connection was not accepted"); }
+        if (!await session.Established.Task.WaitAsync(cancellation))
+        {
+            throw new IOException("The connection was not accepted");
+        }
     }
 
     private void OnConnected(PeerConnectionEventArgs args)
     {
         Session session = GetSession(args.Connection);
-        if (session.State == SessionState.Closed)
+        if (session.State is SessionState.Closed)
         {
             // A serial link presents the same connection object again each time it comes back up.
             sessions.Remove(args.Connection);
@@ -119,17 +122,19 @@ internal sealed class HandshakePeerTransport : IPeerTransport
     {
         lock (session.Gate)
         {
-            if (session.IsStarted) { return; }
+            if (session.IsStarted)
+            {
+                return;
+            }
             session.IsStarted = true;
+            if (handshake is not null)
+            {
+                RunExchange(session);
+                return;
+            }
         }
 
-        if (handshake is null)
-        {
-            Establish(session);
-            return;
-        }
-
-        RunExchange(session);
+        Establish(session);
     }
 
     private void RunExchange(Session session)
@@ -145,34 +150,21 @@ internal sealed class HandshakePeerTransport : IPeerTransport
         Process(session, () => handshake!.Processor.OnConnected(session.Initial));
     }
 
-    private void Process(Session session, Action work)
+    private void Process(Session session, Func<Task> work)
     {
         lock (session.Gate) { session.Tail = Chain(session, session.Tail, work); }
     }
 
-    // What a processor asks of its session (send, connected, disconnect) runs after the handler that asked, in the order asked, and still runs once an
-    // earlier one has marked the connection connected, unlike the handlers themselves, which only run during the exchange.
-    private void Enqueue(Session session, Func<Task> action)
-    {
-        lock (session.Gate) { session.Tail = Run(session, session.Tail, action); }
-    }
-
-    private async Task Run(Session session, Task previous, Func<Task> action)
-    {
-        await previous;
-        if (session.State == SessionState.Closed) { return; }
-
-        try { await action(); }
-        catch (Exception ex) { Fail(session, $"could not complete its initial exchange: {ex.Message}"); }
-    }
-
-    private async Task Chain(Session session, Task previous, Action work)
+    private async Task Chain(Session session, Task previous, Func<Task> work)
     {
         await previous;
         await Task.Yield();
-        if (session.State != SessionState.Handshaking) { return; }
+        if (session.State is not SessionState.Handshaking)
+        {
+            return;
+        }
 
-        try { work(); }
+        try { await work(); }
         catch (Exception ex) { Fail(session, $"could not complete its initial exchange: {ex.Message}"); }
     }
 
@@ -188,7 +180,7 @@ internal sealed class HandshakePeerTransport : IPeerTransport
         Start(session);
 
         bool isHandshakePayload;
-        lock (session.Gate) { isHandshakePayload = handshake is not null && session.State == SessionState.Handshaking; }
+        lock (session.Gate) { isHandshakePayload = handshake is not null && session.State is SessionState.Handshaking; }
 
         if (isHandshakePayload)
         {
@@ -205,10 +197,16 @@ internal sealed class HandshakePeerTransport : IPeerTransport
     {
         lock (session.Gate)
         {
-            if (session.State == SessionState.Closed) { return; }
-            if (session.State != SessionState.Open)
+            if (session.State is SessionState.Closed)
             {
-                if (session.Pending.Count < MaxBufferedPayloads) { session.Pending.Add(args); }
+                return;
+            }
+            if (session.State is not SessionState.Open)
+            {
+                if (session.Pending.Count < MaxBufferedPayloads)
+                {
+                    session.Pending.Add(args);
+                }
                 return;
             }
         }
@@ -216,12 +214,15 @@ internal sealed class HandshakePeerTransport : IPeerTransport
         received.Publish(args);
     }
 
-    private void OnHandshakePayload(Session session, byte[] body, object? packet)
+    private Task OnHandshakePayload(Session session, byte[] body, object? packet)
     {
         object item = handshake!.Deserialize(body, packet);
-        if (item.GetType() != handshake.Processor.ItemType) { throw new InvalidDataException($"expected a {handshake.Processor.ItemType.Name}"); }
+        if (item.GetType() != handshake.Processor.ItemType)
+        {
+            throw new InvalidDataException($"expected a {handshake.Processor.ItemType.Name}");
+        }
 
-        handshake.Processor.OnReceived(session.Initial, item);
+        return handshake.Processor.OnReceived(session.Initial, item);
     }
 
     private void Establish(Session session)
@@ -229,7 +230,10 @@ internal sealed class HandshakePeerTransport : IPeerTransport
         PeerConnection connection = session.Connection;
         lock (session.Gate)
         {
-            if (session.State != SessionState.Handshaking) { return; }
+            if (session.State is not SessionState.Handshaking)
+            {
+                return;
+            }
             session.State = SessionState.Establishing;
         }
 
@@ -251,7 +255,10 @@ internal sealed class HandshakePeerTransport : IPeerTransport
 
             lock (session.Gate)
             {
-                if (session.State == SessionState.Closed) { return; }
+                if (session.State is SessionState.Closed)
+                {
+                    return;
+                }
                 connection.User = identity;
             }
         }
@@ -264,10 +271,16 @@ internal sealed class HandshakePeerTransport : IPeerTransport
         {
             pending = session.Pending;
             session.Pending = [];
-            if (session.State != SessionState.Closed) { session.State = SessionState.Open; }
+            if (session.State is not SessionState.Closed)
+            {
+                session.State = SessionState.Open;
+            }
         }
 
-        foreach (PeerReceivedEventArgs buffered in pending) { received.Publish(buffered); }
+        foreach (PeerReceivedEventArgs buffered in pending)
+        {
+            received.Publish(buffered);
+        }
         session.Established.TrySetResult(true);
         session.Deadline.Cancel();
     }
@@ -276,7 +289,10 @@ internal sealed class HandshakePeerTransport : IPeerTransport
     {
         lock (session.Gate)
         {
-            if (session.State == SessionState.Closed) { return; }
+            if (session.State is SessionState.Closed)
+            {
+                return;
+            }
             session.State = SessionState.Closed;
             session.Pending.Clear();
         }
@@ -290,7 +306,10 @@ internal sealed class HandshakePeerTransport : IPeerTransport
 
     private void OnDisconnected(PeerConnectionEventArgs args)
     {
-        if (!sessions.TryGetValue(args.Connection, out Session? session)) { return; }
+        if (!sessions.TryGetValue(args.Connection, out Session? session))
+        {
+            return;
+        }
 
         bool wasPublished;
         lock (session.Gate)
@@ -304,7 +323,10 @@ internal sealed class HandshakePeerTransport : IPeerTransport
         session.Established.TrySetResult(false);
         session.Deadline.Cancel();
         session.Aborted.Cancel();
-        if (wasPublished) { disconnected.Publish(args); }
+        if (wasPublished)
+        {
+            disconnected.Publish(args);
+        }
     }
 
     private UserIdentity? Identify(PeerConnection connection)
@@ -323,7 +345,10 @@ internal sealed class HandshakePeerTransport : IPeerTransport
     {
         foreach (string user in KnownUsers())
         {
-            if (certificateNames.Contains(user, StringComparer.OrdinalIgnoreCase)) { return user; }
+            if (certificateNames.Contains(user, StringComparer.OrdinalIgnoreCase))
+            {
+                return user;
+            }
         }
 
         return certificateNames.FirstOrDefault();
@@ -368,27 +393,43 @@ internal sealed class HandshakePeerTransport : IPeerTransport
     {
         public IConnectionInfo Connection => owner.engineController.WithLocalUser(session.Connection.Info);
 
-        public IEngineContext Engine => owner.contexts?.Create() ?? new EngineContext(new UserInfo { Name = Connection.LocalUser ?? string.Empty }, owner.engineController.Users, owner.engineController.GetUserInfo, _ => false);
+        public IEngineContext Engine => owner.contexts?.Create() ?? new EngineContext(new UserInfo { Name = Connection.LocalUser ?? string.Empty }, owner.engineController.Users, owner.engineController.GetUserInfo, _ => false, owner.engineController.GetGroupMembers);
 
-        public void Connected(string userName)
-            => owner.Enqueue(session, () =>
-            {
-                session.Connection.InitialUser = userName;
-                owner.Establish(session);
-                return Task.CompletedTask;
-            });
+        public Task Connected(string userName)
+        {
+            session.Connection.InitialUser = userName;
+            owner.Establish(session);
+            return Task.CompletedTask;
+        }
 
-        public void Disconnect()
-            => owner.Enqueue(session, () =>
-            {
-                owner.Fail(session, "was disconnected by its initial processor");
-                return Task.CompletedTask;
-            });
+        public Task Disconnect()
+        {
+            owner.Fail(session, "was disconnected by its initial processor");
+            return Task.CompletedTask;
+        }
 
-        public void Send(object item)
-            => owner.Enqueue(session, async () =>
+        public async Task<bool> Send(object item)
+        {
+            if (session.State is SessionState.Closed)
             {
-                if (!await owner.Send(session, item)) { throw new IOException("an initial item was not accepted for sending"); }
-            });
+                return false;
+            }
+
+            try
+            {
+                if (await owner.Send(session, item))
+                {
+                    return true;
+                }
+
+                owner.Fail(session, "could not complete its initial exchange: an initial item was not accepted for sending");
+            }
+            catch (Exception ex)
+            {
+                owner.Fail(session, $"could not complete its initial exchange: {ex.Message}");
+            }
+
+            return false;
+        }
     }
 }

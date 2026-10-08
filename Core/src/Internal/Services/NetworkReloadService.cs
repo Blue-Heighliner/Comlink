@@ -47,7 +47,10 @@ internal sealed class NetworkReloadService(
         logger.Record(LogEvents.NetworkConfigurationReloaded, "Network configuration reloaded");
 
         // A new user's connections are started again from scratch, which reads the new configuration anyway.
-        if (!await userService.Refresh()) { Apply(restartBefore, interfaceBefore); }
+        if (!await userService.Refresh())
+        {
+            Apply(restartBefore, interfaceBefore);
+        }
 
         Reloaded?.Invoke();
     }

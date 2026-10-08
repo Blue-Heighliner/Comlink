@@ -27,7 +27,10 @@ internal static class EngineUiExtensions
     {
         return builder.AfterSetup(b =>
         {
-            if (b.Instance is null) { return; }
+            if (b.Instance is null)
+            {
+                return;
+            }
             b.Instance.RequestedThemeVariant = ThemeVariant.Dark;
             b.Instance.Styles.Add(new StyleInclude(new Uri("avares://AvaloniaEdit"))
             {

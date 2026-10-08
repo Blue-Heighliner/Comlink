@@ -19,13 +19,13 @@ internal sealed class DraftEntity
     public DateTime ModifiedAt { get; set; } = DateTime.UtcNow;
     /// <summary>Indicates whether this draft has been sent.</summary>
     public bool IsSent { get; set; }
-    /// <summary>Whether this draft should be sent as an alert; see <see cref="IEngineController.GetIsAlert"/>.</summary>
+    /// <summary>Whether this draft should be sent as an alert.</summary>
     public bool IsAlert { get; set; }
-    /// <summary>Priority number this draft should be sent at; see <see cref="IEngineController.GetPriority"/>.</summary>
+    /// <summary>Integer value of the member of the host's priority enum this draft should be sent at.</summary>
     public int Priority { get; set; }
-    /// <summary>Tag identifying the type of this draft; see <see cref="IEngineController.GetTag"/>.</summary>
+    /// <summary>Tag identifying the type of this draft.</summary>
     public string Tag { get; set; } = string.Empty;
-    /// <summary>Message level this draft should be sent at; see <see cref="IEngineController.GetMessageLevel"/>.</summary>
+    /// <summary>Integer value of the member of the host's message level enum this draft should be sent at, or <see langword="null"/> for none.</summary>
     public int? MessageLevel { get; set; }
     /// <summary>Value of the message aspect this draft should be sent with, or <see langword="null"/> for none; see <see cref="IEngineController.MessageAspects"/>.</summary>
     public int? MessageAspect { get; set; }

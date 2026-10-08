@@ -112,20 +112,8 @@ of external systems this instance communicates with, resolved once at startup. `
 by `EngineHost` alongside the peer and interface listeners) reads this list once and then:
 
 - Runs every external system's own `Start` loop concurrently, for the lifetime of the app.
-- Subscribes to `IPeerService.FrameDelivered` — raised for every frame this instance receives (only those that are messages are relayed),
-  whether from a genuine peer, or from `DeliverLocal` (used for self-addressed sends and, as below, for
-  external-system-received messages) — and relays that message out through `Send` on every external
-  system **except** the one it was originally received from, if any.
-- Subscribes to every external system's own `MessageReceived` event. When one fires, the message is
-  passed to `IPeerService.DeliverLocal`, which processes it exactly like an ordinary received message
-  (stored, shown in the UI, etc. — the same path a self-addressed send already used) and, in turn, raises
-  `FrameDelivered`, triggering the relay-to-other-external-systems step above.
-
-The "except the one it was originally received from" exclusion uses an `AsyncLocal<IExternalSystem?>` to
-track which external system (if any) is the source of the in-flight `DeliverLocal` call, since a plain
-field would race under concurrent delivery from multiple external systems at once. A message the app
-receives from a peer (not an external system) has no such source, so it is relayed to every configured
-external system.
+- Subscribes to every external system's own `MessageReceived` event. A frame of the host's frame type that one raises goes to the network processor's `OnReceived` with `FrameOrigin.ExternalSystem` and the system's name as the source user; anything else is dropped. The engine stores and relays nothing itself.
+- Offers the processor `SendToExternalSystems(frame)`, which calls `Send` on every external system. Which frames go out, and not back to the system they came from, is the processor's decision.
 
 If `ExternalSystems` returns an empty list (the Engine default), `ExternalSystemsService.Start`
 returns immediately without subscribing to anything.

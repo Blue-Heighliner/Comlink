@@ -49,7 +49,10 @@ internal sealed class FakeHdlcCable
             Array.Clear(attached);
         }
 
-        foreach (FakeHdlcPeer? peer in peers) { peer?.Terminate(); }
+        foreach (FakeHdlcPeer? peer in peers)
+        {
+            peer?.Terminate();
+        }
     }
 
     private void Attach(int end, FakeHdlcPeer peer)
@@ -72,7 +75,10 @@ internal sealed class FakeHdlcCable
     {
         lock (gate)
         {
-            if (ReferenceEquals(attached[end], peer)) { attached[end] = null; }
+            if (ReferenceEquals(attached[end], peer))
+            {
+                attached[end] = null;
+            }
         }
     }
 
@@ -116,7 +122,7 @@ internal sealed class FakeHdlcCable
 
         public HdlcPeerState State { get; private set; } = HdlcPeerState.Idle;
 
-        public bool IsConnected => State == HdlcPeerState.Connected;
+        public bool IsConnected => State is HdlcPeerState.Connected;
 
         public int MaxPayloadSize => cable.MaxPayloadSize;
 
@@ -153,8 +159,14 @@ internal sealed class FakeHdlcCable
 
         public ValueTask Send(ReadOnlyMemory<byte> data, CancellationToken cancellation = default)
         {
-            if (!IsConnected) { throw new InvalidOperationException("The peer is not connected."); }
-            if (data.Length > MaxPayloadSize) { throw new ArgumentOutOfRangeException(nameof(data)); }
+            if (!IsConnected)
+            {
+                throw new InvalidOperationException("The peer is not connected.");
+            }
+            if (data.Length > MaxPayloadSize)
+            {
+                throw new ArgumentOutOfRangeException(nameof(data));
+            }
 
             cable.Other(end)?.Receiver?.Invoke(new TestOwner(data.ToArray()));
             return ValueTask.CompletedTask;
@@ -173,7 +185,10 @@ internal sealed class FakeHdlcCable
 
         public void Terminate()
         {
-            if (State == HdlcPeerState.Disconnected) { return; }
+            if (State is HdlcPeerState.Disconnected)
+            {
+                return;
+            }
 
             FakeHdlcPeer? remote = cable.Other(end);
             SetState(HdlcPeerState.Disconnected);

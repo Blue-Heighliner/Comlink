@@ -28,6 +28,8 @@ public sealed record UserInfo
     public int? InterfacePort { get; init; }
     /// <summary>The link to this user's parent: the user it forms an outgoing connection with by default. <see langword="null"/> (the default) for a user with no parent.</summary>
     public UserLink? Parent { get; init; }
-    /// <summary>The links to this user's children, the users it listens for by default. For a <see cref="UserRole.Server"/> they are its clients and relays, and for a <see cref="UserRole.Relay"/> the clients behind it. Empty by default.</summary>
+    /// <summary>The links to this user's children, the users it listens for by default. They are the clients of a <see cref="UserRole.Server"/>. Empty by default.</summary>
     public IReadOnlyList<UserLink> Children { get; init; } = [];
+    /// <summary>The names of the auto forwarders this user has access to: the options of the auto forward screen they can open and keep a target list in. Empty by default.</summary>
+    public IReadOnlyList<string> AutoForwarders { get; init; } = [];
 }

@@ -9,13 +9,13 @@ internal sealed class InitialPacketProcessorAdapter<TPacket>(IInitialPacketProce
     public Type ItemType { get; } = typeof(TPacket);
 
     /// <inheritdoc />
-    public void OnConnected(IInitialSession session) => processor.OnConnected(new Context(session));
+    public Task OnConnected(IInitialSession session) => processor.OnConnected(new Context(session));
 
     /// <inheritdoc />
     public TimeSpan Timeout => processor.Timeout;
 
     /// <inheritdoc />
-    public void OnReceived(IInitialSession session, object item) => processor.OnReceived(new Context(session), (TPacket)item);
+    public Task OnReceived(IInitialSession session, object item) => processor.OnReceived(new Context(session), (TPacket)item);
 
     private sealed class Context(IInitialSession session) : IInitialPacketContext<TPacket>
     {
@@ -23,16 +23,16 @@ internal sealed class InitialPacketProcessorAdapter<TPacket>(IInitialPacketProce
 
         public UserInfo CurrentUser => session.Engine.CurrentUser;
 
-        public IEnumerable<UserInfo> Users => session.Engine.Users;
+        public IReadOnlyDictionary<string, UserInfo> Users => session.Engine.Users;
 
-        public IEnumerable<UserInfo> ConnectedUsers => session.Engine.ConnectedUsers;
+        public IReadOnlyDictionary<string, UserInfo> ConnectedUsers => session.Engine.ConnectedUsers;
 
-        public bool IsConnected(string userName) => session.Engine.IsConnected(userName);
+        public IReadOnlyList<string> GetGroupMembers(string groupName) => session.Engine.GetGroupMembers(groupName);
 
-        public void Connected(string userName) => session.Connected(userName);
+        public Task Connected(string userName) => session.Connected(userName);
 
-        public void Disconnect() => session.Disconnect();
+        public Task Disconnect() => session.Disconnect();
 
-        public void Send(TPacket packet) => session.Send(packet);
+        public Task<bool> Send(TPacket packet) => session.Send(packet);
     }
 }

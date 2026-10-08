@@ -105,7 +105,7 @@
                  Foreground="White" />
     </Border>
 
-    <!-- Network indicator: always shown in a client or relay, online or offline -->
+    <!-- Network indicator: always shown in a client, online or offline -->
     <Border x:Name="NetworkBox"
             Grid.Column="3"
             CornerRadius="3"

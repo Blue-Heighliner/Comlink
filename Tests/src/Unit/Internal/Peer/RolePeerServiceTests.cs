@@ -52,7 +52,7 @@ public sealed class RolePeerServiceTests
         harness.Service.Restart();
 
         Assert.Empty(harness.Service.GetConnectedUsers());
-        Assert.False(await harness.Service.Send("ALICE", new object()));
+        Assert.False(await harness.Service.Send("ALICE", new object(), 0));
         Assert.Empty(harness.Transports);
     }
 

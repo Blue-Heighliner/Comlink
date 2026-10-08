@@ -3,11 +3,12 @@ namespace BlueHeighliner.Comlink;
 /// <summary>
 /// Hosts the local interface listener: an MSMT connection that behaves like a peer connection — same
 /// transport, same frame type (<see cref="IEngineController.FrameType"/>) — but represents no user of
-/// its own. Every message an interface sends is routed out to other peers as if this user had originated
-/// it itself.
+/// its own. Every frame an interface sends is handed to the host's network processor as received (see
+/// <see cref="INetworkProcessor{TFrame, TPriority, TLevel, TAspect}.OnReceived"/>), whose origin says it came from the interface, and the
+/// processor decides what to do with it, for example to send it on as if this user had originated it itself.
 /// </summary>
 /// <remarks>
-/// Mirroring an inbound peer message back out to a connected interface is not currently implemented: doing
+/// Mirroring a frame back out to a connected interface is not implemented: doing
 /// so would need that interface client's connection kept open and correlated to its own inbound peer
 /// traffic, rather than treated as a one-way injection point, and this instance never writes back down a
 /// connection a remote party opened to it in the first place - see <c>Docs/Components/MsmtIntegration.md</c>.
@@ -31,20 +32,20 @@ internal sealed class InterfaceService : IInterfaceService
     public InterfaceService(
         IMsmtSessionPeer.IFactory peerFactory,
         IEngineController engineController,
-        IMessageRoutingService routingService,
+        INetworkProcessing processing,
         IUserService userService,
         ILoggerFactory loggerFactory)
     {
         this.peerFactory = peerFactory;
         this.engineController = engineController;
-        this.routingService = routingService;
+        this.processing = processing;
         this.userService = userService;
         logger = loggerFactory.CreateLogger(LogCategories.App);
     }
 
     private readonly IMsmtSessionPeer.IFactory peerFactory;
     private readonly IEngineController engineController;
-    private readonly IMessageRoutingService routingService;
+    private readonly INetworkProcessing processing;
     private readonly IUserService userService;
     private readonly ILogger logger;
 
@@ -69,7 +70,10 @@ internal sealed class InterfaceService : IInterfaceService
 
             lock (runLock)
             {
-                if (!restartRequested || cancellation.IsCancellationRequested) { return; }
+                if (!restartRequested || cancellation.IsCancellationRequested)
+                {
+                    return;
+                }
             }
         }
     }
@@ -79,7 +83,10 @@ internal sealed class InterfaceService : IInterfaceService
     {
         lock (runLock)
         {
-            if (current is null) { return; }
+            if (current is null)
+            {
+                return;
+            }
 
             restartRequested = true;
             current.Cancel();
@@ -108,7 +115,10 @@ internal sealed class InterfaceService : IInterfaceService
 
         await WaitForRestart(cancellation);
         await listener.DisposeAsync();
-        if (ReferenceEquals(peer, listener)) { peer = null; }
+        if (ReferenceEquals(peer, listener))
+        {
+            peer = null;
+        }
     }
 
     private static async Task WaitForRestart(CancellationToken cancellation)
@@ -125,7 +135,7 @@ internal sealed class InterfaceService : IInterfaceService
         responder?.Accept(ReadOnlyMemory<byte>.Empty);
     }
 
-    internal async Task HandleInterfaceMessage(ReadOnlyMemory<byte> data)
+    internal Task HandleInterfaceMessage(ReadOnlyMemory<byte> data)
     {
         object message;
         try
@@ -134,46 +144,33 @@ internal sealed class InterfaceService : IInterfaceService
         }
         catch
         {
-            return;
+            return Task.CompletedTask;
         }
 
         // FrameSerializer determines the type from the data itself, so bytes from an incompatible sender
         // could describe a type other than this instance's own FrameType; treat that the same as a
         // failed deserialize rather than let a mismatched cast below throw.
-        if (message.GetType() != engineController.FrameType) { return; }
+        if (message.GetType() != engineController.FrameType)
+        {
+            return Task.CompletedTask;
+        }
 
         UserInfo? userInfo = userService.GetCurrentUserInfo();
-        if (userInfo is null) { return; }
-
-        if (engineController.GetUnconfiguredLevelReason(message) is { } invalid)
+        if (userInfo is null)
         {
-            logger.Record(LogEvents.InvalidMessage, "A message from {Source} is invalid and was dropped: it {Reason}", "the interface", invalid);
-            logger.Record(LogEvents.MessageDropped, "A message from {Source} was dropped because it was not valid", "another application");
-            return;
+            return Task.CompletedTask;
         }
 
-        SendMessagePayload payload = new()
-        {
-            Body = engineController.GetBody(message),
-            Addresses = engineController.GetAddresses(message).Select(a => new AddressPayload { UserName = a.UserName, Type = a.Type.ToString(), Information = a.Information }).ToList(),
-            Priority = engineController.GetMessagePriority(message),
-            Tag = engineController.GetTag(message),
-            MessageLevel = engineController.GetMessageLevel(message)
-        };
-
-        try
-        {
-            await routingService.Route(userInfo.Name, payload, CancellationToken.None);
-        }
-        catch (Exception ex)
-        {
-            logger.Record(LogEvents.RouteFailed, ex, "Failed to {Action}", "route a message received on the interface");
-        }
+        processing.Received(message, FrameOrigin.Interface, userInfo.Name);
+        return Task.CompletedTask;
     }
 
     /// <inheritdoc />
     public async ValueTask DisposeAsync()
     {
-        if (peer is not null) { await peer.DisposeAsync(); }
+        if (peer is not null)
+        {
+            await peer.DisposeAsync();
+        }
     }
 }

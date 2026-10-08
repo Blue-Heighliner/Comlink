@@ -43,9 +43,18 @@ internal static class MsmtCertificateLookup
     /// <returns>Why the certificates are not good, or <see langword="null"/> when they are.</returns>
     public static string? GetProblem(string? identityFile, string? authorityFile, string userName)
     {
-        if (identityFile is null || authorityFile is null) { return "The network's CertificateStore and AuthorityCertificate must both be set."; }
-        if (!File.Exists(identityFile)) { return $"The certificate file '{identityFile}' for {userName} was not found."; }
-        if (!File.Exists(authorityFile)) { return $"The authority certificate file '{authorityFile}' was not found."; }
+        if (identityFile is null || authorityFile is null)
+        {
+            return "The network's CertificateStore and AuthorityCertificate must both be set.";
+        }
+        if (!File.Exists(identityFile))
+        {
+            return $"The certificate file '{identityFile}' for {userName} was not found.";
+        }
+        if (!File.Exists(authorityFile))
+        {
+            return $"The authority certificate file '{authorityFile}' was not found.";
+        }
 
         try
         {

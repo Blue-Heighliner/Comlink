@@ -24,7 +24,7 @@ The engine runs in one of two modes selected at startup via `EngineMode`:
 | Mode | Description |
 |------|-------------|
 | `Client` | Desktop UI via Engine's Avalonia layer. Includes LiteDB persistence, all ViewModels, and a peer listener for receiving connections. |
-| `Headless` | Runs as a normal peer client — same LiteDB persistence, same `IServiceConnection` — but with no UI. |
+| `Headless` | Runs as a normal peer client — same LiteDB persistence, same `IServiceConnection<TPriority, TLevel, TAspect>` — but with no UI. |
 
 Both modes run the role's peer service to accept and send messages over [MSMT](Components/MsmtIntegration.md), and both always run `InterfaceService`, hosting the local interface listener for external programs — see [Interface.md](Components/Interface.md). The interface listener is not tied to Headless mode; it is active regardless of which mode the engine runs in.
 
@@ -37,7 +37,7 @@ Core/src/
 ├── Engine.cs, EngineConfiguration.cs   The primary public types: the entry point and the configuration a host passes to it
 ├── Public/        The rest of the package's public surface
 │   ├── Configuration/   The fluent builders a configuration is written against, and the types they take
-│   ├── Connection/      IServiceConnection and its models
+│   ├── Connection/      IServiceConnection<TPriority, TLevel, TAspect>, the processor contexts and their models
 │   ├── ExternalSystems/ The external system contract and its base class
 │   ├── Models/          Types that appear in configuration (UserInfo, ConnectionPoint, IConnectionInfo, ...)
 │   └── Serialization/   The frame and packet serializer contracts, their abstract bases, and the protobuf default
@@ -70,18 +70,17 @@ Core/src/
 ```mermaid
 sequenceDiagram
     participant DVM as DraftViewModel
-    participant SC as IServiceConnection
-    participant MRS as MessageRoutingService
+    participant SC as IEngineConnection
+    participant NP as Network processor
     participant PS as PeerService
-    participant RP as Remote IMsmtSessionPeer
+    participant RP as Remote node
     DVM->>SC: SendMessage
-    SC->>MRS: Route
-    MRS->>PS: Send (the host's frame type, tagged for delivery status)
-    PS->>PS: Find the connection identified as the recipient
-    PS->>RP: MSMT send over that connection
+    SC->>SC: Store in the Outbox (every recipient Sending)
+    SC->>NP: OnSent (the Message)
+    NP->>PS: context.Send (the host's frame, one per hop)
+    PS->>RP: MSMT send over the connection that reaches the user
     RP-->>PS: MSMT Acknowledged
-    PS-->>MRS: DeliveryStatusChanged (Received)
-    MRS-->>SC: DeliveryStatusChanged event
+    NP->>SC: context.SetSentStatus
     SC-->>DVM: DeliveryStatusChanged event
 ```
 
@@ -91,26 +90,25 @@ sequenceDiagram
 sequenceDiagram
     participant RN as Remote Node
     participant PS as PeerService
+    participant NP as Network processor
     participant DSC as DirectServiceConnection
     participant MVM as MainViewModel
     participant ES as EntryService
     RN->>PS: MSMT send (the host's frame type)
-    PS-->>DSC: FrameDelivered event
+    PS-->>NP: OnReceived (frame, FrameOrigin.Peer, source user)
+    NP->>DSC: context.ReceiveMessage (a Message)
     DSC-->>MVM: MessageReceived event
     MVM->>ES: StoreIncomingMessage (ReadStatus=Received)
     MVM->>MVM: Prepend to EntryBar if Inbox active
 ```
 
-When the user opens that Inbox message, `ContentAreaViewModel` calls `IServiceConnection.MarkMessageRead`, which transitions `ReadStatus` to `Read` and sends a read receipt back to the sender — see [Peer.md](Components/Peer.md#receipts). If the message is an alert (`IEngineController.GetIsAlert`), `AlertViewModel` also alarms (title bar box + sound) until it — and every other pending alert — is read; see `Docs/Components/ViewModels.md`.
+The engine is only transport, GUI and storage: receiving, routing, receipts, retrieval, forwarding and the network indicator are the host's network processor's, stated in its configuration. When the user opens that Inbox message, `ContentAreaViewModel` calls `IServiceConnection.MarkMessageRead`, which transitions `ReadStatus` to `Read` and calls the processor's `OnRead` so it can tell the sender, see Components/Peer.md. If the message is an alert (`Message.IsAlert`), `AlertViewModel` also alarms (title bar box + sound) until it, and every other pending alert, is read; see `Docs/Components/ViewModels.md`.
 
-### Receiving/relaying a message (via an external system)
-1. An external system (the configured external systems) reports an inbound message via `Receive`.
-2. `ExternalSystemsService` calls `IPeerService.DeliverLocal`, which processes it exactly like an ordinary received message (stored, shown in the UI) and raises `FrameDelivered`.
-3. `ExternalSystemsService`'s own `FrameDelivered` subscription relays the message out through every other configured external system, excluding the one it was originally received from. This happens in both Client and Headless mode. See [ExternalSystems.md](Components/ExternalSystems.md).
+### Receiving a frame from an external system
+An external system reports an inbound frame; `ExternalSystemsService` hands it to the processor's `OnReceived` with `FrameOrigin.ExternalSystem`, and the processor may send frames out through `SendToExternalSystems`. This happens in both Client and Headless mode. See [ExternalSystems.md](Components/ExternalSystems.md).
 
-### Sending a message from an interface
-1. An external program sends an instance of the host's frame type on its interface connection.
-2. `InterfaceService` reads `Body`/`Addresses` from it via `IEngineController` and calls `MessageRoutingService.Route` with this user's own installed name as `fromUser` — exactly as if the user itself had composed the message. This happens in both Client and Headless mode.
+### Receiving a frame from an interface
+An external program sends an instance of the host's frame type on its interface connection. `InterfaceService` hands it to the processor's `OnReceived` with `FrameOrigin.Interface`. This happens in both Client and Headless mode.
 
 ### Exporting and importing entries (Client mode)
 

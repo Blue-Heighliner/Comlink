@@ -11,7 +11,10 @@ internal sealed class MessageAspectBuilder<TAspect> where TAspect : struct, Enum
     public MessageAspectBuilder<TAspect> Aspect(TAspect aspect)
     {
         current = aspect;
-        if (!order.Contains(aspect)) { order.Add(aspect); }
+        if (!order.Contains(aspect))
+        {
+            order.Add(aspect);
+        }
         return this;
     }
 
@@ -29,11 +32,17 @@ internal sealed class MessageAspectBuilder<TAspect> where TAspect : struct, Enum
         List<MessageAspect> built =
         [.. order.Select(aspect =>
         {
-            if (Convert.ToInt64(aspect) is < int.MinValue or > int.MaxValue) { throw new InvalidOperationException($"The message aspect {typeof(TAspect).Name}.{aspect} has a value that does not fit an int, which is how message aspects are stored"); }
+            if (Convert.ToInt64(aspect) is < int.MinValue or > int.MaxValue)
+            {
+                throw new InvalidOperationException($"The message aspect {typeof(TAspect).Name}.{aspect} has a value that does not fit an int, which is how message aspects are stored");
+            }
 
             return new MessageAspect { Key = aspect, Name = labels.GetValueOrDefault(aspect) ?? aspect.ToString().ToUpperInvariant() };
         })];
-        if (built.GroupBy(aspect => aspect.Name, StringComparer.OrdinalIgnoreCase).FirstOrDefault(group => group.Count() > 1) is { } duplicate) { throw new InvalidOperationException($"Two message aspects are named {duplicate.Key}: every message aspect needs its own name"); }
+        if (built.GroupBy(aspect => aspect.Name, StringComparer.OrdinalIgnoreCase).FirstOrDefault(group => group.Count() > 1) is { } duplicate)
+        {
+            throw new InvalidOperationException($"Two message aspects are named {duplicate.Key}: every message aspect needs its own name");
+        }
 
         return built;
     }

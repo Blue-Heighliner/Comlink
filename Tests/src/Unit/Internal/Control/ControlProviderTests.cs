@@ -307,40 +307,6 @@ public sealed class ControlProviderTests
         Assert.False(blocks.IsBlocked("OK", TestMessagePriority.Normal));
     }
 
-    /// <summary>The default implementation returns hardcoded settings.</summary>
-    [Fact]
-    public void EngineController_ReturnsHardcodedAlertDefaults()
-    {
-        TestEngineController controller = new();
-        Assert.Equal("ALERT", controller.AlertLabel);
-        Assert.Equal(TimeSpan.FromSeconds(30), controller.AlarmSoundDuration);
-        Assert.Equal(["Space", "Enter"], controller.AlertQuickReadKeys);
-    }
-
-    /// <summary>Falls back to the wrapped provider for every field when not configured.</summary>
-    [Fact]
-    public void ConfiguredEngineController_FallsBackWhenAlertSettingsNotConfigured()
-    {
-        Mock<IEngineController> fallback = new();
-        fallback.Setup(f => f.AlertLabel).Returns("FALLBACK");
-        fallback.Setup(f => f.AlarmSoundDuration).Returns(TimeSpan.FromSeconds(12));
-        fallback.Setup(f => f.AlertQuickReadKeys).Returns(["F5"]);
-        ConfiguredEngineController controller = new(fallback.Object, new NetworkConfig(), NoCurrentUser);
-
-        Assert.Equal("FALLBACK", controller.AlertLabel);
-        Assert.Equal(TimeSpan.FromSeconds(12), controller.AlarmSoundDuration);
-        Assert.Equal(["F5"], controller.AlertQuickReadKeys);
-    }
-
-    /// <summary>The default implementation is disabled by default and prints every message exactly once.</summary>
-    [Fact]
-    public void EngineController_ReturnsHardcodedPrintPolicyDefaults()
-    {
-        TestEngineController controller = new();
-        Assert.False(controller.PrintReceivedDefaultEnabled);
-        Assert.Equal(1, controller.GetPrintCount(new TestFrame()));
-    }
-
     /// <summary>Falls back to the wrapped provider when not configured.</summary>
     [Fact]
     public void ConfiguredEngineController_FallsBackWhenPrintPolicyNotConfigured()
@@ -350,17 +316,6 @@ public sealed class ControlProviderTests
         ConfiguredEngineController controller = new(fallback.Object, new NetworkConfig(), NoCurrentUser);
 
         Assert.True(controller.PrintReceivedDefaultEnabled);
-    }
-
-    /// <summary>GetPrintCount always delegates to the wrapped provider, since there is no corresponding network file field.</summary>
-    [Fact]
-    public void ConfiguredEngineController_GetPrintCount_AlwaysDelegatesToFallback()
-    {
-        Mock<IEngineController> fallback = new();
-        fallback.Setup(f => f.GetPrintCount(It.IsAny<object>())).Returns(5);
-        ConfiguredEngineController controller = new(fallback.Object, new NetworkConfig(), NoCurrentUser);
-
-        Assert.Equal(5, controller.GetPrintCount(new object()));
     }
 
     /// <summary>The default implementation allows deletion in every root folder type.</summary>
@@ -565,47 +520,6 @@ public sealed class ControlProviderTests
         Assert.Equal(new byte[] { 5 }, controller.GetPacketData(packet).ToArray());
     }
 
-    /// <summary>Every message-field member has no network file field and always delegates straight to the wrapped provider, working through the real TestFrame mapping.</summary>
-    [Fact]
-    public void ConfiguredEngineController_MessageFieldMembers_AlwaysDelegateToFallback()
-    {
-        TestEngineController fallback = new();
-        ConfiguredEngineController controller = new(fallback, new NetworkConfig(), NoCurrentUser);
-
-        Assert.Equal(fallback.FrameType, controller.FrameType);
-        Assert.Same(fallback.FrameSerializer, controller.FrameSerializer);
-        Assert.Null(controller.PacketType);
-        Assert.Null(controller.PacketSerializer);
-        Assert.Equal(fallback.PacketSize, controller.PacketSize);
-        Assert.Equal(fallback.PacketWindow, controller.PacketWindow);
-
-        object message = controller.CreateFrame();
-        Assert.IsType<TestFrame>(message);
-
-        ((TestFrame)message).MessageId = "M1";
-        Assert.Equal("M1", controller.GetMessageId(message));
-        controller.SetFromUser(message, "ALICE");
-        Assert.Equal("ALICE", controller.GetFromUser(message));
-        ((TestFrame)message).Body = "Body text";
-        Assert.Equal("Body text", controller.GetBody(message));
-        List<MessageAddress> addresses = [new MessageAddress { UserName = "BOB", Type = AddressType.To }];
-        controller.SetAddresses(message, addresses);
-        MessageAddress roundTripped = Assert.Single(controller.GetAddresses(message));
-        Assert.Equal("BOB", roundTripped.UserName);
-        Assert.Equal(AddressType.To, roundTripped.Type);
-        DateTime sentAt = new(2026, 1, 1, 0, 0, 0, DateTimeKind.Utc);
-        ((TestFrame)message).SentAt = sentAt;
-        Assert.Equal(sentAt, controller.GetSentAt(message));
-        ((TestFrame)message).ReadReceiptMessageId = "M0";
-        Assert.Equal("M0", controller.GetReadReceiptMessageId(message));
-        ((TestFrame)message).IsAlert = true;
-        Assert.True(controller.GetIsAlert(message));
-        ((TestFrame)message).Priority = "LEVEL2";
-        Assert.Equal(2, controller.GetPriority(message));
-        ((TestFrame)message).Tag = "URGENT";
-        Assert.Equal("URGENT", controller.GetTag(message));
-    }
-
     /// <summary>ExternalSystems has no network file field and always delegates to the wrapped provider.</summary>
     [Fact]
     public void ConfiguredEngineController_ExternalSystems_AlwaysDelegatesToFallback()
@@ -649,41 +563,6 @@ public sealed class ControlProviderTests
     }
 
     private static TestFrame Alert(string body) => new() { Body = body, IsAlert = true };
-
-    /// <summary>A message that is not an alert is always kept, and does not enter the alert history.</summary>
-    [Fact]
-    public void EngineController_AcceptAlert_NonAlertIsAlwaysKept()
-    {
-        TestEngineController controller = new();
-
-        Assert.True(controller.AcceptAlert(new TestFrame { Body = "DUPLICATE" }));
-        Assert.True(controller.AcceptAlert(new TestFrame { Body = "DUPLICATE" }));
-    }
-
-    /// <summary>An alert the handler's filter refuses, given the alerts kept before it, is thrown away and not added to the history.</summary>
-    [Fact]
-    public void EngineController_AcceptAlert_RepeatedAlertIsThrownAway()
-    {
-        TestEngineController controller = new();
-
-        Assert.True(controller.AcceptAlert(Alert("DUPLICATE")));
-        Assert.False(controller.AcceptAlert(Alert("DUPLICATE")));
-        Assert.True(controller.AcceptAlert(Alert("OTHER")));
-    }
-
-    /// <summary>The history holds only as many alerts as the handler's limit, a newly kept alert replacing the oldest.</summary>
-    [Fact]
-    public void EngineController_AcceptAlert_HistoryDropsTheOldestAtTheLimit()
-    {
-        TestEngineController controller = new();
-
-        Assert.True(controller.AcceptAlert(Alert("DUPLICATE")));
-        Assert.True(controller.AcceptAlert(Alert("A")));
-        Assert.False(controller.AcceptAlert(Alert("DUPLICATE")));
-        Assert.True(controller.AcceptAlert(Alert("B")));
-
-        Assert.True(controller.AcceptAlert(Alert("DUPLICATE")));
-    }
 
     private sealed class CertificateFiles : IDisposable
     {

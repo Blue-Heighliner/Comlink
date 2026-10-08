@@ -26,7 +26,7 @@ internal sealed class HelpViewModel : IHelpViewModel
     public string AppName { get; }
 
     /// <inheritdoc />
-    public IReadOnlyList<HelpTab> Tabs => [.. (engineController.Role is UserRole.Server or UserRole.Relay ? BuildServerTabs() : BuildMessagingTabs(engineController)).Select(tab => new HelpTab(engineController.Display(tab.Title), [.. tab.Sections.Select(section => new HelpSection(engineController.Display(section.Heading), engineController.Display(section.Body)))]))];
+    public IReadOnlyList<HelpTab> Tabs => [.. (engineController.Role is UserRole.Server ? BuildServerTabs() : BuildMessagingTabs(engineController)).Select(tab => new HelpTab(engineController.Display(tab.Title), [.. tab.Sections.Select(section => new HelpSection(engineController.Display(section.Heading), engineController.Display(section.Body)))]))];
 
     private static List<HelpTab> BuildServerTabs() =>
     [
@@ -91,7 +91,7 @@ internal sealed class HelpViewModel : IHelpViewModel
             ])
         ];
 
-        if (engineController.Role == UserRole.Client)
+        if (engineController.Role is UserRole.Client)
         {
             tabs.Add(new HelpTab("Connection",
             [

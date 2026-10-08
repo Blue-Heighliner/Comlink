@@ -122,8 +122,8 @@ public sealed class EntryServiceTests : IDisposable
             DateTime.UtcNow);
 
         Assert.NotNull(entity);
-        Assert.Equal("SenderUser", format.GetFromUser(entity.Message));
-        Assert.Equal("Hello", format.GetBody(entity.Message));
+        Assert.Equal("SenderUser", entity.Message.FromUser);
+        Assert.Equal("Hello", entity.Message.Body);
         Assert.Contains("root-inbox", entity.FolderId);
     }
 
@@ -143,11 +143,11 @@ public sealed class EntryServiceTests : IDisposable
     {
         MessageEntity incoming = await service.StoreIncomingMessage(
             Guid.NewGuid().ToString(), "SenderUser", "Hello", [], DateTime.UtcNow, tag: "ALERT");
-        Assert.True(format.GetIsAlert(incoming.Message));
+        Assert.True(incoming.Message.IsAlert);
 
         MessageEntity sent = await service.StoreSentMessage(
             Guid.NewGuid().ToString("N"), "Subj", [], DateTime.UtcNow, [], tag: "ALERT");
-        Assert.True(format.GetIsAlert(sent.Message));
+        Assert.True(sent.Message.IsAlert);
     }
 
     /// <summary>StoreIncomingMessage/StoreSentMessage round-trip the Priority number onto the stored message.</summary>
@@ -156,11 +156,11 @@ public sealed class EntryServiceTests : IDisposable
     {
         MessageEntity incoming = await service.StoreIncomingMessage(
             Guid.NewGuid().ToString(), "SenderUser", "Hello", [], DateTime.UtcNow, priority: TestMessagePriority.Level2);
-        Assert.Equal(2, format.GetPriority(incoming.Message));
+        Assert.Equal(2, incoming.Message.Priority);
 
         MessageEntity sent = await service.StoreSentMessage(
             Guid.NewGuid().ToString("N"), "Subj", [], DateTime.UtcNow, [], priority: TestMessagePriority.Level3);
-        Assert.Equal(3, format.GetPriority(sent.Message));
+        Assert.Equal(3, sent.Message.Priority);
     }
 
     /// <summary>MarkMessageRead transitions an Inbox record from Received to Read and fires MessageRead.</summary>
@@ -256,8 +256,8 @@ public sealed class EntryServiceTests : IDisposable
 
         (List<MessageEntity> items, int _) = await service.GetMessages("root-inbox", 1);
 
-        Assert.Equal("Second", format.GetBody(items[0].Message));
-        Assert.Equal("First", format.GetBody(items[1].Message));
+        Assert.Equal("Second", items[0].Message.Body);
+        Assert.Equal("First", items[1].Message.Body);
     }
 
     /// <summary>A message search matches case-insensitively against the body, and excludes messages that don't match.</summary>
@@ -270,7 +270,7 @@ public sealed class EntryServiceTests : IDisposable
         (List<MessageEntity> items, int total) = await service.GetMessages("root-inbox", 1, filter: new EntryFilter { Search = "report" });
 
         Assert.Equal(1, total);
-        Assert.Equal("Quarterly Report", format.GetBody(Assert.Single(items).Message));
+        Assert.Equal("Quarterly Report", Assert.Single(items).Message.Body);
     }
 
     /// <summary>A message search also matches the sender, the tag, and the priority label, not just the body.</summary>
@@ -286,7 +286,7 @@ public sealed class EntryServiceTests : IDisposable
         (List<MessageEntity> items, int total) = await service.GetMessages("root-inbox", 1, filter: new EntryFilter { Search = search });
 
         Assert.Equal(1, total);
-        Assert.Equal(expectedBody, format.GetBody(Assert.Single(items).Message));
+        Assert.Equal(expectedBody, Assert.Single(items).Message.Body);
     }
 
     /// <summary>A message search with no matches returns an empty page and a zero total rather than falling back to the unfiltered folder.</summary>
@@ -349,7 +349,7 @@ public sealed class EntryServiceTests : IDisposable
         (List<MessageEntity> items, int total) = await service.GetMessages("root-inbox", 1, filter: new EntryFilter { MessageLevel = "restricted" });
 
         Assert.Equal(1, total);
-        Assert.Equal("Restricted memo", format.GetBody(Assert.Single(items).Message));
+        Assert.Equal("Restricted memo", Assert.Single(items).Message.Body);
     }
 
     /// <summary>IncomingMessageExists reports whether the Inbox holds the ID, and an Outbox-only record does not count.</summary>
@@ -374,7 +374,7 @@ public sealed class EntryServiceTests : IDisposable
         (List<MessageEntity> items, int total) = await service.GetMessages("root-inbox", 1, filter: new EntryFilter { Author = "lic" });
 
         Assert.Equal(1, total);
-        Assert.Equal("From alice", format.GetBody(Assert.Single(items).Message));
+        Assert.Equal("From alice", Assert.Single(items).Message.Body);
     }
 
     /// <summary>A message filter's Destination matches any addressee by case-insensitive substring.</summary>
@@ -387,7 +387,7 @@ public sealed class EntryServiceTests : IDisposable
         (List<MessageEntity> items, int total) = await service.GetMessages("root-inbox", 1, filter: new EntryFilter { Destination = "carol" });
 
         Assert.Equal(1, total);
-        Assert.Equal("To carol", format.GetBody(Assert.Single(items).Message));
+        Assert.Equal("To carol", Assert.Single(items).Message.Body);
     }
 
     /// <summary>A draft filter's Destination matches any addressee by case-insensitive substring.</summary>
@@ -419,7 +419,7 @@ public sealed class EntryServiceTests : IDisposable
         (List<MessageEntity> items, int total) = await service.GetMessages("root-inbox", 1, filter: new EntryFilter { Priority = TestMessagePriority.Level2 });
 
         Assert.Equal(1, total);
-        Assert.Equal("High priority", format.GetBody(Assert.Single(items).Message));
+        Assert.Equal("High priority", Assert.Single(items).Message.Body);
     }
 
     /// <summary>A message filter's Alert of false keeps only non-alert messages.</summary>
@@ -432,7 +432,7 @@ public sealed class EntryServiceTests : IDisposable
         (List<MessageEntity> items, int total) = await service.GetMessages("root-inbox", 1, filter: new EntryFilter { Alert = false });
 
         Assert.Equal(1, total);
-        Assert.Equal("Routine", format.GetBody(Assert.Single(items).Message));
+        Assert.Equal("Routine", Assert.Single(items).Message.Body);
     }
 
     /// <summary>A message filter's Alert of true excludes every non-alert message.</summary>
@@ -445,7 +445,7 @@ public sealed class EntryServiceTests : IDisposable
         (List<MessageEntity> items, int total) = await service.GetMessages("root-inbox", 1, filter: new EntryFilter { Alert = true });
 
         Assert.Equal(1, total);
-        Assert.Equal("Urgent", format.GetBody(Assert.Single(items).Message));
+        Assert.Equal("Urgent", Assert.Single(items).Message.Body);
     }
 
     /// <summary>A message filter's DateFrom/DateTo bound the received date inclusively, by date only.</summary>
@@ -465,7 +465,7 @@ public sealed class EntryServiceTests : IDisposable
             filter: new EntryFilter { DateFrom = today, DateTo = today.AddDays(1).AddTicks(-1) });
 
         Assert.Equal(2, total);
-        Assert.Equal(["Today early", "Today late"], items.Select(i => format.GetBody(i.Message)).OrderBy(s => s));
+        Assert.Equal(["Today early", "Today late"], items.Select(i => i.Message.Body).OrderBy(s => s));
     }
 
     /// <summary>A message filter's DateFrom/DateTo also bound an exact time of day, not just the calendar date.</summary>
@@ -481,7 +481,7 @@ public sealed class EntryServiceTests : IDisposable
             filter: new EntryFilter { DateFrom = today.AddHours(12), DateTo = today.AddHours(14) });
 
         Assert.Equal(1, total);
-        Assert.Equal("In window", format.GetBody(Assert.Single(items).Message));
+        Assert.Equal("In window", Assert.Single(items).Message.Body);
     }
 
     /// <summary>Multiple filter criteria combine with AND semantics: a message must satisfy every stated criterion.</summary>
@@ -495,7 +495,7 @@ public sealed class EntryServiceTests : IDisposable
         (List<MessageEntity> items, int total) = await service.GetMessages("root-inbox", 1, filter: new EntryFilter { Priority = TestMessagePriority.Level2, MessageLevel = "RESTRICTED" });
 
         Assert.Equal(1, total);
-        Assert.Equal("Match", format.GetBody(Assert.Single(items).Message));
+        Assert.Equal("Match", Assert.Single(items).Message.Body);
     }
 
     /// <summary>A draft filter matches MessageLevel, Priority and AlertOnly directly against the stored fields, the same way a message filter matches the decoded message.</summary>
@@ -541,7 +541,7 @@ public sealed class EntryServiceTests : IDisposable
         string? receivedBody = null;
         service.MessageInserted += entity =>
         {
-            receivedBody = format.GetBody(entity.Message);
+            receivedBody = entity.Message.Body;
             return Task.CompletedTask;
         };
 
@@ -604,7 +604,10 @@ public sealed class EntryServiceTests : IDisposable
         ctx.Dispose();
         string appData = Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData);
         string dir = Path.Combine(appData, appName);
-        if (Directory.Exists(dir)) { Directory.Delete(dir, recursive: true); }
+        if (Directory.Exists(dir))
+        {
+            Directory.Delete(dir, recursive: true);
+        }
     }
 
     private async Task<string> StoreSentTo(string user, bool success)

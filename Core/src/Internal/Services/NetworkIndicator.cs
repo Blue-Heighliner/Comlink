@@ -1,8 +1,8 @@
 namespace BlueHeighliner.Comlink;
 
 /// <summary>
-/// Whether the network indicator in the top bar of a client or relay shows online or offline. Set by <see cref="INetworkIndicatorService"/> from the node's connection to its parent,
-/// or by the host's network processor when it has taken that over (see <see cref="INetworkProcessor{TFrame}.UseAutomaticNetworkIndicator"/>).
+/// Whether the network indicator in the top bar of a client shows online or offline. Only the host's network processor sets it (see <see cref="INetworkContext{TFrame, TPriority, TLevel, TAspect}.SetNetworkIndicator"/>):
+/// the engine does not follow any connection itself.
 /// </summary>
 internal interface INetworkIndicator
 {
@@ -41,7 +41,10 @@ internal sealed class NetworkIndicator(ILoggerFactory loggerFactory) : INetworkI
     {
         lock (gate)
         {
-            if (this.isOnline == isOnline) { return; }
+            if (this.isOnline == isOnline)
+            {
+                return;
+            }
 
             this.isOnline = isOnline;
         }

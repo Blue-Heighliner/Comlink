@@ -9,18 +9,16 @@ public sealed class InterfaceServiceTests
 
     private static UserInfo MakeUserInfo(string name) => new() { Name = name };
 
-    /// <summary>A message received from an interface is routed as if sent by the currently installed user.</summary>
+    /// <summary>A frame received from an interface is handed to the network processor as coming from the interface, under the installed user's name.</summary>
     [Fact]
-    public async Task HandleInterfaceMessage_ValidMessage_RoutesAsCurrentUser()
+    public async Task HandleInterfaceMessage_ValidFrame_IsHandedToTheProcessor()
     {
         Mock<IMsmtSessionPeer.IFactory> peerFactory = new();
-        Mock<IMessageRoutingService> routing = new();
-        routing.Setup(r => r.Route(It.IsAny<string>(), It.IsAny<SendMessagePayload>(), It.IsAny<CancellationToken>()))
-            .ReturnsAsync(("MSGID", (IReadOnlyList<UserDeliveryResult>)[]));
+        Mock<INetworkProcessing> processing = new();
         Mock<IUserService> user = new();
         user.Setup(s => s.GetCurrentUserInfo()).Returns(MakeUserInfo("LOCAL"));
 
-        InterfaceService svc = new(peerFactory.Object, format, routing.Object, user.Object, noLogger);
+        InterfaceService svc = new(peerFactory.Object, format, processing.Object, user.Object, noLogger);
 
         TestFrame incoming = new()
         {
@@ -33,59 +31,37 @@ public sealed class InterfaceServiceTests
 
         await svc.HandleInterfaceMessage(buf.Memory.ToArray());
 
-        routing.Verify(r => r.Route("LOCAL", It.Is<SendMessagePayload>(p =>
-            p.Body == "Body" && p.Addresses.Count == 2 && p.Addresses[0].UserName == "DEST" && p.Addresses[1].Type == "External" && p.Addresses[1].Information == "Deliver to Eastside Office" && Equals(p.Priority, TestMessagePriority.Level2)),
-            It.IsAny<CancellationToken>()), Times.Once);
+        processing.Verify(p => p.Received(It.Is<object>(frame => frame is TestFrame && ((TestFrame)frame).Body == "Body" && ((TestFrame)frame).Addresses.Count == 2), FrameOrigin.Interface, "LOCAL"), Times.Once);
     }
 
-    /// <summary>A failure while routing a message from an interface is logged rather than escaping into a task nobody observes.</summary>
+    /// <summary>A frame received from an interface is dropped when no user is installed.</summary>
     [Fact]
-    public async Task HandleInterfaceMessage_RoutingFails_DoesNotThrow()
+    public async Task HandleInterfaceMessage_NoUserInstalled_IsNotHandedOn()
     {
-        Mock<IMsmtSessionPeer.IFactory> peerFactory = new();
-        Mock<IMessageRoutingService> routing = new();
-        routing.Setup(r => r.Route(It.IsAny<string>(), It.IsAny<SendMessagePayload>(), It.IsAny<CancellationToken>())).ThrowsAsync(new InvalidOperationException("database is locked"));
-        Mock<IUserService> user = new();
-        user.Setup(s => s.GetCurrentUserInfo()).Returns(MakeUserInfo("LOCAL"));
-        InterfaceService svc = new(peerFactory.Object, format, routing.Object, user.Object, noLogger);
-        using IMemoryOwner<byte> buf = serializer.Serialize(new TestFrame { Body = "Hi" });
-
-        await svc.HandleInterfaceMessage(buf.Memory.ToArray());
-
-        routing.Verify(r => r.Route("LOCAL", It.IsAny<SendMessagePayload>(), It.IsAny<CancellationToken>()), Times.Once);
-    }
-
-    /// <summary>A message received from an interface is dropped without routing when no user is installed.</summary>
-    [Fact]
-    public async Task HandleInterfaceMessage_NoUserInstalled_DoesNotRoute()
-    {
-        Mock<IMsmtSessionPeer.IFactory> peerFactory = new();
-        Mock<IMessageRoutingService> routing = new();
+        Mock<INetworkProcessing> processing = new();
         Mock<IUserService> user = new();
         user.Setup(s => s.GetCurrentUserInfo()).Returns((UserInfo?)null);
-
-        InterfaceService svc = new(peerFactory.Object, format, routing.Object, user.Object, noLogger);
+        InterfaceService svc = new(Mock.Of<IMsmtSessionPeer.IFactory>(), format, processing.Object, user.Object, noLogger);
 
         using IMemoryOwner<byte> buf = serializer.Serialize(new TestFrame { Body = "Hi" });
         await svc.HandleInterfaceMessage(buf.Memory.ToArray());
 
-        routing.Verify(r => r.Route(It.IsAny<string>(), It.IsAny<SendMessagePayload>(), It.IsAny<CancellationToken>()), Times.Never);
+        processing.Verify(p => p.Received(It.IsAny<object>(), It.IsAny<FrameOrigin>(), It.IsAny<string>()), Times.Never);
     }
 
-    /// <summary>A payload that describes a type other than the engine's FrameType is dropped without routing or throwing, since the serializer determines the type from the data itself.</summary>
+    /// <summary>A payload that describes a type other than the engine's FrameType is dropped without being handed on or throwing, since the serializer determines the type from the data itself.</summary>
     [Fact]
-    public async Task HandleInterfaceMessage_ForeignType_IsDroppedWithoutRouting()
+    public async Task HandleInterfaceMessage_ForeignType_IsDropped()
     {
-        Mock<IMsmtSessionPeer.IFactory> peerFactory = new();
-        Mock<IMessageRoutingService> routing = new();
+        Mock<INetworkProcessing> processing = new();
         Mock<IUserService> user = new();
         user.Setup(s => s.GetCurrentUserInfo()).Returns(MakeUserInfo("LOCAL"));
-        InterfaceService svc = new(peerFactory.Object, format, routing.Object, user.Object, noLogger);
+        InterfaceService svc = new(Mock.Of<IMsmtSessionPeer.IFactory>(), format, processing.Object, user.Object, noLogger);
         using IMemoryOwner<byte> buf = serializer.Serialize(new ForeignDto { Name = "not a message" });
 
         await svc.HandleInterfaceMessage(buf.Memory.ToArray());
 
-        routing.Verify(r => r.Route(It.IsAny<string>(), It.IsAny<SendMessagePayload>(), It.IsAny<CancellationToken>()), Times.Never);
+        processing.Verify(p => p.Received(It.IsAny<object>(), It.IsAny<FrameOrigin>(), It.IsAny<string>()), Times.Never);
     }
 
     [ProtoContract]
@@ -98,29 +74,27 @@ public sealed class InterfaceServiceTests
     [Fact]
     public async Task HandleInterfaceMessage_CorruptData_DoesNotThrow()
     {
-        Mock<IMsmtSessionPeer.IFactory> peerFactory = new();
-        Mock<IMessageRoutingService> routing = new();
+        Mock<INetworkProcessing> processing = new();
         Mock<IUserService> user = new();
 
-        InterfaceService svc = new(peerFactory.Object, format, routing.Object, user.Object, noLogger);
+        InterfaceService svc = new(Mock.Of<IMsmtSessionPeer.IFactory>(), format, processing.Object, user.Object, noLogger);
 
         await svc.HandleInterfaceMessage(new byte[] { 0xFF, 0xFE, 0xFD });
 
-        routing.Verify(r => r.Route(It.IsAny<string>(), It.IsAny<SendMessagePayload>(), It.IsAny<CancellationToken>()), Times.Never);
+        processing.Verify(p => p.Received(It.IsAny<object>(), It.IsAny<FrameOrigin>(), It.IsAny<string>()), Times.Never);
     }
 
-    /// <summary>A message an interface sends over a real MSMT connection is routed out to peers as if the app's own installed user had sent it.</summary>
+    /// <summary>A frame an interface sends over a real MSMT connection is handed to the network processor as received from the interface, under the app's own installed user.</summary>
     [Fact]
-    public async Task RealMsmt_MessageFromInterface_IsRoutedAsCurrentUser()
+    public async Task RealMsmt_FrameFromInterface_IsHandedToTheProcessor()
     {
         int port = 44000 + Random.Shared.Next(1000);
         (X509Certificate2 serverCertificate, X509Certificate2 clientCertificate, X509Certificate2Collection trustedAuthorities) = TestMsmtCertificates.Create();
 
-        Mock<IMessageRoutingService> routing = new();
-        TaskCompletionSource<(string FromUser, SendMessagePayload Payload)> routeCalled = new();
-        routing.Setup(r => r.Route(It.IsAny<string>(), It.IsAny<SendMessagePayload>(), It.IsAny<CancellationToken>()))
-            .Callback<string, SendMessagePayload, CancellationToken>((fromUser, payload, _) => routeCalled.TrySetResult((fromUser, payload)))
-            .ReturnsAsync(("MSGID", (IReadOnlyList<UserDeliveryResult>)[]));
+        Mock<INetworkProcessing> processing = new();
+        TaskCompletionSource<(object Frame, FrameOrigin Origin, string Source)> routeCalled = new();
+        processing.Setup(p => p.Received(It.IsAny<object>(), It.IsAny<FrameOrigin>(), It.IsAny<string>()))
+            .Callback<object, FrameOrigin, string>((frame, origin, source) => routeCalled.TrySetResult((frame, origin, source)));
         Mock<IUserService> user = new();
         user.Setup(s => s.GetCurrentUserInfo()).Returns(MakeUserInfo("LOCAL"));
 
@@ -132,7 +106,7 @@ public sealed class InterfaceServiceTests
             RequireFullyQualifiedHostname = false
         });
 
-        await using InterfaceService svc = new(new IMsmtSessionPeer.Factory(), engineController.Object, routing.Object, user.Object, noLogger);
+        await using InterfaceService svc = new(new IMsmtSessionPeer.Factory(), engineController.Object, processing.Object, user.Object, noLogger);
 
         using CancellationTokenSource cts = new();
         _ = svc.Start(cts.Token);
@@ -150,7 +124,7 @@ public sealed class InterfaceServiceTests
         };
 
         // The interface listener may still be finishing binding immediately after Start() returns control;
-        // reconnect and re-send until routing observes it (harmless: Route is a no-op to production state here).
+        // reconnect and re-send until the processing observes it (harmless: it is a mock here).
         _ = Task.Run(async () =>
         {
             try
@@ -170,11 +144,11 @@ public sealed class InterfaceServiceTests
             catch { }
         });
 
-        (string fromUser, SendMessagePayload payload) = await routeCalled.Task.WaitAsync(TimeSpan.FromSeconds(10));
-        Assert.Equal("LOCAL", fromUser);
-        Assert.Equal("Body", payload.Body);
-        Assert.Single(payload.Addresses);
-        Assert.Equal("DEST", payload.Addresses[0].UserName);
+        (object frame, FrameOrigin origin, string source) = await routeCalled.Task.WaitAsync(TimeSpan.FromSeconds(10));
+        Assert.Equal(("LOCAL", FrameOrigin.Interface), (source, origin));
+        TestFrame received = Assert.IsType<TestFrame>(frame);
+        Assert.Equal("Body", received.Body);
+        Assert.Equal("DEST", Assert.Single(received.Addresses).UserName);
 
         cts.Cancel();
     }

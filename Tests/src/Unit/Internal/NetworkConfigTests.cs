@@ -18,7 +18,7 @@ public sealed class NetworkConfigTests : IDisposable
         return path;
     }
 
-    /// <summary>A file with a role that is not Client, Server or Relay (the retired Peer, say) does not load, so networking cannot start.</summary>
+    /// <summary>A file with a role that is not Client or Server (the retired Peer or Relay, say) does not load, so networking cannot start.</summary>
     [Theory]
     [InlineData("Peer")]
     [InlineData("Bogus")]
@@ -115,6 +115,7 @@ public sealed class NetworkConfigTests : IDisposable
                   "Parent": { "User": "ROOT", "Mode": "MsmtListen" },
                   "Children": [ "BOB", { "User": "CAROL", "Mode": "Hdlc", "Port": "ignored", "Address": 5 }, { "user": "DAN", "mode": "msmtconnect" } ],
                   "MessageLevel": "HIGH",
+                  "AutoForwarders": [ "Alerts", "Backups" ],
                   "Data": { "desk": "4" },
                   "Headless": true
                 }
@@ -136,6 +137,7 @@ public sealed class NetworkConfigTests : IDisposable
             [new UserLink { User = "BOB" }, new UserLink { User = "CAROL", Mode = ConnectionMode.Hdlc }, new UserLink { User = "DAN", Mode = ConnectionMode.MsmtConnect }],
             info.Children);
         Assert.Equal("HIGH", info.MessageLevel);
+        Assert.Equal(["Alerts", "Backups"], info.AutoForwarders);
         Assert.Equal("4", info.Data["desk"]);
         Assert.Equal(["OPS"], info.Groups);
         Assert.True(node.Headless);
@@ -173,7 +175,7 @@ public sealed class NetworkConfigTests : IDisposable
     [Theory]
     [InlineData("server", UserRole.Server)]
     [InlineData("CLIENT", UserRole.Client)]
-    [InlineData("relay", UserRole.Relay)]
+    [InlineData("relay", null)]
     [InlineData("Peer", null)]
     [InlineData(null, null)]
     [InlineData("Bogus", null)]

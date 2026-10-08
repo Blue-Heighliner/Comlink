@@ -77,7 +77,10 @@ internal sealed class Packetizer : IPacketizer
             {
                 int offset = index * chunkSize;
                 object packet = Build(id, index, count, payload.Length, payload.Slice(offset, Math.Min(chunkSize, payload.Length - offset)));
-                if (frame is not null) { engineController.FrameSerializer.ConfigurePacket(frame, packet); }
+                if (frame is not null)
+                {
+                    engineController.FrameSerializer.ConfigurePacket(frame, packet);
+                }
                 IMemoryOwner<byte> data = serializer.Serialize(packet, frame);
                 if (data.Memory.Length > packetSize)
                 {
@@ -91,7 +94,10 @@ internal sealed class Packetizer : IPacketizer
         }
         catch
         {
-            foreach (Packet packet in packets) { packet.Dispose(); }
+            foreach (Packet packet in packets)
+            {
+                packet.Dispose();
+            }
             throw;
         }
 
@@ -112,15 +118,24 @@ internal sealed class Packetizer : IPacketizer
     // out bigger. A format that grows the data (a text encoding, say) needs no special handling.
     private int MeasureChunkSize()
     {
-        if (Probe(1) > packetSize) { throw new InvalidOperationException($"PacketSize {packetSize} leaves no room for payload in a packet of this format"); }
+        if (Probe(1) > packetSize)
+        {
+            throw new InvalidOperationException($"PacketSize {packetSize} leaves no room for payload in a packet of this format");
+        }
 
         int fits = 1;
         int over = Math.Min(packetSize, maxPayloadSize) + 1;
         while (over - fits > 1)
         {
             int middle = fits + ((over - fits) / 2);
-            if (Probe(middle) <= packetSize) { fits = middle; }
-            else { over = middle; }
+            if (Probe(middle) <= packetSize)
+            {
+                fits = middle;
+            }
+            else
+            {
+                over = middle;
+            }
         }
 
         return fits;

@@ -211,7 +211,7 @@ public sealed class ImportViewModelTests
             .Returns(async (string _, Func<ImportConflict, Task<DraftNoteConflictResolution>> resolve, ImportFormatDefinition? _, CancellationToken _) =>
             {
                 DraftNoteConflictResolution resolution = await resolve(conflict);
-                return new ImportSummary { Imported = 0, Skipped = resolution == DraftNoteConflictResolution.KeepExisting ? 1 : 0, Overwritten = resolution == DraftNoteConflictResolution.KeepExisting ? 0 : 1 };
+                return new ImportSummary { Imported = 0, Skipped = resolution is DraftNoteConflictResolution.KeepExisting ? 1 : 0, Overwritten = resolution is DraftNoteConflictResolution.KeepExisting ? 0 : 1 };
             });
         ImportViewModel vm = s.Build();
 

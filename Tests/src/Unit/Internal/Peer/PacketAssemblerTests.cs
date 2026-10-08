@@ -15,7 +15,10 @@ public sealed class PacketAssemblerTests
     {
         IReadOnlyList<Packet> packets = packetizer.Split(payload, 0);
         List<byte[]> bytes = [.. packets.Select(p => p.Data.Memory.ToArray())];
-        foreach (Packet packet in packets) { packet.Dispose(); }
+        foreach (Packet packet in packets)
+        {
+            packet.Dispose();
+        }
         return bytes;
     }
 
@@ -68,7 +71,10 @@ public sealed class PacketAssemblerTests
         packets.Reverse();
 
         AssembledPayload? complete = null;
-        foreach (byte[] packet in packets) { complete = assembler.Add(packet) ?? complete; }
+        foreach (byte[] packet in packets)
+        {
+            complete = assembler.Add(packet) ?? complete;
+        }
 
         using IMemoryOwner<byte> payload = Assert.IsType<AssembledPayload>(complete).Payload;
         Assert.Equal(0, Assert.IsType<TestPacket>(complete.FirstPacket).Index);

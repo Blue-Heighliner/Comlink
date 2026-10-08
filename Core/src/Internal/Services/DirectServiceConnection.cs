@@ -1,31 +1,40 @@
 namespace BlueHeighliner.Comlink;
 
-/// <summary>In-process <see cref="IServiceConnection"/> implementation that wires directly to engine services without a network hop.</summary>
-internal sealed class DirectServiceConnection : IServiceConnection
+/// <summary>In-process <see cref="IEngineConnection"/> implementation that wires directly to engine services without a network hop.</summary>
+internal sealed class DirectServiceConnection : IEngineConnection
 {
     /// <summary>Initializes a new <see cref="DirectServiceConnection"/> with the required engine services.</summary>
     public DirectServiceConnection(
         IUserService userService,
         IEngineController engineController,
-        IMessageRoutingService messageRouting,
         IPeerService peerService,
-        IEntryService entryService)
+        IEntryService entryService,
+        IMessageEvents events,
+        INetworkProcessing processing,
+        IIdGenerator ids,
+        ILoggerFactory loggerFactory)
     {
+        logger = loggerFactory.CreateLogger(LogCategories.App);
         this.userService = userService;
         this.engineController = engineController;
-        this.messageRouting = messageRouting;
         this.peerService = peerService;
         this.entryService = entryService;
+        this.events = events;
+        this.processing = processing;
+        this.ids = ids;
     }
 
     private readonly IUserService userService;
     private readonly IEngineController engineController;
-    private readonly IMessageRoutingService messageRouting;
     private readonly IPeerService peerService;
     private readonly IEntryService entryService;
+    private readonly IMessageEvents events;
+    private readonly INetworkProcessing processing;
+    private readonly IIdGenerator ids;
+    private readonly ILogger logger;
 
     /// <inheritdoc />
-    public event Func<MessageReceivedEvent, Task>? MessageReceived;
+    public event Func<Message, Task>? MessageReceived;
 
     /// <inheritdoc />
     public event Func<DeliveryStatusChangedEvent, Task>? DeliveryStatusChanged;
@@ -33,43 +42,14 @@ internal sealed class DirectServiceConnection : IServiceConnection
     /// <inheritdoc />
     public Task Connect(CancellationToken cancellation = default)
     {
-        peerService.FrameDelivered += OnMessageDelivered;
-        messageRouting.DeliveryStatusChanged += OnDeliveryStatusChanged;
+        events.MessageReceived += OnMessageReceived;
+        events.DeliveryStatusChanged += OnDeliveryStatusChanged;
         return Task.CompletedTask;
     }
 
-    private async Task OnMessageDelivered(object payload)
-    {
-        if (!engineController.IsMessage(payload)) { return; }
+    private Task OnMessageReceived(Message message) => MessageReceived.InvokeAll(message);
 
-        await SendReceiveReceipt(payload);
-        if (!engineController.AcceptAlert(payload)) { return; }
-
-        if (MessageReceived is null) { return; }
-        await MessageReceived.InvokeAll(engineController.ToMessageReceivedEvent(payload));
-    }
-
-    private async Task SendReceiveReceipt(object message)
-    {
-        UserInfo? userInfo = userService.GetCurrentUserInfo();
-        string fromUser = engineController.GetFromUser(message);
-        if (userInfo is null) { return; }
-
-        object receipt = engineController.CreateReceiveReceipt(engineController.GetMessageId(message), fromUser);
-        engineController.SetFromUser(receipt, userInfo.Name);
-        await peerService.Send(fromUser, receipt);
-    }
-
-    private async Task OnDeliveryStatusChanged(string messageId, string user, DestinationStatus status)
-    {
-        MessageEntity? entity = await entryService.UpdateDeliveryStatus(messageId, user, status);
-        if (entity is null || DeliveryStatusChanged is null) { return; }
-
-        // Reports the status as stored rather than as raised, since a late, out-of-order event may have been ignored.
-        DestinationStatus effective = entity.DeliveryStatuses
-            .FirstOrDefault(d => string.Equals(d.UserName, user, StringComparison.OrdinalIgnoreCase))?.Status ?? status;
-        await DeliveryStatusChanged.InvokeAll(new DeliveryStatusChangedEvent { MessageId = messageId, UserName = user, Status = effective, OverallStatus = entity.OverallStatus });
-    }
+    private Task OnDeliveryStatusChanged(DeliveryStatusChangedEvent change) => DeliveryStatusChanged.InvokeAll(change);
 
     /// <inheritdoc />
     public Task<UserInfo?> GetUserInfo(CancellationToken cancellation = default)
@@ -100,44 +80,52 @@ internal sealed class DirectServiceConnection : IServiceConnection
     public async Task<SendMessageResult?> SendMessage(string body, List<AddressRequest> addresses, Enum? priority = null, string tag = "", Enum? messageLevel = null, Enum? messageAspect = null, CancellationToken cancellation = default)
     {
         UserInfo? userInfo = userService.GetCurrentUserInfo();
-        if (userInfo is null) { return null; }
-
-        if (engineController.TagsEnabled && engineController.DraftTagRules.Validate(tag) is { } tagError) { throw new ArgumentException(tagError, nameof(tag)); }
-
-        SendMessagePayload payload = new()
+        if (userInfo is null)
         {
+            return null;
+        }
+
+        if (engineController.TagsEnabled && engineController.DraftTagRules.Validate(tag) is { } tagError)
+        {
+            throw new ArgumentException(tagError, nameof(tag));
+        }
+
+        Enum resolvedPriority = engineController.RequirePriority(priority);
+        string levelName = engineController.GetMessageLevelName(messageLevel);
+        string aspectName = engineController.GetMessageAspectName(messageAspect);
+        bool isAlert = engineController.IsAlert(new DraftContent { Tag = tag, Priority = resolvedPriority, MessageLevel = levelName, MessageAspect = aspectName, Body = body, Addresses = addresses, LineWidth = null });
+
+        Message message = new()
+        {
+            Id = await ids.Next(),
+            FromUser = userInfo.Name,
             Body = body,
-            Addresses = addresses.Select(a => new AddressPayload { UserName = a.UserName, Type = a.Type, Information = a.Information }).ToList(),
-            Priority = priority,
+            Addresses = [.. addresses.Select(a => new MessageAddress { UserName = a.UserName, Type = a.Type.ParseAddressType(), Information = a.Information })],
+            SentAt = DateTime.UtcNow,
+            Priority = resolvedPriority,
             Tag = tag,
-            MessageLevel = engineController.GetMessageLevelName(messageLevel),
-            MessageAspect = engineController.GetMessageAspectName(messageAspect)
+            MessageLevel = messageLevel,
+            MessageAspect = messageAspect,
+            IsAlert = isAlert
         };
 
-        (string messageId, IReadOnlyList<UserDeliveryResult> userResults) = await messageRouting.Route(userInfo.Name, payload, cancellation);
-        return new SendMessageResult
-        {
-            MessageId = messageId,
-            IsAlert = engineController.ComputeIsAlert(body, priority, tag, engineController.GetMessageLevelName(messageLevel), addresses),
-            UserResults = [.. userResults]
-        };
+        await entryService.StoreSentMessage(message);
+        logger.Record(LogEvents.MessageSending, "{MessageId} sending to {Destinations}", message.Id, string.Join(", ", message.Addresses.Where(a => a.Type is not AddressType.External).Select(a => a.UserName).Distinct(StringComparer.OrdinalIgnoreCase)));
+        processing.Sent(message);
+        return new SendMessageResult { MessageId = message.Id, IsAlert = isAlert };
     }
 
     /// <inheritdoc />
     public async Task<bool> MarkMessageRead(string messageId, CancellationToken cancellation = default)
     {
         MessageEntity? entity = await entryService.MarkMessageRead(messageId);
-        if (entity is null) { return false; }
+        if (entity is null)
+        {
+            return false;
+        }
 
-        await DeliveryStatusChanged.InvokeAll(new DeliveryStatusChangedEvent { MessageId = messageId, Status = DestinationStatus.Read, OverallStatus = DestinationStatus.Read });
-
-        UserInfo? userInfo = userService.GetCurrentUserInfo();
-        if (userInfo is null) { return true; }
-
-        string fromUser = engineController.GetFromUser(entity.Message);
-        object receipt = engineController.CreateReadReceipt(messageId, fromUser);
-        engineController.SetFromUser(receipt, userInfo.Name);
-        await peerService.Send(fromUser, receipt, cancellation);
+        await events.RaiseDeliveryStatusChanged(new DeliveryStatusChangedEvent { MessageId = messageId, Status = DestinationStatus.Read, OverallStatus = DestinationStatus.Read });
+        processing.Read(engineController.ToMessage(entity.Message));
         return true;
     }
 }

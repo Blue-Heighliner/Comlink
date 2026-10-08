@@ -76,7 +76,7 @@ internal sealed partial class ConnectionStatusViewModel : ObservableObject, ICon
                 LastConnectedAt = status.LastConnectedAt,
                 LastDisconnectedAt = status.LastDisconnectedAt
             };
-            (status.Kind == PeerConnectionKind.Server ? ServerRows : ClientRows).Add(row);
+            (status.Kind is PeerConnectionKind.Server ? ServerRows : ClientRows).Add(row);
         }
         OnPropertyChanged(nameof(HasServerRows));
         OnPropertyChanged(nameof(HasClientRows));

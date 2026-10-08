@@ -9,13 +9,13 @@ public sealed class EngineContextTests
     {
         Dictionary<string, UserInfo> known = new(StringComparer.OrdinalIgnoreCase)
         {
-            ["RELAY"] = new UserInfo { Name = "RELAY", Role = UserRole.Relay, Children = ["C1"] },
+            ["SERVER2"] = new UserInfo { Name = "SERVER2", Role = UserRole.Server, Children = ["C1"] },
             ["C1"] = new UserInfo { Name = "C1", Role = UserRole.Client }
         };
-        EngineContext context = new(new UserInfo { Name = "ME" }, ["RELAY", "C1"], name => known[name], name => name == "RELAY");
+        EngineContext context = new(new UserInfo { Name = "ME" }, ["SERVER2", "C1"], name => known[name], name => name == "SERVER2", _ => []);
 
-        Assert.Equal([UserRole.Relay, UserRole.Client], context.Users.Select(user => user.Role));
-        Assert.Equal("RELAY", Assert.Single(context.ConnectedUsers).Name);
-        Assert.Equal(["C1"], context.ConnectedUsers.Single().Children.Select(link => link.User));
+        Assert.Equal([UserRole.Server, UserRole.Client], context.Users.Values.Select(user => user.Role));
+        Assert.Equal("SERVER2", Assert.Single(context.ConnectedUsers).Key);
+        Assert.Equal(["C1"], context.ConnectedUsers.Values.Single().Children.Select(link => link.User));
     }
 }

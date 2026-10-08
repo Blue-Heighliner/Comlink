@@ -13,12 +13,13 @@ public interface IInitialPacketContext<TPacket> : IEngineContext where TPacket :
 
     /// <summary>Marks the connection fully connected, as <paramref name="userName"/>. The connection is then usable, and anything after it is ordinary traffic.</summary>
     /// <param name="userName">The user on the other end.</param>
-    void Connected(string userName);
+    Task Connected(string userName);
 
     /// <summary>Drops the connection.</summary>
-    void Disconnect();
+    Task Disconnect();
 
-    /// <summary>Sends <paramref name="packet"/> over the connection in the background, in order with this context's other calls (a <see cref="Connected"/> after a send takes effect once it has been sent), and dropping the connection if it cannot be sent,, serialized with the packet serializer and sent as it is, since it is itself a packet and is not split.</summary>
+    /// <summary>Sends <paramref name="packet"/> over the connection and completes once the other node has accepted it, so a processor awaits it before calling <see cref="Connected"/>. The connection is dropped if it cannot be sent, serialized with the packet serializer and sent as it is, since it is itself a packet and is not split.</summary>
     /// <param name="packet">What to send.</param>
-    void Send(TPacket packet);
+    /// <returns>Whether the other node accepted it.</returns>
+    Task<bool> Send(TPacket packet);
 }

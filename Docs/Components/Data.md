@@ -19,9 +19,9 @@ Collections initialized:
 | `notes` | `NoteEntity` | Text notes |
 | `activity_logs` | `ActivityLogEntity` | Daily activity entries |
 | `folders` | `FolderEntity` | Folder hierarchy |
-| `auto_forward_targets` | `AutoForwardTargetsEntity` | Auto forward controller target lists |
-| `stored_messages` | `StoredMessageEntity` | Copies of the messages a server's children sent |
-| `last_id` | `LastIdEntity` | The last message identifier generated, kept so the message handler's `NextId` continues from it after a restart |
+| `auto_forward_targets` | `AutoForwardTargetsEntity` | Auto forwarder target lists |
+| `stored_messages` | `StoredMessageEntity` | Copies of the messages a server's processor stored |
+| `last_id` | `LastIdEntity` | The last message identifier generated, kept so the draft handler's `NextId` continues from it after a restart |
 
 On each `Initialize()` call, root folders are auto-created (Inbox, Outbox, Drafts, Notes, Activity) if absent.
 
@@ -39,7 +39,7 @@ erDiagram
         ObjectId Id PK
         string MessageId
         string FolderId FK
-        object Message
+        MessageData Message
         DateTime ReceivedAt
         bool IsOutbound
     }
@@ -75,8 +75,8 @@ Stored in both Inbox (received) and Outbox (sent).
 | Field | Type | Notes |
 |-------|------|-------|
 | `Id` | `ObjectId` | LiteDB auto-ID (the actual primary key) |
-| `MessageId` | `string` | Denormalized from `Message` (via `IEngineController.GetMessageId`) so LiteDB can query/index on it directly. **Not unique** — see below |
-| `Message` | `object` | The message content — body, sender, addresses, sent time — as an instance of `IEngineController.FrameType`. This is the canonical representation; LiteDB serializes it using its own runtime type (via its built-in `object`-property polymorphism, storing a `_type` discriminator) and reconstructs the same concrete type on load. Read its logical fields through the registered `IEngineController` — see `Docs/Components/Peer.md` and `Docs/Components/Configuration.md`. |
+| `MessageId` | `string` | Denormalized from `Message.Id` so LiteDB can query/index on it directly. **Not unique** — see below |
+| `Message` | `MessageData` | The message content, embedded: `Id`, `FromUser`, `Body`, `Addresses`, `SentAt`, `Priority`, `Tag`, `MessageLevel`, `MessageAspect` (the enum members as integers, `null` for none) and `IsAlert`. It is built from the `Message` record the processor and the GUI hand to the engine, which `MessageMapping` turns back into a `Message` for the host. |
 | `DeliveryStatuses` | `List<DeliveryStatus>` | Per-user delivery state (Outbox messages) |
 | `ReadStatus` | `DestinationStatus?` | Inbox-only: `Received` when stored, `Read` once the user opens it (see `Docs/Components/Peer.md#receipts`). Always `null` on Outbox records — per-destination read state lives in `DeliveryStatuses` instead |
 | `ReceivedAt` | `DateTime` | UTC timestamp; denormalized from `Message`'s sent time so LiteDB can sort/index on it directly |
@@ -144,11 +144,11 @@ One record per day, accumulated throughout the day.
 
 ### `AutoForwardTargetsEntity`
 
-One document per configured auto forward controller, keyed by the controller's own name rather than an auto-generated ID: `Id (string)` is that name verbatim (see `Docs/Components/Configuration.md#auto-forward-controllers`), and `Targets (List<string>)` is the user names it currently forwards a matching received message to - empty until a user with access adds at least one. No document exists for a controller until its target list is saved for the first time.
+One document per configured auto forwarder, keyed by the auto forwarder's own name rather than an auto-generated ID: `Id (string)` is that name verbatim (see `Docs/Components/Configuration.md#auto-forwarders`), and `Targets (List<string>)` is the user names it currently forwards a matching received message to - empty until a user with access adds at least one. No document exists for a controller until its target list is saved for the first time.
 
 ### `StoredMessageEntity`
 
-A server's copy of one message a child of it sent (see `Docs/Components/Configuration.md#server-storage`): `Id (ObjectId)`, `MessageId (string)` denormalized from `Message` and indexed so a duplicate is caught cheaply, `Message (object)` as an instance of `IEngineController.FrameType` stored the same way `MessageEntity.Message` is, and `StoredAt (DateTime)`. Written only by a server whose user is in `IEngineController.StorageServers`; a client's database never has any. A stored `DateTime` reads back as local time, so anything comparing a stored message's sent time converts it to UTC first.
+A copy of one message the network processor stored with `StoreMessage` (see `Docs/Components/Configuration.md#server-storage`): `Id (ObjectId)`, `MessageId (string)` denormalized from `Message` and indexed so a duplicate is caught cheaply, `Message (MessageData)` stored the same way `MessageEntity.Message` is, and `StoredAt (DateTime)`. Which messages are stored is the processor's decision; a client's database normally has none. A stored `DateTime` reads back as local time, so anything comparing a stored message's sent time converts it to UTC first.
 
 ### Embedded Types
 
@@ -171,7 +171,7 @@ All repositories take `LiteDbContext` by constructor. All public methods are `Ta
 | `Update(entity)` | Update |
 | `Delete(messageId, outbound)` | Delete by `MessageId` and direction, same disambiguation as `Get` |
 | `GetAll()` | Every message document, both Inbox and Outbox, across all folders — unpaginated; used by `ExportService` for a full export |
-| `GetAllInFolder(folderId)` | Every message in one folder, unpaginated, same ordering as `GetPage`; used by `EntryService` to search a folder's entries, since a message's searchable fields live inside the host's own opaque `Message` type and cannot be queried in LiteDB directly |
+| `GetAllInFolder(folderId)` | Every message in one folder, unpaginated, same ordering as `GetPage`; used by `EntryService` to search a folder's entries, since the filters (search, author, destination) run in memory over the embedded `MessageData` |
 
 ### `DraftRepository` — page size 50
 
@@ -210,7 +210,7 @@ Same interface shape as `DraftRepository`, including `GetAll()` and `GetAllInFol
 
 ### `StoredMessageRepository`
 
-`InsertIfNew(entity)` stores a copy unless one with the same `MessageId` exists (serialized by a lock so two concurrent routes of one message keep one), returning whether it stored; `GetAll()` returns every copy, since a message's searchable fields live inside the host's opaque type and cannot be queried in LiteDB.
+`InsertIfNew(entity)` stores a copy unless one with the same `MessageId` exists (serialized by a lock so two concurrent stores of one message keep one), returning whether it stored; `GetAll()` returns every copy, since the criteria run in memory over the embedded `MessageData`.
 
 ### `AutoForwardTargetsRepository`
 

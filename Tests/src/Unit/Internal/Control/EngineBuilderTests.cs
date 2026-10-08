@@ -18,7 +18,10 @@ public sealed class EngineBuilderTests
         ServiceCollection services = new();
         foreach (object processor in processors)
         {
-            foreach (Type type in processor.GetType().GetInterfaces().Where(type => type.IsGenericType && type.Namespace == typeof(IInitialFrameProcessor<>).Namespace && type.Name.EndsWith("Processor`1"))) { services.AddSingleton(type, processor); }
+            foreach (Type type in processor.GetType().GetInterfaces().Where(type => type.IsGenericType && type.Namespace == typeof(IInitialFrameProcessor<>).Namespace && type.Name.EndsWith("Processor`1")))
+            {
+                services.AddSingleton(type, processor);
+            }
         }
 
         return services.BuildServiceProvider();
@@ -89,10 +92,7 @@ public sealed class EngineBuilderTests
                 .Priorities().Priority(TestMessagePriority.High).Priority(TestMessagePriority.Low).Priority(TestMessagePriority.Flash)
                 .MessageLevels().Level(TestLevel.Secret).Level(TestLevel.Public)
                 .Frames()
-                    .Message<TestMessageHandler>()
-                    .Retrieval<TestRetrievalHandler>()
-                    .ReadReceipt<TestReadReceiptHandler>()
-                    .ReceiveReceipt<TestReceiveReceiptHandler>();
+                    .Heartbeat<TestHeartbeatHandler>();
     }
 
     /// <summary>Levels rank in the order they are stated, not the order of the enum, a member not stated is not a level, and what is stored is the member's integer value.</summary>
@@ -119,51 +119,18 @@ public sealed class EngineBuilderTests
         Assert.Contains("not one of the configured priorities", Assert.Throws<InvalidOperationException>(() => controller.Validate()).Message);
     }
 
-    /// <summary>A received message with an unconfigured priority or message level is invalid, with the reason, so it is dropped and logged.</summary>
-    [Fact]
-    public void GetInvalidMessageReason_UnconfiguredPriorityOrMessageLevel_IsReported()
-    {
-        EngineController controller = new(EngineBuilder.Build(new UnorderedConfiguration()), new CurrentUserProvider(), null);
-
-        Assert.Null(controller.GetInvalidMessageReason(new TestFrame { MessageId = "M", Priority = "FLASH", MessageLevel = "SECRET" }));
-        Assert.Null(controller.GetInvalidMessageReason(new TestFrame { MessageId = "M", Priority = "FLASH" }));
-        Assert.Contains("priority", controller.GetInvalidMessageReason(new TestFrame { MessageId = "M", Priority = "LEVEL3" }));
-        Assert.Contains("message level", controller.GetInvalidMessageReason(new TestFrame { MessageId = "M", Priority = "FLASH", MessageLevel = "LOW" }));
-        Assert.Contains("identifier", controller.GetInvalidMessageReason(new TestFrame { Priority = "FLASH" }));
-    }
-
     private sealed class DuplicateLabelConfiguration : IEngineConfiguration
     {
         public void Configure(IEngineBuilder engine)
             => engine.Types<TestFrame, TestPacket, TestMessagePriority, TestLevel, TestAspect>()
                 .Priorities().Priority(TestMessagePriority.Normal).Label("SAME").Priority(TestMessagePriority.Flash).Label("same")
-                .Frames().Message<TestMessageHandler>().Retrieval<TestRetrievalHandler>().ReadReceipt<TestReadReceiptHandler>().ReceiveReceipt<TestReceiveReceiptHandler>();
+                .Frames();
     }
 
     /// <summary>Two priorities with the same name are refused, since the name is what users pick by.</summary>
     [Fact]
     public void Build_DuplicatePriorityNames_Throws()
         => Assert.Contains("SAME", Assert.Throws<InvalidOperationException>(() => EngineBuilder.Build(new DuplicateLabelConfiguration())).Message);
-
-    /// <summary>Stating a frame handler before Frames() says so, rather than failing with a null reference.</summary>
-    [Fact]
-    public void FrameHandlers_BeforeFrames_ThrowAClearError()
-    {
-        EngineBuilder state = new();
-        TestEngineBuilder typed = state.Types<TestFrame, TestPacket, TestMessagePriority, TestLevel, TestAspect>();
-
-        Assert.Contains("Frames()", Assert.Throws<InvalidOperationException>(() => ((IFrameBuilder<TestFrame, TestPacket, TestMessagePriority, TestLevel, TestAspect>)typed).Message<TestMessageHandler>()).Message);
-    }
-
-    /// <summary>A receipt or retrieval with no destination goes nowhere rather than to an empty user name.</summary>
-    [Fact]
-    public void Route_EmptyDestination_GoesNowhere()
-    {
-        (_, EngineController controller) = Build(engine => engine);
-
-        Assert.Empty(controller.Route(new TestFrame { IsHidden = true, ReadReceiptMessageId = "M", Addresses = [new TestAddressEntry { UserName = "" }] }));
-        Assert.Equal(["ALICE"], controller.Route(new TestFrame { IsHidden = true, ReadReceiptMessageId = "M", Addresses = [new TestAddressEntry { UserName = "ALICE" }] }));
-    }
 
     /// <summary>A message level is named by its configured level, nothing for none, and anything else throws.</summary>
     [Fact]
@@ -173,27 +140,6 @@ public sealed class EngineBuilderTests
 
         Assert.Equal(["", "RESTRICTED"], [controller.GetMessageLevelName(null), controller.GetMessageLevelName(TestLevel.Restricted)]);
         Assert.Throws<ArgumentException>(() => controller.GetMessageLevelName(TestMessagePriority.High));
-    }
-
-    /// <summary>Without a draft handler the draft view offers no width and no header, and the handler's range, initial width and header are reported otherwise.</summary>
-    [Fact]
-    public void Drafts_HandlerStatesTheWidthRangeAndHeader()
-    {
-        (_, EngineController none) = Build(engine => engine);
-        (_, EngineController full) = Build(engine => engine.Drafts<TestDraftHandler>());
-        (_, EngineController headerOnly) = Build(engine => engine.Drafts<TestHeaderOnlyDraftHandler>());
-        (_, EngineController maxOnly) = Build(engine => engine.Drafts<TestMaxOnlyDraftHandler>());
-        DraftContent withTag = new() { Tag = "X", Priority = TestMessagePriority.Normal, MessageLevel = "", IsAlert = false, Addresses = [], LineWidth = null };
-
-        Assert.Null(none.DraftLineWidth);
-        Assert.Null(none.GetDraftHeader(withTag));
-        Assert.Equal(new LineWidthRange(60, 20, 80), full.DraftLineWidth);
-        Assert.Equal((60, 20, 80), (full.DraftLineWidth!.Initial, full.DraftLineWidth.Clamp(5), full.DraftLineWidth.Clamp(500)));
-        Assert.Equal("TAG: X", full.GetDraftHeader(withTag));
-        Assert.Null(full.GetDraftHeader(withTag with { Tag = "" }));
-        Assert.Null(headerOnly.DraftLineWidth);
-        Assert.Equal("HEADER", headerOnly.GetDraftHeader(withTag));
-        Assert.Equal(40, maxOnly.DraftLineWidth!.Initial);
     }
 
     /// <summary>The tag rules are the draft handler's, and unrestricted without one.</summary>
@@ -243,39 +189,6 @@ public sealed class EngineBuilderTests
 
         Assert.Equal(1, calls);
         Assert.True(builder.AreCommandLineOverridesAllowed);
-    }
-
-    /// <summary>Settings left unstated take the engine's defaults.</summary>
-    [Fact]
-    public void Defaults_AreTheEnginesOwn()
-    {
-        (_, EngineController controller) = Build(engine => engine);
-
-        Assert.Equal("HOME", controller.HomeText);
-        Assert.False(controller.IsKioskMode);
-        Assert.Null(controller.WindowIconPath);
-        Assert.Null(controller.DebugUserName);
-        Assert.Equal(50021, controller.PeerPort);
-        Assert.Equal(50020, controller.InterfacePort);
-        Assert.Equal("ALERT", controller.AlertLabel);
-        Assert.Equal(TimeSpan.FromSeconds(30), controller.AlarmSoundDuration);
-        Assert.Equal(["Space", "Enter"], controller.AlertQuickReadKeys);
-        Assert.Equal("Tag", controller.TagLabel);
-        Assert.True(controller.TagsEnabled);
-        Assert.False(controller.PrintReceivedDefaultEnabled);
-        Assert.Equal(UserRole.Client, controller.Role);
-        Assert.False(controller.CommandLineOverridesAllowed);
-        Assert.Empty(controller.OutgoingPoints);
-        Assert.Empty(controller.Servers);
-        Assert.Empty(controller.ExternalSystems);
-        Assert.Null(controller.NetworkHandler);
-        Assert.Null(controller.PacketType);
-        Assert.Equal(Enum.GetValues<TestMessagePriority>().Length, controller.Priorities.Count);
-        Assert.Equal("NORMAL", controller.Priorities[0].Name);
-        Assert.True(controller.CanDelete(FolderType.Inbox));
-        Assert.Equal(1, controller.GetPrintCount(new TestFrame()));
-        Assert.Equal([AddressType.To, AddressType.Cc, AddressType.External], controller.AddressTypes.Select(t => t.Type));
-        Assert.Equal(["To", "Cc", "External"], controller.AddressTypes.Select(t => t.Label));
     }
 
     /// <summary>Everything a host can state about the application and the ports is reported back.</summary>
@@ -382,40 +295,6 @@ public sealed class EngineBuilderTests
         Assert.Equal([AddressType.To, AddressType.Cc, AddressType.External], controller.AddressTypes.Select(t => t.Type));
     }
 
-    /// <summary>A retrieval request, read receipt and receive receipt are sent with the priority their handler names, and a message with its own.</summary>
-    [Fact]
-    public void GetPriority_FollowsTheKindOfFrame()
-    {
-        ServiceCollection services = new();
-        services.AddSingleton(new TestRetrievalHandler { Priority = TestMessagePriority.Level1 });
-        services.AddSingleton(new TestReadReceiptHandler { Priority = TestMessagePriority.Receipt });
-        services.AddSingleton(new TestReceiveReceiptHandler { Priority = TestMessagePriority.Receipt });
-        EngineBuilder builder = EngineBuilder.Build(new Configuration(engine => engine.Priorities().Priority(TestMessagePriority.Level1).Mode(PriorityMode.System).Priority(TestMessagePriority.Receipt).Mode(PriorityMode.System)));
-        EngineController controller = new(builder, new CurrentUserProvider(), null, services.BuildServiceProvider());
-
-        Assert.Equal(1, controller.GetPriority(new TestFrame { IsHidden = true, IsRetrieval = true }));
-        Assert.Equal(12, controller.GetPriority(new TestFrame { IsHidden = true, ReadReceiptMessageId = "M" }));
-        Assert.Equal(12, controller.GetPriority(new TestFrame { IsHidden = true, ReceiveReceiptMessageId = "M" }));
-        Assert.Equal(0, controller.GetPriority(new TestFrame()));
-    }
-
-    /// <summary>A stated heartbeat handler creates, recognizes and prioritizes heartbeats; without one there are none.</summary>
-    [Fact]
-    public void Heartbeat_IsOptionalAndHandlerDriven()
-    {
-        EngineController withHandler = new(EngineBuilder.Build(new Configuration(engine => engine)), new CurrentUserProvider(), null);
-        EngineController without = new(EngineBuilder.Build(new TestEngineConfiguration(heartbeats: false)), new CurrentUserProvider(), null);
-
-        object heartbeat = withHandler.CreateHeartbeat();
-        Assert.True(withHandler.HeartbeatsEnabled);
-        Assert.True(withHandler.IsHeartbeat(heartbeat));
-        Assert.False(withHandler.IsHeartbeat(new TestFrame()));
-        Assert.Equal(0, withHandler.GetPriority(heartbeat));
-        Assert.False(without.HeartbeatsEnabled);
-        Assert.False(without.IsHeartbeat(heartbeat));
-        Assert.Throws<InvalidOperationException>(() => without.CreateHeartbeat());
-    }
-
     /// <summary>The heartbeat intervals come from the heartbeat handler in use, the packet one first, and are 30 and 2 seconds when there is none.</summary>
     [Fact]
     public void HeartbeatIntervals_ComeFromTheHandler()
@@ -427,68 +306,6 @@ public sealed class EngineBuilderTests
 
         Assert.Equal([TimeSpan.FromSeconds(5), TimeSpan.FromSeconds(1)], [frames.HeartbeatInterval, frames.HeartbeatRetryInterval]);
         Assert.Equal([TimeSpan.FromSeconds(30), TimeSpan.FromSeconds(2)], [none.HeartbeatInterval, none.HeartbeatRetryInterval]);
-    }
-
-    /// <summary>The next message id comes from the message handler, and is a 32 character uppercase GUID when it does not say.</summary>
-    [Fact]
-    public void NextId_ComesFromTheMessageHandler()
-    {
-        ServiceCollection services = new();
-        services.AddSingleton(new TestMessageHandler { Ids = previous => $"{previous ?? "0"}1" });
-        EngineController stated = new(EngineBuilder.Build(new TestEngineConfiguration()), new CurrentUserProvider(), null, services.BuildServiceProvider());
-        (_, EngineController unstated) = Build(engine => engine);
-
-        Assert.Equal("01", stated.NextId(null));
-        Assert.Equal("A1", stated.NextId("A"));
-        string guid = unstated.NextId(null);
-        Assert.Equal(32, guid.Length);
-        Assert.Equal(guid.ToUpperInvariant(), guid);
-        Assert.NotEqual(guid, unstated.NextId(guid));
-    }
-
-    /// <summary>The sender is read and written through the handler of the frame's kind, and a frame of no kind has none.</summary>
-    [Fact]
-    public void Sender_GoesThroughTheHandlerOfTheFramesKind()
-    {
-        (_, EngineController controller) = Build(engine => engine);
-        TestFrame message = new();
-        TestFrame retrieval = new() { IsHidden = true, IsRetrieval = true };
-        TestFrame receipt = new() { IsHidden = true, ReadReceiptMessageId = "M" };
-        TestFrame heartbeat = new() { IsHidden = true, IsHeartbeat = true };
-
-        foreach (TestFrame frame in new[] { message, retrieval, receipt, heartbeat }) { controller.SetFromUser(frame, "ALICE"); }
-
-        Assert.Equal(["ALICE", "ALICE", "ALICE", string.Empty], [controller.GetFromUser(message), controller.GetFromUser(retrieval), controller.GetFromUser(receipt), controller.GetFromUser(heartbeat)]);
-        Assert.Equal(string.Empty, heartbeat.FromUser);
-    }
-
-    /// <summary>Only messages have an identifier: a receipt is identified by the message it is for, and any other frame has none.</summary>
-    [Fact]
-    public void GetIdentifier_IsTheMessageIdOrTheReceiptedMessageId()
-    {
-        (_, EngineController controller) = Build(engine => engine);
-
-        Assert.Equal("M1", controller.GetIdentifier(new TestFrame { MessageId = "M1" }));
-        Assert.Equal("M2", controller.GetIdentifier(new TestFrame { IsHidden = true, ReadReceiptMessageId = "M2" }));
-        Assert.Equal("M3", controller.GetIdentifier(new TestFrame { IsHidden = true, ReceiveReceiptMessageId = "M3" }));
-        Assert.Equal(string.Empty, controller.GetIdentifier(new TestFrame { IsHidden = true, IsHeartbeat = true }));
-    }
-
-    /// <summary>With no priorities configured everything goes at priority 0, and with some configured nothing goes outside them: a name that is empty or unknown, or a level that is not configured, is the lowest level.</summary>
-    [Fact]
-    public void Priorities_ResolveWithinTheConfiguredLevels()
-    {
-        (_, EngineController configured) = Build(engine => engine);
-
-        Assert.Equal([TestMessagePriority.Normal, TestMessagePriority.Receipt, TestMessagePriority.Normal, TestMessagePriority.Normal], [configured.PriorityOf(null), configured.PriorityOf((int)TestMessagePriority.Receipt), configured.PriorityOf(999), configured.PriorityOf(0)]);
-        Assert.Equal([TestMessagePriority.Normal, TestMessagePriority.Flash], [configured.ResolvePriority(TestLevel.High), configured.ResolvePriority(TestMessagePriority.Flash)]);
-        Assert.Equal(15, configured.HighestPriority);
-        Assert.Equal(12, configured.GetPriority(new TestFrame { Priority = "receipt" }));
-        Assert.Equal(0, configured.GetPriority(new TestFrame { Priority = "BOGUS" }));
-        Assert.Equal(TestMessagePriority.Receipt, configured.GetMessagePriority(new TestFrame { Priority = "Receipt" }));
-        Assert.Equal("NORMAL", ((TestFrame)configured.CreateMessage(new MessageContent { SentAt = DateTime.UtcNow, Body = "B", Priority = TestMessagePriority.Normal, Tag = "", MessageLevel = "" })).Priority);
-        Assert.Throws<ArgumentException>(() => configured.CreateMessage(new MessageContent { SentAt = DateTime.UtcNow, Body = "B", Priority = TestLevel.High, Tag = "", MessageLevel = "" }));
-        Assert.Throws<ArgumentException>(() => configured.CreateMessage(new MessageContent { SentAt = DateTime.UtcNow, Body = "B", Priority = TestMessagePriority.Normal, Tag = "", MessageLevel = "BOGUS" }));
     }
 
     /// <summary>The packet size and window are stated on the packet configuration, defaulting to 16 KiB and 1.</summary>
@@ -644,23 +461,6 @@ public sealed class EngineBuilderTests
         Assert.Empty(listener.OutgoingPoints);
     }
 
-    /// <summary>A server's topology records which of its children are relays and the clients behind each, taken from the relay's own entry.</summary>
-    [Fact]
-    public void Servers_RecordTheClientsBehindEachRelay()
-    {
-        NetworkConfig network = Network(
-            ("SERVER", new NetworkUserConfig { Role = "Server", Children = ["C1", "RELAY"] }),
-            ("RELAY", new NetworkUserConfig { Role = "Relay", Children = ["C2", "C3"] }));
-        (_, EngineController controller) = Build(engine => engine, "SERVER", network);
-
-        ServerUserConfig server = controller.Servers["SERVER"];
-
-        Assert.Equal(["C1", "RELAY"], server.Children);
-        Assert.Equal(["C2", "C3"], Assert.Single(server.Relays).Value);
-        Assert.Equal("RELAY", Assert.Single(server.Relays).Key);
-        Assert.DoesNotContain("RELAY", controller.Servers.Keys);
-    }
-
     /// <summary>The stated MSMT options are used with the engine's own credentials, and the built options are used as they are when none are stated.</summary>
     [Fact]
     public void Stated_MsmtOptions_ReplaceTheSettingsUsedForEveryConnectionKeepingTheEnginesCredentials()
@@ -700,19 +500,9 @@ public sealed class EngineBuilderTests
         Assert.Equal(new LogFieldWidths(8, 7, 3), fixedWidths.LogWidths);
     }
 
-    /// <summary>The print count comes from the print handler.</summary>
-    [Fact]
-    public void PrintCount_ComesFromPrintHandler()
-    {
-        (_, EngineController controller) = Build(engine => engine.Prints<TestPrintHandler>());
-
-        Assert.Equal(2, controller.GetPrintCount(new TestFrame { PrintCount = 2 }));
-        Assert.Equal(1, controller.GetPrintCount(new TestFrame()));
-    }
-
     /// <summary>The initial message and packet processors are reported and used.</summary>
     [Fact]
-    public void Stated_Identification_IsUsed()
+    public async Task Stated_Identification_IsUsed()
     {
         Mock<IInitialFrameProcessor<TestFrame>> messages = new();
         Mock<IInitialPacketProcessor<TestPacket>> packets = new();
@@ -725,9 +515,9 @@ public sealed class EngineBuilderTests
         TestFrame initialMessage = new();
         TestPacket initialPacket = new();
 
-        controller.InitialFrameProcessor!.OnConnected(session.Object);
-        controller.InitialFrameProcessor.OnReceived(session.Object, initialMessage);
-        controller.InitialPacketProcessor!.OnReceived(session.Object, initialPacket);
+        await controller.InitialFrameProcessor!.OnConnected(session.Object);
+        await controller.InitialFrameProcessor.OnReceived(session.Object, initialMessage);
+        await controller.InitialPacketProcessor!.OnReceived(session.Object, initialPacket);
 
         Assert.Equal(typeof(TestFrame), controller.InitialFrameProcessor.ItemType);
         Assert.Equal(typeof(TestPacket), controller.InitialPacketProcessor.ItemType);
@@ -744,7 +534,7 @@ public sealed class EngineBuilderTests
         IpConnectionInfo info = new() { Host = "10.0.0.1", LocalUser = "ME" };
         Mock<IEngineContext> engine = new();
         engine.Setup(e => e.CurrentUser).Returns(new UserInfo { Name = "ME" });
-        engine.Setup(e => e.IsConnected("BOB")).Returns(true);
+        engine.Setup(e => e.ConnectedUsers).Returns(new Dictionary<string, UserInfo> { ["BOB"] = new UserInfo { Name = "BOB" } });
         session.Setup(s => s.Engine).Returns(engine.Object);
         session.Setup(s => s.Connection).Returns(info);
         IInitialFrameContext<TestFrame>? seen = null;
@@ -754,16 +544,16 @@ public sealed class EngineBuilderTests
         EngineController controller = new(builder, new CurrentUserProvider(), null, Services(processor.Object));
         TestFrame sent = new() { Body = "HI" };
 
-        controller.InitialFrameProcessor!.OnConnected(session.Object);
+        await controller.InitialFrameProcessor!.OnConnected(session.Object);
 
         Assert.NotNull(seen);
         Assert.Equal("ME", seen.CurrentUser.Name);
-        Assert.True(seen.IsConnected("BOB"));
-        Assert.False(seen.IsConnected("X"));
+        Assert.Contains("BOB", seen.ConnectedUsers.Keys);
+        Assert.DoesNotContain("X", seen.ConnectedUsers.Keys);
         Assert.Same(info, seen.Connection);
-        seen.Send(sent);
-        seen.Connected("ALICE");
-        seen.Disconnect();
+        await seen.Send(sent);
+        await seen.Connected("ALICE");
+        await seen.Disconnect();
         session.Verify(s => s.Send(sent), Times.Once);
         session.Verify(s => s.Connected("ALICE"), Times.Once);
         session.Verify(s => s.Disconnect(), Times.Once);
@@ -790,37 +580,15 @@ public sealed class EngineBuilderTests
         Assert.Equal([first, second], controller.ExternalSystems);
     }
 
-    /// <summary>The network processor stated with the message is reported, and runs with contexts typed with the host's message.</summary>
-    [Fact]
-    public async Task NetworkProcessor_IsReported_AndGetsTypedContexts()
-    {
-        List<string> calls = [];
-        Mock<INetworkProcessor<TestFrame>> processor = new();
-        processor.Setup(p => p.OnConnected(It.IsAny<INetworkConnectedContext<TestFrame>>())).Callback((INetworkConnectedContext<TestFrame> context) => calls.Add($"connected:{context.TargetUser}"));
-        processor.Setup(p => p.OnDisconnected(It.IsAny<INetworkDisconnectedContext<TestFrame>>())).Callback((INetworkDisconnectedContext<TestFrame> context) => calls.Add($"disconnected:{context.TargetUser}"));
-        processor.Setup(p => p.OnReceived(It.IsAny<INetworkReceivedContext<TestFrame>>())).Callback((INetworkReceivedContext<TestFrame> context) => calls.Add($"received:{context.Frame.Body}"));
-        (_, EngineController controller) = BuildWith(message => message.Processor<INetworkProcessor<TestFrame>>(), services: Services(processor.Object));
-        Mock<INetworkUserContext> connection = new();
-        connection.Setup(c => c.TargetUser).Returns("BOB");
-        Mock<INetworkFrameContext> received = new();
-        received.Setup(c => c.Frame).Returns(new TestFrame { Body = "HI" });
-
-        controller.NetworkHandler!.OnConnected(connection.Object);
-        controller.NetworkHandler.OnDisconnected(connection.Object);
-        controller.NetworkHandler.OnReceived(received.Object);
-
-        Assert.Equal(["connected:BOB", "disconnected:BOB", "received:HI"], calls);
-    }
-
-    private sealed class DependentProcessor(Dependency dependency) : INetworkProcessor<TestFrame>
+    private sealed class DependentProcessor(Dependency dependency) : INetworkProcessor<TestFrame, TestMessagePriority, TestLevel, TestAspect>
     {
         public Dependency Dependency { get; } = dependency;
 
-        public void OnConnected(INetworkConnectedContext<TestFrame> context) { }
+        public Task OnConnected(INetworkConnectedContext<TestFrame, TestMessagePriority, TestLevel, TestAspect> context) => Task.CompletedTask;
 
-        public void OnDisconnected(INetworkDisconnectedContext<TestFrame> context) { }
+        public Task OnDisconnected(INetworkDisconnectedContext<TestFrame, TestMessagePriority, TestLevel, TestAspect> context) => Task.CompletedTask;
 
-        public void OnReceived(INetworkReceivedContext<TestFrame> context) { }
+        public Task OnReceived(INetworkReceivedContext<TestFrame, TestMessagePriority, TestLevel, TestAspect> context) => Task.CompletedTask;
     }
 
     /// <summary>A processor type that is not registered is constructed from the container's services, so its constructor can take dependencies.</summary>
@@ -846,12 +614,12 @@ public sealed class EngineBuilderTests
     {
         public string Name => "csv";
 
-        public bool Accepts(FolderType type) => type == FolderType.Inbox;
+        public bool Accepts(FolderType type) => type is FolderType.Inbox;
 
         public Task Export(object entry, Stream stream, CancellationToken cancellation) => Task.CompletedTask;
     }
 
-    private sealed class SlowImportFormat : IImportFormat
+    private sealed class SlowImportFormat : IImportFormat<TestMessagePriority, TestLevel>
     {
         public string Name => "Slow";
 
@@ -859,7 +627,7 @@ public sealed class EngineBuilderTests
 
         public TimeSpan? StagedSendDelay => TimeSpan.FromSeconds(2);
 
-        public Task Import(Stream stream, IImportFormatContext context, CancellationToken cancellation) => Task.CompletedTask;
+        public Task Import(Stream stream, IImportFormatContext<TestMessagePriority, TestLevel> context, CancellationToken cancellation) => Task.CompletedTask;
     }
 
     /// <summary>Formats are added by type, a later format of the same name replaces an earlier one in place, and a format's own members become its definition.</summary>
@@ -888,7 +656,7 @@ public sealed class EngineBuilderTests
 
     private sealed class DraftsOnlyDeleteHandler : IDeleteHandler
     {
-        public bool CanDelete(DeleteContext context) => context.Folder == FolderType.Drafts;
+        public bool CanDelete(DeleteContext context) => context.Folder is FolderType.Drafts;
     }
 
     private sealed class Dependency(string name)
@@ -1043,21 +811,6 @@ public sealed class EngineBuilderTests
     [Fact]
     public void MessageAspects_DuplicateNames_Throw()
         => Assert.Throws<InvalidOperationException>(() => Build(engine => engine.MessageAspects().Aspect(TestAspect.Signed).Label("X").Aspect(TestAspect.Encrypted).Label("x")));
-
-    /// <summary>A message created with an aspect carries it through the host's handler, and reads back by its name, or as none.</summary>
-    [Fact]
-    public void CreateMessage_CarriesTheMessageAspect()
-    {
-        (_, EngineController controller) = Build(engine => engine.MessageAspects().Aspect(TestAspect.Signed).Label("SIGNED BY SENDER"));
-        MessageContent content = new() { SentAt = DateTime.UtcNow, Body = "b", Priority = controller.RequirePriority(null), Tag = string.Empty, MessageLevel = string.Empty };
-
-        object with = controller.CreateMessage(content with { MessageAspect = "signed by sender" });
-        object without = controller.CreateMessage(content);
-
-        Assert.Equal("SIGNED BY SENDER", controller.GetMessageAspect(with));
-        Assert.Equal(string.Empty, controller.GetMessageAspect(without));
-        Assert.Throws<ArgumentException>(() => controller.CreateMessage(content with { MessageAspect = "NOPE" }));
-    }
 
     /// <summary>The aspect labels are the engine's own unless the display handler renames them, with the plural following the singular.</summary>
     [Fact]

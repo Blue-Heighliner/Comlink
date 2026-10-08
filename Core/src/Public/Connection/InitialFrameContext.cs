@@ -13,12 +13,13 @@ public interface IInitialFrameContext<TFrame> : IEngineContext where TFrame : cl
 
     /// <summary>Marks the connection fully connected, as <paramref name="userName"/>. The connection is then usable, and anything after it is ordinary traffic.</summary>
     /// <param name="userName">The user on the other end.</param>
-    void Connected(string userName);
+    Task Connected(string userName);
 
     /// <summary>Drops the connection.</summary>
-    void Disconnect();
+    Task Disconnect();
 
-    /// <summary>Sends <paramref name="frame"/> over the connection in the background, in order with this context's other calls (a <see cref="Connected"/> after a send takes effect once it has been sent), and dropping the connection if it cannot be sent, serialized with the frame serializer and, when packets are configured, split into packets like any frame. It is not stored, routed or shown.</summary>
+    /// <summary>Sends <paramref name="frame"/> over the connection and completes once the other node has accepted it, so a processor awaits it before calling <see cref="Connected"/>. The connection is dropped if it cannot be sent, serialized with the frame serializer and, when packets are configured, split into packets like any frame. It is not stored, routed or shown.</summary>
     /// <param name="frame">What to send.</param>
-    void Send(TFrame frame);
+    /// <returns>Whether the other node accepted it.</returns>
+    Task<bool> Send(TFrame frame);
 }

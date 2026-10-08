@@ -51,7 +51,10 @@ public sealed class PacketizerTests
 
     private static void Release(IEnumerable<Packet> packets)
     {
-        foreach (Packet packet in packets) { packet.Dispose(); }
+        foreach (Packet packet in packets)
+        {
+            packet.Dispose();
+        }
     }
 
     private sealed class FrameSpyEngineController(int packetSize, List<object?> frames) : RawPacketEngineController(packetSize)
@@ -250,7 +253,10 @@ public sealed class PacketizerTests
         Assert.All(packets, packet => Assert.True(packet.Data.Memory.Length <= 200));
         using IPacketAssembler assembler = packetizer.CreateAssembler();
         AssembledPayload? complete = null;
-        foreach (Packet packet in packets) { complete = assembler.Add(packet.Data.Memory) ?? complete; }
+        foreach (Packet packet in packets)
+        {
+            complete = assembler.Add(packet.Data.Memory) ?? complete;
+        }
         using IMemoryOwner<byte> owner = Assert.IsType<AssembledPayload>(complete).Payload;
         Assert.Equal(payload, owner.Memory.ToArray());
         Release(packets);
@@ -293,7 +299,10 @@ public sealed class PacketizerTests
         Assert.All(packets, packet => Assert.True(packet.Data.Memory.Length <= 400));
         using IPacketAssembler assembler = packetizer.CreateAssembler();
         AssembledPayload? complete = null;
-        foreach (Packet packet in packets) { complete = assembler.Add(packet.Data.Memory) ?? complete; }
+        foreach (Packet packet in packets)
+        {
+            complete = assembler.Add(packet.Data.Memory) ?? complete;
+        }
         using IMemoryOwner<byte> owner = Assert.IsType<AssembledPayload>(complete).Payload;
         Assert.Equal(payload, owner.Memory.ToArray());
         Release(packets);

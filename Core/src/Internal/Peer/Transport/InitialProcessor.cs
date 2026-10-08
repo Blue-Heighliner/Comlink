@@ -9,16 +9,16 @@ internal interface IInitialSession
     /// <summary>Gets a snapshot of the engine.</summary>
     IEngineContext Engine { get; }
 
-    /// <summary>Marks the connection fully connected as <paramref name="userName"/>, once everything queued before it has been sent.</summary>
+    /// <summary>Marks the connection fully connected as <paramref name="userName"/>, after everything awaited before it has been sent.</summary>
     /// <param name="userName">The user on the other end.</param>
-    void Connected(string userName);
+    Task Connected(string userName);
 
-    /// <summary>Drops the connection, once everything queued before it has been sent.</summary>
-    void Disconnect();
+    /// <summary>Drops the connection.</summary>
+    Task Disconnect();
 
-    /// <summary>Queues an item to be sent over the connection, in order with the session's other calls.</summary>
+    /// <summary>Sends an item over the connection, completing once the other node has accepted it. A send that fails drops the connection.</summary>
     /// <param name="item">An instance of the exchange's type.</param>
-    void Send(object item);
+    Task<bool> Send(object item);
 }
 
 /// <summary>The engine's view of a host's initial frame or packet processor, with items as plain objects.</summary>
@@ -32,10 +32,10 @@ internal interface IInitialProcessor
 
     /// <summary>Called on both nodes when the connection has formed.</summary>
     /// <param name="session">Controls the connection.</param>
-    void OnConnected(IInitialSession session);
+    Task OnConnected(IInitialSession session);
 
     /// <summary>Called for each item received before the connection is marked connected.</summary>
     /// <param name="session">Controls the connection.</param>
     /// <param name="item">What arrived.</param>
-    void OnReceived(IInitialSession session, object item);
+    Task OnReceived(IInitialSession session, object item);
 }

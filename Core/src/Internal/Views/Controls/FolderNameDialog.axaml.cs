@@ -12,8 +12,14 @@ internal partial class FolderNameDialog : Window
         CancelBtn.Click += (_, _) => Close(null);
         NameBox.KeyDown += (_, e) =>
         {
-            if (e.Key == Key.Enter) { Confirm(); }
-            else if (e.Key == Key.Escape) { Close(null); }
+            if (e.Key is Key.Enter)
+            {
+                Confirm();
+            }
+            else if (e.Key is Key.Escape)
+            {
+                Close(null);
+            }
         };
         Opened += (_, _) => NameBox.Focus();
     }

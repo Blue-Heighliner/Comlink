@@ -13,7 +13,7 @@ internal interface ILiteDbContext : IDisposable
     ILiteCollection<ActivityLogEntity> ActivityLogs { get; }
     /// <summary>Collection of persisted folders.</summary>
     ILiteCollection<FolderEntity> Folders { get; }
-    /// <summary>Collection of persisted auto forward controller target lists.</summary>
+    /// <summary>Collection of persisted auto forwarder target lists.</summary>
     ILiteCollection<AutoForwardTargetsEntity> AutoForwardTargets { get; }
     /// <summary>Collection of message copies a storage server keeps.</summary>
     ILiteCollection<StoredMessageEntity> StoredMessages { get; }
@@ -53,7 +53,7 @@ internal sealed class LiteDbContext : ILiteDbContext
     public ILiteCollection<ActivityLogEntity> ActivityLogs { get; private set; } = null!;
     /// <summary>Collection of persisted folders.</summary>
     public ILiteCollection<FolderEntity> Folders { get; private set; } = null!;
-    /// <summary>Collection of persisted auto forward controller target lists.</summary>
+    /// <summary>Collection of persisted auto forwarder target lists.</summary>
     public ILiteCollection<AutoForwardTargetsEntity> AutoForwardTargets { get; private set; } = null!;
     /// <summary>Collection of message copies a storage server keeps.</summary>
     public ILiteCollection<StoredMessageEntity> StoredMessages { get; private set; } = null!;
@@ -73,7 +73,10 @@ internal sealed class LiteDbContext : ILiteDbContext
         lock (initializeLock)
         {
             string dataDir = engineController.AppDataPath;
-            if (db is not null && openedDirectory == dataDir) { return; }
+            if (db is not null && openedDirectory == dataDir)
+            {
+                return;
+            }
 
             db?.Dispose();
             WarmUpMapper();
@@ -104,13 +107,12 @@ internal sealed class LiteDbContext : ILiteDbContext
     // LiteDB's shared BsonMapper publishes a type's mapper before it has finished building it, so two threads
     // serializing a type for the first time can collide ("Collection was modified"), e.g. a message arriving while a
     // draft is saved. Serializing one fully populated instance of every stored shape here, once, under a lock, builds
-    // every mapper up front, including nested list element types and the host's own frame type.
+    // every mapper up front, including nested list element types.
     private void WarmUpMapper()
     {
         lock (mapperWarmupLock)
         {
-            object message = engineController.CreateFrame();
-            engineController.SetAddresses(message, [new MessageAddress { UserName = string.Empty, Type = AddressType.To }]);
+            MessageData message = new() { Addresses = [new AddressData { UserName = string.Empty, Type = string.Empty, Information = string.Empty }] };
             BsonMapper mapper = BsonMapper.Global;
             mapper.ToDocument(new MessageEntity
             {

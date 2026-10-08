@@ -13,12 +13,12 @@ public interface IInitialFrameProcessor<TFrame> where TFrame : class
     /// <summary>Gets how long the exchange may take, from the connection forming, before the connection is dropped.</summary>
     TimeSpan Timeout { get; }
 
-    /// <summary>Called on both nodes when the connection has formed, before anything has been received. A processor in which one node speaks first sends its initial frame here, on the node that decides that is it.</summary>
+    /// <summary>Called on both nodes when the connection has formed, before anything has been received. A processor in which one node speaks first sends its initial frame here (awaiting it), on the node that decides that is it.</summary>
     /// <param name="context">Controls the connection.</param>
-    void OnConnected(IInitialFrameContext<TFrame> context);
+    Task OnConnected(IInitialFrameContext<TFrame> context);
 
     /// <summary>Called for each frame received while the connection is not yet marked connected.</summary>
     /// <param name="context">Controls the connection.</param>
     /// <param name="frame">What arrived.</param>
-    void OnReceived(IInitialFrameContext<TFrame> context, TFrame frame);
+    Task OnReceived(IInitialFrameContext<TFrame> context, TFrame frame);
 }

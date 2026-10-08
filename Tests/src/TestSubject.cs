@@ -8,7 +8,10 @@ internal sealed class TestSubject<T> : IObservable<T>
     /// <summary>Publishes <paramref name="value"/> to every current subscriber.</summary>
     public void Publish(T value)
     {
-        foreach (IObserver<T> observer in Snapshot()) { observer.OnNext(value); }
+        foreach (IObserver<T> observer in Snapshot())
+        {
+            observer.OnNext(value);
+        }
     }
 
     /// <summary>Completes every current subscriber and drops them.</summary>
@@ -16,7 +19,10 @@ internal sealed class TestSubject<T> : IObservable<T>
     {
         IObserver<T>[] current = Snapshot();
         lock (observers) { observers.Clear(); }
-        foreach (IObserver<T> observer in current) { observer.OnCompleted(); }
+        foreach (IObserver<T> observer in current)
+        {
+            observer.OnCompleted();
+        }
     }
 
     /// <inheritdoc />

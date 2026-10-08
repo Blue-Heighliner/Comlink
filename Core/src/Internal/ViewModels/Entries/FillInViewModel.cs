@@ -80,7 +80,10 @@ internal sealed partial class FillInViewModel : ObservableObject, IFillInViewMod
     private void RemoveOption(string value)
     {
         FillInOptionViewModel? opt = Options.FirstOrDefault(o => o.Value == value);
-        if (opt is null) { return; }
+        if (opt is null)
+        {
+            return;
+        }
         Options.Remove(opt);
         OnPropertyChanged(nameof(SelectedOption));
         OnPropertyChanged(nameof(DisplayText));
@@ -90,7 +93,10 @@ internal sealed partial class FillInViewModel : ObservableObject, IFillInViewMod
     private void AddOption()
     {
         string trimmed = NewOption.Trim();
-        if (string.IsNullOrEmpty(trimmed)) { return; }
+        if (string.IsNullOrEmpty(trimmed))
+        {
+            return;
+        }
         Options.Add(new FillInOptionViewModel(trimmed));
         NewOption = string.Empty;
     }
@@ -99,9 +105,15 @@ internal sealed partial class FillInViewModel : ObservableObject, IFillInViewMod
     private void MoveOptionUp(string value)
     {
         FillInOptionViewModel? item = Options.FirstOrDefault(o => o.Value == value);
-        if (item is null) { return; }
+        if (item is null)
+        {
+            return;
+        }
         int idx = Options.IndexOf(item);
-        if (idx <= 0) { return; }
+        if (idx <= 0)
+        {
+            return;
+        }
         Options.RemoveAt(idx);
         Options.Insert(idx - 1, item);
     }
@@ -110,9 +122,15 @@ internal sealed partial class FillInViewModel : ObservableObject, IFillInViewMod
     private void MoveOptionDown(string value)
     {
         FillInOptionViewModel? item = Options.FirstOrDefault(o => o.Value == value);
-        if (item is null) { return; }
+        if (item is null)
+        {
+            return;
+        }
         int idx = Options.IndexOf(item);
-        if (idx < 0 || idx >= Options.Count - 1) { return; }
+        if (idx < 0 || idx >= Options.Count - 1)
+        {
+            return;
+        }
         Options.RemoveAt(idx);
         Options.Insert(idx + 1, item);
     }

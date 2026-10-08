@@ -21,12 +21,14 @@
     },
     "CLIENT1": {
       "Role": "Client",
+      "AutoForwarders": [ "Escalation" ],
       "InterfacePort": 50224,
       "Parent": "SERVER1",
       "MessageLevel": "INTERNAL"
     },
     "CLIENT2": {
       "Role": "Client",
+      "AutoForwarders": [ "Escalation" ],
       "InterfacePort": 50226,
       "Parent": "SERVER2",
       "MessageLevel": "INTERNAL"

@@ -13,7 +13,7 @@ public sealed class MainViewModelTests
     /// <summary>Helper that assembles all mocks and builds a <see cref="MainViewModel"/>.</summary>
     private sealed class Setup
     {
-        public Mock<IServiceConnection> Connection { get; } = new();
+        public Mock<IEngineConnection> Connection { get; } = new();
         public Mock<ILiteDbContext> Db { get; } = new();
         public Mock<IEntryService> EntryService { get; } = new();
         public Mock<IFolderBarViewModel> FolderBar { get; } = new();
@@ -115,7 +115,7 @@ public sealed class MainViewModelTests
         s.EngineController.SetupGet(e => e.Role).Returns(UserRole.Server);
         s.EngineController.Setup(e => e.GetUserInfo("ALICE")).Returns(new UserInfo { Name = "ALICE", Role = UserRole.Client });
         s.EngineController.SetupGet(e => e.MessageLevels).Returns([]);
-        s.EngineController.SetupGet(e => e.AutoForwardControllers).Returns([]);
+        s.EngineController.SetupGet(e => e.AutoForwarders).Returns([]);
         s.EngineController.Setup(e => e.GetUserMessageLevel("ALICE")).Returns(string.Empty);
         s.UserProvider.SetupGet(u => u.UserName).Returns("ALICE");
         MainViewModel vm = s.BuildVm();
@@ -295,17 +295,17 @@ public sealed class MainViewModelTests
         Assert.False(vm.IsInstallScreenVisible);
     }
 
-    /// <summary>Initialize sets HasAutoForwardAccess when the installed user is named in at least one configured auto forward controller.</summary>
+    /// <summary>Initialize sets HasAutoForwardAccess when the installed user lists at least one configured auto forwarder.</summary>
     [Fact]
     public async Task Initialize_UserHasAutoForwardAccess_SetsHasAutoForwardAccessTrue()
     {
         Setup s = new();
         s.Connection.Setup(c => c.Connect(It.IsAny<CancellationToken>())).Returns(Task.CompletedTask);
-        s.Connection.Setup(c => c.GetUserInfo(It.IsAny<CancellationToken>())).ReturnsAsync(MakeUserInfo("BETA"));
+        s.Connection.Setup(c => c.GetUserInfo(It.IsAny<CancellationToken>())).ReturnsAsync(MakeUserInfo("BETA") with { AutoForwarders = ["Alerts"] });
         s.FolderBar.Setup(f => f.Load()).Returns(Task.CompletedTask);
-        s.EngineController.Setup(e => e.AutoForwardControllers).Returns((IReadOnlyList<AutoForwardControllerDefinition>)
+        s.EngineController.Setup(e => e.AutoForwarders).Returns((IReadOnlyList<AutoForwarderDefinition>)
         [
-            new AutoForwardControllerDefinition { Name = "Alerts", Users = ["BETA"], Filter = _ => true }
+            new AutoForwarderDefinition { Name = "Alerts" }
         ]);
         MainViewModel vm = s.BuildVm();
 
@@ -314,7 +314,7 @@ public sealed class MainViewModelTests
         Assert.True(vm.HasAutoForwardAccess);
     }
 
-    /// <summary>Initialize leaves HasAutoForwardAccess false when the installed user is not named in any configured auto forward controller.</summary>
+    /// <summary>Initialize leaves HasAutoForwardAccess false when the installed user lists none of the configured auto forwarders.</summary>
     [Fact]
     public async Task Initialize_UserHasNoAutoForwardAccess_LeavesHasAutoForwardAccessFalse()
     {
@@ -322,9 +322,9 @@ public sealed class MainViewModelTests
         s.Connection.Setup(c => c.Connect(It.IsAny<CancellationToken>())).Returns(Task.CompletedTask);
         s.Connection.Setup(c => c.GetUserInfo(It.IsAny<CancellationToken>())).ReturnsAsync(MakeUserInfo("BETA"));
         s.FolderBar.Setup(f => f.Load()).Returns(Task.CompletedTask);
-        s.EngineController.Setup(e => e.AutoForwardControllers).Returns((IReadOnlyList<AutoForwardControllerDefinition>)
+        s.EngineController.Setup(e => e.AutoForwarders).Returns((IReadOnlyList<AutoForwarderDefinition>)
         [
-            new AutoForwardControllerDefinition { Name = "Alerts", Users = ["OTHER"], Filter = _ => true }
+            new AutoForwarderDefinition { Name = "Alerts" }
         ]);
         MainViewModel vm = s.BuildVm();
 
@@ -689,7 +689,6 @@ public sealed class MainViewModelTests
     [Theory]
     [InlineData(UserRole.Client, true, true)]
     [InlineData(UserRole.Client, false, false)]
-    [InlineData(UserRole.Relay, true, false)]
     [InlineData(UserRole.Server, true, false)]
     public void CanRetrieve_RequiresClientRoleAndAStorageServer(UserRole role, bool hasStorageServer, bool expected)
     {
@@ -710,10 +709,10 @@ public sealed class MainViewModelTests
         s.EntryService.Setup(e => e.IncomingMessageExists("M1")).ReturnsAsync(true);
         MainViewModel vm = s.BuildVm();
 
-        s.Connection.Raise(c => c.MessageReceived += null!, new MessageReceivedEvent { MessageId = "M1", FromUser = "BOB" });
+        s.Connection.Raise(c => c.MessageReceived += null!, new Message { Id = "M1", FromUser = "BOB", Body = string.Empty, Addresses = [], SentAt = DateTime.UtcNow, Priority = TestMessagePriority.Normal });
         await Task.Delay(100);
 
-        s.EntryService.Verify(e => e.StoreIncomingMessage(It.IsAny<string>(), It.IsAny<string>(), It.IsAny<string>(), It.IsAny<List<AddressData>>(), It.IsAny<DateTime>(), It.IsAny<Enum?>(), It.IsAny<string>(), It.IsAny<string>()), Times.Never);
+        s.EntryService.Verify(e => e.StoreIncomingMessage(It.IsAny<Message>()), Times.Never);
         GC.KeepAlive(vm);
     }
 

@@ -23,9 +23,9 @@ public sealed class AlertViewModelTests
 
     private static MessageEntity MakeMessage(string messageId, bool isAlert)
     {
-        object message = format.CreateFrame();
-        ((TestFrame)message).MessageId = messageId;
-        ((TestFrame)message).IsAlert = isAlert;
+        MessageData message = new();
+        message.Id = messageId;
+        message.IsAlert = isAlert;
         return new MessageEntity { MessageId = messageId, Message = message };
     }
 
@@ -39,18 +39,17 @@ public sealed class AlertViewModelTests
         Assert.Equal(0, vm.PendingCount);
     }
 
-    /// <summary>AlertText and QuickReadKeys are read from IEngineController.</summary>
+    /// <summary>AlertText is read from IEngineController, and the quick read keys are Space and Enter.</summary>
     [Fact]
     public void Ctor_ExposesConfigurationValues()
     {
         Setup s = new();
         s.AlertSettings.Setup(c => c.AlertLabel).Returns("INCOMING");
-        s.AlertSettings.Setup(c => c.AlertQuickReadKeys).Returns(["F5"]);
 
         AlertViewModel vm = s.Build();
 
         Assert.Equal("INCOMING", vm.AlertText);
-        Assert.Equal(["F5"], vm.QuickReadKeys);
+        Assert.Equal(["Space", "Enter"], vm.QuickReadKeys);
     }
 
     /// <summary>An inserted alert message becomes pending, starts alarming, and plays the sound.</summary>

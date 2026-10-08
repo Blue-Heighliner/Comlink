@@ -20,7 +20,10 @@ public sealed class ProtobufSerializer : IFrameSerializer, IPacketSerializer
     /// </param>
     public ProtobufSerializer(params Type[] knownTypes)
     {
-        if (knownTypes.Length > 0) { this.knownTypes = knownTypes.ToDictionary(type => type.AssemblyQualifiedName ?? type.FullName ?? type.Name); }
+        if (knownTypes.Length > 0)
+        {
+            this.knownTypes = knownTypes.ToDictionary(type => type.AssemblyQualifiedName ?? type.FullName ?? type.Name);
+        }
     }
 
     private readonly Dictionary<string, Type>? knownTypes;
@@ -59,7 +62,10 @@ public sealed class ProtobufSerializer : IFrameSerializer, IPacketSerializer
     public object Deserialize(ReadOnlyMemory<byte> data)
     {
         ProtobufEnvelope? envelope = Serializer.Deserialize<ProtobufEnvelope>(data);
-        if (envelope is null || string.IsNullOrEmpty(envelope.TypeName)) { throw new InvalidDataException("The bytes are not a serialized frame or packet"); }
+        if (envelope is null || string.IsNullOrEmpty(envelope.TypeName))
+        {
+            throw new InvalidDataException("The bytes are not a serialized frame or packet");
+        }
 
         Type type = Resolve(envelope.TypeName) ?? throw new InvalidDataException("The bytes name a type this serializer does not build");
         return Serializer.NonGeneric.Deserialize(type, envelope.Payload) ?? throw new InvalidDataException("The bytes hold no value");
@@ -67,7 +73,10 @@ public sealed class ProtobufSerializer : IFrameSerializer, IPacketSerializer
 
     private Type? Resolve(string typeName)
     {
-        if (knownTypes is not null) { return knownTypes.GetValueOrDefault(typeName); }
+        if (knownTypes is not null)
+        {
+            return knownTypes.GetValueOrDefault(typeName);
+        }
 
         Type? type = Type.GetType(typeName);
         return type is not null && type.IsDefined(typeof(ProtoContractAttribute), inherit: false) ? type : null;

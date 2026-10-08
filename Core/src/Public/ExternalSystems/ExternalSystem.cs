@@ -159,7 +159,10 @@ public abstract class ExternalSystemBase<TFrame>(string name, TimeSpan? connectR
     /// <inheritdoc />
     public async Task<bool> Send(object message)
     {
-        if (!IsConnected) { return false; }
+        if (!IsConnected)
+        {
+            return false;
+        }
         if (message is not TFrame typed)
         {
             logger.Record(LogEvents.ExternalSystemWrongFrameType, "External system {Name} cannot send a {Type}; it only handles {Expected}", Name, message.GetType().Name, typeof(TFrame).Name);
@@ -168,7 +171,10 @@ public abstract class ExternalSystemBase<TFrame>(string name, TimeSpan? connectR
 
         try
         {
-            if (!FilterSent(typed)) { return false; }
+            if (!FilterSent(typed))
+            {
+                return false;
+            }
             return await Send(typed);
         }
         catch (Exception ex) when (ex is not OperationCanceledException)
@@ -196,7 +202,10 @@ public abstract class ExternalSystemBase<TFrame>(string name, TimeSpan? connectR
     {
         try
         {
-            if (!FilterReceived(message)) { return; }
+            if (!FilterReceived(message))
+            {
+                return;
+            }
             await receivedMessages.Writer.WriteAsync(message);
         }
         catch (ChannelClosedException)
@@ -226,7 +235,10 @@ public abstract class ExternalSystemBase<TFrame>(string name, TimeSpan? connectR
     {
         await foreach (TFrame message in receivedMessages.Reader.ReadAllAsync())
         {
-            if (MessageReceived is null) { continue; }
+            if (MessageReceived is null)
+            {
+                continue;
+            }
             try { await MessageReceived(message); }
             catch (Exception ex) when (ex is not OperationCanceledException)
             {

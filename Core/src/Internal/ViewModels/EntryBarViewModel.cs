@@ -241,7 +241,10 @@ internal sealed partial class EntryBarViewModel : ObservableObject, IEntryBarVie
 
     private void ResetPageAndRefresh()
     {
-        if (suppressFilterRefresh) { return; }
+        if (suppressFilterRefresh)
+        {
+            return;
+        }
         CurrentPage = 1;
         _ = Refresh();
     }
@@ -294,18 +297,20 @@ internal sealed partial class EntryBarViewModel : ObservableObject, IEntryBarVie
     /// <inheritdoc />
     public event Action<EntryItemViewModel>? EntryDeleted;
 
-    private string GetPriorityLabel(object message) => engineController.NameOf(engineController.GetMessagePriority(message));
+    private string GetPriorityLabel(MessageData message) => engineController.NameOf(engineController.PriorityOf(message.Priority));
 
-    private string? GetTagLabel(object message)
+    private string? GetTagLabel(MessageData message)
     {
-        if (!engineController.TagsEnabled) { return null; }
-        string tag = engineController.GetTag(message);
-        return string.IsNullOrEmpty(tag) ? null : tag;
+        if (!engineController.TagsEnabled)
+        {
+            return null;
+        }
+        return string.IsNullOrEmpty(message.Tag) ? null : message.Tag;
     }
 
-    private string? GetMessageLevelColor(object message)
+    private string? GetMessageLevelColor(MessageData message)
     {
-        string level = engineController.GetMessageLevel(message);
+        string level = engineController.NameOfLevel(message);
         return engineController.MessageLevels.IsRecognized(level) ? engineController.MessageLevels.GetColor(level) : null;
     }
 
@@ -399,14 +404,20 @@ internal sealed partial class EntryBarViewModel : ObservableObject, IEntryBarVie
     /// <summary>Reloads the current page of entries from the service for the active folder.</summary>
     public async Task Refresh()
     {
-        if (currentFolder is null) { return; }
+        if (currentFolder is null)
+        {
+            return;
+        }
 
         // Several triggers can refresh at once (a saved draft, a received message, the user paging). Each load runs to
         // completion, but only the newest one is shown; clearing up front and adding after the load let overlapping
         // refreshes interleave and list entries twice.
         int generation = ++refreshGeneration;
         (List<EntryItemViewModel> items, int total) = await Load(currentFolder);
-        if (generation != refreshGeneration) { return; }
+        if (generation != refreshGeneration)
+        {
+            return;
+        }
 
         Entries.Clear();
         foreach (EntryItemViewModel item in items)
@@ -428,9 +439,9 @@ internal sealed partial class EntryBarViewModel : ObservableObject, IEntryBarVie
                     foreach (MessageEntity m in messages)
                     {
                         string timeText = m.ReceivedAt.ToString("dd-MMM-yyyy HH:mm").ToUpperInvariant();
-                        EntryItemViewModel item = new(m.MessageId, engineController.GetFromUser(m.Message), EntryType.Message, m.ReceivedAt,
-                            secondaryText: engineController.GetBody(m.Message).FirstLine, priorityText: GetPriorityLabel(m.Message), tagText: GetTagLabel(m.Message), timeText: timeText,
-                            messageLevelColorHex: GetMessageLevelColor(m.Message), isAlert: engineController.GetIsAlert(m.Message));
+                        EntryItemViewModel item = new(m.MessageId, m.Message.FromUser, EntryType.Message, m.ReceivedAt,
+                            secondaryText: m.Message.Body.FirstLine, priorityText: GetPriorityLabel(m.Message), tagText: GetTagLabel(m.Message), timeText: timeText,
+                            messageLevelColorHex: GetMessageLevelColor(m.Message), isAlert: m.Message.IsAlert);
                         item.OverallStatus = m.ReadStatus;
                         items.Add(item);
                     }
@@ -442,11 +453,11 @@ internal sealed partial class EntryBarViewModel : ObservableObject, IEntryBarVie
                     (List<MessageEntity> messages, int total) = await entryService.GetMessages(folder.StorageId, CurrentPage, Filter);
                     foreach (MessageEntity m in messages)
                     {
-                        string destinations = string.Join(", ", engineController.GetAddresses(m.Message).Select(a => a.UserName).Distinct());
+                        string destinations = string.Join(", ", m.Message.Addresses.Select(a => a.UserName).Distinct());
                         string timeText = m.ReceivedAt.ToString("dd-MMM-yyyy HH:mm").ToUpperInvariant();
                         EntryItemViewModel item = new(m.MessageId, destinations, EntryType.Message, m.ReceivedAt,
-                            secondaryText: engineController.GetBody(m.Message).FirstLine, priorityText: GetPriorityLabel(m.Message), tagText: GetTagLabel(m.Message), timeText: timeText, isOutboundMessage: true,
-                            messageLevelColorHex: GetMessageLevelColor(m.Message), isAlert: engineController.GetIsAlert(m.Message));
+                            secondaryText: m.Message.Body.FirstLine, priorityText: GetPriorityLabel(m.Message), tagText: GetTagLabel(m.Message), timeText: timeText, isOutboundMessage: true,
+                            messageLevelColorHex: GetMessageLevelColor(m.Message), isAlert: m.Message.IsAlert);
                         item.OverallStatus = m.OverallStatus;
                         items.Add(item);
                     }
@@ -491,7 +502,7 @@ internal sealed partial class EntryBarViewModel : ObservableObject, IEntryBarVie
     /// <summary>Updates the overall delivery status on an entry already shown in the list.</summary>
     public Task UpdateEntryStatus(string messageId, DestinationStatus? overallStatus)
     {
-        EntryItemViewModel? entry = Entries.FirstOrDefault(e => e.Id == messageId && e.EntryType == EntryType.Message);
+        EntryItemViewModel? entry = Entries.FirstOrDefault(e => e.Id == messageId && e.EntryType is EntryType.Message);
         if (entry is not null)
         {
             entry.OverallStatus = overallStatus;
@@ -517,11 +528,17 @@ internal sealed partial class EntryBarViewModel : ObservableObject, IEntryBarVie
 
     private void ApplyPendingSelect()
     {
-        if (pendingSelectId is null) { return; }
+        if (pendingSelectId is null)
+        {
+            return;
+        }
         string id = pendingSelectId;
         pendingSelectId = null;
         EntryItemViewModel? match = Entries.FirstOrDefault(e => e.Id == id);
-        if (match is not null) { SelectEntry(match); }
+        if (match is not null)
+        {
+            SelectEntry(match);
+        }
     }
 
     private void UpdatePagination(int total)
@@ -534,10 +551,10 @@ internal sealed partial class EntryBarViewModel : ObservableObject, IEntryBarVie
     /// <summary>Inserts an entry at the top of the current page when the active folder and page match, then refreshes pagination counts.</summary>
     public async Task PrependEntry(EntryItemViewModel entry)
     {
-        if (currentFolder is null || currentFolder.RootType != FolderType.Inbox &&
-            currentFolder.RootType != FolderType.Outbox &&
-            currentFolder.RootType != FolderType.Drafts &&
-            currentFolder.RootType != FolderType.Notes)
+        if (currentFolder is null || currentFolder.RootType is not FolderType.Inbox &&
+            currentFolder.RootType is not FolderType.Outbox &&
+            currentFolder.RootType is not FolderType.Drafts &&
+            currentFolder.RootType is not FolderType.Notes)
         {
             return;
         }
@@ -559,7 +576,10 @@ internal sealed partial class EntryBarViewModel : ObservableObject, IEntryBarVie
 
     private async Task RefreshPaginationCounts()
     {
-        if (currentFolder is null) { return; }
+        if (currentFolder is null)
+        {
+            return;
+        }
         int total = currentFolder.RootType switch
         {
             FolderType.Inbox or FolderType.Outbox => (await entryService.GetMessages(currentFolder.StorageId, 1, Filter)).Total,
@@ -574,7 +594,10 @@ internal sealed partial class EntryBarViewModel : ObservableObject, IEntryBarVie
     /// <inheritdoc />
     public async Task DeleteEntry(EntryItemViewModel entry)
     {
-        if (currentFolder is null || !engineController.CanDelete(currentFolder.RootType)) { return; }
+        if (currentFolder is null || !engineController.CanDelete(currentFolder.RootType))
+        {
+            return;
+        }
 
         await entryService.DeleteEntry(entry.Id, entry.EntryType, entry.IsOutboundMessage);
         Entries.Remove(entry);
@@ -602,14 +625,20 @@ internal sealed partial class EntryBarViewModel : ObservableObject, IEntryBarVie
     public void UpdateTitle(string id, EntryType type, string title)
     {
         EntryItemViewModel? entry = Entries.FirstOrDefault(candidate => candidate.Id == id && candidate.EntryType == type);
-        if (entry is null) { return; }
+        if (entry is null)
+        {
+            return;
+        }
 
-        entry.Title = string.IsNullOrEmpty(title) ? engineController.Display(type == EntryType.Draft ? "(Empty draft)" : "(Empty note)") : title;
+        entry.Title = string.IsNullOrEmpty(title) ? engineController.Display(type is EntryType.Draft ? "(Empty draft)" : "(Empty note)") : title;
     }
 
     private void PrependEntry(EntryItemViewModel added, string folderId)
     {
-        if (currentFolder?.Id != folderId || Entries.Any(entry => entry.Id == added.Id)) { return; }
+        if (currentFolder?.Id != folderId || Entries.Any(entry => entry.Id == added.Id))
+        {
+            return;
+        }
 
         foreach (EntryItemViewModel other in Entries.Where(entry => entry.IsSelected).ToList())
         {
@@ -627,7 +656,10 @@ internal sealed partial class EntryBarViewModel : ObservableObject, IEntryBarVie
     /// <inheritdoc />
     public void SelectEntry(EntryItemViewModel entry)
     {
-        if (SelectedEntry == entry && Entries.Count(e => e.IsSelected) == 1) { return; }
+        if (SelectedEntry == entry && Entries.Count(e => e.IsSelected) == 1)
+        {
+            return;
+        }
 
         foreach (EntryItemViewModel other in Entries.Where(e => e.IsSelected && e != entry).ToList())
         {

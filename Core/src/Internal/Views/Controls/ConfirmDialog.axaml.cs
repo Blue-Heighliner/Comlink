@@ -21,7 +21,10 @@ internal partial class ConfirmDialog : Window
         CancelBtn.Click += (_, _) => Close(false);
         KeyDown += (_, e) =>
         {
-            if (e.Key == Key.Escape) { Close(false); }
+            if (e.Key is Key.Escape)
+            {
+                Close(false);
+            }
         };
         Opened += (_, _) => CancelBtn.Focus();
     }

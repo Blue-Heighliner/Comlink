@@ -3,423 +3,176 @@ namespace BlueHeighliner.Comlink.Tests.Unit.Internal.Services;
 /// <summary>Unit tests for <see cref="DirectServiceConnection"/> event wiring and delegation.</summary>
 public sealed class DirectServiceConnectionTests
 {
-
-    private sealed class FakePeerService : IPeerService
-    {
-        public event Func<object, Task>? FrameDelivered;
-#pragma warning disable CS0067
-        public event Func<string, string, Task>? ReadReceiptReceived;
-        public event Func<string, string, Task>? ReceiveReceiptReceived;
-        public event Func<string, string, DestinationStatus, Task>? DeliveryStatusChanged;
-        public event Func<string, Task>? UserConnected;
-        public event Func<string, Task>? UserDisconnected;
-#pragma warning restore CS0067
-        public IReadOnlyList<string> ConnectedUsers { get; set; } = [];
-        public IReadOnlyList<string> GetConnectedUsers() => ConnectedUsers;
-        public bool IsUserConnected(string userName) => ConnectedUsers.Contains(userName);
-        public Task<bool> SendPacket(string userName, object packet, CancellationToken cancellation = default) => Task.FromResult(true);
-        public List<(string UserName, TestFrame Message)> Sent { get; } = [];
-        public bool ReturnSuccess { get; set; } = true;
-
-        public Task Start(CancellationToken cancellation) => Task.CompletedTask;
-        public Task<bool> Send(string userName, object message, CancellationToken cancellation = default)
-        {
-            Sent.Add((userName, (TestFrame)message));
-            return Task.FromResult(ReturnSuccess);
-        }
-        public Task DeliverLocal(object payload) => FrameDelivered is null ? Task.CompletedTask : FrameDelivered(payload);
-
-        public async Task FireMessageDelivered(object payload)
-        {
-            if (FrameDelivered is not null) { await FrameDelivered(payload); }
-        }
-    }
-
-    private sealed class FakeMessageRoutingService : IMessageRoutingService
-    {
-        public event Func<string, string, DestinationStatus, Task>? DeliveryStatusChanged;
-
-        public (string MessageId, IReadOnlyList<UserDeliveryResult> UserResults)? RouteResult;
-        public SendMessagePayload? LastPayload;
-
-        public Task<(string MessageId, IReadOnlyList<UserDeliveryResult> UserResults)> Route(
-            string fromUser, SendMessagePayload payload, CancellationToken cancellation)
-        {
-            LastPayload = payload;
-            if (RouteResult is null) { throw new InvalidOperationException("RouteResult not configured"); }
-            return Task.FromResult(RouteResult.Value);
-        }
-
-        public Task<(string MessageId, IReadOnlyList<UserDeliveryResult> UserResults)> RouteFrame(
-            string fromUser, object message, CancellationToken cancellation)
-        {
-            if (RouteResult is null) { throw new InvalidOperationException("RouteResult not configured"); }
-            return Task.FromResult(RouteResult.Value);
-        }
-
-        public async Task FireDeliveryStatusChanged(string messageId, string user, DestinationStatus status)
-        {
-            if (DeliveryStatusChanged is not null) { await DeliveryStatusChanged(messageId, user, status); }
-        }
-    }
-
     private static DirectServiceConnection Build(
         out FakePeerService fakePeer,
-        out FakeMessageRoutingService fakeRouting,
         out Mock<IUserService> userMock,
         out Mock<IEntryService> entryMock,
-        out Mock<TestEngineController> dirMock)
+        out Mock<TestEngineController> engineMock,
+        out MessageEvents events,
+        out Mock<INetworkProcessing> processing)
     {
         fakePeer = new FakePeerService();
-        fakeRouting = new FakeMessageRoutingService();
         userMock = new Mock<IUserService>();
         entryMock = new Mock<IEntryService>();
-        dirMock = new Mock<TestEngineController> { CallBase = true };
-        return new DirectServiceConnection(userMock.Object, dirMock.Object,
-            fakeRouting, fakePeer, entryMock.Object);
+        engineMock = new Mock<TestEngineController> { CallBase = true };
+        events = new MessageEvents();
+        processing = new Mock<INetworkProcessing>();
+        Mock<IIdGenerator> ids = new();
+        ids.Setup(i => i.Next()).ReturnsAsync("ID-1");
+        return new DirectServiceConnection(userMock.Object, engineMock.Object, fakePeer, entryMock.Object, events, processing.Object, ids.Object, LoggerFactory.Create(_ => { }));
     }
+
+    private static DirectServiceConnection Build(out Mock<IUserService> user, out Mock<IEntryService> entry, out Mock<INetworkProcessing> processing, out MessageEvents events)
+        => Build(out _, out user, out entry, out _, out events, out processing);
 
     /// <summary>GetUserInfo delegates to IUserService.GetCurrentUserInfo and returns the result.</summary>
     [Fact]
     public async Task GetUserInfo_WhenInstalled_ReturnsUserInfo()
     {
-        DirectServiceConnection conn = Build(out _, out _, out Mock<IUserService> user, out _, out _);
+        DirectServiceConnection conn = Build(out _, out Mock<IUserService> user, out _, out _, out _, out _);
         UserInfo info = new() { Name = "ALPHA" };
         user.Setup(s => s.GetCurrentUserInfo()).Returns(info);
 
-        UserInfo? result = await conn.GetUserInfo();
-
-        Assert.Same(info, result);
+        Assert.Same(info, await conn.GetUserInfo());
     }
 
     /// <summary>GetUserInfo returns null when no user is installed.</summary>
     [Fact]
     public async Task GetUserInfo_WhenNotInstalled_ReturnsNull()
     {
-        DirectServiceConnection conn = Build(out _, out _, out Mock<IUserService> user, out _, out _);
+        DirectServiceConnection conn = Build(out _, out Mock<IUserService> user, out _, out _, out _, out _);
         user.Setup(s => s.GetCurrentUserInfo()).Returns((UserInfo?)null);
 
-        UserInfo? result = await conn.GetUserInfo();
-
-        Assert.Null(result);
+        Assert.Null(await conn.GetUserInfo());
     }
 
     /// <summary>GetUserNames returns the names from the directory as a list.</summary>
     [Fact]
     public async Task GetUserNames_ReturnsUserNamesFromDirectory()
     {
-        DirectServiceConnection conn = Build(out _, out _, out _, out _, out Mock<TestEngineController> dir);
+        DirectServiceConnection conn = Build(out _, out _, out _, out Mock<TestEngineController> dir, out _, out _);
         dir.Setup(d => d.Users).Returns((IReadOnlyList<string>)["ALPHA", "BETA"]);
 
-        List<string> names = await conn.GetUserNames();
-
-        Assert.Equal(["ALPHA", "BETA"], names);
+        Assert.Equal(["ALPHA", "BETA"], await conn.GetUserNames());
     }
 
     /// <summary>GetUserNames returns an empty list when the directory throws.</summary>
     [Fact]
     public async Task GetUserNames_WhenDirectoryThrows_ReturnsEmptyList()
     {
-        DirectServiceConnection conn = Build(out _, out _, out _, out _, out Mock<TestEngineController> dir);
+        DirectServiceConnection conn = Build(out _, out _, out _, out Mock<TestEngineController> dir, out _, out _);
         dir.Setup(d => d.Users).Throws(new IOException("network error"));
 
-        List<string> names = await conn.GetUserNames();
-
-        Assert.Empty(names);
+        Assert.Empty(await conn.GetUserNames());
     }
 
     /// <summary>GetConnectedUsers returns whatever IPeerService.GetConnectedUsers reports.</summary>
     [Fact]
     public async Task GetConnectedUsers_DelegatesToPeerService()
     {
-        DirectServiceConnection conn = Build(out FakePeerService peer, out _, out _, out _, out _);
-        peer.ConnectedUsers = ["ALPHA", "BETA"];
+        DirectServiceConnection conn = Build(out FakePeerService peer, out _, out _, out _, out _, out _);
+        peer.Connected.UnionWith(["ALPHA", "BETA"]);
 
-        List<string> connected = await conn.GetConnectedUsers();
-
-        Assert.Equal(["ALPHA", "BETA"], connected);
+        Assert.Equal(["ALPHA", "BETA"], (await conn.GetConnectedUsers()).Order());
     }
 
     /// <summary>InstallUser delegates to IUserService.Install and returns its result.</summary>
     [Fact]
     public async Task InstallUser_DelegatesToUserService()
     {
-        DirectServiceConnection conn = Build(out _, out _, out Mock<IUserService> user, out _, out _);
+        DirectServiceConnection conn = Build(out _, out Mock<IUserService> user, out _, out _, out _, out _);
         UserInfo info = new() { Name = "BRAVO" };
         user.Setup(s => s.Install("CODE1", It.IsAny<CancellationToken>())).ReturnsAsync(info);
 
-        UserInfo? result = await conn.InstallUser("CODE1");
-
-        Assert.Same(info, result);
+        Assert.Same(info, await conn.InstallUser("CODE1"));
     }
 
-    /// <summary>A delivered frame that is not a message is never shown or stored, so no MessageReceived is raised for it.</summary>
+    /// <summary>A message the host's processor records as received is raised to the connection's listeners.</summary>
     [Fact]
-    public async Task Connect_ThenNonMessageFrameDelivered_RaisesNothing()
+    public async Task Connect_ThenMessageReceived_IsRaised()
     {
-        DirectServiceConnection conn = Build(out FakePeerService peer, out _, out _, out _, out _);
+        DirectServiceConnection conn = Build(out _, out _, out _, out MessageEvents events);
         await conn.Connect();
-        int raised = 0;
-        conn.MessageReceived += _ => { raised++; return Task.CompletedTask; };
+        List<Message> raised = [];
+        conn.MessageReceived += message => { raised.Add(message); return Task.CompletedTask; };
+        Message message = new() { Id = "M1", FromUser = "BOB", Body = "hi", Addresses = [], SentAt = DateTime.UtcNow, Priority = TestMessagePriority.Normal };
 
-        await peer.FireMessageDelivered(new TestFrame { MessageId = "F1", FromUser = "REMOTE", IsHidden = true });
+        await events.RaiseMessageReceived(message);
 
-        Assert.Equal(0, raised);
+        Assert.Same(message, Assert.Single(raised));
     }
 
-    /// <summary>An alert the message handler's filter throws away is not raised as received, while one it keeps is.</summary>
+    /// <summary>A delivery status change is raised to the connection's listeners.</summary>
     [Fact]
-    public async Task Connect_ThenRepeatedAlertDelivered_IsThrownAway()
+    public async Task Connect_ThenDeliveryStatusChanged_IsRaised()
     {
-        DirectServiceConnection conn = Build(out FakePeerService peer, out _, out _, out _, out _);
+        DirectServiceConnection conn = Build(out _, out _, out _, out MessageEvents events);
         await conn.Connect();
-        int raised = 0;
-        conn.MessageReceived += _ => { raised++; return Task.CompletedTask; };
+        List<DeliveryStatusChangedEvent> raised = [];
+        conn.DeliveryStatusChanged += change => { raised.Add(change); return Task.CompletedTask; };
 
-        await peer.FireMessageDelivered(new TestFrame { MessageId = "A1", FromUser = "REMOTE", Body = "DUPLICATE", IsAlert = true });
-        await peer.FireMessageDelivered(new TestFrame { MessageId = "A2", FromUser = "REMOTE", Body = "DUPLICATE", IsAlert = true });
+        await events.RaiseDeliveryStatusChanged(new DeliveryStatusChangedEvent { MessageId = "M1", UserName = "BOB", Status = DestinationStatus.Sent });
 
-        Assert.Equal(1, raised);
+        Assert.Equal("BOB", Assert.Single(raised).UserName);
     }
 
-    /// <summary>A message from another user is answered with a receive receipt frame addressed back to its sender.</summary>
+    /// <summary>SendMessage builds the message, stores it in the Outbox and hands it to the network processor, which does the sending; the result carries its identifier and whether it is an alert.</summary>
     [Fact]
-    public async Task MessageDelivered_FromAnotherUser_SendsReceiveReceiptToSender()
+    public async Task SendMessage_StoresTheMessage_AndHandsItToTheProcessor()
     {
-        DirectServiceConnection conn = Build(out FakePeerService peer, out _, out Mock<IUserService> user, out _, out _);
-        user.Setup(s => s.GetCurrentUserInfo()).Returns(new UserInfo { Name = "LOCAL" });
-        await conn.Connect();
+        DirectServiceConnection conn = Build(out Mock<IUserService> user, out Mock<IEntryService> entry, out Mock<INetworkProcessing> processing, out _);
+        user.Setup(s => s.GetCurrentUserInfo()).Returns(new UserInfo { Name = "ME" });
+        Message? stored = null;
+        entry.Setup(e => e.StoreSentMessage(It.IsAny<Message>())).Callback<Message>(message => stored = message).ReturnsAsync(new MessageEntity());
 
-        await peer.FireMessageDelivered(new TestFrame { MessageId = "MSG1", FromUser = "REMOTE" });
-
-        (string userName, TestFrame receipt) = Assert.Single(peer.Sent);
-        Assert.Equal("REMOTE", userName);
-        Assert.Equal("MSG1", receipt.ReceiveReceiptMessageId);
-        Assert.Equal("LOCAL", receipt.FromUser);
-        Assert.True(receipt.IsHidden);
-    }
-
-    /// <summary>A message the user sent to themselves comes back from the server like any other, so it is answered with a receipt.</summary>
-    [Fact]
-    public async Task MessageDelivered_FromSelf_IsAnsweredWithAReceiptToSelf()
-    {
-        DirectServiceConnection conn = Build(out FakePeerService peer, out _, out Mock<IUserService> user, out _, out _);
-        user.Setup(s => s.GetCurrentUserInfo()).Returns(new UserInfo { Name = "LOCAL" });
-        await conn.Connect();
-
-        await peer.FireMessageDelivered(new TestFrame { MessageId = "MSG1", FromUser = "LOCAL" });
-
-        Assert.Equal("LOCAL", Assert.Single(peer.Sent).UserName);
-    }
-
-    /// <summary>After Connect, a FrameDelivered peer event is converted and re-raised as MessageReceived.</summary>
-    [Fact]
-    public async Task Connect_ThenMessageDelivered_RaisesMessageReceivedEvent()
-    {
-        DirectServiceConnection conn = Build(out FakePeerService peer, out _, out _, out _, out _);
-        await conn.Connect();
-
-        MessageReceivedEvent? received = null;
-        conn.MessageReceived += evt => { received = evt; return Task.CompletedTask; };
-
-        TestFrame payload = new()
-        {
-            MessageId = "MSG1",
-            FromUser = "REMOTE",
-            Body = "Body text",
-            Addresses = [new TestAddressEntry { UserName = "LOCAL", Type = "To" }, new TestAddressEntry { UserName = "OMAHA", Type = "External", Information = "Deliver to Eastside Office" }],
-            SentAt = new DateTime(2025, 7, 4, 12, 0, 0, DateTimeKind.Utc),
-            Priority = "LEVEL2"
-        };
-        await peer.FireMessageDelivered(payload);
-
-        Assert.NotNull(received);
-        Assert.Equal("MSG1", received.MessageId);
-        Assert.Equal("REMOTE", received.FromUser);
-        Assert.Equal("Body text", received.Body);
-        Assert.Equal(2, received.Addresses.Count);
-        Assert.Equal("LOCAL", received.Addresses[0].UserName);
-        Assert.Equal("External", received.Addresses[1].Type);
-        Assert.Equal("Deliver to Eastside Office", received.Addresses[1].Information);
-        Assert.Equal(TestMessagePriority.Level2, received.Priority);
-    }
-
-    /// <summary>After Connect, a DeliveryStatusChanged routing event updates the entry service and fires the connection event.</summary>
-    [Fact]
-    public async Task Connect_ThenDeliveryStatusChanged_UpdatesEntryAndRaisesEvent()
-    {
-        DirectServiceConnection conn = Build(out _, out FakeMessageRoutingService routing,
-            out _, out Mock<IEntryService> entry, out _);
-
-        MessageEntity fakeEntity = new()
-        {
-            MessageId = "MSG2",
-            DeliveryStatuses = [new DeliveryStatus { UserName = "DEST", Status = DestinationStatus.Received, AddressedVia = [] }]
-        };
-        entry.Setup(e => e.UpdateDeliveryStatus("MSG2", "DEST", DestinationStatus.Received))
-             .ReturnsAsync(fakeEntity);
-        await conn.Connect();
-
-        DeliveryStatusChangedEvent? evt = null;
-        conn.DeliveryStatusChanged += e => { evt = e; return Task.CompletedTask; };
-
-        await routing.FireDeliveryStatusChanged("MSG2", "DEST", DestinationStatus.Received);
-
-        Assert.NotNull(evt);
-        Assert.Equal("MSG2", evt.MessageId);
-        Assert.Equal("DEST", evt.UserName);
-        Assert.Equal(DestinationStatus.Received, evt.Status);
-        entry.Verify(e => e.UpdateDeliveryStatus("MSG2", "DEST", DestinationStatus.Received), Times.Once);
-    }
-
-    /// <summary>SendMessage returns null when no user is installed.</summary>
-    [Fact]
-    public async Task SendMessage_WhenNotInstalled_ReturnsNull()
-    {
-        DirectServiceConnection conn = Build(out _, out _, out Mock<IUserService> user, out _, out _);
-        user.Setup(s => s.GetCurrentUserInfo()).Returns((UserInfo?)null);
-
-        SendMessageResult? result = await conn.SendMessage("Body", []);
-
-        Assert.Null(result);
-    }
-
-    /// <summary>SendMessage delegates to the routing service and maps the result to SendMessageResult.</summary>
-    [Fact]
-    public async Task SendMessage_DelegatesToRoutingServiceAndMapsResult()
-    {
-        DirectServiceConnection conn = Build(out _, out FakeMessageRoutingService routing,
-            out Mock<IUserService> user, out _, out _);
-        user.Setup(s => s.GetCurrentUserInfo()).Returns(new UserInfo
-        {
-            Name = "ALPHA"
-        });
-        IReadOnlyList<UserDeliveryResult> userResults =
-            [new UserDeliveryResult { UserName = "DEST", Success = true, AddressedVia = [] }];
-        routing.RouteResult = ("MSGID1", userResults);
-
-        SendMessageResult? result = await conn.SendMessage("Body", [new AddressRequest { UserName = "DEST" }]);
+        SendMessageResult? result = await conn.SendMessage("hello", [new AddressRequest { UserName = "BOB", Type = "Cc", Information = "note" }], TestMessagePriority.Level3, "TAG");
 
         Assert.NotNull(result);
-        Assert.Equal("MSGID1", result.MessageId);
-        Assert.Single(result.UserResults);
-        Assert.Equal("DEST", result.UserResults[0].UserName);
-        Assert.True(result.UserResults[0].Success);
+        Assert.Equal("ID-1", result.MessageId);
+        Assert.NotNull(stored);
+        Assert.Equal(("ID-1", "ME", "hello", "TAG", TestMessagePriority.Level3), (stored.Id, stored.FromUser, stored.Body, stored.Tag, stored.Priority));
+        MessageAddress address = Assert.Single(stored.Addresses);
+        Assert.Equal(("BOB", AddressType.Cc, "note"), (address.UserName, address.Type, address.Information));
+        processing.Verify(p => p.Sent(stored), Times.Once);
     }
 
-    /// <summary>Whether a sent message is an alert is decided by the host's message handler from the message's other fields, and reported in the result.</summary>
+    /// <summary>Without an installed user nothing is stored or sent and the result is null.</summary>
     [Fact]
-    public async Task SendMessage_IsAlertComesFromTheMessageHandler()
+    public async Task SendMessage_NoUser_ReturnsNull()
     {
-        DirectServiceConnection conn = Build(out _, out FakeMessageRoutingService routing,
-            out Mock<IUserService> user, out _, out _);
-        user.Setup(s => s.GetCurrentUserInfo()).Returns(new UserInfo { Name = "ALPHA" });
-        routing.RouteResult = ("MSGID1", []);
+        DirectServiceConnection conn = Build(out Mock<IUserService> user, out Mock<IEntryService> entry, out Mock<INetworkProcessing> processing, out _);
+        user.Setup(s => s.GetCurrentUserInfo()).Returns((UserInfo?)null);
 
-        SendMessageResult? alert = await conn.SendMessage("Body", [new AddressRequest { UserName = "DEST" }], tag: "ALERT");
-        Assert.True(alert!.IsAlert);
-
-        SendMessageResult? plain = await conn.SendMessage("Body", [new AddressRequest { UserName = "DEST" }], tag: "OTHER");
-        Assert.False(plain!.IsAlert);
+        Assert.Null(await conn.SendMessage("hello", []));
+        entry.Verify(e => e.StoreSentMessage(It.IsAny<Message>()), Times.Never);
+        processing.Verify(p => p.Sent(It.IsAny<Message>()), Times.Never);
     }
 
-    /// <summary>SendMessage passes the priority argument through to the routing payload.</summary>
+    /// <summary>Marking a message read tells the network processor, so it can tell the sender, and announces the change.</summary>
     [Fact]
-    public async Task SendMessage_PassesPriorityThroughToPayload()
+    public async Task MarkMessageRead_TellsTheProcessor()
     {
-        DirectServiceConnection conn = Build(out _, out FakeMessageRoutingService routing,
-            out Mock<IUserService> user, out _, out _);
-        user.Setup(s => s.GetCurrentUserInfo()).Returns(new UserInfo
-        {
-            Name = "ALPHA"
-        });
-        routing.RouteResult = ("MSGID1", []);
-
-        await conn.SendMessage("Body", [new AddressRequest { UserName = "DEST" }], priority: TestMessagePriority.Level3);
-
-        Assert.NotNull(routing.LastPayload);
-        Assert.Equal(TestMessagePriority.Level3, routing.LastPayload.Priority);
-    }
-
-    /// <summary>MarkMessageRead returns false and sends nothing when EntryService reports no change (already read or not found).</summary>
-    [Fact]
-    public async Task MarkMessageRead_WhenEntryServiceReturnsNull_ReturnsFalse()
-    {
-        DirectServiceConnection conn = Build(out FakePeerService peer, out _, out _, out Mock<IEntryService> entry, out _);
-        entry.Setup(e => e.MarkMessageRead("MSG1")).ReturnsAsync((MessageEntity?)null);
-
-        bool result = await conn.MarkMessageRead("MSG1");
-
-        Assert.False(result);
-        Assert.Empty(peer.Sent);
-    }
-
-    /// <summary>MarkMessageRead sends a confirmation message back to the sender and raises a local Read status event.</summary>
-    [Fact]
-    public async Task MarkMessageRead_ForRemoteSender_SendsConfirmationAndRaisesReadEvent()
-    {
-        DirectServiceConnection conn = Build(out FakePeerService peer, out _, out Mock<IUserService> user, out Mock<IEntryService> entry, out _);
-        user.Setup(s => s.GetCurrentUserInfo()).Returns(new UserInfo { Name = "LOCAL" });
-
-        TestFrame stored = new() { MessageId = "MSG1", FromUser = "REMOTE" };
-        MessageEntity entity = new() { MessageId = "MSG1", Message = stored };
-        entry.Setup(e => e.MarkMessageRead("MSG1")).ReturnsAsync(entity);
-
-        DeliveryStatusChangedEvent? evt = null;
-        conn.DeliveryStatusChanged += e => { evt = e; return Task.CompletedTask; };
-
-        bool result = await conn.MarkMessageRead("MSG1");
-
-        Assert.True(result);
-        Assert.NotNull(evt);
-        Assert.Equal("MSG1", evt.MessageId);
-        Assert.Equal(DestinationStatus.Read, evt.Status);
-
-        (string userName, TestFrame confirmation) = Assert.Single(peer.Sent);
-        Assert.Equal("REMOTE", userName);
-        Assert.Equal("MSG1", confirmation.ReadReceiptMessageId);
-        Assert.Equal("LOCAL", confirmation.FromUser);
-        Assert.Equal(string.Empty, confirmation.MessageId);
-        TestAddressEntry address = Assert.Single(confirmation.Addresses);
-        Assert.Equal("REMOTE", address.UserName);
-    }
-
-    /// <summary>MarkMessageRead for a self-addressed message sends the read receipt to the user itself like any other, which goes up to the server.</summary>
-    [Fact]
-    public async Task MarkMessageRead_ForSelfAddressedMessage_SendsTheReceiptToSelf()
-    {
-        DirectServiceConnection conn = Build(out FakePeerService peer, out _, out Mock<IUserService> user, out Mock<IEntryService> entry, out _);
-        user.Setup(s => s.GetCurrentUserInfo()).Returns(new UserInfo { Name = "LOCAL" });
-
-        TestFrame stored = new() { MessageId = "MSG1", FromUser = "LOCAL" };
-        MessageEntity entity = new() { MessageId = "MSG1", Message = stored };
-        entry.Setup(e => e.MarkMessageRead("MSG1")).ReturnsAsync(entity);
-
-        bool result = await conn.MarkMessageRead("MSG1");
-
-        Assert.True(result);
-        (string userName, TestFrame receipt) = Assert.Single(peer.Sent);
-        Assert.Equal("LOCAL", userName);
-        Assert.Equal("MSG1", receipt.ReadReceiptMessageId);
-    }
-
-    /// <summary>The event reports the status as stored, so a late, out-of-order status that storage ignored is not shown either.</summary>
-    [Fact]
-    public async Task DeliveryStatusChanged_IgnoredLateStatus_ReportsStoredStatus()
-    {
-        DirectServiceConnection conn = Build(out _, out FakeMessageRoutingService routing, out _, out Mock<IEntryService> entry, out _);
-        MessageEntity stored = new()
-        {
-            MessageId = "MSG3",
-            DeliveryStatuses = [new DeliveryStatus { UserName = "DEST", Status = DestinationStatus.Received, AddressedVia = [] }]
-        };
-        entry.Setup(e => e.UpdateDeliveryStatus("MSG3", "dest", DestinationStatus.Sent)).ReturnsAsync(stored);
+        DirectServiceConnection conn = Build(out Mock<IUserService> _, out Mock<IEntryService> entry, out Mock<INetworkProcessing> processing, out _);
+        MessageEntity entity = new() { MessageId = "M1", Message = new MessageData { Id = "M1", FromUser = "BOB", Body = "hi" } };
+        entry.Setup(e => e.MarkMessageRead("M1")).ReturnsAsync(entity);
+        List<DeliveryStatusChangedEvent> raised = [];
         await conn.Connect();
-        DeliveryStatusChangedEvent? evt = null;
-        conn.DeliveryStatusChanged += e => { evt = e; return Task.CompletedTask; };
+        conn.DeliveryStatusChanged += change => { raised.Add(change); return Task.CompletedTask; };
 
-        await routing.FireDeliveryStatusChanged("MSG3", "dest", DestinationStatus.Sent);
+        Assert.True(await conn.MarkMessageRead("M1"));
 
-        Assert.Equal(DestinationStatus.Received, evt!.Status);
+        processing.Verify(p => p.Read(It.Is<Message>(message => message.Id == "M1" && message.FromUser == "BOB")), Times.Once);
+        Assert.Equal(DestinationStatus.Read, Assert.Single(raised).Status);
+    }
+
+    /// <summary>A message that is not there, or already read, changes nothing.</summary>
+    [Fact]
+    public async Task MarkMessageRead_NothingChanged_ReturnsFalse()
+    {
+        DirectServiceConnection conn = Build(out Mock<IUserService> _, out Mock<IEntryService> entry, out Mock<INetworkProcessing> processing, out _);
+        entry.Setup(e => e.MarkMessageRead("M1")).ReturnsAsync((MessageEntity?)null);
+
+        Assert.False(await conn.MarkMessageRead("M1"));
+        processing.Verify(p => p.Read(It.IsAny<Message>()), Times.Never);
     }
 }

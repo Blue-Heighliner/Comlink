@@ -26,10 +26,22 @@ internal sealed record TagRules(TagCase Case, int MinLength, int? MaxLength, boo
     /// <param name="tag">The tag.</param>
     public string? Validate(string tag)
     {
-        if (tag.Length == 0) { return IsRequired ? "A tag is required" : null; }
-        if (tag.Length < MinLength) { return $"A tag must have at least {MinLength} characters"; }
-        if (MaxLength is { } max && tag.Length > max) { return $"A tag may have at most {max} characters"; }
-        if (!tag.All(IsAllowed)) { return "A tag may not contain " + string.Join(", ", new[] { AllowSymbols ? null : "symbols", AllowNumbers ? null : "numbers", AllowSpaces ? null : "spaces" }.Where(kind => kind is not null)); }
+        if (tag.Length == 0)
+        {
+            return IsRequired ? "A tag is required" : null;
+        }
+        if (tag.Length < MinLength)
+        {
+            return $"A tag must have at least {MinLength} characters";
+        }
+        if (MaxLength is { } max && tag.Length > max)
+        {
+            return $"A tag may have at most {max} characters";
+        }
+        if (!tag.All(IsAllowed))
+        {
+            return "A tag may not contain " + string.Join(", ", new[] { AllowSymbols ? null : "symbols", AllowNumbers ? null : "numbers", AllowSpaces ? null : "spaces" }.Where(kind => kind is not null));
+        }
 
         return Case switch
         {

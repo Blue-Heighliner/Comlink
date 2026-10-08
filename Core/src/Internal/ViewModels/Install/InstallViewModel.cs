@@ -23,14 +23,14 @@ internal sealed partial class InstallViewModel : ObservableObject, IInstallViewM
     /// <param name="connection">Service connection used to install the user.</param>
     /// <param name="loggerFactory">Factory for the activity logger that records why an install failed.</param>
     /// <param name="engineController">Words the messages shown with the host's name for a user.</param>
-    public InstallViewModel(IServiceConnection connection, ILoggerFactory loggerFactory, IEngineController engineController)
+    public InstallViewModel(IEngineConnection connection, ILoggerFactory loggerFactory, IEngineController engineController)
     {
         this.connection = connection;
         this.engineController = engineController;
         logger = loggerFactory.CreateLogger(LogCategories.App);
     }
 
-    private readonly IServiceConnection connection;
+    private readonly IEngineConnection connection;
     private readonly IEngineController engineController;
     private readonly ILogger logger;
 
@@ -41,7 +41,10 @@ internal sealed partial class InstallViewModel : ObservableObject, IInstallViewM
     partial void OnUserNameChanged(string value)
     {
         string upper = value.ToUpperInvariant();
-        if (value != upper) { UserName = upper; }
+        if (value != upper)
+        {
+            UserName = upper;
+        }
     }
 
     /// <summary>Raised after a user is successfully installed, providing the resulting user information.</summary>

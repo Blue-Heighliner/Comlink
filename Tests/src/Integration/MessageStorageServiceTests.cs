@@ -5,20 +5,16 @@ public sealed class MessageStorageServiceTests : IDisposable
 {
     private static readonly ILoggerFactory noLogger = LoggerFactory.Create(_ => { });
 
-    /// <summary>Initializes a fresh database and a service running as the storage server <c>SERVER</c>.</summary>
+    /// <summary>Initializes a fresh database and a service over it.</summary>
     public MessageStorageServiceTests()
     {
         ctx = new LiteDbContext(new TestAppDataPathProvider(appName));
         ctx.Initialize();
-        controller.Setup(c => c.StorageServers).Returns(["SERVER"]);
-        currentUser.SetupGet(p => p.UserName).Returns("SERVER");
-        service = new MessageStorageService(new StoredMessageRepository(ctx), controller.Object, currentUser.Object, noLogger);
+        service = new MessageStorageService(new StoredMessageRepository(ctx), new TestEngineController(), noLogger);
     }
 
     private readonly string appName = Guid.NewGuid().ToString();
     private readonly LiteDbContext ctx;
-    private readonly Mock<TestEngineController> controller = new() { CallBase = true };
-    private readonly Mock<ICurrentUserProvider> currentUser = new();
     private readonly MessageStorageService service;
 
     /// <inheritdoc />
@@ -26,69 +22,30 @@ public sealed class MessageStorageServiceTests : IDisposable
     {
         ctx.Dispose();
         string dir = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), appName);
-        if (Directory.Exists(dir)) { Directory.Delete(dir, recursive: true); }
+        if (Directory.Exists(dir))
+        {
+            Directory.Delete(dir, recursive: true);
+        }
     }
 
-    private static TestFrame Message(string id, string from, DateTime sentAt, params string[] to) => new()
+    private static Message Message(string id, string from, DateTime sentAt, params string[] to) => new()
     {
-        MessageId = id,
+        Id = id,
         FromUser = from,
         Body = $"Body {id}",
         SentAt = sentAt,
         IsAlert = true,
-        Priority = "LEVEL2",
+        Priority = TestMessagePriority.Level2,
         Tag = "TAG",
-        Addresses = [.. to.Select(u => new TestAddressEntry { UserName = u, Type = "To" })]
+        MessageLevel = TestLevel.Restricted,
+        Addresses = [.. to.Select(user => new MessageAddress { UserName = user, Type = AddressType.To })]
     };
-
-    private static TestFrame Request(RetrievalCriteria criteria)
-    {
-        TestFrame request = (TestFrame)new TestEngineController().CreateRetrieval(criteria, "SERVER");
-        request.MessageId = "REQ";
-        return request;
-    }
 
     private static readonly DateTime day1 = new(2026, 1, 1, 12, 0, 0, DateTimeKind.Utc);
     private static readonly DateTime day2 = new(2026, 1, 2, 12, 0, 0, DateTimeKind.Utc);
     private static readonly DateTime day3 = new(2026, 1, 3, 12, 0, 0, DateTimeKind.Utc);
 
-    private async Task<List<string>> Ids(string requester, RetrievalCriteria criteria)
-        => [.. (await service.Find(requester, Request(criteria))).Select(m => ((TestFrame)m).MessageId)];
-
-    /// <summary>Only a user named in StorageServers keeps messages.</summary>
-    [Fact]
-    public async Task Store_NotAStorageServer_KeepsNothing()
-    {
-        currentUser.SetupGet(p => p.UserName).Returns("OTHER");
-
-        await service.Store(Message("M1", "ALICE", day1, "BOB"));
-
-        Assert.False(service.IsEnabled);
-        Assert.Empty(ctx.StoredMessages.FindAll());
-    }
-
-    /// <summary>A frame that is not a message is never kept, though it is otherwise ordinary.</summary>
-    [Fact]
-    public async Task Store_FrameThatIsNotAMessage_IsNotKept()
-    {
-        currentUser.SetupGet(p => p.UserName).Returns(controller.Object.StorageServers.First());
-        TestFrame frame = Message("F1", "ALICE", day1, "BOB");
-        frame.IsHidden = true;
-
-        await service.Store(frame);
-
-        Assert.Empty(ctx.StoredMessages.FindAll());
-    }
-
-    /// <summary>A receipt or a retrieval request is not user content and is never kept.</summary>
-    [Fact]
-    public async Task Store_ReceiptOrRetrievalRequest_IsNotKept()
-    {
-        await service.Store(new TestFrame { MessageId = "C1", ReadReceiptMessageId = "M1" });
-        await service.Store(Request(new RetrievalCriteria()));
-
-        Assert.Empty(ctx.StoredMessages.FindAll());
-    }
+    private async Task<List<string>> Ids(RetrievalCriteria criteria) => [.. (await service.Find(criteria)).Select(message => message.Id)];
 
     /// <summary>Storing the same message twice keeps one copy.</summary>
     [Fact]
@@ -100,7 +57,7 @@ public sealed class MessageStorageServiceTests : IDisposable
         Assert.Single(ctx.StoredMessages.FindAll());
     }
 
-    /// <summary>A retrieval is not limited to the requester's own traffic: it finds every stored message that fits, whoever sent or received it.</summary>
+    /// <summary>A retrieval is not limited to anyone's own traffic: it finds every stored message that fits, whoever sent or received it.</summary>
     [Fact]
     public async Task Find_ReturnsMessagesRegardlessOfWhoSentOrReceivedThem()
     {
@@ -108,20 +65,20 @@ public sealed class MessageStorageServiceTests : IDisposable
         await service.Store(Message("DIRECT", "ALICE", day1, "CAROL"));
         await service.Store(Message("OTHERS", "ALICE", day1, "BOB"));
 
-        Assert.Equal(["DIRECT", "OTHERS", "SENT"], (await Ids("ERIN", new RetrievalCriteria())).Order());
+        Assert.Equal(["DIRECT", "OTHERS", "SENT"], (await Ids(new RetrievalCriteria())).Order());
     }
 
-    /// <summary>The date range bounds the original sent time, inclusively.</summary>
+    /// <summary>The date range bounds the original sent time, inclusively, and what is found is ordered by it.</summary>
     [Fact]
     public async Task Find_FiltersByDateRangeInclusively()
     {
+        await service.Store(Message("D3", "ALICE", day3, "CAROL"));
         await service.Store(Message("D1", "ALICE", day1, "CAROL"));
         await service.Store(Message("D2", "ALICE", day2, "CAROL"));
-        await service.Store(Message("D3", "ALICE", day3, "CAROL"));
 
-        Assert.Equal(["D2", "D3"], await Ids("CAROL", new RetrievalCriteria { From = day2 }));
-        Assert.Equal(["D1", "D2"], await Ids("CAROL", new RetrievalCriteria { To = day2 }));
-        Assert.Equal(["D2"], await Ids("CAROL", new RetrievalCriteria { From = day2, To = day2 }));
+        Assert.Equal(["D2", "D3"], await Ids(new RetrievalCriteria { From = day2 }));
+        Assert.Equal(["D1", "D2"], await Ids(new RetrievalCriteria { To = day2 }));
+        Assert.Equal(["D2"], await Ids(new RetrievalCriteria { From = day2, To = day2 }));
     }
 
     /// <summary>Authors, destinations and IDs each match by exact name, case-insensitively, and combine with AND.</summary>
@@ -131,46 +88,23 @@ public sealed class MessageStorageServiceTests : IDisposable
         await service.Store(Message("A1", "ALICE", day1, "CAROL", "BOB"));
         await service.Store(Message("A2", "ERIN", day1, "CAROL"));
 
-        Assert.Equal(["A1"], await Ids("CAROL", new RetrievalCriteria { Authors = ["alice"] }));
-        Assert.Equal(["A1"], await Ids("CAROL", new RetrievalCriteria { Destinations = ["bob"] }));
-        Assert.Equal(["A2"], await Ids("CAROL", new RetrievalCriteria { Ids = ["a2"] }));
-        Assert.Empty(await Ids("CAROL", new RetrievalCriteria { Authors = ["ALICE"], Ids = ["A2"] }));
+        Assert.Equal(["A1"], await Ids(new RetrievalCriteria { Authors = ["alice"] }));
+        Assert.Equal(["A1"], await Ids(new RetrievalCriteria { Destinations = ["bob"] }));
+        Assert.Equal(["A2"], await Ids(new RetrievalCriteria { Ids = ["a2"] }));
+        Assert.Empty(await Ids(new RetrievalCriteria { Authors = ["ALICE"], Ids = ["A2"] }));
     }
 
-    /// <summary>A found copy keeps the original's identity and content, is never an alert, and is addressed only to the requester.</summary>
+    /// <summary>A found message is the message that was stored, with its content, priority, level and addresses.</summary>
     [Fact]
-    public async Task Find_CopyKeepsContentClearsAlertAndReaddressesToRequester()
+    public async Task Find_ReturnsTheStoredMessage()
     {
         await service.Store(Message("M1", "ALICE", day1, "CAROL", "BOB"));
 
-        TestFrame copy = (TestFrame)Assert.Single(await service.Find("CAROL", Request(new RetrievalCriteria())));
+        Message found = Assert.Single(await service.Find(new RetrievalCriteria()));
 
-        Assert.Equal(("M1", "ALICE", "Body M1"), (copy.MessageId, copy.FromUser, copy.Body));
-        Assert.Equal(day1, copy.SentAt);
-        Assert.Equal(("LEVEL2", "TAG"), (copy.Priority, copy.Tag));
-        Assert.False(copy.IsAlert);
-        TestAddressEntry address = Assert.Single(copy.Addresses);
-        Assert.Equal("CAROL", address.UserName);
-        Assert.False(copy.IsRetrieval);
-    }
-
-    /// <summary>Copies come back oldest first.</summary>
-    [Fact]
-    public async Task Find_OrdersBySentTime()
-    {
-        await service.Store(Message("LATE", "ALICE", day3, "CAROL"));
-        await service.Store(Message("EARLY", "ALICE", day1, "CAROL"));
-
-        Assert.Equal(["EARLY", "LATE"], await Ids("CAROL", new RetrievalCriteria()));
-    }
-
-    /// <summary>A server that is not a storage server finds nothing.</summary>
-    [Fact]
-    public async Task Find_NotEnabled_ReturnsNothing()
-    {
-        await service.Store(Message("M1", "ALICE", day1, "CAROL"));
-
-        currentUser.SetupGet(p => p.UserName).Returns("OTHER");
-        Assert.Empty(await service.Find("CAROL", Request(new RetrievalCriteria())));
+        Assert.Equal(("M1", "ALICE", "Body M1"), (found.Id, found.FromUser, found.Body));
+        Assert.Equal(day1, found.SentAt.ToUniversalTime());
+        Assert.Equal((TestMessagePriority.Level2, "TAG", TestLevel.Restricted), (found.Priority, found.Tag, found.MessageLevel));
+        Assert.Equal(["CAROL", "BOB"], found.Addresses.Select(address => address.UserName));
     }
 }

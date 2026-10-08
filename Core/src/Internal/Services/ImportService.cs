@@ -25,7 +25,7 @@ internal interface IImportService
     /// <item>An activity log matching an existing log's date is merged into it line by line, skipping any imported line that exactly matches an existing one and inserting the rest in timestamp order.</item>
     /// </list>
     /// Otherwise, opens the file as a stream and calls <paramref name="format"/>'s own reader, handing it an
-    /// <see cref="IImportFormatContext"/> that applies the same message/draft/note rules above to whatever the
+    /// <see cref="IImportContext"/> that applies the same message/draft/note rules above to whatever the
     /// reader adds through it, and collects whatever staged sends it adds into the returned summary.
     /// </summary>
     /// <param name="packagePath">Absolute path of the file to import.</param>
@@ -103,7 +103,7 @@ internal sealed class ImportService : IImportService
         if (format is not null)
         {
             await using Stream stream = File.OpenRead(packagePath);
-            ImportFormatContext context = new(ApplyMessage, ApplyDraft, ApplyNote, resolveConflict);
+            ImportContext context = new(ApplyMessage, ApplyDraft, ApplyNote, resolveConflict);
             await format.Read(stream, context, cancellation);
             return context.BuildSummary();
         }
@@ -117,35 +117,70 @@ internal sealed class ImportService : IImportService
         foreach (ZipArchiveEntry zipEntry in archive.Entries)
         {
             EntryType? entryType = ParseEntryType(zipEntry.Name);
-            if (entryType is null) { continue; }
+            if (entryType is null)
+            {
+                continue;
+            }
 
             switch (entryType)
             {
                 case EntryType.Message:
                     {
                         MessageExportData? data = await ReadEntry<MessageExportData>(zipEntry);
-                        if (data is not null && await ApplyMessage(data)) { imported++; }
-                        else { skipped++; }
+                        if (data is not null && await ApplyMessage(data))
+                        {
+                            imported++;
+                        }
+                        else
+                        {
+                            skipped++;
+                        }
                         break;
                     }
                 case EntryType.Draft:
                     {
                         DraftExportData? data = await ReadEntry<DraftExportData>(zipEntry);
-                        if (data is null) { skipped++; break; }
+                        if (data is null)
+                        {
+                            skipped++;
+                            break;
+                        }
                         (bool wasImported, bool wasOverwritten) = await ApplyDraft(data, resolveConflict, () => overwriteAll, v => overwriteAll = v);
-                        if (wasOverwritten) { overwritten++; }
-                        else if (wasImported) { imported++; }
-                        else { skipped++; }
+                        if (wasOverwritten)
+                        {
+                            overwritten++;
+                        }
+                        else if (wasImported)
+                        {
+                            imported++;
+                        }
+                        else
+                        {
+                            skipped++;
+                        }
                         break;
                     }
                 case EntryType.Note:
                     {
                         NoteExportData? data = await ReadEntry<NoteExportData>(zipEntry);
-                        if (data is null) { skipped++; break; }
+                        if (data is null)
+                        {
+                            skipped++;
+                            break;
+                        }
                         (bool wasImported, bool wasOverwritten) = await ApplyNote(data, resolveConflict, () => overwriteAll, v => overwriteAll = v);
-                        if (wasOverwritten) { overwritten++; }
-                        else if (wasImported) { imported++; }
-                        else { skipped++; }
+                        if (wasOverwritten)
+                        {
+                            overwritten++;
+                        }
+                        else if (wasImported)
+                        {
+                            imported++;
+                        }
+                        else
+                        {
+                            skipped++;
+                        }
                         break;
                     }
                 case EntryType.Activity:
@@ -174,19 +209,19 @@ internal sealed class ImportService : IImportService
             return false;
         }
 
-        object message = engineController.CreateMessage(new MessageContent
+        MessageData message = new()
         {
-            SentAt = data.SentAt,
+            Id = data.MessageId,
+            FromUser = data.FromUser,
             Body = data.Body,
-            Priority = engineController.PriorityOf(data.Priority),
+            Addresses = [.. data.Addresses.Select(a => new AddressData { UserName = a.UserName, Type = a.Type, Information = a.Information })],
+            SentAt = data.SentAt,
+            Priority = data.Priority,
             Tag = data.Tag,
-            MessageLevel = string.Empty
-        });
-        engineController.SetMessageId(message, data.MessageId);
-        engineController.SetFromUser(message, data.FromUser);
-        engineController.SetAddresses(message, data.Addresses
-            .Select(a => new MessageAddress { UserName = a.UserName, Type = a.Type.ParseAddressType(), Information = a.Information })
-            .ToList());
+            MessageLevel = ConfiguredLevel(data.MessageLevel),
+            MessageAspect = ConfiguredAspect(data.MessageAspect),
+            IsAlert = data.IsAlert
+        };
 
         MessageEntity entity = new()
         {
@@ -241,12 +276,12 @@ internal sealed class ImportService : IImportService
             ? DraftNoteConflictResolution.OverwriteAll
             : await resolveConflict(new ImportConflict { EntryType = EntryType.Draft, Name = name });
 
-        if (resolution == DraftNoteConflictResolution.KeepExisting)
+        if (resolution is DraftNoteConflictResolution.KeepExisting)
         {
             return (false, false);
         }
 
-        if (resolution == DraftNoteConflictResolution.OverwriteAll)
+        if (resolution is DraftNoteConflictResolution.OverwriteAll)
         {
             setOverwriteAll(true);
         }
@@ -291,12 +326,12 @@ internal sealed class ImportService : IImportService
             ? DraftNoteConflictResolution.OverwriteAll
             : await resolveConflict(new ImportConflict { EntryType = EntryType.Note, Name = firstLine });
 
-        if (resolution == DraftNoteConflictResolution.KeepExisting)
+        if (resolution is DraftNoteConflictResolution.KeepExisting)
         {
             return (false, false);
         }
 
-        if (resolution == DraftNoteConflictResolution.OverwriteAll)
+        if (resolution is DraftNoteConflictResolution.OverwriteAll)
         {
             setOverwriteAll(true);
         }
@@ -311,7 +346,10 @@ internal sealed class ImportService : IImportService
     private async Task ImportActivityLog(ZipArchiveEntry zipEntry)
     {
         ActivityLogExportData? data = await ReadEntry<ActivityLogExportData>(zipEntry);
-        if (data is null) { return; }
+        if (data is null)
+        {
+            return;
+        }
 
         ActivityLogEntity? existing = (await activityLogs.GetAll()).FirstOrDefault(a => a.Date == data.Date);
         if (existing is null)

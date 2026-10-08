@@ -2,7 +2,7 @@ namespace BlueHeighliner.Comlink;
 
 /// <summary>
 /// ViewModel interface tracking unread alert messages and driving the title bar's alert indicator and the alarm sound.
-/// See <see cref="IEngineController.GetIsAlert"/> and <c>Docs/Components/ViewModels.md</c>.
+/// See <see cref="Message.IsAlert"/> and <c>Docs/Components/ViewModels.md</c>.
 /// </summary>
 internal interface IAlertViewModel
 {
@@ -15,7 +15,7 @@ internal interface IAlertViewModel
     int PendingCount { get; }
     /// <summary>Gets the text to display in the title bar's alert indicator.</summary>
     string AlertText { get; }
-    /// <summary>Gets the names of the keys that open the oldest unread alert, from the message handler.</summary>
+    /// <summary>Gets the names of the keys that open the oldest unread alert: Space and Enter.</summary>
     IReadOnlyList<string> QuickReadKeys { get; }
     /// <summary>Opens the oldest unread alert, if any, which reads it.</summary>
     IAsyncRelayCommand OpenOldestCommand { get; }
@@ -66,11 +66,11 @@ internal sealed partial class AlertViewModel : ObservableObject, IAlertViewModel
     /// <inheritdoc />
     public string AlertText => engineController.AlertLabel;
     /// <inheritdoc />
-    public IReadOnlyList<string> QuickReadKeys => engineController.AlertQuickReadKeys;
+    public IReadOnlyList<string> QuickReadKeys { get; } = ["Space", "Enter"];
 
     private Task OnMessageInserted(MessageEntity entity)
     {
-        if (!engineController.GetIsAlert(entity.Message))
+        if (!entity.Message.IsAlert)
         {
             return Task.CompletedTask;
         }
@@ -95,7 +95,10 @@ internal sealed partial class AlertViewModel : ObservableObject, IAlertViewModel
         bool silence = false;
         lock (pending)
         {
-            if (!pending.Remove(entity.MessageId)) { return Task.CompletedTask; }
+            if (!pending.Remove(entity.MessageId))
+            {
+                return Task.CompletedTask;
+            }
 
             count = pending.Count;
             if (alarming.Remove(entity.MessageId) && alarming.Count == 0 && soundTimer is not null)
@@ -107,7 +110,10 @@ internal sealed partial class AlertViewModel : ObservableObject, IAlertViewModel
         }
 
         PendingCount = count;
-        if (silence) { soundPlayer.Stop(); }
+        if (silence)
+        {
+            soundPlayer.Stop();
+        }
         return Task.CompletedTask;
     }
 
@@ -146,7 +152,10 @@ internal sealed partial class AlertViewModel : ObservableObject, IAlertViewModel
             oldest = pending.Count > 0 ? pending[0] : null;
         }
 
-        if (oldest is null || OpenRequested is null) { return; }
+        if (oldest is null || OpenRequested is null)
+        {
+            return;
+        }
         await OpenRequested.InvokeAll(oldest);
     }
 

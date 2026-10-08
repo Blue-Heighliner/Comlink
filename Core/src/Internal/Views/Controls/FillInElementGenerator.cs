@@ -24,7 +24,10 @@ internal sealed class FillInElementGenerator : VisualLineElementGenerator
     {
         DocumentLine line = CurrentContext.VisualLine.FirstDocumentLine;
         int lineEnd = line.Offset + line.Length;
-        if (startOffset >= lineEnd) { return -1; }
+        if (startOffset >= lineEnd)
+        {
+            return -1;
+        }
 
         string text = CurrentContext.Document.GetText(startOffset, lineEnd - startOffset);
         int idx = text.IndexOf(Sentinel);
@@ -35,11 +38,20 @@ internal sealed class FillInElementGenerator : VisualLineElementGenerator
     public override VisualLineElement? ConstructElement(int offset)
     {
         TextDocument doc = CurrentContext.Document;
-        if (doc.GetCharAt(offset) != Sentinel) { return null; }
-        if (offset + MarkerLength > doc.TextLength) { return null; }
+        if (doc.GetCharAt(offset) != Sentinel)
+        {
+            return null;
+        }
+        if (offset + MarkerLength > doc.TextLength)
+        {
+            return null;
+        }
 
         string id = doc.GetText(offset + 1, IdLength);
-        if (!fillIns.TryGetValue(id, out IFillInViewModel? fillIn)) { return null; }
+        if (!fillIns.TryGetValue(id, out IFillInViewModel? fillIn))
+        {
+            return null;
+        }
 
         FillInInlineControl ctrl = new()
         {

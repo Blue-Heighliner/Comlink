@@ -1,6 +1,6 @@
 namespace BlueHeighliner.Comlink;
 
-/// <summary>Generates frame identifiers through the host's <see cref="IMessageHandler{TFrame, TPriority, TLevel, TAspect}.NextId"/>, handing it the identifier generated last, which it keeps between restarts.</summary>
+/// <summary>Generates the identifiers of the messages the user sends through the host's <see cref="IDraftHandler{TPriority, TLevel, TAspect}.NextId"/>, handing it the identifier generated last, which it keeps between restarts.</summary>
 internal interface IIdGenerator
 {
     /// <summary>Generates the next identifier and remembers it as the last one.</summary>
@@ -35,7 +35,7 @@ internal sealed class IdGenerator : IIdGenerator
                 loaded = true;
             }
 
-            string id = engineController.NextId(last);
+            string id = engineController.NextMessageId(last);
             await repository.Save(id);
             last = id;
             return id;

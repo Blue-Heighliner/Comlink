@@ -3,54 +3,44 @@ namespace BlueHeighliner.Comlink.Tests.Unit.Internal.Services;
 /// <summary>Unit tests for <see cref="RetrievalService"/>.</summary>
 public sealed class RetrievalServiceTests
 {
-    private static (RetrievalService Service, Mock<IMessageRoutingService> Routing, List<object> Sent) Build(string? user = "ALICE", bool delivered = true)
+    private static (RetrievalService Service, Mock<INetworkProcessing> Processing) Build(string? user = "ALICE", bool processorStated = true)
     {
         Mock<ICurrentUserProvider> currentUser = new();
         currentUser.SetupGet(p => p.UserName).Returns(user);
-        Mock<IMessageRoutingService> routing = new();
-        List<object> sent = [];
-        routing.Setup(r => r.RouteFrame(It.IsAny<string>(), It.IsAny<object>(), It.IsAny<CancellationToken>()))
-            .Callback<string, object, CancellationToken>((_, message, _) => sent.Add(message))
-            .ReturnsAsync(("ID", (IReadOnlyList<UserDeliveryResult>)[new UserDeliveryResult { UserName = "SERVER", Success = delivered }]));
+        Mock<INetworkProcessing> processing = new();
+        processing.Setup(p => p.Retrieval(It.IsAny<string>(), It.IsAny<RetrievalCriteria>())).Returns(processorStated);
         Mock<TestEngineController> controller = new() { CallBase = true };
         controller.Setup(c => c.StorageServers).Returns(["SERVER"]);
-        return (new RetrievalService(controller.Object, currentUser.Object, routing.Object), routing, sent);
+        return (new RetrievalService(controller.Object, currentUser.Object, processing.Object), processing);
     }
 
-    /// <summary>The request is an ordinary message carrying the criteria in its retrieval fields, addressed only to the server, routed from the current user.</summary>
+    /// <summary>The request is handed to the network processor with the server and the criteria.</summary>
     [Fact]
-    public async Task Request_RoutesAMessageCarryingTheCriteriaToTheServer()
+    public async Task Request_HandsTheCriteriaToTheProcessor()
     {
-        (RetrievalService service, Mock<IMessageRoutingService> routing, List<object> sent) = Build();
+        (RetrievalService service, Mock<INetworkProcessing> processing) = Build();
         RetrievalCriteria criteria = new() { Authors = ["BOB"], Ids = ["M1"] };
 
-        bool ok = await service.Request("SERVER", criteria);
+        Assert.True(await service.Request("SERVER", criteria));
 
-        Assert.True(ok);
-        TestFrame request = Assert.IsType<TestFrame>(Assert.Single(sent));
-        Assert.True(request.IsRetrieval);
-        Assert.Equal(["BOB"], request.RetrievalAuthors);
-        Assert.Equal(["M1"], request.RetrievalIds);
-        TestAddressEntry address = Assert.Single(request.Addresses);
-        Assert.Equal(("SERVER", "To"), (address.UserName, address.Type));
-        routing.Verify(r => r.RouteFrame("ALICE", request, It.IsAny<CancellationToken>()), Times.Once);
+        processing.Verify(p => p.Retrieval("SERVER", criteria), Times.Once);
     }
 
-    /// <summary>A retrieval can only be asked of a server, so any other user is refused before anything is sent.</summary>
+    /// <summary>A retrieval can only be asked of a server, so any other user is refused before the processor is told.</summary>
     [Fact]
     public async Task Request_ToAUserThatIsNotAServer_IsRefused()
     {
-        (RetrievalService service, Mock<IMessageRoutingService> routing, _) = Build();
+        (RetrievalService service, Mock<INetworkProcessing> processing) = Build();
 
         await Assert.ThrowsAsync<ArgumentException>(() => service.Request("BOB", new RetrievalCriteria()));
-        routing.Verify(r => r.RouteFrame(It.IsAny<string>(), It.IsAny<object>(), It.IsAny<CancellationToken>()), Times.Never);
+        processing.Verify(p => p.Retrieval(It.IsAny<string>(), It.IsAny<RetrievalCriteria>()), Times.Never);
     }
 
-    /// <summary>A request the server side never acknowledged reports failure.</summary>
+    /// <summary>Without a processor nobody takes the request, which reports failure.</summary>
     [Fact]
-    public async Task Request_ServerNotReached_ReturnsFalse()
+    public async Task Request_WithoutAProcessor_ReturnsFalse()
     {
-        (RetrievalService service, _, _) = Build(delivered: false);
+        (RetrievalService service, _) = Build(processorStated: false);
 
         Assert.False(await service.Request("SERVER", new RetrievalCriteria()));
     }
@@ -59,7 +49,7 @@ public sealed class RetrievalServiceTests
     [Fact]
     public async Task Request_NoUser_Throws()
     {
-        (RetrievalService service, _, _) = Build(user: null);
+        (RetrievalService service, _) = Build(user: null);
 
         await Assert.ThrowsAsync<InvalidOperationException>(() => service.Request("SERVER", new RetrievalCriteria()));
     }

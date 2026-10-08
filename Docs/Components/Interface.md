@@ -14,11 +14,7 @@ whatever the host's packet type is.
 
 An interface connection represents no user of its own:
 
-- **Interface → outbound**: every message an interface sends is routed out to peers exactly as if this
-  user's own installed identity had composed and sent it — `Body` and `Addresses` are read
-  from the message via the host's frame handlers; `MessageId` and `FromUser` are ignored and
-  re-assigned by `MessageRoutingService.Route`, the same call `DirectServiceConnection.SendMessage`
-  makes for a GUI-composed send.
+- **Interface → processor**: every frame an interface sends is handed to the network processor's `OnReceived` with `FrameOrigin.Interface`. The engine reads nothing from it; the processor decides what it means, typically sending it on as if this user's own installed identity had composed it.
 - **Inbound → interface**: not currently supported. Mirroring a message this user receives from a peer
   out to a connected interface would need that interface client's connection kept open and correlated to
   its own inbound peer traffic, rather than treated as a one-way injection point - see
@@ -34,12 +30,7 @@ An interface connection represents no user of its own:
 
 ## Delivery status
 
-There is no acknowledgement message on the wire in either direction beyond MSMT's own message
-acknowledgement. Delivery status for a message an interface causes to be routed out is tracked the same
-way any outbound send is: through MSMT's own delivery-status stream, surfaced by
-`IPeerService`/`IMessageRoutingService` as `DestinationStatus` transitions (see
-[Peer.md](Peer.md#delivery-status)). An interface has no way to observe those transitions directly — it is
-a one-way injection point, not a client of the routing result.
+There is no acknowledgement message on the wire in either direction beyond MSMT's own message acknowledgement. An interface has no way to observe delivery status: it is a one-way injection point.
 
 ## Example (C#, using the MSMT reference implementation)
 

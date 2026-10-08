@@ -93,7 +93,10 @@ public sealed class UserServiceTests : IDisposable
     {
         string appData = Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData);
         string dir = Path.Combine(appData, appName);
-        if (Directory.Exists(dir)) { Directory.Delete(dir, recursive: true); }
+        if (Directory.Exists(dir))
+        {
+            Directory.Delete(dir, recursive: true);
+        }
     }
 
     /// <summary>A successful Install raises Installed once the user is current; a failed one does not.</summary>

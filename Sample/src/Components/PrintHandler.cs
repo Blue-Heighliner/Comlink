@@ -1,8 +1,8 @@
 namespace BlueHeighliner.Comlink.Sample;
 
 /// <summary>Prints an alert message twice and every other received message once.</summary>
-public sealed class PrintHandler : IPrintHandler<Frame>
+public sealed class PrintHandler : IPrintHandler<MessagePriority, MessageLevel, MessageAspect>
 {
     /// <inheritdoc />
-    public int GetPrintCount(Frame frame) => string.Equals(frame.Category, "ALERT", StringComparison.OrdinalIgnoreCase) ? 2 : 1;
+    public int GetPrintCount(Message message) => message.IsAlert ? 2 : 1;
 }

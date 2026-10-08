@@ -58,7 +58,10 @@ internal sealed class PacketizingPeerTransport : IPeerTransport
     /// <inheritdoc />
     public async Task<bool> Request(PeerConnection connection, ReadOnlyMemory<byte> data, PeerSendOptions? options = null, CancellationToken cancellation = default)
     {
-        if (options?.IsPacket == true) { return await inner.Request(connection, data, options, cancellation); }
+        if (options?.IsPacket == true)
+        {
+            return await inner.Request(connection, data, options, cancellation);
+        }
 
         IReadOnlyList<Packet> packets;
         try { packets = packetizer.Split(data, options?.Priority ?? 0, options?.Frame); }
@@ -76,7 +79,10 @@ internal sealed class PacketizingPeerTransport : IPeerTransport
             {
                 transmitted = () =>
                 {
-                    if (Interlocked.Decrement(ref untransmitted) == 0) { onTransmitted(); }
+                    if (Interlocked.Decrement(ref untransmitted) == 0)
+                    {
+                        onTransmitted();
+                    }
                 };
             }
 
@@ -91,16 +97,25 @@ internal sealed class PacketizingPeerTransport : IPeerTransport
         }
         finally
         {
-            foreach (Packet packet in packets) { packet.Dispose(); }
+            foreach (Packet packet in packets)
+            {
+                packet.Dispose();
+            }
         }
     }
 
     /// <inheritdoc />
     public async ValueTask DisposeAsync()
     {
-        foreach (IPacketAssembler assembler in assemblers.Values) { assembler.Dispose(); }
+        foreach (IPacketAssembler assembler in assemblers.Values)
+        {
+            assembler.Dispose();
+        }
         assemblers.Clear();
-        foreach (PacketScheduler scheduler in schedulers.Values) { scheduler.Dispose(); }
+        foreach (PacketScheduler scheduler in schedulers.Values)
+        {
+            scheduler.Dispose();
+        }
         await inner.DisposeAsync();
     }
 
@@ -117,7 +132,10 @@ internal sealed class PacketizingPeerTransport : IPeerTransport
             return;
         }
 
-        if (complete is null) { return; }
+        if (complete is null)
+        {
+            return;
+        }
 
         byte[] payload;
         using (complete.Payload) { payload = complete.Payload.Memory.ToArray(); }
@@ -126,8 +144,14 @@ internal sealed class PacketizingPeerTransport : IPeerTransport
 
     private void OnDisconnected(PeerConnectionEventArgs args)
     {
-        if (assemblers.TryRemove(args.Connection, out IPacketAssembler? assembler)) { assembler.Dispose(); }
-        if (schedulers.TryRemove(args.Connection, out PacketScheduler? scheduler)) { scheduler.Dispose(); }
+        if (assemblers.TryRemove(args.Connection, out IPacketAssembler? assembler))
+        {
+            assembler.Dispose();
+        }
+        if (schedulers.TryRemove(args.Connection, out PacketScheduler? scheduler))
+        {
+            scheduler.Dispose();
+        }
         disconnected.Publish(args);
     }
 }

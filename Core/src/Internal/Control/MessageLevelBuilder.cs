@@ -11,7 +11,10 @@ internal sealed class MessageLevelBuilder<TLevel> where TLevel : struct, Enum
     public MessageLevelBuilder<TLevel> Level(TLevel level)
     {
         current = level;
-        if (!order.Contains(level)) { order.Add(level); }
+        if (!order.Contains(level))
+        {
+            order.Add(level);
+        }
         return this;
     }
 
@@ -37,11 +40,17 @@ internal sealed class MessageLevelBuilder<TLevel> where TLevel : struct, Enum
         [.. order.Select(level =>
         {
             (string? label, string? color) = options.GetValueOrDefault(level);
-            if (Convert.ToInt64(level) is < int.MinValue or > int.MaxValue) { throw new InvalidOperationException($"The message level {typeof(TLevel).Name}.{level} has a value that does not fit an int, which is how message levels are stored"); }
+            if (Convert.ToInt64(level) is < int.MinValue or > int.MaxValue)
+            {
+                throw new InvalidOperationException($"The message level {typeof(TLevel).Name}.{level} has a value that does not fit an int, which is how message levels are stored");
+            }
 
             return new MessageLevel { Key = level, Name = label ?? level.ToString().ToUpperInvariant(), Color = color ?? "#5A5A5A" };
         })];
-        if (built.GroupBy(level => level.Name, StringComparer.OrdinalIgnoreCase).FirstOrDefault(group => group.Count() > 1) is { } duplicate) { throw new InvalidOperationException($"Two message levels are named {duplicate.Key}: every message level needs its own name"); }
+        if (built.GroupBy(level => level.Name, StringComparer.OrdinalIgnoreCase).FirstOrDefault(group => group.Count() > 1) is { } duplicate)
+        {
+            throw new InvalidOperationException($"Two message levels are named {duplicate.Key}: every message level needs its own name");
+        }
 
         return built;
     }

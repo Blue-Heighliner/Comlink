@@ -25,7 +25,10 @@ internal sealed class StoredMessageRepository : IStoredMessageRepository
         try
         {
             ctx.Initialize();
-            if (ctx.StoredMessages.Exists(m => m.MessageId == entity.MessageId)) { return false; }
+            if (ctx.StoredMessages.Exists(m => m.MessageId == entity.MessageId))
+            {
+                return false;
+            }
             ctx.StoredMessages.Insert(entity);
             return true;
         }

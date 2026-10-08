@@ -35,8 +35,9 @@ internal static class EngineExtensions
             services.AddMsmt();
             services.TryAddSingleton<IHdlcPeerFactory, HdlcPeerFactory>();
 
-            services.AddSingleton<IServiceConnection, DirectServiceConnection>();
-            if (mode == EngineMode.Client)
+            services.AddSingleton<IEngineConnection, DirectServiceConnection>();
+            engine.TypedServices?.Invoke(services);
+            if (mode is EngineMode.Client)
             {
                 services.TryAddSingleton<IBodyDocumentFactory, BodyDocumentFactory>();
             }
@@ -48,7 +49,7 @@ internal static class EngineExtensions
             logging.AddFilter("Microsoft", LogLevel.None);
             logging.AddFilter("System", LogLevel.None);
             logging.Services.AddSingleton<ILoggerProvider, DailyFileLoggerProvider>();
-            if (mode == EngineMode.Client)
+            if (mode is EngineMode.Client)
             {
                 logging.Services.AddSingleton<ILoggerProvider, ActivityLoggerProvider>();
             }

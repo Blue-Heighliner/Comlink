@@ -56,7 +56,7 @@ internal sealed partial class ContentAreaViewModel : ObservableObject, IContentA
     public ContentAreaViewModel(
         IEngineController engineController,
         IEntryService entryService,
-        IServiceConnection connection,
+        IEngineConnection connection,
         IMessageRepository messages,
         IDraftRepository drafts,
         INoteRepository notes,
@@ -83,7 +83,7 @@ internal sealed partial class ContentAreaViewModel : ObservableObject, IContentA
     }
 
     private readonly IEntryService entryService;
-    private readonly IServiceConnection connection;
+    private readonly IEngineConnection connection;
     private readonly IMessageRepository messages;
     private readonly IDraftRepository drafts;
     private readonly INoteRepository notes;
@@ -191,7 +191,10 @@ internal sealed partial class ContentAreaViewModel : ObservableObject, IContentA
 
     private async Task NotifyOpened()
     {
-        if (EntryOpened is null) { return; }
+        if (EntryOpened is null)
+        {
+            return;
+        }
 
         (EntryType Type, string Id, bool IsOutbound)? opened = ActiveContent switch
         {
@@ -200,7 +203,10 @@ internal sealed partial class ContentAreaViewModel : ObservableObject, IContentA
             INoteViewModel note => (EntryType.Note, note.Id, false),
             _ => null
         };
-        if (opened is not var (type, id, isOutbound)) { return; }
+        if (opened is not var (type, id, isOutbound))
+        {
+            return;
+        }
 
         try { await EntryOpened.InvokeAll(type, id, isOutbound); }
         catch (Exception ex) { logger.Record(LogEvents.RevealOpenedEntryFailed, ex, "Failed to show where the opened entry is kept"); }
@@ -251,9 +257,12 @@ internal sealed partial class ContentAreaViewModel : ObservableObject, IContentA
     private async Task<MessageViewModel?> BuildMessageViewModel(string id, bool isOutboundMessage)
     {
         MessageEntity? entity = await messages.Get(id, isOutboundMessage);
-        if (entity is null) { return null; }
+        if (entity is null)
+        {
+            return null;
+        }
 
-        if (!entity.IsOutbound && entity.ReadStatus == DestinationStatus.Received)
+        if (!entity.IsOutbound && entity.ReadStatus is DestinationStatus.Received)
         {
             try
             {
@@ -271,16 +280,25 @@ internal sealed partial class ContentAreaViewModel : ObservableObject, IContentA
     private async Task<DraftViewModel?> BuildDraftViewModel(string id)
     {
         ObjectId? oid = TryParseObjectId(id);
-        if (oid is null) { return null; }
+        if (oid is null)
+        {
+            return null;
+        }
         DraftEntity? entity = await drafts.Get(oid);
-        if (entity is null) { return null; }
+        if (entity is null)
+        {
+            return null;
+        }
         List<string> userNames = await connection.GetUserNames();
         string currentMessageLevel = engineController.GetUserMessageLevel(currentUserProvider.UserName ?? string.Empty);
         DraftViewModel vm = new(entity, entryService, connection, userNames, loggerFactory, engineController, bodyDocumentFactory?.Create(), currentMessageLevel: currentMessageLevel);
         vm.DraftSent += async (IDraftViewModel _, MessageEntity msg) =>
         {
             ShowEntry(new MessageViewModel(msg, engineController));
-            if (DraftSent is not null) { await DraftSent(msg); }
+            if (DraftSent is not null)
+            {
+                await DraftSent(msg);
+            }
         };
         vm.Deleted += HandleEditorDeleted;
         vm.Duplicated += ShowDraft;
@@ -291,9 +309,15 @@ internal sealed partial class ContentAreaViewModel : ObservableObject, IContentA
     private async Task<NoteViewModel?> BuildNoteViewModel(string id)
     {
         ObjectId? oid = TryParseObjectId(id);
-        if (oid is null) { return null; }
+        if (oid is null)
+        {
+            return null;
+        }
         NoteEntity? entity = await notes.Get(oid);
-        if (entity is null) { return null; }
+        if (entity is null)
+        {
+            return null;
+        }
 
         NoteViewModel vm = new(entity, entryService, engineController.CanDelete(FolderType.Notes));
         vm.Deleted += HandleEditorDeleted;
@@ -305,13 +329,19 @@ internal sealed partial class ContentAreaViewModel : ObservableObject, IContentA
     private async Task HandleEditorDeleted()
     {
         ShowHome();
-        if (EntryDeleted is not null) { await EntryDeleted(); }
+        if (EntryDeleted is not null)
+        {
+            await EntryDeleted();
+        }
     }
 
     private async Task<ActivityLogViewModel?> BuildActivityLogViewModel(string id)
     {
         ObjectId? oid = TryParseObjectId(id);
-        if (oid is null) { return null; }
+        if (oid is null)
+        {
+            return null;
+        }
         ActivityLogEntity? entity = await activityLogs.Get(oid);
         return entity is null ? null : new ActivityLogViewModel(entity, engineController.LogWidths.Id);
     }

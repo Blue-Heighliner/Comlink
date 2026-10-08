@@ -16,7 +16,10 @@ internal partial class DraftEditor : UserControl
     {
         foreach (int length in PhoneticAlphabet.Lengths)
         {
-            if (caret - length < 0) { continue; }
+            if (caret - length < 0)
+            {
+                continue;
+            }
             if (PhoneticAlphabet.IsWord(doc.GetText(caret - length, length)))
             {
                 wordLength = length;
@@ -77,12 +80,18 @@ internal partial class DraftEditor : UserControl
     // After a recipient is added the name box is ready for the next one.
     private void OnAddressesChanged(object? sender, System.Collections.Specialized.NotifyCollectionChangedEventArgs e)
     {
-        if (e.Action == System.Collections.Specialized.NotifyCollectionChangedAction.Add) { Dispatcher.UIThread.Post(() => UserInput.Focus()); }
+        if (e.Action == System.Collections.Specialized.NotifyCollectionChangedAction.Add)
+        {
+            Dispatcher.UIThread.Post(() => UserInput.Focus());
+        }
     }
 
     private void OnViewModelPropertyChanged(object? sender, System.ComponentModel.PropertyChangedEventArgs e)
     {
-        if (e.PropertyName == nameof(IDraftViewModel.LineWidth)) { ApplyViewWidth(); }
+        if (e.PropertyName == nameof(IDraftViewModel.LineWidth))
+        {
+            ApplyViewWidth();
+        }
     }
 
     /// <summary>
@@ -91,7 +100,10 @@ internal partial class DraftEditor : UserControl
     /// </summary>
     private void ApplyViewWidth()
     {
-        if (DataContext is not IDraftViewModel vm) { return; }
+        if (DataContext is not IDraftViewModel vm)
+        {
+            return;
+        }
 
         if (vm.LineWidth is not { } width)
         {
@@ -154,10 +166,16 @@ internal partial class DraftEditor : UserControl
 
     private void OnTagTextChanged(object? sender, TextChangedEventArgs e)
     {
-        if (DataContext is not IDraftViewModel vm || TagBox.Text is not { } text) { return; }
+        if (DataContext is not IDraftViewModel vm || TagBox.Text is not { } text)
+        {
+            return;
+        }
 
         string allowed = vm.FilterTag(text);
-        if (allowed == text) { return; }
+        if (allowed == text)
+        {
+            return;
+        }
 
         int caret = TagBox.CaretIndex;
         TagBox.Text = allowed;
@@ -186,7 +204,10 @@ internal partial class DraftEditor : UserControl
             fillInGenerator = null;
         }
 
-        if (DataContext is not IDraftViewModel vm) { return; }
+        if (DataContext is not IDraftViewModel vm)
+        {
+            return;
+        }
 
         // Set document explicitly - AXAML binding alone can miss timing edge cases. A draft built without the UI's
         // body document factory (a host registering its own) still opens, as a copy of its text, rather than crashing.
@@ -195,7 +216,10 @@ internal partial class DraftEditor : UserControl
             : new TextDocument(vm.BodyDocument.Text);
 
         watchedViewModel = vm as System.ComponentModel.INotifyPropertyChanged;
-        if (watchedViewModel is not null) { watchedViewModel.PropertyChanged += OnViewModelPropertyChanged; }
+        if (watchedViewModel is not null)
+        {
+            watchedViewModel.PropertyChanged += OnViewModelPropertyChanged;
+        }
         watchedAddresses = vm.Addresses;
         watchedAddresses.CollectionChanged += OnAddressesChanged;
         ApplyViewWidth();
@@ -243,7 +267,7 @@ internal partial class DraftEditor : UserControl
 
         TextDocument doc = BodyEditor.Document;
         int caret = BodyEditor.CaretOffset;
-        string insertion = vm.PlsoMode == PlsoMode.Spaces ? word + " " : word;
+        string insertion = vm.PlsoMode is PlsoMode.Spaces ? word + " " : word;
         doc.Insert(caret, insertion);
         BodyEditor.CaretOffset = caret + insertion.Length;
         e.Handled = true;
@@ -259,7 +283,7 @@ internal partial class DraftEditor : UserControl
         IFillInViewModel? activeFillIn = GetActiveFillIn(vm);
         if (activeFillIn is not null)
         {
-            if (e.Key == Key.Back)
+            if (e.Key is Key.Back)
             {
                 if (activeFillIn.NewOption.Length > 0)
                 {
@@ -277,7 +301,7 @@ internal partial class DraftEditor : UserControl
                 e.Handled = true;
                 return;
             }
-            if (e.Key == Key.Escape)
+            if (e.Key is Key.Escape)
             {
                 activeFillIn.IsPopupOpen = false;
                 e.Handled = true;
@@ -292,7 +316,7 @@ internal partial class DraftEditor : UserControl
 
         // PLSO: backspacing when the text immediately to the left of the caret is a phonetic word
         // deletes the whole word at once, regardless of which word it is or how it got there.
-        if (e.Key == Key.Back && vm is { PlsoMode: not PlsoMode.Off } &&
+        if (e.Key is Key.Back && vm is { PlsoMode: not PlsoMode.Off } &&
             TryFindPhoneticWordBeforeCaret(doc, caret, out int wordLength))
         {
             doc.Remove(caret - wordLength, wordLength);
@@ -301,8 +325,8 @@ internal partial class DraftEditor : UserControl
         }
 
         // Delete key: if caret is at fill-in sentinel, delete the whole marker
-        if (e.Key == Key.Delete && caret < doc.TextLength &&
-            doc.GetCharAt(caret) == FillInElementGenerator.Sentinel)
+        if (e.Key is Key.Delete && caret < doc.TextLength &&
+            doc.GetCharAt(caret) is FillInElementGenerator.Sentinel)
         {
             doc.Remove(caret, FillInElementGenerator.MarkerLength);
             e.Handled = true;
@@ -310,10 +334,10 @@ internal partial class DraftEditor : UserControl
         }
 
         // Backspace key: if caret is right after a fill-in marker, delete the whole marker
-        if (e.Key == Key.Back && caret >= FillInElementGenerator.MarkerLength)
+        if (e.Key is Key.Back && caret >= FillInElementGenerator.MarkerLength)
         {
             int markerStart = caret - FillInElementGenerator.MarkerLength;
-            if (doc.GetCharAt(markerStart) == FillInElementGenerator.Sentinel)
+            if (doc.GetCharAt(markerStart) is FillInElementGenerator.Sentinel)
             {
                 doc.Remove(markerStart, FillInElementGenerator.MarkerLength);
                 e.Handled = true;
@@ -323,7 +347,10 @@ internal partial class DraftEditor : UserControl
 
     private void OnUserInputKeyDown(object? sender, KeyEventArgs e)
     {
-        if (e.Key != Key.Return) { return; }
+        if (e.Key is not Key.Return)
+        {
+            return;
+        }
         if (DataContext is IDraftViewModel vm && vm.AddAddressCommand.CanExecute(null))
         {
             vm.AddAddressCommand.Execute(null);
@@ -332,7 +359,10 @@ internal partial class DraftEditor : UserControl
 
     private void OnAddFillInClick(object? sender, RoutedEventArgs e)
     {
-        if (DataContext is not IDraftViewModel vm) { return; }
+        if (DataContext is not IDraftViewModel vm)
+        {
+            return;
+        }
         int offset = BodyEditor.CaretOffset;
         vm.InsertFillIn(offset);
         BodyEditor.CaretOffset = offset + FillInElementGenerator.MarkerLength;
@@ -341,7 +371,10 @@ internal partial class DraftEditor : UserControl
 
     private void OnPlsoButtonClick(object? sender, RoutedEventArgs e)
     {
-        if (DataContext is not IDraftViewModel vm) { return; }
+        if (DataContext is not IDraftViewModel vm)
+        {
+            return;
+        }
         vm.PlsoMode = vm.PlsoMode switch
         {
             PlsoMode.Off => PlsoMode.On,

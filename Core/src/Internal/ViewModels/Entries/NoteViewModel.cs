@@ -88,7 +88,10 @@ internal sealed partial class NoteViewModel : ObservableObject, INoteViewModel
     // The first time a new note is altered into something worth keeping it is stored, so it shows up in the list straight away.
     private void StoreIfNew()
     {
-        if (!isNew || isStoringNew) { return; }
+        if (!isNew || isStoringNew)
+        {
+            return;
+        }
 
         _ = StoreNew();
     }
@@ -116,7 +119,10 @@ internal sealed partial class NoteViewModel : ObservableObject, INoteViewModel
         await insertLock.WaitAsync();
         try
         {
-            if (!isNew || isDeleted) { return; }
+            if (!isNew || isDeleted)
+            {
+                return;
+            }
 
             await entryService.InsertNote(entity);
             isNew = false;
@@ -145,7 +151,10 @@ internal sealed partial class NoteViewModel : ObservableObject, INoteViewModel
     [RelayCommand]
     private async Task Delete()
     {
-        if (!CanDelete || !deleteConfirmation.Confirm()) { return; }
+        if (!CanDelete || !deleteConfirmation.Confirm())
+        {
+            return;
+        }
 
         await insertLock.WaitAsync();
         bool wasStored;
@@ -159,8 +168,14 @@ internal sealed partial class NoteViewModel : ObservableObject, INoteViewModel
             insertLock.Release();
         }
 
-        if (wasStored) { await entryService.DeleteEntry(Id, EntryType.Note); }
-        if (Deleted is not null) { await Deleted(); }
+        if (wasStored)
+        {
+            await entryService.DeleteEntry(Id, EntryType.Note);
+        }
+        if (Deleted is not null)
+        {
+            await Deleted();
+        }
     }
 
     private string? StoredName => string.IsNullOrWhiteSpace(Name) ? null : Name.Trim();
@@ -173,7 +188,10 @@ internal sealed partial class NoteViewModel : ObservableObject, INoteViewModel
     /// <inheritdoc />
     public async Task SaveChanges()
     {
-        if (isDeleted || !IsChanged || !IsWorthStoring) { return; }
+        if (isDeleted || !IsChanged || !IsWorthStoring)
+        {
+            return;
+        }
 
         entity.Body = Body;
         entity.Name = StoredName;
@@ -184,8 +202,14 @@ internal sealed partial class NoteViewModel : ObservableObject, INoteViewModel
     {
         await InsertIfNew();
 
-        if (quietly) { await entryService.SaveNoteQuietly(entity); }
-        else { await entryService.SaveNote(entity); }
+        if (quietly)
+        {
+            await entryService.SaveNoteQuietly(entity);
+        }
+        else
+        {
+            await entryService.SaveNote(entity);
+        }
     }
 
     [RelayCommand]
@@ -194,7 +218,10 @@ internal sealed partial class NoteViewModel : ObservableObject, INoteViewModel
         entity.Body = Body;
         entity.Name = StoredName;
         NoteEntity copy = await entryService.DuplicateNote(entity);
-        if (Duplicated is not null) { await Duplicated(copy.Id.ToString()); }
+        if (Duplicated is not null)
+        {
+            await Duplicated(copy.Id.ToString());
+        }
     }
 
     [RelayCommand]

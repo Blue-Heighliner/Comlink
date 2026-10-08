@@ -37,13 +37,22 @@ internal sealed class PeerTransportFactory(
         }
 
         IPeerTransport transport = new CompositePeerTransport(ip, new SerialPeerTransport(microGateFactory, logger, options: engineController.HdlcOptions));
-        if (packetizer is not null) { transport = new TracingPeerTransport(transport, loggerFactory.CreateLogger(LogCategories.Packets), logSettings, LogCategories.Packets, LogEvents.PacketSent, LogEvents.PacketReceived); }
-        // The initial packet travels as a packet of its own, so its exchange happens beneath the packetizer; the initial frame is a frame like
-        // any other, so its exchange, and identification, happen above it.
-        if (packetizer is null && engineController.InitialPacketProcessor is not null) { throw new InvalidEngineConfigurationException("An initial packet needs a packet type, but none is configured"); }
         if (packetizer is not null)
         {
-            if (Handshake.ForPackets(engineController) is { } initialPacket) { transport = new HandshakePeerTransport(transport, engineController, logger, initialPacket, identify: false, contexts: contexts); }
+            transport = new TracingPeerTransport(transport, loggerFactory.CreateLogger(LogCategories.Packets), logSettings, LogCategories.Packets, LogEvents.PacketSent, LogEvents.PacketReceived);
+        }
+        // The initial packet travels as a packet of its own, so its exchange happens beneath the packetizer; the initial frame is a frame like
+        // any other, so its exchange, and identification, happen above it.
+        if (packetizer is null && engineController.InitialPacketProcessor is not null)
+        {
+            throw new InvalidEngineConfigurationException("An initial packet needs a packet type, but none is configured");
+        }
+        if (packetizer is not null)
+        {
+            if (Handshake.ForPackets(engineController) is { } initialPacket)
+            {
+                transport = new HandshakePeerTransport(transport, engineController, logger, initialPacket, identify: false, contexts: contexts);
+            }
             transport = new PacketizingPeerTransport(transport, packetizer, engineController.PacketWindow, logger);
         }
 
@@ -54,9 +63,15 @@ internal sealed class PeerTransportFactory(
 
     private IPacketizer? CreatePacketizer()
     {
-        if (engineController.PacketType is null) { return null; }
+        if (engineController.PacketType is null)
+        {
+            return null;
+        }
 
-        if (engineController.PacketWindow < 1) { throw new InvalidEngineConfigurationException($"PacketWindow {engineController.PacketWindow} must be at least 1"); }
+        if (engineController.PacketWindow < 1)
+        {
+            throw new InvalidEngineConfigurationException($"PacketWindow {engineController.PacketWindow} must be at least 1");
+        }
 
         try { return new Packetizer(engineController); }
         catch (InvalidOperationException ex) when (ex is not InvalidEngineConfigurationException) { throw new InvalidEngineConfigurationException(ex.Message, ex); }

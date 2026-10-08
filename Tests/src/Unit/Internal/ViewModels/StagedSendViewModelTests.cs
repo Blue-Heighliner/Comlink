@@ -9,7 +9,7 @@ public sealed class StagedSendViewModelTests
 
     private sealed class Setup
     {
-        public Mock<IServiceConnection> Connection { get; } = new();
+        public Mock<IEngineConnection> Connection { get; } = new();
         public Mock<IEntryService> EntryService { get; } = new();
 
         public StagedSendViewModel Build() => new(Connection.Object, EntryService.Object, noLogger, new TestEngineController());
@@ -69,7 +69,7 @@ public sealed class StagedSendViewModelTests
         Setup s = new();
         s.Connection
             .Setup(c => c.SendMessage(It.IsAny<string>(), It.IsAny<List<AddressRequest>>(), It.IsAny<Enum?>(), It.IsAny<string>(), It.IsAny<Enum?>(), It.IsAny<Enum?>(), It.IsAny<CancellationToken>()))
-            .ReturnsAsync(new SendMessageResult { MessageId = "M1", UserResults = [new UserDeliveryResult { UserName = "Bob", Success = true, AddressedVia = [] }] });
+            .ReturnsAsync(new SendMessageResult { MessageId = "M1" });
         StagedSendViewModel vm = s.Build();
         vm.Enqueue([MakeSend("A"), MakeSend("B")], StagedSendMode.Sequential, null);
 
@@ -77,9 +77,6 @@ public sealed class StagedSendViewModelTests
 
         Assert.All(vm.Queue, e => Assert.Equal(StagedSendStatus.Sent, e.Status));
         Assert.Equal("Sent 2 of 2", vm.StatusMessage);
-        s.EntryService.Verify(e => e.StoreSentMessage(
-            "M1", It.IsAny<string>(), It.IsAny<List<AddressData>>(), It.IsAny<DateTime>(),
-            It.IsAny<IReadOnlyList<UserDeliveryResult>>(), It.IsAny<Enum?>(), It.IsAny<string>(), It.IsAny<string>()), Times.Exactly(2));
     }
 
     /// <summary>Sequential mode sends entries one at a time, in queue order.</summary>
@@ -93,7 +90,7 @@ public sealed class StagedSendViewModelTests
             .Returns<string, List<AddressRequest>, Enum?, string, Enum?, Enum?, CancellationToken>((body, _, _, _, _, _, _) =>
             {
                 order.Add(body);
-                return Task.FromResult<SendMessageResult?>(new SendMessageResult { MessageId = "M", UserResults = [] });
+                return Task.FromResult<SendMessageResult?>(new SendMessageResult { MessageId = "M" });
             });
         StagedSendViewModel vm = s.Build();
         vm.Enqueue([MakeSend("A"), MakeSend("B"), MakeSend("C")], StagedSendMode.Sequential, null);
@@ -110,7 +107,7 @@ public sealed class StagedSendViewModelTests
         Setup s = new();
         s.Connection
             .Setup(c => c.SendMessage(It.IsAny<string>(), It.IsAny<List<AddressRequest>>(), It.IsAny<Enum?>(), It.IsAny<string>(), It.IsAny<Enum?>(), It.IsAny<Enum?>(), It.IsAny<CancellationToken>()))
-            .ReturnsAsync(new SendMessageResult { MessageId = "M", UserResults = [] });
+            .ReturnsAsync(new SendMessageResult { MessageId = "M" });
         StagedSendViewModel vm = s.Build();
         vm.Enqueue([MakeSend("A"), MakeSend("B")], StagedSendMode.Simultaneous, null);
 
@@ -146,7 +143,7 @@ public sealed class StagedSendViewModelTests
         s.Connection
             .SetupSequence(c => c.SendMessage(It.IsAny<string>(), It.IsAny<List<AddressRequest>>(), It.IsAny<Enum?>(), It.IsAny<string>(), It.IsAny<Enum?>(), It.IsAny<Enum?>(), It.IsAny<CancellationToken>()))
             .ThrowsAsync(new IOException("disk error"))
-            .ReturnsAsync(new SendMessageResult { MessageId = "M", UserResults = [] });
+            .ReturnsAsync(new SendMessageResult { MessageId = "M" });
         StagedSendViewModel vm = s.Build();
         vm.Enqueue([MakeSend("A"), MakeSend("B")], StagedSendMode.Sequential, null);
 
@@ -165,7 +162,7 @@ public sealed class StagedSendViewModelTests
         Setup s = new();
         s.Connection
             .Setup(c => c.SendMessage(It.IsAny<string>(), It.IsAny<List<AddressRequest>>(), It.IsAny<Enum?>(), It.IsAny<string>(), It.IsAny<Enum?>(), It.IsAny<Enum?>(), It.IsAny<CancellationToken>()))
-            .ReturnsAsync(new SendMessageResult { MessageId = "M", UserResults = [] });
+            .ReturnsAsync(new SendMessageResult { MessageId = "M" });
         StagedSendViewModel vm = s.Build();
         vm.Enqueue([MakeSend("A")], StagedSendMode.Sequential, null);
 

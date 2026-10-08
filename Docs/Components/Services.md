@@ -6,15 +6,16 @@ Business logic lives in `Core/src/Internal/Services/`. All services are register
 graph TD
     PS[PeerService]
     DSC[DirectServiceConnection]
-    MRS[MessageRoutingService]
+    NP[NetworkProcessing]
     ES[EntryService]
     MVM[MainViewModel]
     DVM[DraftViewModel]
     EBV[EntryBarViewModel]
     CAV[ContentAreaViewModel]
-    PS -->|FrameDelivered event| DSC
-    PS -->|DeliveryStatusChanged event| MRS
-    MRS -->|DeliveryStatusChanged event| DSC
+    PS -->|FrameReceived event| NP
+    DSC -->|Sent| NP
+    NP -->|processor contexts| ME[MessageEvents]
+    ME -->|DeliveryStatusChanged event| DSC
     DSC -->|UpdateDeliveryStatus| ES
     DSC -->|MessageReceived event| MVM
     DSC -->|DeliveryStatusChanged event| MVM
@@ -27,7 +28,7 @@ graph TD
     EBV -->|EntrySelected event| CAV
 ```
 
-Message and delivery-status persistence (`StoreIncomingMessage`, `StoreSentMessage`, `UpdateDeliveryStatus`) all go through `EntryService`, which is only ever driven from Client-mode ViewModels (`MainViewModel`, `DraftViewModel`) and `DirectServiceConnection`'s own delivery-status handler — never from `DirectServiceConnection.OnMessageDelivered`/`SendMessage` directly. In Headless mode, no ViewModels are constructed, so a host consuming `IServiceConnection` in that mode observes messages and delivery-status changes purely as events/calls and is responsible for its own persistence if it needs any — the data layer is Client-mode-only (see below).
+Message and delivery-status persistence (`StoreIncomingMessage`, `StoreSentMessage`, `UpdateDeliveryStatus`) all go through `EntryService`. The engine does not receive, route, receipt, retrieve or indicate anything itself: the host's network processor does, through the contexts of `NetworkProcessing`. In Headless mode, no ViewModels are constructed, so a host consuming `IEngineConnection` in that mode observes messages and delivery-status changes purely as events/calls and is responsible for its own persistence if it needs any — the data layer is Client-mode-only (see below).
 
 ## UserService
 
@@ -57,31 +58,22 @@ UserInfo? installed = await service.Install("SN01", cancellation);
 
 ---
 
-## MessageRoutingService
+## NetworkProcessing and NetworkEnvironment
 
-Routes outbound messages to peer nodes and surfaces their delivery status. Delivery status comes from `IPeerService`'s `DestinationStatus` stream: `Sent` and `Failed` from the transport, `Received` and `Read` from the receipt frame flow (see [Peer.md](Peer.md#delivery-status)).
+The engine's only protocol surface. `NetworkProcessing` runs the host's `INetworkProcessor<TFrame, TPriority, TLevel, TAspect>` (through `NetworkHandler<,,,>`, which gives it contexts typed by the host's enums) for `OnConnected`, `OnDisconnected`, `OnReceived`, `OnSent`, `OnRead` and `OnRetrieval`. Each call runs in the background and a processor that throws is logged (`NetworkProcessorFailed`) and never reaches the engine. Without a processor every event is ignored and a retrieval reports failure.
 
-**Key responsibilities**:
-- Build the outbound message via `IEngineController` (`CreateMessage` with the message content, which runs the host's message handler, with the sent time in its content, with the identifier it was just given in that content, then the `SetFromUser` and `SetAddresses` setters for the fields every frame has) so it can be sent as whatever concrete type the host has configured (see [Configuration.md](Configuration.md#frame-format))
-- For each recipient in `SendMessagePayload.Addresses`, deliver via `IPeerService.Send`
-- Subscribe to `IPeerService.DeliveryStatusChanged` and forward each `DestinationStatus` unchanged as its own `DeliveryStatusChanged`
-- Subscribe to `IPeerService.ReceiveReceiptReceived` and `ReadReceiptReceived` and re-raise them as `DeliveryStatusChanged(messageId, user, DestinationStatus.Received)` and `(..., DestinationStatus.Read)` — reusing the same event as peer-driven status changes
+Every context carries the operations of `NetworkEnvironment`:
+- `Send(user, priority, frame)` hands a frame to the peer layer with the wire priority of the given level, and reports whether the directly connected user accepted it. A user who is not directly connected fails. The frame is sent exactly as given.
+- `ReceiveMessage(message)` records a `Message` as received: it is validated against the configured priorities, levels and aspects and raised as `MessageReceived`, which `MainViewModel` stores in the Inbox and shows.
+- `SetSentStatus(messageId, user, status)` moves the stored Outbox status of one recipient, and `SetReceivedStatus(messageId, status)` marks a stored Inbox message `Read`. A status only moves forward, so a late earlier one is ignored.
+- `SetNetworkIndicator(isOnline)` is the only thing that changes the indicator.
+- `SendToExternalSystems(frame)` sends to every external system.
+- `StoreMessage`/`FindStoredMessages` keep and look up messages in the server-side store (`MessageStorageService`).
+- `GetAutoForwardTargets(controllerName)` reads the targets a user chose for an auto forwarder.
 
-**Events**:
-- `DeliveryStatusChanged(messageId, userName, DestinationStatus)` — raised on every per-user status change
+`DirectServiceConnection.SendMessage` stores the sent message in the Outbox with `Sending` statuses and hands the `Message` to `OnSent`; routing, expansion of groups, message level checks and the actual sends are the processor's. Frames from peers (`FrameOrigin.Peer`), the local interface (`FrameOrigin.Interface`) and external systems (`FrameOrigin.ExternalSystem`) all arrive in `OnReceived`.
 
-**Result timing**: `IPeerService.Send` does not return until the remote node has accepted the message, so `Route`'s per-user `UserDeliveryResult.Success` means accepted (status `Sent`); `Received` and `Read` follow later as receipt frames arrive.
-
-**External addresses**: An `AddressType.External` address is information for the reader only (with its `Information`, e.g. `OMAHA - Deliver to Eastside Office`). It is stored and shown with the message but never routed: no group expansion, no delivery, no status row, and the server ignores it when choosing recipients.
-
-**Message levels**: `Route` reads the message's level name (`SendMessagePayload.MessageLevel`) and, before sending, drops any destination whose own assigned level (`IEngineController.GetUserMessageLevel`) ranks lower - it is never dialed, and its `UserDeliveryResult.Success` is `false`. Unrecognized or empty level names (no message levels configured at all) skip the check entirely, so a host with no use for the feature sees no behavior change. The check applies per destination, so a message can still reach every recipient cleared for it even when others in the same address list are blocked.
-
-**Self-addressing**: a recipient that is the sending user is sent like any other.
-
-```csharp
-var (messageId, results) = await routing.Route(fromUser, payload, ct);
-// results: IReadOnlyList<UserDeliveryResult> { UserName, Success, AddressedVia }
-```
+**External addresses**: An `AddressType.External` address is information for the reader only. It is stored and shown with the message but gets no status row.
 
 ---
 
@@ -91,30 +83,30 @@ CRUD for messages, drafts, notes, and activity log reads. Runs in `Client` mode 
 
 **Events** (all `Func<entity, Task>`):
 - `MessageInserted` — fired after `StoreIncomingMessage`
-- `MessageRead` — fired after `MarkMessageRead` transitions an Inbox record from `Received` to `Read`; consumed by `AlertViewModel` to track pending alerts (see [Peer.md](Peer.md#receipts))
+- `MessageRead` — fired after `MarkMessageRead` transitions an Inbox record from `Received` to `Read`; consumed by `AlertViewModel` to track pending alerts
 - `DraftInserted` — after `InsertDraft` or `DuplicateDraft`
 - `DraftUpdated` — after `SaveDraft`, only if the draft has not yet been sent
 - `NoteInserted` — after `InsertNote` or `DuplicateNote`
 - `NoteUpdated` — after `SaveNote`
 
-Both `StoreIncomingMessage` and `StoreSentMessage` take the message's logical fields (body, addresses, etc.) as plain parameters, plus an `isAlert` flag, and build `MessageEntity.Message` from them via `IEngineController` (`CreateMessage` followed by the common field setters) before saving — callers never construct the stored frame type directly. `MessageEntity.MessageId` is denormalized from the same value passed to `IEngineController.SetFrameId` so it stays queryable/indexable (see [Data.md](Data.md#messageentity)).
+Both `StoreIncomingMessage` and `StoreSentMessage` take a `Message` and store it as `MessageData` (see `MessageMapping`, which turns the host's enum members into the integers stored). `MessageEntity.MessageId` is denormalized from `Message.Id` so it stays queryable/indexable (see [Data.md](Data.md#messageentity)).
 
 **Key methods**:
 
 | Method | Description |
 |--------|-------------|
-| `StoreIncomingMessage(messageId, fromUser, body, addresses, sentAt, priority = null, tag = "", messageLevel = "")` | Creates a `MessageEntity` in the Inbox folder (`IsOutbound = false`, `ReadStatus = Received`), fires `MessageInserted` |
-| `StoreSentMessage(messageId, body, addresses, sentAt, userResults, priority = null, tag = "", messageLevel = "")` | Creates a `MessageEntity` in the Outbox (`IsOutbound = true`) with per-user delivery statuses seeded from the routing result — `Sent` when `Success` is `true`, otherwise `Failed`; a status that arrived before the record was stored is applied here |
+| `StoreIncomingMessage(message)` | Creates a `MessageEntity` in the Inbox folder (`IsOutbound = false`, `ReadStatus = Received`), fires `MessageInserted` |
+| `StoreSentMessage(message)` | Creates a `MessageEntity` in the Outbox (`IsOutbound = true`) with a `Sending` status for every recipient that is not a group or external address |
 | `IncomingMessageExists(messageId)` | Whether the Inbox already holds a record for the ID (an Outbox-only record does not count). `MainViewModel` checks it before `StoreIncomingMessage`, so a message delivered twice - notably a storage server's answer to a retrieval request that includes messages the Inbox already has - is stored and shown once |
 | `UpdateDeliveryStatus(messageId, userName, status)` | Updates per-user delivery status on the Outbox record for `messageId` - always scoped to the outbound record, since a self-addressed message also has an Inbox record sharing the same `messageId`. The user name matches case-insensitively, and a status only ever moves forward (Sending, then Sent, then Failed, then Received, then Read): status events for different stages can arrive out of order, so a late earlier one is ignored rather than undoing a later one |
-| `MarkMessageRead(messageId)` | Transitions the Inbox record's `ReadStatus` from `Received` to `Read` and fires `MessageRead`. A no-op (returns `null`) if the record is missing or already `Read` — see [Peer.md](Peer.md#receipts) |
+| `MarkMessageRead(messageId)` | Transitions the Inbox record's `ReadStatus` from `Received` to `Read` and fires `MessageRead`. A no-op (returns `null`) if the record is missing or already `Read` |
 | `NewDraft()` / `NewNote()` | Build a blank draft (with the draft handler's defaults) or note for the Drafts or Notes root folder without storing it, so one that is never written in leaves nothing behind |
 | `InsertDraft(entity)` / `InsertNote(entity)` | Store an entity built by `NewDraft` / `NewNote`, firing `DraftInserted` / `NoteInserted` |
 | `DuplicateDraft(entity)` / `DuplicateNote(entity)` | Store a copy (same name, body, fill-ins, recipients, tag, priority, message level and width, never sent) as a new entry in the same folder, firing the inserted event, and return it; the original is untouched |
 | `SaveDraft(entity)` | Persists draft changes, fires `DraftUpdated` if not yet sent |
 | `SaveNote(entity)` | Persists note changes, fires `NoteUpdated` |
 | `SaveDraftQuietly(entity)` / `SaveNoteQuietly(entity)` | Persist what the user wrote in a draft or note they are leaving, firing `DraftSavedQuietly` / `NoteSavedQuietly` instead of the update events, so nothing is selected |
-| `GetMessages(folderId, page, filter = null)` | Paginated messages, ordered by `ReceivedAt` descending. A non-empty `EntryFilter` loads the whole folder to filter in memory instead of paginating the LiteDB query directly, since a message's fields live inside the host's own opaque frame type: `Search` matches case-insensitively against body, sender, destinations, tag, priority label, or message level name; `Author` matches the sender and `Destination` any addressee, both by case-insensitive substring; `DateFrom`/`DateTo` bound `ReceivedAt` as exact instants (a caller wanting a whole calendar day combines the date with its start/end of day itself - `EntryBarViewModel` does this by default); `MessageLevel`/`Priority` match the decoded message exactly and `Alert` (`true` for alerts only, `false` for non-alerts only, `null` for both) is checked against the handler's `IsAlert` |
+| `GetMessages(folderId, page, filter = null)` | Paginated messages, ordered by `ReceivedAt` descending. A non-empty `EntryFilter` loads the whole folder to filter in memory instead of paginating the LiteDB query directly, since the filters read the stored `MessageData`: `Search` matches case-insensitively against body, sender, destinations, tag, priority label, or message level name; `Author` matches the sender and `Destination` any addressee, both by case-insensitive substring; `DateFrom`/`DateTo` bound `ReceivedAt` as exact instants (a caller wanting a whole calendar day combines the date with its start/end of day itself - `EntryBarViewModel` does this by default); `MessageLevel`/`Priority` match the decoded message exactly and `Alert` (`true` for alerts only, `false` for non-alerts only, `null` for both) is checked against the stored alert flag |
 | `GetDrafts(folderId, page, alphabetical, filter = null)` | Paginated drafts, same in-memory filtering approach. `Search` matches name, body or tag; `Destination` matches any address's user name by case-insensitive substring; `DateFrom`/`DateTo` bound `ModifiedAt` the same exact-instant way; `MessageLevel`/`Priority` match directly against `DraftEntity`'s own fields; drafts have no alert criterion |
 | `GetNotes(folderId, page, alphabetical, filter = null)` | Paginated notes, same in-memory filtering approach. `Search` matches body text; `DateFrom`/`DateTo` bound `ModifiedAt` the same exact-instant way; `Author`/`Destination`/`MessageLevel`/`Priority`/`AlertOnly` are ignored - `NoteEntity` has none of those fields |
 | `GetActivityLogs(page)` | Paginated activity log entries, newest first |
@@ -127,24 +119,20 @@ Both `StoreIncomingMessage` and `StoreSentMessage` take the message's logical fi
 
 ## DirectServiceConnection
 
-Implements `IServiceConnection`, registered in both `Client` and `Headless` mode. Wires engine internals to the interface consumed by ViewModels (Client) or embedding host code (Headless).
+Implements `IEngineConnection`, registered in both `Client` and `Headless` mode. Wires engine internals to the interface consumed by ViewModels (Client) or embedding host code (Headless).
 
 **Responsibilities**:
-- Forwards `IServiceConnection.SendMessage(body, addresses, priority, tag, messageLevel)` (whether the message is an alert is decided by the message handler from the other properties and reported in `SendMessageResult.IsAlert`) (priority and message level are members of the host's enums, and the call throws for one that is not a configured level) → `MessageRoutingService.Route` and returns the result. It does not persist anything itself — in Client mode, `DraftViewModel` calls `EntryService.StoreSentMessage` after a successful send
-- Translates `PeerService.FrameDelivered` → fires `IServiceConnection.MessageReceived` for each frame that is a message (`IEngineController.IsMessage`, answered by the message handler; any other frame is neither shown nor stored). Each such message from another user is also answered with a receive receipt sent straight to its sender. It does not persist the message itself — in Client mode, `MainViewModel`'s handler for that event calls `EntryService.StoreIncomingMessage`
-- On `MessageRoutingService.DeliveryStatusChanged`, updates the Outbox record via `EntryService.UpdateDeliveryStatus`, then fires `IServiceConnection.DeliveryStatusChanged` with the user's status as stored and the resulting `OverallStatus`, so an ignored late status is not shown either
-- `MarkMessageRead(messageId)`: calls `EntryService.MarkMessageRead`, fires `IServiceConnection.DeliveryStatusChanged` locally (empty `UserName`, status `Read`) so Client-mode UI reflects the read state immediately, then sends a read receipt to the original sender via `IPeerService.Send` directly — or, for a self-addressed message, calls `EntryService.UpdateDeliveryStatus` directly with no network round-trip. See [Peer.md](Peer.md#receipts)
+- `IEngineConnection.SendMessage(body, addresses, priority, tag, messageLevel, messageAspect)` builds a `Message` (the draft handler decides `IsAlert` and the next identifier), stores it in the Outbox and calls `NetworkProcessing.Sent`. The priority, level and aspect are members of the host's enums, and the call throws for one that is not configured.
+- Fires `IEngineConnection.MessageReceived(Message)` when the processor calls `ReceiveMessage`. In Client mode `MainViewModel` stores it with `EntryService.StoreIncomingMessage`.
+- On a delivery status change raised by the processor, fires `IEngineConnection.DeliveryStatusChanged` with the status as stored and the resulting `OverallStatus`.
+- `MarkMessageRead(messageId)`: calls `EntryService.MarkMessageRead`, fires `DeliveryStatusChanged` locally (empty `UserName`, status `Read`) so Client-mode UI reflects the read state immediately, then calls `NetworkProcessing.Read` so the processor can tell the sender.
 - Implements install, user info query, and user names query by delegating to `UserService` / `IEngineController`
 
 ---
 
-## NetworkIndicatorService
-
-Keeps the network indicator (`INetworkIndicator`, which the top bar's `NetworkIndicatorViewModel` follows) in step with the node's direct connection to its parent, in a client or relay. `EngineHost` starts it with the other services; nothing runs for a server. When a network processor exists, it is first asked `UseAutomaticNetworkIndicator` with an engine context, and a `false` answer ends the service so only the processor's `SetNetworkIndicator` calls change the indicator. Otherwise it starts from `IPeerService.IsUserConnected(ParentUser)` and follows `UserConnected`/`UserDisconnected` for the parent only (names compared case-insensitively), so the connection beyond the parent never matters.
-
 ## DisconnectAlarmService
 
-Sounds an alarm in every role (Client, Server and Relay) when a connection drops, separately from the alarm for alerts. `EngineHost` starts it with the other services once networking starts; it subscribes to `IPeerService.UserDisconnected` (raised when a user's last live connection goes) and `UserConnected`, and plays its own sound through `IDisconnectAlarmPlayer`, a player of its own so it never starts or stops the alert alarm's sound or the reverse.
+Sounds an alarm in every role (Client and Server) when a connection drops, separately from the alarm for alerts. `EngineHost` starts it with the other services once networking starts; it subscribes to `IPeerService.UserDisconnected` (raised when a user's last live connection goes) and `UserConnected`, and plays its own sound through `IDisconnectAlarmPlayer`, a player of its own so it never starts or stops the alert alarm's sound or the reverse.
 
 - A disconnect adds the user to the set of connections that dropped during the current alarm, plays the sound, and (re)starts a timer of `IEngineController.DisconnectAlarmDuration`, the alarm handler's `DisconnectDuration` (30 seconds by default), so another drop while it sounds starts the time again.
 - A connection coming back removes its user from that set; once the set is empty the alarm stops early. A connection that did not drop during the alarm does nothing.
@@ -156,7 +144,7 @@ Re-reads the configuration while the engine runs (`Reload()`, raising `Reloaded`
 
 ## InterfaceService
 
-Hosts the local interface listener described in [Interface.md](Interface.md). Always active, in both `Client` and `Headless` mode. `Restart()` closes the listener and opens it again from the configuration as it is then, and it keeps waiting for a restart when it cannot start (for example before its certificates are in place) instead of ending. Mirrors `PeerService.FrameDelivered` out to every connected interface connection, and routes messages received from an interface via `MessageRoutingService.Route`.
+Hosts the local interface listener described in [Interface.md](Interface.md). Always active, in both `Client` and `Headless` mode. `Restart()` closes the listener and opens it again from the configuration as it is then, and it keeps waiting for a restart when it cannot start (for example before its certificates are in place) instead of ending. Frames received from an interface connection go to the processor as `OnReceived` with `FrameOrigin.Interface`.
 
 ---
 
@@ -213,13 +201,13 @@ ImportSummary summary = await importService.Import(packages[0].FullPath, conflic
 
 ## MessageStorageService
 
-The storage half of a server (see [Configuration.md](Configuration.md#server-storage)); `ServerRoutingService` is its only caller, and it deliberately does not depend on `IPeerService`, so finding copies and sending them are separate steps. `IsEnabled` is true when the current user is in `IEngineController.StorageServers`, which is every server user. `Store(message)` keeps a copy through `IStoredMessageRepository.InsertIfNew` unless disabled or the message is a receipt or retrieval request, and swallows and logs any failure. `Find(requester, request)` reads the request's retrieval fields into a `RetrievalCriteria`, loads every stored message, keeps those that fit the criteria (any sender or recipient - no check that the requester was involved), orders them by original sent time, and returns a freshly built copy of each addressed to the requester alone with the alert flag cleared (see [Peer.md](Peer.md#message-storage--retrieval) for why). Times are compared as UTC, since LiteDB returns stored times as local. A server that is not a storage server yields an empty list.
+The storage behind `StoreMessage` and `FindStoredMessages`, used by a server's processor. `Store(message)` keeps a copy through `IStoredMessageRepository.InsertIfNew` and swallows and logs any failure. `Find(criteria)` loads every stored message, keeps those that fit the `RetrievalCriteria` (`From`/`To` UTC instants, `Authors`, `Destinations`, `Ids`), and orders them by original sent time. Times are compared as UTC, since LiteDB returns stored times as local. Which messages to store and who may retrieve them is the processor's decision.
 
 ---
 
 ## RetrievalService
 
-The client's half: `Request(serverName, criteria)` builds a request through the host's retrieval handler with `CreateRetrieval(criteria, serverName)`, which gives the server to the handler as the request's destination, routes it from the current user with `IMessageRoutingService.RouteFrame` (which sets the sender), and returns whether that server's delivery succeeded - not whether anything matched, since the answer arrives later as ordinary received messages. Throws `InvalidOperationException` with no installed user. `RetrievalCriteria` (`Core/src/Internal/Services/RetrievalCriteria.cs`) holds `From`/`To` (UTC instants), `Authors`, `Destinations` and `Ids`, which the engine controller hands to the retrieval handler to build a request and reads back from a received one.
+The client's half: `Request(serverName, criteria)` checks that the server is one of `IEngineController.StorageServers` and passes the request to `NetworkProcessing.Retrieval`, which runs the processor's `OnRetrieval`. It returns whether a processor took it, not whether anything matched, since the answer arrives later as ordinary received messages. Throws `ArgumentException` for a user that is not a server and `InvalidOperationException` with no installed user.
 
 ---
 
@@ -229,13 +217,10 @@ DTOs used across the service layer:
 
 | Type | Fields |
 |------|--------|
-| `MessageReceivedEvent` | `MessageId`, `FromUser`, `Body`, `Addresses[]`, `SentAt`, `IsAlert`, `Priority`, `Tag` |
+| `Message<TPriority, TLevel, TAspect>` | `Id`, `FromUser`, `Body`, `Addresses[]`, `SentAt`, `Priority`, `Tag`, `MessageLevel`, `MessageAspect`, `IsAlert` |
 | `AddressRequest` | `UserName`, `Type` |
-| `UserDeliveryResult` | `UserName`, `Success (bool)`, `AddressedVia[]` |
-| `SendMessageResult` | `MessageId`, `UserResults[]` |
-| `DeliveryStatusChangedEvent` | `MessageId`, `UserName`, `Status`, `OverallStatus` — an empty `UserName` marks a local read-status notification for this user's own Inbox record rather than a remote destination (see [Peer.md](Peer.md#receipts)) |
-| `SendMessagePayload` | `Body`, `Addresses[]` (of `AddressPayload`), `Priority`, `Tag` |
-| `AddressPayload` | `UserName`, `Type` |
+| `SendMessageResult` | `MessageId`, `IsAlert` |
+| `DeliveryStatusChangedEvent` | `MessageId`, `UserName`, `Status`, `OverallStatus` — an empty `UserName` marks a local read-status notification for this user's own Inbox record rather than a remote destination |
 
 ---
 
@@ -256,6 +241,6 @@ Internal DTOs used by `ImportService` (`Core/src/Internal/Services/ImportModels.
 | `DraftNoteConflictResolution` (enum) | `KeepExisting`, `Overwrite`, `OverwriteAll` |
 | `ImportSummary` | `Imported`, `Skipped`, `Overwritten` (counts), `StagedSends` (a custom format's reader's `AddStagedSend` additions; always empty for the built-in package format) |
 
-The public `StagedSendData` type a custom import format's reader builds for `AddStagedSend` - body,
+The public `StagedSendData<TPriority, TLevel>` type a custom import format's reader builds for `AddStagedSend` - body,
 addresses, and the same `Priority`/`Tag`/`MessageLevel` fields a send normally carries - is in
 `Core/src/Public/Models/ImportModels.cs`; see [Configuration.md](Configuration.md#import-formats).

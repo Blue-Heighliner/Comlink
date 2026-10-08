@@ -20,15 +20,10 @@ public sealed class HelpViewModelTests
     [Fact]
     public void AppName_ComesFromEngineController() => Assert.Equal("MyApp", Build().AppName);
 
-    /// <summary>A relay has the same tabs as a server.</summary>
-    [Fact]
-    public void Relay_HasTheServerTabs() => Assert.Equal(Titles(Build(UserRole.Server)), Titles(Build(UserRole.Relay)));
-
     /// <summary>Every tab has content, and every section has a heading and text.</summary>
     [Theory]
     [InlineData(UserRole.Client)]
     [InlineData(UserRole.Server)]
-    [InlineData(UserRole.Relay)]
     public void EveryTab_HasNonEmptySections(UserRole role)
     {
         foreach (HelpTab tab in Build(role).Tabs)

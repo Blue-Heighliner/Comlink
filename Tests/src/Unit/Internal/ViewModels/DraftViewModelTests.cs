@@ -32,7 +32,7 @@ public sealed class DraftViewModelTests
 
     private static DraftViewModel Build(
         out Mock<IEntryService> entryMock,
-        out Mock<IServiceConnection> connMock,
+        out Mock<IEngineConnection> connMock,
         DraftEntity? entity = null,
         IReadOnlyList<string>? userNames = null,
         string alertText = "ALERT",
@@ -41,7 +41,7 @@ public sealed class DraftViewModelTests
         IReadOnlyList<TagPriorityBlock>? blockedCombinations = null)
     {
         entryMock = new Mock<IEntryService>();
-        connMock = new Mock<IServiceConnection>();
+        connMock = new Mock<IEngineConnection>();
         connMock.Setup(c => c.GetUserNames(It.IsAny<CancellationToken>()))
                 .ReturnsAsync(new List<string>());
         DraftEntity ent = entity ?? new DraftEntity
@@ -59,7 +59,7 @@ public sealed class DraftViewModelTests
         Mock<IEngineController> controller = Mock.Get(MakeEngineController());
         controller.Setup(c => c.CanDelete(FolderType.Drafts)).Returns(canDelete);
         entryMock = new Mock<IEntryService>();
-        Mock<IServiceConnection> conn = new();
+        Mock<IEngineConnection> conn = new();
         DraftEntity entity = new() { Body = "B", Addresses = [], FolderId = "root-drafts" };
         return new DraftViewModel(entity, entryMock.Object, conn.Object, [], noLogger, controller.Object, confirmationWindow: TimeSpan.FromMinutes(1));
     }
@@ -316,7 +316,7 @@ public sealed class DraftViewModelTests
     {
         DraftViewModel vm = Build(out _, out _);
         vm.NewAddressUser = "OMAHA";
-        vm.NewAddressType = vm.AddressTypes.Single(t => t.Type == AddressType.External);
+        vm.NewAddressType = vm.AddressTypes.Single(t => t.Type is AddressType.External);
         vm.NewAddressInformation = "  Deliver to Eastside Office  ";
 
         vm.AddAddressCommand.Execute(null);
@@ -371,7 +371,7 @@ public sealed class DraftViewModelTests
     {
         DraftViewModel vm = Build(out _, out _);
         vm.NewAddressUser = "BRAVO";
-        vm.NewAddressType = vm.AddressTypes.Single(t => t.Type == AddressType.Cc);
+        vm.NewAddressType = vm.AddressTypes.Single(t => t.Type is AddressType.Cc);
 
         vm.AddAddressCommand.Execute(null);
 
@@ -439,20 +439,20 @@ public sealed class DraftViewModelTests
         controller.Setup(c => c.DraftLineWidth).Returns(width is null ? null : new LineWidthRange(width, 1, null));
         entryMock = new Mock<IEntryService>();
         entryMock.Setup(e => e.SaveDraft(It.IsAny<DraftEntity>())).Returns(Task.CompletedTask);
-        DraftViewModel vm = new(new DraftEntity { Body = body, Addresses = [], FolderId = "root-drafts" }, entryMock.Object, new Mock<IServiceConnection>().Object, [], noLogger, controller.Object);
+        DraftViewModel vm = new(new DraftEntity { Body = body, Addresses = [], FolderId = "root-drafts" }, entryMock.Object, new Mock<IEngineConnection>().Object, [], noLogger, controller.Object);
         vm.BodyDocument.Text = body;
         return vm;
     }
 
-    private static DraftViewModel BuildWithHandler(out Mock<IEntryService> entryMock, out Mock<IServiceConnection> connMock, DraftEntity? entity = null)
+    private static DraftViewModel BuildWithHandler(out Mock<IEntryService> entryMock, out Mock<IEngineConnection> connMock, DraftEntity? entity = null)
     {
         Mock<IEngineController> controller = Mock.Get(MakeEngineController());
         controller.Setup(c => c.DraftLineWidth).Returns(new LineWidthRange(30, 20, 40));
-        controller.Setup(c => c.ComputeIsAlert(It.IsAny<string>(), It.IsAny<Enum?>(), It.IsAny<string>(), It.IsAny<string>(), It.IsAny<IReadOnlyList<AddressRequest>>())).Returns<string, Enum?, string, string, IReadOnlyList<AddressRequest>>((_, _, tag, _, _) => tag == "ALERT");
-        controller.Setup(c => c.GetDraftHeader(It.IsAny<DraftContent>())).Returns<DraftContent>(draft => draft.Tag.Length > 0 ? $"HEADER {draft.Tag} {draft.IsAlert} {draft.Addresses.Count} {draft.LineWidth}" : null);
+        controller.Setup(c => c.IsAlert(It.IsAny<DraftContent>())).Returns<DraftContent>(draft => draft.Tag == "ALERT");
+        controller.Setup(c => c.GetDraftHeader(It.IsAny<DraftContent>())).Returns<DraftContent>(draft => draft.Tag.Length > 0 ? $"HEADER {draft.Tag} {draft.Tag == "ALERT"} {draft.Addresses.Count} {draft.LineWidth}" : null);
         entryMock = new Mock<IEntryService>();
         entryMock.Setup(e => e.SaveDraft(It.IsAny<DraftEntity>())).Returns(Task.CompletedTask);
-        connMock = new Mock<IServiceConnection>();
+        connMock = new Mock<IEngineConnection>();
         return new DraftViewModel(entity ?? new DraftEntity { Body = "body", Addresses = [], FolderId = "root-drafts" }, entryMock.Object, connMock.Object, [], noLogger, controller.Object);
     }
 
@@ -500,11 +500,11 @@ public sealed class DraftViewModelTests
         entryMock.Verify(e => e.SaveDraft(It.Is<DraftEntity>(d => d.LineWidth == 40)), Times.Once);
     }
 
-    private static DraftViewModel BuildWithTagRules(out Mock<IServiceConnection> connMock, TagRules rules)
+    private static DraftViewModel BuildWithTagRules(out Mock<IEngineConnection> connMock, TagRules rules)
     {
         Mock<IEngineController> controller = Mock.Get(MakeEngineController());
         controller.Setup(c => c.DraftTagRules).Returns(rules);
-        connMock = new Mock<IServiceConnection>();
+        connMock = new Mock<IEngineConnection>();
         return new DraftViewModel(new DraftEntity { Body = "b", Addresses = [], FolderId = "root-drafts", Tag = "kept" }, new Mock<IEntryService>().Object, connMock.Object, [], noLogger, controller.Object);
     }
 
@@ -527,7 +527,7 @@ public sealed class DraftViewModelTests
         Mock<IEngineController> controller = Mock.Get(MakeEngineController());
         DraftEntity stored = new() { Body = "b", Addresses = [], FolderId = "root-drafts", Tag = null! };
 
-        DraftViewModel vm = new(stored, new Mock<IEntryService>().Object, new Mock<IServiceConnection>().Object, [], noLogger, controller.Object);
+        DraftViewModel vm = new(stored, new Mock<IEntryService>().Object, new Mock<IEngineConnection>().Object, [], noLogger, controller.Object);
 
         Assert.Equal(string.Empty, vm.Tag);
     }
@@ -538,7 +538,7 @@ public sealed class DraftViewModelTests
     {
         Mock<IEngineController> controller = Mock.Get(MakeEngineController());
         controller.Setup(c => c.DraftTagRules).Returns(TagRules.Unrestricted with { IsRequired = true });
-        Mock<IServiceConnection> connMock = new();
+        Mock<IEngineConnection> connMock = new();
         DraftViewModel vm = new(new DraftEntity { Body = "b", Addresses = [], FolderId = "root-drafts" }, new Mock<IEntryService>().Object, connMock.Object, [], noLogger, controller.Object);
         vm.Addresses.Add(new AddressData { UserName = "BOB", Type = "To" });
 
@@ -596,7 +596,7 @@ public sealed class DraftViewModelTests
     [Fact]
     public async Task Send_TagShorterThanTheMinimum_IsNotSent()
     {
-        DraftViewModel vm = BuildWithTagRules(out Mock<IServiceConnection> connMock, new TagRules(TagCase.Mixed, 6, null, true, true, true));
+        DraftViewModel vm = BuildWithTagRules(out Mock<IEngineConnection> connMock, new TagRules(TagCase.Mixed, 6, null, true, true, true));
         vm.Addresses.Add(new AddressData { UserName = "BOB", Type = "To" });
 
         await vm.SendCommand.ExecuteAsync(null);
@@ -612,7 +612,7 @@ public sealed class DraftViewModelTests
         Mock<IEngineController> controller = Mock.Get(MakeEngineController());
         controller.Setup(c => c.DraftLineWidth).Returns(new LineWidthRange(25, 10, 40));
         controller.Setup(c => c.GetDraftHeader(It.IsAny<DraftContent>())).Returns<DraftContent>(draft => draft.Tag.Length > 0 ? "first\n" + new string('h', draft.Tag.Length) : null);
-        DraftViewModel vm = new(new DraftEntity { Body = "b", Addresses = [], FolderId = "root-drafts" }, new Mock<IEntryService>().Object, new Mock<IServiceConnection>().Object, [], noLogger, controller.Object);
+        DraftViewModel vm = new(new DraftEntity { Body = "b", Addresses = [], FolderId = "root-drafts" }, new Mock<IEntryService>().Object, new Mock<IEngineConnection>().Object, [], noLogger, controller.Object);
         Assert.Equal((10m, 25), (vm.LineWidthMinimum, vm.LineWidth));
 
         vm.Tag = new string('t', 30);
@@ -634,11 +634,10 @@ public sealed class DraftViewModelTests
     [Fact]
     public async Task Send_PutsTheHeaderInFrontOfTheBody()
     {
-        DraftViewModel vm = BuildWithHandler(out Mock<IEntryService> entryMock, out Mock<IServiceConnection> connMock);
+        DraftViewModel vm = BuildWithHandler(out Mock<IEntryService> entryMock, out Mock<IEngineConnection> connMock);
         connMock.Setup(c => c.SendMessage(It.IsAny<string>(), It.IsAny<List<AddressRequest>>(), It.IsAny<Enum?>(), It.IsAny<string>(), It.IsAny<Enum?>(), It.IsAny<Enum?>(), It.IsAny<CancellationToken>()))
-            .ReturnsAsync(new SendMessageResult { MessageId = "M", UserResults = [] });
-        entryMock.Setup(e => e.StoreSentMessage(It.IsAny<string>(), It.IsAny<string>(), It.IsAny<List<AddressData>>(), It.IsAny<DateTime>(), It.IsAny<IReadOnlyList<UserDeliveryResult>>(), It.IsAny<Enum?>(), It.IsAny<string>(), It.IsAny<string>()))
-            .ReturnsAsync(new MessageEntity());
+            .ReturnsAsync(new SendMessageResult { MessageId = "M" });
+        entryMock.Setup(e => e.FindMessage(It.IsAny<string>(), It.IsAny<bool>())).ReturnsAsync(new MessageEntity());
         vm.Tag = "URGENT";
         vm.Addresses.Add(new AddressData { UserName = "BOB", Type = "To" });
         vm.BodyDocument.Text = "the body";
@@ -709,7 +708,7 @@ public sealed class DraftViewModelTests
     [Fact]
     public async Task SendCommand_NoAddresses_SetsStatusMessageAndDoesNotSend()
     {
-        DraftViewModel vm = Build(out _, out Mock<IServiceConnection> connMock);
+        DraftViewModel vm = Build(out _, out Mock<IEngineConnection> connMock);
 
         await vm.SendCommand.ExecuteAsync(null);
 
@@ -722,7 +721,7 @@ public sealed class DraftViewModelTests
     public async Task SendCommand_NoUserInstalled_SaysSoAndKeepsDraftUnsent()
     {
         DraftEntity entity = new() { Body = "World", Addresses = [new AddressData { UserName = "ALPHA", Type = "To" }], FolderId = "root-drafts" };
-        DraftViewModel vm = Build(out Mock<IEntryService> entryMock, out Mock<IServiceConnection> connMock, entity: entity);
+        DraftViewModel vm = Build(out Mock<IEntryService> entryMock, out Mock<IEngineConnection> connMock, entity: entity);
         connMock.Setup(c => c.SendMessage(It.IsAny<string>(), It.IsAny<List<AddressRequest>>(), It.IsAny<Enum?>(), It.IsAny<string>(), It.IsAny<Enum?>(), It.IsAny<Enum?>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync((SendMessageResult?)null);
 
@@ -730,7 +729,6 @@ public sealed class DraftViewModelTests
 
         Assert.Equal("Cannot send until a user is installed", vm.StatusMessage);
         Assert.False(vm.IsSent);
-        entryMock.Verify(e => e.StoreSentMessage(It.IsAny<string>(), It.IsAny<string>(), It.IsAny<List<AddressData>>(), It.IsAny<DateTime>(), It.IsAny<IReadOnlyList<UserDeliveryResult>>(), It.IsAny<Enum?>(), It.IsAny<string>()), Times.Never);
     }
 
     /// <summary>SendCommand with addresses and successful send sets IsSent and StatusMessage.</summary>
@@ -743,12 +741,11 @@ public sealed class DraftViewModelTests
             Addresses = [new AddressData { UserName = "ALPHA", Type = "To" }],
             FolderId = "root-drafts"
         };
-        DraftViewModel vm = Build(out Mock<IEntryService> entryMock, out Mock<IServiceConnection> connMock, entity: entity);
+        DraftViewModel vm = Build(out Mock<IEntryService> entryMock, out Mock<IEngineConnection> connMock, entity: entity);
 
         SendMessageResult sendResult = new()
         {
-            MessageId = "MSG-001",
-            UserResults = [new UserDeliveryResult { UserName = "ALPHA", Success = true, AddressedVia = [] }]
+            MessageId = "MSG-001"
         };
         connMock.Setup(c => c.SendMessage(It.IsAny<string>(),
                 It.IsAny<List<AddressRequest>>(), It.IsAny<Enum?>(), It.IsAny<string>(), It.IsAny<Enum?>(), It.IsAny<Enum?>(), It.IsAny<CancellationToken>()))
@@ -756,10 +753,7 @@ public sealed class DraftViewModelTests
 
         MessageEntity sentMessage = new() { MessageId = "MSG-001" };
         entryMock.Setup(e => e.SaveDraft(It.IsAny<DraftEntity>())).Returns(Task.CompletedTask);
-        entryMock.Setup(e => e.StoreSentMessage(It.IsAny<string>(), It.IsAny<string>(),
-                It.IsAny<List<AddressData>>(), It.IsAny<DateTime>(),
-                It.IsAny<IReadOnlyList<UserDeliveryResult>>(), It.IsAny<Enum?>(), It.IsAny<string>()))
-            .ReturnsAsync(sentMessage);
+        entryMock.Setup(e => e.FindMessage(It.IsAny<string>(), It.IsAny<bool>())).ReturnsAsync(new MessageEntity());
 
         await vm.SendCommand.ExecuteAsync(null);
 
@@ -778,13 +772,12 @@ public sealed class DraftViewModelTests
             Addresses = [new AddressData { UserName = "ALPHA", Type = "To" }],
             FolderId = "root-drafts"
         };
-        DraftViewModel vm = Build(out Mock<IEntryService> entryMock, out Mock<IServiceConnection> connMock, entity: entity);
+        DraftViewModel vm = Build(out Mock<IEntryService> entryMock, out Mock<IEngineConnection> connMock, entity: entity);
         vm.SelectedPriority = vm.AvailablePriorities.Single(p => p.Name == "FLASH");
 
         SendMessageResult sendResult = new()
         {
-            MessageId = "MSG-001",
-            UserResults = [new UserDeliveryResult { UserName = "ALPHA", Success = true, AddressedVia = [] }]
+            MessageId = "MSG-001"
         };
         connMock.Setup(c => c.SendMessage(It.IsAny<string>(),
                 It.IsAny<List<AddressRequest>>(), TestMessagePriority.Flash, It.IsAny<string>(), It.IsAny<Enum?>(), It.IsAny<Enum?>(), It.IsAny<CancellationToken>()))
@@ -792,18 +785,12 @@ public sealed class DraftViewModelTests
 
         MessageEntity sentMessage = new() { MessageId = "MSG-001" };
         entryMock.Setup(e => e.SaveDraft(It.IsAny<DraftEntity>())).Returns(Task.CompletedTask);
-        entryMock.Setup(e => e.StoreSentMessage(It.IsAny<string>(), It.IsAny<string>(),
-                It.IsAny<List<AddressData>>(), It.IsAny<DateTime>(),
-                It.IsAny<IReadOnlyList<UserDeliveryResult>>(), TestMessagePriority.Flash, It.IsAny<string>()))
-            .ReturnsAsync(sentMessage);
+        entryMock.Setup(e => e.FindMessage(It.IsAny<string>(), It.IsAny<bool>())).ReturnsAsync(new MessageEntity());
 
         await vm.SendCommand.ExecuteAsync(null);
 
         connMock.Verify(c => c.SendMessage(It.IsAny<string>(),
             It.IsAny<List<AddressRequest>>(), TestMessagePriority.Flash, It.IsAny<string>(), It.IsAny<Enum?>(), It.IsAny<Enum?>(), It.IsAny<CancellationToken>()), Times.Once);
-        entryMock.Verify(e => e.StoreSentMessage(It.IsAny<string>(), It.IsAny<string>(),
-            It.IsAny<List<AddressData>>(), It.IsAny<DateTime>(),
-            It.IsAny<IReadOnlyList<UserDeliveryResult>>(), TestMessagePriority.Flash, It.IsAny<string>()), Times.Once);
         Assert.True(vm.IsSent);
     }
 
@@ -817,13 +804,12 @@ public sealed class DraftViewModelTests
             Addresses = [new AddressData { UserName = "ALPHA", Type = "To" }],
             FolderId = "root-drafts"
         };
-        DraftViewModel vm = Build(out Mock<IEntryService> entryMock, out Mock<IServiceConnection> connMock, entity: entity);
+        DraftViewModel vm = Build(out Mock<IEntryService> entryMock, out Mock<IEngineConnection> connMock, entity: entity);
         vm.Tag = "URGENT";
 
         SendMessageResult sendResult = new()
         {
-            MessageId = "MSG-001",
-            UserResults = [new UserDeliveryResult { UserName = "ALPHA", Success = true, AddressedVia = [] }]
+            MessageId = "MSG-001"
         };
         connMock.Setup(c => c.SendMessage(It.IsAny<string>(),
                 It.IsAny<List<AddressRequest>>(), It.IsAny<Enum?>(), "URGENT", It.IsAny<Enum?>(), It.IsAny<Enum?>(), It.IsAny<CancellationToken>()))
@@ -831,18 +817,12 @@ public sealed class DraftViewModelTests
 
         MessageEntity sentMessage = new() { MessageId = "MSG-001" };
         entryMock.Setup(e => e.SaveDraft(It.IsAny<DraftEntity>())).Returns(Task.CompletedTask);
-        entryMock.Setup(e => e.StoreSentMessage(It.IsAny<string>(), It.IsAny<string>(),
-                It.IsAny<List<AddressData>>(), It.IsAny<DateTime>(),
-                It.IsAny<IReadOnlyList<UserDeliveryResult>>(), It.IsAny<Enum?>(), "URGENT"))
-            .ReturnsAsync(sentMessage);
+        entryMock.Setup(e => e.FindMessage(It.IsAny<string>(), It.IsAny<bool>())).ReturnsAsync(new MessageEntity());
 
         await vm.SendCommand.ExecuteAsync(null);
 
         connMock.Verify(c => c.SendMessage(It.IsAny<string>(),
             It.IsAny<List<AddressRequest>>(), It.IsAny<Enum?>(), "URGENT", It.IsAny<Enum?>(), It.IsAny<Enum?>(), It.IsAny<CancellationToken>()), Times.Once);
-        entryMock.Verify(e => e.StoreSentMessage(It.IsAny<string>(), It.IsAny<string>(),
-            It.IsAny<List<AddressData>>(), It.IsAny<DateTime>(),
-            It.IsAny<IReadOnlyList<UserDeliveryResult>>(), It.IsAny<Enum?>(), "URGENT"), Times.Once);
         Assert.True(vm.IsSent);
     }
 
@@ -860,7 +840,7 @@ public sealed class DraftViewModelTests
             FolderId = "root-drafts"
         };
         IReadOnlyList<TagPriorityBlock> blocks = [new TagPriorityBlock { Tag = "URGENT", Priority = TestMessagePriority.Flash }];
-        DraftViewModel vm = Build(out _, out Mock<IServiceConnection> connMock, entity: entity, blockedCombinations: blocks);
+        DraftViewModel vm = Build(out _, out Mock<IEngineConnection> connMock, entity: entity, blockedCombinations: blocks);
         vm.Tag = "URGENT";
         vm.SelectedPriority = new MessagePriorityOption { Name = "FLASH", Value = 3, Key = TestMessagePriority.Flash };
 
@@ -875,7 +855,7 @@ public sealed class DraftViewModelTests
     public async Task NewDraft_IsStoredOnlyOnceAlteredAndNotBlank()
     {
         Mock<IEntryService> entryMock = new();
-        Mock<IServiceConnection> connMock = new();
+        Mock<IEngineConnection> connMock = new();
         DraftEntity entity = new() { Body = string.Empty, Addresses = [], FolderId = "root-drafts" };
         DraftViewModel vm = new(entity, entryMock.Object, connMock.Object, [], noLogger, MakeEngineController(), isNew: true);
 
@@ -949,14 +929,14 @@ public sealed class DraftViewModelTests
         Assert.Equal(["First", "Named", "First"], titles);
     }
 
-    private static (DraftViewModel Vm, Mock<IServiceConnection> Connection, Mock<IEntryService> Entries, DraftEntity Entity) BuildWithAspects(int? storedAspect = null)
+    private static (DraftViewModel Vm, Mock<IEngineConnection> Connection, Mock<IEntryService> Entries, DraftEntity Entity) BuildWithAspects(int? storedAspect = null)
     {
         Mock<IEngineController> controller = Mock.Get(MakeEngineController());
         controller.Setup(c => c.MessageAspects).Returns([new MessageAspect { Name = "ENCRYPTED", Key = TestAspect.Encrypted }, new MessageAspect { Name = "SIGNED", Key = TestAspect.Signed }]);
         Mock<IEntryService> entries = new();
-        Mock<IServiceConnection> connection = new();
+        Mock<IEngineConnection> connection = new();
         connection.Setup(c => c.SendMessage(It.IsAny<string>(), It.IsAny<List<AddressRequest>>(), It.IsAny<Enum?>(), It.IsAny<string>(), It.IsAny<Enum?>(), It.IsAny<Enum?>(), It.IsAny<CancellationToken>()))
-            .ReturnsAsync(new SendMessageResult { MessageId = "M1", UserResults = [] });
+            .ReturnsAsync(new SendMessageResult { MessageId = "M1" });
         DraftEntity entity = new() { Body = "B", Addresses = [new AddressData { UserName = "BOB", Type = "To" }], FolderId = "root-drafts", MessageAspect = storedAspect };
         return (new DraftViewModel(entity, entries.Object, connection.Object, [], noLogger, controller.Object), connection, entries, entity);
     }
@@ -987,7 +967,7 @@ public sealed class DraftViewModelTests
     [Fact]
     public async Task Send_PassesTheSelectedMessageAspect()
     {
-        (DraftViewModel vm, Mock<IServiceConnection> connection, _, DraftEntity entity) = BuildWithAspects();
+        (DraftViewModel vm, Mock<IEngineConnection> connection, _, DraftEntity entity) = BuildWithAspects();
         vm.SelectedMessageAspect = vm.AvailableMessageAspects.Single(option => option.Label == "ENCRYPTED");
 
         await vm.SendCommand.ExecuteAsync(null);
@@ -995,7 +975,7 @@ public sealed class DraftViewModelTests
         connection.Verify(c => c.SendMessage(It.IsAny<string>(), It.IsAny<List<AddressRequest>>(), It.IsAny<Enum?>(), It.IsAny<string>(), It.IsAny<Enum?>(), TestAspect.Encrypted, It.IsAny<CancellationToken>()), Times.Once);
         Assert.Equal((int)TestAspect.Encrypted, entity.MessageAspect);
 
-        (DraftViewModel plain, Mock<IServiceConnection> plainConnection, _, _) = BuildWithAspects();
+        (DraftViewModel plain, Mock<IEngineConnection> plainConnection, _, _) = BuildWithAspects();
         await plain.SendCommand.ExecuteAsync(null);
         plainConnection.Verify(c => c.SendMessage(It.IsAny<string>(), It.IsAny<List<AddressRequest>>(), It.IsAny<Enum?>(), It.IsAny<string>(), It.IsAny<Enum?>(), null, It.IsAny<CancellationToken>()), Times.Once);
     }

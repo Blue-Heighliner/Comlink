@@ -190,7 +190,7 @@ internal partial class TitleBar : UserControl
         set => SetValue(ShowAutoForwardCommandProperty, value);
     }
 
-    /// <summary>Gets or sets a value indicating whether the current user has access to at least one auto forward controller, showing the Auto Forward button.</summary>
+    /// <summary>Gets or sets a value indicating whether the current user has access to at least one auto forwarder, showing the Auto Forward button.</summary>
     public bool HasAutoForwardAccess
     {
         get => GetValue(HasAutoForwardAccessProperty);
@@ -256,7 +256,7 @@ internal partial class TitleBar : UserControl
         set => SetValue(IsAlertingProperty, value);
     }
 
-    /// <summary>Gets or sets the label shown in the network indicator, which a client or relay always has.</summary>
+    /// <summary>Gets or sets the label shown in the network indicator, which a client always has.</summary>
     public string NetworkText
     {
         get => GetValue(NetworkTextProperty);
@@ -299,16 +299,28 @@ internal partial class TitleBar : UserControl
         if (change.Property == CanRetrieveProperty)
         {
             Button? retrieveButton = this.FindControl<Button>("RetrieveButton");
-            if (retrieveButton is not null) { retrieveButton.IsVisible = CanRetrieve; }
+            if (retrieveButton is not null)
+            {
+                retrieveButton.IsVisible = CanRetrieve;
+            }
             Border? retrieveLeadingSeparator = this.FindControl<Border>("RetrieveLeadingSeparator");
-            if (retrieveLeadingSeparator is not null) { retrieveLeadingSeparator.IsVisible = CanRetrieve; }
+            if (retrieveLeadingSeparator is not null)
+            {
+                retrieveLeadingSeparator.IsVisible = CanRetrieve;
+            }
         }
         if (change.Property == HasAutoForwardAccessProperty)
         {
             Button? autoForwardButton = this.FindControl<Button>("AutoForwardButton");
-            if (autoForwardButton is not null) { autoForwardButton.IsVisible = HasAutoForwardAccess; }
+            if (autoForwardButton is not null)
+            {
+                autoForwardButton.IsVisible = HasAutoForwardAccess;
+            }
             Border? autoForwardLeadingSeparator = this.FindControl<Border>("AutoForwardLeadingSeparator");
-            if (autoForwardLeadingSeparator is not null) { autoForwardLeadingSeparator.IsVisible = HasAutoForwardAccess; }
+            if (autoForwardLeadingSeparator is not null)
+            {
+                autoForwardLeadingSeparator.IsVisible = HasAutoForwardAccess;
+            }
         }
         if (change.Property == IsKioskModeProperty)
         {
@@ -317,49 +329,79 @@ internal partial class TitleBar : UserControl
         if (change.Property == IsAlertingProperty)
         {
             Border? box = this.FindControl<Border>("AlertBox");
-            if (box is not null) { box.IsVisible = IsAlerting; }
+            if (box is not null)
+            {
+                box.IsVisible = IsAlerting;
+            }
             ApplyAlertText();
         }
-        if (change.Property == AlertTextProperty) { ApplyAlertText(); }
-        if (change.Property == NetworkTextProperty || change.Property == NetworkColorProperty || change.Property == IsServerModeProperty || change.Property == IsInstallScreenVisibleProperty) { ApplyNetworkIndicator(); }
+        if (change.Property == AlertTextProperty)
+        {
+            ApplyAlertText();
+        }
+        if (change.Property == NetworkTextProperty || change.Property == NetworkColorProperty || change.Property == IsServerModeProperty || change.Property == IsInstallScreenVisibleProperty)
+        {
+            ApplyNetworkIndicator();
+        }
     }
 
-    // A server has no network indicator, and nobody is connected on the install screen; a client or relay otherwise always has one.
+    // A server has no network indicator, and nobody is connected on the install screen; a client otherwise always has one.
     private void ApplyNetworkIndicator()
     {
         Border? box = this.FindControl<Border>("NetworkBox");
         TextBlock? text = this.FindControl<TextBlock>("NetworkBoxText");
-        if (box is null || text is null) { return; }
+        if (box is null || text is null)
+        {
+            return;
+        }
 
         box.IsVisible = !IsServerMode && !IsInstallScreenVisible && NetworkText.Length > 0;
         text.Text = NetworkText;
-        if (Color.TryParse(NetworkColor, out Color color)) { box.Background = new SolidColorBrush(color); }
+        if (Color.TryParse(NetworkColor, out Color color))
+        {
+            box.Background = new SolidColorBrush(color);
+        }
     }
 
     // Set whenever the box is shown as well as when the text changes, since the text alone does not change when the host's label is the default one.
     private void ApplyAlertText()
     {
         TextBlock? text = this.FindControl<TextBlock>("AlertBoxText");
-        if (text is not null) { text.Text = AlertText.ToUpperInvariant(); }
+        if (text is not null)
+        {
+            text.Text = AlertText.ToUpperInvariant();
+        }
     }
 
     private void UpdateActionButtonsVisibility()
     {
         StackPanel? actionButtons = this.FindControl<StackPanel>("ActionButtonsPanel");
-        if (actionButtons is not null) { actionButtons.IsVisible = !IsServerMode && !IsInstallScreenVisible; }
+        if (actionButtons is not null)
+        {
+            actionButtons.IsVisible = !IsServerMode && !IsInstallScreenVisible;
+        }
         StackPanel? serverViewButtons = this.FindControl<StackPanel>("ServerViewButtonsPanel");
-        if (serverViewButtons is not null) { serverViewButtons.IsVisible = IsServerMode && !IsInstallScreenVisible; }
+        if (serverViewButtons is not null)
+        {
+            serverViewButtons.IsVisible = IsServerMode && !IsInstallScreenVisible;
+        }
     }
 
     private void UpdateUserInfo()
     {
         TextBlock? userNameText = this.FindControl<TextBlock>("UserNameText");
-        if (userNameText is not null) { userNameText.Text = UserName; }
+        if (userNameText is not null)
+        {
+            userNameText.Text = UserName;
+        }
     }
 
     private void OnInfoClick(object? sender, Avalonia.Interactivity.RoutedEventArgs e)
     {
-        if (sender is not Avalonia.Controls.Control anchor) { return; }
+        if (sender is not Avalonia.Controls.Control anchor)
+        {
+            return;
+        }
 
         StackPanel content = new() { Spacing = 2, Margin = new Thickness(6), MinWidth = 160 };
         content.Children.Add(new TextBlock { Text = AppName, FontSize = 14, FontWeight = FontWeight.SemiBold });
@@ -387,7 +429,10 @@ internal partial class TitleBar : UserControl
             return;
         }
 
-        if (Help is null || VisualRoot is not Window owner) { return; }
+        if (Help is null || VisualRoot is not Window owner)
+        {
+            return;
+        }
 
         helpWindow = new HelpWindow { DataContext = Help };
         helpWindow.Closed += (_, _) => helpWindow = null;
@@ -441,7 +486,10 @@ internal partial class TitleBar : UserControl
         {
             window.PropertyChanged += (_, args) =>
             {
-                if (args.Property == Window.WindowStateProperty) { ApplyMaximizeSymbol(window); }
+                if (args.Property == Window.WindowStateProperty)
+                {
+                    ApplyMaximizeSymbol(window);
+                }
             };
             ApplyMaximizeSymbol(window);
         }
@@ -449,7 +497,7 @@ internal partial class TitleBar : UserControl
 
     private void ApplyMaximizeSymbol(Window window)
     {
-        bool isMaximized = window.WindowState == WindowState.Maximized;
+        bool isMaximized = window.WindowState is WindowState.Maximized;
         Avalonia.Controls.Shapes.Path restore = new()
         {
             Data = Geometry.Parse("M3,1 H10 V8 H8 M1,3 H8 V10 H1 Z"),
@@ -468,14 +516,26 @@ internal partial class TitleBar : UserControl
         Button? minimize = this.FindControl<Button>("MinimizeButton");
         Button? maximize = this.FindControl<Button>("MaximizeButton");
         Button? close = this.FindControl<Button>("CloseButton");
-        if (minimize is not null) { minimize.IsVisible = !IsKioskMode; }
-        if (maximize is not null) { maximize.IsVisible = !IsKioskMode; }
-        if (close is not null) { close.Content = IsKioskMode ? "↺" : "✕"; }
+        if (minimize is not null)
+        {
+            minimize.IsVisible = !IsKioskMode;
+        }
+        if (maximize is not null)
+        {
+            maximize.IsVisible = !IsKioskMode;
+        }
+        if (close is not null)
+        {
+            close.Content = IsKioskMode ? "↺" : "✕";
+        }
     }
 
     private void OnDragAreaPressed(object? sender, PointerPressedEventArgs e)
     {
-        if (!ReferenceEquals(e.Source, sender)) { return; }
+        if (!ReferenceEquals(e.Source, sender))
+        {
+            return;
+        }
         if (VisualRoot is Window window && e.GetCurrentPoint(window).Properties.IsLeftButtonPressed)
         {
             window.BeginMoveDrag(e);
@@ -484,24 +544,33 @@ internal partial class TitleBar : UserControl
 
     private void OnMinimize(object? sender, Avalonia.Interactivity.RoutedEventArgs e)
     {
-        if (VisualRoot is Window w) { w.WindowState = WindowState.Minimized; }
+        if (VisualRoot is Window w)
+        {
+            w.WindowState = WindowState.Minimized;
+        }
     }
 
     private void OnMaximize(object? sender, Avalonia.Interactivity.RoutedEventArgs e)
     {
         if (VisualRoot is Window w)
         {
-            w.WindowState = w.WindowState == WindowState.Maximized ? WindowState.Normal : WindowState.Maximized;
+            w.WindowState = w.WindowState is WindowState.Maximized ? WindowState.Normal : WindowState.Maximized;
         }
     }
 
     private async void OnClose(object? sender, Avalonia.Interactivity.RoutedEventArgs e)
     {
-        if (VisualRoot is not Window w) { return; }
+        if (VisualRoot is not Window w)
+        {
+            return;
+        }
 
         ConfirmDialog dialog = IsKioskMode
             ? new("Restart", "Are you sure you want to restart?", "Restart")
             : new("Exit", "Are you sure you want to exit?", "Exit");
-        if (await dialog.ShowDialog<bool>(w)) { w.Close(); }
+        if (await dialog.ShowDialog<bool>(w))
+        {
+            w.Close();
+        }
     }
 }

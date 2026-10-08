@@ -20,7 +20,7 @@ internal interface IMainViewModel
     /// <summary>Gets the help ViewModel driving the help window opened from the title bar.</summary>
     IHelpViewModel Help { get; }
     /// <summary>
-    /// Gets a value indicating whether this instance is running as a <see cref="UserRole.Server"/> or <see cref="UserRole.Relay"/> — a
+    /// Gets a value indicating whether this instance is running as a <see cref="UserRole.Server"/> — a
     /// routing-only node with no inbox/outbox/notes/drafts UI of its own. When <see langword="true"/>, the
     /// main window shows either <see cref="ConnectionStatus"/>'s connections table (see
     /// <see cref="ShowConnectionsTable"/>) or the activity log view (see <see cref="ShowServerActivityView"/>),
@@ -60,7 +60,7 @@ internal interface IMainViewModel
     IInstallViewModel InstallView { get; }
     /// <summary>Gets the alert ViewModel driving the title bar's alarm box and sound.</summary>
     IAlertViewModel Alert { get; }
-    /// <summary>Gets the network indicator ViewModel shown in the top bar of a client or relay.</summary>
+    /// <summary>Gets the network indicator ViewModel shown in the top bar of a client.</summary>
     INetworkIndicatorViewModel NetworkIndicator { get; }
     /// <summary>Gets the export ViewModel driving the export screen.</summary>
     IExportViewModel Export { get; }
@@ -79,7 +79,7 @@ internal interface IMainViewModel
     bool CanRetrieve { get; }
     /// <summary>Gets the auto forward ViewModel driving the auto forward screen.</summary>
     IAutoForwardViewModel AutoForward { get; }
-    /// <summary>Gets a value indicating whether the current user has access to at least one auto forward controller, and so should see the title bar's AUTO FORWARD button at all.</summary>
+    /// <summary>Gets a value indicating whether the current user has access to at least one auto forwarder, and so should see the title bar's AUTO FORWARD button at all.</summary>
     bool HasAutoForwardAccess { get; }
     /// <summary>Gets the print manager ViewModel driving the print queue screen.</summary>
     IPrintManagerViewModel PrintManager { get; }
@@ -127,7 +127,7 @@ internal sealed partial class MainViewModel : ObservableObject, IMainViewModel
     /// <param name="contentArea">Content area ViewModel.</param>
     /// <param name="installViewModel">Install screen ViewModel.</param>
     /// <param name="alert">Alert ViewModel driving the title bar's alarm box and sound.</param>
-    /// <param name="networkIndicator">Network indicator ViewModel shown in the top bar of a client or relay.</param>
+    /// <param name="networkIndicator">Network indicator ViewModel shown in the top bar of a client.</param>
     /// <param name="export">Export ViewModel driving the export screen.</param>
     /// <param name="import">Import ViewModel driving the import screen.</param>
     /// <param name="stagedSend">Staged send ViewModel driving the staged send screen.</param>
@@ -142,7 +142,7 @@ internal sealed partial class MainViewModel : ObservableObject, IMainViewModel
     /// <param name="loggerFactory">Factory for creating named loggers.</param>
     /// <param name="bodyDocumentFactory">Factory for creating the body document for new drafts.</param>
     public MainViewModel(
-        IServiceConnection connection,
+        IEngineConnection connection,
         ILiteDbContext db,
         IEntryService entryService,
         IFolderBarViewModel folderBar,
@@ -196,7 +196,7 @@ internal sealed partial class MainViewModel : ObservableObject, IMainViewModel
         WireEvents();
     }
 
-    private readonly IServiceConnection connection;
+    private readonly IEngineConnection connection;
     private readonly ILiteDbContext db;
     private readonly IEntryService entryService;
     private readonly IFolderBarViewModel folderBar;
@@ -358,8 +358,11 @@ internal sealed partial class MainViewModel : ObservableObject, IMainViewModel
         entryService.DraftUpdated += async entity =>
         {
             entryBar.SetPendingSelectId(entity.Id.ToString());
-            FolderItemViewModel? draftsFolder = folderBar.RootFolders.FirstOrDefault(f => f.RootType == FolderType.Drafts);
-            if (draftsFolder is null) { return; }
+            FolderItemViewModel? draftsFolder = folderBar.RootFolders.FirstOrDefault(f => f.RootType is FolderType.Drafts);
+            if (draftsFolder is null)
+            {
+                return;
+            }
             if (folderBar.SelectedFolder?.Id == draftsFolder.Id)
             {
                 await entryBar.Refresh();
@@ -399,8 +402,11 @@ internal sealed partial class MainViewModel : ObservableObject, IMainViewModel
         entryService.NoteUpdated += async entity =>
         {
             entryBar.SetPendingSelectId(entity.Id.ToString());
-            FolderItemViewModel? notesFolder = folderBar.RootFolders.FirstOrDefault(f => f.RootType == FolderType.Notes);
-            if (notesFolder is null) { return; }
+            FolderItemViewModel? notesFolder = folderBar.RootFolders.FirstOrDefault(f => f.RootType is FolderType.Notes);
+            if (notesFolder is null)
+            {
+                return;
+            }
             if (folderBar.SelectedFolder?.Id == notesFolder.Id)
             {
                 await entryBar.Refresh();
@@ -412,36 +418,36 @@ internal sealed partial class MainViewModel : ObservableObject, IMainViewModel
         };
     }
 
-    private async Task HandleMessageReceived(MessageReceivedEvent evt)
+    private async Task HandleMessageReceived(Message message)
     {
         try
         {
             // A storage server's answer to a retrieval request can include messages this inbox already holds.
-            if (await entryService.IncomingMessageExists(evt.MessageId)) { return; }
+            if (await entryService.IncomingMessageExists(message.Id))
+            {
+                return;
+            }
 
-            MessageEntity entity = await entryService.StoreIncomingMessage(
-                evt.MessageId, evt.FromUser, evt.Body,
-                evt.Addresses.Select(a => new AddressData { UserName = a.UserName, Type = a.Type, Information = a.Information }).ToList(),
-                evt.SentAt, evt.Priority, evt.Tag, engineController.GetMessageLevelName(evt.MessageLevel));
+            MessageEntity entity = await entryService.StoreIncomingMessage(message);
 
-            FolderItemViewModel? inboxFolder = FindMessageRoot(FolderType.Inbox, evt.IsAlert);
+            FolderItemViewModel? inboxFolder = FindMessageRoot(FolderType.Inbox, message.IsAlert);
             if (inboxFolder is not null && folderBar.SelectedFolder?.Id == inboxFolder.Id)
             {
                 string timeText = entity.ReceivedAt.ToString("dd-MMM-yyyy HH:mm").ToUpperInvariant();
-                string priorityText = engineController.NameOf(engineController.ResolvePriority(evt.Priority));
-                string? tagText = engineController.TagsEnabled && !string.IsNullOrEmpty(evt.Tag) ? evt.Tag : null;
-                string messageLevelName = engineController.GetMessageLevelName(evt.MessageLevel);
+                string priorityText = engineController.NameOf(engineController.ResolvePriority(message.Priority));
+                string? tagText = engineController.TagsEnabled && !string.IsNullOrEmpty(message.Tag) ? message.Tag : null;
+                string messageLevelName = engineController.GetMessageLevelName(message.MessageLevel);
                 string? messageLevelColor = engineController.MessageLevels.IsRecognized(messageLevelName) ? engineController.MessageLevels.GetColor(messageLevelName) : null;
-                EntryItemViewModel item = new(entity.MessageId, evt.FromUser, EntryType.Message, entity.ReceivedAt,
-                    secondaryText: evt.Body.FirstLine, priorityText: priorityText, tagText: tagText, timeText: timeText, messageLevelColorHex: messageLevelColor, isAlert: evt.IsAlert);
+                EntryItemViewModel item = new(entity.MessageId, message.FromUser, EntryType.Message, entity.ReceivedAt,
+                    secondaryText: message.Body.FirstLine, priorityText: priorityText, tagText: tagText, timeText: timeText, messageLevelColorHex: messageLevelColor, isAlert: message.IsAlert);
                 item.OverallStatus = entity.ReadStatus;
                 await entryBar.PrependEntry(item);
             }
         }
         catch (Exception ex)
         {
-            logger.Record(LogEvents.StoreReceivedMessageFailed, ex, "Failed to store received message from {FromUser}", evt.FromUser);
-            logger.Record(LogEvents.ReceivedMessageNotSaved, "A message received from {FromUser} could not be saved", evt.FromUser);
+            logger.Record(LogEvents.StoreReceivedMessageFailed, ex, "Failed to store received message from {FromUser}", message.FromUser);
+            logger.Record(LogEvents.ReceivedMessageNotSaved, "A message received from {FromUser} could not be saved", message.FromUser);
         }
     }
 
@@ -479,8 +485,8 @@ internal sealed partial class MainViewModel : ObservableObject, IMainViewModel
 
     private void ApplyRole()
     {
-        IsServerMode = engineController.Role is UserRole.Server or UserRole.Relay;
-        IsClientMode = engineController.Role == UserRole.Client;
+        IsServerMode = engineController.Role is UserRole.Server;
+        IsClientMode = engineController.Role is UserRole.Client;
         CanRetrieve = IsClientMode && engineController.StorageServers.Count > 0;
     }
 
@@ -522,7 +528,7 @@ internal sealed partial class MainViewModel : ObservableObject, IMainViewModel
         string level = engineController.GetUserMessageLevel(info.Name);
         MessageLevelName = level;
         MessageLevelColor = engineController.MessageLevels.GetColor(level);
-        HasAutoForwardAccess = engineController.AutoForwardControllers.Any(c => c.Users.Contains(info.Name, StringComparer.OrdinalIgnoreCase));
+        HasAutoForwardAccess = engineController.AutoForwarders.Any(forwarder => info.AutoForwarders.Contains(forwarder.Name));
         return Task.CompletedTask;
     }
 
@@ -534,8 +540,11 @@ internal sealed partial class MainViewModel : ObservableObject, IMainViewModel
 
     private async Task HandleDraftSent(MessageEntity msg)
     {
-        FolderItemViewModel? outboxFolder = FindMessageRoot(FolderType.Outbox, engineController.GetIsAlert(msg.Message));
-        if (outboxFolder is null) { return; }
+        FolderItemViewModel? outboxFolder = FindMessageRoot(FolderType.Outbox, msg.Message.IsAlert);
+        if (outboxFolder is null)
+        {
+            return;
+        }
 
         entryBar.SetPendingSelectId(msg.MessageId);
         if (folderBar.SelectedFolder?.Id == outboxFolder.Id)
@@ -550,23 +559,35 @@ internal sealed partial class MainViewModel : ObservableObject, IMainViewModel
 
     private bool IsShown(EntryItemViewModel entry) => contentArea.ActiveContent switch
     {
-        IMessageViewModel message => entry.EntryType == EntryType.Message && message.MessageId == entry.Id && message.IsOutbound == entry.IsOutboundMessage,
-        IDraftViewModel draft => entry.EntryType == EntryType.Draft && draft.Id == entry.Id,
-        INoteViewModel note => entry.EntryType == EntryType.Note && note.Id == entry.Id,
+        IMessageViewModel message => entry.EntryType is EntryType.Message && message.MessageId == entry.Id && message.IsOutbound == entry.IsOutboundMessage,
+        IDraftViewModel draft => entry.EntryType is EntryType.Draft && draft.Id == entry.Id,
+        INoteViewModel note => entry.EntryType is EntryType.Note && note.Id == entry.Id,
         _ => false
     };
 
     // Whatever is opened in the content area, however it got there, is shown in the listings as well: its folder is selected and it is selected in that folder's list.
     private async Task Reveal(EntryType type, string id, bool isOutbound)
     {
-        if (entryBar.Entries?.Any(entry => entry.IsSelected && entry.Id == id && entry.EntryType == type) == true) { return; }
+        if (entryBar.Entries?.Any(entry => entry.IsSelected && entry.Id == id && entry.EntryType == type) == true)
+        {
+            return;
+        }
 
         EntryLocation? location = await entryService.Locate(id, type, isOutbound);
-        if (location is null) { return; }
+        if (location is null)
+        {
+            return;
+        }
 
         FolderItemViewModel? folder = FindFolder(folderBar.RootFolders, location.FolderId);
-        if (folder is { IsRootFolder: true, AlertView: not null }) { folder = FindMessageRoot(folder.RootType, location.IsAlert) ?? folder; }
-        if (folder is null) { return; }
+        if (folder is { IsRootFolder: true, AlertView: not null })
+        {
+            folder = FindMessageRoot(folder.RootType, location.IsAlert) ?? folder;
+        }
+        if (folder is null)
+        {
+            return;
+        }
 
         entryBar.SetPendingSelectId(id);
         if (folderBar.SelectedFolder?.Id == folder.Id)
@@ -584,8 +605,14 @@ internal sealed partial class MainViewModel : ObservableObject, IMainViewModel
     {
         foreach (FolderItemViewModel folder in folders)
         {
-            if (folder.StorageId == storageId && folder.AlertView is not true) { return folder; }
-            if (FindFolder(folder.Children, storageId) is { } found) { return found; }
+            if (folder.StorageId == storageId && folder.AlertView is not true)
+            {
+                return folder;
+            }
+            if (FindFolder(folder.Children, storageId) is { } found)
+            {
+                return found;
+            }
         }
 
         return null;
@@ -707,7 +734,7 @@ internal sealed partial class MainViewModel : ObservableObject, IMainViewModel
     private async Task ShowActivity()
     {
         IsServerActivityViewActive = true;
-        if (folderBar.SelectedFolder?.RootType == FolderType.Activity)
+        if (folderBar.SelectedFolder?.RootType is FolderType.Activity)
         {
             await entryBar.Refresh();
         }

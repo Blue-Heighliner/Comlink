@@ -45,11 +45,20 @@ internal sealed class AlertSoundPlayer : IAlertSoundPlayer
     {
         lock (lockObject)
         {
-            if (cts is not null) { return; }
+            if (cts is not null)
+            {
+                return;
+            }
             CancellationTokenSource newCts = new();
             cts = newCts;
-            if (OperatingSystem.IsWindows()) { PlayWindows(newCts.Token); }
-            else if (OperatingSystem.IsLinux()) { _ = Task.Run(() => PlayLoopLinux(newCts.Token)); }
+            if (OperatingSystem.IsWindows())
+            {
+                PlayWindows(newCts.Token);
+            }
+            else if (OperatingSystem.IsLinux())
+            {
+                _ = Task.Run(() => PlayLoopLinux(newCts.Token));
+            }
         }
     }
 
@@ -61,7 +70,10 @@ internal sealed class AlertSoundPlayer : IAlertSoundPlayer
             cts?.Cancel();
             cts?.Dispose();
             cts = null;
-            if (OperatingSystem.IsWindows()) { StopWindows(); }
+            if (OperatingSystem.IsWindows())
+            {
+                StopWindows();
+            }
         }
     }
 
@@ -115,7 +127,10 @@ internal sealed class AlertSoundPlayer : IAlertSoundPlayer
                 catch
                 {
                     // Disposing a Process does not stop it, so without this the beep would keep sounding after Stop.
-                    if (!process.HasExited) { process.Kill(); }
+                    if (!process.HasExited)
+                    {
+                        process.Kill();
+                    }
                     throw;
                 }
             }
@@ -191,7 +206,10 @@ internal sealed class AlertSoundPlayer : IAlertSoundPlayer
     // and can be moved or collected afterwards, so the sound lives in unmanaged memory, allocated once and kept.
     private static nint GetWindowsSound()
     {
-        if (windowsSound != nint.Zero) { return windowsSound; }
+        if (windowsSound != nint.Zero)
+        {
+            return windowsSound;
+        }
 
         byte[] wav = BuildWavFile(BuildPcmFrame());
         nint buffer = Marshal.AllocHGlobal(wav.Length);

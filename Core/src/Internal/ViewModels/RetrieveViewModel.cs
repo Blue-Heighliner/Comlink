@@ -89,7 +89,11 @@ internal sealed partial class RetrieveViewModel : ObservableObject, IRetrieveVie
     [RelayCommand(CanExecute = nameof(CanRequest))]
     private async Task Request()
     {
-        if (SelectedServer is not { } server) { StatusMessage = "Select a server"; return; }
+        if (SelectedServer is not { } server)
+        {
+            StatusMessage = "Select a server";
+            return;
+        }
 
         IsRequesting = true;
         StatusMessage = null;

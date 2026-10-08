@@ -11,9 +11,7 @@ internal sealed class EngineHost : IHostedService
         IInterfaceService interfaceService,
         IExternalSystemsService externalSystemsService,
         IEngineHooksService engineHooksService,
-        IAutoForwardService autoForwardService,
         IDisconnectAlarmService disconnectAlarmService,
-        INetworkIndicatorService networkIndicatorService,
         IEngineController engineController,
         EngineMode mode,
         ILoggerFactory loggerFactory)
@@ -23,12 +21,10 @@ internal sealed class EngineHost : IHostedService
         this.interfaceService = interfaceService;
         this.externalSystemsService = externalSystemsService;
         this.engineHooksService = engineHooksService;
-        this.autoForwardService = autoForwardService;
         this.disconnectAlarmService = disconnectAlarmService;
-        this.networkIndicatorService = networkIndicatorService;
         engineController.Validate();
         logger = loggerFactory.CreateLogger(LogCategories.App);
-        displayName = mode == EngineMode.Headless ? $"{engineController.AppName} (Headless)" : engineController.AppName;
+        displayName = mode is EngineMode.Headless ? $"{engineController.AppName} (Headless)" : engineController.AppName;
     }
 
     private readonly IUserService userService;
@@ -36,9 +32,7 @@ internal sealed class EngineHost : IHostedService
     private readonly IInterfaceService interfaceService;
     private readonly IExternalSystemsService externalSystemsService;
     private readonly IEngineHooksService engineHooksService;
-    private readonly IAutoForwardService autoForwardService;
     private readonly IDisconnectAlarmService disconnectAlarmService;
-    private readonly INetworkIndicatorService networkIndicatorService;
     private readonly ILogger logger;
     private readonly string displayName;
     private CancellationTokenSource? cts;
@@ -68,26 +62,33 @@ internal sealed class EngineHost : IHostedService
     // Every service that runs on a user's behalf (identity certificate, role, connections) ends with the token it was given and can be started again, so another user, or none, is a stop and a start.
     private void RestartNetworking()
     {
-        if (cts is null) { return; }
+        if (cts is null)
+        {
+            return;
+        }
 
         cts.Cancel();
         cts = new CancellationTokenSource();
         Interlocked.Exchange(ref networkingStarted, 0);
-        if (userService.GetCurrentUserInfo() is not null) { StartNetworking(); }
+        if (userService.GetCurrentUserInfo() is not null)
+        {
+            StartNetworking();
+        }
     }
 
     private void StartNetworking()
     {
-        if (Interlocked.Exchange(ref networkingStarted, 1) != 0) { return; }
+        if (Interlocked.Exchange(ref networkingStarted, 1) != 0)
+        {
+            return;
+        }
 
         CancellationToken cancellation = cts!.Token;
         RunInBackground("Peer service", () => peerService.Start(cancellation), cancellation);
         RunInBackground("Interface service", () => interfaceService.Start(cancellation), cancellation);
         RunInBackground("External systems service", () => externalSystemsService.Start(cancellation), cancellation);
         RunInBackground("Engine hooks service", () => engineHooksService.Start(cancellation), cancellation);
-        RunInBackground("Auto forward service", () => autoForwardService.Start(cancellation), cancellation);
         RunInBackground("Disconnect alarm service", () => disconnectAlarmService.Start(cancellation), cancellation);
-        RunInBackground("Network indicator service", () => networkIndicatorService.Start(cancellation), cancellation);
     }
 
     // Each service runs until cancelled, so one that ends any other way has failed, and nothing else would ever say so.

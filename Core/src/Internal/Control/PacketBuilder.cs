@@ -42,7 +42,10 @@ internal sealed class PacketBuilder<TPacket, TPriority> where TPacket : class, n
     /// <exception cref="InvalidOperationException">The frame packet handler has not been stated.</exception>
     public PacketMap Build()
     {
-        if (framePacket is null) { throw new InvalidOperationException($"The packet mapping for {typeof(TPacket).Name} does not state: {nameof(Frame)}"); }
+        if (framePacket is null)
+        {
+            throw new InvalidOperationException($"The packet mapping for {typeof(TPacket).Name} does not state: {nameof(Frame)}");
+        }
 
         return new PacketMap
         {

@@ -18,7 +18,10 @@ internal partial class EntryBar : UserControl
 
     private void OnEntrySelectionChanged(object? sender, SelectionChangedEventArgs e)
     {
-        if (DataContext is not IEntryBarViewModel vm) { return; }
+        if (DataContext is not IEntryBarViewModel vm)
+        {
+            return;
+        }
 
         vm.SelectEntries(
             e.AddedItems.OfType<EntryItemViewModel>().ToList(),
@@ -27,7 +30,10 @@ internal partial class EntryBar : UserControl
 
     private void OnEntryPointerPressed(object? sender, PointerPressedEventArgs e)
     {
-        if (!e.GetCurrentPoint(EntryList).Properties.IsLeftButtonPressed) { return; }
+        if (!e.GetCurrentPoint(EntryList).Properties.IsLeftButtonPressed)
+        {
+            return;
+        }
         pendingDrag = (e.Source as Visual)?.FindAncestorOfType<ListBoxItem>(includeSelf: true)?.DataContext as EntryItemViewModel;
         dragStartPoint = e.GetPosition(EntryList);
     }
@@ -39,14 +45,24 @@ internal partial class EntryBar : UserControl
 
     private async void OnEntryPointerMoved(object? sender, PointerEventArgs e)
     {
-        if (pendingDrag is null) { return; }
+        if (pendingDrag is null)
+        {
+            return;
+        }
 
         Point pos = e.GetPosition(EntryList);
         double dx = Math.Abs(pos.X - dragStartPoint.X);
         double dy = Math.Abs(pos.Y - dragStartPoint.Y);
-        if (dx < 5 && dy < 5) { return; }
+        if (dx < 5 && dy < 5)
+        {
+            return;
+        }
 
-        if (!e.GetCurrentPoint(EntryList).Properties.IsLeftButtonPressed) { pendingDrag = null; return; }
+        if (!e.GetCurrentPoint(EntryList).Properties.IsLeftButtonPressed)
+        {
+            pendingDrag = null;
+            return;
+        }
 
         EntryItemViewModel entry = pendingDrag;
         pendingDrag = null;
