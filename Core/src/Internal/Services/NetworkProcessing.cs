@@ -44,7 +44,7 @@ internal sealed class NetworkProcessing(IEngineController engineController, INet
     public void Disconnected(string userName) => Run(handler => handler.OnDisconnected(environment, userName), "OnDisconnected", userName);
 
     /// <inheritdoc />
-    public void Received(object frame, FrameOrigin origin, string sourceUser) => Run(handler => handler.OnReceived(environment, frame, origin, sourceUser), "OnReceived", sourceUser);
+    public void Received(object frame, FrameOrigin origin, string sourceUser) => Run(handler => handler.OnReceived(environment, frame, origin, sourceUser), "OnReceived", sourceUser, origin is FrameOrigin.ExternalSystem ? null : frame);
 
     /// <inheritdoc />
     public void Sent(Message message) => Run(handler => handler.OnSent(environment, message), "OnSent", message.Id);
@@ -64,10 +64,11 @@ internal sealed class NetworkProcessing(IEngineController engineController, INet
         return true;
     }
 
-    private void Run(Func<INetworkHandler, Task> run, string name, string subject)
+    private void Run(Func<INetworkHandler, Task> run, string name, string subject, object? unhandled = null)
     {
         if (engineController.NetworkHandler is not { } handler)
         {
+            unhandled.TryDispose();
             return;
         }
 

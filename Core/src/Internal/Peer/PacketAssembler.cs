@@ -33,6 +33,23 @@ internal sealed class PacketAssembler(IEngineController engineController, int ma
     public AssembledPayload? Add(ReadOnlyMemory<byte> packet)
     {
         object decoded = serializer.Deserialize(packet);
+        bool retained = false;
+        try
+        {
+            return Assemble(decoded, ref retained);
+        }
+        finally
+        {
+            if (!retained)
+            {
+                decoded.TryDispose();
+            }
+        }
+    }
+
+    // A decoded packet is kept (retained) only when it is the first of its payload, held until the payload is assembled, or when it goes out with the payload; any other is the caller's to dispose.
+    private AssembledPayload? Assemble(object decoded, ref bool retained)
+    {
         if (decoded.GetType() == engineController.PacketType && engineController.IsPacketHeartbeat(decoded))
         {
             return null;
@@ -72,6 +89,7 @@ internal sealed class PacketAssembler(IEngineController engineController, int ma
 
                 PooledMemoryOwner whole = PooledMemoryOwner.Rent(total);
                 chunk.CopyTo(whole.Memory.Span);
+                retained = true;
                 return new AssembledPayload(whole, decoded);
             }
 
@@ -107,6 +125,7 @@ internal sealed class PacketAssembler(IEngineController engineController, int ma
             if (index == 0)
             {
                 payload.FirstPacket = decoded;
+                retained = true;
             }
             payload.ReceivedCount++;
             payload.ReceivedBytes += chunk.Length;
@@ -135,7 +154,10 @@ internal sealed class PacketAssembler(IEngineController engineController, int ma
                     offset += part.Memory.Length;
                 }
 
-                return new AssembledPayload(whole, payload.FirstPacket ?? decoded);
+                object first = payload.FirstPacket ?? decoded;
+                retained |= ReferenceEquals(first, decoded);
+                payload.FirstPacket = null;
+                return new AssembledPayload(whole, first);
             }
             finally
             {
@@ -186,6 +208,11 @@ internal sealed class PacketAssembler(IEngineController engineController, int ma
 
         public void Dispose()
         {
+            if (FirstPacket is not null)
+            {
+                FirstPacket.TryDispose();
+            }
+
             foreach (PooledMemoryOwner? chunk in Chunks)
             {
                 chunk?.Dispose();

@@ -6,10 +6,17 @@ public sealed class RawPacketSerializer : IPacketSerializer
     /// <summary>Gets the number of bytes in front of the data.</summary>
     public static int HeaderSize { get; } = 16;
 
+    /// <summary>Gets the packets that were serialized.</summary>
+    public ConcurrentQueue<TestPacket> Serialized { get; } = [];
+
+    /// <summary>Gets the packets that were deserialized.</summary>
+    public ConcurrentQueue<TestPacket> Deserialized { get; } = [];
+
     /// <inheritdoc />
     public IMemoryOwner<byte> Serialize(object value, object? frame)
     {
         TestPacket packet = (TestPacket)value;
+        Serialized.Enqueue(packet);
         byte[] bytes = new byte[HeaderSize + packet.Data.Length];
         BinaryPrimitives.WriteInt32BigEndian(bytes, packet.PayloadId);
         BinaryPrimitives.WriteInt32BigEndian(bytes.AsSpan(4), packet.Index);
@@ -28,7 +35,7 @@ public sealed class RawPacketSerializer : IPacketSerializer
         }
 
         ReadOnlySpan<byte> span = data.Span;
-        return new TestPacket
+        TestPacket packet = new()
         {
             IsFramePacket = true,
             PayloadId = BinaryPrimitives.ReadInt32BigEndian(span),
@@ -37,6 +44,8 @@ public sealed class RawPacketSerializer : IPacketSerializer
             PayloadLength = BinaryPrimitives.ReadInt32BigEndian(span[12..]),
             Data = span[HeaderSize..].ToArray()
         };
+        Deserialized.Enqueue(packet);
+        return packet;
     }
 
     private sealed class ArrayOwner(byte[] bytes) : IMemoryOwner<byte>

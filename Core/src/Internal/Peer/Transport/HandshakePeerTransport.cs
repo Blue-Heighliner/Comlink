@@ -214,15 +214,22 @@ internal sealed class HandshakePeerTransport : IPeerTransport
         received.Publish(args);
     }
 
-    private Task OnHandshakePayload(Session session, byte[] body, object? packet)
+    private async Task OnHandshakePayload(Session session, byte[] body, object? packet)
     {
-        object item = handshake!.Deserialize(body, packet);
-        if (item.GetType() != handshake.Processor.ItemType)
+        try
         {
-            throw new InvalidDataException($"expected a {handshake.Processor.ItemType.Name}");
-        }
+            object item = handshake!.Deserialize(body, packet);
+            if (item.GetType() != handshake.Processor.ItemType)
+            {
+                throw new InvalidDataException($"expected a {handshake.Processor.ItemType.Name}");
+            }
 
-        return handshake.Processor.OnReceived(session.Initial, item);
+            await handshake.Processor.OnReceived(session.Initial, item);
+        }
+        finally
+        {
+            packet.TryDispose();
+        }
     }
 
     private void Establish(Session session)

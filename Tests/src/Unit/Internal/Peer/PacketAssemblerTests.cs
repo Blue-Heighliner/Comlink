@@ -295,4 +295,46 @@ public sealed class PacketAssemblerTests
 
         Assert.Throws<ObjectDisposedException>(() => assembler.Add(packet));
     }
+
+    /// <summary>A packet that is not the first of its payload is disposed as soon as its data is copied out, and the first is kept for the frame and left to its consumer.</summary>
+    [Fact]
+    public void Add_DisposesEveryPacketButTheFirst()
+    {
+        RawPacketEngineController controller = new(packetSize: Header + 10);
+        Packetizer packetizer = new(controller);
+        List<byte[]> packets = Packets(packetizer, Payload(25));
+        RawPacketSerializer packetSerializer = (RawPacketSerializer)controller.PacketSerializer!;
+        using IPacketAssembler assembler = packetizer.CreateAssembler();
+
+        foreach (byte[] packet in packets)
+        {
+            assembler.Add(packet);
+        }
+
+        List<TestPacket> decoded = [.. packetSerializer.Deserialized];
+        Assert.False(decoded[0].IsDisposed);
+        Assert.All(decoded.Skip(1), packet => Assert.True(packet.IsDisposed));
+    }
+
+    /// <summary>The first packet of a payload that never completes is disposed with the assembler, and a repeated packet is disposed at once.</summary>
+    [Fact]
+    public void Add_DisposesAHeldFirstPacketWithTheAssembler_AndARepeatAtOnce()
+    {
+        RawPacketEngineController controller = new(packetSize: Header + 10);
+        Packetizer packetizer = new(controller);
+        List<byte[]> packets = Packets(packetizer, Payload(25));
+        RawPacketSerializer packetSerializer = (RawPacketSerializer)controller.PacketSerializer!;
+        IPacketAssembler assembler = packetizer.CreateAssembler();
+
+        assembler.Add(packets[0]);
+        assembler.Add(packets[0]);
+
+        List<TestPacket> decoded = [.. packetSerializer.Deserialized];
+        Assert.False(decoded[0].IsDisposed);
+        Assert.True(decoded[1].IsDisposed);
+
+        assembler.Dispose();
+
+        Assert.True(decoded[0].IsDisposed);
+    }
 }

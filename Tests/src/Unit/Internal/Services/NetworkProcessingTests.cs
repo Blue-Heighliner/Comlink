@@ -5,10 +5,15 @@ public sealed class NetworkProcessingTests
 {
     private static Message MakeMessage() => new() { Id = "M1", FromUser = "ALICE", Body = "Hi", Addresses = [], SentAt = DateTime.UtcNow, Priority = TestMessagePriority.Normal };
 
-    private static NetworkProcessing Build(Mock<INetworkHandler>? handler, Mock<INetworkEnvironment> environment)
+    private static NetworkProcessing Build(Mock<INetworkHandler>? handler, Mock<INetworkEnvironment> environment, TrackingFrameSerializer? frames = null)
     {
         Mock<TestEngineController> controller = new() { CallBase = true };
         controller.Setup(c => c.NetworkHandler).Returns(handler?.Object);
+        if (frames is not null)
+        {
+            controller.Setup(c => c.FrameSerializer).Returns(frames);
+        }
+
         return new NetworkProcessing(controller.Object, environment.Object, LoggerFactory.Create(_ => { }));
     }
 
@@ -68,5 +73,33 @@ public sealed class NetworkProcessingTests
         Assert.True(processing.Retrieval("SERVER", criteria));
 
         await done.Task.WaitAsync(TimeSpan.FromSeconds(10));
+    }
+
+    /// <summary>A frame the processor is given is the processor's to dispose, so the engine disposes it only when there is no processor to give it to, and never a frame from an external system.</summary>
+    [Fact]
+    public async Task Received_DisposesTheFrameOnlyWhenNoProcessorGetsIt()
+    {
+        Mock<INetworkEnvironment> environment = new();
+        Mock<INetworkHandler> handler = new();
+        TaskCompletionSource handled = new();
+        handler.Setup(h => h.OnReceived(environment.Object, It.IsAny<object>(), FrameOrigin.Peer, "BOB")).Returns(() =>
+        {
+            handled.SetResult();
+            return Task.CompletedTask;
+        });
+        TestFrame given = new();
+        Build(handler, environment).Received(given, FrameOrigin.Peer, "BOB");
+        await handled.Task.WaitAsync(TimeSpan.FromSeconds(10));
+        await Task.Delay(50);
+
+        TestFrame unhandled = new();
+        TestFrame external = new();
+        NetworkProcessing none = Build(null, environment);
+        none.Received(unhandled, FrameOrigin.Peer, "BOB");
+        none.Received(external, FrameOrigin.ExternalSystem, "FEED");
+
+        Assert.False(given.IsDisposed);
+        Assert.True(unhandled.IsDisposed);
+        Assert.False(external.IsDisposed);
     }
 }

@@ -15,11 +15,13 @@ internal static class PeerFrameDispatcher
     /// <returns><see langword="true"/> if <paramref name="data"/> deserialized successfully or was an ignored heartbeat; otherwise <see langword="false"/>.</returns>
     public static async Task<bool> Dispatch(ReadOnlyMemory<byte> data, IEngineController engineController, Func<ReceivedFrame, Task>? frameReceived, string sourceUser, object? packet = null)
     {
+        object? ownedFrame = null;
         try
         {
             // The serializer determines the type from the data itself, so bytes from an incompatible sender could describe a type other than
             // this node's own frame type; that is a failed deserialize, not something to hand to a processor that would cast it.
             object frame = engineController.FrameSerializer.Deserialize(data, packet);
+            ownedFrame = frame;
             if (frame.GetType() != engineController.FrameType)
             {
                 return false;
@@ -30,12 +32,27 @@ internal static class PeerFrameDispatcher
                 return true;
             }
 
+            if (frameReceived is null)
+            {
+                return true;
+            }
+
+            ownedFrame = null;
             await frameReceived.InvokeAll(new ReceivedFrame(frame, sourceUser));
             return true;
         }
         catch
         {
             return false;
+        }
+        finally
+        {
+            if (ownedFrame is not null)
+            {
+                ownedFrame.TryDispose();
+            }
+
+            packet.TryDispose();
         }
     }
 }

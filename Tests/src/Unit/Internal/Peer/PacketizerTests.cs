@@ -330,4 +330,23 @@ public sealed class PacketizerTests
         using IMemoryOwner<byte> owner = Assert.IsType<AssembledPayload>(complete).Payload;
         Assert.Equal(payload, owner.Memory.ToArray());
     }
+
+    /// <summary>Every packet the packetizer builds is disposed once it has been serialized, if the host's packet type is disposable.</summary>
+    [Fact]
+    public void Split_DisposesEachPacketItBuilds()
+    {
+        RawPacketEngineController controller = new(packetSize: Header + 10);
+        Packetizer packetizer = new(controller);
+        RawPacketSerializer packetSerializer = (RawPacketSerializer)controller.PacketSerializer!;
+        packetSerializer.Serialized.Clear();
+
+        IReadOnlyList<Packet> packets = packetizer.Split(new byte[25], 0);
+
+        Assert.Equal(packets.Count, packetSerializer.Serialized.Count);
+        Assert.All(packetSerializer.Serialized, packet => Assert.True(packet.IsDisposed));
+        foreach (Packet packet in packets)
+        {
+            packet.Dispose();
+        }
+    }
 }

@@ -67,15 +67,31 @@ internal sealed class PeerConnectionMonitor(IEngineController engineController, 
                     else if (engineController.PacketHeartbeatsEnabled)
                     {
                         byte[] heartbeat;
-                        using (IMemoryOwner<byte> owner = engineController.PacketSerializer!.Serialize(engineController.CreatePacketHeartbeat(), null)) { heartbeat = owner.Memory.ToArray(); }
+                        object heartbeatPacket = engineController.CreatePacketHeartbeat();
+                        try
+                        {
+                            using (IMemoryOwner<byte> owner = engineController.PacketSerializer!.Serialize(heartbeatPacket, null)) { heartbeat = owner.Memory.ToArray(); }
+                        }
+                        finally
+                        {
+                            heartbeatPacket.TryDispose();
+                        }
+
                         connected = await transport.Request(connection, heartbeat, new PeerSendOptions { Priority = engineController.PacketHeartbeatPriority, IsPacket = true }, cancellation);
                     }
                     else
                     {
                         object frame = engineController.CreateHeartbeat();
-                        byte[] heartbeat;
-                        using (IMemoryOwner<byte> owner = engineController.FrameSerializer.Serialize(frame)) { heartbeat = owner.Memory.ToArray(); }
-                        connected = await transport.Request(connection, heartbeat, new PeerSendOptions { Priority = engineController.HeartbeatPriority, Frame = frame }, cancellation);
+                        try
+                        {
+                            byte[] heartbeat;
+                            using (IMemoryOwner<byte> owner = engineController.FrameSerializer.Serialize(frame)) { heartbeat = owner.Memory.ToArray(); }
+                            connected = await transport.Request(connection, heartbeat, new PeerSendOptions { Priority = engineController.HeartbeatPriority, Frame = frame }, cancellation);
+                        }
+                        finally
+                        {
+                            frame.TryDispose();
+                        }
                     }
                 }
                 catch (Exception ex)

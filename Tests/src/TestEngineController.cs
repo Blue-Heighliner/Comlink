@@ -2,8 +2,11 @@ namespace BlueHeighliner.Comlink.Tests;
 
 /// <summary>Test frame DTO standing in for a host-supplied <see cref="IEngineController.FrameType"/>.</summary>
 [ProtoContract]
-public sealed class TestFrame
+public sealed class TestFrame : IDisposable
 {
+    /// <summary>Gets whether the frame has been disposed.</summary>
+    public bool IsDisposed { get; private set; }
+
     /// <summary>Application-level message identifier.</summary>
     [ProtoMember(1)] public string MessageId { get; set; } = string.Empty;
     /// <summary>User name of the sender.</summary>
@@ -44,6 +47,9 @@ public sealed class TestFrame
     [ProtoMember(18)] public bool IsHidden { get; set; }
     /// <summary>Whether this frame is a heartbeat.</summary>
     [ProtoMember(20)] public bool IsHeartbeat { get; set; }
+
+    /// <inheritdoc />
+    public void Dispose() => IsDisposed = true;
 }
 
 /// <summary>A single address entry within a <see cref="TestFrame"/>.</summary>

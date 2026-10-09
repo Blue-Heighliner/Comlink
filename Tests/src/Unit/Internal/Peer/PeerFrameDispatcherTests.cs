@@ -88,4 +88,50 @@ public sealed class PeerFrameDispatcherTests
         Assert.False(await PeerFrameDispatcher.Dispatch(new byte[] { 1 }, controller.Object, r => { received.Add(r); return Task.CompletedTask; }, "SERVER"));
         Assert.Empty(received);
     }
+
+    private static Mock<TestEngineController> Tracking(TrackingFrameSerializer frames)
+    {
+        Mock<TestEngineController> controller = new() { CallBase = true };
+        controller.Setup(c => c.FrameSerializer).Returns(frames);
+        return controller;
+    }
+
+    /// <summary>A frame handed on is exposed to the receiver, so the dispatcher leaves it for the receiver to dispose.</summary>
+    [Fact]
+    public async Task Dispatch_HandedOnFrame_IsNotDisposedByTheDispatcher()
+    {
+        TrackingFrameSerializer frames = new();
+        Mock<TestEngineController> controller = Tracking(frames);
+
+        await PeerFrameDispatcher.Dispatch(Encode(controller.Object, new TestFrame { MessageId = "M1" }), controller.Object, _ => Task.CompletedTask, "A");
+
+        Assert.False(Assert.Single(frames.Deserialized).IsDisposed);
+    }
+
+    /// <summary>A heartbeat, or a frame with nobody to receive it, never leaves the engine, so the dispatcher disposes it.</summary>
+    [Fact]
+    public async Task Dispatch_HeartbeatOrUnreceivedFrame_IsDisposed()
+    {
+        TrackingFrameSerializer frames = new();
+        Mock<TestEngineController> controller = Tracking(frames);
+
+        await PeerFrameDispatcher.Dispatch(Encode(controller.Object, new TestFrame { IsHeartbeat = true }), controller.Object, _ => Task.CompletedTask, "A");
+        await PeerFrameDispatcher.Dispatch(Encode(controller.Object, new TestFrame { MessageId = "M2" }), controller.Object, null, "A");
+
+        Assert.All(frames.Deserialized, frame => Assert.True(frame.IsDisposed));
+        Assert.Equal(2, frames.Deserialized.Count);
+    }
+
+    /// <summary>The packet that carried a frame is only given to the serializer, so the dispatcher disposes it once the frame is dispatched.</summary>
+    [Fact]
+    public async Task Dispatch_DisposesThePacketThatCarriedTheFrame()
+    {
+        TrackingFrameSerializer frames = new();
+        Mock<TestEngineController> controller = Tracking(frames);
+        TestPacket packet = new();
+
+        await PeerFrameDispatcher.Dispatch(Encode(controller.Object, new TestFrame { MessageId = "M3" }), controller.Object, _ => Task.CompletedTask, "A", packet);
+
+        Assert.True(packet.IsDisposed);
+    }
 }

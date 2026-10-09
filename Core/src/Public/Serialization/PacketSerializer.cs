@@ -18,6 +18,7 @@ public interface IPacketSerializer
     /// <returns>The deserialized packet.</returns>
     /// <exception cref="InvalidDataException"><paramref name="data"/> is not a packet this serializer can or will build.</exception>
     object Deserialize(ReadOnlyMemory<byte> data);
+
 }
 
 /// <summary>The base class for a host's own <see cref="IPacketSerializer"/>, working with the packet and frame types rather than <see cref="object"/>.</summary>

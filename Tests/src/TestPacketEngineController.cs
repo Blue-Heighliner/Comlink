@@ -2,8 +2,11 @@ namespace BlueHeighliner.Comlink.Tests;
 
 /// <summary>Test packet DTO standing in for a host-supplied <see cref="IEngineController.PacketType"/>.</summary>
 [ProtoContract]
-public sealed class TestPacket
+public sealed class TestPacket : IDisposable
 {
+    /// <summary>Gets whether the packet has been disposed.</summary>
+    public bool IsDisposed { get; private set; }
+
     /// <summary>Identifier shared by every packet of one payload.</summary>
     [ProtoMember(1)] public int PayloadId { get; set; }
     /// <summary>Zero-based position of the packet among its payload's packets.</summary>
@@ -18,6 +21,9 @@ public sealed class TestPacket
     [ProtoMember(6)] public bool IsFramePacket { get; set; }
     /// <summary>Whether the packet is a heartbeat.</summary>
     [ProtoMember(7)] public bool IsHeartbeat { get; set; }
+
+    /// <inheritdoc />
+    public void Dispose() => IsDisposed = true;
 }
 
 /// <summary>

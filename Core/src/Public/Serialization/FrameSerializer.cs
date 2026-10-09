@@ -33,6 +33,7 @@ public interface IFrameSerializer
     /// <returns>The deserialized frame.</returns>
     /// <exception cref="InvalidDataException"><paramref name="data"/> is not a frame this serializer can or will build.</exception>
     object Deserialize(ReadOnlyMemory<byte> data, object? packet);
+
 }
 
 /// <summary>The base class for a host's own <see cref="IFrameSerializer"/>, working with the frame and packet types rather than <see cref="object"/>.</summary>

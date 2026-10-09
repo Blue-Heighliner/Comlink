@@ -177,12 +177,14 @@ internal sealed class InterfaceService : IInterfaceService
         // failed deserialize rather than let a mismatched cast below throw.
         if (message.GetType() != engineController.FrameType)
         {
+            message.TryDispose();
             return Task.CompletedTask;
         }
 
         UserInfo? userInfo = userService.GetCurrentUserInfo();
         if (userInfo is null)
         {
+            message.TryDispose();
             return Task.CompletedTask;
         }
 

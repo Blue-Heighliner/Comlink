@@ -81,7 +81,16 @@ internal sealed class Packetizer : IPacketizer
                 {
                     engineController.FrameSerializer.ConfigurePacket(frame, packet);
                 }
-                IMemoryOwner<byte> data = serializer.Serialize(packet, frame);
+                IMemoryOwner<byte> data;
+                try
+                {
+                    data = serializer.Serialize(packet, frame);
+                }
+                finally
+                {
+                    packet.TryDispose();
+                }
+
                 if (data.Memory.Length > packetSize)
                 {
                     int length = data.Memory.Length;
@@ -144,7 +153,14 @@ internal sealed class Packetizer : IPacketizer
     private int Probe(int dataLength)
     {
         object packet = Build(int.MaxValue, int.MaxValue, int.MaxValue, int.MaxValue, new byte[dataLength]);
-        using IMemoryOwner<byte> serialized = serializer.Serialize(packet, null);
-        return serialized.Memory.Length;
+        try
+        {
+            using IMemoryOwner<byte> serialized = serializer.Serialize(packet, null);
+            return serialized.Memory.Length;
+        }
+        finally
+        {
+            packet.TryDispose();
+        }
     }
 }
