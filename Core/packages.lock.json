@@ -46,9 +46,9 @@
       },
       "BlueHeighliner.MicroGate": {
         "type": "Direct",
-        "requested": "[0.4.0, )",
-        "resolved": "0.4.0",
-        "contentHash": "TBfuxIs0SiHyjKqxOURhz3wZ3+fqmZteAJ93sO7rNo9rrB4m1cl1lxGLfqFqdpSGJiyIyVFXiu7e5KZpo0ruyQ==",
+        "requested": "[0.4.1, )",
+        "resolved": "0.4.1",
+        "contentHash": "PEVulUmQIco/96boLHwz8Np/QoCMa7a2WwO0a5QtVcY56n0MU9px5m8NF7xS9p3ylhWIlfyzqALrVLFrGUwMOQ==",
         "dependencies": {
           "System.Reactive": "7.0.0"
         }

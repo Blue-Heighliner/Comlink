@@ -285,6 +285,25 @@ internal sealed class HandshakePeerTransport : IPeerTransport
         session.Deadline.Cancel();
     }
 
+    private bool WrongSerialAddress(PeerConnection connection, string userName)
+    {
+        if (connection.Info is not SerialConnectionInfo serial || connection.Point is not { OtherRemotes.Count: > 0 } point)
+        {
+            return false;
+        }
+
+        byte? address = string.Equals(point.User, userName, StringComparison.OrdinalIgnoreCase)
+            ? point.RemoteSerialAddress
+            : point.OtherRemotes.FirstOrDefault(remote => string.Equals(remote.User, userName, StringComparison.OrdinalIgnoreCase))?.Address;
+        if (address is null || address == serial.RemoteSerialAddress)
+        {
+            return false;
+        }
+
+        serial.PreferredRemoteSerialAddress = address;
+        return true;
+    }
+
     private void Fail(Session session, string reason)
     {
         lock (session.Gate)
@@ -397,6 +416,12 @@ internal sealed class HandshakePeerTransport : IPeerTransport
 
         public Task Connected(string userName)
         {
+            if (owner.WrongSerialAddress(session.Connection, userName))
+            {
+                owner.Fail(session, "was reached at the wrong HDLC address for its user, so the link is formed again at the right one");
+                return Task.CompletedTask;
+            }
+
             session.Connection.InitialUser = userName;
             owner.Establish(session);
             return Task.CompletedTask;

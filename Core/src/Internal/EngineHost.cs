@@ -13,10 +13,12 @@ internal sealed class EngineHost : IHostedService
         IEngineHooksService engineHooksService,
         IDisconnectAlarmService disconnectAlarmService,
         IEngineController engineController,
+        ILiteDbContext database,
         EngineMode mode,
         ILoggerFactory loggerFactory)
     {
         this.userService = userService;
+        this.database = database;
         this.peerService = peerService;
         this.interfaceService = interfaceService;
         this.externalSystemsService = externalSystemsService;
@@ -28,6 +30,7 @@ internal sealed class EngineHost : IHostedService
     }
 
     private readonly IUserService userService;
+    private readonly ILiteDbContext database;
     private readonly IPeerService peerService;
     private readonly IInterfaceService interfaceService;
     private readonly IExternalSystemsService externalSystemsService;
@@ -83,6 +86,7 @@ internal sealed class EngineHost : IHostedService
             return;
         }
 
+        database.Initialize();
         CancellationToken cancellation = cts!.Token;
         RunInBackground("Peer service", () => peerService.Start(cancellation), cancellation);
         RunInBackground("Interface service", () => interfaceService.Start(cancellation), cancellation);

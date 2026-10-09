@@ -83,6 +83,9 @@ internal static class LogEvents
     /// <summary>A serial link drops, cannot be opened or reports an error.</summary>
     public static EventId SerialLinkProblem { get; } = Define(47, nameof(SerialLinkProblem), LogCategories.App);
 
+    /// <summary>The connection to an outgoing point cannot be opened, or its heartbeat fails.</summary>
+    public static EventId PeerConnectFailed { get; } = Define(115, nameof(PeerConnectFailed), LogCategories.App);
+
     /// <summary>A server has no live connection to a recipient.</summary>
     public static EventId CannotDeliverNoConnection { get; } = Define(54, nameof(CannotDeliverNoConnection), LogCategories.App);
 

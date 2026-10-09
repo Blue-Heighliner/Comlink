@@ -20,7 +20,7 @@ namespace BlueHeighliner.Comlink;
 /// normal way, through <see cref="IPeerTransport.Connected"/>/<see cref="IPeerTransport.Disconnected"/>, by
 /// whichever caller subscribes to those observables. See <c>Docs/Components/Peer.md</c>.
 /// </remarks>
-internal sealed class PeerConnectionMonitor(IEngineController engineController, TimeSpan? steadyInterval = null, TimeSpan? fastRetryInterval = null)
+internal sealed class PeerConnectionMonitor(IEngineController engineController, ILogger? logger = null, TimeSpan? steadyInterval = null, TimeSpan? fastRetryInterval = null)
 {
     private TimeSpan SteadyInterval => steadyInterval ?? engineController.HeartbeatInterval;
     private TimeSpan FastRetryInterval => fastRetryInterval ?? engineController.HeartbeatRetryInterval;
@@ -49,6 +49,7 @@ internal sealed class PeerConnectionMonitor(IEngineController engineController, 
 
     private async Task Loop(IPeerTransport transport, ConnectionPoint target, PeerLinkControl control, Action<PeerConnection>? acknowledged, CancellationToken cancellation)
     {
+        bool failureLogged = false;
         while (!cancellation.IsCancellationRequested)
         {
             TimeSpan delay = Timeout.InfiniteTimeSpan;
@@ -77,9 +78,19 @@ internal sealed class PeerConnectionMonitor(IEngineController engineController, 
                         connected = await transport.Request(connection, heartbeat, new PeerSendOptions { Priority = engineController.HeartbeatPriority, Frame = frame }, cancellation);
                     }
                 }
-                catch
+                catch (Exception ex)
                 {
                     connected = false;
+                    if (!failureLogged && !cancellation.IsCancellationRequested)
+                    {
+                        failureLogged = true;
+                        logger?.Record(LogEvents.PeerConnectFailed, "Cannot reach {Point}, retrying: {Reason}", target, ex.Message);
+                    }
+                }
+
+                if (connected)
+                {
+                    failureLogged = false;
                 }
 
                 delay = connected ? SteadyInterval : FastRetryInterval;

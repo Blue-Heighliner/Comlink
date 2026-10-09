@@ -151,7 +151,7 @@ public sealed class ControlProviderTests
         fallback.Setup(f => f.FindUserName("alice")).Returns("ALICE");
 
         Assert.Equal("/base/path", new ConfiguredEngineController(fallback.Object, new NetworkConfig(), NoCurrentUser).AppDataPath);
-        Assert.Equal(Path.Combine("/base", "Data", "ALICE"), new ConfiguredEngineController(fallback.Object, new NetworkConfig { User = "alice" }, NoCurrentUser).AppDataPath);
+        Assert.Equal(Path.Combine(Path.GetDirectoryName(Path.Combine("/base", "Data", "User.json"))!, "ALICE"), new ConfiguredEngineController(fallback.Object, new NetworkConfig { User = "alice" }, NoCurrentUser).AppDataPath);
         Assert.Equal("/base/path", new ConfiguredEngineController(fallback.Object, new NetworkConfig { User = "nobody" }, NoCurrentUser).AppDataPath);
         Assert.Equal("/base/path", new ConfiguredEngineController(fallback.Object, new NetworkConfig { User = "alice" }, Me).AppDataPath);
     }
@@ -560,6 +560,21 @@ public sealed class ControlProviderTests
         {
             Directory.Delete(tempDir, recursive: true);
         }
+    }
+
+    /// <summary>The identity loaded from a file keeps an exportable private key, which MSMT needs to complete a TLS handshake on Windows.</summary>
+    [Fact]
+    public void MsmtCertificateLookup_BuildPeerOptionsFromFiles_IdentityKeyIsExportable()
+    {
+        using CertificateFiles files = new();
+        (Dictionary<string, X509Certificate2> identities, X509Certificate2Collection authorities) = TestMsmtCertificates.CreateNamed("ALICE");
+        files.WriteAuthority(authorities);
+        files.WriteIdentity("ALICE", identities["ALICE"]);
+
+        MsmtSessionPeerOptions options = MsmtCertificateLookup.BuildPeerOptionsFromFiles(files.Identity("ALICE"), files.Authority);
+
+        using RSA key = options.Credentials!.Identity.GetRSAPrivateKey()!;
+        key.ExportParameters(includePrivateParameters: true);
     }
 
     private static TestFrame Alert(string body) => new() { Body = body, IsAlert = true };

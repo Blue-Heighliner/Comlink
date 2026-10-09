@@ -23,7 +23,7 @@ internal static class MsmtCertificateLookup
             throw new InvalidOperationException($"Peer authentication requires a trusted authority certificate file at '{trustedAuthorityCertificateFile}', but it was not found.");
         }
 
-        X509Certificate2 identity = X509CertificateLoader.LoadPkcs12FromFile(peerCertificateFile, password: null);
+        X509Certificate2 identity = X509CertificateLoader.LoadPkcs12FromFile(peerCertificateFile, password: null, keyStorageFlags: X509KeyStorageFlags.Exportable);
         X509Certificate2 authority = X509CertificateLoader.LoadCertificateFromFile(trustedAuthorityCertificateFile);
 
         return new MsmtSessionPeerOptions

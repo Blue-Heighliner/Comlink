@@ -72,6 +72,37 @@ public sealed class PeerConnectionMonitorTests
         cts.Cancel();
     }
 
+    /// <summary>A connection that cannot be opened is logged once with its reason, however often the monitor retries, and again after it has come up and failed anew.</summary>
+    [Fact]
+    public async Task Maintain_ConnectFails_LogsTheReasonOncePerOutage()
+    {
+        Mock<IPeerTransport> transport = new();
+        transport.Setup(t => t.Connect(target, It.IsAny<CancellationToken>())).ThrowsAsync(new IOException("handshake rejected"));
+        RecordingLogger logger = new();
+        PeerConnectionMonitor monitor = new(new TestEngineController(), logger, TimeSpan.FromMinutes(10), TimeSpan.FromMilliseconds(20));
+
+        using CancellationTokenSource cts = new();
+        monitor.Maintain(transport.Object, target, cts.Token);
+
+        await WaitUntil(() => transport.Invocations.Count >= 4, TimeSpan.FromSeconds(5));
+        cts.Cancel();
+
+        (EventId id, string message) = Assert.Single(logger.Entries);
+        Assert.Equal(LogEvents.PeerConnectFailed.Id, id.Id);
+        Assert.Contains("handshake rejected", message);
+    }
+
+    private sealed class RecordingLogger : ILogger
+    {
+        public List<(EventId Id, string Message)> Entries { get; } = [];
+
+        public IDisposable? BeginScope<TState>(TState state) where TState : notnull => null;
+
+        public bool IsEnabled(LogLevel logLevel) => true;
+
+        public void Log<TState>(LogLevel logLevel, EventId eventId, TState state, Exception? exception, Func<TState, Exception?, string> formatter) => Entries.Add((eventId, formatter(state, exception)));
+    }
+
     /// <summary>Without a heartbeat handler no heartbeat is ever sent, and an IP connection counts as up once it is established.</summary>
     [Fact]
     public async Task Maintain_NoHeartbeatHandler_SendsNothingAndCountsAsUp()

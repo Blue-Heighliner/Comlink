@@ -208,7 +208,9 @@ internal sealed class SerialLink : IAsyncDisposable
             () => ended.TrySetResult());
 
         // With several users that may be at the other end of the cable, each is tried in turn for a while, since the far end answers only the address it is given.
-        byte remote = remotes[nextRemote % remotes.Length];
+        SerialConnectionInfo info = (SerialConnectionInfo)connection.Info;
+        byte? preferred = info.PreferredRemoteSerialAddress;
+        byte remote = preferred ?? remotes[nextRemote % remotes.Length];
         using CancellationTokenSource candidate = CancellationTokenSource.CreateLinkedTokenSource(attemptToken);
         if (remotes.Length > 1)
         {
@@ -225,7 +227,14 @@ internal sealed class SerialLink : IAsyncDisposable
             await DisposeQuietly(peer);
             if (!attemptToken.IsCancellationRequested)
             {
-                nextRemote++;
+                if (preferred is not null)
+                {
+                    info.PreferredRemoteSerialAddress = null;
+                }
+                else
+                {
+                    nextRemote++;
+                }
             }
             return;
         }
@@ -243,7 +252,7 @@ internal sealed class SerialLink : IAsyncDisposable
         }
 
         failureLogged = false;
-        ((SerialConnectionInfo)connection.Info).RemoteSerialAddress = remote;
+        info.RemoteSerialAddress = remote;
         bool closedMeanwhile;
         lock (closeLock)
         {

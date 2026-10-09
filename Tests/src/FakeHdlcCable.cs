@@ -102,6 +102,7 @@ internal sealed class FakeHdlcCable
         private readonly TestSubject<HdlcFrame> monitored = new();
         private readonly TestSubject<HdlcFrame> transmitted = new();
         private readonly TestSubject<HdlcPeerState> stateChanged = new();
+        private readonly TestSubject<MicroGateSignals> signalsChanged = new();
         private readonly TaskCompletionSource connected = new(TaskCreationOptions.RunContinuationsAsynchronously);
 
         private HdlcPeerOptions options = new();
@@ -119,6 +120,10 @@ internal sealed class FakeHdlcCable
         public IObservable<Exception> Exceptions => exceptions;
 
         public IObservable<HdlcPeerState> StateChanged => stateChanged;
+
+        public IObservable<MicroGateSignals> SignalsChanged => signalsChanged;
+
+        public MicroGateSignals Signals => MicroGateSignals.None;
 
         public HdlcPeerState State { get; private set; } = HdlcPeerState.Idle;
 
@@ -198,10 +203,17 @@ internal sealed class FakeHdlcCable
             monitored.Complete();
             transmitted.Complete();
             stateChanged.Complete();
+            signalsChanged.Complete();
             remote?.Terminate();
         }
 
         public void Dispose() => Terminate();
+
+        public ValueTask Drop()
+        {
+            Terminate();
+            return ValueTask.CompletedTask;
+        }
 
         public ValueTask DisposeAsync()
         {

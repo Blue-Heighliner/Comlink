@@ -30,7 +30,7 @@ internal sealed class ServerRoutingService : IPeerService, IConnectionStatusServ
     {
         this.transportFactory = transportFactory;
         this.engineController = engineController;
-        maintenance = new PointMaintenance(new PeerConnectionMonitor(engineController));
+        maintenance = new PointMaintenance(new PeerConnectionMonitor(engineController, loggerFactory.CreateLogger(LogCategories.App)));
         this.currentUserProvider = currentUserProvider;
         logger = loggerFactory.CreateLogger(LogCategories.App);
     }

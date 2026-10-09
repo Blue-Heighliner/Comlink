@@ -107,8 +107,8 @@
       },
       "BlueHeighliner.MicroGate": {
         "type": "Transitive",
-        "resolved": "0.4.0",
-        "contentHash": "TBfuxIs0SiHyjKqxOURhz3wZ3+fqmZteAJ93sO7rNo9rrB4m1cl1lxGLfqFqdpSGJiyIyVFXiu7e5KZpo0ruyQ==",
+        "resolved": "0.4.1",
+        "contentHash": "PEVulUmQIco/96boLHwz8Np/QoCMa7a2WwO0a5QtVcY56n0MU9px5m8NF7xS9p3ylhWIlfyzqALrVLFrGUwMOQ==",
         "dependencies": {
           "System.Reactive": "7.0.0"
         }
@@ -520,7 +520,7 @@
           "Avalonia.AvaloniaEdit": "[11.3.0, )",
           "Avalonia.Desktop": "[11.3.0, )",
           "Avalonia.Themes.Fluent": "[11.3.0, )",
-          "BlueHeighliner.MicroGate": "[0.4.0, )",
+          "BlueHeighliner.MicroGate": "[0.4.1, )",
           "BlueHeighliner.Msmt": "[0.3.0, )",
           "CommunityToolkit.Mvvm": "[8.4.0, )",
           "LiteDB": "[5.0.21, )",

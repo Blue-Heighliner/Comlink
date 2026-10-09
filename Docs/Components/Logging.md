@@ -151,6 +151,7 @@ Technical events of the running application: connections, the wire and the netwo
 | 45 | `IP connections are unavailable: {Message}` | The IP transport cannot be built, for example because certificates are missing. |
 | 46 | `The packet size of {PacketSize} bytes is larger than the HDLC MaxInfoField of {MaxInfoField} bytes, so packets will fail to send over serial connections` | Packetization is on and its packet size exceeds the HDLC frame limit. |
 | 47 | `Serial link to {Point} {Problem}` | A serial link drops other than by being closed (`lost`), fails to open (`cannot be established, retrying: ...`, once per outage) or its HDLC layer reports an error (`met an error: ...`). |
+| 115 | `Cannot reach {Point}, retrying: {Reason}` | The connection to an outgoing point cannot be opened, or its heartbeat throws, logged once per outage with the reason (a failed TLS handshake, a refused connection, a timeout). |
 | 54 | `Cannot deliver to {User}: no connection is identified as them` | A server has no live connection to a recipient. |
 | 57 | `External system {Name} failed to {Action}` | An operation of an external system throws: `connect`, `poll connection status`, `release its connection cleanly`, `send a message`, `filter a received message` or `process a received message`. |
 | 60 | `External system {Name} cannot send a {Type}; it only handles {Expected}` | A frame of the wrong type is sent to an external system. |
