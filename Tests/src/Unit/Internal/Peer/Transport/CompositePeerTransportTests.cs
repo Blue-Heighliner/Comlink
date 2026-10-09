@@ -229,14 +229,14 @@ public sealed class CompositePeerTransportTests
     public void Factory_InitialPacketWithoutPackets_Throws()
     {
         Mock<TestEngineController> controller = new() { CallBase = true };
-        controller.Setup(c => c.InitialPacketProcessor).Returns(Mock.Of<IInitialProcessor>());
+        controller.Setup(c => c.HandshakeProcessor).Returns(Mock.Of<IHandshakeHandler>());
         controller.Setup(c => c.ConnectionOptions).Throws(new InvalidOperationException("no current user"));
         PeerTransportFactory factory = new(Mock.Of<IMsmtSessionPeer.IFactory>(), Mock.Of<IHdlcPeerFactory>(), controller.Object, LoggerFactory.Create(_ => { }), Mock.Of<ILogSettings>());
 
         Assert.Throws<InvalidEngineConfigurationException>(() => factory.Create());
     }
 
-    /// <summary>The factory always produces an outermost transport that carries out the initial message exchange and identifies its connections.</summary>
+    /// <summary>The factory always produces an outermost transport that carries out the handshake and identifies its connections.</summary>
     [Fact]
     public async Task Factory_AlwaysBuildsHandshakeTransport()
     {

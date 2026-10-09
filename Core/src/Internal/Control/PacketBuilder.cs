@@ -7,8 +7,8 @@ internal sealed class PacketBuilder<TPacket, TPriority> where TPacket : class, n
     private ServiceRegistration<IFramePacketAdapter>? framePacket;
     private ServiceRegistration<IHeartbeatFrameHandler>? heartbeat;
 
-    /// <summary>The initial packet processor, if stated.</summary>
-    public ServiceRegistration<IInitialProcessor>? Initial { get; private set; }
+    /// <summary>The handshake processor, if stated.</summary>
+    public ServiceRegistration<IHandshakeHandler>? Handler { get; private set; }
 
     /// <inheritdoc cref="IPacketBuilder{TFrame, TPacket, TPriority, TLevel, TAspect}.Frame{THandler}"/>
     public PacketBuilder<TPacket, TPriority> Frame<THandler>() where THandler : IFramePacketHandler<TPacket>
@@ -24,10 +24,10 @@ internal sealed class PacketBuilder<TPacket, TPriority> where TPacket : class, n
         return this;
     }
 
-    /// <inheritdoc cref="IPacketBuilder{TFrame, TPacket, TPriority, TLevel, TAspect}.InitialProcessor{TProcessor}"/>
-    public PacketBuilder<TPacket, TPriority> InitialProcessor<TProcessor>() where TProcessor : IInitialPacketProcessor<TPacket>
+    /// <inheritdoc cref="IPacketBuilder{TFrame, TPacket, TPriority, TLevel, TAspect}.Handshake{TProcessor}"/>
+    public PacketBuilder<TPacket, TPriority> Handshake<TProcessor>() where TProcessor : IHandshakeProcessor<TPacket>
     {
-        Initial = ServiceRegistration<IInitialProcessor>.Of(typeof(TProcessor), processor => new InitialPacketProcessorAdapter<TPacket>((IInitialPacketProcessor<TPacket>)processor));
+        Handler = ServiceRegistration<IHandshakeHandler>.Of(typeof(TProcessor), processor => new HandshakeProcessorAdapter<TPacket>((IHandshakeProcessor<TPacket>)processor));
         return this;
     }
 

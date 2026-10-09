@@ -16,7 +16,7 @@ public interface IEngineBuilder<TFrame, TPacket, TPriority, TLevel, TAspect> whe
 {
     /// <summary>
     /// Starts stating how the host's frame type, the data format of all network traffic other than packets, is handled: a handler for each kind of frame, and what else depends on the frame type: the print
-    /// count, auto forwarders, the network processor and the initial frame processor. A handler for every kind of frame is required. The type must be LiteDB-serializable for
+    /// count, auto forwarders and the network processor. A handler for every kind of frame is required. The type must be LiteDB-serializable for
     /// storage, and must satisfy whatever serializer is used for the network (by default protobuf-net, so it needs
     /// <c>[ProtoContract]</c>/<c>[ProtoMember]</c> attributes). Calling it again continues the same statement.
     /// </summary>
@@ -24,7 +24,7 @@ public interface IEngineBuilder<TFrame, TPacket, TPriority, TLevel, TAspect> whe
 
     /// <summary>
     /// Turns on packetization and starts stating what depends on the packet type: payloads are broken into prioritized packets of type <typeparamref name="TPacket"/> and
-    /// reassembled on the other side, so a large payload does not hold up higher-priority ones, and the initial packet processor. Off by default. Every node on a network must be configured alike, since neither side can tell whether the other packetizes.
+    /// reassembled on the other side, so a large payload does not hold up higher-priority ones, and the handshake processor. Off by default. Every node on a network must be configured alike, since neither side can tell whether the other packetizes.
     /// </summary>
     /// <exception cref="InvalidOperationException"><typeparamref name="TPacket"/> is <see cref="NoPacket"/>.</exception>
     IPacketBuilder<TFrame, TPacket, TPriority, TLevel, TAspect> Packets();

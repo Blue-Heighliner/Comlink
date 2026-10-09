@@ -18,7 +18,7 @@ public sealed class EngineBuilderTests
         ServiceCollection services = new();
         foreach (object processor in processors)
         {
-            foreach (Type type in processor.GetType().GetInterfaces().Where(type => type.IsGenericType && type.Namespace == typeof(IInitialFrameProcessor<>).Namespace && type.Name.EndsWith("Processor`1")))
+            foreach (Type type in processor.GetType().GetInterfaces().Where(type => type.IsGenericType && type.Namespace == typeof(IHandshakeProcessor<>).Namespace && type.Name.EndsWith("Processor`1")))
             {
                 services.AddSingleton(type, processor);
             }
@@ -500,51 +500,43 @@ public sealed class EngineBuilderTests
         Assert.Equal(new LogFieldWidths(8, 7, 3), fixedWidths.LogWidths);
     }
 
-    /// <summary>The initial message and packet processors are reported and used.</summary>
+    /// <summary>The handshake processor is reported and used.</summary>
     [Fact]
-    public async Task Stated_Identification_IsUsed()
+    public async Task Stated_Handshake_IsUsed()
     {
-        Mock<IInitialFrameProcessor<TestFrame>> messages = new();
-        Mock<IInitialPacketProcessor<TestPacket>> packets = new();
-        EngineBuilder builder = EngineBuilder.Build(new TestEngineConfiguration(
-            false,
-            message => message.InitialProcessor<IInitialFrameProcessor<TestFrame>>(),
-            packet => packet.InitialProcessor<IInitialPacketProcessor<TestPacket>>()));
-        EngineController controller = new(builder, new CurrentUserProvider(), null, Services(messages.Object, packets.Object));
-        Mock<IInitialSession> session = new();
-        TestFrame initialMessage = new();
-        TestPacket initialPacket = new();
+        Mock<IHandshakeProcessor<TestPacket>> packets = new();
+        EngineBuilder builder = EngineBuilder.Build(new TestEngineConfiguration(false, null, packet => packet.Handshake<IHandshakeProcessor<TestPacket>>()));
+        EngineController controller = new(builder, new CurrentUserProvider(), null, Services(packets.Object));
+        Mock<IHandshakeSession> session = new();
+        TestPacket received = new();
 
-        await controller.InitialFrameProcessor!.OnConnected(session.Object);
-        await controller.InitialFrameProcessor.OnReceived(session.Object, initialMessage);
-        await controller.InitialPacketProcessor!.OnReceived(session.Object, initialPacket);
+        await controller.HandshakeProcessor!.OnConnected(session.Object);
+        await controller.HandshakeProcessor.OnReceived(session.Object, received);
 
-        Assert.Equal(typeof(TestFrame), controller.InitialFrameProcessor.ItemType);
-        Assert.Equal(typeof(TestPacket), controller.InitialPacketProcessor.ItemType);
-        messages.Verify(m => m.OnConnected(It.IsAny<IInitialFrameContext<TestFrame>>()), Times.Once);
-        messages.Verify(m => m.OnReceived(It.IsAny<IInitialFrameContext<TestFrame>>(), initialMessage), Times.Once);
-        packets.Verify(p => p.OnReceived(It.IsAny<IInitialPacketContext<TestPacket>>(), initialPacket), Times.Once);
+        Assert.Equal(typeof(TestPacket), controller.HandshakeProcessor.ItemType);
+        packets.Verify(p => p.OnConnected(It.IsAny<IHandshakeContext<TestPacket>>()), Times.Once);
+        packets.Verify(p => p.OnReceived(It.IsAny<IHandshakeContext<TestPacket>>(), received), Times.Once);
     }
 
     /// <summary>The context a processor is handed reflects the connection session it stands for.</summary>
     [Fact]
-    public async Task InitialProcessor_Context_ReflectsTheSession()
+    public async Task Handshake_Context_ReflectsTheSession()
     {
-        Mock<IInitialSession> session = new();
+        Mock<IHandshakeSession> session = new();
         IpConnectionInfo info = new() { Host = "10.0.0.1", LocalUser = "ME" };
         Mock<IEngineContext> engine = new();
         engine.Setup(e => e.CurrentUser).Returns(new UserInfo { Name = "ME" });
         engine.Setup(e => e.ConnectedUsers).Returns(new Dictionary<string, UserInfo> { ["BOB"] = new UserInfo { Name = "BOB" } });
         session.Setup(s => s.Engine).Returns(engine.Object);
         session.Setup(s => s.Connection).Returns(info);
-        IInitialFrameContext<TestFrame>? seen = null;
-        Mock<IInitialFrameProcessor<TestFrame>> processor = new();
-        processor.Setup(p => p.OnConnected(It.IsAny<IInitialFrameContext<TestFrame>>())).Callback((IInitialFrameContext<TestFrame> context) => seen = context);
-        EngineBuilder builder = EngineBuilder.Build(new TestEngineConfiguration(false, message => message.InitialProcessor<IInitialFrameProcessor<TestFrame>>()));
+        IHandshakeContext<TestPacket>? seen = null;
+        Mock<IHandshakeProcessor<TestPacket>> processor = new();
+        processor.Setup(p => p.OnConnected(It.IsAny<IHandshakeContext<TestPacket>>())).Callback((IHandshakeContext<TestPacket> context) => seen = context);
+        EngineBuilder builder = EngineBuilder.Build(new TestEngineConfiguration(false, null, packet => packet.Handshake<IHandshakeProcessor<TestPacket>>()));
         EngineController controller = new(builder, new CurrentUserProvider(), null, Services(processor.Object));
-        TestFrame sent = new() { Body = "HI" };
+        TestPacket sent = new() { PayloadId = 5 };
 
-        await controller.InitialFrameProcessor!.OnConnected(session.Object);
+        await controller.HandshakeProcessor!.OnConnected(session.Object);
 
         Assert.NotNull(seen);
         Assert.Equal("ME", seen.CurrentUser.Name);
@@ -559,14 +551,13 @@ public sealed class EngineBuilderTests
         session.Verify(s => s.Disconnect(), Times.Once);
     }
 
-    /// <summary>Without any initial exchange there is none, and the identification hook leaves the decision to the engine.</summary>
+    /// <summary>Without a handshake there is none, and the identification hook leaves the decision to the engine.</summary>
     [Fact]
     public void Unstated_Identification_IsOff()
     {
         (_, EngineController controller) = Build(engine => engine);
 
-        Assert.Null(controller.InitialPacketProcessor);
-        Assert.Null(controller.InitialFrameProcessor);
+        Assert.Null(controller.HandshakeProcessor);
     }
 
     /// <summary>External systems are reported in the order added, without duplicates.</summary>

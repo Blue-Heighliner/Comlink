@@ -442,14 +442,13 @@ public sealed class ControlProviderTests
         Assert.Empty(controller.Servers);
     }
 
-    /// <summary>By default no initial exchange is configured.</summary>
+    /// <summary>By default no handshake is configured.</summary>
     [Fact]
-    public void EngineController_NoInitialExchange()
+    public void EngineController_NoHandshake()
     {
         TestEngineController controller = new();
 
-        Assert.Null(controller.InitialPacketProcessor);
-        Assert.Null(controller.InitialFrameProcessor);
+        Assert.Null(controller.HandshakeProcessor);
         Assert.Null(controller.NetworkHandler);
     }
 
@@ -466,19 +465,18 @@ public sealed class ControlProviderTests
         Assert.Equal(expected, controller.WithLocalUser(connection));
     }
 
-    /// <summary>The initial exchange and network processors are not configurable from the network file and come from the wrapped provider.</summary>
+    /// <summary>The handshake and network processors are not configurable from the network file and come from the wrapped provider.</summary>
     [Fact]
     public void ConfiguredEngineController_Processors_DelegateToFallback()
     {
-        IInitialProcessor packets = Mock.Of<IInitialProcessor>();
+        IHandshakeHandler packets = Mock.Of<IHandshakeHandler>();
         INetworkHandler network = Mock.Of<INetworkHandler>();
         Mock<IEngineController> fallback = new();
-        fallback.Setup(f => f.InitialPacketProcessor).Returns(packets);
+        fallback.Setup(f => f.HandshakeProcessor).Returns(packets);
         fallback.Setup(f => f.NetworkHandler).Returns(network);
         ConfiguredEngineController controller = new(fallback.Object, new NetworkConfig(), NoCurrentUser);
 
-        Assert.Same(packets, controller.InitialPacketProcessor);
-        Assert.Null(controller.InitialFrameProcessor);
+        Assert.Same(packets, controller.HandshakeProcessor);
         Assert.Same(network, controller.NetworkHandler);
     }
 

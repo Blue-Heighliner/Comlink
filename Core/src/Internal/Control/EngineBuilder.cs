@@ -49,10 +49,8 @@ internal sealed class EngineBuilder : IEngineBuilder, IAsyncDisposable
     public MsmtConnectionOptions? MsmtOptionsValue { get; set; }
     /// <summary>How the HDLC peer options are adjusted, if stated.</summary>
     public HdlcPeerOptions? HdlcOptionsValue { get; set; }
-    /// <summary>The initial packet processor, if stated.</summary>
-    public ServiceRegistration<IInitialProcessor>? InitialPacketProcessor { get; set; }
-    /// <summary>The initial message processor, if stated.</summary>
-    public ServiceRegistration<IInitialProcessor>? InitialFrameProcessor { get; set; }
+    /// <summary>The handshake processor, if stated.</summary>
+    public ServiceRegistration<IHandshakeHandler>? HandshakeProcessor { get; set; }
     /// <summary>Whether the <c>--config</c> and <c>--user</c> arguments are honored.</summary>
     public bool AreCommandLineOverridesAllowed { get; set; }
     /// <summary>The external systems.</summary>

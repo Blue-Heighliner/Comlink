@@ -161,13 +161,6 @@ internal sealed class EngineBuilder<TFrame, TPacket, TPriority, TLevel, TAspect>
         return this;
     }
 
-    /// <inheritdoc />
-    IFrameBuilder<TFrame, TPacket, TPriority, TLevel, TAspect> IFrameBuilder<TFrame, TPacket, TPriority, TLevel, TAspect>.InitialProcessor<TProcessor>()
-    {
-        RequireFrames().InitialProcessor<TProcessor>();
-        return this;
-    }
-
     /// <inheritdoc cref="IPacketBuilder{TFrame, TPacket, TPriority, TLevel, TAspect}.Frame{THandler}"/>
     public IPacketBuilder<TFrame, TPacket, TPriority, TLevel, TAspect> Frame<THandler>() where THandler : IFramePacketHandler<TPacket>
     {
@@ -190,9 +183,9 @@ internal sealed class EngineBuilder<TFrame, TPacket, TPriority, TLevel, TAspect>
     }
 
     /// <inheritdoc />
-    IPacketBuilder<TFrame, TPacket, TPriority, TLevel, TAspect> IPacketBuilder<TFrame, TPacket, TPriority, TLevel, TAspect>.InitialProcessor<TProcessor>()
+    IPacketBuilder<TFrame, TPacket, TPriority, TLevel, TAspect> IPacketBuilder<TFrame, TPacket, TPriority, TLevel, TAspect>.Handshake<TProcessor>()
     {
-        RequirePackets().InitialProcessor<TProcessor>();
+        RequirePackets().Handshake<TProcessor>();
         return this;
     }
 
@@ -316,7 +309,6 @@ internal sealed class EngineBuilder<TFrame, TPacket, TPriority, TLevel, TAspect>
         if (frames is not null)
         {
             state.FrameMap = frames.Build();
-            state.InitialFrameProcessor = frames.Initial;
             state.NetworkHandler = frames.NetworkHandler;
             state.AutoForwarders.Clear();
             state.AutoForwarders.AddRange(frames.AutoForwarders);
@@ -325,7 +317,7 @@ internal sealed class EngineBuilder<TFrame, TPacket, TPriority, TLevel, TAspect>
         if (packets is not null)
         {
             state.PacketMap = packets.Build();
-            state.InitialPacketProcessor = packets.Initial;
+            state.HandshakeProcessor = packets.Handler;
         }
 
         List<MessageLevel> builtLevels = levels.Build();

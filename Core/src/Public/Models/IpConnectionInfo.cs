@@ -6,7 +6,7 @@ public interface IIpConnectionInfo : IConnectionInfo
     /// <summary>Gets the remote TCP port.</summary>
     int Port { get; }
 
-    /// <summary>Gets the remote IP address. For an inbound connection the port is the remote node's ephemeral one, so identify by certificate or initial packet or message instead.</summary>
+    /// <summary>Gets the remote IP address. For an inbound connection the port is the remote node's ephemeral one, so identify by certificate or handshake packet or message instead.</summary>
     string Host { get; }
 
     /// <summary>Gets the distinguished name of the remote certificate, or <see langword="null"/> when it presented none.</summary>

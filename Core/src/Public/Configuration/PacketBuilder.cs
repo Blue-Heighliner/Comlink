@@ -25,13 +25,13 @@ public interface IPacketBuilder<TFrame, TPacket, TPriority, TLevel, TAspect> : I
     IPacketBuilder<TFrame, TPacket, TPriority, TLevel, TAspect> Serializer<TSerializer>() where TSerializer : IPacketSerializer;
 
     /// <summary>
-    /// States how nodes introduce themselves on a new connection, with packets: the processor is told when a connection forms and given each packet that
-    /// arrives until it marks the connection connected as a named user (see <see cref="IInitialPacketProcessor{TPacket}"/>). What it sends is a serialized
-    /// instance of the packet type sent as it is, beneath the packetizer and before any initial message exchange. Every node on a network must be configured alike.
+    /// States how nodes introduce themselves on a new connection: the handshake processor is told when a connection forms and given each packet that
+    /// arrives until it marks the connection connected as a named user (see <see cref="IHandshakeProcessor{TPacket}"/>). What it sends is a serialized
+    /// instance of the packet type sent as it is, beneath the packetizer. Every node on a network must be configured alike.
     /// Like every other thing sent between nodes it is a serialized instance of the frame or packet type and nothing else.
     /// </summary>
     /// <typeparam name="TProcessor">The processor type, instantiated through dependency injection when the engine runs: the instance registered for it in the host's services, or else one constructed from them.</typeparam>
-    IPacketBuilder<TFrame, TPacket, TPriority, TLevel, TAspect> InitialProcessor<TProcessor>() where TProcessor : IInitialPacketProcessor<TPacket>;
+    IPacketBuilder<TFrame, TPacket, TPriority, TLevel, TAspect> Handshake<TProcessor>() where TProcessor : IHandshakeProcessor<TPacket>;
 
     /// <summary>
     /// States the handler for heartbeat packets (see <see cref="IHeartbeatHandler{TFrame, TPriority}"/>, with the packet type as its type argument): a heartbeat sent as a packet of its own, beneath

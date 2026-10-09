@@ -68,7 +68,7 @@ internal static class LogEvents
     /// <summary>A server gets a connection from a user it does not know.</summary>
     public static EventId RejectedConnection { get; } = Define(41, nameof(RejectedConnection), LogCategories.App);
 
-    /// <summary>An IP connection cannot be identified or fails its initial exchange.</summary>
+    /// <summary>An IP connection cannot be identified or fails its handshake.</summary>
     public static EventId ConnectionDropped { get; } = Define(43, nameof(ConnectionDropped), LogCategories.App);
 
     /// <summary>A received packet fails reassembly.</summary>

@@ -278,9 +278,7 @@ internal sealed class ConfiguredEngineController : IEngineController
     }
 
     /// <inheritdoc />
-    public IInitialProcessor? InitialPacketProcessor => fallback.InitialPacketProcessor;
-    /// <inheritdoc />
-    public IInitialProcessor? InitialFrameProcessor => fallback.InitialFrameProcessor;
+    public IHandshakeHandler? HandshakeProcessor => fallback.HandshakeProcessor;
 
     /// <inheritdoc />
     public bool CommandLineOverridesAllowed => fallback.CommandLineOverridesAllowed;

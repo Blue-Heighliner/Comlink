@@ -10,20 +10,20 @@ public sealed class HandshakePeerTransportTests
 
     private static bool Matches(IConnectionInfo info) => info is ISerialConnectionInfo { SerialPort: "SL0", SerialAddress: 0xFF };
 
-    private static bool Opens(IInitialSession session)
+    private static bool Opens(IHandshakeSession session)
         => session.Connection is ISerialConnectionInfo serial ? serial.SerialAddress > serial.RemoteSerialAddress : !session.Connection.IsInbound;
 
-    private sealed class Scripted : IInitialProcessor
+    private sealed class Scripted : IHandshakeHandler
     {
-        public Type ItemType { get; init; } = typeof(TestFrame);
+        public Type ItemType { get; init; } = typeof(TestPacket);
         public TimeSpan Timeout { get; init; } = TimeSpan.FromSeconds(10);
-        public Func<IInitialSession, Task> Connected { get; init; } = _ => Task.CompletedTask;
-        public Func<IInitialSession, object, Task> Initial { get; init; } = (_, _) => Task.CompletedTask;
-        public Func<IInitialSession, object, Task> Reply { get; init; } = (_, _) => Task.CompletedTask;
+        public Func<IHandshakeSession, Task> Connected { get; init; } = _ => Task.CompletedTask;
+        public Func<IHandshakeSession, object, Task> Initial { get; init; } = (_, _) => Task.CompletedTask;
+        public Func<IHandshakeSession, object, Task> Reply { get; init; } = (_, _) => Task.CompletedTask;
 
-        public Task OnConnected(IInitialSession session) => Connected(session);
+        public Task OnConnected(IHandshakeSession session) => Connected(session);
 
-        public Task OnReceived(IInitialSession session, object item)
+        public Task OnReceived(IHandshakeSession session, object item)
             => Opens(session) ? Reply(session, item) : Initial(session, item);
     }
 
@@ -48,17 +48,17 @@ public sealed class HandshakePeerTransportTests
         }
     }
 
-    private static Mock<TestEngineController> Controller(params string[] users)
+    private static Mock<RawPacketEngineController> Controller(params string[] users)
     {
-        Mock<TestEngineController> controller = new() { CallBase = true };
+        Mock<RawPacketEngineController> controller = new(16 * 1024, 1) { CallBase = true };
         controller.Setup(c => c.Users).Returns(users);
         return controller;
     }
 
-    private static Mock<TestEngineController> WithProcessor(IInitialProcessor processor)
+    private static Mock<RawPacketEngineController> WithProcessor(IHandshakeHandler processor)
     {
-        Mock<TestEngineController> controller = Controller();
-        controller.Setup(c => c.InitialFrameProcessor).Returns(processor);
+        Mock<RawPacketEngineController> controller = Controller();
+        controller.Setup(c => c.HandshakeProcessor).Returns(processor);
         return controller;
     }
 
@@ -76,21 +76,23 @@ public sealed class HandshakePeerTransportTests
             Initial = async (session, item) =>
             {
                 await session.Send(Who(me));
-                await session.Connected(((TestFrame)item).FromUser);
+                await session.Connected(NameIn(item));
             },
             Reply = async (session, item) =>
             {
-                await session.Connected(((TestFrame)item).FromUser);
+                await session.Connected(NameIn(item));
             }
         };
 
-    private static TestFrame Who(string user) => new() { FromUser = user };
+    private static TestPacket Who(string user) => new() { Data = Encoding.UTF8.GetBytes(user) };
+
+    private static string NameIn(object item) => Encoding.UTF8.GetString(((TestPacket)item).Data);
 
     private static (End A, End B) Pair(IEngineController a, IEngineController b, IReadOnlyList<string>? aNames = null, IReadOnlyList<string>? bNames = null, bool serial = false)
     {
         (LoopbackPeerTransport rawA, LoopbackPeerTransport rawB) = LoopbackPeerTransport.CreatePair(aNames, bNames, serial);
-        End endA = new(new HandshakePeerTransport(rawA, a, logger, Handshake.ForFrames(a), identify: true), rawA);
-        End endB = new(new HandshakePeerTransport(rawB, b, logger, Handshake.ForFrames(b), identify: true), rawB);
+        End endA = new(new HandshakePeerTransport(rawA, a, logger, Handshake.ForProcessor(a), identify: true), rawA);
+        End endB = new(new HandshakePeerTransport(rawB, b, logger, Handshake.ForProcessor(b), identify: true), rawB);
         endA.Watch();
         endB.Watch();
         return (endA, endB);
@@ -113,8 +115,8 @@ public sealed class HandshakePeerTransportTests
     [Fact]
     public async Task Connect_IdentifiesByCertificateName()
     {
-        Mock<TestEngineController> a = Controller("ALICE", "BOB");
-        Mock<TestEngineController> b = Controller("ALICE", "BOB");
+        Mock<RawPacketEngineController> a = Controller("ALICE", "BOB");
+        Mock<RawPacketEngineController> b = Controller("ALICE", "BOB");
         a.Setup(c => c.GetUserData("BOB")).Returns(new Dictionary<string, string> { ["desk"] = "4" });
         (End endA, End endB) = Pair(a.Object, b.Object, aNames: ["ALICE"], bNames: ["BOB"]);
 
@@ -142,7 +144,7 @@ public sealed class HandshakePeerTransportTests
     [Fact]
     public async Task Connect_MatchesTopologyUsers()
     {
-        Mock<TestEngineController> a = Controller();
+        Mock<RawPacketEngineController> a = Controller();
         a.Setup(c => c.Servers).Returns(new Dictionary<string, ServerUserConfig> { ["Server1"] = new ServerUserConfig { Children = ["Client1"] } });
         (End endA, _) = Pair(a.Object, Controller().Object, bNames: ["Client1"]);
 
@@ -177,7 +179,7 @@ public sealed class HandshakePeerTransportTests
     [Fact]
     public async Task Connect_SerialPointNamingItsUser_IdentifiesAsThatUser()
     {
-        Mock<TestEngineController> named = Controller();
+        Mock<RawPacketEngineController> named = Controller();
         named.SetupGet(c => c.OutgoingPoints).Returns([new ConnectionPoint { SerialPort = "sl0", User = "SERVER" }, new ConnectionPoint { SerialPort = "SL0", SerialAddress = 5, User = "OTHER" }]);
         (End namedA, _) = Pair(named.Object, Controller().Object, serial: true);
 
@@ -185,7 +187,7 @@ public sealed class HandshakePeerTransportTests
 
         Assert.Equal("SERVER", connection.User!.Name);
 
-        Mock<TestEngineController> unnamed = Controller();
+        Mock<RawPacketEngineController> unnamed = Controller();
         unnamed.SetupGet(c => c.OutgoingPoints).Returns([new ConnectionPoint { SerialPort = "SL0", SerialAddress = 5, User = "OTHER" }]);
         (End unnamedA, _) = Pair(unnamed.Object, Controller().Object, serial: true);
         Assert.Equal("SL0", (await unnamedA.Transport.Connect(serialPoint)).User!.Name);
@@ -220,9 +222,9 @@ public sealed class HandshakePeerTransportTests
         Assert.Single(endA.Connected);
     }
 
-    /// <summary>Without an initial exchange payloads travel exactly as sent, in both directions, over the connection either end opened.</summary>
+    /// <summary>Without a handshake payloads travel exactly as sent, in both directions, over the connection either end opened.</summary>
     [Fact]
-    public async Task Request_WithoutInitialExchange_PassesPayloadsThroughUnchanged()
+    public async Task Request_WithoutHandshake_PassesPayloadsThroughUnchanged()
     {
         (End endA, End endB) = Pair(Controller().Object, Controller().Object, aNames: ["Alice"], bNames: ["Bob"]);
         PeerConnection outbound = await endA.Transport.Connect(point);
@@ -252,9 +254,9 @@ public sealed class HandshakePeerTransportTests
     [Fact]
     public async Task Handshake_IdentitiesComeFromTheProcessors()
     {
-        Mock<TestEngineController> a = WithProcessor(Introduce("ALICE"));
+        Mock<RawPacketEngineController> a = WithProcessor(Introduce("ALICE"));
         a.Setup(c => c.GetUserData("BOB")).Returns(new Dictionary<string, string> { ["station"] = "4" });
-        Mock<TestEngineController> b = WithProcessor(Introduce("BOB"));
+        Mock<RawPacketEngineController> b = WithProcessor(Introduce("BOB"));
         (End endA, End endB) = Pair(a.Object, b.Object);
 
         PeerConnection outbound = await endA.Transport.Connect(point);
@@ -265,11 +267,11 @@ public sealed class HandshakePeerTransportTests
         Assert.Equal("ALICE", endB.Connected[0].User!.Name);
     }
 
-    /// <summary>The exchange adds nothing to what crosses the connection: the initial message is the serialized message itself, and later payloads arrive exactly as sent, in both directions.</summary>
+    /// <summary>The handshake adds nothing to what crosses the connection: the handshake item is the serialized packet itself, and later payloads arrive exactly as sent, in both directions.</summary>
     [Fact]
     public async Task Handshake_AddsNothingToPayloads_AndDataFlowsBothWaysAfterwards()
     {
-        Mock<TestEngineController> a = WithProcessor(Introduce("ALICE"));
+        Mock<RawPacketEngineController> a = WithProcessor(Introduce("ALICE"));
         (End endA, End endB) = Pair(a.Object, WithProcessor(Introduce("BOB")).Object);
         PeerConnection outbound = await endA.Transport.Connect(point);
         await WaitUntil(() => endB.Connected.Count == 1);
@@ -280,7 +282,7 @@ public sealed class HandshakePeerTransportTests
         await WaitUntil(() => endB.Received.Count == 1 && endA.Received.Count == 1);
         Assert.Equal(new byte[] { 1, 2, 3 }, endB.Received[0]);
         Assert.Equal(new byte[] { 7 }, endA.Received[0]);
-        using IMemoryOwner<byte> expected = a.Object.FrameSerializer.Serialize(Who("ALICE"));
+        using IMemoryOwner<byte> expected = a.Object.PacketSerializer!.Serialize(Who("ALICE"), null);
         Assert.Equal(expected.Memory.ToArray(), endB.Raw.Delivered.First());
         Assert.Equal(new byte[] { 1, 2, 3 }, endB.Raw.Delivered.ElementAt(1));
     }
@@ -289,7 +291,7 @@ public sealed class HandshakePeerTransportTests
     [Fact]
     public async Task Handshake_DataSentImmediately_IsHeldUntilTheReceiverIsEstablished()
     {
-        Mock<TestEngineController> b = WithProcessor(Introduce("BOB"));
+        Mock<RawPacketEngineController> b = WithProcessor(Introduce("BOB"));
         b.Setup(c => c.GetUserData("ALICE")).Returns(() =>
         {
             Thread.Sleep(100);
@@ -332,7 +334,7 @@ public sealed class HandshakePeerTransportTests
         {
             Initial = async (session, item) =>
             {
-                seen.Add(((TestFrame)item).FromUser);
+                seen.Add(NameIn(item));
                 if (seen.Count < 2)
                 {
                     return;
@@ -417,9 +419,9 @@ public sealed class HandshakePeerTransportTests
         Assert.Empty(endA.Connected);
     }
 
-    /// <summary>The initial packet exchange travels as instances of the packet type through the packet serializer, names the user on the connection for identification above it, and identifies no one itself.</summary>
+    /// <summary>The handshake travels as instances of the packet type through the packet serializer, names the user on the connection for identification above it, and identifies no one itself.</summary>
     [Fact]
-    public async Task InitialPacket_ExchangesPackets_AndNamesTheUserOnTheConnection()
+    public async Task Handshake_CarriesPackets_AndNamesTheUserOnTheConnection()
     {
         Scripted a = new()
         {
@@ -448,12 +450,12 @@ public sealed class HandshakePeerTransportTests
             }
         };
         Mock<TestPacketEngineController> controllerA = new() { CallBase = true };
-        controllerA.Setup(c => c.InitialPacketProcessor).Returns(a);
+        controllerA.Setup(c => c.HandshakeProcessor).Returns(a);
         Mock<TestPacketEngineController> controllerB = new() { CallBase = true };
-        controllerB.Setup(c => c.InitialPacketProcessor).Returns(b);
+        controllerB.Setup(c => c.HandshakeProcessor).Returns(b);
         (LoopbackPeerTransport rawA, LoopbackPeerTransport rawB) = LoopbackPeerTransport.CreatePair();
-        HandshakePeerTransport endA = new(rawA, controllerA.Object, logger, Handshake.ForPackets(controllerA.Object), identify: false);
-        HandshakePeerTransport endB = new(rawB, controllerB.Object, logger, Handshake.ForPackets(controllerB.Object), identify: false);
+        HandshakePeerTransport endA = new(rawA, controllerA.Object, logger, Handshake.ForProcessor(controllerA.Object), identify: false);
+        HandshakePeerTransport endB = new(rawB, controllerB.Object, logger, Handshake.ForProcessor(controllerB.Object), identify: false);
         List<PeerConnection> accepted = [];
         endB.Connected.Listen(args => accepted.Add(args.Connection));
 
@@ -466,16 +468,15 @@ public sealed class HandshakePeerTransportTests
         Assert.Null(accepted[0].User);
     }
 
-    /// <summary>An initial packet processor with no packet serializer is a configuration error, reported when the exchange is built.</summary>
+    /// <summary>A handshake processor with no packet serializer is a configuration error, reported when the handshake is built.</summary>
     [Fact]
-    public void ForPackets_WithoutSerializer_Throws()
+    public void ForProcessor_WithoutSerializer_Throws()
     {
-        Mock<TestEngineController> controller = Controller();
-        controller.Setup(c => c.InitialPacketProcessor).Returns(new Scripted());
+        Mock<TestEngineController> controller = new() { CallBase = true };
+        controller.Setup(c => c.HandshakeProcessor).Returns(new Scripted());
 
-        Assert.Throws<InvalidEngineConfigurationException>(() => Handshake.ForPackets(controller.Object));
-        Assert.Null(Handshake.ForPackets(Controller().Object));
-        Assert.Null(Handshake.ForFrames(Controller().Object));
+        Assert.Throws<InvalidEngineConfigurationException>(() => Handshake.ForProcessor(controller.Object));
+        Assert.Null(Handshake.ForProcessor(Controller().Object));
     }
 
     /// <summary>The management calls that are not about identity go straight to the wrapped transport.</summary>

@@ -11,7 +11,7 @@ internal sealed class PeerConnection(ConnectionPoint? point, ConnectionInfo info
     /// <summary>What is known about the connection.</summary>
     public ConnectionInfo Info { get; } = info;
 
-    /// <summary>The user an initial packet or message processor marked the connection connected as, taking precedence over every other way of identifying it, or <see langword="null"/> when none did.</summary>
+    /// <summary>The user a handshake processor marked the connection connected as, taking precedence over every other way of identifying it, or <see langword="null"/> when none did.</summary>
     public string? InitialUser { get; set; }
 
     /// <summary>Who is on the other end, or <see langword="null"/> until the connection has been identified.</summary>

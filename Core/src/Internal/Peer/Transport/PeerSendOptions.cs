@@ -6,7 +6,7 @@ internal sealed record PeerSendOptions
     /// <summary>Send priority; higher values go first on every link, MSMT and HDLC alike.</summary>
     public int Priority { get; init; }
 
-    /// <summary>The frame the payload is the serialization of, which a packetizing transport hands the packet serializer, or <see langword="null"/> when the payload is not a frame (an initial packet exchange, say).</summary>
+    /// <summary>The frame the payload is the serialization of, which a packetizing transport hands the packet serializer, or <see langword="null"/> when the payload is not a frame (an initial packet handshake, say).</summary>
     public object? Frame { get; init; }
 
     /// <summary>Whether the payload is already a serialized packet, which a packetizing transport sends as it is instead of splitting it.</summary>

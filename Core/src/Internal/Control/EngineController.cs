@@ -7,7 +7,7 @@ namespace BlueHeighliner.Comlink;
 /// identity/presentation, local user identity, the user/group directory, listener ports, alert settings,
 /// message composition, the automatic print policy, MSMT peer certificate naming and peer options, network
 /// topology, the points this node connects out to, how the user on the other end of a connection is identified
-/// (optionally after an initial packet and message exchange), the external systems this instance communicates with, the
+/// (optionally after a handshake of packets), the external systems this instance communicates with, the
 /// hooks run on connection and message activity, and whether command-line arguments may override the network configuration file and user. External drive discovery and printer discovery/driving are real
 /// OS-level behavior, not configuration or rules, so they live on <see cref="IExternalDriveProvider"/>
 /// and <see cref="IPrintDriver"/> instead. See <c>Docs/Components/Configuration.md</c>.
@@ -248,10 +248,8 @@ internal interface IEngineController
     /// </summary>
     IReadOnlyDictionary<string, ServerUserConfig> Servers { get; }
 
-    /// <summary>Gets the processor that carries out the initial packet exchange on each new connection (see <see cref="IPacketBuilder{TFrame, TPacket, TPriority, TLevel, TAspect}.InitialProcessor"/>), or <see langword="null"/> for none. Requires <see cref="PacketType"/>.</summary>
-    IInitialProcessor? InitialPacketProcessor { get; }
-    /// <summary>Gets the processor that carries out the initial message exchange on each new connection (see <see cref="IFrameBuilder{TFrame, TPacket, TPriority, TLevel, TAspect}.InitialProcessor"/>), or <see langword="null"/> for none.</summary>
-    IInitialProcessor? InitialFrameProcessor { get; }
+    /// <summary>Gets the processor that carries out the handshake on each new connection (see <see cref="IPacketBuilder{TFrame, TPacket, TPriority, TLevel, TAspect}.Handshake{TProcessor}"/>), or <see langword="null"/> for none. Requires <see cref="PacketType"/>.</summary>
+    IHandshakeHandler? HandshakeProcessor { get; }
     /// <summary>When <see langword="true"/>, the <c>--config</c> and <c>--user</c> command-line arguments override where the network configuration file and the running user come from (see <see cref="IEngineBuilder{TFrame, TPacket, TPriority, TLevel, TAspect}.CommandLineOverrides"/>); when <see langword="false"/> (the default) they are ignored and only <c>Config.json</c> and <c>User.json</c> in the working directory are used.</summary>
     bool CommandLineOverridesAllowed { get; }
 
@@ -310,7 +308,7 @@ internal interface IEngineController
     int SendPriority(Enum? priority);
     /// <summary>Gets the lowest priority anything is sent with, <c>0</c>: the first configured level, and the only one when none are configured. Used for traffic that should yield to everything else, such as heartbeats.</summary>
     int LowestPriority { get; }
-    /// <summary>Gets the highest priority anything is sent with: that of the last configured level, or <c>0</c> when none are configured. Used for traffic that must not wait behind anything else, such as the exchange that identifies a connection.</summary>
+    /// <summary>Gets the highest priority anything is sent with: that of the last configured level, or <c>0</c> when none are configured. Used for traffic that must not wait behind anything else, such as the handshake that identifies a connection.</summary>
     int HighestPriority { get; }
     /// <summary>Returns <paramref name="priority"/> if it is one of the configured priority levels, or the lowest level otherwise (including when it is <see langword="null"/>), so nothing is ever sent with a priority the configuration does not define.</summary>
     /// <param name="priority">The level to resolve, a member of the enum stated for the priorities.</param>
@@ -443,8 +441,7 @@ internal class EngineController(EngineBuilder builder, ICurrentUserProvider curr
         builder.ImportFormats.Select(registration => registration.Create(services)),
         format => new ImportFormatDefinition { Name = format.Name, Read = format.Import, StagedSendMode = format.StagedSendMode, StagedSendDelay = format.StagedSendDelay },
         definition => definition.Name));
-    private readonly Lazy<IInitialProcessor?> initialPacketProcessor = new(() => builder.InitialPacketProcessor?.Create(services));
-    private readonly Lazy<IInitialProcessor?> initialMessageProcessor = new(() => builder.InitialFrameProcessor?.Create(services));
+    private readonly Lazy<IHandshakeHandler?> handshakeProcessor = new(() => builder.HandshakeProcessor?.Create(services));
     private readonly Lazy<IDraftFrameHandler?> draftHandler = new(() => builder.DraftHandler?.Create(services));
     private readonly Lazy<IAlarmHandler?> alarmHandler = new(() => builder.AlarmHandler?.Create(services));
     private readonly Lazy<ILogHandler?> logHandler = new(() => builder.LogHandler?.Create(services));
@@ -800,10 +797,7 @@ internal class EngineController(EngineBuilder builder, ICurrentUserProvider curr
         };
 
     /// <inheritdoc />
-    public virtual IInitialProcessor? InitialPacketProcessor => initialPacketProcessor.Value;
-
-    /// <inheritdoc />
-    public virtual IInitialProcessor? InitialFrameProcessor => initialMessageProcessor.Value;
+    public virtual IHandshakeHandler? HandshakeProcessor => handshakeProcessor.Value;
 
     /// <inheritdoc />
     public virtual bool CommandLineOverridesAllowed => builder.AreCommandLineOverridesAllowed;

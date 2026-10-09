@@ -1,7 +1,7 @@
 namespace BlueHeighliner.Comlink;
 
-/// <summary>One connection's side of an initial exchange, as a <see cref="IInitialProcessor"/> sees it, with items as plain objects since the engine does not know the host's types at compile time.</summary>
-internal interface IInitialSession
+/// <summary>One connection's side of a handshake, as a <see cref="IHandshakeHandler"/> sees it, with items as plain objects since the engine does not know the host's types at compile time.</summary>
+internal interface IHandshakeSession
 {
     /// <summary>Gets what is known about the connection.</summary>
     IConnectionInfo Connection { get; }
@@ -17,25 +17,25 @@ internal interface IInitialSession
     Task Disconnect();
 
     /// <summary>Sends an item over the connection, completing once the other node has accepted it. A send that fails drops the connection.</summary>
-    /// <param name="item">An instance of the exchange's type.</param>
+    /// <param name="item">An instance of the handshake's type.</param>
     Task<bool> Send(object item);
 }
 
-/// <summary>The engine's view of a host's initial frame or packet processor, with items as plain objects.</summary>
-internal interface IInitialProcessor
+/// <summary>The engine's view of a host's handshake processor, with items as plain objects.</summary>
+internal interface IHandshakeHandler
 {
-    /// <summary>Gets the type of item the exchange carries.</summary>
+    /// <summary>Gets the type of item the handshake carries.</summary>
     Type ItemType { get; }
 
-    /// <summary>Gets how long the exchange may take.</summary>
+    /// <summary>Gets how long the handshake may take.</summary>
     TimeSpan Timeout { get; }
 
     /// <summary>Called on both nodes when the connection has formed.</summary>
     /// <param name="session">Controls the connection.</param>
-    Task OnConnected(IInitialSession session);
+    Task OnConnected(IHandshakeSession session);
 
     /// <summary>Called for each item received before the connection is marked connected.</summary>
     /// <param name="session">Controls the connection.</param>
     /// <param name="item">What arrived.</param>
-    Task OnReceived(IInitialSession session, object item);
+    Task OnReceived(IHandshakeSession session, object item);
 }

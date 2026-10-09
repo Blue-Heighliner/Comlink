@@ -8,8 +8,6 @@ internal sealed class FrameBuilder<TFrame, TPriority, TLevel, TAspect> where TFr
     private Func<TFrame> create = () => new();
     private ServiceRegistration<IHeartbeatFrameHandler>? heartbeat;
 
-    /// <summary>The initial message processor, if stated.</summary>
-    public ServiceRegistration<IInitialProcessor>? Initial { get; private set; }
 
     /// <summary>The processor that carries out the host's protocol, if stated.</summary>
     public ServiceRegistration<INetworkHandler>? NetworkHandler { get; private set; }
@@ -56,12 +54,6 @@ internal sealed class FrameBuilder<TFrame, TPriority, TLevel, TAspect> where TFr
         return this;
     }
 
-    /// <inheritdoc cref="IFrameBuilder{TFrame, TPacket, TPriority, TLevel, TAspect}.InitialProcessor{TProcessor}"/>
-    public FrameBuilder<TFrame, TPriority, TLevel, TAspect> InitialProcessor<TProcessor>() where TProcessor : IInitialFrameProcessor<TFrame>
-    {
-        Initial = ServiceRegistration<IInitialProcessor>.Of(typeof(TProcessor), processor => new InitialFrameProcessorAdapter<TFrame>((IInitialFrameProcessor<TFrame>)processor));
-        return this;
-    }
 
     /// <summary>Builds the engine-side map.</summary>
     public FrameMap Build()

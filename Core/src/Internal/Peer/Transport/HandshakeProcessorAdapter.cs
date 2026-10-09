@@ -1,23 +1,23 @@
 namespace BlueHeighliner.Comlink;
 
-/// <summary>Presents a host's <see cref="IInitialPacketProcessor{TPacket}"/> as an <see cref="IInitialProcessor"/>.</summary>
+/// <summary>Presents a host's <see cref="IHandshakeProcessor{TPacket}"/> as an <see cref="IHandshakeHandler"/>.</summary>
 /// <typeparam name="TPacket">The host's packet type.</typeparam>
 /// <param name="processor">The host's processor.</param>
-internal sealed class InitialPacketProcessorAdapter<TPacket>(IInitialPacketProcessor<TPacket> processor) : IInitialProcessor where TPacket : class
+internal sealed class HandshakeProcessorAdapter<TPacket>(IHandshakeProcessor<TPacket> processor) : IHandshakeHandler where TPacket : class
 {
     /// <inheritdoc />
     public Type ItemType { get; } = typeof(TPacket);
 
     /// <inheritdoc />
-    public Task OnConnected(IInitialSession session) => processor.OnConnected(new Context(session));
+    public Task OnConnected(IHandshakeSession session) => processor.OnConnected(new Context(session));
 
     /// <inheritdoc />
     public TimeSpan Timeout => processor.Timeout;
 
     /// <inheritdoc />
-    public Task OnReceived(IInitialSession session, object item) => processor.OnReceived(new Context(session), (TPacket)item);
+    public Task OnReceived(IHandshakeSession session, object item) => processor.OnReceived(new Context(session), (TPacket)item);
 
-    private sealed class Context(IInitialSession session) : IInitialPacketContext<TPacket>
+    private sealed class Context(IHandshakeSession session) : IHandshakeContext<TPacket>
     {
         public IConnectionInfo Connection => session.Connection;
 

@@ -1,18 +1,18 @@
 namespace BlueHeighliner.Comlink.Sample;
 
 /// <summary>
-/// Identifies the node on the other end of every connection with an initial packet exchange. The engine does not say who starts, so this processor decides: the node that
+/// Identifies the node on the other end of every connection with a handshake of packets. The engine does not say who starts, so this processor decides: the node that
 /// opened an IP connection, or on a serial cable (where both ends open the port) the node at the higher station address, sends a <see cref="Packet"/> whose chunk is its user name,
 /// the other node answers with one carrying its own, and each marks the connection connected as the user the other named, so a serial link needs no <c>User</c> on its
 /// outgoing point and an IP connection does not depend on certificate names.
 /// </summary>
-public sealed class IdentityProcessor : IInitialPacketProcessor<Packet>
+public sealed class IdentityProcessor : IHandshakeProcessor<Packet>
 {
     /// <inheritdoc />
     public TimeSpan Timeout { get; } = TimeSpan.FromSeconds(10);
 
     /// <inheritdoc />
-    public async Task OnConnected(IInitialPacketContext<Packet> context)
+    public async Task OnConnected(IHandshakeContext<Packet> context)
     {
         if (Starts(context))
         {
@@ -21,7 +21,7 @@ public sealed class IdentityProcessor : IInitialPacketProcessor<Packet>
     }
 
     /// <inheritdoc />
-    public async Task OnReceived(IInitialPacketContext<Packet> context, Packet packet)
+    public async Task OnReceived(IHandshakeContext<Packet> context, Packet packet)
     {
         if (!Starts(context))
         {
@@ -38,8 +38,8 @@ public sealed class IdentityProcessor : IInitialPacketProcessor<Packet>
         }
     }
 
-    private bool Starts(IInitialPacketContext<Packet> context)
+    private bool Starts(IHandshakeContext<Packet> context)
         => context.Connection is ISerialConnectionInfo serial ? serial.SerialAddress > serial.RemoteSerialAddress : !context.Connection.IsInbound;
 
-    private Packet Announce(IInitialPacketContext<Packet> context) => new() { Chunk = Encoding.UTF8.GetBytes(context.Connection.LocalUser ?? string.Empty) };
+    private Packet Announce(IHandshakeContext<Packet> context) => new() { Chunk = Encoding.UTF8.GetBytes(context.Connection.LocalUser ?? string.Empty) };
 }

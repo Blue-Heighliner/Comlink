@@ -123,7 +123,7 @@ What a user reads in the in-app activity log: general, in plain words, with no e
 
 ### FRAMES
 
-Written only while the `FRAMES` category is turned on (see Enabling categories). One entry per frame, as the serialized bytes in hexadecimal with the user on the other end (`unidentified` before the connection is identified). A frame is traced between the packetizer and the connection's initial exchange, so a frame the engine sends for the initial exchange is traced too, and when packetization is on a frame is traced whole rather than as the packets it travels in.
+Written only while the `FRAMES` category is turned on (see Enabling categories). One entry per frame, as the serialized bytes in hexadecimal with the user on the other end (`unidentified` before the connection is identified). A frame is traced between the packetizer and the connection's handshake, so a frame the engine sends for the initial exchange is traced too, and when packetization is on a frame is traced whole rather than as the packets it travels in.
 
 | ID | Content | Scenario |
 |----|---------|----------|
@@ -132,7 +132,7 @@ Written only while the `FRAMES` category is turned on (see Enabling categories).
 
 ### PACKETS
 
-Written only while the `PACKETS` category is turned on (see Enabling categories) and packetization is on. The same as the frame trace, for each packet, beneath everything else, so it includes the initial packet exchange and exactly the bytes put on the connection.
+Written only while the `PACKETS` category is turned on (see Enabling categories) and packetization is on. The same as the frame trace, for each packet, beneath everything else, so it includes the handshake and exactly the bytes put on the connection.
 
 | ID | Content | Scenario |
 |----|---------|----------|
@@ -146,7 +146,7 @@ Technical events of the running application: connections, the wire and the netwo
 | ID | Content | Scenario |
 |----|---------|----------|
 | 41 | `Rejected connection from {Name}, which is neither {Expected}` | A server (a child client or another server in the cluster) gets a connection from a user it does not know. |
-| 43 | `Dropped a connection that {Reason}` | An IP connection cannot be identified or fails its initial exchange. |
+| 43 | `Dropped a connection that {Reason}` | An IP connection cannot be identified or fails its handshake. |
 | 44 | `Dropped a packet that could not be assembled: {Message}` | A received packet fails reassembly. |
 | 45 | `IP connections are unavailable: {Message}` | The IP transport cannot be built, for example because certificates are missing. |
 | 46 | `The packet size of {PacketSize} bytes is larger than the HDLC MaxInfoField of {MaxInfoField} bytes, so packets will fail to send over serial connections` | Packetization is on and its packet size exceeds the HDLC frame limit. |
