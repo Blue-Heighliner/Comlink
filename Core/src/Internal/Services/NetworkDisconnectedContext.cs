@@ -8,7 +8,7 @@ namespace BlueHeighliner.Comlink;
 internal sealed class NetworkDisconnectedContext<TFrame, TPriority, TLevel, TAspect> : NetworkEngineContext<TFrame, TPriority, TLevel, TAspect>, INetworkDisconnectedContext<TFrame, TPriority, TLevel, TAspect> where TFrame : class where TPriority : struct, Enum where TLevel : struct, Enum where TAspect : struct, Enum
 {
     /// <summary>Creates the context for a user who disconnected.</summary>
-    /// <param name="environment">What the processor acts on.</param>
+    /// <param name="environment">What the handler acts on.</param>
     /// <param name="targetUser">The name of the user.</param>
     public NetworkDisconnectedContext(INetworkEnvironment environment, string targetUser)
         : base(environment) => TargetUser = GetUser(targetUser);

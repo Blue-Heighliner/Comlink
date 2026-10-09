@@ -1,6 +1,6 @@
 namespace BlueHeighliner.Comlink;
 
-/// <summary>Runs the host's network processor (<see cref="IEngineController.NetworkHandler"/>) when something happens that it takes part in. Each event gets a freshly built context, so the processor sees a consistent snapshot even if a user connects or disconnects while it runs, and runs in the background: a failure is logged, never thrown back.</summary>
+/// <summary>Runs the host's frame handler (<see cref="IEngineController.FrameHandler"/>) when something happens that it takes part in. Each event gets a freshly built context, so the handler sees a consistent snapshot even if a user connects or disconnects while it runs, and runs in the background: a failure is logged, never thrown back.</summary>
 internal interface INetworkProcessing
 {
     /// <summary>A user went from having no live connection to having one.</summary>
@@ -28,7 +28,7 @@ internal interface INetworkProcessing
     /// <summary>The user submitted a retrieval with the GUI.</summary>
     /// <param name="server">The server asked.</param>
     /// <param name="criteria">What the stored messages must fit.</param>
-    /// <returns><see langword="true"/> when a processor was there to be told, <see langword="false"/> when none is stated.</returns>
+    /// <returns><see langword="true"/> when a handler was there to be told, <see langword="false"/> when none is stated.</returns>
     bool Retrieval(string server, RetrievalCriteria criteria);
 }
 
@@ -55,7 +55,7 @@ internal sealed class NetworkProcessing(IEngineController engineController, INet
     /// <inheritdoc />
     public bool Retrieval(string server, RetrievalCriteria criteria)
     {
-        if (engineController.NetworkHandler is null)
+        if (engineController.FrameHandler is null)
         {
             return false;
         }
@@ -64,9 +64,9 @@ internal sealed class NetworkProcessing(IEngineController engineController, INet
         return true;
     }
 
-    private void Run(Func<INetworkHandler, Task> run, string name, string subject, object? unhandled = null)
+    private void Run(Func<IEngineFrameHandler, Task> run, string name, string subject, object? unhandled = null)
     {
-        if (engineController.NetworkHandler is not { } handler)
+        if (engineController.FrameHandler is not { } handler)
         {
             unhandled.TryDispose();
             return;
@@ -75,7 +75,7 @@ internal sealed class NetworkProcessing(IEngineController engineController, INet
         _ = Task.Run(async () =>
         {
             try { await run(handler); }
-            catch (Exception ex) { logger.Record(LogEvents.NetworkProcessorFailed, ex, "The network processor's {Name} failed for {Subject}", name, subject); }
+            catch (Exception ex) { logger.Record(LogEvents.FrameHandlerFailed, ex, "The frame handler's {Name} failed for {Subject}", name, subject); }
         });
     }
 }

@@ -7,7 +7,7 @@ internal sealed class PacketBuilder<TFrame, TPacket, TPriority> where TFrame : c
     private ServiceRegistration<IPacketAdapter>? packetHandler;
     private ServiceRegistration<IHeartbeatItemHandler>? heartbeat;
 
-    /// <summary>The handshake processor, if stated.</summary>
+    /// <summary>The handshake handler, if stated.</summary>
     public ServiceRegistration<IHandshakeHandler>? HandshakeHandler { get; private set; }
 
     /// <summary>States the handler for the packets that carry a piece of a serialized frame.</summary>
@@ -25,10 +25,10 @@ internal sealed class PacketBuilder<TFrame, TPacket, TPriority> where TFrame : c
         return this;
     }
 
-    /// <inheritdoc cref="IPacketBuilder{TFrame, TPacket, TPriority, TLevel, TAspect}.Handshake{TProcessor}"/>
-    public PacketBuilder<TFrame, TPacket, TPriority> Handshake<TProcessor>() where TProcessor : IPacketHandshakeProcessor<TPacket>
+    /// <inheritdoc cref="IPacketBuilder{TFrame, TPacket, TPriority, TLevel, TAspect}.Handshake{THandler}"/>
+    public PacketBuilder<TFrame, TPacket, TPriority> Handshake<THandler>() where THandler : IPacketHandshakeHandler<TPacket>
     {
-        HandshakeHandler = ServiceRegistration<IHandshakeHandler>.Of(typeof(TProcessor), processor => new PacketHandshakeProcessorAdapter<TPacket>((IPacketHandshakeProcessor<TPacket>)processor));
+        HandshakeHandler = ServiceRegistration<IHandshakeHandler>.Of(typeof(THandler), handler => new PacketHandshakeHandlerAdapter<TPacket>((IPacketHandshakeHandler<TPacket>)handler));
         return this;
     }
 

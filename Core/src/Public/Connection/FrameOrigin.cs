@@ -1,6 +1,6 @@
 namespace BlueHeighliner.Comlink;
 
-/// <summary>Where a frame handed to <see cref="INetworkProcessor{TFrame, TPriority, TLevel, TAspect}.OnReceived"/> came from.</summary>
+/// <summary>Where a frame handed to <see cref="IFrameHandler{TFrame, TPriority, TLevel, TAspect}.OnReceived"/> came from.</summary>
 public enum FrameOrigin
 {
     /// <summary>A peer node, over an MSMT or HDLC connection.</summary>

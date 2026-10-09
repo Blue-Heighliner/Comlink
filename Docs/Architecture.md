@@ -37,7 +37,7 @@ Core/src/
 ├── Engine.cs, EngineConfiguration.cs   The primary public types: the entry point and the configuration a host passes to it
 ├── Public/        The rest of the package's public surface
 │   ├── Configuration/   The fluent builders a configuration is written against, and the types they take
-│   ├── Connection/      IServiceConnection<TPriority, TLevel, TAspect>, the processor contexts and their models
+│   ├── Connection/      IServiceConnection<TPriority, TLevel, TAspect>, the handler contexts and their models
 │   ├── ExternalSystems/ The external system contract and its base class
 │   ├── Models/          Types that appear in configuration (UserInfo, ConnectionPoint, IConnectionInfo, ...)
 │   └── Serialization/   The frame and packet serializer contracts, their abstract bases, and the protobuf default
@@ -71,7 +71,7 @@ Core/src/
 sequenceDiagram
     participant DVM as DraftViewModel
     participant SC as IEngineConnection
-    participant NP as Network processor
+    participant NP as Frame handler
     participant PS as PeerService
     participant RP as Remote node
     DVM->>SC: SendMessage
@@ -90,7 +90,7 @@ sequenceDiagram
 sequenceDiagram
     participant RN as Remote Node
     participant PS as PeerService
-    participant NP as Network processor
+    participant NP as Frame handler
     participant DSC as DirectServiceConnection
     participant MVM as MainViewModel
     participant ES as EntryService
@@ -102,13 +102,13 @@ sequenceDiagram
     MVM->>MVM: Prepend to EntryBar if Inbox active
 ```
 
-The engine is only transport, GUI and storage: receiving, routing, receipts, retrieval, forwarding and the network indicator are the host's network processor's, stated in its configuration. When the user opens that Inbox message, `ContentAreaViewModel` calls `IServiceConnection.MarkMessageRead`, which transitions `ReadStatus` to `Read` and calls the processor's `OnRead` so it can tell the sender, see Components/Peer.md. If the message is an alert (`Message.IsAlert`), `AlertViewModel` also alarms (title bar box + sound) until it, and every other pending alert, is read; see `Docs/Components/ViewModels.md`.
+The engine is only transport, GUI and storage: receiving, routing, receipts, retrieval, forwarding and the network indicator are the host's frame handler's, stated in its configuration. When the user opens that Inbox message, `ContentAreaViewModel` calls `IServiceConnection.MarkMessageRead`, which transitions `ReadStatus` to `Read` and calls the handler's `OnRead` so it can tell the sender, see Components/Peer.md. If the message is an alert (`Message.IsAlert`), `AlertViewModel` also alarms (title bar box + sound) until it, and every other pending alert, is read; see `Docs/Components/ViewModels.md`.
 
 ### Receiving a frame from an external system
-An external system reports an inbound frame; `ExternalSystemsService` hands it to the processor's `OnReceived` with `FrameOrigin.ExternalSystem`, and the processor may send frames out through `SendToExternalSystems`. This happens in both Client and Headless mode. See [ExternalSystems.md](Components/ExternalSystems.md).
+An external system reports an inbound frame; `ExternalSystemsService` hands it to the handler's `OnReceived` with `FrameOrigin.ExternalSystem`, and the handler may send frames out through `SendToExternalSystems`. This happens in both Client and Headless mode. See [ExternalSystems.md](Components/ExternalSystems.md).
 
 ### Receiving a frame from an interface
-An external program sends an instance of the host's frame type on its interface connection. `InterfaceService` hands it to the processor's `OnReceived` with `FrameOrigin.Interface`. This happens in both Client and Headless mode.
+An external program sends an instance of the host's frame type on its interface connection. `InterfaceService` hands it to the handler's `OnReceived` with `FrameOrigin.Interface`. This happens in both Client and Headless mode.
 
 ### Exporting and importing entries (Client mode)
 
@@ -157,7 +157,7 @@ sequenceDiagram
 1. `UserService.Load` - restores the installed user from `User.json` (or the `--user` user), checking their certificate
 2. `PeerService.Start` — begins accepting peer connections
 3. `InterfaceService.Start` — begins accepting interface connections (always, regardless of mode)
-4. `EngineHooksService.Start` - subscribes to `IPeerService`'s connection and message events on behalf of the host's configured network processor (`Frames<TProcessor>`, see [Configuration.md](Components/Configuration.md#network-processor)); a no-op if none is configured
+4. `EngineHooksService.Start` - subscribes to `IPeerService`'s connection and message events on behalf of the host's configured frame handler (`Frames<THandler>`, see [Configuration.md](Components/Configuration.md#frame-handler)); a no-op if none is configured
 
 Steps 2 through 4 (and external systems) only run once a user is installed: a fresh installation has no name, so it cannot identify itself to peers, pick its own certificate, or stamp messages it routes. When no user is installed yet, `EngineHost` waits for `UserService.Installed` and starts networking then, without a restart.
 

@@ -4,7 +4,7 @@ Runnable examples of `IEngineConfiguration` and `Engine.Start<T>` in different s
 
 ## Minimal host
 
-The smallest possible host: a frame DTO, a configuration, and the entry point. The engine is only transport, GUI and storage, so a host that wants messages to flow states a network processor that implements the protocol.
+The smallest possible host: a frame DTO, a configuration, and the entry point. The engine is only transport, GUI and storage, so a host that wants messages to flow states a frame handler that implements the protocol.
 
 ```csharp
 [ProtoContract]
@@ -20,16 +20,16 @@ public sealed class MyEngineConfiguration : IEngineConfiguration
 {
     public void Configure(IEngineBuilder engine) => engine.Types<MyFrame, MyPacket, MyPriority, MyMessageLevel, MyMessageAspect>()
         .Priority(MyPriority.Normal)
-        .Frames<MyNetworkProcessor>();
+        .Frames<MyFrameHandler>();
 }
 
 await Engine.Start<MyEngineConfiguration>(args);
 ```
 
-The processor reacts to what happens and acts through the context it is handed. For example, a client that sends each message to its server and records each frame it receives:
+The handler reacts to what happens and acts through the context it is handed. For example, a client that sends each message to its server and records each frame it receives:
 
 ```csharp
-public sealed class MyNetworkProcessor : INetworkProcessor<MyFrame, MyPriority, MyMessageLevel, MyMessageAspect>
+public sealed class MyFrameHandler : IFrameHandler<MyFrame, MyPriority, MyMessageLevel, MyMessageAspect>
 {
     public async Task OnSent(INetworkSentContext<MyFrame, MyPriority, MyMessageLevel, MyMessageAspect> context)
     {
@@ -55,7 +55,7 @@ public sealed class MyNetworkProcessor : INetworkProcessor<MyFrame, MyPriority, 
 }
 ```
 
-Receipts, routing through servers, retrieval and the network indicator are written the same way, in the processor; `Sample/src/Components/NetworkProcessor.cs` is a complete one. The frame type also needs `[ProtoContract]`/`[ProtoMember]` attributes for the default network serializer.
+Receipts, routing through servers, retrieval and the network indicator are written the same way, in the handler; `Sample/src/Components/FrameHandler.cs` is a complete one. The frame type also needs `[ProtoContract]`/`[ProtoMember]` attributes for the default network serializer.
 By default this runs the Avalonia desktop UI, with command-line overrides disallowed (`CommandLineOverrides` is off
 unless stated) and no window icon (the display handler's `Icon` is the operating system's unless stated).
 
@@ -66,7 +66,7 @@ A host only states what it needs distinct behavior for; every other setting keep
 ```csharp
 public void Configure(IEngineBuilder engine) => engine.Types<MyFrame, MyPriority, MyMessageLevel, MyMessageAspect>()
     .Display<MyDisplayHandler>()
-    .Frames<MyNetworkProcessor>();
+    .Frames<MyFrameHandler>();
 ```
 
 ## The network configuration file
@@ -79,7 +79,7 @@ lets `--config` name another file and `--user` name the user, who is checked lik
 
 ```csharp
 public void Configure(IEngineBuilder engine) => engine.Types<MyFrame, MyPriority, MyMessageLevel, MyMessageAspect>()
-    .Frames<MyNetworkProcessor>()
+    .Frames<MyFrameHandler>()
     .CommandLineOverrides(true);
 ```
 

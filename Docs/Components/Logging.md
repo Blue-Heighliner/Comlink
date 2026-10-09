@@ -101,9 +101,9 @@ What a user reads in the in-app activity log: general, in plain words, with no e
 | 68 | `{Change} {UserName}` | A client or server connection to its parent, a child or a sibling server comes up (`Connected to`) or goes down (`Disconnected from`). |
 | 70 | `Network {Status}` | The network indicator goes `online` or `offline`. |
 | 72 | `Network configuration reloaded` | The user chooses Refresh and the network file has been read again. |
-| 76 | `{MessageId} received from {FromUser}` | The network processor records a received message. |
-| 80 | `{MessageId} sending to {Destinations}` | A message sent with the GUI is stored and handed to the network processor. |
-| 83 | `{MessageId} status for {User}: {Status}` | The network processor changes the delivery status of a sent message to a recipient. |
+| 76 | `{MessageId} received from {FromUser}` | The frame handler records a received message. |
+| 80 | `{MessageId} sending to {Destinations}` | A message sent with the GUI is stored and handed to the frame handler. |
+| 83 | `{MessageId} status for {User}: {Status}` | The frame handler changes the delivery status of a sent message to a recipient. |
 | 85 | `External system {Name} {Change}` | An external system's connection comes up (`connected`) or goes down (`disconnected`). |
 | 90 | `{UserName} is not installed: {Problem}` | At startup the remembered user or the `--user` name is not in the network file, or its certificate fails the check. |
 | 93 | `The application ran into an unexpected error` | An exception reaches the top-level handler of the application (technical detail: 1). |
@@ -159,7 +159,7 @@ Technical events of the running application: connections, the wire and the netwo
 | 73 | `Role or certificates changed, restarting connections` | A reload finds a changed role, certificate store or authority certificate. |
 | 74 | `Interface listener changed, restarting it` | A reload finds a changed interface port or certificate setting. |
 | 75 | `Serial link to {Point} connected` | A serial link comes up. |
-| 84 | `Retrieval found {Count} stored message(s)` | The network processor looks up stored messages. |
+| 84 | `Retrieval found {Count} stored message(s)` | The frame handler looks up stored messages. |
 | 109 | `{Change} {UserName}` | A server connection to a parent, a child or a sibling server comes up (`Connected to`) or goes down (`Disconnected from`). |
 
 ### ERROR
@@ -174,7 +174,7 @@ Something failed. The technical detail of a problem that also has an `ACTIVITY` 
 | 11 | `A payload of {Length} bytes cannot be sent over {Point}: {Reason}` | A send is larger than the connection can carry: MSMT's largest message with packetization off, what the packetizer can split, or one HDLC frame (the reason says which and how to fix it). |
 | 22 | `Failed to handle {UserName} {Action}` | A handler of a user connecting or disconnecting throws. |
 | 23 | `Failed to store received message from {FromUser}` | Storing a message received while the UI runs throws. |
-| 24 | `Failed to store a copy of {MessageId}` | The network processor stores a message and storing it fails. |
+| 24 | `Failed to store a copy of {MessageId}` | The frame handler stores a message and storing it fails. |
 | 25 | `Failed to read stored messages for a retrieval by {Requester}` | A storage server fails to read messages for a retrieval request. |
 | 26 | `{Kind} transmission failed for {Preview}` | Sending a draft (`Message`) or a staged message (`Staged send`) throws. |
 | 28 | `Failed to store a new draft` | The automatic first store of a new draft throws. |
@@ -182,7 +182,7 @@ Something failed. The technical detail of a problem that also has an `ACTIVITY` 
 | 30 | `Failed to save what was written before leaving it` | Saving a draft or note when leaving it throws. |
 | 33 | `Failed to load print content for {EntryId}` | Reading the content of a print job throws. |
 | 34 | `Printing {EntryId} on {Printer} failed` | Sending a print job to the printer throws. |
-| 37 | `The network processor's {Name} failed for {Subject}` | A method of the network processor throws. |
+| 37 | `The frame handler's {Name} failed for {Subject}` | A method of the frame handler throws. |
 | 39 | `The network configuration could not be reloaded: {Message}` | A reload requested by the user fails because the file cannot be read or parsed. |
 | 40 | `External system {Name} stopped unexpectedly` | An external system's run loop throws. |
 | 88 | `Initialization failed` | The initial setup of the main window's view model throws. |
@@ -195,4 +195,4 @@ A failure the application cannot go on after, or that stops a part of it.
 | ID | Content | Scenario |
 |----|---------|----------|
 | 1 | `Unhandled exception: {Message}` | An exception reaches the top-level handler of the application. |
-| 87 | `{Service} stopped unexpectedly` | A background service (peer, interface, external systems, network processor, auto forward, disconnect alarm or network indicator) ends other than by being cancelled. |
+| 87 | `{Service} stopped unexpectedly` | A background service (peer, interface, external systems, frame handler, auto forward, disconnect alarm or network indicator) ends other than by being cancelled. |

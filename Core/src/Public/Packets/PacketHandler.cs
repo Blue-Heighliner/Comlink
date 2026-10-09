@@ -2,7 +2,7 @@ namespace BlueHeighliner.Comlink;
 
 /// <summary>
 /// Handles the packets of the host's packet type <typeparamref name="TPacket"/> that carry a piece of a serialized frame, as opposed to a packet that carries no frame
-/// (such as one a handshake processor sends). The engine cuts every serialized frame into packets, calls <see cref="IFrameSerializer.ConfigurePacket"/> on each with its frame,
+/// (such as one a handshake handler sends). The engine cuts every serialized frame into packets, calls <see cref="IFrameSerializer.ConfigurePacket"/> on each with its frame,
 /// and reassembles frames from the packets it receives. State one with <see cref="IEngineBuilder{TFrame, TPacket, TPriority, TLevel, TAspect}.Packets{THandler}"/>.
 /// </summary>
 /// <typeparam name="TFrame">The host's frame type.</typeparam>

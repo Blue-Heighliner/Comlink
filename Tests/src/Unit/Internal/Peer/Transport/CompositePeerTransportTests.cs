@@ -229,7 +229,7 @@ public sealed class CompositePeerTransportTests
     public void Factory_InitialPacketWithoutPackets_Throws()
     {
         Mock<TestEngineController> controller = new() { CallBase = true };
-        controller.Setup(c => c.PacketHandshakeProcessor).Returns(Mock.Of<IHandshakeHandler>());
+        controller.Setup(c => c.PacketHandshakeHandler).Returns(Mock.Of<IHandshakeHandler>());
         controller.Setup(c => c.ConnectionOptions).Throws(new InvalidOperationException("no current user"));
         PeerTransportFactory factory = new(Mock.Of<IMsmtSessionPeer.IFactory>(), Mock.Of<IHdlcPeerFactory>(), controller.Object, LoggerFactory.Create(_ => { }), Mock.Of<ILogSettings>());
 

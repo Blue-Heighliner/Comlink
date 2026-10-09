@@ -1,12 +1,12 @@
 namespace BlueHeighliner.Comlink.Sample;
 
 /// <summary>
-/// Identifies the node on the other end of every connection with a handshake of packets. The engine does not say who starts, so this processor decides: the node that
+/// Identifies the node on the other end of every connection with a handshake of packets. The engine does not say who starts, so this handler decides: the node that
 /// opened an IP connection, or on a serial cable (where both ends open the port) the node at the higher station address, sends a <see cref="Packet"/> whose chunk is its user name,
 /// the other node answers with one carrying its own, and each marks the connection connected as the user the other named, so a serial link needs no <c>User</c> on its
 /// outgoing point and an IP connection does not depend on certificate names.
 /// </summary>
-public sealed class IdentityProcessor : IPacketHandshakeProcessor<Packet>
+public sealed class HandshakeHandler : IPacketHandshakeHandler<Packet>
 {
     /// <inheritdoc />
     public TimeSpan Timeout { get; } = TimeSpan.FromSeconds(10);

@@ -42,9 +42,9 @@ internal sealed class PeerTransportFactory(
             transport = new TracingPeerTransport(transport, loggerFactory.CreateLogger(LogCategories.Packets), logSettings, LogCategories.Packets, LogEvents.PacketSent, LogEvents.PacketReceived);
         }
         // A packet handshake's packets travel as packets of their own, so it happens beneath the packetizer; a frame handshake's frames are frames like any other, so it, and identification, happen above it.
-        if (packetizer is null && engineController.PacketHandshakeProcessor is not null)
+        if (packetizer is null && engineController.PacketHandshakeHandler is not null)
         {
-            throw new InvalidEngineConfigurationException("A packet handshake processor needs a packet type, but none is configured");
+            throw new InvalidEngineConfigurationException("A packet handshake handler needs a packet type, but none is configured");
         }
         if (packetizer is not null)
         {

@@ -47,10 +47,10 @@ internal sealed class EngineBuilder : IEngineBuilder, IAsyncDisposable
     public MsmtConnectionOptions? MsmtOptionsValue { get; set; }
     /// <summary>How the HDLC peer options are adjusted, if stated.</summary>
     public HdlcPeerOptions? HdlcOptionsValue { get; set; }
-    /// <summary>The packet handshake processor, if stated.</summary>
-    public ServiceRegistration<IHandshakeHandler>? PacketHandshakeProcessor { get; set; }
-    /// <summary>The frame handshake processor, if stated.</summary>
-    public ServiceRegistration<IHandshakeHandler>? FrameHandshakeProcessor { get; set; }
+    /// <summary>The packet handshake handler, if stated.</summary>
+    public ServiceRegistration<IHandshakeHandler>? PacketHandshakeHandler { get; set; }
+    /// <summary>The frame handshake handler, if stated.</summary>
+    public ServiceRegistration<IHandshakeHandler>? FrameHandshakeHandler { get; set; }
     /// <summary>Whether the <c>--config</c> and <c>--user</c> arguments are honored.</summary>
     public bool AreCommandLineOverridesAllowed { get; set; }
     /// <summary>The external systems.</summary>
@@ -58,8 +58,8 @@ internal sealed class EngineBuilder : IEngineBuilder, IAsyncDisposable
     /// <summary>Registers the services typed by the host's enums, once <c>Types</c> has stated them.</summary>
     public Action<IServiceCollection>? TypedServices { get; private set; }
 
-    /// <summary>The processor that reacts to peer activity, if stated.</summary>
-    public ServiceRegistration<INetworkHandler>? NetworkHandler { get; set; }
+    /// <summary>The handler that reacts to peer activity, if stated.</summary>
+    public ServiceRegistration<IEngineFrameHandler>? FrameHandler { get; set; }
     /// <summary>The custom export formats, in the order added.</summary>
     public List<ServiceRegistration<IExportFormat>> ExportFormats { get; } = [];
     /// <summary>The custom import formats, in the order added.</summary>
@@ -150,7 +150,7 @@ internal sealed class EngineBuilder : IEngineBuilder, IAsyncDisposable
         }
         if (FrameMap is null)
         {
-            throw new InvalidOperationException("The engine configuration must state its frame handlers with Frames<TProcessor>().");
+            throw new InvalidOperationException("The engine configuration must state its frame handlers with Frames<THandler>().");
         }
     }
 }

@@ -21,7 +21,7 @@ internal interface IEntryService
     event Func<MessageEntity, Task>? MessageRead;
     /// <summary>
     /// Persists a message the user sent to the Outbox folder. It lists a delivery status, <see cref="DestinationStatus.Sending"/>, for each addressed user that is not a group and not an external address; the host's
-    /// processor reports every destination's outcome, those and the members of the groups it expanded, with <see cref="UpdateDeliveryStatus"/>.
+    /// handler reports every destination's outcome, those and the members of the groups it expanded, with <see cref="UpdateDeliveryStatus"/>.
     /// </summary>
     Task<MessageEntity> StoreSentMessage(Message message);
     /// <summary>Returns the stored message with the identifier <paramref name="messageId"/> in the Outbox (<paramref name="outbound"/>) or the Inbox, or <see langword="null"/> when there is none.</summary>

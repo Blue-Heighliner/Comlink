@@ -55,10 +55,10 @@ public sealed class HandshakePeerTransportTests
         return controller;
     }
 
-    private static Mock<RawPacketEngineController> WithProcessor(IHandshakeHandler processor)
+    private static Mock<RawPacketEngineController> WithHandler(IHandshakeHandler handler)
     {
         Mock<RawPacketEngineController> controller = Controller();
-        controller.Setup(c => c.PacketHandshakeProcessor).Returns(processor);
+        controller.Setup(c => c.PacketHandshakeHandler).Returns(handler);
         return controller;
     }
 
@@ -250,13 +250,13 @@ public sealed class HandshakePeerTransportTests
         await Assert.ThrowsAsync<IOException>(() => endA.Transport.Request(connection, new byte[] { 1 }));
     }
 
-    /// <summary>The processors decide the identity on both ends, ahead of the engine's own identification: the opener sends a message, the receiver answers and names the opener from it, and the opener names the receiver from the reply, data included.</summary>
+    /// <summary>The handlers decide the identity on both ends, ahead of the engine's own identification: the opener sends a message, the receiver answers and names the opener from it, and the opener names the receiver from the reply, data included.</summary>
     [Fact]
-    public async Task Handshake_IdentitiesComeFromTheProcessors()
+    public async Task Handshake_IdentitiesComeFromTheHandlers()
     {
-        Mock<RawPacketEngineController> a = WithProcessor(Introduce("ALICE"));
+        Mock<RawPacketEngineController> a = WithHandler(Introduce("ALICE"));
         a.Setup(c => c.GetUserData("BOB")).Returns(new Dictionary<string, string> { ["station"] = "4" });
-        Mock<RawPacketEngineController> b = WithProcessor(Introduce("BOB"));
+        Mock<RawPacketEngineController> b = WithHandler(Introduce("BOB"));
         (End endA, End endB) = Pair(a.Object, b.Object);
 
         PeerConnection outbound = await endA.Transport.Connect(point);
@@ -271,8 +271,8 @@ public sealed class HandshakePeerTransportTests
     [Fact]
     public async Task Handshake_AddsNothingToPayloads_AndDataFlowsBothWaysAfterwards()
     {
-        Mock<RawPacketEngineController> a = WithProcessor(Introduce("ALICE"));
-        (End endA, End endB) = Pair(a.Object, WithProcessor(Introduce("BOB")).Object);
+        Mock<RawPacketEngineController> a = WithHandler(Introduce("ALICE"));
+        (End endA, End endB) = Pair(a.Object, WithHandler(Introduce("BOB")).Object);
         PeerConnection outbound = await endA.Transport.Connect(point);
         await WaitUntil(() => endB.Connected.Count == 1);
 
@@ -291,13 +291,13 @@ public sealed class HandshakePeerTransportTests
     [Fact]
     public async Task Handshake_DataSentImmediately_IsHeldUntilTheReceiverIsEstablished()
     {
-        Mock<RawPacketEngineController> b = WithProcessor(Introduce("BOB"));
+        Mock<RawPacketEngineController> b = WithHandler(Introduce("BOB"));
         b.Setup(c => c.GetUserData("ALICE")).Returns(() =>
         {
             Thread.Sleep(100);
             return new Dictionary<string, string>();
         });
-        (End endA, End endB) = Pair(WithProcessor(Introduce("ALICE")).Object, b.Object);
+        (End endA, End endB) = Pair(WithHandler(Introduce("ALICE")).Object, b.Object);
 
         PeerConnection outbound = await endA.Transport.Connect(point);
         await endA.Transport.Request(outbound, new byte[] { 1 });
@@ -309,9 +309,9 @@ public sealed class HandshakePeerTransportTests
         Assert.Single(endB.Connected);
     }
 
-    /// <summary>A processor may take several rounds: every item that arrives before the connection is marked connected is handed to it, in order.</summary>
+    /// <summary>A handler may take several rounds: every item that arrives before the connection is marked connected is handed to it, in order.</summary>
     [Fact]
-    public async Task Handshake_SeveralItems_AreHandedToTheProcessorInOrder()
+    public async Task Handshake_SeveralItems_AreHandedToTheHandlerInOrder()
     {
         List<string> seen = [];
         Scripted opener = new()
@@ -344,7 +344,7 @@ public sealed class HandshakePeerTransportTests
                 await session.Connected("ALICE");
             }
         };
-        (End endA, _) = Pair(WithProcessor(opener).Object, WithProcessor(acceptor).Object);
+        (End endA, _) = Pair(WithHandler(opener).Object, WithHandler(acceptor).Object);
 
         PeerConnection outbound = await endA.Transport.Connect(point);
 
@@ -358,7 +358,7 @@ public sealed class HandshakePeerTransportTests
     {
         List<bool> openersA = [];
         List<bool> openersB = [];
-        (End endA, End endB) = Pair(WithProcessor(Introduce("ALICE", openersA)).Object, WithProcessor(Introduce("BOB", openersB)).Object, serial: true);
+        (End endA, End endB) = Pair(WithHandler(Introduce("ALICE", openersA)).Object, WithHandler(Introduce("BOB", openersB)).Object, serial: true);
 
         PeerConnection link = await endA.Transport.Connect(serialPoint);
 
@@ -370,24 +370,24 @@ public sealed class HandshakePeerTransportTests
         Assert.Equal([false], openersB);
     }
 
-    /// <summary>The processor disconnecting drops the connection, which fails the connect.</summary>
+    /// <summary>The handler disconnecting drops the connection, which fails the connect.</summary>
     [Fact]
-    public async Task Handshake_ProcessorDisconnects_DropsConnection()
+    public async Task Handshake_HandlerDisconnects_DropsConnection()
     {
         Scripted refusing = new() { Connected = async session => { await session.Disconnect(); } };
-        (End endA, _) = Pair(WithProcessor(refusing).Object, WithProcessor(Introduce("BOB")).Object);
+        (End endA, _) = Pair(WithHandler(refusing).Object, WithHandler(Introduce("BOB")).Object);
 
         await Assert.ThrowsAsync<IOException>(() => endA.Transport.Connect(point));
 
         Assert.Empty(endA.Connected);
     }
 
-    /// <summary>If the processor never marks the connection connected, the connection is dropped once the timeout passes and connecting fails.</summary>
+    /// <summary>If the handler never marks the connection connected, the connection is dropped once the timeout passes and connecting fails.</summary>
     [Fact]
     public async Task Handshake_NeverConnected_TimesOutAndDrops()
     {
         Scripted silent = new() { Timeout = TimeSpan.FromMilliseconds(150) };
-        (End endA, End endB) = Pair(WithProcessor(Introduce("ALICE")).Object, WithProcessor(silent).Object);
+        (End endA, End endB) = Pair(WithHandler(Introduce("ALICE")).Object, WithHandler(silent).Object);
 
         await Assert.ThrowsAsync<IOException>(() => endA.Transport.Connect(point));
 
@@ -395,24 +395,24 @@ public sealed class HandshakePeerTransportTests
         Assert.Empty(endB.Connected);
     }
 
-    /// <summary>An item of a type other than the processor's is refused and the connection dropped.</summary>
+    /// <summary>An item of a type other than the handler's is refused and the connection dropped.</summary>
     [Fact]
     public async Task Handshake_WrongItemType_DropsConnection()
     {
         Scripted wrong = new() { ItemType = typeof(TestHello), Timeout = TimeSpan.FromMilliseconds(300) };
-        (End endA, End endB) = Pair(WithProcessor(Introduce("ALICE")).Object, WithProcessor(wrong).Object);
+        (End endA, End endB) = Pair(WithHandler(Introduce("ALICE")).Object, WithHandler(wrong).Object);
 
         await Assert.ThrowsAsync<IOException>(() => endA.Transport.Connect(point));
 
         Assert.Empty(endB.Connected);
     }
 
-    /// <summary>A processor that throws drops the connection.</summary>
+    /// <summary>A handler that throws drops the connection.</summary>
     [Fact]
-    public async Task Handshake_ProcessorThrows_DropsConnection()
+    public async Task Handshake_HandlerThrows_DropsConnection()
     {
         Scripted throwing = new() { Connected = _ => throw new InvalidOperationException("boom") };
-        (End endA, _) = Pair(WithProcessor(throwing).Object, WithProcessor(Introduce("BOB")).Object);
+        (End endA, _) = Pair(WithHandler(throwing).Object, WithHandler(Introduce("BOB")).Object);
 
         await Assert.ThrowsAsync<IOException>(() => endA.Transport.Connect(point));
 
@@ -450,9 +450,9 @@ public sealed class HandshakePeerTransportTests
             }
         };
         Mock<TestPacketEngineController> controllerA = new() { CallBase = true };
-        controllerA.Setup(c => c.PacketHandshakeProcessor).Returns(a);
+        controllerA.Setup(c => c.PacketHandshakeHandler).Returns(a);
         Mock<TestPacketEngineController> controllerB = new() { CallBase = true };
-        controllerB.Setup(c => c.PacketHandshakeProcessor).Returns(b);
+        controllerB.Setup(c => c.PacketHandshakeHandler).Returns(b);
         (LoopbackPeerTransport rawA, LoopbackPeerTransport rawB) = LoopbackPeerTransport.CreatePair();
         HandshakePeerTransport endA = new(rawA, controllerA.Object, logger, Handshake.ForPackets(controllerA.Object), identify: false);
         HandshakePeerTransport endB = new(rawB, controllerB.Object, logger, Handshake.ForPackets(controllerB.Object), identify: false);
@@ -468,12 +468,12 @@ public sealed class HandshakePeerTransportTests
         Assert.Null(accepted[0].User);
     }
 
-    /// <summary>A handshake processor with no packet serializer is a configuration error, reported when the handshake is built.</summary>
+    /// <summary>A handshake handler with no packet serializer is a configuration error, reported when the handshake is built.</summary>
     [Fact]
     public void ForPackets_WithoutSerializer_Throws()
     {
         Mock<TestEngineController> controller = new() { CallBase = true };
-        controller.Setup(c => c.PacketHandshakeProcessor).Returns(new Scripted());
+        controller.Setup(c => c.PacketHandshakeHandler).Returns(new Scripted());
 
         Assert.Throws<InvalidEngineConfigurationException>(() => Handshake.ForPackets(controller.Object));
         Assert.Null(Handshake.ForPackets(Controller().Object));

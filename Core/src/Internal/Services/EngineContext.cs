@@ -1,10 +1,10 @@
 namespace BlueHeighliner.Comlink;
 
-/// <summary>Creates the <see cref="IEngineContext"/> handed to a host's processors, once a user is installed.</summary>
+/// <summary>Creates the <see cref="IEngineContext"/> handed to a host's handlers, once a user is installed.</summary>
 internal interface IEngineContextFactory
 {
     /// <summary>Creates a snapshot of the engine as it is now.</summary>
-    /// <exception cref="InvalidOperationException">No user is installed, which should never happen where a processor runs.</exception>
+    /// <exception cref="InvalidOperationException">No user is installed, which should never happen where a handler runs.</exception>
     IEngineContext Create();
 }
 
@@ -51,7 +51,7 @@ internal sealed class EngineContextFactory(IServiceProvider services, IEngineCon
     /// <inheritdoc />
     public IEngineContext Create()
         => new EngineContext(
-            userService.GetCurrentUserInfo() ?? throw new InvalidOperationException("A processor ran with no installed user, which should never happen: processors only run once one is installed."),
+            userService.GetCurrentUserInfo() ?? throw new InvalidOperationException("A handler ran with no installed user, which should never happen: handlers only run once one is installed."),
             engineController.Users,
             engineController.GetUserInfo,
             userName => services.GetRequiredService<IPeerService>().IsUserConnected(userName),

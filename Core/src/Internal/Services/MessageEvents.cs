@@ -1,9 +1,9 @@
 namespace BlueHeighliner.Comlink;
 
-/// <summary>Where what happens to the user's messages is announced: a message recorded as received, and a destination's delivery status changing. The host's processor causes both through its context; the GUI and <see cref="IEngineConnection"/> listen.</summary>
+/// <summary>Where what happens to the user's messages is announced: a message recorded as received, and a destination's delivery status changing. The host's handler causes both through its context; the GUI and <see cref="IEngineConnection"/> listen.</summary>
 internal interface IMessageEvents
 {
-    /// <summary>Raised when the host's processor records a message as received.</summary>
+    /// <summary>Raised when the host's handler records a message as received.</summary>
     event Func<Message, Task>? MessageReceived;
 
     /// <summary>Raised when a destination's delivery status on a sent message changes.</summary>

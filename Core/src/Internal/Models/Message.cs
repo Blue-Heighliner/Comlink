@@ -30,6 +30,6 @@ internal sealed record Message
     /// <summary>Gets the message aspect the message carries, a member of the enum the host stated for its message aspects, or <see langword="null"/> for none.</summary>
     public Enum? MessageAspect { get; init; }
 
-    /// <summary>Gets whether the message is an alert, which alarms the recipient's Client-mode UI until it is read. The draft handler decides it for a message the user sends (see <see cref="IDraftHandler{TPriority, TLevel, TAspect}.IsAlert"/>) and the host's processor for one it receives.</summary>
+    /// <summary>Gets whether the message is an alert, which alarms the recipient's Client-mode UI until it is read. The draft handler decides it for a message the user sends (see <see cref="IDraftHandler{TPriority, TLevel, TAspect}.IsAlert"/>) and the host's handler for one it receives.</summary>
     public bool IsAlert { get; init; }
 }

@@ -72,7 +72,7 @@ node is configured with the users it expects, a connection is matched to a user 
 presents, not by where it was dialed: `IMsmtConnection.Direction` distinguishes an accepted connection from one
 this node dialed, and `IMsmtConnection.Identity` exposes the remote peer's certificate subject (a plain
 distinguished-name string, e.g. `CN=Client1`), which `MsmtPeerTransport` turns into the connection's
-`IIpConnectionInfo` (host, port, and every common name). `InterfaceService` sends a frame the processor asks for (`SendInterface`) down the connection each interface client opened, and mirrors nothing on its own.
+`IIpConnectionInfo` (host, port, and every common name). `InterfaceService` sends a frame the handler asks for (`SendInterface`) down the connection each interface client opened, and mirrors nothing on its own.
 
 ## Comlink Integration
 

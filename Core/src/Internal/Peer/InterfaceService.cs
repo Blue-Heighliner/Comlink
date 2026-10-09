@@ -3,12 +3,12 @@ namespace BlueHeighliner.Comlink;
 /// <summary>
 /// Hosts the local interface listener: an MSMT connection that behaves like a peer connection — same
 /// transport, same frame type (<see cref="IEngineController.FrameType"/>) — but represents no user of
-/// its own. Every frame an interface sends is handed to the host's network processor as received (see
-/// <see cref="INetworkProcessor{TFrame, TPriority, TLevel, TAspect}.OnReceived"/>), whose origin says it came from the interface, and the
-/// processor decides what to do with it, for example to send it on as if this user had originated it itself.
+/// its own. Every frame an interface sends is handed to the host's frame handler as received (see
+/// <see cref="IFrameHandler{TFrame, TPriority, TLevel, TAspect}.OnReceived"/>), whose origin says it came from the interface, and the
+/// handler decides what to do with it, for example to send it on as if this user had originated it itself.
 /// </summary>
 /// <remarks>
-/// The processor can also send a frame to every connected interface (see <see cref="INetworkContext{TFrame, TPriority, TLevel, TAspect}.SendInterface"/>). Interface connections are bidirectional MSMT session connections, so the frame
+/// The handler can also send a frame to every connected interface (see <see cref="INetworkContext{TFrame, TPriority, TLevel, TAspect}.SendInterface"/>). Interface connections are bidirectional MSMT session connections, so the frame
 /// goes back down the connection the interface itself opened.
 /// </remarks>
 internal interface IInterfaceService : IAsyncDisposable

@@ -87,7 +87,7 @@ public sealed class DirectServiceConnectionTests
         Assert.Same(info, await conn.InstallUser("CODE1"));
     }
 
-    /// <summary>A message the host's processor records as received is raised to the connection's listeners.</summary>
+    /// <summary>A message the host's handler records as received is raised to the connection's listeners.</summary>
     [Fact]
     public async Task Connect_ThenMessageReceived_IsRaised()
     {
@@ -116,9 +116,9 @@ public sealed class DirectServiceConnectionTests
         Assert.Equal("BOB", Assert.Single(raised).UserName);
     }
 
-    /// <summary>SendMessage builds the message, stores it in the Outbox and hands it to the network processor, which does the sending; the result carries its identifier and whether it is an alert.</summary>
+    /// <summary>SendMessage builds the message, stores it in the Outbox and hands it to the frame handler, which does the sending; the result carries its identifier and whether it is an alert.</summary>
     [Fact]
-    public async Task SendMessage_StoresTheMessage_AndHandsItToTheProcessor()
+    public async Task SendMessage_StoresTheMessage_AndHandsItToTheHandler()
     {
         DirectServiceConnection conn = Build(out Mock<IUserService> user, out Mock<IEntryService> entry, out Mock<INetworkProcessing> processing, out _);
         user.Setup(s => s.GetCurrentUserInfo()).Returns(new UserInfo { Name = "ME" });
@@ -148,9 +148,9 @@ public sealed class DirectServiceConnectionTests
         processing.Verify(p => p.Sent(It.IsAny<Message>()), Times.Never);
     }
 
-    /// <summary>Marking a message read tells the network processor, so it can tell the sender, and announces the change.</summary>
+    /// <summary>Marking a message read tells the frame handler, so it can tell the sender, and announces the change.</summary>
     [Fact]
-    public async Task MarkMessageRead_TellsTheProcessor()
+    public async Task MarkMessageRead_TellsTheHandler()
     {
         DirectServiceConnection conn = Build(out Mock<IUserService> _, out Mock<IEntryService> entry, out Mock<INetworkProcessing> processing, out _);
         MessageEntity entity = new() { MessageId = "M1", Message = new MessageData { Id = "M1", FromUser = "BOB", Body = "hi" } };

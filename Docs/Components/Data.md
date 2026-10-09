@@ -20,7 +20,7 @@ Collections initialized:
 | `activity_logs` | `ActivityLogEntity` | Daily activity entries |
 | `folders` | `FolderEntity` | Folder hierarchy |
 | `auto_forward_targets` | `AutoForwardTargetsEntity` | Auto forwarder target lists |
-| `stored_messages` | `StoredMessageEntity` | Copies of the messages a server's processor stored |
+| `stored_messages` | `StoredMessageEntity` | Copies of the messages a server's handler stored |
 | `last_id` | `LastIdEntity` | The last message identifier generated, kept so the draft handler's `NextId` continues from it after a restart |
 
 On each `Initialize()` call, root folders are auto-created (Inbox, Outbox, Drafts, Notes, Activity) if absent.
@@ -76,7 +76,7 @@ Stored in both Inbox (received) and Outbox (sent).
 |-------|------|-------|
 | `Id` | `ObjectId` | LiteDB auto-ID (the actual primary key) |
 | `MessageId` | `string` | Denormalized from `Message.Id` so LiteDB can query/index on it directly. **Not unique** — see below |
-| `Message` | `MessageData` | The message content, embedded: `Id`, `FromUser`, `Body`, `Addresses`, `SentAt`, `Priority`, `Tag`, `MessageLevel`, `MessageAspect` (the enum members as integers, `null` for none) and `IsAlert`. It is built from the `Message` record the processor and the GUI hand to the engine, which `MessageMapping` turns back into a `Message` for the host. |
+| `Message` | `MessageData` | The message content, embedded: `Id`, `FromUser`, `Body`, `Addresses`, `SentAt`, `Priority`, `Tag`, `MessageLevel`, `MessageAspect` (the enum members as integers, `null` for none) and `IsAlert`. It is built from the `Message` record the handler and the GUI hand to the engine, which `MessageMapping` turns back into a `Message` for the host. |
 | `DeliveryStatuses` | `List<DeliveryStatus>` | Per-user delivery state (Outbox messages) |
 | `ReadStatus` | `DestinationStatus?` | Inbox-only: `Received` when stored, `Read` once the user opens it (see `Docs/Components/Peer.md#receipts`). Always `null` on Outbox records — per-destination read state lives in `DeliveryStatuses` instead |
 | `ReceivedAt` | `DateTime` | UTC timestamp; denormalized from `Message`'s sent time so LiteDB can sort/index on it directly |
@@ -148,7 +148,7 @@ One document per configured auto forwarder, keyed by the auto forwarder's own na
 
 ### `StoredMessageEntity`
 
-A copy of one message the network processor stored with `StoreMessage` (see `Docs/Components/Configuration.md#server-storage`): `Id (ObjectId)`, `MessageId (string)` denormalized from `Message` and indexed so a duplicate is caught cheaply, `Message (MessageData)` stored the same way `MessageEntity.Message` is, and `StoredAt (DateTime)`. Which messages are stored is the processor's decision; a client's database normally has none. A stored `DateTime` reads back as local time, so anything comparing a stored message's sent time converts it to UTC first.
+A copy of one message the frame handler stored with `StoreMessage` (see `Docs/Components/Configuration.md#server-storage`): `Id (ObjectId)`, `MessageId (string)` denormalized from `Message` and indexed so a duplicate is caught cheaply, `Message (MessageData)` stored the same way `MessageEntity.Message` is, and `StoredAt (DateTime)`. Which messages are stored is the handler's decision; a client's database normally has none. A stored `DateTime` reads back as local time, so anything comparing a stored message's sent time converts it to UTC first.
 
 ### Embedded Types
 

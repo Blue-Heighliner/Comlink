@@ -8,7 +8,7 @@ namespace BlueHeighliner.Comlink;
 internal sealed class NetworkRetrievalContext<TFrame, TPriority, TLevel, TAspect> : NetworkEngineContext<TFrame, TPriority, TLevel, TAspect>, INetworkRetrievalContext<TFrame, TPriority, TLevel, TAspect> where TFrame : class where TPriority : struct, Enum where TLevel : struct, Enum where TAspect : struct, Enum
 {
     /// <summary>Creates the context for a retrieval the user submitted.</summary>
-    /// <param name="environment">What the processor acts on.</param>
+    /// <param name="environment">What the handler acts on.</param>
     /// <param name="server">The name of the server asked.</param>
     /// <param name="criteria">What the stored messages must fit.</param>
     public NetworkRetrievalContext(INetworkEnvironment environment, string server, RetrievalCriteria criteria)

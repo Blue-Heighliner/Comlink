@@ -8,7 +8,7 @@ namespace BlueHeighliner.Comlink;
 internal sealed class NetworkReceivedContext<TFrame, TPriority, TLevel, TAspect> : NetworkEngineContext<TFrame, TPriority, TLevel, TAspect>, INetworkReceivedContext<TFrame, TPriority, TLevel, TAspect> where TFrame : class where TPriority : struct, Enum where TLevel : struct, Enum where TAspect : struct, Enum
 {
     /// <summary>Creates the context for a frame that was received.</summary>
-    /// <param name="environment">What the processor acts on.</param>
+    /// <param name="environment">What the handler acts on.</param>
     /// <param name="frame">The frame that was received.</param>
     /// <param name="origin">Where it came from.</param>
     /// <param name="sourceUser">The name of the user it arrived from, or of the external system.</param>

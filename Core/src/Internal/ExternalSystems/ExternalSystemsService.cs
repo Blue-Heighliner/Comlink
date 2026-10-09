@@ -2,8 +2,8 @@ namespace BlueHeighliner.Comlink;
 
 /// <summary>
 /// Coordinates every configured <see cref="IExternalSystem"/> (see <see cref="IEngineController.ExternalSystems"/>): runs each one's own connect/poll/disconnect lifecycle, hands every frame an external system
-/// delivers to the host's network processor (see <see cref="INetworkProcessor{TFrame, TPriority, TLevel, TAspect}.OnReceived"/>), and sends the frames the processor asks it to (see <see cref="INetworkContext{TFrame, TPriority, TLevel, TAspect}.SendToExternalSystems"/>).
-/// What a frame from an external system means, and whether it goes anywhere, is the processor's: the engine does not treat it as a received message or mirror it to anything. See <c>Docs/Components/ExternalSystems.md</c>.
+/// delivers to the host's frame handler (see <see cref="IFrameHandler{TFrame, TPriority, TLevel, TAspect}.OnReceived"/>), and sends the frames the handler asks it to (see <see cref="INetworkContext{TFrame, TPriority, TLevel, TAspect}.SendToExternalSystems"/>).
+/// What a frame from an external system means, and whether it goes anywhere, is the handler's: the engine does not treat it as a received message or mirror it to anything. See <c>Docs/Components/ExternalSystems.md</c>.
 /// </summary>
 internal interface IExternalSystemsService
 {

@@ -9,7 +9,7 @@ public interface IPacketSerializer
 {
     /// <summary>Serializes <paramref name="packet"/> into a pool-backed buffer.</summary>
     /// <param name="packet">The packet instance to serialize, an instance of the host's packet type.</param>
-    /// <param name="frame">The original frame (an instance of the host's frame type) this packet is one of the pieces of, or <see langword="null"/> for a packet that does not carry a frame (such as one sent by a handshake processor).</param>
+    /// <param name="frame">The original frame (an instance of the host's frame type) this packet is one of the pieces of, or <see langword="null"/> for a packet that does not carry a frame (such as one sent by a handshake handler).</param>
     /// <returns>A pooled buffer holding the serialized bytes; the caller owns it and must dispose it once done.</returns>
     IMemoryOwner<byte> Serialize(object packet, object? frame);
 

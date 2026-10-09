@@ -112,8 +112,8 @@ of external systems this instance communicates with, resolved once at startup. `
 by `EngineHost` alongside the peer and interface listeners) reads this list once and then:
 
 - Runs every external system's own `Start` loop concurrently, for the lifetime of the app.
-- Subscribes to every external system's own `MessageReceived` event. A frame of the host's frame type that one raises goes to the network processor's `OnReceived` with `FrameOrigin.ExternalSystem` and the system's name as the source user; anything else is dropped. The engine stores and relays nothing itself.
-- Offers the processor `SendToExternalSystems(frame)`, which calls `Send` on every external system. Which frames go out, and not back to the system they came from, is the processor's decision.
+- Subscribes to every external system's own `MessageReceived` event. A frame of the host's frame type that one raises goes to the frame handler's `OnReceived` with `FrameOrigin.ExternalSystem` and the system's name as the source user; anything else is dropped. The engine stores and relays nothing itself.
+- Offers the handler `SendToExternalSystems(frame)`, which calls `Send` on every external system. Which frames go out, and not back to the system they came from, is the handler's decision.
 
 If `ExternalSystems` returns an empty list (the Engine default), `ExternalSystemsService.Start`
 returns immediately without subscribing to anything.

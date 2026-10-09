@@ -11,13 +11,13 @@ namespace BlueHeighliner.Comlink.Sample;
 /// is a recipient and once to each other server that owns a recipient (a frame that came from another server is only delivered locally). It answers a retrieval request addressed to it with the stored messages.</item>
 /// </list>
 /// </summary>
-public sealed class NetworkProcessor : INetworkProcessor<Frame, MessagePriority, MessageLevel, MessageAspect>
+public sealed class FrameHandler : IFrameHandler<Frame, Priority, Level, Aspect>
 {
     /// <summary>Gets the name of the auto forwarder whose target list receives a copy of every received alert or <c>URGENT</c>-tagged message.</summary>
     public static string EscalationForwarder { get; } = "Escalation";
 
     /// <inheritdoc />
-    public Task OnConnected(INetworkConnectedContext<Frame, MessagePriority, MessageLevel, MessageAspect> context)
+    public Task OnConnected(INetworkConnectedContext<Frame, Priority, Level, Aspect> context)
     {
         if (context.CurrentUser.Role is UserRole.Client && context.TargetUser.Name == context.CurrentUser.Parent?.User)
         {
@@ -28,7 +28,7 @@ public sealed class NetworkProcessor : INetworkProcessor<Frame, MessagePriority,
     }
 
     /// <inheritdoc />
-    public Task OnDisconnected(INetworkDisconnectedContext<Frame, MessagePriority, MessageLevel, MessageAspect> context)
+    public Task OnDisconnected(INetworkDisconnectedContext<Frame, Priority, Level, Aspect> context)
     {
         if (context.CurrentUser.Role is UserRole.Client && context.TargetUser.Name == context.CurrentUser.Parent?.User)
         {
@@ -39,22 +39,22 @@ public sealed class NetworkProcessor : INetworkProcessor<Frame, MessagePriority,
     }
 
     /// <inheritdoc />
-    public Task OnReceived(INetworkReceivedContext<Frame, MessagePriority, MessageLevel, MessageAspect> context)
+    public Task OnReceived(INetworkReceivedContext<Frame, Priority, Level, Aspect> context)
         => context.CurrentUser.Role is UserRole.Server ? Serve(context) : Receive(context);
 
     /// <inheritdoc />
-    public async Task OnSent(INetworkSentContext<Frame, MessagePriority, MessageLevel, MessageAspect> context)
+    public async Task OnSent(INetworkSentContext<Frame, Priority, Level, Aspect> context)
     {
         bool sent = await context.Send(context.CurrentUser.Parent!.User, context.Message.Priority, Frame.FromMessage(context.Message));
         await context.SetSentStatus(context.Message.Id, context.Destinations, sent ? DestinationStatus.Sent : DestinationStatus.Failed);
     }
 
     /// <inheritdoc />
-    public Task OnRead(INetworkReadContext<Frame, MessagePriority, MessageLevel, MessageAspect> context)
+    public Task OnRead(INetworkReadContext<Frame, Priority, Level, Aspect> context)
         => context.Send
         (
             context.CurrentUser.Parent!.User,
-            MessagePriority.Receipt,
+            Priority.Receipt,
             new()
             {
                 IsReadReceipt = true,
@@ -67,11 +67,11 @@ public sealed class NetworkProcessor : INetworkProcessor<Frame, MessagePriority,
         );
 
     /// <inheritdoc />
-    public Task OnRetrieval(INetworkRetrievalContext<Frame, MessagePriority, MessageLevel, MessageAspect> context)
+    public Task OnRetrieval(INetworkRetrievalContext<Frame, Priority, Level, Aspect> context)
         => context.Send
         (
             context.CurrentUser.Parent!.User,
-            MessagePriority.Retrieval,
+            Priority.Retrieval,
             new()
             {
                 IsRetrieval = true,
@@ -87,7 +87,7 @@ public sealed class NetworkProcessor : INetworkProcessor<Frame, MessagePriority,
             }
         );
 
-    private static async Task Receive(INetworkReceivedContext<Frame, MessagePriority, MessageLevel, MessageAspect> context)
+    private static async Task Receive(INetworkReceivedContext<Frame, Priority, Level, Aspect> context)
     {
         Frame frame = context.Frame;
         if (context.Origin is FrameOrigin.Interface)
@@ -114,7 +114,7 @@ public sealed class NetworkProcessor : INetworkProcessor<Frame, MessagePriority,
         }
     }
 
-    private static async Task ReceiveMessage(INetworkReceivedContext<Frame, MessagePriority, MessageLevel, MessageAspect> context, Frame frame)
+    private static async Task ReceiveMessage(INetworkReceivedContext<Frame, Priority, Level, Aspect> context, Frame frame)
     {
         await context.ReceiveMessage(frame.ToMessage());
 
@@ -128,7 +128,7 @@ public sealed class NetworkProcessor : INetworkProcessor<Frame, MessagePriority,
         await context.Send
         (
             context.CurrentUser.Parent!.User,
-            MessagePriority.Receipt,
+            Priority.Receipt,
             new()
             {
                 IsReceiveReceipt = true,
@@ -152,7 +152,7 @@ public sealed class NetworkProcessor : INetworkProcessor<Frame, MessagePriority,
         }
     }
 
-    private static async Task Serve(INetworkReceivedContext<Frame, MessagePriority, MessageLevel, MessageAspect> context)
+    private static async Task Serve(INetworkReceivedContext<Frame, Priority, Level, Aspect> context)
     {
         if (context.Origin is not FrameOrigin.Peer)
         {
@@ -174,13 +174,13 @@ public sealed class NetworkProcessor : INetworkProcessor<Frame, MessagePriority,
         (
             context,
             context.Frame,
-            context.GetDestinations(context.Frame.IsMessage ? (MessageLevel?)context.Frame.Confidentiality : null, out _, context.Frame.Recipients.Where(recipient => recipient.Kind is not "OUTSIDE").Select(recipient => recipient.User)),
+            context.GetDestinations(context.Frame.IsMessage ? (Level?)context.Frame.Confidentiality : null, out _, context.Frame.Recipients.Where(recipient => recipient.Kind is not "OUTSIDE").Select(recipient => recipient.User)),
             context.SourceUser.Role is not UserRole.Server
         );
     }
 
     // A retrieval request names the server it is for: this one answers it, and a request that came from a client is handed on to the other server it names.
-    private static async Task Answer(INetworkReceivedContext<Frame, MessagePriority, MessageLevel, MessageAspect> context, Frame request)
+    private static async Task Answer(INetworkReceivedContext<Frame, Priority, Level, Aspect> context, Frame request)
     {
         string server = request.Recipients.FirstOrDefault()?.User ?? string.Empty;
         if (server != context.CurrentUser.Name)
@@ -209,7 +209,7 @@ public sealed class NetworkProcessor : INetworkProcessor<Frame, MessagePriority,
     }
 
     // Sends a frame once to each node that reaches a recipient: the recipient itself when it is a child of this server, and, when allowed, the other server that is the recipient or their parent.
-    private static async Task Route(INetworkReceivedContext<Frame, MessagePriority, MessageLevel, MessageAspect> context, Frame frame, IEnumerable<string> recipients, bool mayLeaveServer)
+    private static async Task Route(INetworkReceivedContext<Frame, Priority, Level, Aspect> context, Frame frame, IEnumerable<string> recipients, bool mayLeaveServer)
     {
         HashSet<string> hops = [];
         foreach (string user in recipients)

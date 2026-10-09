@@ -2,7 +2,7 @@ namespace BlueHeighliner.Comlink;
 
 /// <summary>
 /// What a user asks a server for when they submit a retrieval in the GUI: the stored messages fitting every criterion that is set, each list criterion satisfied by matching any one of its entries,
-/// compared case-insensitively and exactly. It is handed to <see cref="INetworkProcessor{TFrame, TPriority, TLevel, TAspect}.OnRetrieval"/>, and given back to <see cref="INetworkContext{TFrame, TPriority, TLevel, TAspect}.FindStoredMessages"/> by the server that answers.
+/// compared case-insensitively and exactly. It is handed to <see cref="IFrameHandler{TFrame, TPriority, TLevel, TAspect}.OnRetrieval"/>, and given back to <see cref="INetworkContext{TFrame, TPriority, TLevel, TAspect}.FindStoredMessages"/> by the server that answers.
 /// </summary>
 public sealed record RetrievalCriteria
 {

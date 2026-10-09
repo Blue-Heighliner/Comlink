@@ -11,7 +11,7 @@ A host implements `IEngineConfiguration`, whose single `Configure` method receiv
 fluent calls, how the engine should run. It starts with `Types`, which fixes the frame type, the optional packet type, the
 priority enum and the message level enum, and returns the typed builder every other setting is stated on, so handlers,
 priorities and message levels are all checked against those types. After `Types`, the frame configuration (usually with the
-network processor that implements the protocol) is stated and anything else that should differ from the engine's defaults is optional (see [Configuration.md](Components/Configuration.md)).
+frame handler that implements the protocol) is stated and anything else that should differ from the engine's defaults is optional (see [Configuration.md](Components/Configuration.md)).
 Core has no frame DTO of its own.
 
 `Engine.Start<TConfiguration>(string[] args, Action<IServiceCollection>? configureServices = null)` is the only entry

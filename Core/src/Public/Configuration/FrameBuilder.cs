@@ -2,8 +2,8 @@ namespace BlueHeighliner.Comlink;
 
 /// <summary>
 /// Configures the host's own frame type, continuing the fluent chain of the engine builder: every setting of the engine builder can follow on <typeparamref name="TFrame"/>. The engine
-/// never looks inside a frame and has no frame type of its own: what a frame means, which of them are messages, receipts or requests, and who it goes to is the host's processor's (see <see cref="INetworkProcessor{TFrame, TPriority, TLevel, TAspect}"/>).
-/// What the engine needs of a frame is only how to serialize it, how to create an empty one, and, optionally, which one is a heartbeat. See <see cref="IEngineBuilder{TFrame, TPacket, TPriority, TLevel, TAspect}.Frames{TProcessor}"/>.
+/// never looks inside a frame and has no frame type of its own: what a frame means, which of them are messages, receipts or requests, and who it goes to is the host's handler's (see <see cref="IFrameHandler{TFrame, TPriority, TLevel, TAspect}"/>).
+/// What the engine needs of a frame is only how to serialize it, how to create an empty one, and, optionally, which one is a heartbeat. See <see cref="IEngineBuilder{TFrame, TPacket, TPriority, TLevel, TAspect}.Frames{THandler}"/>.
 /// </summary>
 /// <typeparam name="TFrame">The host's frame type.</typeparam>
 /// <typeparam name="TPacket">The host's packet type, or <see cref="NoPacket"/>.</typeparam>
@@ -31,11 +31,11 @@ public interface IFrameBuilder<TFrame, TPacket, TPriority, TLevel, TAspect> : IE
     IFrameBuilder<TFrame, TPacket, TPriority, TLevel, TAspect> Create(Func<TFrame> create);
 
     /// <summary>
-    /// States how nodes introduce themselves on a new connection, with frames: the processor is told when a connection forms and given each frame that
-    /// arrives until it marks the connection connected as a named user (see <see cref="IFrameHandshakeProcessor{TFrame}"/>). What it sends is a serialized
+    /// States how nodes introduce themselves on a new connection, with frames: the handler is told when a connection forms and given each frame that
+    /// arrives until it marks the connection connected as a named user (see <see cref="IFrameHandshakeHandler{TFrame}"/>). What it sends is a serialized
     /// instance of the frame type, split into packets like any frame when packets are configured, and is not stored, routed or shown. It runs above packetization, after any
     /// packet handshake. Without one, a connection is identified by the engine's own rule straight away. Every node on a network must be configured alike.
     /// </summary>
-    /// <typeparam name="TProcessor">The processor type, instantiated through dependency injection when the engine runs: the instance registered for it in the host's services, or else one constructed from them.</typeparam>
-    IFrameBuilder<TFrame, TPacket, TPriority, TLevel, TAspect> Handshake<TProcessor>() where TProcessor : IFrameHandshakeProcessor<TFrame>;
+    /// <typeparam name="THandler">The handler type, instantiated through dependency injection when the engine runs: the instance registered for it in the host's services, or else one constructed from them.</typeparam>
+    IFrameBuilder<TFrame, TPacket, TPriority, TLevel, TAspect> Handshake<THandler>() where THandler : IFrameHandshakeHandler<TFrame>;
 }

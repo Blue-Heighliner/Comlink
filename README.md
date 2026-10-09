@@ -23,7 +23,7 @@ public sealed class MyEngineConfiguration : IEngineConfiguration
     public void Configure(IEngineBuilder engine) => engine.Types<MyFrame, MyPriority, MyMessageLevel, MyMessageAspect>()
         .Display<MyDisplayHandler>()
         .Priority(MyPriority.Normal)
-        .Frames<MyNetworkProcessor>()
+        .Frames<MyFrameHandler>()
         ;
 }
 

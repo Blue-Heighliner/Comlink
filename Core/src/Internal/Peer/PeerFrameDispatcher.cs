@@ -1,6 +1,6 @@
 namespace BlueHeighliner.Comlink;
 
-/// <summary>Shared deserialize logic for raw bytes received over a peer connection: turns them into a frame of the configured type and hands it on, leaving what it means to the host's network processor. Used by <see cref="ClientPeerService"/> and <see cref="ServerRoutingService"/>.</summary>
+/// <summary>Shared deserialize logic for raw bytes received over a peer connection: turns them into a frame of the configured type and hands it on, leaving what it means to the host's frame handler. Used by <see cref="ClientPeerService"/> and <see cref="ServerRoutingService"/>.</summary>
 internal static class PeerFrameDispatcher
 {
     /// <summary>
@@ -19,7 +19,7 @@ internal static class PeerFrameDispatcher
         try
         {
             // The serializer determines the type from the data itself, so bytes from an incompatible sender could describe a type other than
-            // this node's own frame type; that is a failed deserialize, not something to hand to a processor that would cast it.
+            // this node's own frame type; that is a failed deserialize, not something to hand to a handler that would cast it.
             object frame = engineController.FrameSerializer.Deserialize(data, packet);
             ownedFrame = frame;
             if (frame.GetType() != engineController.FrameType)

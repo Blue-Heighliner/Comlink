@@ -6,6 +6,6 @@ public enum PriorityMode
     /// <summary>The GUI offers the priority to a user composing a message.</summary>
     User,
 
-    /// <summary>The GUI never offers the priority to a user; it is for code to use, such as the priority a processor sends a receipt or a retrieval request with.</summary>
+    /// <summary>The GUI never offers the priority to a user; it is for code to use, such as the priority a handler sends a receipt or a retrieval request with.</summary>
     System
 }

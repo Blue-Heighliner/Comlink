@@ -278,10 +278,10 @@ internal sealed class ConfiguredEngineController : IEngineController
     }
 
     /// <inheritdoc />
-    public IHandshakeHandler? PacketHandshakeProcessor => fallback.PacketHandshakeProcessor;
+    public IHandshakeHandler? PacketHandshakeHandler => fallback.PacketHandshakeHandler;
 
     /// <inheritdoc />
-    public IHandshakeHandler? FrameHandshakeProcessor => fallback.FrameHandshakeProcessor;
+    public IHandshakeHandler? FrameHandshakeHandler => fallback.FrameHandshakeHandler;
 
     /// <inheritdoc />
     public bool CommandLineOverridesAllowed => fallback.CommandLineOverridesAllowed;
@@ -292,7 +292,7 @@ internal sealed class ConfiguredEngineController : IEngineController
     /// <inheritdoc />
 
     /// <inheritdoc />
-    public INetworkHandler? NetworkHandler => fallback.NetworkHandler;
+    public IEngineFrameHandler? FrameHandler => fallback.FrameHandler;
     /// <inheritdoc />
     public IReadOnlyList<ExportFormatDefinition> ExportFormats => fallback.ExportFormats;
     /// <inheritdoc />

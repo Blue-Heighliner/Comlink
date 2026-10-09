@@ -8,11 +8,11 @@ internal sealed class FrameBuilder<TFrame, TPriority, TLevel, TAspect> where TFr
     private ServiceRegistration<IHeartbeatItemHandler>? heartbeat;
 
 
-    /// <summary>The handshake processor, if stated.</summary>
+    /// <summary>The handshake handler, if stated.</summary>
     public ServiceRegistration<IHandshakeHandler>? HandshakeHandler { get; private set; }
 
-    /// <summary>The processor that carries out the host's protocol, if stated.</summary>
-    public ServiceRegistration<INetworkHandler>? NetworkHandler { get; private set; }
+    /// <summary>The handler that carries out the host's protocol, if stated.</summary>
+    public ServiceRegistration<IEngineFrameHandler>? FrameHandler { get; private set; }
 
     /// <inheritdoc cref="IFrameBuilder{TFrame, TPacket, TPriority, TLevel, TAspect}.Heartbeat{THandler}"/>
     public FrameBuilder<TFrame, TPriority, TLevel, TAspect> Heartbeat<THandler>() where THandler : IFrameHeartbeatHandler<TFrame, TPriority>
@@ -35,11 +35,11 @@ internal sealed class FrameBuilder<TFrame, TPriority, TLevel, TAspect> where TFr
         return this;
     }
 
-    /// <summary>States the processor that carries out the host's protocol.</summary>
-    /// <typeparam name="TProcessor">The processor type.</typeparam>
-    public FrameBuilder<TFrame, TPriority, TLevel, TAspect> Processor<TProcessor>() where TProcessor : INetworkProcessor<TFrame, TPriority, TLevel, TAspect>
+    /// <summary>States the handler that carries out the host's protocol.</summary>
+    /// <typeparam name="THandler">The handler type.</typeparam>
+    public FrameBuilder<TFrame, TPriority, TLevel, TAspect> Handler<THandler>() where THandler : IFrameHandler<TFrame, TPriority, TLevel, TAspect>
     {
-        NetworkHandler = ServiceRegistration<INetworkHandler>.Of(typeof(TProcessor), processor => new NetworkHandler<TFrame, TPriority, TLevel, TAspect>((INetworkProcessor<TFrame, TPriority, TLevel, TAspect>)processor));
+        FrameHandler = ServiceRegistration<IEngineFrameHandler>.Of(typeof(THandler), handler => new EngineFrameHandler<TFrame, TPriority, TLevel, TAspect>((IFrameHandler<TFrame, TPriority, TLevel, TAspect>)handler));
         return this;
     }
 
@@ -54,10 +54,10 @@ internal sealed class FrameBuilder<TFrame, TPriority, TLevel, TAspect> where TFr
             Heartbeat = heartbeat
         };
 
-    /// <inheritdoc cref="IFrameBuilder{TFrame, TPacket, TPriority, TLevel, TAspect}.Handshake{TProcessor}"/>
-    public FrameBuilder<TFrame, TPriority, TLevel, TAspect> Handshake<TProcessor>() where TProcessor : IFrameHandshakeProcessor<TFrame>
+    /// <inheritdoc cref="IFrameBuilder{TFrame, TPacket, TPriority, TLevel, TAspect}.Handshake{THandler}"/>
+    public FrameBuilder<TFrame, TPriority, TLevel, TAspect> Handshake<THandler>() where THandler : IFrameHandshakeHandler<TFrame>
     {
-        HandshakeHandler = ServiceRegistration<IHandshakeHandler>.Of(typeof(TProcessor), processor => new FrameHandshakeProcessorAdapter<TFrame>((IFrameHandshakeProcessor<TFrame>)processor));
+        HandshakeHandler = ServiceRegistration<IHandshakeHandler>.Of(typeof(THandler), handler => new FrameHandshakeHandlerAdapter<TFrame>((IFrameHandshakeHandler<TFrame>)handler));
         return this;
     }
 }

@@ -1,12 +1,12 @@
 namespace BlueHeighliner.Comlink;
 
 /// <summary>
-/// The storage half of a server: keeps the messages the host's network processor tells it to keep, and finds the kept messages that fit the criteria of a retrieval. The engine neither decides what is kept nor who may retrieve
-/// it, nor sends what is found: those are the processor's, through its context (see <see cref="INetworkContext{TFrame, TPriority, TLevel, TAspect}.StoreMessage"/> and <see cref="INetworkContext{TFrame, TPriority, TLevel, TAspect}.FindStoredMessages"/>).
+/// The storage half of a server: keeps the messages the host's frame handler tells it to keep, and finds the kept messages that fit the criteria of a retrieval. The engine neither decides what is kept nor who may retrieve
+/// it, nor sends what is found: those are the handler's, through its context (see <see cref="INetworkContext{TFrame, TPriority, TLevel, TAspect}.StoreMessage"/> and <see cref="INetworkContext{TFrame, TPriority, TLevel, TAspect}.FindStoredMessages"/>).
 /// </summary>
 internal interface IMessageStorageService
 {
-    /// <summary>Keeps a copy of <paramref name="message"/> unless one with the same identifier is already kept. A failure is logged, never thrown: storage must not interrupt the processor.</summary>
+    /// <summary>Keeps a copy of <paramref name="message"/> unless one with the same identifier is already kept. A failure is logged, never thrown: storage must not interrupt the handler.</summary>
     /// <param name="message">The message to keep.</param>
     Task Store(Message message);
 

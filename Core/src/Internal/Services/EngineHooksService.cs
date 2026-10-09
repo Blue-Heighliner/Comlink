@@ -1,6 +1,6 @@
 namespace BlueHeighliner.Comlink;
 
-/// <summary>Hands what <see cref="IPeerService"/> reports to the host's network processor: a user connecting, a user disconnecting and a frame arriving, in both Client and Headless mode.</summary>
+/// <summary>Hands what <see cref="IPeerService"/> reports to the host's frame handler: a user connecting, a user disconnecting and a frame arriving, in both Client and Headless mode.</summary>
 internal interface IEngineHooksService
 {
     /// <summary>Subscribes to <see cref="IPeerService"/>'s events and blocks until <paramref name="cancellation"/> is cancelled.</summary>
@@ -13,7 +13,7 @@ internal sealed class EngineHooksService(IPeerService peerService, IEngineContro
     /// <inheritdoc />
     public async Task Start(CancellationToken cancellation)
     {
-        if (engineController.NetworkHandler is null)
+        if (engineController.FrameHandler is null)
         {
             return;
         }

@@ -5,10 +5,10 @@ public sealed class NetworkProcessingTests
 {
     private static Message MakeMessage() => new() { Id = "M1", FromUser = "ALICE", Body = "Hi", Addresses = [], SentAt = DateTime.UtcNow, Priority = TestMessagePriority.Normal };
 
-    private static NetworkProcessing Build(Mock<INetworkHandler>? handler, Mock<INetworkEnvironment> environment, TrackingFrameSerializer? frames = null)
+    private static NetworkProcessing Build(Mock<IEngineFrameHandler>? handler, Mock<INetworkEnvironment> environment, TrackingFrameSerializer? frames = null)
     {
         Mock<TestEngineController> controller = new() { CallBase = true };
-        controller.Setup(c => c.NetworkHandler).Returns(handler?.Object);
+        controller.Setup(c => c.FrameHandler).Returns(handler?.Object);
         if (frames is not null)
         {
             controller.Setup(c => c.FrameSerializer).Returns(frames);
@@ -22,7 +22,7 @@ public sealed class NetworkProcessingTests
     public async Task Events_ReachTheHandler()
     {
         Mock<INetworkEnvironment> environment = new();
-        Mock<INetworkHandler> handler = new();
+        Mock<IEngineFrameHandler> handler = new();
         TaskCompletionSource done = new();
         handler.Setup(h => h.OnSent(environment.Object, It.IsAny<Message>())).Returns(() => { done.SetResult(); return Task.CompletedTask; });
         NetworkProcessing processing = Build(handler, environment);
@@ -38,7 +38,7 @@ public sealed class NetworkProcessingTests
     public async Task Events_AHandlerThatThrows_IsContained()
     {
         Mock<INetworkEnvironment> environment = new();
-        Mock<INetworkHandler> handler = new();
+        Mock<IEngineFrameHandler> handler = new();
         TaskCompletionSource done = new();
         handler.Setup(h => h.OnConnected(environment.Object, "BOB")).Returns(() => { done.SetResult(); throw new InvalidOperationException(); });
         NetworkProcessing processing = Build(handler, environment);
@@ -64,7 +64,7 @@ public sealed class NetworkProcessingTests
     public async Task Retrieval_IsPassedToTheHandler()
     {
         Mock<INetworkEnvironment> environment = new();
-        Mock<INetworkHandler> handler = new();
+        Mock<IEngineFrameHandler> handler = new();
         TaskCompletionSource done = new();
         RetrievalCriteria criteria = new();
         handler.Setup(h => h.OnRetrieval(environment.Object, "SERVER", criteria)).Returns(() => { done.SetResult(); return Task.CompletedTask; });
@@ -75,12 +75,12 @@ public sealed class NetworkProcessingTests
         await done.Task.WaitAsync(TimeSpan.FromSeconds(10));
     }
 
-    /// <summary>A frame the processor is given is the processor's to dispose, so the engine disposes it only when there is no processor to give it to, and never a frame from an external system.</summary>
+    /// <summary>A frame the handler is given is the handler's to dispose, so the engine disposes it only when there is no handler to give it to, and never a frame from an external system.</summary>
     [Fact]
-    public async Task Received_DisposesTheFrameOnlyWhenNoProcessorGetsIt()
+    public async Task Received_DisposesTheFrameOnlyWhenNoHandlerGetsIt()
     {
         Mock<INetworkEnvironment> environment = new();
-        Mock<INetworkHandler> handler = new();
+        Mock<IEngineFrameHandler> handler = new();
         TaskCompletionSource handled = new();
         handler.Setup(h => h.OnReceived(environment.Object, It.IsAny<object>(), FrameOrigin.Peer, "BOB")).Returns(() =>
         {

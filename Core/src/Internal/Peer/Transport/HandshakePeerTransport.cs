@@ -2,12 +2,12 @@ namespace BlueHeighliner.Comlink;
 
 /// <summary>
 /// Wraps another <see cref="IPeerTransport"/> so that a connection is only published, and only usable, once its handshake has completed and,
-/// optionally, the node on the other end has been identified. The handshake is a <see cref="Handshake"/>: a host's processor is told when the connection
+/// optionally, the node on the other end has been identified. The handshake is a <see cref="Handshake"/>: a host's handler is told when the connection
 /// forms and is given each item that arrives, on the accepting node as an initial item and on the opening node (the node at the higher station address
 /// for a serial link) as a reply, until it marks the connection connected as a named user or disconnects it. Each item is an instance of the frame or
 /// packet type serialized with its own serializer and nothing is added to it, so items are recognized by position: every payload a node receives on a
 /// connection that is still in its handshake is an item, and everything after the connection is marked connected is ordinary data. The handshake has to
-/// complete within a timeout or the connection is dropped. With <c>identify</c>, the user the processor named (here or in the handshake beneath this one),
+/// complete within a timeout or the connection is dropped. With <c>identify</c>, the user the handler named (here or in the handshake beneath this one),
 /// else the engine's own rule (a certificate name matching a user, or the user named on the serial
 /// point or else the serial port name) decides who is on the other end, and the result is set on the connection's <see cref="PeerConnection.User"/>; a
 /// connection that cannot be identified is dropped.
@@ -22,7 +22,7 @@ internal sealed class HandshakePeerTransport : IPeerTransport
     /// <param name="logger">Receives a warning for every connection that is refused.</param>
     /// <param name="handshake">The handshake to carry out, or <see langword="null"/> for none.</param>
     /// <param name="identify">Whether to identify the node on the other end once the handshake is done. Only the outermost handshake transport does.</param>
-    /// <param name="contexts">Creates the engine snapshot a processor sees, or <see langword="null"/> for one that knows no connected users.</param>
+    /// <param name="contexts">Creates the engine snapshot a handler sees, or <see langword="null"/> for one that knows no connected users.</param>
     public HandshakePeerTransport(IPeerTransport inner, IEngineController engineController, ILogger logger, Handshake? handshake, bool identify, IEngineContextFactory? contexts = null)
     {
         this.inner = inner;
@@ -141,13 +141,13 @@ internal sealed class HandshakePeerTransport : IPeerTransport
     {
         _ = Task.Run(async () =>
         {
-            try { await Task.Delay(handshake!.Processor.Timeout, session.Deadline.Token); }
+            try { await Task.Delay(handshake!.Handler.Timeout, session.Deadline.Token); }
             catch (OperationCanceledException) { return; }
 
             Fail(session, "did not complete its handshake in time");
         });
 
-        Process(session, () => handshake!.Processor.OnConnected(session.Initial));
+        Process(session, () => handshake!.Handler.OnConnected(session.Initial));
     }
 
     private void Process(Session session, Func<Task> work)
@@ -219,12 +219,12 @@ internal sealed class HandshakePeerTransport : IPeerTransport
         try
         {
             object item = handshake!.Deserialize(body, packet);
-            if (item.GetType() != handshake.Processor.ItemType)
+            if (item.GetType() != handshake.Handler.ItemType)
             {
-                throw new InvalidDataException($"expected a {handshake.Processor.ItemType.Name}");
+                throw new InvalidDataException($"expected a {handshake.Handler.ItemType.Name}");
             }
 
-            await handshake.Processor.OnReceived(session.Initial, item);
+            await handshake.Handler.OnReceived(session.Initial, item);
         }
         finally
         {
@@ -436,7 +436,7 @@ internal sealed class HandshakePeerTransport : IPeerTransport
 
         public Task Disconnect()
         {
-            owner.Fail(session, "was disconnected by its initial processor");
+            owner.Fail(session, "was disconnected by its initial handler");
             return Task.CompletedTask;
         }
 

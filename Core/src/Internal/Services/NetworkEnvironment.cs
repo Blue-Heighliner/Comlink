@@ -1,10 +1,10 @@
 namespace BlueHeighliner.Comlink;
 
-/// <summary>What the engine lets the host's network processor do, with frames as plain objects since the engine does not know the host's frame type at compile time. A <see cref="NetworkHandler{TFrame, TPriority, TLevel, TAspect}"/> presents it to the processor with the frame type.</summary>
+/// <summary>What the engine lets the host's frame handler do, with frames as plain objects since the engine does not know the host's frame type at compile time. A <see cref="EngineFrameHandler{TFrame, TPriority, TLevel, TAspect}"/> presents it to the handler with the frame type.</summary>
 internal interface INetworkEnvironment
 {
     /// <summary>Creates a snapshot of the engine as it is now.</summary>
-    /// <exception cref="InvalidOperationException">No user is installed, which should never happen where a processor runs.</exception>
+    /// <exception cref="InvalidOperationException">No user is installed, which should never happen where a handler runs.</exception>
     IEngineContext CreateEngineContext();
 
     /// <summary>Sends <paramref name="frame"/> to <paramref name="userName"/> over the connection identified as them.</summary>

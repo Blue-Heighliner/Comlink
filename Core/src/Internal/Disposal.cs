@@ -5,7 +5,7 @@ internal static class Disposal
 {
     extension(object? instance)
     {
-        /// <summary>Disposes the instance if it is <see cref="IDisposable"/>. Only for an instance the engine created or deserialized and never handed to the host's processors, which own what they are given.</summary>
+        /// <summary>Disposes the instance if it is <see cref="IDisposable"/>. Only for an instance the engine created or deserialized and never handed to the host's handlers, which own what they are given.</summary>
         public void TryDispose() => (instance as IDisposable)?.Dispose();
     }
 }

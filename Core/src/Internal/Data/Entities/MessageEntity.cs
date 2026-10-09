@@ -26,7 +26,7 @@ internal sealed class MessageEntity
     public bool IsOutbound { get; set; }
     /// <summary>
     /// Inbox-only read status: <see cref="DestinationStatus.Received"/> when stored, <see cref="DestinationStatus.Read"/>
-    /// once the user opens it (which also tells the host's network processor, see <see cref="INetworkProcessor{TFrame, TPriority, TLevel, TAspect}.OnRead"/>). Always <see langword="null"/> on Outbox records; per-destination read state
+    /// once the user opens it (which also tells the host's frame handler, see <see cref="IFrameHandler{TFrame, TPriority, TLevel, TAspect}.OnRead"/>). Always <see langword="null"/> on Outbox records; per-destination read state
     /// there lives in <see cref="DeliveryStatuses"/> instead.
     /// </summary>
     public DestinationStatus? ReadStatus { get; set; }

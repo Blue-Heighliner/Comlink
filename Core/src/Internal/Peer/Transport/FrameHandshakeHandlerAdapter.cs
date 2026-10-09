@@ -1,21 +1,21 @@
 namespace BlueHeighliner.Comlink;
 
-/// <summary>Presents a host's <see cref="IFrameHandshakeProcessor{TFrame}"/> as an <see cref="IHandshakeHandler"/>.</summary>
+/// <summary>Presents a host's <see cref="IFrameHandshakeHandler{TFrame}"/> as an <see cref="IHandshakeHandler"/>.</summary>
 /// <typeparam name="TFrame">The host's frame type.</typeparam>
-/// <param name="processor">The host's processor.</param>
-internal sealed class FrameHandshakeProcessorAdapter<TFrame>(IFrameHandshakeProcessor<TFrame> processor) : IHandshakeHandler where TFrame : class
+/// <param name="handler">The host's handler.</param>
+internal sealed class FrameHandshakeHandlerAdapter<TFrame>(IFrameHandshakeHandler<TFrame> handler) : IHandshakeHandler where TFrame : class
 {
     /// <inheritdoc />
     public Type ItemType { get; } = typeof(TFrame);
 
     /// <inheritdoc />
-    public Task OnConnected(IHandshakeSession session) => processor.OnConnected(new Context(session));
+    public Task OnConnected(IHandshakeSession session) => handler.OnConnected(new Context(session));
 
     /// <inheritdoc />
-    public TimeSpan Timeout => processor.Timeout;
+    public TimeSpan Timeout => handler.Timeout;
 
     /// <inheritdoc />
-    public Task OnReceived(IHandshakeSession session, object item) => processor.OnReceived(new Context(session), (TFrame)item);
+    public Task OnReceived(IHandshakeSession session, object item) => handler.OnReceived(new Context(session), (TFrame)item);
 
     private sealed class Context(IHandshakeSession session) : IFrameHandshakeContext<TFrame>
     {

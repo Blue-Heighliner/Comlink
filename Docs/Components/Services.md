@@ -14,7 +14,7 @@ graph TD
     CAV[ContentAreaViewModel]
     PS -->|FrameReceived event| NP
     DSC -->|Sent| NP
-    NP -->|processor contexts| ME[MessageEvents]
+    NP -->|handler contexts| ME[MessageEvents]
     ME -->|DeliveryStatusChanged event| DSC
     DSC -->|UpdateDeliveryStatus| ES
     DSC -->|MessageReceived event| MVM
@@ -28,7 +28,7 @@ graph TD
     EBV -->|EntrySelected event| CAV
 ```
 
-Message and delivery-status persistence (`StoreIncomingMessage`, `StoreSentMessage`, `UpdateDeliveryStatus`) all go through `EntryService`. The engine does not receive, route, receipt, retrieve or indicate anything itself: the host's network processor does, through the contexts of `NetworkProcessing`. In Headless mode, no ViewModels are constructed, so a host consuming `IEngineConnection` in that mode observes messages and delivery-status changes purely as events/calls and is responsible for its own persistence if it needs any — the data layer is Client-mode-only (see below).
+Message and delivery-status persistence (`StoreIncomingMessage`, `StoreSentMessage`, `UpdateDeliveryStatus`) all go through `EntryService`. The engine does not receive, route, receipt, retrieve or indicate anything itself: the host's frame handler does, through the contexts of `NetworkProcessing`. In Headless mode, no ViewModels are constructed, so a host consuming `IEngineConnection` in that mode observes messages and delivery-status changes purely as events/calls and is responsible for its own persistence if it needs any — the data layer is Client-mode-only (see below).
 
 ## UserService
 
@@ -60,7 +60,7 @@ UserInfo? installed = await service.Install("SN01", cancellation);
 
 ## NetworkProcessing and NetworkEnvironment
 
-The engine's only protocol surface. `NetworkProcessing` runs the host's `INetworkProcessor<TFrame, TPriority, TLevel, TAspect>` (through `NetworkHandler<,,,>`, which gives it contexts typed by the host's enums) for `OnConnected`, `OnDisconnected`, `OnReceived`, `OnSent`, `OnRead` and `OnRetrieval`. Each call runs in the background and a processor that throws is logged (`NetworkProcessorFailed`) and never reaches the engine.
+The engine's only protocol surface. `NetworkProcessing` runs the host's `IFrameHandler<TFrame, TPriority, TLevel, TAspect>` (through `EngineFrameHandler<,,,>`, which gives it contexts typed by the host's enums) for `OnConnected`, `OnDisconnected`, `OnReceived`, `OnSent`, `OnRead` and `OnRetrieval`. Each call runs in the background and a handler that throws is logged (`FrameHandlerFailed`) and never reaches the engine.
 
 Every context carries the operations of `NetworkEnvironment`:
 - `Send(user, priority, frame)` hands a frame to the peer layer with the wire priority of the given level, and reports whether the directly connected user accepted it. A user who is not directly connected fails. The frame is sent exactly as given.
@@ -71,7 +71,7 @@ Every context carries the operations of `NetworkEnvironment`:
 - `StoreMessage`/`FindStoredMessages` keep and look up messages in the server-side store (`MessageStorageService`).
 - `GetAutoForwardTargets(controllerName)` reads the targets a user chose for an auto forwarder.
 
-`DirectServiceConnection.SendMessage` stores the sent message in the Outbox with `Sending` statuses and hands the `Message` to `OnSent`; routing, expansion of groups, message level checks and the actual sends are the processor's. Frames from peers (`FrameOrigin.Peer`), the local interface (`FrameOrigin.Interface`) and external systems (`FrameOrigin.ExternalSystem`) all arrive in `OnReceived`.
+`DirectServiceConnection.SendMessage` stores the sent message in the Outbox with `Sending` statuses and hands the `Message` to `OnSent`; routing, expansion of groups, message level checks and the actual sends are the handler's. Frames from peers (`FrameOrigin.Peer`), the local interface (`FrameOrigin.Interface`) and external systems (`FrameOrigin.ExternalSystem`) all arrive in `OnReceived`.
 
 **External addresses**: An `AddressType.External` address is information for the reader only. It is stored and shown with the message but gets no status row.
 
@@ -123,9 +123,9 @@ Implements `IEngineConnection`, registered in both `Client` and `Headless` mode.
 
 **Responsibilities**:
 - `IEngineConnection.SendMessage(body, addresses, priority, tag, messageLevel, messageAspect)` builds a `Message` (the draft handler decides `IsAlert` and the next identifier), stores it in the Outbox and calls `NetworkProcessing.Sent`. The priority, level and aspect are members of the host's enums, and the call throws for one that is not configured.
-- Fires `IEngineConnection.MessageReceived(Message)` when the processor calls `ReceiveMessage`. In Client mode `MainViewModel` stores it with `EntryService.StoreIncomingMessage`.
-- On a delivery status change raised by the processor, fires `IEngineConnection.DeliveryStatusChanged` with the status as stored and the resulting `OverallStatus`.
-- `MarkMessageRead(messageId)`: calls `EntryService.MarkMessageRead`, fires `DeliveryStatusChanged` locally (empty `UserName`, status `Read`) so Client-mode UI reflects the read state immediately, then calls `NetworkProcessing.Read` so the processor can tell the sender.
+- Fires `IEngineConnection.MessageReceived(Message)` when the handler calls `ReceiveMessage`. In Client mode `MainViewModel` stores it with `EntryService.StoreIncomingMessage`.
+- On a delivery status change raised by the handler, fires `IEngineConnection.DeliveryStatusChanged` with the status as stored and the resulting `OverallStatus`.
+- `MarkMessageRead(messageId)`: calls `EntryService.MarkMessageRead`, fires `DeliveryStatusChanged` locally (empty `UserName`, status `Read`) so Client-mode UI reflects the read state immediately, then calls `NetworkProcessing.Read` so the handler can tell the sender.
 - Implements install, user info query, and user names query by delegating to `UserService` / `IEngineController`
 
 ---
@@ -144,7 +144,7 @@ Re-reads the configuration while the engine runs (`Reload()`, raising `Reloaded`
 
 ## InterfaceService
 
-Hosts the local interface listener described in [Interface.md](Interface.md). Always active, in both `Client` and `Headless` mode. `Restart()` closes the listener and opens it again from the configuration as it is then, and it keeps waiting for a restart when it cannot start (for example before its certificates are in place) instead of ending. Frames received from an interface connection go to the processor as `OnReceived` with `FrameOrigin.Interface`.
+Hosts the local interface listener described in [Interface.md](Interface.md). Always active, in both `Client` and `Headless` mode. `Restart()` closes the listener and opens it again from the configuration as it is then, and it keeps waiting for a restart when it cannot start (for example before its certificates are in place) instead of ending. Frames received from an interface connection go to the handler as `OnReceived` with `FrameOrigin.Interface`.
 
 ---
 
@@ -201,13 +201,13 @@ ImportSummary summary = await importService.Import(packages[0].FullPath, conflic
 
 ## MessageStorageService
 
-The storage behind `StoreMessage` and `FindStoredMessages`, used by a server's processor. `Store(message)` keeps a copy through `IStoredMessageRepository.InsertIfNew` and swallows and logs any failure. `Find(criteria)` loads every stored message, keeps those that fit the `RetrievalCriteria` (`From`/`To` UTC instants, `Authors`, `Destinations`, `Ids`), and orders them by original sent time. Times are compared as UTC, since LiteDB returns stored times as local. Which messages to store and who may retrieve them is the processor's decision.
+The storage behind `StoreMessage` and `FindStoredMessages`, used by a server's handler. `Store(message)` keeps a copy through `IStoredMessageRepository.InsertIfNew` and swallows and logs any failure. `Find(criteria)` loads every stored message, keeps those that fit the `RetrievalCriteria` (`From`/`To` UTC instants, `Authors`, `Destinations`, `Ids`), and orders them by original sent time. Times are compared as UTC, since LiteDB returns stored times as local. Which messages to store and who may retrieve them is the handler's decision.
 
 ---
 
 ## RetrievalService
 
-The client's half: `Request(serverName, criteria)` checks that the server is one of `IEngineController.StorageServers` and passes the request to `NetworkProcessing.Retrieval`, which runs the processor's `OnRetrieval`. It returns whether a processor took it, not whether anything matched, since the answer arrives later as ordinary received messages. Throws `ArgumentException` for a user that is not a server and `InvalidOperationException` with no installed user.
+The client's half: `Request(serverName, criteria)` checks that the server is one of `IEngineController.StorageServers` and passes the request to `NetworkProcessing.Retrieval`, which runs the handler's `OnRetrieval`. It returns whether a handler took it, not whether anything matched, since the answer arrives later as ordinary received messages. Throws `ArgumentException` for a user that is not a server and `InvalidOperationException` with no installed user.
 
 ---
 

@@ -1,7 +1,7 @@
 namespace BlueHeighliner.Comlink.Tests;
 
-/// <summary>A network processor that ignores every event, for configurations that need one but do not exercise it.</summary>
-internal sealed class TestNetworkProcessor : INetworkProcessor<TestFrame, TestMessagePriority, TestLevel, TestAspect>
+/// <summary>A frame handler that ignores every event, for configurations that need one but do not exercise it.</summary>
+internal sealed class TestFrameHandler : IFrameHandler<TestFrame, TestMessagePriority, TestLevel, TestAspect>
 {
     /// <inheritdoc />
     public Task OnConnected(INetworkConnectedContext<TestFrame, TestMessagePriority, TestLevel, TestAspect> context) => Task.CompletedTask;

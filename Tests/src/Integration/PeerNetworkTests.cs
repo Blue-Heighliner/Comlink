@@ -127,7 +127,7 @@ public sealed class PeerNetworkTests
     private static Dictionary<string, ServerUserConfig> OneServer(params string[] children)
         => new(StringComparer.OrdinalIgnoreCase) { ["Server"] = new ServerUserConfig { Children = children } };
 
-    /// <summary>A server whose processor forwards a frame between two clients that only connect out: it is pushed to the recipient over the connection the recipient opened, and the rows on both sides are named from the certificates.</summary>
+    /// <summary>A server whose handler forwards a frame between two clients that only connect out: it is pushed to the recipient over the connection the recipient opened, and the rows on both sides are named from the certificates.</summary>
     [Fact]
     public async Task ClientServer_MessageBetweenClients_TravelsOverTheClientsOwnConnections()
     {

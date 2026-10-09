@@ -5,7 +5,7 @@ namespace BlueHeighliner.Comlink;
 /// <param name="SourceUser">The name of the user at the other end of the connection it arrived over: the one that handed it on, who is not necessarily who wrote it.</param>
 internal sealed record ReceivedFrame(object Frame, string SourceUser);
 
-/// <summary>Manages inbound and outbound peer connections and exposes the frames that arrive over them. It only transports: what a frame means and where it goes next is the host's network processor's.</summary>
+/// <summary>Manages inbound and outbound peer connections and exposes the frames that arrive over them. It only transports: what a frame means and where it goes next is the host's frame handler's.</summary>
 internal interface IPeerService
 {
     /// <summary>Raised when a peer delivers a frame to this node; heartbeats, which only keep a connection live, are never raised.</summary>
@@ -22,7 +22,7 @@ internal interface IPeerService
     Task Start(CancellationToken cancellation);
     /// <summary>
     /// Sends <paramref name="frame"/> (an instance of <see cref="IEngineController.FrameType"/>) to the user <paramref name="userName"/>, who must be directly connected to this node, over the connection identified as them, and completes once the transport has fully acknowledged it.
-    /// Nothing is routed or relayed: reaching a user who is not directly connected is up to the host's network processor, which sends to the node that is.
+    /// Nothing is routed or relayed: reaching a user who is not directly connected is up to the host's frame handler, which sends to the node that is.
     /// </summary>
     /// <param name="userName">The user to send it to.</param>
     /// <param name="frame">What to send.</param>

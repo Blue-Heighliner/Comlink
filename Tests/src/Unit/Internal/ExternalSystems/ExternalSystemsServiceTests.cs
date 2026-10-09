@@ -1,6 +1,6 @@
 namespace BlueHeighliner.Comlink.Tests.Unit.Internal.ExternalSystems;
 
-/// <summary>Unit tests for <see cref="ExternalSystemsService"/>: running the systems, handing what they deliver to the network processor, and sending to them.</summary>
+/// <summary>Unit tests for <see cref="ExternalSystemsService"/>: running the systems, handing what they deliver to the frame handler, and sending to them.</summary>
 public sealed class ExternalSystemsServiceTests
 {
     private sealed class FakeExternalSystem(string name) : IExternalSystem
@@ -68,9 +68,9 @@ public sealed class ExternalSystemsServiceTests
         await startTask.WaitAsync(TimeSpan.FromSeconds(30));
     }
 
-    /// <summary>A frame an external system delivers is handed to the network processor as received from that system, and the engine does nothing else with it.</summary>
+    /// <summary>A frame an external system delivers is handed to the frame handler as received from that system, and the engine does nothing else with it.</summary>
     [Fact]
-    public async Task ExternalSystemFrame_IsHandedToTheProcessor()
+    public async Task ExternalSystemFrame_IsHandedToTheHandler()
     {
         FakeExternalSystem system = new("A");
         Mock<INetworkProcessing> processing = new();
@@ -87,7 +87,7 @@ public sealed class ExternalSystemsServiceTests
         await startTask.WaitAsync(TimeSpan.FromSeconds(30));
     }
 
-    /// <summary>Something that is not an instance of the configured frame type is not handed to the processor.</summary>
+    /// <summary>Something that is not an instance of the configured frame type is not handed to the handler.</summary>
     [Fact]
     public async Task ExternalSystemObjectOfAnotherType_IsIgnored()
     {

@@ -57,6 +57,6 @@ public sealed class FrameBuilderTests
             => engine.Types<TestFrame, TestPacket, TestMessagePriority, TestLevel, TestAspect>()
                 .Priority(TestMessagePriority.Normal)
                 .AutoForwarder("Alerts").AutoForwarder("Other").AutoForwarder("Alerts")
-                .Frames<TestNetworkProcessor>();
+                .Frames<TestFrameHandler>();
     }
 }

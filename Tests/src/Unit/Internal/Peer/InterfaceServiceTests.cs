@@ -9,9 +9,9 @@ public sealed class InterfaceServiceTests
 
     private static UserInfo MakeUserInfo(string name) => new() { Name = name };
 
-    /// <summary>A frame received from an interface is handed to the network processor as coming from the interface, under the installed user's name.</summary>
+    /// <summary>A frame received from an interface is handed to the frame handler as coming from the interface, under the installed user's name.</summary>
     [Fact]
-    public async Task HandleInterfaceMessage_ValidFrame_IsHandedToTheProcessor()
+    public async Task HandleInterfaceMessage_ValidFrame_IsHandedToTheHandler()
     {
         Mock<IMsmtSessionPeer.IFactory> peerFactory = new();
         Mock<INetworkProcessing> processing = new();
@@ -84,9 +84,9 @@ public sealed class InterfaceServiceTests
         processing.Verify(p => p.Received(It.IsAny<object>(), It.IsAny<FrameOrigin>(), It.IsAny<string>()), Times.Never);
     }
 
-    /// <summary>A frame an interface sends over a real MSMT connection is handed to the network processor as received from the interface, under the app's own installed user.</summary>
+    /// <summary>A frame an interface sends over a real MSMT connection is handed to the frame handler as received from the interface, under the app's own installed user.</summary>
     [Fact]
-    public async Task RealMsmt_FrameFromInterface_IsHandedToTheProcessor()
+    public async Task RealMsmt_FrameFromInterface_IsHandedToTheHandler()
     {
         int port = 44000 + Random.Shared.Next(1000);
         (X509Certificate2 serverCertificate, X509Certificate2 clientCertificate, X509Certificate2Collection trustedAuthorities) = TestMsmtCertificates.Create();

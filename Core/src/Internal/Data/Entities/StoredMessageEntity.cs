@@ -1,6 +1,6 @@
 namespace BlueHeighliner.Comlink;
 
-/// <summary>LiteDB document holding a copy of a message a server's processor chose to keep for retrievals.</summary>
+/// <summary>LiteDB document holding a copy of a message a server's handler chose to keep for retrievals.</summary>
 internal sealed class StoredMessageEntity
 {
     /// <summary>Unique document identifier.</summary>

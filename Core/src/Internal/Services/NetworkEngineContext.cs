@@ -1,6 +1,6 @@
 namespace BlueHeighliner.Comlink;
 
-/// <summary>What every context handed to the host's <see cref="INetworkProcessor{TFrame, TPriority, TLevel, TAspect}"/> is built on: one snapshot of the engine, and the environment the processor acts on, with the host's frame type.</summary>
+/// <summary>What every context handed to the host's <see cref="IFrameHandler{TFrame, TPriority, TLevel, TAspect}"/> is built on: one snapshot of the engine, and the environment the handler acts on, with the host's frame type.</summary>
 /// <typeparam name="TFrame">The host's frame type.</typeparam>
 /// <typeparam name="TPriority">The enum the host stated for its priorities.</typeparam>
 /// <typeparam name="TLevel">The enum the host stated for its message levels.</typeparam>
@@ -8,7 +8,7 @@ namespace BlueHeighliner.Comlink;
 internal abstract class NetworkEngineContext<TFrame, TPriority, TLevel, TAspect> : INetworkContext<TFrame, TPriority, TLevel, TAspect> where TFrame : class where TPriority : struct, Enum where TLevel : struct, Enum where TAspect : struct, Enum
 {
     /// <summary>Initializes the shared state of a new network context, taking the snapshot of the engine now.</summary>
-    /// <param name="environment">What the processor acts on.</param>
+    /// <param name="environment">What the handler acts on.</param>
     protected NetworkEngineContext(INetworkEnvironment environment)
     {
         this.environment = environment;

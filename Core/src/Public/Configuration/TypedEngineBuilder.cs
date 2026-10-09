@@ -16,7 +16,7 @@ public interface IEngineBuilder<TFrame, TPacket, TPriority, TLevel, TAspect> whe
 {
     /// <summary>
     /// Adds an auto forwarder called <paramref name="name"/>, shown as an option in the client's auto forward screen to every user whose <c>AutoForwarders</c> in the network configuration file lists the name, each of whom keeps their own
-    /// target list there. The engine only keeps the lists; what an auto forwarder accepts and the forwarding are the processor's (see <see cref="INetworkContext{TFrame, TPriority, TLevel, TAspect}.GetAutoForwardTargets"/>).
+    /// target list there. The engine only keeps the lists; what an auto forwarder accepts and the forwarding are the handler's (see <see cref="INetworkContext{TFrame, TPriority, TLevel, TAspect}.GetAutoForwardTargets"/>).
     /// Stating a name that is already an auto forwarder changes nothing.
     /// </summary>
     /// <param name="name">The auto forwarder's name, which is also the key of its target lists.</param>
@@ -26,14 +26,14 @@ public interface IEngineBuilder<TFrame, TPacket, TPriority, TLevel, TAspect> whe
     /// Starts stating how the host's frame type, the data format of all network traffic other than packets, is handled: a handler for each kind of frame, and what else depends on the frame type: the print
     /// count and auto forwarders. A handler for every kind of frame is required. The type must be LiteDB-serializable for
     /// storage, and must satisfy whatever serializer is used for the network (by default protobuf-net, so it needs
-    /// <c>[ProtoContract]</c>/<c>[ProtoMember]</c> attributes). Calling it again continues the same statement and replaces the processor.
+    /// <c>[ProtoContract]</c>/<c>[ProtoMember]</c> attributes). Calling it again continues the same statement and replaces the handler.
     /// </summary>
-    /// <typeparam name="TProcessor">The processor that carries out the host's protocol: it reacts to a user connecting or disconnecting, a frame being received, the user sending a message, reading one or submitting a retrieval (see <see cref="INetworkProcessor{TFrame, TPriority, TLevel, TAspect}"/>). The engine receives and sends nothing itself. Instantiated through dependency injection when the engine runs: the instance registered for it in the host's services, or else one constructed from them.</typeparam>
-    IFrameBuilder<TFrame, TPacket, TPriority, TLevel, TAspect> Frames<TProcessor>() where TProcessor : INetworkProcessor<TFrame, TPriority, TLevel, TAspect>;
+    /// <typeparam name="THandler">The handler that carries out the host's protocol: it reacts to a user connecting or disconnecting, a frame being received, the user sending a message, reading one or submitting a retrieval (see <see cref="IFrameHandler{TFrame, TPriority, TLevel, TAspect}"/>). The engine receives and sends nothing itself. Instantiated through dependency injection when the engine runs: the instance registered for it in the host's services, or else one constructed from them.</typeparam>
+    IFrameBuilder<TFrame, TPacket, TPriority, TLevel, TAspect> Frames<THandler>() where THandler : IFrameHandler<TFrame, TPriority, TLevel, TAspect>;
 
     /// <summary>
     /// Turns on packetization and starts stating what depends on the packet type: payloads are broken into prioritized packets of type <typeparamref name="TPacket"/> and
-    /// reassembled on the other side, so a large payload does not hold up higher-priority ones, and the handshake processor. Off by default. Every node on a network must be configured alike, since neither side can tell whether the other packetizes.
+    /// reassembled on the other side, so a large payload does not hold up higher-priority ones, and the handshake handler. Off by default. Every node on a network must be configured alike, since neither side can tell whether the other packetizes.
     /// </summary>
     /// <typeparam name="THandler">The handler for the packets that carry a piece of a serialized frame (see <see cref="IPacketHandler{TFrame, TPacket}"/>), instantiated through dependency injection when the engine runs: the instance registered for it in the host's services, or else one constructed from them.</typeparam>
     /// <param name="maxPayloadSize">The largest slice of a serialized frame a packet carries, in bytes. Smaller payloads let a higher-priority frame cut in sooner; larger ones carry less framing overhead. It limits the payload only: the packet's own fields (its frame id, index, count and length, and whatever else the packet type and serializer add) come on top of it, so a connection that limits what it can carry (the HDLC <c>MaxInfoField</c>, say) needs a maximum that leaves room for them. A packet that does not fit the connection fails to send, and the reason is logged.</param>

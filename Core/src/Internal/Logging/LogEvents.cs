@@ -56,8 +56,8 @@ internal static class LogEvents
     /// <summary>Sending a print job to the printer throws.</summary>
     public static EventId PrintFailed { get; } = Define(34, nameof(PrintFailed), LogCategories.Error);
 
-    /// <summary>A method of the network processor throws.</summary>
-    public static EventId NetworkProcessorFailed { get; } = Define(37, nameof(NetworkProcessorFailed), LogCategories.Error);
+    /// <summary>A method of the frame handler throws.</summary>
+    public static EventId FrameHandlerFailed { get; } = Define(37, nameof(FrameHandlerFailed), LogCategories.Error);
 
     /// <summary>A reload requested by the user fails because the file cannot be read or parsed.</summary>
     public static EventId NetworkReloadFailed { get; } = Define(39, nameof(NetworkReloadFailed), LogCategories.Error);
@@ -143,7 +143,7 @@ internal static class LogEvents
     /// <summary>An external system's connection comes up or goes down.</summary>
     public static EventId ExternalSystemConnectionChanged { get; } = Define(85, nameof(ExternalSystemConnectionChanged), LogCategories.Activity);
 
-    /// <summary>A background service (peer, interface, external systems, network processor, auto forward, disconnect alarm or network indicator) ends other than by being cancelled.</summary>
+    /// <summary>A background service (peer, interface, external systems, frame handler, auto forward, disconnect alarm or network indicator) ends other than by being cancelled.</summary>
     public static EventId ServiceStoppedUnexpectedly { get; } = Define(87, nameof(ServiceStoppedUnexpectedly), LogCategories.Crash);
 
     /// <summary>The initial setup of the main window's view model throws.</summary>

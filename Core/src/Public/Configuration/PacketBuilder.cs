@@ -17,13 +17,13 @@ public interface IPacketBuilder<TFrame, TPacket, TPriority, TLevel, TAspect> : I
     IPacketBuilder<TFrame, TPacket, TPriority, TLevel, TAspect> Serializer<TSerializer>() where TSerializer : IPacketSerializer;
 
     /// <summary>
-    /// States how nodes introduce themselves on a new connection: the handshake processor is told when a connection forms and given each packet that
-    /// arrives until it marks the connection connected as a named user (see <see cref="IPacketHandshakeProcessor{TPacket}"/>). What it sends is a serialized
+    /// States how nodes introduce themselves on a new connection: the handshake handler is told when a connection forms and given each packet that
+    /// arrives until it marks the connection connected as a named user (see <see cref="IPacketHandshakeHandler{TPacket}"/>). What it sends is a serialized
     /// instance of the packet type sent as it is, beneath the packetizer, before any frame handshake. Every node on a network must be configured alike.
     /// Like every other thing sent between nodes it is a serialized instance of the frame or packet type and nothing else.
     /// </summary>
-    /// <typeparam name="TProcessor">The processor type, instantiated through dependency injection when the engine runs: the instance registered for it in the host's services, or else one constructed from them.</typeparam>
-    IPacketBuilder<TFrame, TPacket, TPriority, TLevel, TAspect> Handshake<TProcessor>() where TProcessor : IPacketHandshakeProcessor<TPacket>;
+    /// <typeparam name="THandler">The handler type, instantiated through dependency injection when the engine runs: the instance registered for it in the host's services, or else one constructed from them.</typeparam>
+    IPacketBuilder<TFrame, TPacket, TPriority, TLevel, TAspect> Handshake<THandler>() where THandler : IPacketHandshakeHandler<TPacket>;
 
     /// <summary>
     /// States the handler for heartbeat packets (see <see cref="IPacketHeartbeatHandler{TPacket, TPriority}"/>): a heartbeat sent as a packet of its own, beneath

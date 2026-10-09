@@ -6,7 +6,7 @@ namespace BlueHeighliner.Comlink.Sample;
 /// <see cref="EngineConfiguration"/>. The serializer has to rebuild the right type from the bytes alone, which is trivial here because a Sample
 /// connection only ever carries <see cref="Frame"/>.
 /// </summary>
-public sealed class JsonSerializer : FrameSerializer<Frame, Packet>
+public sealed class FrameSerializer : FrameSerializer<Frame, Packet>
 {
     /// <inheritdoc />
     public override IMemoryOwner<byte> Serialize(Frame frame)

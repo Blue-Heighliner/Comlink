@@ -2,7 +2,7 @@ namespace BlueHeighliner.Comlink;
 
 /// <summary>
 /// A message as the engine uses it: what the user composes and reads, and what the engine stores in the Inbox and the Outbox. The engine has no frame of its own and
-/// does not know how a message travels, so a host's network processor turns a <see cref="Message{TPriority, TLevel, TAspect}"/> into its own frame to send it (see <see cref="INetworkProcessor{TFrame, TPriority, TLevel, TAspect}.OnSent"/>)
+/// does not know how a message travels, so a host's frame handler turns a <see cref="Message{TPriority, TLevel, TAspect}"/> into its own frame to send it (see <see cref="IFrameHandler{TFrame, TPriority, TLevel, TAspect}.OnSent"/>)
 /// and a received frame into a <see cref="Message{TPriority, TLevel, TAspect}"/> to record it (see <see cref="INetworkContext{TFrame, TPriority, TLevel, TAspect}.ReceiveMessage"/>).
 /// </summary>
 /// <typeparam name="TPriority">The enum the host stated for its priorities.</typeparam>
@@ -37,6 +37,6 @@ public sealed record Message<TPriority, TLevel, TAspect> where TPriority : struc
     /// <summary>Gets the message aspect the message carries, or <see langword="null"/> for none.</summary>
     public TAspect? MessageAspect { get; init; }
 
-    /// <summary>Gets whether the message is an alert, which alarms the recipient's Client-mode UI until it is read. The draft handler decides it for a message the user sends (see <see cref="IDraftHandler{TPriority, TLevel, TAspect}.IsAlert"/>) and the host's processor for one it receives.</summary>
+    /// <summary>Gets whether the message is an alert, which alarms the recipient's Client-mode UI until it is read. The draft handler decides it for a message the user sends (see <see cref="IDraftHandler{TPriority, TLevel, TAspect}.IsAlert"/>) and the host's handler for one it receives.</summary>
     public bool IsAlert { get; init; }
 }

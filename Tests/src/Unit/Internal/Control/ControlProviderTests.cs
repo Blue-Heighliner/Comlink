@@ -400,11 +400,11 @@ public sealed class ControlProviderTests
     {
         TestEngineController controller = new();
 
-        Assert.Null(controller.PacketHandshakeProcessor);
-        Assert.Null(controller.FrameHandshakeProcessor);
+        Assert.Null(controller.PacketHandshakeHandler);
+        Assert.Null(controller.FrameHandshakeHandler);
     }
 
-    /// <summary>Every processor's connection description is told which user this node runs as, so what they send can say who is speaking.</summary>
+    /// <summary>Every handler's connection description is told which user this node runs as, so what they send can say who is speaking.</summary>
     [Fact]
     public void ConfiguredEngineController_ConnectionDescriptions_SeeTheLocalUser()
     {
@@ -417,22 +417,22 @@ public sealed class ControlProviderTests
         Assert.Equal(expected, controller.WithLocalUser(connection));
     }
 
-    /// <summary>The handshake and network processors are not configurable from the network file and come from the wrapped provider.</summary>
+    /// <summary>The handshake and frame handlers are not configurable from the network file and come from the wrapped provider.</summary>
     [Fact]
-    public void ConfiguredEngineController_Processors_DelegateToFallback()
+    public void ConfiguredEngineController_Handlers_DelegateToFallback()
     {
         IHandshakeHandler packets = Mock.Of<IHandshakeHandler>();
         IHandshakeHandler frames = Mock.Of<IHandshakeHandler>();
-        INetworkHandler network = Mock.Of<INetworkHandler>();
+        IEngineFrameHandler network = Mock.Of<IEngineFrameHandler>();
         Mock<IEngineController> fallback = new();
-        fallback.Setup(f => f.PacketHandshakeProcessor).Returns(packets);
-        fallback.Setup(f => f.FrameHandshakeProcessor).Returns(frames);
-        fallback.Setup(f => f.NetworkHandler).Returns(network);
+        fallback.Setup(f => f.PacketHandshakeHandler).Returns(packets);
+        fallback.Setup(f => f.FrameHandshakeHandler).Returns(frames);
+        fallback.Setup(f => f.FrameHandler).Returns(network);
         ConfiguredEngineController controller = new(fallback.Object, new NetworkConfig(), NoCurrentUser);
 
-        Assert.Same(packets, controller.PacketHandshakeProcessor);
-        Assert.Same(frames, controller.FrameHandshakeProcessor);
-        Assert.Same(network, controller.NetworkHandler);
+        Assert.Same(packets, controller.PacketHandshakeHandler);
+        Assert.Same(frames, controller.FrameHandshakeHandler);
+        Assert.Same(network, controller.FrameHandler);
     }
 
     /// <summary>The default implementation always disables config file reading.</summary>

@@ -693,7 +693,7 @@ public sealed class ServerRoutingServiceTests
         Addresses = [new TestAddressEntry { UserName = server, Type = "To" }]
     };
 
-    /// <summary>A frame from a child is raised with the child as its source; the server itself sends nothing, since where it goes is the processor's to say.</summary>
+    /// <summary>A frame from a child is raised with the child as its source; the server itself sends nothing, since where it goes is the handler's to say.</summary>
     [Fact]
     public async Task FromChild_IsRaisedWithTheChildAsSource_AndNothingIsSent()
     {

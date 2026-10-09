@@ -8,7 +8,7 @@ namespace BlueHeighliner.Comlink;
 internal sealed class NetworkConnectedContext<TFrame, TPriority, TLevel, TAspect> : NetworkEngineContext<TFrame, TPriority, TLevel, TAspect>, INetworkConnectedContext<TFrame, TPriority, TLevel, TAspect> where TFrame : class where TPriority : struct, Enum where TLevel : struct, Enum where TAspect : struct, Enum
 {
     /// <summary>Creates the context for a user who connected.</summary>
-    /// <param name="environment">What the processor acts on.</param>
+    /// <param name="environment">What the handler acts on.</param>
     /// <param name="targetUser">The name of the user.</param>
     public NetworkConnectedContext(INetworkEnvironment environment, string targetUser)
         : base(environment) => TargetUser = GetUser(targetUser);

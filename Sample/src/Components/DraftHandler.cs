@@ -6,13 +6,13 @@ namespace BlueHeighliner.Comlink.Sample;
 /// an alert has <c>ALERT - ACTION REQUIRED</c>, otherwise a message tagged <c>URGENT</c> has <c>URGENT - PLEASE REPLY</c> and one tagged <c>REPORT</c> has <c>REPORT - FOR YOUR REVIEW</c>, and a message at the
 /// restricted message level has a second line, <c>RESTRICTED - DO NOT FORWARD</c>, whatever else it is. Every other message, such as a plain one or one tagged <c>NOTICE</c>, has no header at all.
 /// </summary>
-public sealed class DraftHandler : IDraftHandler<MessagePriority, MessageLevel, MessageAspect>
+public sealed class DraftHandler : IDraftHandler<Priority, Level, Aspect>
 {
     private readonly string run = Guid.NewGuid().ToString("N")[..16].ToUpperInvariant();
 
     /// <inheritdoc />
-    public bool IsAllowed(IEngineContext context, MessagePriority priority, MessageLevel? level, MessageAspect? aspect, string tag)
-        => priority is not MessagePriority.High && !string.Equals(tag, "SPAM", StringComparison.Ordinal);
+    public bool IsAllowed(IEngineContext context, Priority priority, Level? level, Aspect? aspect, string tag)
+        => priority is not Priority.High && !string.Equals(tag, "SPAM", StringComparison.Ordinal);
 
     /// <inheritdoc />
     public int? DefaultLineWidth => 60;
@@ -30,10 +30,10 @@ public sealed class DraftHandler : IDraftHandler<MessagePriority, MessageLevel, 
     public string? DefaultTag => "NOTICE";
 
     /// <inheritdoc />
-    public MessagePriority? DefaultPriority => MessagePriority.Medium;
+    public Priority? DefaultPriority => Priority.Medium;
 
     /// <inheritdoc />
-    public MessageLevel? DefaultMessageLevel => MessageLevel.Internal;
+    public Level? DefaultMessageLevel => Level.Internal;
 
     /// <inheritdoc />
     public TagCase TagCase => TagCase.Upper;
@@ -48,7 +48,7 @@ public sealed class DraftHandler : IDraftHandler<MessagePriority, MessageLevel, 
     public bool AllowTagSpaces => false;
 
     /// <inheritdoc />
-    public bool IsAlert(DraftState<MessagePriority, MessageLevel, MessageAspect> state) => state.Tag is "ALERT";
+    public bool IsAlert(DraftState<Priority, Level, Aspect> state) => state.Tag is "ALERT";
 
     /// <inheritdoc />
     public string NextId(string? previous)
@@ -58,7 +58,7 @@ public sealed class DraftHandler : IDraftHandler<MessagePriority, MessageLevel, 
     }
 
     /// <inheritdoc />
-    public string? GetHeader(DraftState<MessagePriority, MessageLevel, MessageAspect> state)
+    public string? GetHeader(DraftState<Priority, Level, Aspect> state)
     {
         List<string> lines = [];
         if (IsAlert(state))
@@ -74,7 +74,7 @@ public sealed class DraftHandler : IDraftHandler<MessagePriority, MessageLevel, 
             lines.Add("REPORT - FOR YOUR REVIEW");
         }
 
-        if (state.MessageLevel is MessageLevel.Restricted)
+        if (state.MessageLevel is Level.Restricted)
         {
             lines.Add("RESTRICTED - DO NOT FORWARD");
         }

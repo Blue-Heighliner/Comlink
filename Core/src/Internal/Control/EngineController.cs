@@ -251,11 +251,11 @@ internal interface IEngineController
     /// </summary>
     IReadOnlyDictionary<string, ServerUserConfig> Servers { get; }
 
-    /// <summary>Gets the processor that carries out the handshake of packets on each new connection (see <see cref="IPacketBuilder{TFrame, TPacket, TPriority, TLevel, TAspect}.Handshake{TProcessor}"/>), or <see langword="null"/> for none. Requires <see cref="PacketType"/>.</summary>
-    IHandshakeHandler? PacketHandshakeProcessor { get; }
+    /// <summary>Gets the handler that carries out the handshake of packets on each new connection (see <see cref="IPacketBuilder{TFrame, TPacket, TPriority, TLevel, TAspect}.Handshake{THandler}"/>), or <see langword="null"/> for none. Requires <see cref="PacketType"/>.</summary>
+    IHandshakeHandler? PacketHandshakeHandler { get; }
 
-    /// <summary>Gets the processor that carries out the handshake of frames on each new connection (see <see cref="IFrameBuilder{TFrame, TPacket, TPriority, TLevel, TAspect}.Handshake{TProcessor}"/>), or <see langword="null"/> for none.</summary>
-    IHandshakeHandler? FrameHandshakeProcessor { get; }
+    /// <summary>Gets the handler that carries out the handshake of frames on each new connection (see <see cref="IFrameBuilder{TFrame, TPacket, TPriority, TLevel, TAspect}.Handshake{THandler}"/>), or <see langword="null"/> for none.</summary>
+    IHandshakeHandler? FrameHandshakeHandler { get; }
     /// <summary>When <see langword="true"/>, the <c>--config</c> and <c>--user</c> command-line arguments override where the network configuration file and the running user come from (see <see cref="IEngineBuilder{TFrame, TPacket, TPriority, TLevel, TAspect}.CommandLineOverrides"/>); when <see langword="false"/> (the default) they are ignored and only <c>Config.json</c> and <c>User.json</c> in the working directory are used.</summary>
     bool CommandLineOverridesAllowed { get; }
 
@@ -269,8 +269,8 @@ internal interface IEngineController
     /// </summary>
     IReadOnlyList<IExternalSystem> ExternalSystems { get; }
 
-    /// <summary>The processor that reacts to a user connecting or disconnecting and to a message being received (see <see cref="IEngineBuilder{TFrame, TPacket, TPriority, TLevel, TAspect}.Frames{TProcessor}"/>), or <see langword="null"/> for none.</summary>
-    INetworkHandler? NetworkHandler { get; }
+    /// <summary>The handler that reacts to a user connecting or disconnecting and to a message being received (see <see cref="IEngineBuilder{TFrame, TPacket, TPriority, TLevel, TAspect}.Frames{THandler}"/>), or <see langword="null"/> for none.</summary>
+    IEngineFrameHandler? FrameHandler { get; }
 
     /// <summary>Every custom export format added via <see cref="IEngineBuilder{TFrame, TPacket, TPriority, TLevel, TAspect}.Export{TFormat}"/>, in the order added; empty if none.</summary>
     IReadOnlyList<ExportFormatDefinition> ExportFormats { get; }
@@ -308,7 +308,7 @@ internal interface IEngineController
     bool IsHeartbeat(object frame);
     /// <summary>Gets the send priority the heartbeat frames are sent with: the priority the heartbeat handler names, which must be a configured level.</summary>
     int HeartbeatPriority { get; }
-    /// <summary>Returns the send priority of <paramref name="priority"/>, a configured level's position among the levels (larger values are sent first, see <c>Docs/Components/Peer.md</c>), or that of the lowest level for <see langword="null"/>. This is what a frame is sent with when a processor sends it with a priority.</summary>
+    /// <summary>Returns the send priority of <paramref name="priority"/>, a configured level's position among the levels (larger values are sent first, see <c>Docs/Components/Peer.md</c>), or that of the lowest level for <see langword="null"/>. This is what a frame is sent with when a handler sends it with a priority.</summary>
     /// <param name="priority">The level, a member of the enum stated for the priorities, or <see langword="null"/> for the lowest.</param>
     /// <exception cref="ArgumentException"><paramref name="priority"/> is not a configured level.</exception>
     int SendPriority(Enum? priority);
@@ -383,7 +383,7 @@ internal interface IEngineController
     /// <param name="userName">The user to describe.</param>
     IReadOnlyDictionary<string, string> GetUserData(string userName);
 
-    /// <summary>Adds what the engine knows about this node, namely which user it runs as, to a description of a new connection before it is handed to a host's processor.</summary>
+    /// <summary>Adds what the engine knows about this node, namely which user it runs as, to a description of a new connection before it is handed to a host's handler.</summary>
     /// <param name="connection">What is known about the connection.</param>
     IConnectionInfo WithLocalUser(IConnectionInfo connection);
 
@@ -413,7 +413,7 @@ internal interface IEngineController
 /// <param name="builder">What the host stated.</param>
 /// <param name="currentUserProvider">Tracks the user name of the currently running instance, read for <see cref="ConnectionOptions"/>.</param>
 /// <param name="networkConfig">The network configuration file describing every user of the network; empty when none is loaded.</param>
-/// <param name="services">The running engine's container, which instantiates the host's processors; <see langword="null"/> for one with no services.</param>
+/// <param name="services">The running engine's container, which instantiates the host's handlers; <see langword="null"/> for one with no services.</param>
 internal class EngineController(EngineBuilder builder, ICurrentUserProvider currentUserProvider, NetworkConfig? networkConfig = null, IServiceProvider? services = null) : IEngineController
 {
     private readonly IMicroGatePortSource portSource = services?.GetService<IMicroGatePortSource>() ?? new MicroGatePortSource();
@@ -452,14 +452,14 @@ internal class EngineController(EngineBuilder builder, ICurrentUserProvider curr
         builder.ImportFormats.Select(registration => registration.Create(services)),
         format => new ImportFormatDefinition { Name = format.Name, Read = format.Import, StagedSendMode = format.StagedSendMode, StagedSendDelay = format.StagedSendDelay },
         definition => definition.Name));
-    private readonly Lazy<IHandshakeHandler?> packetHandshakeProcessor = new(() => builder.PacketHandshakeProcessor?.Create(services));
-    private readonly Lazy<IHandshakeHandler?> frameHandshakeProcessor = new(() => builder.FrameHandshakeProcessor?.Create(services));
+    private readonly Lazy<IHandshakeHandler?> packetHandshakeHandler = new(() => builder.PacketHandshakeHandler?.Create(services));
+    private readonly Lazy<IHandshakeHandler?> frameHandshakeHandler = new(() => builder.FrameHandshakeHandler?.Create(services));
     private readonly Lazy<IDraftFrameHandler?> draftHandler = new(() => builder.DraftHandler?.Create(services));
     private readonly Lazy<IAlarmHandler?> alarmHandler = new(() => builder.AlarmHandler?.Create(services));
     private readonly Lazy<ILogHandler?> logHandler = new(() => builder.LogHandler?.Create(services));
     private readonly Lazy<IPrintPolicy?> printHandler = new(() => builder.PrintHandler?.Create(services));
     private readonly Lazy<IDeleteHandler?> deleteHandler = new(() => builder.DeleteHandler?.Create(services));
-    private readonly Lazy<INetworkHandler?> networkHandler = new(() => builder.NetworkHandler?.Create(services));
+    private readonly Lazy<IEngineFrameHandler?> frameHandler = new(() => builder.FrameHandler?.Create(services));
     private readonly IReadOnlyList<MessagePriorityOption> defaultPriorities = [new MessagePriorityOption { Name = "NORMAL", Value = 0, Key = NoPriority.Normal }];
     private readonly IReadOnlyList<AddressType> addressTypeOrder = [AddressType.To, AddressType.Cc, AddressType.External];
 
@@ -809,10 +809,10 @@ internal class EngineController(EngineBuilder builder, ICurrentUserProvider curr
         };
 
     /// <inheritdoc />
-    public virtual IHandshakeHandler? PacketHandshakeProcessor => packetHandshakeProcessor.Value;
+    public virtual IHandshakeHandler? PacketHandshakeHandler => packetHandshakeHandler.Value;
 
     /// <inheritdoc />
-    public virtual IHandshakeHandler? FrameHandshakeProcessor => frameHandshakeProcessor.Value;
+    public virtual IHandshakeHandler? FrameHandshakeHandler => frameHandshakeHandler.Value;
 
     /// <inheritdoc />
     public virtual bool CommandLineOverridesAllowed => builder.AreCommandLineOverridesAllowed;
@@ -821,7 +821,7 @@ internal class EngineController(EngineBuilder builder, ICurrentUserProvider curr
     public virtual IReadOnlyList<IExternalSystem> ExternalSystems => builder.ExternalSystems;
 
     /// <inheritdoc />
-    public virtual INetworkHandler? NetworkHandler => networkHandler.Value;
+    public virtual IEngineFrameHandler? FrameHandler => frameHandler.Value;
     /// <inheritdoc />
     public virtual IReadOnlyList<ExportFormatDefinition> ExportFormats => exportFormats.Value;
     /// <inheritdoc />

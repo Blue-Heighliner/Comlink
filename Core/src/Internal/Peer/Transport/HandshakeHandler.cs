@@ -21,7 +21,7 @@ internal interface IHandshakeSession
     Task<bool> Send(object item);
 }
 
-/// <summary>The engine's view of a host's handshake processor, with items as plain objects.</summary>
+/// <summary>The engine's view of a host's handshake handler, with items as plain objects.</summary>
 internal interface IHandshakeHandler
 {
     /// <summary>Gets the type of item the handshake carries.</summary>

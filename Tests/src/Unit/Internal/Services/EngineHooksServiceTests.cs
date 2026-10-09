@@ -1,22 +1,22 @@
 namespace BlueHeighliner.Comlink.Tests.Unit.Internal.Services;
 
-/// <summary>Unit tests for <see cref="EngineHooksService"/>, which hands what the peer service reports to the network processor.</summary>
+/// <summary>Unit tests for <see cref="EngineHooksService"/>, which hands what the peer service reports to the frame handler.</summary>
 public sealed class EngineHooksServiceTests
 {
-    private static (EngineHooksService Service, FakePeerService Peer, Mock<INetworkProcessing> Processing, Mock<IEngineController> Controller) Build(bool processor = true)
+    private static (EngineHooksService Service, FakePeerService Peer, Mock<INetworkProcessing> Processing, Mock<IEngineController> Controller) Build(bool handler = true)
     {
         FakePeerService peer = new();
         Mock<INetworkProcessing> processing = new();
         Mock<IEngineController> controller = new();
-        controller.Setup(c => c.NetworkHandler).Returns(processor ? Mock.Of<INetworkHandler>() : null);
+        controller.Setup(c => c.FrameHandler).Returns(handler ? Mock.Of<IEngineFrameHandler>() : null);
         return (new EngineHooksService(peer, controller.Object, processing.Object), peer, processing, controller);
     }
 
-    /// <summary>With no processor configured, Start returns immediately without subscribing to any peer event.</summary>
+    /// <summary>With no handler configured, Start returns immediately without subscribing to any peer event.</summary>
     [Fact]
-    public async Task Start_NoProcessorConfigured_ReturnsImmediatelyWithoutSubscribing()
+    public async Task Start_NoHandlerConfigured_ReturnsImmediatelyWithoutSubscribing()
     {
-        (EngineHooksService service, FakePeerService peer, _, _) = Build(processor: false);
+        (EngineHooksService service, FakePeerService peer, _, _) = Build(handler: false);
 
         await service.Start(CancellationToken.None).WaitAsync(TimeSpan.FromSeconds(30));
 
@@ -24,9 +24,9 @@ public sealed class EngineHooksServiceTests
         Assert.False(peer.HasFrameSubscribers);
     }
 
-    /// <summary>With a processor, Start subscribes to every peer event and blocks until cancelled, then unsubscribes.</summary>
+    /// <summary>With a handler, Start subscribes to every peer event and blocks until cancelled, then unsubscribes.</summary>
     [Fact]
-    public async Task Start_WithAProcessor_SubscribesAndBlocksUntilCancelled()
+    public async Task Start_WithAHandler_SubscribesAndBlocksUntilCancelled()
     {
         (EngineHooksService service, FakePeerService peer, _, _) = Build();
         using CancellationTokenSource cts = new();

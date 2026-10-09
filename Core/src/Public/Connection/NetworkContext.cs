@@ -1,6 +1,6 @@
 namespace BlueHeighliner.Comlink;
 
-/// <summary>What every <see cref="INetworkProcessor{TFrame, TPriority, TLevel, TAspect}"/> method is handed: the engine, and the ways a processor acts on it.</summary>
+/// <summary>What every <see cref="IFrameHandler{TFrame, TPriority, TLevel, TAspect}"/> method is handed: the engine, and the ways a handler acts on it.</summary>
 /// <typeparam name="TFrame">The host's frame type.</typeparam>
 /// <typeparam name="TPriority">The enum the host stated for its priorities.</typeparam>
 /// <typeparam name="TLevel">The enum the host stated for its message levels.</typeparam>
@@ -9,7 +9,7 @@ public interface INetworkContext<TFrame, TPriority, TLevel, TAspect> : IEngineCo
 {
     /// <summary>
     /// Sends <paramref name="frame"/> to <paramref name="userName"/> over the connection identified as them, and completes once the transport has
-    /// fully acknowledged it. The user must be directly connected to the current user: the engine never routes or relays, and reaching anyone further away is the processor's to do by sending to the node that is directly connected. Nothing in the frame is changed or checked: the engine does not know what is in it.
+    /// fully acknowledged it. The user must be directly connected to the current user: the engine never routes or relays, and reaching anyone further away is the handler's to do by sending to the node that is directly connected. Nothing in the frame is changed or checked: the engine does not know what is in it.
     /// </summary>
     /// <param name="userName">The user to send it to.</param>
     /// <param name="priority">The priority to send it with.</param>
@@ -70,17 +70,17 @@ public interface INetworkContext<TFrame, TPriority, TLevel, TAspect> : IEngineCo
     /// A user whose own message level ranks below <paramref name="minimumLevel"/> is left out. 
     /// </summary>
     /// <param name="minimumLevel">The lowest message level a user may run at to be included, or <see langword="null"/> to include every user. Ignored when message levels are not in use.</param>
-    /// <param name="excluded">The users that were left out for ranking below <paramref name="minimumLevel"/>, for the processor to report as failed.</param>
+    /// <param name="excluded">The users that were left out for ranking below <paramref name="minimumLevel"/>, for the handler to report as failed.</param>
     /// <param name="targets">User and group names.</param>
     /// <exception cref="ArgumentException"><paramref name="minimumLevel"/> is not one of the configured message levels.</exception>
     IReadOnlySet<string> GetDestinations(TLevel? minimumLevel, out IReadOnlySet<string> excluded, params IEnumerable<string> targets);
 
     /// <summary>Gets the users <paramref name="message"/> is for: the distinct user names of all its addresses that are not <see cref="AddressType.External"/>, with groups expanded and users whose message level ranks below the message's left out, as <see cref="GetDestinations(TLevel?, out IReadOnlySet{string}, IEnumerable{string})"/> does.</summary>
     /// <param name="message">The message.</param>
-    /// <param name="excluded">The users that were left out for ranking below the message's level, for the processor to report as failed.</param>
+    /// <param name="excluded">The users that were left out for ranking below the message's level, for the handler to report as failed.</param>
     IReadOnlySet<string> GetDestinations(Message<TPriority, TLevel, TAspect> message, out IReadOnlySet<string> excluded);
 
-    /// <summary>Gets the users the current user has put on the target list of the auto forwarder named <paramref name="controllerName"/>, which the processor forwards what that auto forwarder accepts to, leaving out the current user so a forward never comes back to its sender. Empty when there is no such auto forwarder or the list is empty.</summary>
+    /// <summary>Gets the users the current user has put on the target list of the auto forwarder named <paramref name="controllerName"/>, which the handler forwards what that auto forwarder accepts to, leaving out the current user so a forward never comes back to its sender. Empty when there is no such auto forwarder or the list is empty.</summary>
     /// <param name="controllerName">The auto forwarder's name (see <see cref="IEngineBuilder{TFrame, TPacket, TPriority, TLevel, TAspect}.AutoForwarder"/>).</param>
     Task<IReadOnlyList<string>> GetAutoForwardTargets(string controllerName);
 }

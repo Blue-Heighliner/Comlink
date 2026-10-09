@@ -20,10 +20,10 @@ internal sealed class EngineBuilder<TFrame, TPacket, TPriority, TLevel, TAspect>
     }
 
     /// <inheritdoc />
-    public IFrameBuilder<TFrame, TPacket, TPriority, TLevel, TAspect> Frames<TProcessor>() where TProcessor : INetworkProcessor<TFrame, TPriority, TLevel, TAspect>
+    public IFrameBuilder<TFrame, TPacket, TPriority, TLevel, TAspect> Frames<THandler>() where THandler : IFrameHandler<TFrame, TPriority, TLevel, TAspect>
     {
         frames ??= new();
-        frames.Processor<TProcessor>();
+        frames.Handler<THandler>();
         return this;
     }
 
@@ -162,16 +162,16 @@ internal sealed class EngineBuilder<TFrame, TPacket, TPriority, TLevel, TAspect>
     }
 
     /// <inheritdoc />
-    IFrameBuilder<TFrame, TPacket, TPriority, TLevel, TAspect> IFrameBuilder<TFrame, TPacket, TPriority, TLevel, TAspect>.Handshake<TProcessor>()
+    IFrameBuilder<TFrame, TPacket, TPriority, TLevel, TAspect> IFrameBuilder<TFrame, TPacket, TPriority, TLevel, TAspect>.Handshake<THandler>()
     {
-        RequireFrames().Handshake<TProcessor>();
+        RequireFrames().Handshake<THandler>();
         return this;
     }
 
     /// <inheritdoc />
-    IPacketBuilder<TFrame, TPacket, TPriority, TLevel, TAspect> IPacketBuilder<TFrame, TPacket, TPriority, TLevel, TAspect>.Handshake<TProcessor>()
+    IPacketBuilder<TFrame, TPacket, TPriority, TLevel, TAspect> IPacketBuilder<TFrame, TPacket, TPriority, TLevel, TAspect>.Handshake<THandler>()
     {
-        RequirePackets().Handshake<TProcessor>();
+        RequirePackets().Handshake<THandler>();
         return this;
     }
 
@@ -461,7 +461,7 @@ internal sealed class EngineBuilder<TFrame, TPacket, TPriority, TLevel, TAspect>
         return this;
     }
 
-    private FrameBuilder<TFrame, TPriority, TLevel, TAspect> RequireFrames() => frames ?? throw new InvalidOperationException("Frames<TProcessor>() must be called before the frame handlers are stated.");
+    private FrameBuilder<TFrame, TPriority, TLevel, TAspect> RequireFrames() => frames ?? throw new InvalidOperationException("Frames<THandler>() must be called before the frame handlers are stated.");
 
     private PacketBuilder<TFrame, TPacket, TPriority> RequirePackets() => packets ?? throw new InvalidOperationException("Packets() must be called before the packet handlers are stated.");
 
@@ -470,14 +470,14 @@ internal sealed class EngineBuilder<TFrame, TPacket, TPriority, TLevel, TAspect>
         if (frames is not null)
         {
             state.FrameMap = frames.Build();
-            state.NetworkHandler = frames.NetworkHandler;
-            state.FrameHandshakeProcessor = frames.HandshakeHandler;
+            state.FrameHandler = frames.FrameHandler;
+            state.FrameHandshakeHandler = frames.HandshakeHandler;
         }
 
         if (packets is not null)
         {
             state.PacketMap = packets.Build();
-            state.PacketHandshakeProcessor = packets.HandshakeHandler;
+            state.PacketHandshakeHandler = packets.HandshakeHandler;
         }
 
         List<MessageLevel> builtLevels = levels.Build();

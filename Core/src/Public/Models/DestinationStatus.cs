@@ -15,13 +15,13 @@ public enum DestinationStatus
     Failed,
     /// <summary>
     /// The message has arrived at the destination but the user has not yet opened it. On an Inbox record this is
-    /// its initial status; on an Outbox record's per-destination status, it is set when the host's processor reports it
+    /// its initial status; on an Outbox record's per-destination status, it is set when the host's handler reports it
     /// (see <see cref="INetworkContext{TFrame, TPriority, TLevel, TAspect}.SetSentStatus(string, string, DestinationStatus)"/>), for example on receiving that destination's receive receipt.
     /// </summary>
     Received,
     /// <summary>
     /// The user has opened the message. On an Inbox record this is set locally when the user opens it.
-    /// On an Outbox record's per-destination status, this is set only when the host's processor reports it
+    /// On an Outbox record's per-destination status, this is set only when the host's handler reports it
     /// (see <see cref="INetworkContext{TFrame, TPriority, TLevel, TAspect}.SetSentStatus(string, string, DestinationStatus)"/>), for example on receiving that destination's read receipt.
     /// </summary>
     Read

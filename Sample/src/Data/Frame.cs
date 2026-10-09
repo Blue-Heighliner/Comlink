@@ -3,7 +3,7 @@ namespace BlueHeighliner.Comlink.Sample;
 /// <summary>
 /// Demonstrates injecting a custom frame DTO. Field names are deliberately unlike those of the engine's
 /// <see cref="Message"/> (<c>Id</c>, <c>Sender</c>, <c>Text</c>, <c>Recipients</c> with a <see cref="bool"/> flag vs an address-type enum):
-/// the engine never reads a frame, and this type converts to and from <see cref="Message"/> (<see cref="FromMessage"/>, <see cref="ToMessage"/>) for <see cref="NetworkProcessor"/>.
+/// the engine never reads a frame, and this type converts to and from <see cref="Message"/> (<see cref="FromMessage"/>, <see cref="ToMessage"/>) for <see cref="FrameHandler"/>.
 /// </summary>
 [ProtoContract]
 public sealed class Frame
@@ -37,13 +37,13 @@ public sealed class Frame
     [ProtoMember(6)] public DateTime Timestamp { get; set; }
     /// <summary>Message ID this message is a read receipt for; empty for an ordinary message.</summary>
     [ProtoMember(7)] public string ReadMessageId { get; set; } = string.Empty;
-    /// <summary>Integer value of the priority level of this message, the value of a MessagePriority member.</summary>
+    /// <summary>Integer value of the priority level of this message, the value of a Priority member.</summary>
     [ProtoMember(9)] public int Importance { get; set; }
     /// <summary>Short user-inputted tag identifying the type of this message.</summary>
     [ProtoMember(10)] public string Category { get; set; } = string.Empty;
-    /// <summary>Integer value of the message level this message was sent at, the value of a MessageLevel member, or <see langword="null"/> for none.</summary>
+    /// <summary>Integer value of the message level this message was sent at, the value of a Level member, or <see langword="null"/> for none.</summary>
     [ProtoMember(11)] public int? Confidentiality { get; set; }
-    /// <summary>Integer value of the message aspect this message carries, the value of a MessageAspect member, or <see langword="null"/> for none.</summary>
+    /// <summary>Integer value of the message aspect this message carries, the value of a Aspect member, or <see langword="null"/> for none.</summary>
     [ProtoMember(22)] public int? Protection { get; set; }
     /// <summary>Whether this message is a retrieval request to a storage server.</summary>
     [ProtoMember(12)] public bool IsRetrieval { get; set; }
@@ -69,10 +69,10 @@ public sealed class Frame
     /// <summary>Gets the priority this frame is sent with: that of a receipt or a retrieval request, or the message's own importance.</summary>
     [ProtoIgnore]
     [System.Text.Json.Serialization.JsonIgnore]
-    public MessagePriority Priority
-        => IsReadReceipt || IsReceiveReceipt ? MessagePriority.Receipt
-        : IsRetrieval ? MessagePriority.Retrieval
-        : (MessagePriority)Importance;
+    public Priority Priority
+        => IsReadReceipt || IsReceiveReceipt ? Priority.Receipt
+        : IsRetrieval ? Priority.Retrieval
+        : (Priority)Importance;
 
     /// <summary>Turns this frame into the message the engine stores and shows.</summary>
     public Message ToMessage()
@@ -82,10 +82,10 @@ public sealed class Frame
             FromUser = Sender,
             Body = Text,
             SentAt = Timestamp,
-            Priority = (MessagePriority)Importance,
+            Priority = (Priority)Importance,
             Tag = Category,
-            MessageLevel = (MessageLevel?)Confidentiality,
-            MessageAspect = (MessageAspect?)Protection,
+            MessageLevel = (Level?)Confidentiality,
+            MessageAspect = (Aspect?)Protection,
             IsAlert = Category is "ALERT",
             Addresses = [.. Recipients.Select(recipient => new MessageAddress { UserName = recipient.User, Type = recipient.Kind switch { "CC" => AddressType.Cc, "OUTSIDE" => AddressType.External, _ => AddressType.To }, Information = recipient.Note })]
         };

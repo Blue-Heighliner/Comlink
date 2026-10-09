@@ -1,7 +1,7 @@
 namespace BlueHeighliner.Comlink;
 
 /// <summary>
-/// A service a host stated by type (a processor or a serializer), to be instantiated through dependency injection once the engine runs: the instance the
+/// A service a host stated by type (a handler or a serializer), to be instantiated through dependency injection once the engine runs: the instance the
 /// container has registered for the type, or else one it constructs from the container's services.
 /// </summary>
 /// <typeparam name="TService">The engine's view of the service.</typeparam>

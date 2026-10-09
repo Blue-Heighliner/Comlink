@@ -9,7 +9,7 @@ namespace BlueHeighliner.Comlink;
 /// <typeparam name="TAspect">The enum the host stated for its message aspects.</typeparam>
 public interface IServiceConnection<TPriority, TLevel, TAspect> where TPriority : struct, Enum where TLevel : struct, Enum where TAspect : struct, Enum
 {
-    /// <summary>Raised when the host's network processor records a message as received (see <see cref="INetworkContext{TFrame, TPriority, TLevel, TAspect}.ReceiveMessage"/>).</summary>
+    /// <summary>Raised when the host's frame handler records a message as received (see <see cref="INetworkContext{TFrame, TPriority, TLevel, TAspect}.ReceiveMessage"/>).</summary>
     event Func<Message<TPriority, TLevel, TAspect>, Task>? MessageReceived;
 
     /// <summary>Raised when the delivery status of an outbound message changes.</summary>
@@ -41,8 +41,8 @@ public interface IServiceConnection<TPriority, TLevel, TAspect> where TPriority 
     Task<UserInfo?> InstallUser(string userName, CancellationToken cancellation = default);
 
     /// <summary>
-    /// Sends a message with the given <paramref name="body"/> to the specified <paramref name="addresses"/>: the engine stores it in the Outbox and hands it to the host's network processor
-    /// (see <see cref="INetworkProcessor{TFrame, TPriority, TLevel, TAspect}.OnSent"/>), which sends it and reports each destination's outcome as delivery status changes. Whether the message is an alert
+    /// Sends a message with the given <paramref name="body"/> to the specified <paramref name="addresses"/>: the engine stores it in the Outbox and hands it to the host's frame handler
+    /// (see <see cref="IFrameHandler{TFrame, TPriority, TLevel, TAspect}.OnSent"/>), which sends it and reports each destination's outcome as delivery status changes. Whether the message is an alert
     /// is not chosen here: the host's draft handler decides it (see <see cref="SendMessageResult.IsAlert"/>). The priority, message level and message aspect must be configured ones or the call throws.
     /// </summary>
     /// <param name="body">The body text.</param>
@@ -55,8 +55,8 @@ public interface IServiceConnection<TPriority, TLevel, TAspect> where TPriority 
     Task<SendMessageResult?> SendMessage(string body, List<AddressRequest> addresses, TPriority? priority = null, string tag = "", TLevel? messageLevel = null, TAspect? messageAspect = null, CancellationToken cancellation = default);
 
     /// <summary>
-    /// Marks the Inbox record for <paramref name="messageId"/> as read (no-op if already read or not found) and tells the host's network processor (see
-    /// <see cref="INetworkProcessor{TFrame, TPriority, TLevel, TAspect}.OnRead"/>). Returns <see langword="true"/> if the record's read state actually changed.
+    /// Marks the Inbox record for <paramref name="messageId"/> as read (no-op if already read or not found) and tells the host's frame handler (see
+    /// <see cref="IFrameHandler{TFrame, TPriority, TLevel, TAspect}.OnRead"/>). Returns <see langword="true"/> if the record's read state actually changed.
     /// </summary>
     /// <param name="messageId">The identifier of the received message.</param>
     /// <param name="cancellation">Cancels the wait.</param>
