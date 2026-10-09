@@ -20,12 +20,12 @@ internal interface IPacketAssembler : IDisposable
 /// the payload limit between them, the oldest are dropped, which bounds the memory a lost packet, or a sender that
 /// never finishes, can tie up.
 /// </summary>
-internal sealed class PacketAssembler(IEngineController engineController, int maxPayloadSize, int maxPendingPayloads) : IPacketAssembler
+internal sealed class PacketAssembler(IEngineController engineController, int maxFrameSize, int maxPendingFrames) : IPacketAssembler
 {
     private readonly Lock gate = new();
-    private readonly OrderedDictionary<int, Pending> pending = [];
+    private readonly OrderedDictionary<string, Pending> pending = [];
     private readonly IPacketSerializer serializer = engineController.PacketSerializer ?? throw new InvalidOperationException("The engine controller has no packet serializer");
-    private readonly long maxPendingBytes = 2L * maxPayloadSize;
+    private readonly long maxPendingBytes = 2L * maxFrameSize;
     private long pendingBytes;
     private bool disposed;
 
@@ -59,14 +59,14 @@ internal sealed class PacketAssembler(IEngineController engineController, int ma
             throw new InvalidDataException("The bytes are not a frame packet");
         }
 
-        int id = engineController.GetPayloadId(decoded);
+        string id = engineController.GetFrameId(decoded);
         int index = engineController.GetPacketIndex(decoded);
         int count = engineController.GetPacketCount(decoded);
-        int total = engineController.GetPayloadLength(decoded);
-        ReadOnlySpan<byte> chunk = engineController.GetPacketData(decoded).Span;
+        int total = engineController.GetFrameLength(decoded);
+        ReadOnlySpan<byte> chunk = engineController.GetPacketPayload(decoded).Span;
 
         bool isLast = index == count - 1;
-        if (count < 1 || count > Packetizer.MaxPacketCount || index < 0 || index >= count || total < 0 || total > maxPayloadSize || chunk.Length > total || (!isLast && chunk.Length == 0))
+        if (count < 1 || count > Packetizer.MaxPacketCount || index < 0 || index >= count || total < 0 || total > maxFrameSize || chunk.Length > total || (!isLast && chunk.Length == 0))
         {
             throw new InvalidDataException("The packet's fields are inconsistent");
         }
@@ -97,7 +97,7 @@ internal sealed class PacketAssembler(IEngineController engineController, int ma
             {
                 payload = new Pending(count, total);
                 pending.Add(id, payload);
-                while (pending.Count > maxPendingPayloads) { EvictOldest(except: id); }
+                while (pending.Count > maxPendingFrames) { EvictOldest(except: id); }
             }
             else if (payload.Count != count || payload.Total != total)
             {
@@ -177,7 +177,7 @@ internal sealed class PacketAssembler(IEngineController engineController, int ma
             }
 
             disposed = true;
-            foreach (KeyValuePair<int, Pending> entry in pending)
+            foreach (KeyValuePair<string, Pending> entry in pending)
             {
                 entry.Value.Dispose();
             }
@@ -187,7 +187,7 @@ internal sealed class PacketAssembler(IEngineController engineController, int ma
     }
 
     // Never the payload a packet is being added to, which is still in use.
-    private void EvictOldest(int except)
+    private void EvictOldest(string except)
     {
         int position = pending.GetAt(0).Key == except ? 1 : 0;
         Pending evicted = pending.GetAt(position).Value;

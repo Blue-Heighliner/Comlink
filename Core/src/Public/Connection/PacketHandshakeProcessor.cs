@@ -8,17 +8,17 @@ namespace BlueHeighliner.Comlink;
 /// (<see cref="IConnectionInfo"/>) who sends first and what answers what. Every node on a network must be configured alike. State one with <see cref="IPacketBuilder{TFrame, TPacket, TPriority, TLevel, TAspect}.Handshake{TProcessor}"/>.
 /// </summary>
 /// <typeparam name="TPacket">The host's packet type.</typeparam>
-public interface IHandshakeProcessor<TPacket> where TPacket : class
+public interface IPacketHandshakeProcessor<TPacket> where TPacket : class
 {
     /// <summary>Gets how long the handshake may take, from the connection forming, before the connection is dropped.</summary>
     TimeSpan Timeout { get; }
 
     /// <summary>Called on both nodes when the connection has formed, before anything has been received. A processor in which one node speaks first sends its first packet here, on the node that decides that is it.</summary>
     /// <param name="context">Controls the connection.</param>
-    Task OnConnected(IHandshakeContext<TPacket> context);
+    Task OnConnected(IPacketHandshakeContext<TPacket> context);
 
     /// <summary>Called for each packet received while the connection is not yet marked connected.</summary>
     /// <param name="context">Controls the connection.</param>
     /// <param name="packet">What arrived.</param>
-    Task OnReceived(IHandshakeContext<TPacket> context, TPacket packet);
+    Task OnReceived(IPacketHandshakeContext<TPacket> context, TPacket packet);
 }

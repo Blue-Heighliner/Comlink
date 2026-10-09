@@ -15,6 +15,7 @@ public sealed class ContentAreaViewModelTests
 
         public Task Connect(CancellationToken cancellation = default) => Task.CompletedTask;
         public Task<UserInfo?> GetUserInfo(CancellationToken cancellation = default) => Task.FromResult<UserInfo?>(null);
+        public IEngineContext GetContext() => Mock.Of<IEngineContext>();
         public Task<List<string>> GetUserNames(CancellationToken cancellation = default) => Task.FromResult(new List<string>());
         public Task<List<string>> GetConnectedUsers(CancellationToken cancellation = default) => Task.FromResult(new List<string>());
         public Task<UserInfo?> InstallUser(string userCode, CancellationToken cancellation = default) => Task.FromResult<UserInfo?>(null);
@@ -42,7 +43,6 @@ public sealed class ContentAreaViewModelTests
         mock.Setup(p => p.Priorities).Returns([new MessagePriorityOption { Name = "Normal", Value = 0, Key = TestMessagePriority.Normal }]);
         mock.Setup(t => t.TagsEnabled).Returns(true);
         mock.Setup(t => t.TagLabel).Returns("Tag");
-        mock.Setup(p => p.BlockedCombinations).Returns([]);
         mock.Setup(a => a.AlertLabel).Returns("ALERT");
         return mock.Object;
     }

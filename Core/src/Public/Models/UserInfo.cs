@@ -6,7 +6,7 @@ public sealed record UserInfo
     /// <summary>Canonical name of the user. By convention user names are all uppercase.</summary>
     public required string Name { get; init; }
     /// <summary>
-    /// The name of the message level (see <see cref="IEngineBuilder{TFrame, TPacket, TPriority, TLevel, TAspect}.MessageLevels"/>) this user runs at. <see langword="null"/> (the
+    /// The name of the message level (see <see cref="IEngineBuilder{TFrame, TPacket, TPriority, TLevel, TAspect}.Level"/>) this user runs at. <see langword="null"/> (the
     /// default) is the lowest configured level.
     /// </summary>
     public string? MessageLevel { get; init; }

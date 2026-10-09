@@ -1,12 +1,12 @@
 namespace BlueHeighliner.Comlink;
 
 /// <summary>
-/// Handed to an <see cref="IHandshakeProcessor{TPacket}"/> for one connection that has just formed, to carry out the handshake on it:
+/// Handed to an <see cref="IPacketHandshakeProcessor{TPacket}"/> for one connection that has just formed, to carry out the handshake on it:
 /// send packets, then either mark the connection fully connected as a named user or disconnect it. Until one of those happens the connection is unusable,
 /// and it is dropped if it takes too long.
 /// </summary>
 /// <typeparam name="TPacket">The host's packet type.</typeparam>
-public interface IHandshakeContext<TPacket> : IEngineContext where TPacket : class
+public interface IPacketHandshakeContext<TPacket> : IEngineContext where TPacket : class
 {
     /// <summary>Gets what is known about the connection.</summary>
     IConnectionInfo Connection { get; }

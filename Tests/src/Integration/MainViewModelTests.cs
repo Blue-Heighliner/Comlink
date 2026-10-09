@@ -44,7 +44,6 @@ public sealed class MainViewModelTests
             EngineController.Setup(a => a.AlertLabel).Returns("ALERT");
             EngineController.Setup(t => t.TagsEnabled).Returns(true);
             EngineController.Setup(t => t.TagLabel).Returns("Tag");
-            EngineController.Setup(p => p.BlockedCombinations).Returns([]);
 
             return new MainViewModel(
                 Connection.Object,

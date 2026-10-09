@@ -18,7 +18,7 @@ public sealed class EngineBuilderTests
         ServiceCollection services = new();
         foreach (object processor in processors)
         {
-            foreach (Type type in processor.GetType().GetInterfaces().Where(type => type.IsGenericType && type.Namespace == typeof(IHandshakeProcessor<>).Namespace && type.Name.EndsWith("Processor`1")))
+            foreach (Type type in processor.GetType().GetInterfaces().Where(type => type.IsGenericType && type.Namespace == typeof(IPacketHandshakeProcessor<>).Namespace && type.Name.EndsWith("Processor`1")))
             {
                 services.AddSingleton(type, processor);
             }
@@ -55,13 +55,13 @@ public sealed class EngineBuilderTests
 
     private sealed class TypesOnlyConfiguration : IEngineConfiguration
     {
-        public void Configure(IEngineBuilder engine) => engine.Types<TestFrame, TestMessagePriority, TestLevel, TestAspect>().Priorities().Priority(TestMessagePriority.Normal);
+        public void Configure(IEngineBuilder engine) => engine.Types<TestFrame, TestMessagePriority, TestLevel, TestAspect>().Priority(TestMessagePriority.Normal);
     }
 
     /// <summary>A configuration that states its types but no frame handlers cannot start the engine.</summary>
     [Fact]
     public void Build_TypesWithoutFrames_Throws()
-        => Assert.Contains("Frames(", Assert.Throws<InvalidOperationException>(() => EngineBuilder.Build(new TypesOnlyConfiguration())).Message);
+        => Assert.Contains("Frames<TProcessor>()", Assert.Throws<InvalidOperationException>(() => EngineBuilder.Build(new TypesOnlyConfiguration())).Message);
 
     /// <summary>The types can only be stated once.</summary>
     [Fact]
@@ -82,17 +82,36 @@ public sealed class EngineBuilderTests
 
         Assert.Equal(["NORMAL"], builder.PriorityOptions.Select(option => option.Name));
         Assert.Empty(builder.MessageLevelValues);
-        Assert.Throws<InvalidOperationException>(() => typed.Packets());
+        Assert.Throws<InvalidOperationException>(() => typed.Packets<IPacketHandler<TestFrame, NoPacket>>(16 * 1024));
     }
 
     private sealed class UnorderedConfiguration : IEngineConfiguration
     {
         public void Configure(IEngineBuilder engine)
             => engine.Types<TestFrame, TestPacket, TestMessagePriority, TestLevel, TestAspect>()
-                .Priorities().Priority(TestMessagePriority.High).Priority(TestMessagePriority.Low).Priority(TestMessagePriority.Flash)
-                .MessageLevels().Level(TestLevel.Secret).Level(TestLevel.Public)
-                .Frames()
+                .Priority(TestMessagePriority.High).Priority(TestMessagePriority.Low).Priority(TestMessagePriority.Flash)
+                .Level(TestLevel.Secret).Level(TestLevel.Public)
+                .Frames<TestNetworkProcessor>()
                     .Heartbeat<TestHeartbeatHandler>();
+    }
+
+    private sealed class InterleavedConfiguration : IEngineConfiguration
+    {
+        public void Configure(IEngineBuilder engine)
+            => engine.Types<TestFrame, TestPacket, TestMessagePriority, TestLevel, TestAspect>()
+                .Priority(TestMessagePriority.High).Level(TestLevel.Secret).Priority(TestMessagePriority.Low).Label("LOW")
+                .Level(TestLevel.Public).Priority(TestMessagePriority.High).Priority(TestMessagePriority.Flash).Level(TestLevel.Internal)
+                .Frames<TestNetworkProcessor>();
+    }
+
+    /// <summary>Priorities and levels keep the order of their own calls however the calls are interleaved, and stating one again does not move it.</summary>
+    [Fact]
+    public void PrioritiesAndLevels_FollowTheOrderOfTheirCallsWhenInterleaved()
+    {
+        EngineController controller = new(EngineBuilder.Build(new InterleavedConfiguration()), new CurrentUserProvider(), null);
+
+        Assert.Equal([TestMessagePriority.High, TestMessagePriority.Low, TestMessagePriority.Flash], controller.Priorities.Select(level => level.Key));
+        Assert.Equal(["SECRET", "PUBLIC", "INTERNAL"], controller.MessageLevels.Select(level => level.Name));
     }
 
     /// <summary>Levels rank in the order they are stated, not the order of the enum, a member not stated is not a level, and what is stored is the member's integer value.</summary>
@@ -123,8 +142,8 @@ public sealed class EngineBuilderTests
     {
         public void Configure(IEngineBuilder engine)
             => engine.Types<TestFrame, TestPacket, TestMessagePriority, TestLevel, TestAspect>()
-                .Priorities().Priority(TestMessagePriority.Normal).Label("SAME").Priority(TestMessagePriority.Flash).Label("same")
-                .Frames();
+                .Priority(TestMessagePriority.Normal).Label("SAME").Priority(TestMessagePriority.Flash).Label("same")
+                .Frames<TestNetworkProcessor>();
     }
 
     /// <summary>Two priorities with the same name are refused, since the name is what users pick by.</summary>
@@ -167,7 +186,7 @@ public sealed class EngineBuilderTests
 
     private sealed class NoPrioritiesConfiguration : IEngineConfiguration
     {
-        public void Configure(IEngineBuilder engine) => engine.Types<TestFrame, TestMessagePriority, TestLevel, TestAspect>().Frames();
+        public void Configure(IEngineBuilder engine) => engine.Types<TestFrame, TestMessagePriority, TestLevel, TestAspect>().Frames<TestNetworkProcessor>();
     }
 
     private sealed class EmptyConfiguration : IEngineConfiguration
@@ -225,13 +244,30 @@ public sealed class EngineBuilderTests
         Assert.Equal(Path.Combine(root, "MyApp", "User.json"), alice.UserFilePath);
     }
 
+    /// <summary>Without a draft handler every combination is allowed, and a stated handler is asked with the host's own enum members.</summary>
+    [Fact]
+    public void DraftHandler_DecidesWhichCombinationsAreAllowed()
+    {
+        Mock<IDraftHandler<TestMessagePriority, TestLevel, TestAspect>> handler = new() { CallBase = true };
+        handler.Setup(b => b.IsAllowed(It.IsAny<IEngineContext>(), TestMessagePriority.High, TestLevel.Secret, TestAspect.Signed, "SPAM")).Returns(false);
+        ServiceCollection services = new();
+        services.AddSingleton(handler.Object);
+        EngineBuilder builder = EngineBuilder.Build(new Configuration(engine => engine.Drafts<IDraftHandler<TestMessagePriority, TestLevel, TestAspect>>()));
+        EngineController stated = new(builder, new CurrentUserProvider(), null, services.BuildServiceProvider());
+        (_, EngineController plain) = Build(engine => engine);
+
+        Assert.False(stated.IsDraftAllowed(Mock.Of<IEngineContext>(), TestMessagePriority.High, TestLevel.Secret, TestAspect.Signed, "SPAM"));
+        Assert.True(stated.IsDraftAllowed(Mock.Of<IEngineContext>(), TestMessagePriority.High, null, null, "OK"));
+        Assert.True(plain.IsDraftAllowed(Mock.Of<IEngineContext>(), TestMessagePriority.High, TestLevel.Secret, TestAspect.Signed, "SPAM"));
+    }
+
     /// <summary>Alert, tag, priority and print settings a host states replace the defaults.</summary>
     [Fact]
     public void Stated_CompositionAndAlertSettings_AreReported()
     {
         (_, EngineController controller) = Build(engine => engine
             .Display<TestDisplayHandler>().Drafts<TestNoTagsDraftHandler>().Alarms<TestAlarmHandler>()
-            .Priorities().Priority(TestMessagePriority.High).Label("TOP").Mode(PriorityMode.System).Block(null, "SPAM").Block(TestMessagePriority.High, null)
+            .Priority(TestMessagePriority.High).Label("TOP").Mode(PriorityMode.System)
             .Prints<TestPrintHandler>()
             .Deletes<DraftsOnlyDeleteHandler>());
 
@@ -241,8 +277,6 @@ public sealed class EngineBuilderTests
         Assert.Equal([PriorityMode.User, PriorityMode.System], [controller.Priorities[0].Mode, controller.Priorities[^1].Mode]);
         Assert.False(controller.TagsEnabled);
         Assert.Equal("Category", controller.TagLabel);
-        Assert.Equal(2, controller.BlockedCombinations.Count);
-        Assert.Equal(TestMessagePriority.High, controller.BlockedCombinations[1].Priority);
         Assert.True(controller.PrintReceivedDefaultEnabled);
         Assert.True(controller.CanDelete(FolderType.Drafts));
         Assert.False(controller.CanDelete(FolderType.Inbox));
@@ -289,7 +323,7 @@ public sealed class EngineBuilderTests
     [Fact]
     public void AddressTypes_Labelled_ReplacesOnlyThatTypesDefault()
     {
-        (_, EngineController controller) = Build(engine => engine.AddressTypes().Type(AddressType.External).Label("OUTSIDE"));
+        (_, EngineController controller) = Build(engine => engine.AddressType(AddressType.External).Label("OUTSIDE"));
 
         Assert.Equal(["To", "Cc", "OUTSIDE"], controller.AddressTypes.Select(t => t.Label));
         Assert.Equal([AddressType.To, AddressType.Cc, AddressType.External], controller.AddressTypes.Select(t => t.Type));
@@ -308,15 +342,15 @@ public sealed class EngineBuilderTests
         Assert.Equal([TimeSpan.FromSeconds(30), TimeSpan.FromSeconds(2)], [none.HeartbeatInterval, none.HeartbeatRetryInterval]);
     }
 
-    /// <summary>The packet size and window are stated on the packet configuration, defaulting to 16 KiB and 1.</summary>
+    /// <summary>The maximum payload size is the argument of Packets and the window is stated on the packet configuration, defaulting to 1.</summary>
     [Fact]
-    public void PacketSizeAndWindow_AreStatedOnPackets()
+    public void MaxPayloadSizeAndWindow_AreStatedOnPackets()
     {
-        (_, EngineController stated) = Build(engine => engine.Packets().Frame<TestFramePacketHandler>().Size(1024).Window(3));
+        (_, EngineController stated) = Build(engine => engine.Packets<TestPacketHandler>(1024).Window(3));
         (_, EngineController unstated) = Build(engine => engine);
 
-        Assert.Equal((1024, 3), (stated.PacketSize, stated.PacketWindow));
-        Assert.Equal((16 * 1024, 1), (unstated.PacketSize, unstated.PacketWindow));
+        Assert.Equal((1024, 3), (stated.MaxPayloadSize, stated.PacketWindow));
+        Assert.Equal((0, 1), (unstated.MaxPayloadSize, unstated.PacketWindow));
     }
 
     /// <summary>Stating priorities twice replaces the earlier list rather than adding to it.</summary>
@@ -324,8 +358,8 @@ public sealed class EngineBuilderTests
     public void Priorities_StatedTwice_ReplacesTheEarlierList()
     {
         (_, EngineController controller) = Build(engine => engine
-            .Priorities().Priority(TestMessagePriority.Flash).Label("FIRST")
-            .Priorities().Priority(TestMessagePriority.Flash).Label("SECOND"));
+            .Priority(TestMessagePriority.Flash).Label("FIRST")
+            .Priority(TestMessagePriority.Flash).Label("SECOND"));
 
         Assert.Contains("SECOND", controller.Priorities.Select(p => p.Name));
         Assert.DoesNotContain("FIRST", controller.Priorities.Select(p => p.Name));
@@ -467,7 +501,7 @@ public sealed class EngineBuilderTests
     {
         MsmtSessionPeerOptions options = new() { Credentials = new MsmtCredentials { Identity = TestMsmtCertificates.Create().Server, TrustedAuthorities = [] } };
         (_, EngineController adjusted) = Build(engine => engine
-            .Connections().Msmt(new MsmtConnectionOptions { HandshakeTimeout = TimeSpan.FromSeconds(7) }));
+            .Msmt().HandshakeTimeout(TimeSpan.FromSeconds(7)));
         (_, EngineController plain) = Build(engine => engine);
 
         MsmtSessionPeerOptions applied = adjusted.ConfigureConnectionOptions(options);
@@ -481,11 +515,11 @@ public sealed class EngineBuilderTests
     public void Stated_HdlcOptions_ReplaceTheDefaults()
     {
         (_, EngineController adjusted) = Build(engine => engine
-            .Connections().Hdlc(new HdlcPeerOptions { MaxInfoField = 512, Link = new HdlcPeerOptions().Link with { Crc = HdlcCrc.Crc32Ccitt } }));
+            .Hdlc().MaxInfoField(512).Crc(HdlcCrc.Crc16Ccitt));
         (_, EngineController plain) = Build(engine => engine);
 
         Assert.Equal(512, adjusted.HdlcOptions.MaxInfoField);
-        Assert.Equal(HdlcCrc.Crc32Ccitt, adjusted.HdlcOptions.Link.Crc);
+        Assert.Equal(HdlcCrc.Crc16Ccitt, adjusted.HdlcOptions.Link.Crc);
         Assert.Equal(new HdlcPeerOptions(), plain.HdlcOptions);
     }
 
@@ -500,22 +534,41 @@ public sealed class EngineBuilderTests
         Assert.Equal(new LogFieldWidths(8, 7, 3), fixedWidths.LogWidths);
     }
 
-    /// <summary>The handshake processor is reported and used.</summary>
+    /// <summary>The packet handshake processor is reported and used.</summary>
     [Fact]
-    public async Task Stated_Handshake_IsUsed()
+    public async Task Stated_PacketHandshake_IsUsed()
     {
-        Mock<IHandshakeProcessor<TestPacket>> packets = new();
-        EngineBuilder builder = EngineBuilder.Build(new TestEngineConfiguration(false, null, packet => packet.Handshake<IHandshakeProcessor<TestPacket>>()));
+        Mock<IPacketHandshakeProcessor<TestPacket>> packets = new();
+        EngineBuilder builder = EngineBuilder.Build(new TestEngineConfiguration(false, null, packet => packet.Handshake<IPacketHandshakeProcessor<TestPacket>>()));
         EngineController controller = new(builder, new CurrentUserProvider(), null, Services(packets.Object));
         Mock<IHandshakeSession> session = new();
         TestPacket received = new();
 
-        await controller.HandshakeProcessor!.OnConnected(session.Object);
-        await controller.HandshakeProcessor.OnReceived(session.Object, received);
+        await controller.PacketHandshakeProcessor!.OnConnected(session.Object);
+        await controller.PacketHandshakeProcessor.OnReceived(session.Object, received);
 
-        Assert.Equal(typeof(TestPacket), controller.HandshakeProcessor.ItemType);
-        packets.Verify(p => p.OnConnected(It.IsAny<IHandshakeContext<TestPacket>>()), Times.Once);
-        packets.Verify(p => p.OnReceived(It.IsAny<IHandshakeContext<TestPacket>>(), received), Times.Once);
+        Assert.Equal(typeof(TestPacket), controller.PacketHandshakeProcessor.ItemType);
+        packets.Verify(p => p.OnConnected(It.IsAny<IPacketHandshakeContext<TestPacket>>()), Times.Once);
+        packets.Verify(p => p.OnReceived(It.IsAny<IPacketHandshakeContext<TestPacket>>(), received), Times.Once);
+    }
+
+    /// <summary>The frame handshake processor is reported and used, apart from the packet one.</summary>
+    [Fact]
+    public async Task Stated_FrameHandshake_IsUsed()
+    {
+        Mock<IFrameHandshakeProcessor<TestFrame>> frames = new();
+        EngineBuilder builder = EngineBuilder.Build(new TestEngineConfiguration(false, frame => frame.Handshake<IFrameHandshakeProcessor<TestFrame>>()));
+        EngineController controller = new(builder, new CurrentUserProvider(), null, Services(frames.Object));
+        Mock<IHandshakeSession> session = new();
+        TestFrame received = new();
+
+        await controller.FrameHandshakeProcessor!.OnConnected(session.Object);
+        await controller.FrameHandshakeProcessor.OnReceived(session.Object, received);
+
+        Assert.Equal(typeof(TestFrame), controller.FrameHandshakeProcessor.ItemType);
+        Assert.Null(controller.PacketHandshakeProcessor);
+        frames.Verify(p => p.OnConnected(It.IsAny<IFrameHandshakeContext<TestFrame>>()), Times.Once);
+        frames.Verify(p => p.OnReceived(It.IsAny<IFrameHandshakeContext<TestFrame>>(), received), Times.Once);
     }
 
     /// <summary>The context a processor is handed reflects the connection session it stands for.</summary>
@@ -529,14 +582,14 @@ public sealed class EngineBuilderTests
         engine.Setup(e => e.ConnectedUsers).Returns(new Dictionary<string, UserInfo> { ["BOB"] = new UserInfo { Name = "BOB" } });
         session.Setup(s => s.Engine).Returns(engine.Object);
         session.Setup(s => s.Connection).Returns(info);
-        IHandshakeContext<TestPacket>? seen = null;
-        Mock<IHandshakeProcessor<TestPacket>> processor = new();
-        processor.Setup(p => p.OnConnected(It.IsAny<IHandshakeContext<TestPacket>>())).Callback((IHandshakeContext<TestPacket> context) => seen = context);
-        EngineBuilder builder = EngineBuilder.Build(new TestEngineConfiguration(false, null, packet => packet.Handshake<IHandshakeProcessor<TestPacket>>()));
+        IPacketHandshakeContext<TestPacket>? seen = null;
+        Mock<IPacketHandshakeProcessor<TestPacket>> processor = new();
+        processor.Setup(p => p.OnConnected(It.IsAny<IPacketHandshakeContext<TestPacket>>())).Callback((IPacketHandshakeContext<TestPacket> context) => seen = context);
+        EngineBuilder builder = EngineBuilder.Build(new TestEngineConfiguration(false, null, packet => packet.Handshake<IPacketHandshakeProcessor<TestPacket>>()));
         EngineController controller = new(builder, new CurrentUserProvider(), null, Services(processor.Object));
         TestPacket sent = new() { PayloadId = 5 };
 
-        await controller.HandshakeProcessor!.OnConnected(session.Object);
+        await controller.PacketHandshakeProcessor!.OnConnected(session.Object);
 
         Assert.NotNull(seen);
         Assert.Equal("ME", seen.CurrentUser.Name);
@@ -557,7 +610,7 @@ public sealed class EngineBuilderTests
     {
         (_, EngineController controller) = Build(engine => engine);
 
-        Assert.Null(controller.HandshakeProcessor);
+        Assert.Null(controller.PacketHandshakeProcessor);
     }
 
     /// <summary>External systems are reported in the order added, without duplicates.</summary>
@@ -582,13 +635,22 @@ public sealed class EngineBuilderTests
         public Task OnReceived(INetworkReceivedContext<TestFrame, TestMessagePriority, TestLevel, TestAspect> context) => Task.CompletedTask;
     }
 
+    private sealed class DependentProcessorConfiguration : IEngineConfiguration
+    {
+        public void Configure(IEngineBuilder engine)
+            => engine.Types<TestFrame, TestPacket, TestMessagePriority, TestLevel, TestAspect>()
+                .Priority(TestMessagePriority.Normal)
+                .Frames<DependentProcessor>();
+    }
+
     /// <summary>A processor type that is not registered is constructed from the container's services, so its constructor can take dependencies.</summary>
     [Fact]
     public void Processor_Unregistered_IsConstructedWithInjectedServices()
     {
         ServiceCollection services = new();
         services.AddSingleton(new Dependency("INJECTED"));
-        (_, EngineController controller) = BuildWith(message => message.Processor<DependentProcessor>(), services: services.BuildServiceProvider());
+        EngineBuilder builder = EngineBuilder.Build(new DependentProcessorConfiguration());
+        EngineController controller = new(builder, new CurrentUserProvider(), null, services.BuildServiceProvider());
 
         Assert.NotNull(controller.NetworkHandler);
         Assert.Same(controller.NetworkHandler, controller.NetworkHandler);
@@ -625,7 +687,7 @@ public sealed class EngineBuilderTests
     [Fact]
     public void Formats_AreAddedByType_AndSameNameReplaces()
     {
-        (_, EngineController controller) = Build(engine => engine.Exports().Format<FirstExportFormat>().Format<ReplacingExportFormat>().Imports().Format<SlowImportFormat>());
+        (_, EngineController controller) = Build(engine => engine.Export<FirstExportFormat>().Export<ReplacingExportFormat>().Import<SlowImportFormat>());
 
         ExportFormatDefinition export = Assert.Single(controller.ExportFormats);
         Assert.Equal("csv", export.Name);
@@ -634,15 +696,6 @@ public sealed class EngineBuilderTests
         ImportFormatDefinition import = Assert.Single(controller.ImportFormats);
         Assert.Equal(StagedSendMode.Simultaneous, import.StagedSendMode);
         Assert.Equal(TimeSpan.FromSeconds(2), import.StagedSendDelay);
-    }
-
-    /// <summary>Without a processor stated there is none.</summary>
-    [Fact]
-    public void NetworkProcessor_Unstated_IsNull()
-    {
-        (_, EngineController controller) = Build(engine => engine);
-
-        Assert.Null(controller.NetworkHandler);
     }
 
     private sealed class DraftsOnlyDeleteHandler : IDeleteHandler
@@ -757,7 +810,7 @@ public sealed class EngineBuilderTests
     [Fact]
     public void MessageLevels_FollowTheStatedOrderWithOverrides()
     {
-        (_, EngineController controller) = Build(engine => engine.MessageLevels().Level(TestLevel.High).Label("TOP").Color("#222222"));
+        (_, EngineController controller) = Build(engine => engine.Level(TestLevel.High).Label("TOP").Color("#222222"));
 
         Assert.Equal(["PUBLIC", "TOP"], [controller.MessageLevels[0].Name, controller.MessageLevels[^1].Name]);
         Assert.Equal(["#5A5A5A", "#222222"], [controller.MessageLevels[0].Color, controller.MessageLevels[^1].Color]);
@@ -768,7 +821,7 @@ public sealed class EngineBuilderTests
     public void GetUserMessageLevel_UsesTheEntryElseTheLowestLevel()
     {
         (_, EngineController controller) = Build(
-            engine => engine.MessageLevels().Level(TestLevel.Low).Color("#111111").Level(TestLevel.High).Color("#222222"),
+            engine => engine.Level(TestLevel.Low).Color("#111111").Level(TestLevel.High).Color("#222222"),
             network: Network(("ALICE", new NetworkUserConfig { MessageLevel = "HIGH" })));
 
         Assert.Equal("HIGH", controller.GetUserMessageLevel("ALICE"));
@@ -780,7 +833,7 @@ public sealed class EngineBuilderTests
     public void MessageAspects_FollowTheStatedOrderWithLabels()
     {
         (_, EngineController none) = Build(engine => engine);
-        (_, EngineController controller) = Build(engine => engine.MessageAspects().Aspect(TestAspect.Signed).Label("SIGNED BY SENDER").Aspect(TestAspect.Encrypted));
+        (_, EngineController controller) = Build(engine => engine.Aspect(TestAspect.Signed).Label("SIGNED BY SENDER").Aspect(TestAspect.Encrypted));
 
         Assert.Empty(none.MessageAspects);
         Assert.Equal(["SIGNED BY SENDER", "ENCRYPTED"], controller.MessageAspects.Select(aspect => aspect.Name));
@@ -791,7 +844,7 @@ public sealed class EngineBuilderTests
     [Fact]
     public void GetMessageAspectName_NamesStatedAspectsOnly()
     {
-        (_, EngineController controller) = Build(engine => engine.MessageAspects().Aspect(TestAspect.Signed).Label("SIGNED"));
+        (_, EngineController controller) = Build(engine => engine.Aspect(TestAspect.Signed).Label("SIGNED"));
 
         Assert.Equal("SIGNED", controller.GetMessageAspectName(TestAspect.Signed));
         Assert.Equal(string.Empty, controller.GetMessageAspectName(null));
@@ -801,7 +854,7 @@ public sealed class EngineBuilderTests
     /// <summary>Two aspects cannot share a name.</summary>
     [Fact]
     public void MessageAspects_DuplicateNames_Throw()
-        => Assert.Throws<InvalidOperationException>(() => Build(engine => engine.MessageAspects().Aspect(TestAspect.Signed).Label("X").Aspect(TestAspect.Encrypted).Label("x")));
+        => Assert.Throws<InvalidOperationException>(() => Build(engine => engine.Aspect(TestAspect.Signed).Label("X").Aspect(TestAspect.Encrypted).Label("x")));
 
     /// <summary>The aspect labels are the engine's own unless the display handler renames them, with the plural following the singular.</summary>
     [Fact]

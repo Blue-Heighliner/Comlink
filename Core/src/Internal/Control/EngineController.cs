@@ -3,7 +3,7 @@ namespace BlueHeighliner.Comlink;
 /// <summary>
 /// Single control interface consolidating every extension point through which a host application
 /// customises Engine behaviour without modifying Engine code: the concrete frame type and its logical
-/// field mapping, how that frame type is serialized and packetized (and at what packet size and window) for the network, app
+/// field mapping, how that frame type is serialized and packetized (and at what payload size and window) for the network, app
 /// identity/presentation, local user identity, the user/group directory, listener ports, alert settings,
 /// message composition, the automatic print policy, MSMT peer certificate naming and peer options, network
 /// topology, the points this node connects out to, how the user on the other end of a connection is identified
@@ -47,12 +47,10 @@ internal interface IEngineController
     IPacketSerializer? PacketSerializer { get; }
 
     /// <summary>
-    /// The largest a serialized packet may be, in bytes. Smaller packets let a higher-priority payload cut in
-    /// sooner; larger ones carry less framing overhead. The engine works out how much payload fits in a packet
-    /// by measuring what <see cref="PacketSerializer"/> makes of one, so it must leave room for the packet's own
-    /// fields. Ignored while <see cref="PacketType"/> is <see langword="null"/>.
+    /// The largest slice of a serialized frame a packet carries, in bytes. Smaller payloads let a higher-priority frame cut in sooner; larger ones carry less framing overhead.
+    /// It limits the payload only: the packet's own fields come on top of it. Ignored while <see cref="PacketType"/> is <see langword="null"/>.
     /// </summary>
-    int PacketSize { get; }
+    int MaxPayloadSize { get; }
 
     /// <summary>
     /// How many packets may be in flight over one connection at once. A higher-priority payload sent meanwhile goes out
@@ -163,7 +161,7 @@ internal interface IEngineController
     /// <summary>Gets the plural of <see cref="MessageAspectLabel"/>.</summary>
     string MessageAspectPluralLabel { get; }
     /// <summary>
-    /// Gets the message aspects a message can carry, in the order stated with <see cref="IEngineBuilder{TFrame, TPacket, TPriority, TLevel, TAspect}.MessageAspects"/>; empty when none were stated, which turns the feature off.
+    /// Gets the message aspects a message can carry, in the order stated with <see cref="IEngineBuilder{TFrame, TPacket, TPriority, TLevel, TAspect}.Aspect"/>; empty when none were stated, which turns the feature off.
     /// </summary>
     IReadOnlyList<MessageAspect> MessageAspects { get; }
     /// <summary>Gets the name of the configured message aspect <paramref name="aspect"/>, or an empty string for <see langword="null"/>.</summary>
@@ -185,8 +183,13 @@ internal interface IEngineController
     /// <summary>Returns the text to show for <paramref name="label"/>, the engine's own name for a concept of the app: what the host's display handler calls it (see <see cref="IDisplayHandler.InboxLabel"/> and the members like it), or <paramref name="label"/> itself.</summary>
     /// <param name="label">The engine's name for the concept.</param>
     string Rename(string label);
-    /// <summary>Every blocked tag/priority combination rule, enforced when composing a draft.</summary>
-    IReadOnlyList<TagPriorityBlock> BlockedCombinations { get; }
+    /// <summary>Returns whether a draft may have this combination (see <see cref="IDraftHandler{TPriority, TLevel, TAspect}.IsAllowed"/>); every combination is allowed when no draft handler is stated.</summary>
+    /// <param name="context">A snapshot of the engine.</param>
+    /// <param name="priority">The priority as the host's enum member.</param>
+    /// <param name="level">The message level as the host's enum member, or <see langword="null"/> for none.</param>
+    /// <param name="aspect">The message aspect as the host's enum member, or <see langword="null"/> for none.</param>
+    /// <param name="tag">The tag, empty for none.</param>
+    bool IsDraftAllowed(IEngineContext context, Enum priority, Enum? level, Enum? aspect, string tag);
     /// <summary>
     /// Every address type, in a fixed order (<see cref="AddressType.To"/>, <see cref="AddressType.Cc"/>,
     /// <see cref="AddressType.External"/>), paired with its display label - shown in the address type picker, the
@@ -196,7 +199,7 @@ internal interface IEngineController
     IReadOnlyList<AddressTypeOption> AddressTypes { get; }
     /// <summary>
     /// Every configured message level, in ascending order (index 0 is lowest); empty when
-    /// <see cref="IEngineBuilder{TFrame, TPacket, TPriority, TLevel, TAspect}.MessageLevels"/> was never stated, which turns the whole feature off. A
+    /// <see cref="IEngineBuilder{TFrame, TPacket, TPriority, TLevel, TAspect}.Level"/> was never stated, which turns the whole feature off. A
     /// message may only be sent at one of these levels, and a destination user's own assigned level (see
     /// <see cref="GetUserMessageLevel"/>) must rank at or above it.
     /// </summary>
@@ -220,10 +223,10 @@ internal interface IEngineController
     /// <summary>The peer options - including TLS identity certificate and trusted certificate authorities - used for both inbound and outbound MSMT session peer connections.</summary>
     MsmtSessionPeerOptions ConnectionOptions { get; }
 
-    /// <summary>Applies the host's adjustment of the MSMT options (see <see cref="IConnectionsBuilder{TFrame, TPacket, TPriority, TLevel, TAspect}.Msmt(MsmtConnectionOptions)"/>) to <paramref name="options"/>, returning them unchanged if none was stated.</summary>
+    /// <summary>Applies the host's adjustment of the MSMT options (see <see cref="IEngineBuilder{TFrame, TPacket, TPriority, TLevel, TAspect}.Msmt"/>) to <paramref name="options"/>, returning them unchanged if none was stated.</summary>
     MsmtSessionPeerOptions ConfigureConnectionOptions(MsmtSessionPeerOptions options);
 
-    /// <summary>The options used for every MicroGate serial connection, after the host's adjustment (see <see cref="IConnectionsBuilder{TFrame, TPacket, TPriority, TLevel, TAspect}.Hdlc(HdlcPeerOptions)"/>).</summary>
+    /// <summary>The options used for every MicroGate serial connection, after the host's adjustment (see <see cref="IEngineBuilder{TFrame, TPacket, TPriority, TLevel, TAspect}.Hdlc"/>).</summary>
     HdlcPeerOptions HdlcOptions { get; }
 
     /// <summary>The configured role for this instance.</summary>
@@ -248,8 +251,11 @@ internal interface IEngineController
     /// </summary>
     IReadOnlyDictionary<string, ServerUserConfig> Servers { get; }
 
-    /// <summary>Gets the processor that carries out the handshake on each new connection (see <see cref="IPacketBuilder{TFrame, TPacket, TPriority, TLevel, TAspect}.Handshake{TProcessor}"/>), or <see langword="null"/> for none. Requires <see cref="PacketType"/>.</summary>
-    IHandshakeHandler? HandshakeProcessor { get; }
+    /// <summary>Gets the processor that carries out the handshake of packets on each new connection (see <see cref="IPacketBuilder{TFrame, TPacket, TPriority, TLevel, TAspect}.Handshake{TProcessor}"/>), or <see langword="null"/> for none. Requires <see cref="PacketType"/>.</summary>
+    IHandshakeHandler? PacketHandshakeProcessor { get; }
+
+    /// <summary>Gets the processor that carries out the handshake of frames on each new connection (see <see cref="IFrameBuilder{TFrame, TPacket, TPriority, TLevel, TAspect}.Handshake{TProcessor}"/>), or <see langword="null"/> for none.</summary>
+    IHandshakeHandler? FrameHandshakeProcessor { get; }
     /// <summary>When <see langword="true"/>, the <c>--config</c> and <c>--user</c> command-line arguments override where the network configuration file and the running user come from (see <see cref="IEngineBuilder{TFrame, TPacket, TPriority, TLevel, TAspect}.CommandLineOverrides"/>); when <see langword="false"/> (the default) they are ignored and only <c>Config.json</c> and <c>User.json</c> in the working directory are used.</summary>
     bool CommandLineOverridesAllowed { get; }
 
@@ -263,19 +269,19 @@ internal interface IEngineController
     /// </summary>
     IReadOnlyList<IExternalSystem> ExternalSystems { get; }
 
-    /// <summary>The processor that reacts to a user connecting or disconnecting and to a message being received (see <see cref="IFrameBuilder{TFrame, TPacket, TPriority, TLevel, TAspect}.Processor"/>), or <see langword="null"/> for none.</summary>
+    /// <summary>The processor that reacts to a user connecting or disconnecting and to a message being received (see <see cref="IEngineBuilder{TFrame, TPacket, TPriority, TLevel, TAspect}.Frames{TProcessor}"/>), or <see langword="null"/> for none.</summary>
     INetworkHandler? NetworkHandler { get; }
 
-    /// <summary>Every custom export format added via <see cref="IExportsBuilder{TFrame, TPacket, TPriority, TLevel, TAspect}.Format{TFormat}"/>, in the order added; empty if none.</summary>
+    /// <summary>Every custom export format added via <see cref="IEngineBuilder{TFrame, TPacket, TPriority, TLevel, TAspect}.Export{TFormat}"/>, in the order added; empty if none.</summary>
     IReadOnlyList<ExportFormatDefinition> ExportFormats { get; }
 
-    /// <summary>Every custom import format added via <see cref="IImportsBuilder{TFrame, TPacket, TPriority, TLevel, TAspect}.Format{TFormat}"/>, in the order added; empty if none.</summary>
+    /// <summary>Every custom import format added via <see cref="IEngineBuilder{TFrame, TPacket, TPriority, TLevel, TAspect}.Import{TFormat}"/>, in the order added; empty if none.</summary>
     IReadOnlyList<ImportFormatDefinition> ImportFormats { get; }
 
     /// <summary>Every server user, from <see cref="Servers"/>: each keeps a copy of every message one of its own children sends and answers retrieval requests for them, so a retrieval names the server the message is stored on. Empty if none.</summary>
     IReadOnlyList<string> StorageServers { get; }
 
-    /// <summary>Every auto forwarder added via <see cref="IFrameBuilder{TFrame, TPacket, TPriority, TLevel, TAspect}.AutoForwarder"/>, in the order added.</summary>
+    /// <summary>Every auto forwarder added via <see cref="IEngineBuilder{TFrame, TPacket, TPriority, TLevel, TAspect}.AutoForwarder"/>, in the order added.</summary>
     IReadOnlyList<AutoForwarderDefinition> AutoForwarders { get; }
 
     /// <summary>Creates a new, empty instance of <see cref="FrameType"/>.</summary>
@@ -334,20 +340,25 @@ internal interface IEngineController
     /// <exception cref="ArgumentException"><paramref name="level"/> is not a configured message level.</exception>
     string GetMessageLevelName(Enum? level);
 
-    /// <summary>Creates a frame packet carrying <paramref name="context"/> through the host's frame packet handler. Only called while <see cref="PacketType"/> is set.</summary>
-    object CreateFramePacket(FramePacketCreateContext context);
-    /// <summary>Gets whether <paramref name="packet"/> is a frame packet, one that carries a piece of a frame's payload.</summary>
+    /// <summary>Creates a packet carrying one piece of a serialized frame through the host's packet handler. Only called while <see cref="PacketType"/> is set.</summary>
+    /// <param name="frame">The frame the packet is being created from, an instance of the host's frame type.</param>
+    /// <param name="index">The position of the packet among the packets of its frame.</param>
+    /// <param name="count">How many packets the frame was broken into.</param>
+    /// <param name="frameLength">The length in bytes of the whole serialized frame.</param>
+    /// <param name="payload">The slice of the serialized frame the packet carries.</param>
+    object CreateFramePacket(object frame, int index, int count, int frameLength, ReadOnlyMemory<byte> payload);
+    /// <summary>Gets whether <paramref name="packet"/> is a frame packet, one that carries a piece of a serialized frame.</summary>
     bool IsFramePacket(object packet);
-    /// <summary>Gets the identifier shared by every packet of one payload, which tells packets of different payloads apart.</summary>
-    int GetPayloadId(object packet);
+    /// <summary>Gets the identifier shared by every packet of one frame, which tells packets of different frames apart.</summary>
+    string GetFrameId(object packet);
     /// <summary>Gets the zero-based position of <paramref name="packet"/> among the packets of its payload.</summary>
     int GetPacketIndex(object packet);
     /// <summary>Gets how many packets the payload <paramref name="packet"/> belongs to was broken into.</summary>
     int GetPacketCount(object packet);
     /// <summary>Gets the length in bytes of the whole payload <paramref name="packet"/> belongs to.</summary>
-    int GetPayloadLength(object packet);
+    int GetFrameLength(object packet);
     /// <summary>Gets the slice of the payload <paramref name="packet"/> carries.</summary>
-    ReadOnlyMemory<byte> GetPacketData(object packet);
+    ReadOnlyMemory<byte> GetPacketPayload(object packet);
 
     /// <summary>Returns the name, as the network configuration file spells it, of the user <paramref name="name"/> names (compared case-insensitively), or <see langword="null"/> when the network has no such user.</summary>
     /// <param name="name">The user name to look for.</param>
@@ -428,9 +439,9 @@ internal class EngineController(EngineBuilder builder, ICurrentUserProvider curr
 
     private readonly FrameMap frame = builder.FrameMap ?? throw new InvalidOperationException("The engine configuration must state its frame type with Frames<TFrame>(...).");
     private readonly PacketMap? packet = builder.PacketMap;
-    private readonly Lazy<IHeartbeatFrameHandler?> heartbeatHandler = new(() => builder.FrameMap!.Heartbeat?.Create(services));
-    private readonly Lazy<IHeartbeatFrameHandler?> packetHeartbeatHandler = new(() => builder.PacketMap?.Heartbeat?.Create(services));
-    private readonly Lazy<IFramePacketAdapter> framePacketHandler = new(() => (builder.PacketMap ?? throw new NotSupportedException("This engine has no packet type; state one with Packets<TPacket>(...) to enable packetization.")).FramePacket.Create(services));
+    private readonly Lazy<IHeartbeatItemHandler?> heartbeatHandler = new(() => builder.FrameMap!.Heartbeat?.Create(services));
+    private readonly Lazy<IHeartbeatItemHandler?> packetHeartbeatHandler = new(() => builder.PacketMap?.Heartbeat?.Create(services));
+    private readonly Lazy<IPacketAdapter> packetAdapter = new(() => (builder.PacketMap ?? throw new NotSupportedException("This engine has no packet type; state one with Packets<TPacket>(...) to enable packetization.")).Handler.Create(services));
     private readonly Lazy<IFrameSerializer> frameSerializer = new(() => (builder.FrameMap ?? throw new InvalidOperationException("The engine configuration must state its frame type with Frames<TFrame>(...).")).Serializer.Create(services));
     private readonly Lazy<IPacketSerializer?> packetSerializer = new(() => builder.PacketMap?.Serializer.Create(services));
     private readonly Lazy<IReadOnlyList<ExportFormatDefinition>> exportFormats = new(() => Replacing(
@@ -441,7 +452,8 @@ internal class EngineController(EngineBuilder builder, ICurrentUserProvider curr
         builder.ImportFormats.Select(registration => registration.Create(services)),
         format => new ImportFormatDefinition { Name = format.Name, Read = format.Import, StagedSendMode = format.StagedSendMode, StagedSendDelay = format.StagedSendDelay },
         definition => definition.Name));
-    private readonly Lazy<IHandshakeHandler?> handshakeProcessor = new(() => builder.HandshakeProcessor?.Create(services));
+    private readonly Lazy<IHandshakeHandler?> packetHandshakeProcessor = new(() => builder.PacketHandshakeProcessor?.Create(services));
+    private readonly Lazy<IHandshakeHandler?> frameHandshakeProcessor = new(() => builder.FrameHandshakeProcessor?.Create(services));
     private readonly Lazy<IDraftFrameHandler?> draftHandler = new(() => builder.DraftHandler?.Create(services));
     private readonly Lazy<IAlarmHandler?> alarmHandler = new(() => builder.AlarmHandler?.Create(services));
     private readonly Lazy<ILogHandler?> logHandler = new(() => builder.LogHandler?.Create(services));
@@ -460,7 +472,7 @@ internal class EngineController(EngineBuilder builder, ICurrentUserProvider curr
     /// <inheritdoc />
     public virtual IPacketSerializer? PacketSerializer => packetSerializer.Value;
     /// <inheritdoc />
-    public virtual int PacketSize => builder.PacketSizeValue ?? 16 * 1024;
+    public virtual int MaxPayloadSize => builder.MaxPayloadSizeValue ?? 0;
     /// <inheritdoc />
     public virtual int PacketWindow => builder.PacketWindowValue ?? 1;
 
@@ -642,7 +654,7 @@ internal class EngineController(EngineBuilder builder, ICurrentUserProvider curr
     /// <inheritdoc />
     public virtual string TagLabel => builder.DisplayHandlerInstance?.TagLabel.OrNull() ?? "Tag";
     /// <inheritdoc />
-    public virtual IReadOnlyList<TagPriorityBlock> BlockedCombinations => builder.BlockedCombinations;
+    public virtual bool IsDraftAllowed(IEngineContext context, Enum priority, Enum? level, Enum? aspect, string tag) => draftHandler.Value?.IsAllowed(context, priority, level, aspect, tag) ?? true;
     /// <inheritdoc />
     public virtual IReadOnlyList<AddressTypeOption> AddressTypes
         => [.. addressTypeOrder.Select(type => new AddressTypeOption { Type = type, Label = builder.AddressTypeLabels.TryGetValue(type, out string? label) ? label : type.ToString() })];
@@ -797,7 +809,10 @@ internal class EngineController(EngineBuilder builder, ICurrentUserProvider curr
         };
 
     /// <inheritdoc />
-    public virtual IHandshakeHandler? HandshakeProcessor => handshakeProcessor.Value;
+    public virtual IHandshakeHandler? PacketHandshakeProcessor => packetHandshakeProcessor.Value;
+
+    /// <inheritdoc />
+    public virtual IHandshakeHandler? FrameHandshakeProcessor => frameHandshakeProcessor.Value;
 
     /// <inheritdoc />
     public virtual bool CommandLineOverridesAllowed => builder.AreCommandLineOverridesAllowed;
@@ -887,19 +902,19 @@ internal class EngineController(EngineBuilder builder, ICurrentUserProvider curr
     public virtual bool IsHeartbeat(object value) => heartbeatHandler.Value?.IsValid(value) ?? false;
 
     /// <inheritdoc />
-    public virtual object CreateFramePacket(FramePacketCreateContext context) => framePacketHandler.Value.Create(context);
+    public virtual object CreateFramePacket(object frame, int index, int count, int frameLength, ReadOnlyMemory<byte> payload) => packetAdapter.Value.CreateFramePacket(frame, index, count, frameLength, payload);
     /// <inheritdoc />
-    public virtual bool IsFramePacket(object value) => framePacketHandler.Value.IsValid(value);
+    public virtual bool IsFramePacket(object value) => packetAdapter.Value.IsFramePacket(value);
     /// <inheritdoc />
-    public virtual int GetPayloadId(object value) => framePacketHandler.Value.GetPayloadId(value);
+    public virtual string GetFrameId(object value) => packetAdapter.Value.GetFrameId(value);
     /// <inheritdoc />
-    public virtual int GetPacketIndex(object value) => framePacketHandler.Value.GetIndex(value);
+    public virtual int GetPacketIndex(object value) => packetAdapter.Value.GetIndex(value);
     /// <inheritdoc />
-    public virtual int GetPacketCount(object value) => framePacketHandler.Value.GetCount(value);
+    public virtual int GetPacketCount(object value) => packetAdapter.Value.GetCount(value);
     /// <inheritdoc />
-    public virtual int GetPayloadLength(object value) => framePacketHandler.Value.GetPayloadLength(value);
+    public virtual int GetFrameLength(object value) => packetAdapter.Value.GetFrameLength(value);
     /// <inheritdoc />
-    public virtual ReadOnlyMemory<byte> GetPacketData(object value) => framePacketHandler.Value.GetData(value);
+    public virtual ReadOnlyMemory<byte> GetPacketPayload(object value) => packetAdapter.Value.GetPayload(value);
 
     /// <inheritdoc />
     public virtual string? FindUserName(string name) => network.Users.Keys.FirstOrDefault(user => string.Equals(user, name, StringComparison.OrdinalIgnoreCase));

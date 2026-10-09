@@ -81,6 +81,6 @@ public interface INetworkContext<TFrame, TPriority, TLevel, TAspect> : IEngineCo
     IReadOnlySet<string> GetDestinations(Message<TPriority, TLevel, TAspect> message, out IReadOnlySet<string> excluded);
 
     /// <summary>Gets the users the current user has put on the target list of the auto forwarder named <paramref name="controllerName"/>, which the processor forwards what that auto forwarder accepts to, leaving out the current user so a forward never comes back to its sender. Empty when there is no such auto forwarder or the list is empty.</summary>
-    /// <param name="controllerName">The auto forwarder's name (see <see cref="IFrameBuilder{TFrame, TPacket, TPriority, TLevel, TAspect}.AutoForwarder"/>).</param>
+    /// <param name="controllerName">The auto forwarder's name (see <see cref="IEngineBuilder{TFrame, TPacket, TPriority, TLevel, TAspect}.AutoForwarder"/>).</param>
     Task<IReadOnlyList<string>> GetAutoForwardTargets(string controllerName);
 }

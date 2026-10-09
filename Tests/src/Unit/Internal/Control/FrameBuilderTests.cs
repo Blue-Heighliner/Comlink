@@ -40,25 +40,23 @@ public sealed class FrameBuilderTests
         Assert.Same(created, map.Create());
     }
 
-    /// <summary>Auto forwarders are stated by name on the frame builder, once each.</summary>
+    /// <summary>Auto forwarders are stated by name on the engine builder, once each, and the engine controller reports them.</summary>
     [Fact]
-    public void AutoForwarder_AddsEachNameOnce()
+    public void AutoForwarders_AreStatedOnceEachAndReportedByTheEngineController()
     {
-        FrameBuilder<TestFrame, TestMessagePriority, TestLevel, TestAspect> builder = Complete();
-
-        builder.AutoForwarder("Alerts").AutoForwarder("Other").AutoForwarder("Alerts");
-
-        Assert.Equal(["Alerts", "Other"], builder.AutoForwarders.Select(forwarder => forwarder.Name));
-    }
-
-    /// <summary>The engine controller reports the auto forwarders the configuration stated.</summary>
-    [Fact]
-    public void AutoForwarders_AreReportedByTheEngineController()
-    {
-        EngineBuilder engine = EngineBuilder.Build(new TestEngineConfiguration(false, frame => frame.AutoForwarder("Alerts").AutoForwarder("Other")));
+        EngineBuilder engine = EngineBuilder.Build(new AutoForwarderConfiguration());
 
         EngineController controller = new(engine, new CurrentUserProvider());
 
         Assert.Equal(["Alerts", "Other"], controller.AutoForwarders.Select(forwarder => forwarder.Name));
+    }
+
+    private sealed class AutoForwarderConfiguration : IEngineConfiguration
+    {
+        public void Configure(IEngineBuilder engine)
+            => engine.Types<TestFrame, TestPacket, TestMessagePriority, TestLevel, TestAspect>()
+                .Priority(TestMessagePriority.Normal)
+                .AutoForwarder("Alerts").AutoForwarder("Other").AutoForwarder("Alerts")
+                .Frames<TestNetworkProcessor>();
     }
 }

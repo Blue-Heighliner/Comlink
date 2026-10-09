@@ -19,9 +19,8 @@ public sealed class MyFrame
 public sealed class MyEngineConfiguration : IEngineConfiguration
 {
     public void Configure(IEngineBuilder engine) => engine.Types<MyFrame, MyPacket, MyPriority, MyMessageLevel, MyMessageAspect>()
-        .Priorities().Priority(MyPriority.Normal)
-        .Frames()
-            .Processor<MyNetworkProcessor>();
+        .Priority(MyPriority.Normal)
+        .Frames<MyNetworkProcessor>();
 }
 
 await Engine.Start<MyEngineConfiguration>(args);
@@ -67,7 +66,7 @@ A host only states what it needs distinct behavior for; every other setting keep
 ```csharp
 public void Configure(IEngineBuilder engine) => engine.Types<MyFrame, MyPriority, MyMessageLevel, MyMessageAspect>()
     .Display<MyDisplayHandler>()
-    .Frames() /* ...the processor from above... */;
+    .Frames<MyNetworkProcessor>();
 ```
 
 ## The network configuration file
@@ -80,7 +79,7 @@ lets `--config` name another file and `--user` name the user, who is checked lik
 
 ```csharp
 public void Configure(IEngineBuilder engine) => engine.Types<MyFrame, MyPriority, MyMessageLevel, MyMessageAspect>()
-    .Frames() /* ...the processor... */
+    .Frames<MyNetworkProcessor>()
     .CommandLineOverrides(true);
 ```
 

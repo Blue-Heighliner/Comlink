@@ -58,7 +58,7 @@ public sealed class HandshakePeerTransportTests
     private static Mock<RawPacketEngineController> WithProcessor(IHandshakeHandler processor)
     {
         Mock<RawPacketEngineController> controller = Controller();
-        controller.Setup(c => c.HandshakeProcessor).Returns(processor);
+        controller.Setup(c => c.PacketHandshakeProcessor).Returns(processor);
         return controller;
     }
 
@@ -91,8 +91,8 @@ public sealed class HandshakePeerTransportTests
     private static (End A, End B) Pair(IEngineController a, IEngineController b, IReadOnlyList<string>? aNames = null, IReadOnlyList<string>? bNames = null, bool serial = false)
     {
         (LoopbackPeerTransport rawA, LoopbackPeerTransport rawB) = LoopbackPeerTransport.CreatePair(aNames, bNames, serial);
-        End endA = new(new HandshakePeerTransport(rawA, a, logger, Handshake.ForProcessor(a), identify: true), rawA);
-        End endB = new(new HandshakePeerTransport(rawB, b, logger, Handshake.ForProcessor(b), identify: true), rawB);
+        End endA = new(new HandshakePeerTransport(rawA, a, logger, Handshake.ForPackets(a), identify: true), rawA);
+        End endB = new(new HandshakePeerTransport(rawB, b, logger, Handshake.ForPackets(b), identify: true), rawB);
         endA.Watch();
         endB.Watch();
         return (endA, endB);
@@ -450,12 +450,12 @@ public sealed class HandshakePeerTransportTests
             }
         };
         Mock<TestPacketEngineController> controllerA = new() { CallBase = true };
-        controllerA.Setup(c => c.HandshakeProcessor).Returns(a);
+        controllerA.Setup(c => c.PacketHandshakeProcessor).Returns(a);
         Mock<TestPacketEngineController> controllerB = new() { CallBase = true };
-        controllerB.Setup(c => c.HandshakeProcessor).Returns(b);
+        controllerB.Setup(c => c.PacketHandshakeProcessor).Returns(b);
         (LoopbackPeerTransport rawA, LoopbackPeerTransport rawB) = LoopbackPeerTransport.CreatePair();
-        HandshakePeerTransport endA = new(rawA, controllerA.Object, logger, Handshake.ForProcessor(controllerA.Object), identify: false);
-        HandshakePeerTransport endB = new(rawB, controllerB.Object, logger, Handshake.ForProcessor(controllerB.Object), identify: false);
+        HandshakePeerTransport endA = new(rawA, controllerA.Object, logger, Handshake.ForPackets(controllerA.Object), identify: false);
+        HandshakePeerTransport endB = new(rawB, controllerB.Object, logger, Handshake.ForPackets(controllerB.Object), identify: false);
         List<PeerConnection> accepted = [];
         endB.Connected.Listen(args => accepted.Add(args.Connection));
 
@@ -470,13 +470,14 @@ public sealed class HandshakePeerTransportTests
 
     /// <summary>A handshake processor with no packet serializer is a configuration error, reported when the handshake is built.</summary>
     [Fact]
-    public void ForProcessor_WithoutSerializer_Throws()
+    public void ForPackets_WithoutSerializer_Throws()
     {
         Mock<TestEngineController> controller = new() { CallBase = true };
-        controller.Setup(c => c.HandshakeProcessor).Returns(new Scripted());
+        controller.Setup(c => c.PacketHandshakeProcessor).Returns(new Scripted());
 
-        Assert.Throws<InvalidEngineConfigurationException>(() => Handshake.ForProcessor(controller.Object));
-        Assert.Null(Handshake.ForProcessor(Controller().Object));
+        Assert.Throws<InvalidEngineConfigurationException>(() => Handshake.ForPackets(controller.Object));
+        Assert.Null(Handshake.ForPackets(Controller().Object));
+        Assert.Null(Handshake.ForFrames(Controller().Object));
     }
 
     /// <summary>The management calls that are not about identity go straight to the wrapped transport.</summary>

@@ -1,13 +1,13 @@
 namespace BlueHeighliner.Comlink;
 
-/// <summary>Collects what is stated through <see cref="IMessageAspectsBuilder{TFrame, TPacket, TPriority, TLevel, TAspect}"/> and <see cref="IMessageAspectBuilder{TFrame, TPacket, TPriority, TLevel, TAspect}"/>, recording the label of each aspect and turning it into the engine's message aspects.</summary>
+/// <summary>Collects what is stated through <see cref="IEngineBuilder{TFrame, TPacket, TPriority, TLevel, TAspect}"/> and <see cref="IMessageAspectBuilder{TFrame, TPacket, TPriority, TLevel, TAspect}"/>, recording the label of each aspect and turning it into the engine's message aspects.</summary>
 internal sealed class MessageAspectBuilder<TAspect> where TAspect : struct, Enum
 {
     private readonly Dictionary<TAspect, string> labels = [];
     private readonly List<TAspect> order = [];
     private TAspect current;
 
-    /// <inheritdoc cref="IMessageAspectsBuilder{TFrame, TPacket, TPriority, TLevel, TAspect}.Aspect"/>
+    /// <inheritdoc cref="IEngineBuilder{TFrame, TPacket, TPriority, TLevel, TAspect}.Aspect"/>
     public MessageAspectBuilder<TAspect> Aspect(TAspect aspect)
     {
         current = aspect;

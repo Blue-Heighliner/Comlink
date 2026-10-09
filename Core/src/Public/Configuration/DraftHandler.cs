@@ -1,7 +1,7 @@
 namespace BlueHeighliner.Comlink;
 
 /// <summary>
-/// Controls how drafts are composed: how wide a line may be, and a header every message must start with. State one with <see cref="IEngineBuilder{TFrame, TPacket, TPriority, TLevel, TAspect}.Drafts{THandler}"/>. Every member is optional.
+/// Controls how drafts are composed: how wide a line may be, a header every message must start with, and which combinations of priority, level, aspect and tag are allowed. State one with <see cref="IEngineBuilder{TFrame, TPacket, TPriority, TLevel, TAspect}.Drafts{THandler}"/>. Every member is optional.
 /// </summary>
 /// <typeparam name="TPriority">The enum whose members are the priority levels.</typeparam>
 /// <typeparam name="TLevel">The enum whose members are the message levels.</typeparam>
@@ -28,6 +28,18 @@ public interface IDraftHandler<TPriority, TLevel, TAspect> where TPriority : str
 
     /// <summary>Gets whether a message must have a tag: a draft without one can not be sent. Defaults to <see langword="false"/>.</summary>
     bool IsTagRequired => false;
+
+    /// <summary>
+    /// Says whether a draft may have this combination of priority, message level, message aspect and tag. The draft view asks it for every choice the user could make and offers only the allowed ones, and a draft that is
+    /// already a blocked combination cannot be sent, so a blocked combination is never composed. Defaults to <see langword="true"/>: every combination is allowed.
+    /// </summary>
+    /// <param name="context">A snapshot of the engine, such as the current user and the users who are connected.</param>
+    /// <param name="priority">The priority the draft would be sent at.</param>
+    /// <param name="level">The message level the draft would be sent at, or <see langword="null"/> when no message levels are configured.</param>
+    /// <param name="aspect">The message aspect the draft would carry, or <see langword="null"/> for none.</param>
+    /// <param name="tag">The tag the draft would have, empty for none, as the user typed it after the tag rules have been applied.</param>
+    /// <returns><see langword="true"/> if the combination is allowed, <see langword="false"/> if it is blocked.</returns>
+    bool IsAllowed(IEngineContext context, TPriority priority, TLevel? level, TAspect? aspect, string tag) => true;
 
     /// <summary>
     /// Says whether a message sent from the draft in <paramref name="state"/> is an alert, which alarms the recipient's Client-mode UI until it is read. Asked as the user edits the draft, to show the alert mark, and when it is sent, to

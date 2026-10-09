@@ -10,5 +10,5 @@ internal sealed class FrameMap
     /// <summary>Creates a new, empty frame.</summary>
     public required Func<object> Create { get; init; }
     /// <summary>Gets the heartbeat handler, or <see langword="null"/> when none is stated, in which case no heartbeats are sent.</summary>
-    public ServiceRegistration<IHeartbeatFrameHandler>? Heartbeat { get; init; }
+    public ServiceRegistration<IHeartbeatItemHandler>? Heartbeat { get; init; }
 }

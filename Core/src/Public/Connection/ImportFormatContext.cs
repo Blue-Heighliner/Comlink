@@ -1,7 +1,7 @@
 namespace BlueHeighliner.Comlink;
 
 /// <summary>
-/// Handed to a custom import format's reader (see <see cref="IImportsBuilder{TFrame, TPacket, TPriority, TLevel, TAspect}.Format{TFormat}"/>) to turn what it
+/// Handed to a custom import format's reader (see <see cref="IEngineBuilder{TFrame, TPacket, TPriority, TLevel, TAspect}.Import{TFormat}"/>) to turn what it
 /// reads from the stream into new entries or staged sends. <see cref="AddMessage"/>/<see cref="AddDraft"/>/
 /// <see cref="AddNote"/> apply the same insert/conflict rules a built-in package's own entries go through - a
 /// draft/note whose name matches an existing entry prompts the user the same way, sharing that same prompt UI -

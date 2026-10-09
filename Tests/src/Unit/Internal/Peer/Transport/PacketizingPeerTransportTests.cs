@@ -3,6 +3,9 @@ namespace BlueHeighliner.Comlink.Tests.Unit.Internal.Peer.Transport;
 /// <summary>Unit tests for <see cref="PacketizingPeerTransport"/>.</summary>
 public sealed class PacketizingPeerTransportTests
 {
+    private static Task<bool> Send(PacketizingPeerTransport transport, PeerConnection connection, ReadOnlyMemory<byte> data, PeerSendOptions? options = null, CancellationToken cancellation = default)
+        => transport.Request(connection, data, (options ?? new PeerSendOptions()) with { Frame = options?.Frame ?? new TestFrame() }, cancellation);
+
     private static readonly PeerConnection target = new(new ConnectionPoint { IpAddress = "10.0.0.5", Port = 4000 }, new IpConnectionInfo { Host = "10.0.0.5", Port = 4000 }, () => { });
     private static readonly ILogger logger = LoggerFactory.Create(_ => { }).CreateLogger("test");
     private static int Header => RawPacketSerializer.HeaderSize;
@@ -26,7 +29,7 @@ public sealed class PacketizingPeerTransportTests
 
     private sealed class TrackingPacketizer(List<TrackedOwner> owners) : IPacketizer
     {
-        public IReadOnlyList<Packet> Split(ReadOnlyMemory<byte> payload, int priority, object? frame = null)
+        public IReadOnlyList<Packet> Split(ReadOnlyMemory<byte> payload, int priority, object frame)
         {
             List<Packet> packets = [];
             for (byte i = 0; i < 3; i++)
@@ -42,7 +45,7 @@ public sealed class PacketizingPeerTransportTests
         public IPacketAssembler CreateAssembler() => throw new NotSupportedException();
     }
 
-    private static Fixture Build(IPacketizer? packetizer = null, Func<Sent, Task<bool>>? respond = null, int? packetSize = null, int window = 1)
+    private static Fixture Build(IPacketizer? packetizer = null, Func<Sent, Task<bool>>? respond = null, int? payloadSize = null, int window = 1)
     {
         Mock<IPeerTransport> inner = new();
         TestObservable<PeerReceivedEventArgs> received = new();
@@ -59,7 +62,7 @@ public sealed class PacketizingPeerTransportTests
                 lock (sends) { sends.Add(sent); }
                 return respond?.Invoke(sent) ?? Task.FromResult(true);
             });
-        return new Fixture(new PacketizingPeerTransport(inner.Object, packetizer ?? new Packetizer(new RawPacketEngineController(packetSize ?? Header + 10)), window, logger), inner, received, connected, disconnected, sends);
+        return new Fixture(new PacketizingPeerTransport(inner.Object, packetizer ?? new Packetizer(new RawPacketEngineController(payloadSize ?? 10)), window, logger), inner, received, connected, disconnected, sends);
     }
 
     private sealed class Manual
@@ -98,8 +101,8 @@ public sealed class PacketizingPeerTransportTests
 
     private static List<byte[]> Packets(byte[] payload)
     {
-        Packetizer packetizer = new(new RawPacketEngineController(Header + 10));
-        IReadOnlyList<Packet> packets = packetizer.Split(payload, 0);
+        Packetizer packetizer = new(new RawPacketEngineController(10));
+        IReadOnlyList<Packet> packets = packetizer.Split(payload, 0, new TestFrame());
         List<byte[]> bytes = [.. packets.Select(p => p.Data.Memory.ToArray())];
         foreach (Packet packet in packets)
         {
@@ -115,7 +118,7 @@ public sealed class PacketizingPeerTransportTests
         Fixture fx = Build();
         byte[] packet = Payload(35);
 
-        bool ok = await fx.Transport.Request(target, packet, new PeerSendOptions { Priority = 3, IsPacket = true });
+        bool ok = await Send(fx.Transport, target, packet, new PeerSendOptions { Priority = 3, IsPacket = true });
 
         Assert.True(ok);
         Sent sent = Assert.Single(fx.Sends);
@@ -130,12 +133,12 @@ public sealed class PacketizingPeerTransportTests
         Fixture fx = Build();
         byte[] payload = Payload(35);
 
-        bool ok = await fx.Transport.Request(target, payload, new PeerSendOptions { Priority = 7 });
+        bool ok = await Send(fx.Transport, target, payload, new PeerSendOptions { Priority = 7 });
 
         Assert.True(ok);
         Assert.Equal(4, fx.Sends.Count);
         Assert.All(fx.Sends, sent => Assert.Equal(7, sent.Options!.Priority));
-        using IPacketAssembler assembler = new Packetizer(new RawPacketEngineController(Header + 10)).CreateAssembler();
+        using IPacketAssembler assembler = new Packetizer(new RawPacketEngineController(10)).CreateAssembler();
         AssembledPayload? complete = null;
         foreach (Sent sent in fx.Sends)
         {
@@ -147,7 +150,7 @@ public sealed class PacketizingPeerTransportTests
 
     private sealed class FrameSpyPacketizer(List<object?> frames) : IPacketizer
     {
-        public IReadOnlyList<Packet> Split(ReadOnlyMemory<byte> payload, int priority, object? frame = null)
+        public IReadOnlyList<Packet> Split(ReadOnlyMemory<byte> payload, int priority, object frame)
         {
             frames.Add(frame);
             return [new Packet { Data = new TrackedOwner([1]), Priority = priority }];
@@ -165,10 +168,21 @@ public sealed class PacketizingPeerTransportTests
         object frame = new();
 
         await fx.Transport.Request(target, new byte[] { 1 }, new PeerSendOptions { Frame = frame });
-        await fx.Transport.Request(target, new byte[] { 1 });
 
-        Assert.Same(frame, frames[0]);
-        Assert.Null(frames[1]);
+        Assert.Same(frame, Assert.Single(frames));
+    }
+
+    /// <summary>A payload sent without the frame it is the serialization of is refused, since the packet handler is always given one.</summary>
+    [Fact]
+    public async Task Request_WithoutAFrame_IsRefused()
+    {
+        List<object?> frames = [];
+        Fixture fx = Build(new FrameSpyPacketizer(frames));
+
+        await Assert.ThrowsAsync<ArgumentException>(() => fx.Transport.Request(target, new byte[] { 1 }));
+        await Assert.ThrowsAsync<ArgumentException>(() => fx.Transport.Request(target, new byte[] { 1 }, new PeerSendOptions { Priority = 2 }));
+
+        Assert.Empty(frames);
     }
 
     /// <summary>A reassembled payload is published with the first packet that carried it.</summary>
@@ -206,20 +220,20 @@ public sealed class PacketizingPeerTransportTests
             return true;
         });
 
-        bool[] results = await Task.WhenAll(fx.Transport.Request(target, Payload(35)), fx.Transport.Request(target, Payload(35)), fx.Transport.Request(target, Payload(35)));
+        bool[] results = await Task.WhenAll(Send(fx.Transport, target, Payload(35)), Send(fx.Transport, target, Payload(35)), Send(fx.Transport, target, Payload(35)));
 
         Assert.All(results, Assert.True);
         Assert.Equal(12, fx.Sends.Count);
         Assert.Equal(1, maxInFlight);
     }
 
-    /// <summary>The configured packet size caps every packet put on the wire, framing included.</summary>
+    /// <summary>The configured payload size caps the payload every packet carries, framing not counted.</summary>
     [Fact]
-    public async Task Request_HonorsConfiguredPacketSize()
+    public async Task Request_HonorsConfiguredPayloadSize()
     {
-        Fixture fx = Build(packetSize: Header + 20);
+        Fixture fx = Build(payloadSize: 20);
 
-        await fx.Transport.Request(target, Payload(50));
+        await Send(fx.Transport, target, Payload(50));
 
         Assert.Equal(3, fx.Sends.Count);
         Assert.All(fx.Sends, sent => Assert.True(sent.Data.Length <= Header + 20));
@@ -243,7 +257,7 @@ public sealed class PacketizingPeerTransportTests
             });
         }, window: 3);
 
-        Task<bool> request = fx.Transport.Request(target, Payload(100));
+        Task<bool> request = Send(fx.Transport, target, Payload(100));
         await WaitUntil(() => fx.Sends.Count == 3);
         await Task.Delay(50);
         Assert.Equal(3, fx.Sends.Count);
@@ -269,9 +283,9 @@ public sealed class PacketizingPeerTransportTests
         Manual manual = new();
         Fixture fx = Build(respond: manual.Respond, window: 2);
 
-        Task<bool> low = fx.Transport.Request(target, Payload(35), new PeerSendOptions { Priority = 1 });
+        Task<bool> low = Send(fx.Transport, target, Payload(35), new PeerSendOptions { Priority = 1 });
         await WaitUntil(() => fx.Sends.Count == 2);
-        Task<bool> high = fx.Transport.Request(target, Payload(15), new PeerSendOptions { Priority = 9 });
+        Task<bool> high = Send(fx.Transport, target, Payload(15), new PeerSendOptions { Priority = 9 });
         await Task.Delay(50);
         Assert.Equal(2, fx.Sends.Count);
 
@@ -300,9 +314,9 @@ public sealed class PacketizingPeerTransportTests
         Manual manual = new();
         Fixture fx = Build(respond: manual.Respond);
 
-        Task<bool> low = fx.Transport.Request(target, Payload(35), new PeerSendOptions { Priority = 1 });
+        Task<bool> low = Send(fx.Transport, target, Payload(35), new PeerSendOptions { Priority = 1 });
         await WaitUntil(() => fx.Sends.Count == 1);
-        Task<bool> high = fx.Transport.Request(target, Payload(15), new PeerSendOptions { Priority = 9 });
+        Task<bool> high = Send(fx.Transport, target, Payload(15), new PeerSendOptions { Priority = 9 });
         await Task.Delay(50);
         Assert.Single(fx.Sends);
 
@@ -329,8 +343,8 @@ public sealed class PacketizingPeerTransportTests
         byte[] first = Payload(25);
         byte[] second = [.. Payload(25).Select(b => (byte)(b + 100))];
 
-        Task<bool> a = fx.Transport.Request(target, first, new PeerSendOptions { Priority = 4 });
-        Task<bool> b = fx.Transport.Request(target, second, new PeerSendOptions { Priority = 4 });
+        Task<bool> a = Send(fx.Transport, target, first, new PeerSendOptions { Priority = 4 });
+        Task<bool> b = Send(fx.Transport, target, second, new PeerSendOptions { Priority = 4 });
         for (int i = 0; i < 6; i++)
         {
             await WaitUntil(() => fx.Sends.Count == i + 1);
@@ -353,9 +367,9 @@ public sealed class PacketizingPeerTransportTests
         Fixture fx = Build(respond: manual.Respond);
         PeerConnection other = new(new ConnectionPoint { IpAddress = "10.0.0.6", Port = 4000 }, new IpConnectionInfo(), () => { });
 
-        Task<bool> first = fx.Transport.Request(target, Payload(5));
+        Task<bool> first = Send(fx.Transport, target, Payload(5));
         await WaitUntil(() => fx.Sends.Count == 1);
-        Task<bool> second = fx.Transport.Request(other, Payload(5));
+        Task<bool> second = Send(fx.Transport, other, Payload(5));
 
         await WaitUntil(() => fx.Sends.Count == 2);
         manual.Complete(0);
@@ -371,8 +385,8 @@ public sealed class PacketizingPeerTransportTests
         int calls = 0;
         Fixture fx = Build(respond: _ => Interlocked.Increment(ref calls) == 1 ? Task.FromException<bool>(new IOException("dropped")) : Task.FromResult(true));
 
-        await Assert.ThrowsAsync<IOException>(() => fx.Transport.Request(target, Payload(35)));
-        bool other = await fx.Transport.Request(target, Payload(5));
+        await Assert.ThrowsAsync<IOException>(() => Send(fx.Transport, target, Payload(35)));
+        bool other = await Send(fx.Transport, target, Payload(5));
 
         Assert.True(other);
         Assert.Equal(2, fx.Sends.Count);
@@ -386,9 +400,9 @@ public sealed class PacketizingPeerTransportTests
         Fixture fx = Build(respond: manual.Respond);
         using CancellationTokenSource cancellation = new();
 
-        Task<bool> running = fx.Transport.Request(target, Payload(5));
+        Task<bool> running = Send(fx.Transport, target, Payload(5));
         await WaitUntil(() => fx.Sends.Count == 1);
-        Task<bool> queued = fx.Transport.Request(target, Payload(35), cancellation: cancellation.Token);
+        Task<bool> queued = Send(fx.Transport, target, Payload(35), cancellation: cancellation.Token);
         cancellation.Cancel();
 
         await Assert.ThrowsAnyAsync<OperationCanceledException>(() => queued);
@@ -404,9 +418,9 @@ public sealed class PacketizingPeerTransportTests
         Manual manual = new();
         Fixture fx = Build(respond: manual.Respond);
 
-        Task<bool> running = fx.Transport.Request(target, Payload(5));
+        Task<bool> running = Send(fx.Transport, target, Payload(5));
         await WaitUntil(() => fx.Sends.Count == 1);
-        Task<bool> queued = fx.Transport.Request(target, Payload(5));
+        Task<bool> queued = Send(fx.Transport, target, Payload(5));
 
         await fx.Transport.DisposeAsync();
 
@@ -420,10 +434,10 @@ public sealed class PacketizingPeerTransportTests
     public async Task Request_AfterDispose_Throws()
     {
         Fixture fx = Build();
-        await fx.Transport.Request(target, Payload(5));
+        await Send(fx.Transport, target, Payload(5));
         await fx.Transport.DisposeAsync();
 
-        await Assert.ThrowsAsync<IOException>(() => fx.Transport.Request(target, Payload(5)));
+        await Assert.ThrowsAsync<IOException>(() => Send(fx.Transport, target, Payload(5)));
     }
 
     /// <summary>The request is only accepted when every packet was.</summary>
@@ -432,7 +446,7 @@ public sealed class PacketizingPeerTransportTests
     {
         Fixture fx = Build(respond: sent => Task.FromResult(sent.Data[Header] != 10));
 
-        Assert.False(await fx.Transport.Request(target, Payload(35)));
+        Assert.False(await Send(fx.Transport, target, Payload(35)));
     }
 
     /// <summary>A packet that could not be delivered fails the request, and the packets after it are not sent.</summary>
@@ -442,7 +456,7 @@ public sealed class PacketizingPeerTransportTests
         int calls = 0;
         Fixture fx = Build(respond: _ => Interlocked.Increment(ref calls) == 2 ? Task.FromException<bool>(new IOException("dropped")) : Task.FromResult(true));
 
-        await Assert.ThrowsAsync<IOException>(() => fx.Transport.Request(target, Payload(35)));
+        await Assert.ThrowsAsync<IOException>(() => Send(fx.Transport, target, Payload(35)));
 
         Assert.Equal(2, fx.Sends.Count);
     }
@@ -454,7 +468,7 @@ public sealed class PacketizingPeerTransportTests
         int transmitted = 0;
         Fixture fx = Build();
 
-        await fx.Transport.Request(target, Payload(35), new PeerSendOptions { Transmitted = () => transmitted++ });
+        await Send(fx.Transport, target, Payload(35), new PeerSendOptions { Transmitted = () => transmitted++ });
 
         Assert.Equal(4, fx.Sends.Count);
         for (int i = 0; i < 3; i++)
@@ -476,7 +490,7 @@ public sealed class PacketizingPeerTransportTests
         List<TrackedOwner> owners = [];
         Fixture fx = Build(new TrackingPacketizer(owners), respond: _ => fail ? Task.FromException<bool>(new IOException()) : Task.FromResult(true));
 
-        try { await fx.Transport.Request(target, Payload(5)); }
+        try { await Send(fx.Transport, target, Payload(5)); }
         catch (IOException) { }
 
         Assert.Equal(3, owners.Count);
@@ -487,9 +501,9 @@ public sealed class PacketizingPeerTransportTests
     [Fact]
     public async Task Request_PayloadTooBig_FailsWithoutSending()
     {
-        Fixture fx = Build(new Packetizer(new RawPacketEngineController(100), maxPayloadSize: 10));
+        Fixture fx = Build(new Packetizer(new RawPacketEngineController(100), maxFrameSize: 10));
 
-        Assert.False(await fx.Transport.Request(target, Payload(11)));
+        Assert.False(await Send(fx.Transport, target, Payload(11)));
 
         Assert.Empty(fx.Sends);
     }
@@ -596,7 +610,7 @@ public sealed class PacketizingPeerTransportTests
         Fixture fx = Build(respond: manual.Respond);
         PeerConnection connection = Connection();
 
-        Task<bool> request = fx.Transport.Request(connection, Payload(35));
+        Task<bool> request = Send(fx.Transport, connection, Payload(35));
         await WaitUntil(() => fx.Sends.Count == 1);
         fx.Disconnected.Publish(new PeerConnectionEventArgs { Connection = connection });
         manual.Complete(0);

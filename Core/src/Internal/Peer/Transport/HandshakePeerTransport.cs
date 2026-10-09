@@ -171,7 +171,7 @@ internal sealed class HandshakePeerTransport : IPeerTransport
     private async Task<bool> Send(Session session, object item)
     {
         using IMemoryOwner<byte> body = handshake!.Serialize(item);
-        return await inner.Request(session.Connection, body.Memory, new PeerSendOptions { Priority = engineController.HighestPriority }, session.Aborted.Token);
+        return await inner.Request(session.Connection, body.Memory, new PeerSendOptions { Priority = engineController.HighestPriority, Frame = handshake.CarriesFrames ? item : null }, session.Aborted.Token);
     }
 
     private void OnReceived(PeerReceivedEventArgs args)
@@ -185,7 +185,8 @@ internal sealed class HandshakePeerTransport : IPeerTransport
         if (isHandshakePayload)
         {
             byte[] body = args.Payload.ToArray();
-            Process(session, () => OnHandshakePayload(session, body));
+            object? packet = args.Packet;
+            Process(session, () => OnHandshakePayload(session, body, packet));
             return;
         }
 
@@ -213,15 +214,22 @@ internal sealed class HandshakePeerTransport : IPeerTransport
         received.Publish(args);
     }
 
-    private async Task OnHandshakePayload(Session session, byte[] body)
+    private async Task OnHandshakePayload(Session session, byte[] body, object? packet)
     {
-        object item = handshake!.Deserialize(body);
-        if (item.GetType() != handshake.Processor.ItemType)
+        try
         {
-            throw new InvalidDataException($"expected a {handshake.Processor.ItemType.Name}");
-        }
+            object item = handshake!.Deserialize(body, packet);
+            if (item.GetType() != handshake.Processor.ItemType)
+            {
+                throw new InvalidDataException($"expected a {handshake.Processor.ItemType.Name}");
+            }
 
-        await handshake.Processor.OnReceived(session.Initial, item);
+            await handshake.Processor.OnReceived(session.Initial, item);
+        }
+        finally
+        {
+            packet.TryDispose();
+        }
     }
 
     private void Establish(Session session)

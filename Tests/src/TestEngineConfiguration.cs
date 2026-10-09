@@ -15,19 +15,17 @@ public sealed class TestEngineConfiguration(bool packets = false, Action<TestFra
     public TestEngineBuilder Apply(IEngineBuilder engine)
     {
         TestEngineBuilder typed = engine.Types<TestFrame, TestPacket, TestMessagePriority, TestLevel, TestAspect>();
-        IPriorityBuilder<TestFrame, TestPacket, TestMessagePriority, TestLevel, TestAspect> priorities = typed.Priorities();
         foreach (TestMessagePriority priority in Enum.GetValues<TestMessagePriority>())
         {
-            priorities.Priority(priority);
+            typed.Priority(priority);
         }
 
-        IMessageLevelsBuilder<TestFrame, TestPacket, TestMessagePriority, TestLevel, TestAspect> levels = typed.MessageLevels();
         foreach (TestLevel level in Enum.GetValues<TestLevel>())
         {
-            levels.Level(level);
+            typed.Level(level);
         }
 
-        TestFrameBuilder message = typed.Frames();
+        TestFrameBuilder message = typed.Frames<TestNetworkProcessor>();
 
         if (heartbeats)
         {
@@ -38,7 +36,7 @@ public sealed class TestEngineConfiguration(bool packets = false, Action<TestFra
 
         if (packets || packetExtra is not null)
         {
-            TestPacketBuilder packet = typed.Packets().Frame<TestFramePacketHandler>();
+            TestPacketBuilder packet = typed.Packets<TestPacketHandler>(16 * 1024);
             packetExtra?.Invoke(packet);
         }
 

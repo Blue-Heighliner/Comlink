@@ -77,8 +77,8 @@ internal static class LogEvents
     /// <summary>The IP transport cannot be built, for example because certificates are missing.</summary>
     public static EventId IpConnectionsUnavailable { get; } = Define(45, nameof(IpConnectionsUnavailable), LogCategories.App);
 
-    /// <summary>Packetization is on and its packet size exceeds the HDLC frame limit.</summary>
-    public static EventId PacketSizeExceedsHdlc { get; } = Define(46, nameof(PacketSizeExceedsHdlc), LogCategories.App);
+    /// <summary>Packetization is on and its payload size leaves no room for a packet's own fields within the HDLC frame limit.</summary>
+    public static EventId MaxPayloadSizeExceedsHdlc { get; } = Define(46, nameof(MaxPayloadSizeExceedsHdlc), LogCategories.App);
 
     /// <summary>A serial link drops, cannot be opened or reports an error.</summary>
     public static EventId SerialLinkProblem { get; } = Define(47, nameof(SerialLinkProblem), LogCategories.App);

@@ -7,7 +7,7 @@ public sealed class DraftViewModelTests
 
     private static IEngineController MakeEngineController(
         string alertText = "ALERT",
-        bool tagsEnabled = true, string tagLabel = "Tag", IReadOnlyList<TagPriorityBlock>? blocks = null)
+        bool tagsEnabled = true, string tagLabel = "Tag", Func<Enum, Enum?, Enum?, string, bool>? isAllowed = null)
     {
         Mock<IEngineController> mock = new();
         mock.Setup(a => a.AlertLabel).Returns(alertText);
@@ -19,7 +19,7 @@ public sealed class DraftViewModelTests
         mock.Setup(t => t.TagsEnabled).Returns(tagsEnabled);
         mock.Setup(t => t.TagLabel).Returns(tagLabel);
         mock.Setup(t => t.DraftTagRules).Returns(TagRules.Unrestricted);
-        mock.Setup(p => p.BlockedCombinations).Returns(blocks ?? []);
+        mock.Setup(p => p.IsDraftAllowed(It.IsAny<IEngineContext>(), It.IsAny<Enum>(), It.IsAny<Enum?>(), It.IsAny<Enum?>(), It.IsAny<string>())).Returns((IEngineContext _, Enum priority, Enum? level, Enum? aspect, string tag) => isAllowed?.Invoke(priority, level, aspect, tag) ?? true);
         mock.Setup(a => a.AddressTypes).Returns([
             new AddressTypeOption { Type = AddressType.To, Label = "To" },
             new AddressTypeOption { Type = AddressType.Cc, Label = "Cc" },
@@ -30,6 +30,9 @@ public sealed class DraftViewModelTests
         return mock.Object;
     }
 
+    private static Func<Enum, Enum?, Enum?, string, bool> Blocking(string? tag, TestMessagePriority? priority)
+        => (candidate, _, _, candidateTag) => !((tag is null || tag == candidateTag) && (priority is null || candidate.Equals(priority)));
+
     private static DraftViewModel Build(
         out Mock<IEntryService> entryMock,
         out Mock<IEngineConnection> connMock,
@@ -38,7 +41,7 @@ public sealed class DraftViewModelTests
         string alertText = "ALERT",
         bool tagsEnabled = true,
         string tagLabel = "Tag",
-        IReadOnlyList<TagPriorityBlock>? blockedCombinations = null)
+        Func<Enum, Enum?, Enum?, string, bool>? isAllowed = null)
     {
         entryMock = new Mock<IEntryService>();
         connMock = new Mock<IEngineConnection>();
@@ -51,7 +54,7 @@ public sealed class DraftViewModelTests
             FolderId = "root-drafts"
         };
         return new DraftViewModel(ent, entryMock.Object, connMock.Object, userNames ?? [], noLogger,
-            MakeEngineController(alertText, tagsEnabled, tagLabel, blockedCombinations));
+            MakeEngineController(alertText, tagsEnabled, tagLabel, isAllowed));
     }
 
     private static DraftViewModel BuildDeletable(out Mock<IEntryService> entryMock, bool canDelete)
@@ -175,8 +178,8 @@ public sealed class DraftViewModelTests
     public void Constructor_AvailablePrioritiesExcludesPriorityBlockedForStoredTag()
     {
         DraftEntity entity = new() { Tag = "URGENT", Priority = (int)TestMessagePriority.Flash };
-        IReadOnlyList<TagPriorityBlock> blocks = [new TagPriorityBlock { Tag = "URGENT", Priority = TestMessagePriority.Flash }];
-        DraftViewModel vm = Build(out _, out _, entity: entity, blockedCombinations: blocks);
+        Func<Enum, Enum?, Enum?, string, bool> blocks = Blocking("URGENT", TestMessagePriority.Flash);
+        DraftViewModel vm = Build(out _, out _, entity: entity, isAllowed: blocks);
 
         Assert.DoesNotContain(vm.AvailablePriorities, p => p.Name == "FLASH");
         Assert.Equal("ROUTINE", vm.SelectedPriority.Name);
@@ -186,8 +189,8 @@ public sealed class DraftViewModelTests
     [Fact]
     public void Tag_SetToValueBlockedForCurrentPriority_RevertsToPreviousValue()
     {
-        IReadOnlyList<TagPriorityBlock> blocks = [new TagPriorityBlock { Tag = "SPAM", Priority = null }];
-        DraftViewModel vm = Build(out _, out _, blockedCombinations: blocks);
+        Func<Enum, Enum?, Enum?, string, bool> blocks = Blocking("SPAM", null);
+        DraftViewModel vm = Build(out _, out _, isAllowed: blocks);
 
         vm.Tag = "SPAM";
 
@@ -198,8 +201,8 @@ public sealed class DraftViewModelTests
     [Fact]
     public void Tag_SetToUnblockedValue_IsAccepted()
     {
-        IReadOnlyList<TagPriorityBlock> blocks = [new TagPriorityBlock { Tag = "SPAM", Priority = null }];
-        DraftViewModel vm = Build(out _, out _, blockedCombinations: blocks);
+        Func<Enum, Enum?, Enum?, string, bool> blocks = Blocking("SPAM", null);
+        DraftViewModel vm = Build(out _, out _, isAllowed: blocks);
 
         vm.Tag = "URGENT";
 
@@ -219,8 +222,8 @@ public sealed class DraftViewModelTests
     [Fact]
     public void Tag_SetToValueBlockingAnotherPriority_RemovesItFromAvailablePriorities()
     {
-        IReadOnlyList<TagPriorityBlock> blocks = [new TagPriorityBlock { Tag = "URGENT", Priority = TestMessagePriority.Flash }];
-        DraftViewModel vm = Build(out _, out _, blockedCombinations: blocks);
+        Func<Enum, Enum?, Enum?, string, bool> blocks = Blocking("URGENT", TestMessagePriority.Flash);
+        DraftViewModel vm = Build(out _, out _, isAllowed: blocks);
         Assert.Contains(vm.AvailablePriorities, p => p.Name == "FLASH");
 
         vm.Tag = "URGENT";
@@ -234,8 +237,8 @@ public sealed class DraftViewModelTests
     [Fact]
     public void Tag_RejectedChangeAfterAcceptedChange_RevertsToLastAcceptedValue()
     {
-        IReadOnlyList<TagPriorityBlock> blocks = [new TagPriorityBlock { Tag = "SPAM", Priority = null }];
-        DraftViewModel vm = Build(out _, out _, blockedCombinations: blocks);
+        Func<Enum, Enum?, Enum?, string, bool> blocks = Blocking("SPAM", null);
+        DraftViewModel vm = Build(out _, out _, isAllowed: blocks);
         vm.Tag = "URGENT";
 
         vm.Tag = "SPAM";
@@ -827,8 +830,8 @@ public sealed class DraftViewModelTests
     }
 
     /// <summary>
-    /// SendCommand refuses to send when Tag/SelectedPriority form a blocked combination, as a defense-in-depth
-    /// safety net behind the live UI-level prevention (which SelectedPriority's plain setter does not itself enforce).
+    /// SendCommand refuses to send when the draft is a blocked combination, as a defense-in-depth
+    /// safety net behind the live UI-level prevention (for instance a handler whose answer changes after the draft was opened).
     /// </summary>
     [Fact]
     public async Task SendCommand_BlockedTagPriorityCombination_SetsStatusMessageAndDoesNotSend()
@@ -839,14 +842,14 @@ public sealed class DraftViewModelTests
             Addresses = [new AddressData { UserName = "ALPHA", Type = "To" }],
             FolderId = "root-drafts"
         };
-        IReadOnlyList<TagPriorityBlock> blocks = [new TagPriorityBlock { Tag = "URGENT", Priority = TestMessagePriority.Flash }];
-        DraftViewModel vm = Build(out _, out Mock<IEngineConnection> connMock, entity: entity, blockedCombinations: blocks);
-        vm.Tag = "URGENT";
-        vm.SelectedPriority = new MessagePriorityOption { Name = "FLASH", Value = 3, Key = TestMessagePriority.Flash };
+        bool blocked = false;
+        Func<Enum, Enum?, Enum?, string, bool> blocks = (_, _, _, _) => !blocked;
+        DraftViewModel vm = Build(out _, out Mock<IEngineConnection> connMock, entity: entity, isAllowed: blocks);
+        blocked = true;
 
         await vm.SendCommand.ExecuteAsync(null);
 
-        Assert.Equal("This tag/priority combination is not allowed", vm.StatusMessage);
+        Assert.Equal("This combination is not allowed", vm.StatusMessage);
         connMock.Verify(c => c.SendMessage(It.IsAny<string>(), It.IsAny<List<AddressRequest>>(), It.IsAny<Enum?>(), It.IsAny<string>(), It.IsAny<Enum?>(), It.IsAny<Enum?>(), It.IsAny<CancellationToken>()), Times.Never);
     }
 
@@ -952,6 +955,44 @@ public sealed class DraftViewModelTests
         Assert.Equal(string.Empty, vm.AvailableMessageAspects[0].Label);
         Assert.Null(vm.SelectedMessageAspect?.Aspect);
         Assert.Empty(Build(out _, out _).AvailableMessageAspects);
+    }
+
+    /// <summary>An aspect no allowed combination uses is not offered, and choosing a priority that blocks the chosen aspect moves the aspect to one that is allowed.</summary>
+    [Fact]
+    public void MessageAspects_Blocked_AreNotOfferedAndSelectionMoves()
+    {
+        Mock<IEngineController> controller = Mock.Get(MakeEngineController());
+        controller.Setup(c => c.MessageAspects).Returns([new MessageAspect { Name = "ENCRYPTED", Key = TestAspect.Encrypted }, new MessageAspect { Name = "SIGNED", Key = TestAspect.Signed }]);
+        controller.Setup(c => c.IsDraftAllowed(It.IsAny<IEngineContext>(), It.IsAny<Enum>(), It.IsAny<Enum?>(), It.IsAny<Enum?>(), It.IsAny<string>()))
+            .Returns((IEngineContext _, Enum priority, Enum? level, Enum? aspect, string tag) => !TestAspect.Signed.Equals(aspect) && !(priority.Equals(TestMessagePriority.Flash) && TestAspect.Encrypted.Equals(aspect)));
+        DraftEntity entity = new() { Body = "B", Addresses = [], FolderId = "root-drafts", MessageAspect = (int)TestAspect.Encrypted };
+        DraftViewModel vm = new(entity, Mock.Of<IEntryService>(), Mock.Of<IEngineConnection>(), [], noLogger, controller.Object);
+        Assert.Equal(["", "ENCRYPTED"], vm.AvailableMessageAspects.Select(option => option.Label));
+        Assert.Equal("ENCRYPTED", vm.SelectedMessageAspect?.Aspect?.Name);
+
+        vm.SelectedPriority = vm.AvailablePriorities.Single(p => p.Name == "FLASH");
+
+        Assert.Equal("FLASH", vm.SelectedPriority.Name);
+        Assert.Null(vm.SelectedMessageAspect?.Aspect);
+    }
+
+    /// <summary>A message level the draft handler refuses with the current tag is not offered, and a tag that blocks the chosen level moves the level to one that is allowed.</summary>
+    [Fact]
+    public void MessageLevels_BlockedWithTag_AreNotOfferedAndSelectionMoves()
+    {
+        Mock<IEngineController> controller = Mock.Get(MakeEngineController());
+        controller.Setup(c => c.MessageLevels).Returns([new MessageLevel { Name = "PUBLIC", Color = "#000000", Key = TestLevel.Public }, new MessageLevel { Name = "SECRET", Color = "#000000", Key = TestLevel.Secret }]);
+        controller.Setup(c => c.IsDraftAllowed(It.IsAny<IEngineContext>(), It.IsAny<Enum>(), It.IsAny<Enum?>(), It.IsAny<Enum?>(), It.IsAny<string>()))
+            .Returns((IEngineContext _, Enum priority, Enum? level, Enum? aspect, string tag) => !(tag == "LEAK" && TestLevel.Secret.Equals(level)));
+        DraftEntity entity = new() { Body = "B", Addresses = [], FolderId = "root-drafts", MessageLevel = (int)TestLevel.Secret };
+        DraftViewModel vm = new(entity, Mock.Of<IEntryService>(), Mock.Of<IEngineConnection>(), [], noLogger, controller.Object, currentMessageLevel: "SECRET");
+        Assert.Equal("SECRET", vm.SelectedMessageLevel?.Name);
+
+        vm.Tag = "LEAK";
+
+        Assert.Equal("LEAK", vm.Tag);
+        Assert.Equal(["PUBLIC"], vm.AvailableMessageLevels.Select(level => level.Name));
+        Assert.Equal("PUBLIC", vm.SelectedMessageLevel?.Name);
     }
 
     /// <summary>A stored aspect is selected again when the draft is opened.</summary>

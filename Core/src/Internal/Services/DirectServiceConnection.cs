@@ -56,6 +56,15 @@ internal sealed class DirectServiceConnection : IEngineConnection
         => Task.FromResult(userService.GetCurrentUserInfo());
 
     /// <inheritdoc />
+    public IEngineContext GetContext()
+        => new EngineContext(
+            userService.GetCurrentUserInfo() ?? throw new InvalidOperationException("No user is installed"),
+            engineController.Users,
+            engineController.GetUserInfo,
+            peerService.IsUserConnected,
+            engineController.GetGroupMembers);
+
+    /// <inheritdoc />
     public Task<List<string>> GetUserNames(CancellationToken cancellation = default)
     {
         try

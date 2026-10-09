@@ -3,38 +3,40 @@ namespace BlueHeighliner.Comlink.Tests.Unit.Internal.Control;
 /// <summary>Unit tests for <see cref="PacketBuilder{TPacket, TPriority}"/> and the <see cref="PacketMap"/> it produces.</summary>
 public sealed class PacketBuilderTests
 {
-    private static PacketBuilder<TestPacket, TestMessagePriority> Complete()
+    private static PacketBuilder<TestFrame, TestPacket, TestMessagePriority> Complete()
     {
-        PacketBuilder<TestPacket, TestMessagePriority> builder = new();
-        builder.Frame<TestFramePacketHandler>();
+        PacketBuilder<TestFrame, TestPacket, TestMessagePriority> builder = new();
+        builder.Handler<TestPacketHandler>();
         return builder;
     }
 
-    /// <summary>Building fails and names the frame packet handler when it was not stated.</summary>
+    /// <summary>Building fails and names the packet handler when it was not stated.</summary>
     [Fact]
     public void Build_UnstatedHandler_ThrowsNamingIt()
     {
-        PacketBuilder<TestPacket, TestMessagePriority> builder = new();
+        PacketBuilder<TestFrame, TestPacket, TestMessagePriority> builder = new();
 
         InvalidOperationException error = Assert.Throws<InvalidOperationException>(() => builder.Build());
 
         Assert.Contains("TestPacket", error.Message);
-        Assert.Contains("Frame", error.Message);
+        Assert.Contains("Handler", error.Message);
     }
 
-    /// <summary>The frame packet handler the host states creates a packet from a piece of a payload, recognizes it, and reads each aspect back.</summary>
+    /// <summary>The packet handler the host states creates a packet from a piece of a frame, recognizes it, and reads each aspect back.</summary>
     [Fact]
-    public void FramePacketHandler_CreatesRecognizesAndReads()
+    public void PacketHandler_CreatesRecognizesAndReads()
     {
-        IFramePacketAdapter handler = Complete().Build().FramePacket.Create(null);
+        IPacketAdapter handler = Complete().Build().Handler.Create(null);
 
-        object packet = handler.Create(new FramePacketCreateContext { PayloadId = 5, Index = 2, Count = 9, PayloadLength = 1000, Data = new byte[] { 1, 2, 3 } });
+        TestFrame frame = new();
+        object packet = handler.CreateFramePacket(frame, 2, 9, 1000, new byte[] { 1, 2, 3 });
 
         Assert.IsType<TestPacket>(packet);
-        Assert.True(handler.IsValid(packet));
-        Assert.False(handler.IsValid(new TestPacket()));
-        Assert.Equal((5, 2, 9, 1000), (handler.GetPayloadId(packet), handler.GetIndex(packet), handler.GetCount(packet), handler.GetPayloadLength(packet)));
-        Assert.Equal(new byte[] { 1, 2, 3 }, handler.GetData(packet).ToArray());
+        Assert.True(handler.IsFramePacket(packet));
+        Assert.False(handler.IsFramePacket(new TestPacket()));
+        Assert.Equal((2, 9, 1000), (handler.GetIndex(packet), handler.GetCount(packet), handler.GetFrameLength(packet)));
+        Assert.Equal(handler.GetFrameId(packet), handler.GetFrameId(handler.CreateFramePacket(frame, 3, 9, 1000, new byte[] { 9 })));
+        Assert.Equal(new byte[] { 1, 2, 3 }, handler.GetPayload(packet).ToArray());
     }
 
     /// <summary>The default serializer builds only the packet type.</summary>
@@ -55,7 +57,7 @@ public sealed class PacketBuilderTests
     public void Serializer_CanBeReplaced()
     {
         IPacketSerializer serializer = Mock.Of<IPacketSerializer>();
-        PacketBuilder<TestPacket, TestMessagePriority> builder = Complete();
+        PacketBuilder<TestFrame, TestPacket, TestMessagePriority> builder = Complete();
         builder.Serializer<IPacketSerializer>();
 
         PacketMap map = builder.Build();

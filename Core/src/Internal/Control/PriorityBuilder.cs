@@ -1,17 +1,13 @@
 namespace BlueHeighliner.Comlink;
 
-/// <summary>Collects what is stated through <see cref="IPriorityBuilder{TFrame, TPacket, TPriority, TLevel, TAspect}"/> and <see cref="IPriorityLevelBuilder{TFrame, TPacket, TPriority, TLevel, TAspect}"/>, recording what is stated about each level and turning it into the engine's priority options.</summary>
+/// <summary>Collects what is stated through <see cref="IEngineBuilder{TFrame, TPacket, TPriority, TLevel, TAspect}"/> and <see cref="IPriorityLevelBuilder{TFrame, TPacket, TPriority, TLevel, TAspect}"/>, recording what is stated about each level and turning it into the engine's priority options.</summary>
 internal sealed class PriorityBuilder<TPriority> where TPriority : struct, Enum
 {
     private readonly Dictionary<TPriority, (string? Label, PriorityMode? Mode)> options = [];
     private readonly List<TPriority> order = [];
-    private readonly List<TagPriorityBlock> blocks = [];
     private TPriority current;
 
-    /// <summary>The blocked tag and priority combinations that were stated.</summary>
-    public IReadOnlyList<TagPriorityBlock> Blocks => blocks;
-
-    /// <inheritdoc cref="IPriorityBuilder{TFrame, TPacket, TPriority, TLevel, TAspect}.Priority(TPriority)"/>
+    /// <inheritdoc cref="IEngineBuilder{TFrame, TPacket, TPriority, TLevel, TAspect}.Priority(TPriority)"/>
     public PriorityBuilder<TPriority> Priority(TPriority priority)
     {
         current = priority;
@@ -33,13 +29,6 @@ internal sealed class PriorityBuilder<TPriority> where TPriority : struct, Enum
     public PriorityBuilder<TPriority> Mode(PriorityMode mode)
     {
         options[current] = (options.GetValueOrDefault(current).Label, mode);
-        return this;
-    }
-
-    /// <inheritdoc cref="IPriorityBuilder{TFrame, TPacket, TPriority, TLevel, TAspect}.Block"/>
-    public PriorityBuilder<TPriority> Block(TPriority? priority, string? tag)
-    {
-        blocks.Add(new TagPriorityBlock { Tag = tag, Priority = priority });
         return this;
     }
 

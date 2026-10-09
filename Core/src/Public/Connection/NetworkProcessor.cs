@@ -4,7 +4,7 @@ namespace BlueHeighliner.Comlink;
 /// Runs the host's own protocol, independent of any UI. The engine only transports frames and keeps the user's messages: it does not receive, route, receipt or retrieve anything itself and does not keep the
 /// network indicator, so what happens when a user sends a message, a frame arrives or a user asks for stored messages is whatever this processor does, with the engine's help through the context each method is
 /// handed (see <see cref="INetworkContext{TFrame, TPriority, TLevel, TAspect}"/>). A method runs in the background: it is not awaited by the engine, and an exception it throws is logged rather than thrown back. Every method has a default that
-/// does nothing, so a processor states only what it takes part in. State one with <see cref="IFrameBuilder{TFrame, TPacket, TPriority, TLevel, TAspect}.Processor"/>.
+/// does nothing, so a processor states only what it takes part in. State one with <see cref="IEngineBuilder{TFrame, TPacket, TPriority, TLevel, TAspect}.Frames{TProcessor}"/>.
 /// </summary>
 /// <typeparam name="TFrame">The host's frame type.</typeparam>
 /// <typeparam name="TPriority">The enum the host stated for its priorities.</typeparam>

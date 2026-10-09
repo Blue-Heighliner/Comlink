@@ -11,6 +11,9 @@ internal interface IEngineConnection
     Task Connect(CancellationToken cancellation = default);
     /// <summary>Returns this user's own <see cref="UserInfo"/>, or <see langword="null"/> if not yet registered.</summary>
     Task<UserInfo?> GetUserInfo(CancellationToken cancellation = default);
+    /// <summary>Returns a snapshot of the engine as it is now, as a host's handlers see it.</summary>
+    /// <exception cref="InvalidOperationException">No user is installed.</exception>
+    IEngineContext GetContext();
     /// <summary>Returns the names of all known users in the messaging system.</summary>
     Task<List<string>> GetUserNames(CancellationToken cancellation = default);
     /// <summary>Returns the names of every user currently reachable over at least one live peer connection, unlike <see cref="GetUserNames"/>'s fixed configured directory.</summary>

@@ -60,7 +60,7 @@ UserInfo? installed = await service.Install("SN01", cancellation);
 
 ## NetworkProcessing and NetworkEnvironment
 
-The engine's only protocol surface. `NetworkProcessing` runs the host's `INetworkProcessor<TFrame, TPriority, TLevel, TAspect>` (through `NetworkHandler<,,,>`, which gives it contexts typed by the host's enums) for `OnConnected`, `OnDisconnected`, `OnReceived`, `OnSent`, `OnRead` and `OnRetrieval`. Each call runs in the background and a processor that throws is logged (`NetworkProcessorFailed`) and never reaches the engine. Without a processor every event is ignored and a retrieval reports failure.
+The engine's only protocol surface. `NetworkProcessing` runs the host's `INetworkProcessor<TFrame, TPriority, TLevel, TAspect>` (through `NetworkHandler<,,,>`, which gives it contexts typed by the host's enums) for `OnConnected`, `OnDisconnected`, `OnReceived`, `OnSent`, `OnRead` and `OnRetrieval`. Each call runs in the background and a processor that throws is logged (`NetworkProcessorFailed`) and never reaches the engine.
 
 Every context carries the operations of `NetworkEnvironment`:
 - `Send(user, priority, frame)` hands a frame to the peer layer with the wire priority of the given level, and reports whether the directly connected user accepted it. A user who is not directly connected fails. The frame is sent exactly as given.

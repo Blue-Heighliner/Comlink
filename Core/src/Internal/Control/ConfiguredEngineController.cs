@@ -37,7 +37,7 @@ internal sealed class ConfiguredEngineController : IEngineController
     /// <inheritdoc />
     public IPacketSerializer? PacketSerializer => fallback.PacketSerializer;
     /// <inheritdoc />
-    public int PacketSize => fallback.PacketSize;
+    public int MaxPayloadSize => fallback.MaxPayloadSize;
     /// <inheritdoc />
     public int PacketWindow => fallback.PacketWindow;
 
@@ -86,19 +86,19 @@ internal sealed class ConfiguredEngineController : IEngineController
     /// <inheritdoc />
     public string GetMessageLevelName(Enum? level) => fallback.GetMessageLevelName(level);
     /// <inheritdoc />
-    public object CreateFramePacket(FramePacketCreateContext context) => fallback.CreateFramePacket(context);
+    public object CreateFramePacket(object frame, int index, int count, int frameLength, ReadOnlyMemory<byte> payload) => fallback.CreateFramePacket(frame, index, count, frameLength, payload);
     /// <inheritdoc />
     public bool IsFramePacket(object packet) => fallback.IsFramePacket(packet);
     /// <inheritdoc />
-    public int GetPayloadId(object packet) => fallback.GetPayloadId(packet);
+    public string GetFrameId(object packet) => fallback.GetFrameId(packet);
     /// <inheritdoc />
     public int GetPacketIndex(object packet) => fallback.GetPacketIndex(packet);
     /// <inheritdoc />
     public int GetPacketCount(object packet) => fallback.GetPacketCount(packet);
     /// <inheritdoc />
-    public int GetPayloadLength(object packet) => fallback.GetPayloadLength(packet);
+    public int GetFrameLength(object packet) => fallback.GetFrameLength(packet);
     /// <inheritdoc />
-    public ReadOnlyMemory<byte> GetPacketData(object packet) => fallback.GetPacketData(packet);
+    public ReadOnlyMemory<byte> GetPacketPayload(object packet) => fallback.GetPacketPayload(packet);
 
     /// <inheritdoc />
     public string AppName => fallback.AppName;
@@ -206,7 +206,7 @@ internal sealed class ConfiguredEngineController : IEngineController
     /// <inheritdoc />
     public string TagLabel => fallback.TagLabel;
     /// <inheritdoc />
-    public IReadOnlyList<TagPriorityBlock> BlockedCombinations => fallback.BlockedCombinations;
+    public bool IsDraftAllowed(IEngineContext context, Enum priority, Enum? level, Enum? aspect, string tag) => fallback.IsDraftAllowed(context, priority, level, aspect, tag);
     /// <inheritdoc />
     public IReadOnlyList<AddressTypeOption> AddressTypes => fallback.AddressTypes;
     /// <inheritdoc />
@@ -278,7 +278,10 @@ internal sealed class ConfiguredEngineController : IEngineController
     }
 
     /// <inheritdoc />
-    public IHandshakeHandler? HandshakeProcessor => fallback.HandshakeProcessor;
+    public IHandshakeHandler? PacketHandshakeProcessor => fallback.PacketHandshakeProcessor;
+
+    /// <inheritdoc />
+    public IHandshakeHandler? FrameHandshakeProcessor => fallback.FrameHandshakeProcessor;
 
     /// <inheritdoc />
     public bool CommandLineOverridesAllowed => fallback.CommandLineOverridesAllowed;

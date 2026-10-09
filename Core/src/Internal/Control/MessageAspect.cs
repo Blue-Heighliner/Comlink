@@ -1,6 +1,6 @@
 namespace BlueHeighliner.Comlink;
 
-/// <summary>A message aspect a message can carry (see <see cref="IEngineBuilder{TFrame, TPacket, TPriority, TLevel, TAspect}.MessageAspects"/>).</summary>
+/// <summary>A message aspect a message can carry (see <see cref="IEngineBuilder{TFrame, TPacket, TPriority, TLevel, TAspect}.Aspect"/>).</summary>
 internal sealed record MessageAspect
 {
     /// <summary>Gets the display name of this aspect, and the value stored in a message's message aspect field.</summary>

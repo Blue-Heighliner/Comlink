@@ -3,14 +3,14 @@ namespace BlueHeighliner.Comlink.Sample;
 /// <summary>
 /// Demonstrates injecting a custom packet DTO, which enables the engine's standard packetization. As with
 /// <see cref="Frame"/>, the field names are deliberately unlike the engine's own logical ones, so it is
-/// <see cref="FramePacketHandler"/> that maps them; the engine does all the splitting
+/// <see cref="PacketHandler"/> that maps them; the engine does all the splitting
 /// and reassembling itself.
 /// </summary>
 [ProtoContract]
 public sealed class Packet
 {
     /// <summary>Identifier shared by every packet of one payload.</summary>
-    [ProtoMember(1)] public int Group { get; set; }
+    [ProtoMember(1)] public string Group { get; set; } = string.Empty;
     /// <summary>Zero-based position of the packet among its payload's packets.</summary>
     [ProtoMember(2)] public int Position { get; set; }
     /// <summary>Number of packets the payload was broken into.</summary>

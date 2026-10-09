@@ -1,6 +1,6 @@
 # Engine Configuration
 
-A host tells the engine how to run by implementing `IEngineConfiguration` and naming it to `Engine.Start<T>`, which constructs it through dependency injection. The engine calls `Configure` once, before anything else starts, handing it an `IEngineBuilder`; the first call must be `Types`, which fixes the frame, packet, priority and message level types, and every call after it is optional except `Frames()`, which starts stating the processor, heartbeat and auto forwarders (through `IFrameBuilder<TFrame, TPacket, TPriority, TLevel, TAspect>`), and each returns a builder so a configuration reads as one fluent expression. `Packets()`, `Priorities()` and `MessageLevels()` likewise start sub-configurations (`IPacketBuilder`, `IPriorityBuilder` with `IPriorityLevelBuilder`, `IMessageLevelsBuilder` with `IMessageLevelBuilder`), but no lambda is involved: each sub-configuration builder is also an `IEngineBuilder`, so its own calls (`Message<>()`, `Priority(x).Mode(...)`, `Level(x).Color(...)`) and every ordinary setting follow on the same chain, in any order, and a sub-configuration may be started again later to add to it. They are one object internally, collected as the host states things and completed when `Configure` returns. The builder is the only public way to change what the engine does; everything it collects is read internally through `IEngineController`, which is not part of the public surface. See each area below for what it covers.
+A host tells the engine how to run by implementing `IEngineConfiguration` and naming it to `Engine.Start<T>`, which constructs it through dependency injection. The engine calls `Configure` once, before anything else starts, handing it an `IEngineBuilder`; the first call must be `Types`, which fixes the frame, packet, priority and message level types, and every call after it is optional except `Frames<TProcessor>()`, which states the network processor and starts stating the heartbeat and other frame settings (through `IFrameBuilder<TFrame, TPacket, TPriority, TLevel, TAspect>`), and each returns a builder so a configuration reads as one fluent expression. `Packets<THandler>(maxPayloadSize)`, `Priority(x)`, `Level(x)`, `Aspect(x)` and `AddressType(x)` likewise start sub-configurations (`IPacketBuilder`, `IPriorityLevelBuilder`, `IMessageLevelBuilder`, `IMessageAspectBuilder`, `IAddressTypeBuilder`), but no lambda is involved: each sub-configuration builder is also an `IEngineBuilder`, so its own calls (`Mode(...)`, `Color(...)`, `Label(...)`) and every ordinary setting follow on the same chain, in any order, and a sub-configuration may be started again later to add to it. They are one object internally, collected as the host states things and completed when `Configure` returns. The builder is the only public way to change what the engine does; everything it collects is read internally through `IEngineController`, which is not part of the public surface. See each area below for what it covers.
 
 ## Concept
 
@@ -11,8 +11,8 @@ public sealed class MyEngineConfiguration : IEngineConfiguration
 {
     public void Configure(IEngineBuilder engine) => engine.Types<MyFrame, MyPriority, MyMessageLevel, MyMessageAspect>()
         .Display<MyDisplayHandler>()
-        .Frames()
-            // ...the frames, and the network processor...
+        .Frames<MyNetworkProcessor>()
+            // ...the frames...
         ;
 }
 
@@ -39,21 +39,19 @@ The engine defines the schema of one network configuration file, shared by every
 
 ```csharp
 engine.Types<MyFrame, MyPacket, MyPriority, MyMessageLevel, MyMessageAspect>()
-    .Frames()
-        .Processor<MyNetworkProcessor>()
-        .Heartbeat<MyHeartbeatHandler>()
-        .AutoForwarder("Escalation")
-    .Packets()
-        .Frame<MyFramePacketHandler>()
+    .AutoForwarder("Escalation")
+    .Frames<MyNetworkProcessor>()
+        .Heartbeat<MyFrameHeartbeatHandler>()
+    .Packets<MyPacketHandler>(16 * 1024)
         .Heartbeat<MyPacketHeartbeatHandler>()
-        .Size(16 * 1024).Window(1);
+        .Window(1);
 ```
 
-A **frame** is the data format of all network traffic other than packets: every heartbeat (when the host states one), receipt, retrieval request and user message, and any other frame the host's network processor exchanges, is an instance of the host's one frame type. The engine neither looks inside a frame nor knows what a frame means: what a frame is, who it is for, how it is routed, receipted or stored is the network processor's (see [Network Processor](#network-processor)). A **message** is what the user sees: the `Message<TPriority, TLevel, TAspect>` record, typed by the host's own enums (`Id`, `FromUser`, `Body`, `Addresses`, `SentAt`, `Priority`, `Tag`, `MessageLevel`, `MessageAspect`, `IsAlert`) is how the engine and the processor exchange it. The engine stores and shows `Message` records (as `MessageData` in the Inbox and Outbox) and the processor converts between them and its frames. The only optional frame kind the engine itself knows is the heartbeat: `Heartbeat<THandler>` states an `IHeartbeatHandler<TFrame, TPriority>` that recognizes and creates the empty frame a node sends over each MSMT connection to verify it, names its priority, and states how long a connection waits between heartbeats (`Interval`) and, while they fail, before the next try (`RetryInterval`); heartbeats are never sent over HDLC, and when no handler is stated none are sent at all and an MSMT connection counts as up once it is established. With packetization on, a heartbeat may instead be stated on the packet configuration (`Packets(p => p.Heartbeat<THandler>())`, the same `IHeartbeatHandler`, over the packet type): it is then sent as a packet of its own, beneath packetization, so it is never split or reassembled and the receiving assembler discards it, and it takes precedence over a frame heartbeat. `AutoForward<TController>` adds an auto forwarder (see [Auto Forward Controllers](#auto-forward-controllers)).
+A **frame** is the data format of all network traffic other than packets: every heartbeat (when the host states one), receipt, retrieval request and user message, and any other frame the host's network processor exchanges, is an instance of the host's one frame type. The engine neither looks inside a frame nor knows what a frame means: what a frame is, who it is for, how it is routed, receipted or stored is the network processor's (see [Network Processor](#network-processor)). A **message** is what the user sees: the `Message<TPriority, TLevel, TAspect>` record, typed by the host's own enums (`Id`, `FromUser`, `Body`, `Addresses`, `SentAt`, `Priority`, `Tag`, `MessageLevel`, `MessageAspect`, `IsAlert`) is how the engine and the processor exchange it. The engine stores and shows `Message` records (as `MessageData` in the Inbox and Outbox) and the processor converts between them and its frames. The only optional frame kind the engine itself knows is the heartbeat: `Heartbeat<THandler>` states an `IFrameHeartbeatHandler<TFrame, TPriority>` that recognizes and creates the empty frame a node sends over each MSMT connection to verify it, names its priority, and states how long a connection waits between heartbeats (`Interval`) and, while they fail, before the next try (`RetryInterval`); heartbeats are never sent over HDLC, and when no handler is stated none are sent at all and an MSMT connection counts as up once it is established. With packetization on, a heartbeat may instead be stated on the packet configuration (`Heartbeat<THandler>` on the packet configuration, an `IPacketHeartbeatHandler<TPacket, TPriority>` with the same members, over the packet type): it is then sent as a packet of its own, beneath packetization, so it is never split or reassembled and the receiving assembler discards it, and it takes precedence over a frame heartbeat. `AutoForward<TController>` adds an auto forwarder (see [Auto Forward Controllers](#auto-forward-controllers)).
 
-`Types` supplies the concrete frame type used throughout the engine, on the wire (peer and interface connections). `Frames` states the processor, the heartbeat and the controllers. The frame type needs no field mapping: the engine never reads a field of it. The type must satisfy whatever serializer is used for the wire, which by default is a `ProtobufSerializer` that builds only the frame type (so `[ProtoContract]`/`[ProtoMember]` attributes). `Serializer<TSerializer>` on the frame builder replaces it with a type implementing `IFrameSerializer` (derive from `FrameSerializer<TFrame, TPacket>` to work with the frame and packet types rather than `object`), instantiated through the running engine's dependency injection container, as long as every node this instance talks to (including its own interface connections) uses a matching one: Comlink never negotiates or advertises which format a payload used, so a mismatch deserializes garbage or throws rather than failing cleanly. A serializer can write into a `PooledBufferWriter` (an `IBufferWriter<byte>`, which a `Utf8JsonWriter` accepts) and return its `ToOwner()` to keep the buffers it hands back pooled rather than allocated per frame; `JsonSerializer` does this. A frame or packet type may implement `IDisposable` when it holds values that need disposal: the engine disposes the instances it creates or deserializes and never exposes to the host, namely a heartbeat, the packets it makes to carry a frame (once serialized), the packets that carried a received frame (once the frame has been deserialized and handed on) and frames it drops. Any frame or packet instance the host sees, such as the `Frame` of a processor's `OnReceived`, an item given to an initial processor or anything the host creates and sends itself, is never disposed by the engine and is the host's to dispose. `IFrameSerializer.Deserialize` is given the bytes and the first packet that carried the frame across (`null` when packetization is disabled, or the frame arrived over an interface connection), so a serializer can read what the host's own packet fields say about the frame; a custom serializer must make its format self-describing enough to rebuild the right type itself (the default wraps every payload in an outer envelope naming the type). Both serializers' `Deserialize` return a value or throw `InvalidDataException` for bytes they cannot or will not build (such as a type the sender names that is not this engine's own); the engine treats a throw as a rejected frame or packet. `Create` replaces `new TFrame()` for building an empty frame.
+`Types` supplies the concrete frame type used throughout the engine, on the wire (peer and interface connections). `Frames<TProcessor>` states the processor and starts the frame settings such as the heartbeat; `AutoForwarder` is stated on the engine builder. The frame type needs no field mapping: the engine never reads a field of it. The type must satisfy whatever serializer is used for the wire, which by default is a `ProtobufSerializer` that builds only the frame type (so `[ProtoContract]`/`[ProtoMember]` attributes). `Serializer<TSerializer>` on the frame builder replaces it with a type implementing `IFrameSerializer` (derive from `FrameSerializer<TFrame, TPacket>` to work with the frame and packet types rather than `object`), instantiated through the running engine's dependency injection container, as long as every node this instance talks to (including its own interface connections) uses a matching one: Comlink never negotiates or advertises which format a payload used, so a mismatch deserializes garbage or throws rather than failing cleanly. A serializer can write into a `PooledBufferWriter` (an `IBufferWriter<byte>`, which a `Utf8JsonWriter` accepts) and return its `ToOwner()` to keep the buffers it hands back pooled rather than allocated per frame; `JsonSerializer` does this. A frame or packet type may implement `IDisposable` when it holds values that need disposal: the engine disposes the instances it creates or deserializes and never exposes to the host, namely a heartbeat, the packets it makes to carry a frame (once serialized), the packets that carried a received frame (once the frame has been deserialized and handed on) and frames it drops. Any frame or packet instance the host sees, such as the `Frame` of a processor's `OnReceived`, an item given to an initial processor or anything the host creates and sends itself, is never disposed by the engine and is the host's to dispose. `IFrameSerializer.Deserialize` is given the bytes and the first packet that carried the frame across (`null` when packetization is disabled, or the frame arrived over an interface connection), so a serializer can read what the host's own packet fields say about the frame; a custom serializer must make its format self-describing enough to rebuild the right type itself (the default wraps every payload in an outer envelope naming the type). Both serializers' `Deserialize` return a value or throw `InvalidDataException` for bytes they cannot or will not build (such as a type the sender names that is not this engine's own); the engine treats a throw as a rejected frame or packet. `Create` replaces `new TFrame()` for building an empty frame.
 
-Packetization is off unless `Packets` is called, which needs a packet type stated in `Types` (calling it with `NoPacket` throws). With it, payloads are broken into prioritized packets of the host's packet type and reassembled on the other side. The host only states how its packet carries a piece of a frame, with a frame packet handler (`Frame<THandler>`, instantiated through dependency injection like the frame handlers, implementing `IFramePacketHandler<TPacket>`): `Create` takes a `FramePacketCreateContext` (payload id, packet index, packet count, payload length and the data slice, which is only valid during the call so a packet that stores it must copy it) and returns a packet; `IsValid` says whether a given packet is a frame packet, as opposed to one that carries no frame, such as a packet a handshake processor sends, and the engine refuses to reassemble a packet that is not one; and getters read the same five aspects back. The handler must be stated; all splitting, reassembly and priority scheduling is the engine's, so a host gets its own packet format and serialization without writing any packetization logic. The packet serializer, a type implementing `IPacketSerializer` (derive from `PacketSerializer<TFrame, TPacket>`) stated with `Serializer<TSerializer>` on the packet builder and instantiated the same way, defaults to a `ProtobufSerializer` that wraps every packet in an envelope naming its type, a fixed overhead per packet that a leaner custom serializer avoids. `IFrameSerializer.ConfigurePacket(frame, packet)` is called on every outgoing frame packet, once per packet in order and before the packet is serialized, so the frame serializer can set the host's own packet properties from the frame being packetized. `IPacketSerializer.Serialize` is also given the packet and the original frame being packetized (`null` for a packet that carries no frame, such as one an initial packet processor sends), so a packet's encoding can depend on its frame. `Size` (on the packet configuration, default 16 KiB) is the largest serialized packet in bytes: the engine measures what the serializer makes of a packet to see how much payload fits, and refuses to start, throwing an exception, if none does. `Window` (on the packet configuration, default 1) is how many packets may be in flight over one connection at once, and must be at least 1. `Size` is the only limit the engine applies: a frame or packet larger than a connection can carry (the HDLC `MaxInfoField`, say) fails to send, with the reason logged, so on a serial network the packet size must not be larger than `MaxInfoField`. Every node must be configured alike, since neither side can tell whether the other packetizes. Interface connections are never packetized.
+Packetization is off unless `Packets<THandler>(maxPayloadSize)` is called, which needs a packet type stated in `Types` (calling it with `NoPacket` throws). With it, payloads are broken into prioritized packets of the host's packet type and reassembled on the other side. The host only states how its packet carries a piece of a frame, with a packet handler (the type argument of `Packets<THandler>`, instantiated through dependency injection like the other handlers, implementing `IPacketHandler<TFrame, TPacket>`): `CreateFramePacket` takes a `FramePacketCreateContext<TFrame>` (the frame the packet is being created from, always set, the packet index, packet count, frame length and the payload slice, which is only valid during the call so a packet that stores it must copy it) and returns a packet; `IsFramePacket` says whether a given packet carries a piece of a frame, as opposed to one that carries no frame, such as a packet a handshake processor sends, and the engine refuses to reassemble a packet that does not; and getters read the same aspects back. The frame id (`GetFrameId`, a string) is the handler's to generate: every packet of one frame must report the same one and two frames in flight over a connection must not share one, so a handler typically derives it from the frame it is given or remembers it while a frame's packets are created; the engine rejects a frame whose packets disagree. The handler is required; all splitting, reassembly and priority scheduling is the engine's, so a host gets its own packet format and serialization without writing any packetization logic. The packet serializer, a type implementing `IPacketSerializer` (derive from `PacketSerializer<TFrame, TPacket>`) stated with `Serializer<TSerializer>` on the packet builder and instantiated the same way, defaults to a `ProtobufSerializer` that wraps every packet in an envelope naming its type, a fixed overhead per packet that a leaner custom serializer avoids. `IFrameSerializer.ConfigurePacket(frame, packet)` is called on every outgoing frame packet, once per packet in order and before the packet is serialized, so the frame serializer can set the host's own packet properties from the frame being packetized. `IPacketSerializer.Serialize` is also given the packet and the original frame being packetized (`null` for a packet that carries no frame, such as one an initial packet processor sends), so a packet's encoding can depend on its frame. The maximum payload size (the argument of `Packets`, at least 1) is the largest slice of a serialized frame a packet carries, in bytes. It limits the payload only: the packet's own fields come on top of it. `Window` (on the packet configuration, default 1) is how many packets may be in flight over one connection at once, and must be at least 1. The engine applies no other limit: a packet larger than a connection can carry (the HDLC `MaxInfoField`, say) fails to send, with the reason logged, so on a serial network the payload size must leave room within `MaxInfoField` for a packet's own fields. Every node must be configured alike, since neither side can tell whether the other packetizes. Interface connections are never packetized.
 
 Internally the configuration becomes a `FrameMap` (type, serializer, create, heartbeat) and a `PacketMap`, whose accessors and handlers take the frame or packet as an `object`, since that is the boundary every other layer (LiteDB storage, MSMT wire serialization) operates at. A packet member of an engine that never called `Packets` throws `NotSupportedException`, because nothing calls them.
 
@@ -61,7 +59,7 @@ Internally the configuration becomes a `FrameMap` (type, serializer, create, hea
 
 **Network file:** none; the file has no field for any frame or packet member.
 
-**Sample:** `EngineConfiguration` states `Frame`, a DTO with its own field names (`Id`, `Sender`, `Title`, `Text`, `Recipients`, ...) that its `NetworkProcessor` converts to and from `Message`, and turns packetization on with `Packet`, with a packet size of 1024 bytes to match its HDLC `MaxInfoField` and the default window.
+**Sample:** `EngineConfiguration` states `Frame`, a DTO with its own field names (`Id`, `Sender`, `Title`, `Text`, `Recipients`, ...) that its `NetworkProcessor` converts to and from `Message`, and turns packetization on with `Packet`, with a maximum payload size of 512 bytes so a packet stays within its HDLC `MaxInfoField` of 1024, and the default window.
 
 ---
 
@@ -137,12 +135,13 @@ The current user's info is what decides how this node behaves, so it is read onc
 
 ```csharp
 engine
-    .Packets().Handshake<MyPacketHandshake>();
+    .Frames<MyNetworkProcessor>().Handshake<MyFrameHandshake>()
+    .Packets<MyPacketHandler>(16 * 1024).Handshake<MyPacketHandshake>();
 ```
 
-Who is on the other end of a connection, decided as the connection forms. All traffic between nodes is a serialized instance of the configured frame type, or of the packet type when packets are configured, and nothing else, so the introduction is too: an `IHandshakeProcessor<TPacket>` (stated with `Handshake` on the packet configuration) gets `OnConnected` on both nodes when a connection forms, `OnReceived` on either node for each item the other sent, every time with a controller that can send an item, mark the connection fully connected as a user name, or disconnect it. The handshake runs beneath the packetizer, and the name the processor marks the connection connected as wins; otherwise the engine names the user from what it knows of the connection (an `IIpConnectionInfo` for IP: the remote host, port and certificate names; an `ISerialConnectionInfo` for serial: the port and addresses; and this node's own `LocalUser`, which a processor can read). The handshake, where it sits in the transport stack, and what the engine does by default are described in [Identification.md](Identification.md). Every node on a network must be configured alike, as with packetization. Processors are stated by type and instantiated through the running engine's dependency injection container (the instance the host registered for the type, or else one constructed from the host's services), once and on first use, so a processor's constructor can take services.
+Who is on the other end of a connection, decided as the connection forms. All traffic between nodes is a serialized instance of the configured frame type, or of the packet type when packets are configured, and nothing else, so the introduction is too: a handshake processor gets `OnConnected` on both nodes when a connection forms, `OnReceived` on either node for each item the other sent, every time with a controller that can send an item, mark the connection fully connected as a user name, or disconnect it. Two kinds exist and either, both or neither may be stated: an `IPacketHandshakeProcessor<TPacket>` (stated with `Handshake` on the packet configuration), whose items are packets sent as they are beneath the packetizer, and an `IFrameHandshakeProcessor<TFrame>` (stated with `Handshake` on the frame configuration), whose items are frames, split into packets like any frame, above the packetizer and after the packet handshake. The name the processor marks the connection connected as wins; otherwise the engine names the user from what it knows of the connection (an `IIpConnectionInfo` for IP: the remote host, port and certificate names; an `ISerialConnectionInfo` for serial: the port and addresses; and this node's own `LocalUser`, which a processor can read). The handshake, where it sits in the transport stack, and what the engine does by default are described in [Identification.md](Identification.md). Every node on a network must be configured alike, as with packetization. Processors are stated by type and instantiated through the running engine's dependency injection container (the instance the host registered for the type, or else one constructed from the host's services), once and on first use, so a processor's constructor can take services.
 
-**Default:** the engine identifies an IP connection by its certificate name and a serial connection by its port name, and no handshake processor is stated, so no exchange takes place.
+**Default:** the engine identifies an IP connection by its certificate name and a serial connection by its port name, and no handshake processor is stated, so no handshake takes place.
 
 **Network file:** none, because these are behavior, not settings.
 
@@ -244,30 +243,29 @@ A message has an identifier, which the draft handler states: `NextId(previous)` 
 
 ```csharp
 engine
-    .Priorities()
-        .Priority(MessagePriority.Receipt).Mode(PriorityMode.System)
-        .Block(null, "SPAM").Block(MessagePriority.High, null);
+    .Priority(MessagePriority.Receipt).Mode(PriorityMode.System)
+    .Drafts<MyDraftHandler>();
 ```
 
-How messages are composed and displayed: the priority levels, members of the enum `TPriority` stated in `Types`, each stated in the sub-configuration `Priorities()`, whose calls continue the same fluent chain, lowest first: the order stated is the send priority, never the order of the enum, so later levels are sent first on every connection (see [Peer.md](Peer.md)), and a member not stated is not a level. `Priority(level)` states a level and selects it to give it a `Label` (its name, the member name in uppercase by default) and a `Mode` (the GUI offers `User` priorities to users composing a message and never offers `System` ones, which restricts only the GUI, not code), and `Block(level, tag)` blocks a tag and priority combination when composing a draft (each pairs an optional level with an optional case-insensitive tag; `null` matches any value for that field). In code a level is the enum member (`Message.Priority` and the priority given to `Send` are members of the host's enum); in long-term storage (drafts and exports) it is the enum member's integer value, so reordering or relabelling the levels does not change what stored data means, and a value that is not a stated level is the lowest level. **A member's value must therefore never change or be reused, even for a level that is no longer stated**, or data stored earlier would read as another level. A message carries the priority its user chose, and the processor gives each frame it sends a priority, so receipts and requests can be ordered against messages. Whether message tags are shown anywhere in the UI and what the tag input's watermark says.
+How messages are composed and displayed: the priority levels, members of the enum `TPriority` stated in `Types`, each stated with the top-level `Priority(level)` call, lowest first: the order stated is the send priority, never the order of the enum, so later levels are sent first on every connection (see [Peer.md](Peer.md)), and a member not stated is not a level. `Priority(level)` states a level and selects it to give it a `Label` (its name, the member name in uppercase by default) and a `Mode` (the GUI offers `User` priorities to users composing a message and never offers `System` ones, which restricts only the GUI, not code). The draft handler's `IsAllowed(context, priority, level, aspect, tag)` returns (`context` is an `IEngineContext` snapshot of the engine, so a rule can depend on the current user or who is connected) whether a draft may have that combination (`level` and `aspect` are `null` when none, `tag` is empty for none). In code a level is the enum member (`Message.Priority` and the priority given to `Send` are members of the host's enum); in long-term storage (drafts and exports) it is the enum member's integer value, so reordering or relabelling the levels does not change what stored data means, and a value that is not a stated level is the lowest level. **A member's value must therefore never change or be reused, even for a level that is no longer stated**, or data stored earlier would read as another level. A message carries the priority its user chose, and the processor gives each frame it sends a priority, so receipts and requests can be ordered against messages. Whether message tags are shown anywhere in the UI and what the tag input's watermark says.
 
-`DraftViewModel` enforces the blocked-combination rules proactively rather than only at send time: `AvailablePriorities` excludes any priority blocked for the currently-entered tag, and setting `Tag` to a value blocked for the currently-selected priority is rejected outright (the value reverts), so a blocked combination can never actually be entered in the draft editor. `SendCommand` also re-checks before sending, as a defense-in-depth safety net. See `Docs/Components/ViewModels.md`.
+`DraftViewModel` asks the draft handler proactively rather than only at send time: the priority, message level and message aspect pickers offer only choices some allowed combination with the entered tag uses, choosing one that the other current choices block moves them to the allowed combination that keeps the most of what was chosen, and setting `Tag` to a value that blocks every combination is rejected outright (the value reverts), so a blocked combination can never actually be entered in the draft editor. `SendCommand` also re-checks before sending, as a defense-in-depth safety net. See `Docs/Components/ViewModels.md`.
 
-**Default:** the levels must be stated (the engine refuses to start otherwise), each a `User` level named by its member name in uppercase. A priority or message level is never used unless it is stated: a message with one that is not stated is refused when the processor calls `ReceiveMessage` or the GUI sends it, and an imported one is dropped with an error logged; tags on (the draft handler's `EnableTags`) with label `"Tag"`; no blocked combinations. Stating a level again selects it without changing its place. With `NoPriority` the only level is `"NORMAL"` and everything is sent at priority 0. Nothing is ever sent with a priority outside the configured levels: a priority given to `Send` is brought within them, heartbeats go at the lowest level, and the handshake that identifies a connection at the highest.
+**Default:** the levels must be stated (the engine refuses to start otherwise), each a `User` level named by its member name in uppercase. A priority or message level is never used unless it is stated: a message with one that is not stated is refused when the processor calls `ReceiveMessage` or the GUI sends it, and an imported one is dropped with an error logged; tags on (the draft handler's `EnableTags`) with label `"Tag"`; no draft handler, so every combination is allowed. Stating a level again selects it without changing its place. With `NoPriority` the only level is `"NORMAL"` and everything is sent at priority 0. Nothing is ever sent with a priority outside the configured levels: a priority given to `Send` is brought within them, heartbeats go at the lowest level, and the handshake that identifies a connection at the highest.
 
 **Network file:** none; tags, priorities and blocked combinations are all stated in code.
 
-**Sample:** `EngineConfiguration` states its `MessagePriority` enum: three user levels (`Low`, `Medium`, `High`) and two system ones (`Retrieval`, `Receipt`, used by its processor) instead of the default's one, and demonstrates both blocked-combination kinds: the `"SPAM"` tag is blocked regardless of priority, and `High` priority is blocked regardless of tag. Unlike Sample's other settings, the blocked combinations deliberately change default behavior from the engine's permissive "no blocks" default, since that is the only way to usefully demonstrate that part of the configuration.
+**Sample:** `EngineConfiguration` states its `MessagePriority` enum: three user levels (`Low`, `Medium`, `High`) and two system ones (`Retrieval`, `Receipt`, used by its processor) instead of the default's one, and a `DraftHandler` whose `IsAllowed` blocks the `"SPAM"` tag regardless of the rest, and `High` priority regardless of the rest. Unlike Sample's other settings, the blocking deliberately changes default behavior from the engine's permissive "no blocks" default, since that is the only way to usefully demonstrate that part of the configuration.
 
 ---
 
 ### Address Type Labels
 
 ```csharp
-engine.AddressTypes().Type(AddressType.External).Label("OUTSIDE");
+engine.AddressType(AddressType.External).Label("OUTSIDE");
 ```
 
-The `AddressTypes()` sub-configuration, whose `Type(type)` selects an address type and whose `Label(...)` overrides the display label shown for it, everywhere it appears in the UI: the address type picker in the draft editor, the per-address badge next to each recipient, and the message view's section headers. Each label applies to exactly the type selected; every other type keeps its own current label (its own override, if stated, or the default). The underlying `AddressType` value itself never changes - overriding a label only changes what the user reads, not how an address is stored, routed, or read by the message handler's `GetAddresses`.
+The `AddressType(type)` call selects an address type and its `Label(...)` overrides the display label shown for it, everywhere it appears in the UI: the address type picker in the draft editor, the per-address badge next to each recipient, and the message view's section headers. Each label applies to exactly the type selected; every other type keeps its own current label (its own override, if stated, or the default). The underlying `AddressType` value itself never changes - overriding a label only changes what the user reads, not how an address is stored, routed, or read by the message handler's `GetAddresses`.
 
 **Default:** the enum name itself (`"To"`, `"Cc"`, `"External"`).
 
@@ -281,8 +279,7 @@ The `AddressTypes()` sub-configuration, whose `Type(type)` selects an address ty
 
 ```csharp
 engine
-    .MessageLevels()
-        .Level(MessageLevel.Public).Color("#2E7D32")
+    .Level(MessageLevel.Public).Color("#2E7D32")
         .Level(MessageLevel.Internal).Color("#1565C0")
         .Level(MessageLevel.Restricted).Color("#C62828");
 ```
@@ -303,8 +300,7 @@ The engine does not enforce a destination's level on its own: whether a user may
 
 ```csharp
 engine
-    .MessageAspects()
-        .Aspect(MessageAspect.Encrypted)
+    .Aspect(MessageAspect.Encrypted)
         .Aspect(MessageAspect.Signed).Label("SIGNED BY SENDER");
 ```
 
@@ -372,7 +368,7 @@ Whether the user can delete entries and subfolders, decided per root folder, nev
 ### Export Formats
 
 ```csharp
-engine.Exports().Format<MyCsvExportFormat>();
+engine.Export<MyCsvExportFormat>();
 
 public sealed class MyCsvExportFormat : IExportFormat
 {
@@ -391,7 +387,7 @@ public sealed class MyCsvExportFormat : IExportFormat
 }
 ```
 
-The `Exports()` sub-configuration's `Format<T>()` adds a custom export format, a type implementing `IExportFormat` that is instantiated through the running engine's dependency injection container (the instance the host registered for it, or else one constructed from the host's services), shown as an option in the export screen's format picker alongside the built-in JSON
+`Export<T>()` adds a custom export format, a type implementing `IExportFormat` that is instantiated through the running engine's dependency injection container (the instance the host registered for it, or else one constructed from the host's services), shown as an option in the export screen's format picker alongside the built-in JSON
 format (see `Docs/Components/ViewModels.md`, `IExportViewModel`). `Export` is handed one entry - a
 `MessageExportData`, `DraftExportData`, `NoteExportData`, or `ActivityLogExportData` depending on which root
 folder type it came from, the exact same public DTOs the engine's own built-in JSON export writes - and a stream
@@ -419,7 +415,7 @@ format instead.
 ### Import Formats
 
 ```csharp
-engine.Imports().Format<MyCsvImportFormat>();
+engine.Import<MyCsvImportFormat>();
 
 public sealed class MyCsvImportFormat : IImportFormat<MyPriority, MyMessageLevel>
 {
@@ -441,7 +437,7 @@ public sealed class MyCsvImportFormat : IImportFormat<MyPriority, MyMessageLevel
 }
 ```
 
-The `Imports()` sub-configuration's `Format<T>()` adds a custom import format, a type implementing `IImportFormat<TPriority, TLevel>` that is instantiated through the running engine's dependency injection container, shown as an option in the import screen's format picker alongside the built-in
+`Import<T>()` adds a custom import format, a type implementing `IImportFormat<TPriority, TLevel>` that is instantiated through the running engine's dependency injection container, shown as an option in the import screen's format picker alongside the built-in
 package format (see `Docs/Components/ViewModels.md`, `IImportViewModel`). Selecting it changes which files the
 screen finds on the source drive - not `IExportService.PackageExtension` packages, but files whose extension
 matches this format's own name-derived extension (the same derivation an `ExportFormat` entry's file extension
@@ -478,8 +474,7 @@ a second apart (`StagedSendMode.Sequential`, a one second `StagedSendDelay`).
 ### Auto Forwarders
 
 ```csharp
-engine.Frames()
-    .AutoForwarder("Escalation");
+engine.AutoForwarder("Escalation");
 ```
 
 Adds an auto forwarder with a name, shown as an option in the auto forward screen to every user whose `AutoForwarders` in the network file lists that name. Each of them can open it there and maintain their own locally-saved target list, added to and removed from freely, persisted between restarts (see `Docs/Components/ViewModels.md`, `IAutoForwardViewModel`). An auto forwarder is only a name and a target list: the engine never forwards anything itself. The network processor reads the list with `GetAutoForwardTargets(name)` and decides which received messages to forward and how (the current user is never in the list it returns, so a forward cannot loop back to them). Stating a name twice adds it once.
@@ -507,10 +502,10 @@ The engine keeps a store of messages for the network processor (`StoreMessage` a
 ### HDLC Options
 
 ```csharp
-engine.Connections().Hdlc(new HdlcPeerOptions { MaxInfoField = 1024, Link = new HdlcPeerOptions().Link with { Crc = HdlcCrc.Crc32Ccitt } });
+engine.Hdlc().MaxInfoField(1024).Crc(HdlcCrc.Crc32Ccitt);
 ```
 
-The options every serial connection starts its HDLC peer with: line encoding, CRC and clocking (`Link`, which must match the station at the far end of the cable), frame size, transmit window and retransmission timing. The options object is the MicroGate package's `HdlcPeerOptions`, defaulting to the package defaults. The HDLC address is not an option; each serial `ConnectionPoint` supplies it, used as both this station's and the remote station's address.
+The options every serial connection starts its HDLC peer with: line encoding, CRC and clocking (`Link`, which must match the station at the far end of the cable), frame size, transmit window and retransmission timing. `Hdlc()` is its own top-level configuration with one call per option (`Encoding`, `Crc`, the clock sources, `ClockSpeed`, `MaxInfoField`, `TransmitWindow`, `RetransmitInterval`, `MaxRetransmissions` and the rest of the MicroGate package's `HdlcPeerOptions`), each defaulting to the package's own value. The HDLC address is not an option; each serial `ConnectionPoint` supplies it, used as both this station's and the remote station's address.
 
 **Default:** the MicroGate package's HDLC peer defaults.
 
@@ -524,17 +519,17 @@ MSMT peer authentication is mandatory - there is no unauthenticated mode. The ce
 
 The MSMT options (identity certificate plus trusted authority) used for both inbound and outbound session peer connections are built from those files by `ConfiguredEngineController`, for the current user (via `ICurrentUserProvider`). If either key is missing, there is no current user yet, or either file is missing, building them throws `InvalidOperationException`; callers (`PeerService`, `ClientPeerService`, `ServerRoutingService`, `InterfaceService`) catch this at startup, log it, and simply don't start their listener, retried the next time the host restarts once a user and the files are in place. A host never touches this security-sensitive credential logic.
 
-`Connections().Msmt` adjusts the other MSMT settings (handshake, stall and response timeouts, TCP keep-alive, session lifetimes and keep-alive intervals) for every IP connection, inbound and outbound, including the interface listener. It takes a `MsmtConnectionOptions` object (handshake, stall and response timeouts, TCP keep-alive time, session lifetimes and keep-alive intervals, each defaulting to the MSMT package's own value) instead of the library's session options, since those require credentials the engine supplies. Its values are laid over the options built above, and the credentials and hostname rule stay the engine's:
+`Msmt()` is its own top-level configuration that adjusts the other MSMT settings (handshake, stall and response timeouts, TCP keep-alive, session lifetimes and keep-alive intervals) for every IP connection, inbound and outbound, including the interface listener. It has one call per setting (`HandshakeTimeout`, `StallTimeout`, `ResponseTimeout`, `TcpKeepAliveTime`, `MaximumSessionLifetime`, `SessionLifetime`, `KeepAliveMinInterval`, `KeepAliveMaxInterval`, each defaulting to the MSMT package's own value) instead of the library's session options, since those require credentials the engine supplies. Its values are laid over the options built above, and the credentials and hostname rule stay the engine's:
 
 ```csharp
-engine.Connections().Msmt(new MsmtConnectionOptions { HandshakeTimeout = TimeSpan.FromSeconds(20) });
+engine.Msmt().HandshakeTimeout(TimeSpan.FromSeconds(20));
 ```
 
-**Default:** the MSMT options are left at the package defaults. Sample states a 15 second handshake timeout and a 60 second response timeout through `Connections().Msmt`.
+**Default:** the MSMT options are left at the package defaults. Sample states a 15 second handshake timeout and a 60 second response timeout through `Msmt()`.
 
 **Network file:** `CertificateStore` and `AuthorityCertificate` are required for connections and are the only source of certificates; see [Config.md](Config.md).
 
-**Sample:** Sample states only the `Connections().Msmt` timeouts and provisions no certificates of its own; `Scripts/Scenarios/` demonstrates the `CertificateStore`/`AuthorityCertificate` keys with `{USERNAME}.pfx` files checked in alongside each scenario's config.
+**Sample:** Sample states only the `Msmt()` timeouts and provisions no certificates of its own; `Scripts/Scenarios/` demonstrates the `CertificateStore`/`AuthorityCertificate` keys with `{USERNAME}.pfx` files checked in alongside each scenario's config.
 
 ---
 
@@ -590,7 +585,7 @@ Each external system is constructed directly by the configuration, not resolved 
 ### Network Processor
 
 ```csharp
-engine.Frames().Processor<MyNetworkProcessor>();
+engine.Frames<MyNetworkProcessor>();
 
 public sealed class MyNetworkProcessor : INetworkProcessor<MyFrame, MyPriority, MyMessageLevel, MyMessageAspect>
 {

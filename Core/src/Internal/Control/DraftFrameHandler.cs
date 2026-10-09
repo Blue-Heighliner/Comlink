@@ -21,6 +21,13 @@ internal interface IDraftFrameHandler
     Enum? DefaultMessageLevel { get; }
     /// <summary>Gets the message aspect a new draft starts with as the host's enum member, or <see langword="null"/> for none.</summary>
     Enum? DefaultMessageAspect { get; }
+    /// <summary>Returns whether a draft may have this combination.</summary>
+    /// <param name="context">A snapshot of the engine.</param>
+    /// <param name="priority">The priority as the host's enum member.</param>
+    /// <param name="level">The message level as the host's enum member, or <see langword="null"/> for none.</param>
+    /// <param name="aspect">The message aspect as the host's enum member, or <see langword="null"/> for none.</param>
+    /// <param name="tag">The tag, empty for none.</param>
+    bool IsAllowed(IEngineContext context, Enum priority, Enum? level, Enum? aspect, string tag);
     /// <summary>Returns whether a message sent from the draft in <paramref name="content"/> is an alert.</summary>
     /// <param name="content">The draft as it currently is.</param>
     bool IsAlert(DraftContent content);
@@ -61,6 +68,10 @@ internal sealed class DraftFrameHandler<TPriority, TLevel, TAspect>(IDraftHandle
 
     /// <inheritdoc />
     public Enum? DefaultMessageAspect => handler.DefaultMessageAspect is { } aspect ? aspect : null;
+
+    /// <inheritdoc />
+    public bool IsAllowed(IEngineContext context, Enum priority, Enum? level, Enum? aspect, string tag)
+        => handler.IsAllowed(context, (TPriority)(object)priority, level is null ? null : (TLevel)(object)level, aspect is null ? null : (TAspect)(object)aspect, tag);
 
     /// <inheritdoc />
     public bool IsAlert(DraftContent content) => handler.IsAlert(ToState(content));

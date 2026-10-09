@@ -1,7 +1,7 @@
 namespace BlueHeighliner.Comlink.Tests;
 
-/// <summary>Test <see cref="IHeartbeatHandler{TFrame, TPriority}"/> for <see cref="TestFrame"/>, recognizing frames with <see cref="TestFrame.IsHeartbeat"/> set.</summary>
-public sealed class TestHeartbeatHandler : IHeartbeatHandler<TestFrame, TestMessagePriority>
+/// <summary>Test <see cref="IFrameHeartbeatHandler{TFrame, TPriority}"/> for <see cref="TestFrame"/>, recognizing frames with <see cref="TestFrame.IsHeartbeat"/> set.</summary>
+public sealed class TestHeartbeatHandler : IFrameHeartbeatHandler<TestFrame, TestMessagePriority>
 {
     /// <inheritdoc />
     public TestMessagePriority Priority { get; init; } = TestMessagePriority.Normal;

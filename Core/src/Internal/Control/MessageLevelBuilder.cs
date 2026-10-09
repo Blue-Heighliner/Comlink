@@ -1,13 +1,13 @@
 namespace BlueHeighliner.Comlink;
 
-/// <summary>Collects what is stated through <see cref="IMessageLevelsBuilder{TFrame, TPacket, TPriority, TLevel, TAspect}"/> and <see cref="IMessageLevelBuilder{TFrame, TPacket, TPriority, TLevel, TAspect}"/>, recording what is stated about each level and turning it into the engine's message levels.</summary>
+/// <summary>Collects what is stated through <see cref="IEngineBuilder{TFrame, TPacket, TPriority, TLevel, TAspect}"/> and <see cref="IMessageLevelBuilder{TFrame, TPacket, TPriority, TLevel, TAspect}"/>, recording what is stated about each level and turning it into the engine's message levels.</summary>
 internal sealed class MessageLevelBuilder<TLevel> where TLevel : struct, Enum
 {
     private readonly Dictionary<TLevel, (string? Label, string? Color)> options = [];
     private readonly List<TLevel> order = [];
     private TLevel current;
 
-    /// <inheritdoc cref="IMessageLevelsBuilder{TFrame, TPacket, TPriority, TLevel, TAspect}.Level(TLevel)"/>
+    /// <inheritdoc cref="IEngineBuilder{TFrame, TPacket, TPriority, TLevel, TAspect}.Level(TLevel)"/>
     public MessageLevelBuilder<TLevel> Level(TLevel level)
     {
         current = level;

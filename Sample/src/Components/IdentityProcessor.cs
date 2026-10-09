@@ -6,13 +6,13 @@ namespace BlueHeighliner.Comlink.Sample;
 /// the other node answers with one carrying its own, and each marks the connection connected as the user the other named, so a serial link needs no <c>User</c> on its
 /// outgoing point and an IP connection does not depend on certificate names.
 /// </summary>
-public sealed class IdentityProcessor : IHandshakeProcessor<Packet>
+public sealed class IdentityProcessor : IPacketHandshakeProcessor<Packet>
 {
     /// <inheritdoc />
     public TimeSpan Timeout { get; } = TimeSpan.FromSeconds(10);
 
     /// <inheritdoc />
-    public async Task OnConnected(IHandshakeContext<Packet> context)
+    public async Task OnConnected(IPacketHandshakeContext<Packet> context)
     {
         if (Starts(context))
         {
@@ -21,7 +21,7 @@ public sealed class IdentityProcessor : IHandshakeProcessor<Packet>
     }
 
     /// <inheritdoc />
-    public async Task OnReceived(IHandshakeContext<Packet> context, Packet packet)
+    public async Task OnReceived(IPacketHandshakeContext<Packet> context, Packet packet)
     {
         if (!Starts(context))
         {
@@ -38,8 +38,8 @@ public sealed class IdentityProcessor : IHandshakeProcessor<Packet>
         }
     }
 
-    private bool Starts(IHandshakeContext<Packet> context)
+    private bool Starts(IPacketHandshakeContext<Packet> context)
         => context.Connection is ISerialConnectionInfo serial ? serial.SerialAddress > serial.RemoteSerialAddress : !context.Connection.IsInbound;
 
-    private Packet Announce(IHandshakeContext<Packet> context) => new() { Chunk = Encoding.UTF8.GetBytes(context.Connection.LocalUser ?? string.Empty) };
+    private Packet Announce(IPacketHandshakeContext<Packet> context) => new() { Chunk = Encoding.UTF8.GetBytes(context.Connection.LocalUser ?? string.Empty) };
 }

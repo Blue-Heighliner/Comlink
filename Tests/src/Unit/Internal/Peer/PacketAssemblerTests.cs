@@ -8,12 +8,12 @@ public sealed class PacketAssemblerTests
 
     private static byte[] Payload(int length, byte seed = 0) => [.. Enumerable.Range(0, length).Select(i => (byte)((i + seed) % 251))];
 
-    private static Packetizer Build(int maxPendingPayloads = 32, int maxPayloadSize = 64 * 1024 * 1024)
-        => new(new RawPacketEngineController(packetSize: Header + 10), maxPayloadSize, maxPendingPayloads);
+    private static Packetizer Build(int maxPendingFrames = 32, int maxFrameSize = 64 * 1024 * 1024)
+        => new(new RawPacketEngineController(payloadSize: 10), maxFrameSize, maxPendingFrames);
 
     private static List<byte[]> Packets(Packetizer packetizer, byte[] payload)
     {
-        IReadOnlyList<Packet> packets = packetizer.Split(payload, 0);
+        IReadOnlyList<Packet> packets = packetizer.Split(payload, 0, new TestFrame());
         List<byte[]> bytes = [.. packets.Select(p => p.Data.Memory.ToArray())];
         foreach (Packet packet in packets)
         {
@@ -168,7 +168,7 @@ public sealed class PacketAssemblerTests
     [Fact]
     public void Add_PayloadOverLimit_Throws()
     {
-        using IPacketAssembler assembler = Build(maxPayloadSize: 20).CreateAssembler();
+        using IPacketAssembler assembler = Build(maxFrameSize: 20).CreateAssembler();
 
         Assert.Throws<InvalidDataException>(() => assembler.Add(Wire(1, 0, 3, 25, Payload(10))));
     }
@@ -235,7 +235,7 @@ public sealed class PacketAssemblerTests
     [Fact]
     public void Add_TooManyPending_DropsOldest()
     {
-        Packetizer packetizer = Build(maxPendingPayloads: 2);
+        Packetizer packetizer = Build(maxPendingFrames: 2);
         using IPacketAssembler assembler = packetizer.CreateAssembler();
         byte[] second = Payload(15, seed: 50);
         List<byte[]> a = Packets(packetizer, Payload(15));
@@ -254,7 +254,7 @@ public sealed class PacketAssemblerTests
     [Fact]
     public void Add_PendingBytesOverBudget_DropsOldest()
     {
-        using IPacketAssembler assembler = Build(maxPayloadSize: 40).CreateAssembler();
+        using IPacketAssembler assembler = Build(maxFrameSize: 40).CreateAssembler();
         byte[] second = Payload(40, seed: 50);
         byte[][] a = [.. Enumerable.Range(0, 4).Select(i => Wire(1, i, 4, 40, Payload(10)))];
         byte[][] b = [.. Enumerable.Range(0, 4).Select(i => Wire(2, i, 4, 40, second[(i * 10)..((i * 10) + 10)]))];
@@ -272,7 +272,7 @@ public sealed class PacketAssemblerTests
     [Fact]
     public void Add_InvalidFirstPacket_DoesNotEvictPendingPayloads()
     {
-        Packetizer packetizer = Build(maxPendingPayloads: 1);
+        Packetizer packetizer = Build(maxPendingFrames: 1);
         using IPacketAssembler assembler = packetizer.CreateAssembler();
         byte[] payload = Payload(15);
         List<byte[]> packets = Packets(packetizer, payload);
@@ -300,7 +300,7 @@ public sealed class PacketAssemblerTests
     [Fact]
     public void Add_DisposesEveryPacketButTheFirst()
     {
-        RawPacketEngineController controller = new(packetSize: Header + 10);
+        RawPacketEngineController controller = new(payloadSize: 10);
         Packetizer packetizer = new(controller);
         List<byte[]> packets = Packets(packetizer, Payload(25));
         RawPacketSerializer packetSerializer = (RawPacketSerializer)controller.PacketSerializer!;
@@ -320,7 +320,7 @@ public sealed class PacketAssemblerTests
     [Fact]
     public void Add_DisposesAHeldFirstPacketWithTheAssembler_AndARepeatAtOnce()
     {
-        RawPacketEngineController controller = new(packetSize: Header + 10);
+        RawPacketEngineController controller = new(payloadSize: 10);
         Packetizer packetizer = new(controller);
         List<byte[]> packets = Packets(packetizer, Payload(25));
         RawPacketSerializer packetSerializer = (RawPacketSerializer)controller.PacketSerializer!;

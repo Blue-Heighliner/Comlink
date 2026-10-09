@@ -4,32 +4,20 @@ namespace BlueHeighliner.Comlink;
 internal sealed class FrameBuilder<TFrame, TPriority, TLevel, TAspect> where TFrame : class, new() where TPriority : struct, Enum where TLevel : struct, Enum where TAspect : struct, Enum
 {
     private ServiceRegistration<IFrameSerializer> serializer = new(_ => new ProtobufSerializer(typeof(TFrame)));
-    private readonly List<AutoForwarderDefinition> autoForwarders = [];
     private Func<TFrame> create = () => new();
-    private ServiceRegistration<IHeartbeatFrameHandler>? heartbeat;
+    private ServiceRegistration<IHeartbeatItemHandler>? heartbeat;
 
+
+    /// <summary>The handshake processor, if stated.</summary>
+    public ServiceRegistration<IHandshakeHandler>? HandshakeHandler { get; private set; }
 
     /// <summary>The processor that carries out the host's protocol, if stated.</summary>
     public ServiceRegistration<INetworkHandler>? NetworkHandler { get; private set; }
 
-    /// <summary>The auto forwarders.</summary>
-    public IReadOnlyList<AutoForwarderDefinition> AutoForwarders => autoForwarders;
-
-    /// <inheritdoc cref="IFrameBuilder{TFrame, TPacket, TPriority, TLevel, TAspect}.AutoForwarder"/>
-    public FrameBuilder<TFrame, TPriority, TLevel, TAspect> AutoForwarder(string name)
-    {
-        if (autoForwarders.All(forwarder => forwarder.Name != name))
-        {
-            autoForwarders.Add(new() { Name = name });
-        }
-
-        return this;
-    }
-
     /// <inheritdoc cref="IFrameBuilder{TFrame, TPacket, TPriority, TLevel, TAspect}.Heartbeat{THandler}"/>
-    public FrameBuilder<TFrame, TPriority, TLevel, TAspect> Heartbeat<THandler>() where THandler : IHeartbeatHandler<TFrame, TPriority>
+    public FrameBuilder<TFrame, TPriority, TLevel, TAspect> Heartbeat<THandler>() where THandler : IFrameHeartbeatHandler<TFrame, TPriority>
     {
-        heartbeat = ServiceRegistration<IHeartbeatFrameHandler>.Of(typeof(THandler), handler => new HeartbeatFrameHandler<TFrame, TPriority>((IHeartbeatHandler<TFrame, TPriority>)handler));
+        heartbeat = ServiceRegistration<IHeartbeatItemHandler>.Of(typeof(THandler), handler => new FrameHeartbeatItemHandler<TFrame, TPriority>((IFrameHeartbeatHandler<TFrame, TPriority>)handler));
         return this;
     }
 
@@ -47,7 +35,8 @@ internal sealed class FrameBuilder<TFrame, TPriority, TLevel, TAspect> where TFr
         return this;
     }
 
-    /// <inheritdoc cref="IFrameBuilder{TFrame, TPacket, TPriority, TLevel, TAspect}.Processor{TProcessor}"/>
+    /// <summary>States the processor that carries out the host's protocol.</summary>
+    /// <typeparam name="TProcessor">The processor type.</typeparam>
     public FrameBuilder<TFrame, TPriority, TLevel, TAspect> Processor<TProcessor>() where TProcessor : INetworkProcessor<TFrame, TPriority, TLevel, TAspect>
     {
         NetworkHandler = ServiceRegistration<INetworkHandler>.Of(typeof(TProcessor), processor => new NetworkHandler<TFrame, TPriority, TLevel, TAspect>((INetworkProcessor<TFrame, TPriority, TLevel, TAspect>)processor));
@@ -64,4 +53,11 @@ internal sealed class FrameBuilder<TFrame, TPriority, TLevel, TAspect> where TFr
             Create = () => create(),
             Heartbeat = heartbeat
         };
+
+    /// <inheritdoc cref="IFrameBuilder{TFrame, TPacket, TPriority, TLevel, TAspect}.Handshake{TProcessor}"/>
+    public FrameBuilder<TFrame, TPriority, TLevel, TAspect> Handshake<TProcessor>() where TProcessor : IFrameHandshakeProcessor<TFrame>
+    {
+        HandshakeHandler = ServiceRegistration<IHandshakeHandler>.Of(typeof(TProcessor), processor => new FrameHandshakeProcessorAdapter<TFrame>((IFrameHandshakeProcessor<TFrame>)processor));
+        return this;
+    }
 }

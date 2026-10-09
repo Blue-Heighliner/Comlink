@@ -1,7 +1,7 @@
 namespace BlueHeighliner.Comlink.Sample;
 
 /// <summary>Treats a <see cref="Packet"/> as a heartbeat when its <see cref="Packet.IsHeartbeat"/> flag is set, sending heartbeats at the lowest user priority as packets of their own.</summary>
-public sealed class PacketHeartbeatHandler : IHeartbeatHandler<Packet, MessagePriority>
+public sealed class PacketHeartbeatHandler : IPacketHeartbeatHandler<Packet, MessagePriority>
 {
     /// <inheritdoc />
     public MessagePriority Priority => MessagePriority.Low;

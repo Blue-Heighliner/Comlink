@@ -27,16 +27,14 @@ internal sealed class EngineBuilder : IEngineBuilder, IAsyncDisposable
     public List<MessageAspect> MessageAspectValues { get; } = [];
     /// <summary>The handler that controls the alert alarm, if stated.</summary>
     public ServiceRegistration<IAlarmHandler>? AlarmHandler { get; set; }
-    /// <summary>The largest serialized packet, if stated.</summary>
-    public int? PacketSizeValue { get; set; }
+    /// <summary>The largest payload of a packet, stated with the packets.</summary>
+    public int? MaxPayloadSizeValue { get; set; }
     /// <summary>How many packets may be in flight at once, if stated.</summary>
     public int? PacketWindowValue { get; set; }
     /// <summary>The handler that controls how drafts are composed, if stated.</summary>
     public ServiceRegistration<IDraftFrameHandler>? DraftHandler { get; set; }
     /// <summary>The selectable priorities, empty when none were stated.</summary>
     public List<MessagePriorityOption> PriorityOptions { get; } = [];
-    /// <summary>The blocked tag and priority combinations.</summary>
-    public List<TagPriorityBlock> BlockedCombinations { get; } = [];
     /// <summary>The overridden address type display labels, by address type.</summary>
     public Dictionary<AddressType, string> AddressTypeLabels { get; } = [];
     /// <summary>The handler that controls the print manager, if stated.</summary>
@@ -49,8 +47,10 @@ internal sealed class EngineBuilder : IEngineBuilder, IAsyncDisposable
     public MsmtConnectionOptions? MsmtOptionsValue { get; set; }
     /// <summary>How the HDLC peer options are adjusted, if stated.</summary>
     public HdlcPeerOptions? HdlcOptionsValue { get; set; }
-    /// <summary>The handshake processor, if stated.</summary>
-    public ServiceRegistration<IHandshakeHandler>? HandshakeProcessor { get; set; }
+    /// <summary>The packet handshake processor, if stated.</summary>
+    public ServiceRegistration<IHandshakeHandler>? PacketHandshakeProcessor { get; set; }
+    /// <summary>The frame handshake processor, if stated.</summary>
+    public ServiceRegistration<IHandshakeHandler>? FrameHandshakeProcessor { get; set; }
     /// <summary>Whether the <c>--config</c> and <c>--user</c> arguments are honored.</summary>
     public bool AreCommandLineOverridesAllowed { get; set; }
     /// <summary>The external systems.</summary>
@@ -146,11 +146,11 @@ internal sealed class EngineBuilder : IEngineBuilder, IAsyncDisposable
         }
         if (PriorityOptions.Count == 0)
         {
-            throw new InvalidOperationException("The engine configuration must state its priority levels, lowest first, with Priorities().Priority(...).");
+            throw new InvalidOperationException("The engine configuration must state its priority levels, lowest first, with Priority(...).");
         }
         if (FrameMap is null)
         {
-            throw new InvalidOperationException("The engine configuration must state its frame handlers with Frames(...).");
+            throw new InvalidOperationException("The engine configuration must state its frame handlers with Frames<TProcessor>().");
         }
     }
 }

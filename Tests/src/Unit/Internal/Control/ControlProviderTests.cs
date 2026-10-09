@@ -51,7 +51,7 @@ public sealed class ControlProviderTests
 
         Assert.Null(controller.PacketType);
         Assert.Null(controller.PacketSerializer);
-        Assert.Throws<NotSupportedException>(() => controller.CreateFramePacket(new FramePacketCreateContext { PayloadId = 1, Index = 0, Count = 1, PayloadLength = 0, Data = ReadOnlyMemory<byte>.Empty }));
+        Assert.Throws<NotSupportedException>(() => controller.CreateFramePacket(new TestFrame(), 0, 1, 0, ReadOnlyMemory<byte>.Empty));
         Assert.Throws<NotSupportedException>(() => controller.GetPacketIndex(new object()));
     }
 
@@ -65,42 +65,44 @@ public sealed class ControlProviderTests
         Assert.Equal(typeof(TestPacket), controller.PacketType);
         Assert.IsType<ProtobufSerializer>(controller.PacketSerializer);
         Assert.IsType<TestPacketSerializer>(custom.PacketSerializer);
-        Assert.IsType<TestPacket>(controller.CreateFramePacket(new FramePacketCreateContext { PayloadId = 1, Index = 0, Count = 1, PayloadLength = 0, Data = ReadOnlyMemory<byte>.Empty }));
+        Assert.IsType<TestPacket>(controller.CreateFramePacket(new TestFrame(), 0, 1, 0, ReadOnlyMemory<byte>.Empty));
     }
 
-    /// <summary>Creating a frame packet through the controller and reading it back round-trips the fields of the host's packet type.</summary>
+    /// <summary>Creating a packet through the controller and reading it back round-trips the fields of the host's packet type.</summary>
     [Fact]
     public void PacketEngineController_PacketFields_RoundTripThroughTheController()
     {
         IEngineController controller = new TestPacketEngineController();
-        object packet = controller.CreateFramePacket(new FramePacketCreateContext { PayloadId = 7, Index = 2, Count = 5, PayloadLength = 99, Data = new byte[] { 1, 2, 3 } });
+        TestFrame frame = new();
+        object packet = controller.CreateFramePacket(frame, 2, 5, 99, new byte[] { 1, 2, 3 });
 
         Assert.True(controller.IsFramePacket(packet));
 
-        Assert.Equal(7, controller.GetPayloadId(packet));
+        Assert.Equal(controller.GetFrameId(packet), controller.GetFrameId(controller.CreateFramePacket(frame, 3, 5, 99, new byte[] { 4 })));
+        Assert.NotEqual(controller.GetFrameId(packet), controller.GetFrameId(controller.CreateFramePacket(new TestFrame(), 2, 5, 99, new byte[] { 1 })));
         Assert.Equal(2, controller.GetPacketIndex(packet));
         Assert.Equal(5, controller.GetPacketCount(packet));
-        Assert.Equal(99, controller.GetPayloadLength(packet));
-        Assert.Equal(new byte[] { 1, 2, 3 }, controller.GetPacketData(packet).ToArray());
+        Assert.Equal(99, controller.GetFrameLength(packet));
+        Assert.Equal(new byte[] { 1, 2, 3 }, controller.GetPacketPayload(packet).ToArray());
         Assert.Equal(new byte[] { 1, 2, 3 }, ((TestPacket)packet).Data);
     }
 
-    /// <summary>The default packet size is 16 KiB and the default window is 1, and a host can set both.</summary>
+    /// <summary>Without packets the maximum payload size is 0 and the default window is 1, and a host can set both.</summary>
     [Fact]
-    public void EngineController_PacketSizeAndWindow_HaveDefaultsAndAreOverridable()
+    public void EngineController_MaxPayloadSizeAndWindow_HaveDefaultsAndAreOverridable()
     {
         TestEngineController defaults = new();
-        TestPacketSizeOverride overridden = new();
+        TestPayloadSizeOverride overridden = new();
 
-        Assert.Equal(16 * 1024, defaults.PacketSize);
+        Assert.Equal(0, defaults.MaxPayloadSize);
         Assert.Equal(1, defaults.PacketWindow);
-        Assert.Equal(512, overridden.PacketSize);
+        Assert.Equal(512, overridden.MaxPayloadSize);
         Assert.Equal(4, overridden.PacketWindow);
     }
 
-    private sealed class TestPacketSizeOverride : TestPacketEngineController
+    private sealed class TestPayloadSizeOverride : TestPacketEngineController
     {
-        public override int PacketSize => 512;
+        public override int MaxPayloadSize => 512;
         public override int PacketWindow => 4;
     }
 
@@ -228,7 +230,7 @@ public sealed class ControlProviderTests
         Assert.Equal(Enumerable.Range(0, priorities.Count), priorities.Select(p => p.Value));
         Assert.True(controller.TagsEnabled);
         Assert.Equal("Tag", controller.TagLabel);
-        Assert.Empty(controller.BlockedCombinations);
+        Assert.True(controller.IsDraftAllowed(Mock.Of<IEngineContext>(), TestMessagePriority.Normal, null, null, "ANY"));
     }
 
     /// <summary>Priorities returns the same list instance/values on every access.</summary>
@@ -239,7 +241,7 @@ public sealed class ControlProviderTests
         Assert.Equal(controller.Priorities, controller.Priorities);
     }
 
-    /// <summary>Falls back to the wrapped provider for TagsEnabled/TagLabel when not configured; Priorities/BlockedCombinations always delegate.</summary>
+    /// <summary>Falls back to the wrapped provider for TagsEnabled/TagLabel when not configured; Priorities/IsDraftAllowed always delegate.</summary>
     [Fact]
     public void ConfiguredEngineController_FallsBackWhenMessageCompositionNotConfigured()
     {
@@ -248,63 +250,13 @@ public sealed class ControlProviderTests
         fallback.Setup(f => f.TagLabel).Returns("Category");
         IReadOnlyList<MessagePriorityOption> priorities = [new MessagePriorityOption { Name = "Low", Value = 0, Key = TestMessagePriority.Low }];
         fallback.Setup(f => f.Priorities).Returns(priorities);
-        IReadOnlyList<TagPriorityBlock> blocks = [new TagPriorityBlock { Tag = "SPAM" }];
-        fallback.Setup(f => f.BlockedCombinations).Returns(blocks);
+        fallback.Setup(f => f.IsDraftAllowed(It.IsAny<IEngineContext>(), TestMessagePriority.Low, null, null, "SPAM")).Returns(false);
         ConfiguredEngineController controller = new(fallback.Object, new NetworkConfig(), NoCurrentUser);
 
         Assert.False(controller.TagsEnabled);
         Assert.Equal("Category", controller.TagLabel);
         Assert.Same(priorities, controller.Priorities);
-        Assert.Same(blocks, controller.BlockedCombinations);
-    }
-
-    /// <summary>A rule with only Tag set blocks that tag regardless of priority.</summary>
-    [Theory]
-    [InlineData(TestMessagePriority.Normal)]
-    [InlineData(TestMessagePriority.Level1)]
-    [InlineData(TestMessagePriority.High)]
-    public void TagPriorityBlockExtensions_IsBlocked_TagWithNullPriority_BlocksAnyPriority(TestMessagePriority priority)
-    {
-        IReadOnlyList<TagPriorityBlock> blocks = [new TagPriorityBlock { Tag = "SPAM", Priority = null }];
-        Assert.True(blocks.IsBlocked("SPAM", priority));
-    }
-
-    /// <summary>A rule with only Priority set blocks that priority regardless of tag.</summary>
-    [Theory]
-    [InlineData("URGENT")]
-    [InlineData("")]
-    [InlineData(null)]
-    public void TagPriorityBlockExtensions_IsBlocked_PriorityWithNullTag_BlocksAnyTag(string? tag)
-    {
-        IReadOnlyList<TagPriorityBlock> blocks = [new TagPriorityBlock { Tag = null, Priority = TestMessagePriority.Level2 }];
-        Assert.True(blocks.IsBlocked(tag, TestMessagePriority.Level2));
-    }
-
-    /// <summary>A rule with both fields set only blocks that exact tag/priority pair.</summary>
-    [Fact]
-    public void TagPriorityBlockExtensions_IsBlocked_SpecificPair_OnlyBlocksExactMatch()
-    {
-        IReadOnlyList<TagPriorityBlock> blocks = [new TagPriorityBlock { Tag = "URGENT", Priority = TestMessagePriority.Level2 }];
-
-        Assert.True(blocks.IsBlocked("URGENT", TestMessagePriority.Level2));
-        Assert.False(blocks.IsBlocked("URGENT", TestMessagePriority.Level1));
-        Assert.False(blocks.IsBlocked("OTHER", TestMessagePriority.Level2));
-    }
-
-    /// <summary>Tag matching is case-insensitive.</summary>
-    [Fact]
-    public void TagPriorityBlockExtensions_IsBlocked_TagMatchIsCaseInsensitive()
-    {
-        IReadOnlyList<TagPriorityBlock> blocks = [new TagPriorityBlock { Tag = "SPAM", Priority = null }];
-        Assert.True(blocks.IsBlocked("spam", TestMessagePriority.Normal));
-    }
-
-    /// <summary>No rule matches → not blocked.</summary>
-    [Fact]
-    public void TagPriorityBlockExtensions_IsBlocked_NoMatchingRule_ReturnsFalse()
-    {
-        IReadOnlyList<TagPriorityBlock> blocks = [new TagPriorityBlock { Tag = "SPAM", Priority = null }];
-        Assert.False(blocks.IsBlocked("OK", TestMessagePriority.Normal));
+        Assert.False(controller.IsDraftAllowed(Mock.Of<IEngineContext>(), TestMessagePriority.Low, null, null, "SPAM"));
     }
 
     /// <summary>Falls back to the wrapped provider when not configured.</summary>
@@ -448,8 +400,8 @@ public sealed class ControlProviderTests
     {
         TestEngineController controller = new();
 
-        Assert.Null(controller.HandshakeProcessor);
-        Assert.Null(controller.NetworkHandler);
+        Assert.Null(controller.PacketHandshakeProcessor);
+        Assert.Null(controller.FrameHandshakeProcessor);
     }
 
     /// <summary>Every processor's connection description is told which user this node runs as, so what they send can say who is speaking.</summary>
@@ -470,13 +422,16 @@ public sealed class ControlProviderTests
     public void ConfiguredEngineController_Processors_DelegateToFallback()
     {
         IHandshakeHandler packets = Mock.Of<IHandshakeHandler>();
+        IHandshakeHandler frames = Mock.Of<IHandshakeHandler>();
         INetworkHandler network = Mock.Of<INetworkHandler>();
         Mock<IEngineController> fallback = new();
-        fallback.Setup(f => f.HandshakeProcessor).Returns(packets);
+        fallback.Setup(f => f.PacketHandshakeProcessor).Returns(packets);
+        fallback.Setup(f => f.FrameHandshakeProcessor).Returns(frames);
         fallback.Setup(f => f.NetworkHandler).Returns(network);
         ConfiguredEngineController controller = new(fallback.Object, new NetworkConfig(), NoCurrentUser);
 
-        Assert.Same(packets, controller.HandshakeProcessor);
+        Assert.Same(packets, controller.PacketHandshakeProcessor);
+        Assert.Same(frames, controller.FrameHandshakeProcessor);
         Assert.Same(network, controller.NetworkHandler);
     }
 
@@ -508,14 +463,14 @@ public sealed class ControlProviderTests
 
         Assert.Equal(typeof(TestPacket), controller.PacketType);
         Assert.Same(fallback.PacketSerializer, controller.PacketSerializer);
-        Assert.Equal(fallback.PacketSize, controller.PacketSize);
+        Assert.Equal(fallback.MaxPayloadSize, controller.MaxPayloadSize);
         Assert.Equal(fallback.PacketWindow, controller.PacketWindow);
-        object packet = controller.CreateFramePacket(new FramePacketCreateContext { PayloadId = 9, Index = 1, Count = 2, PayloadLength = 30, Data = new byte[] { 5 } });
-        Assert.Equal(9, controller.GetPayloadId(packet));
+        object packet = controller.CreateFramePacket(new TestFrame(), 1, 2, 30, new byte[] { 5 });
+        Assert.NotEmpty(controller.GetFrameId(packet));
         Assert.Equal(1, controller.GetPacketIndex(packet));
         Assert.Equal(2, controller.GetPacketCount(packet));
-        Assert.Equal(30, controller.GetPayloadLength(packet));
-        Assert.Equal(new byte[] { 5 }, controller.GetPacketData(packet).ToArray());
+        Assert.Equal(30, controller.GetFrameLength(packet));
+        Assert.Equal(new byte[] { 5 }, controller.GetPacketPayload(packet).ToArray());
     }
 
     /// <summary>ExternalSystems has no network file field and always delegates to the wrapped provider.</summary>

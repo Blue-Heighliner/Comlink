@@ -1,6 +1,6 @@
 namespace BlueHeighliner.Comlink;
 
-/// <summary>A custom import format added via <see cref="IImportsBuilder{TFrame, TPacket, TPriority, TLevel, TAspect}.Format{TFormat}"/>.</summary>
+/// <summary>A custom import format added via <see cref="IEngineBuilder{TFrame, TPacket, TPriority, TLevel, TAspect}.Import{TFormat}"/>.</summary>
 internal sealed record ImportFormatDefinition
 {
     /// <summary>Display name shown for this format in the client's import screen, and the source of <see cref="FileExtension"/>.</summary>

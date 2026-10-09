@@ -1,13 +1,13 @@
 namespace BlueHeighliner.Comlink;
 
 /// <summary>
-/// Handles the frames of the host's frame type, or the packets of its packet type, <typeparamref name="TFrame"/> that are heartbeats: sent by a node over each of its MSMT connections to check that the connection is really up and
+/// Handles the frames of the host's frame type, <typeparamref name="TFrame"/>, that are heartbeats: sent by a node over each of its MSMT connections to check that the connection is really up and
 /// to keep it live. A heartbeat is not a message, and the receiving node only acknowledges it. Heartbeats are optional: without a handler none are sent and a connection counts as up once it is
-/// established. They are never sent over HDLC. See <see cref="IFrameBuilder{TFrame, TPacket, TPriority, TLevel, TAspect}.Heartbeat{THandler}"/> and <see cref="IPacketBuilder{TFrame, TPacket, TPriority, TLevel, TAspect}.Heartbeat{THandler}"/>, the latter of which sends the heartbeat as a packet of its own, beneath packetization, and takes precedence.
+/// established. They are never sent over HDLC. See <see cref="IFrameBuilder{TFrame, TPacket, TPriority, TLevel, TAspect}.Heartbeat{THandler}"/>; a heartbeat sent as a packet of its own is an <see cref="IPacketHeartbeatHandler{TPacket, TPriority}"/> instead.
 /// </summary>
-/// <typeparam name="TFrame">The host's frame type, or its packet type for a packet heartbeat.</typeparam>
+/// <typeparam name="TFrame">The host's frame type.</typeparam>
 /// <typeparam name="TPriority">The enum whose members are the priority levels.</typeparam>
-public interface IHeartbeatHandler<TFrame, TPriority> where TFrame : class where TPriority : struct, Enum
+public interface IFrameHeartbeatHandler<TFrame, TPriority> where TFrame : class where TPriority : struct, Enum
 {
     /// <summary>Gets the priority level that heartbeats are sent with, which is how they are ordered against other traffic.</summary>
     TPriority Priority { get; }

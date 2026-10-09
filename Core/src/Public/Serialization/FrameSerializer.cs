@@ -17,7 +17,7 @@ public interface IFrameSerializer
     IMemoryOwner<byte> Serialize(object frame);
 
     /// <summary>
-    /// Called on every outgoing frame packet (one the frame packet handler creates) with the frame it carries a piece of, before the packet is serialized, to
+    /// Called on every outgoing frame packet (one the packet handler creates) with the frame it carries a piece of, before the packet is serialized, to
     /// set the packet's own properties from the frame. Called once per packet, in order, so a frame cut into several packets configures each of them.
     /// </summary>
     /// <param name="frame">The original frame, an instance of the host's frame type.</param>

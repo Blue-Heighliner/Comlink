@@ -7,7 +7,7 @@ internal interface IPeerTransportFactory
     IPeerTransport Create();
 }
 
-/// <summary>Builds a <see cref="CompositePeerTransport"/> of MSMT (IP) and MicroGate (serial), leaving out IP when no identity certificate is available, wraps it in a <see cref="PacketizingPeerTransport"/> when <see cref="IEngineController.PacketType"/> is set, and finally in a <see cref="HandshakePeerTransport"/> that carries out the handshake and identifies each connection. An initial packet handshake, when configured, is carried out by another <see cref="HandshakePeerTransport"/> beneath the packetizer. A <see cref="TracingPeerTransport"/>, which writes only while its trace category is on, traces the packets beneath all of that and the frames between the packetizer and the final handshake.</summary>
+/// <summary>Builds a <see cref="CompositePeerTransport"/> of MSMT (IP) and MicroGate (serial), leaving out IP when no identity certificate is available, wraps it in a <see cref="PacketizingPeerTransport"/> when <see cref="IEngineController.PacketType"/> is set, and finally in a <see cref="HandshakePeerTransport"/> that carries out the handshake and identifies each connection. A packet handshake, when configured, is carried out by another <see cref="HandshakePeerTransport"/> beneath the packetizer, and a frame handshake by the final one. A <see cref="TracingPeerTransport"/>, which writes only while its trace category is on, traces the packets beneath all of that and the frames between the packetizer and the final handshake.</summary>
 internal sealed class PeerTransportFactory(
     IMsmtSessionPeer.IFactory msmtFactory,
     IHdlcPeerFactory microGateFactory,
@@ -21,9 +21,9 @@ internal sealed class PeerTransportFactory(
     {
         ILogger logger = loggerFactory.CreateLogger(LogCategories.App);
         IPacketizer? packetizer = CreatePacketizer();
-        if (packetizer is not null && engineController.PacketSize > engineController.HdlcOptions.MaxInfoField)
+        if (packetizer is not null && engineController.MaxPayloadSize >= engineController.HdlcOptions.MaxInfoField)
         {
-            logger.Record(LogEvents.PacketSizeExceedsHdlc, "The packet size of {PacketSize} bytes is larger than the HDLC MaxInfoField of {MaxInfoField} bytes, so packets will fail to send over serial connections", engineController.PacketSize, engineController.HdlcOptions.MaxInfoField);
+            logger.Record(LogEvents.MaxPayloadSizeExceedsHdlc, "The payload size of {MaxPayloadSize} bytes leaves no room for a packet's own fields within the HDLC MaxInfoField of {MaxInfoField} bytes, so packets will fail to send over serial connections", engineController.MaxPayloadSize, engineController.HdlcOptions.MaxInfoField);
         }
 
         IPeerTransport? ip = null;
@@ -41,14 +41,14 @@ internal sealed class PeerTransportFactory(
         {
             transport = new TracingPeerTransport(transport, loggerFactory.CreateLogger(LogCategories.Packets), logSettings, LogCategories.Packets, LogEvents.PacketSent, LogEvents.PacketReceived);
         }
-        // The handshake's packets travel as packets of their own, so the handshake happens beneath the packetizer; identification happens above it.
-        if (packetizer is null && engineController.HandshakeProcessor is not null)
+        // A packet handshake's packets travel as packets of their own, so it happens beneath the packetizer; a frame handshake's frames are frames like any other, so it, and identification, happen above it.
+        if (packetizer is null && engineController.PacketHandshakeProcessor is not null)
         {
-            throw new InvalidEngineConfigurationException("A handshake processor needs a packet type, but none is configured");
+            throw new InvalidEngineConfigurationException("A packet handshake processor needs a packet type, but none is configured");
         }
         if (packetizer is not null)
         {
-            if (Handshake.ForProcessor(engineController) is { } handshake)
+            if (Handshake.ForPackets(engineController) is { } handshake)
             {
                 transport = new HandshakePeerTransport(transport, engineController, logger, handshake, identify: false, contexts: contexts);
             }
@@ -57,7 +57,7 @@ internal sealed class PeerTransportFactory(
 
         transport = new TracingPeerTransport(transport, loggerFactory.CreateLogger(LogCategories.Frames), logSettings, LogCategories.Frames, LogEvents.FrameSent, LogEvents.FrameReceived);
 
-        return new HandshakePeerTransport(transport, engineController, logger, null, identify: true, contexts: contexts);
+        return new HandshakePeerTransport(transport, engineController, logger, Handshake.ForFrames(engineController), identify: true, contexts: contexts);
     }
 
     private IPacketizer? CreatePacketizer()
@@ -65,6 +65,11 @@ internal sealed class PeerTransportFactory(
         if (engineController.PacketType is null)
         {
             return null;
+        }
+
+        if (engineController.MaxPayloadSize < 1)
+        {
+            throw new InvalidEngineConfigurationException($"MaxPayloadSize {engineController.MaxPayloadSize} must be at least 1");
         }
 
         if (engineController.PacketWindow < 1)

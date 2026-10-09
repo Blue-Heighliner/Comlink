@@ -2,7 +2,7 @@ namespace BlueHeighliner.Comlink;
 
 /// <summary>
 /// A custom import format, shown as an option alongside the built-in package format in the client's import screen. State one with
-/// <see cref="IImportsBuilder{TFrame, TPacket, TPriority, TLevel, TAspect}.Format{TFormat}"/>. Its files are found on the source drive by an extension derived from <see cref="Name"/> the same way an
+/// <see cref="IEngineBuilder{TFrame, TPacket, TPriority, TLevel, TAspect}.Import{TFormat}"/>. Its files are found on the source drive by an extension derived from <see cref="Name"/> the same way an
 /// <see cref="IExportFormat"/>'s is. Unlike the built-in format, this is the reader's own file layout, not a zip archive of typed entries.
 /// </summary>
 /// <typeparam name="TPriority">The enum the host stated for its priorities.</typeparam>

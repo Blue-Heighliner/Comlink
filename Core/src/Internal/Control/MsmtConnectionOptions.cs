@@ -1,10 +1,10 @@
 namespace BlueHeighliner.Comlink;
 
 /// <summary>
-/// The MSMT settings a host can state for every IP connection, inbound and outbound, including the interface listener (see <see cref="IConnectionsBuilder{TFrame, TPacket, TPriority, TLevel, TAspect}.Msmt(MsmtConnectionOptions)"/>). The identity
+/// The MSMT settings a host can state for every IP connection, inbound and outbound, including the interface listener (see <see cref="IMsmtBuilder{TFrame, TPacket, TPriority, TLevel, TAspect}"/>). The identity
 /// certificate and trusted authorities are not among them; the engine supplies those. Each default is the MSMT package's own.
 /// </summary>
-public sealed record MsmtConnectionOptions
+internal sealed record MsmtConnectionOptions
 {
     /// <summary>Gets how long a TCP connection attempt and its TLS handshake may take before it is abandoned. Also bounds how long an accepted connection may take to send its first message. <see langword="null"/> disables the timeout.</summary>
     public TimeSpan? HandshakeTimeout { get; init; } = TimeSpan.FromSeconds(30);

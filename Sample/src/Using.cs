@@ -9,3 +9,4 @@ global using System.Text.Json;
 global using BlueHeighliner.Comlink;
 global using BlueHeighliner.MicroGate;
 global using Message = BlueHeighliner.Comlink.Message<BlueHeighliner.Comlink.Sample.MessagePriority, BlueHeighliner.Comlink.Sample.MessageLevel, BlueHeighliner.Comlink.Sample.MessageAspect>;
+global using System.Runtime.CompilerServices;

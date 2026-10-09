@@ -157,7 +157,7 @@ sequenceDiagram
 1. `UserService.Load` - restores the installed user from `User.json` (or the `--user` user), checking their certificate
 2. `PeerService.Start` — begins accepting peer connections
 3. `InterfaceService.Start` — begins accepting interface connections (always, regardless of mode)
-4. `EngineHooksService.Start` - subscribes to `IPeerService`'s connection and message events on behalf of the host's configured network processor (`IFrameBuilder<TFrame>.Processor`, see [Configuration.md](Components/Configuration.md#network-processor)); a no-op if none is configured
+4. `EngineHooksService.Start` - subscribes to `IPeerService`'s connection and message events on behalf of the host's configured network processor (`Frames<TProcessor>`, see [Configuration.md](Components/Configuration.md#network-processor)); a no-op if none is configured
 
 Steps 2 through 4 (and external systems) only run once a user is installed: a fresh installation has no name, so it cannot identify itself to peers, pick its own certificate, or stamp messages it routes. When no user is installed yet, `EngineHost` waits for `UserService.Installed` and starts networking then, without a restart.
 

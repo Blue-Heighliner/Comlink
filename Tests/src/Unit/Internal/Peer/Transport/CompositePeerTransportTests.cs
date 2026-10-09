@@ -217,7 +217,7 @@ public sealed class CompositePeerTransportTests
         (PeerTransportFactory factory, _, List<byte[]> sent) = BuildIpFactory(controller.Object);
         await using IPeerTransport transport = factory.Create();
 
-        await transport.Request(await transport.Connect(ip), new byte[] { 1, 2, 3 });
+        await transport.Request(await transport.Connect(ip), new byte[] { 1, 2, 3 }, new PeerSendOptions { Frame = new TestFrame() });
 
         byte[] packet = Assert.Single(sent);
         Assert.NotEqual(new byte[] { 1, 2, 3 }, packet);
@@ -229,7 +229,7 @@ public sealed class CompositePeerTransportTests
     public void Factory_InitialPacketWithoutPackets_Throws()
     {
         Mock<TestEngineController> controller = new() { CallBase = true };
-        controller.Setup(c => c.HandshakeProcessor).Returns(Mock.Of<IHandshakeHandler>());
+        controller.Setup(c => c.PacketHandshakeProcessor).Returns(Mock.Of<IHandshakeHandler>());
         controller.Setup(c => c.ConnectionOptions).Throws(new InvalidOperationException("no current user"));
         PeerTransportFactory factory = new(Mock.Of<IMsmtSessionPeer.IFactory>(), Mock.Of<IHdlcPeerFactory>(), controller.Object, LoggerFactory.Create(_ => { }), Mock.Of<ILogSettings>());
 
@@ -249,26 +249,26 @@ public sealed class CompositePeerTransportTests
         Assert.IsType<HandshakePeerTransport>(transport);
     }
 
-    /// <summary>A packet size the packet format leaves no room in, or a window below 1, stops the transport being created rather than failing every send later.</summary>
+    /// <summary>A payload size below 1, or a window below 1, stops the transport being created rather than failing every send later.</summary>
     [Theory]
-    [InlineData(17, 1)]
+    [InlineData(0, 1)]
     [InlineData(16384, 0)]
-    public void Factory_InvalidPacketization_Throws(int packetSize, int window)
+    public void Factory_InvalidPacketization_Throws(int payloadSize, int window)
     {
         Mock<TestPacketEngineController> controller = new() { CallBase = true };
-        controller.Setup(c => c.PacketSize).Returns(packetSize);
+        controller.Setup(c => c.MaxPayloadSize).Returns(payloadSize);
         controller.Setup(c => c.PacketWindow).Returns(window);
         PeerTransportFactory factory = new(Mock.Of<IMsmtSessionPeer.IFactory>(), Mock.Of<IHdlcPeerFactory>(), controller.Object, LoggerFactory.Create(_ => { }), Mock.Of<ILogSettings>());
 
         Assert.Throws<InvalidEngineConfigurationException>(() => factory.Create());
     }
 
-    /// <summary>The packet size and window are not looked at while there is no packet type, so a leftover invalid value does no harm.</summary>
+    /// <summary>The payload size and window are not looked at while there is no packet type, so a leftover invalid value does no harm.</summary>
     [Fact]
     public async Task Factory_InvalidPacketizationWithoutPacketType_IsIgnored()
     {
         Mock<TestEngineController> controller = new() { CallBase = true };
-        controller.Setup(c => c.PacketSize).Returns(1);
+        controller.Setup(c => c.MaxPayloadSize).Returns(1);
         controller.Setup(c => c.PacketWindow).Returns(0);
         controller.Setup(c => c.ConnectionOptions).Throws(new InvalidOperationException("no current user"));
         PeerTransportFactory factory = new(Mock.Of<IMsmtSessionPeer.IFactory>(), Mock.Of<IHdlcPeerFactory>(), controller.Object, LoggerFactory.Create(_ => { }), Mock.Of<ILogSettings>());

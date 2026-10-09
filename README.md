@@ -22,9 +22,8 @@ public sealed class MyEngineConfiguration : IEngineConfiguration
 {
     public void Configure(IEngineBuilder engine) => engine.Types<MyFrame, MyPriority, MyMessageLevel, MyMessageAspect>()
         .Display<MyDisplayHandler>()
-        .Priorities().Priority(MyPriority.Normal)
-        .Frames()
-            .Processor<MyNetworkProcessor>()
+        .Priority(MyPriority.Normal)
+        .Frames<MyNetworkProcessor>()
         ;
 }
 

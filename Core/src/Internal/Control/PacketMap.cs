@@ -7,8 +7,8 @@ internal sealed class PacketMap
     public required Type Type { get; init; }
     /// <summary>The serializer for the packet type.</summary>
     public required ServiceRegistration<IPacketSerializer> Serializer { get; init; }
-    /// <summary>Gets how the host's frame packet handler is instantiated.</summary>
-    public required ServiceRegistration<IFramePacketAdapter> FramePacket { get; init; }
+    /// <summary>Gets how the host's packet handler is instantiated.</summary>
+    public required ServiceRegistration<IPacketAdapter> Handler { get; init; }
     /// <summary>Gets the heartbeat packet handler, or <see langword="null"/> when none is stated.</summary>
-    public ServiceRegistration<IHeartbeatFrameHandler>? Heartbeat { get; init; }
+    public ServiceRegistration<IHeartbeatItemHandler>? Heartbeat { get; init; }
 }

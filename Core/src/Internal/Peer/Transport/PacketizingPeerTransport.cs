@@ -63,8 +63,9 @@ internal sealed class PacketizingPeerTransport : IPeerTransport
             return await inner.Request(connection, data, options, cancellation);
         }
 
+        object frame = options?.Frame ?? throw new ArgumentException("A payload sent through the packetizer needs the frame it is the serialization of", nameof(options));
         IReadOnlyList<Packet> packets;
-        try { packets = packetizer.Split(data, options?.Priority ?? 0, options?.Frame); }
+        try { packets = packetizer.Split(data, options.Priority, frame); }
         catch (ArgumentOutOfRangeException ex)
         {
             logger.Record(LogEvents.PayloadTooLarge, ex, "A payload of {Length} bytes cannot be sent over {Point}: {Reason}", data.Length, connection.Point, "it is too large to be split into packets, so nothing is sent");
