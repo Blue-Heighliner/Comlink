@@ -29,6 +29,9 @@ internal sealed class LoopbackPeerTransport : IPeerTransport
     /// <summary>Every payload delivered to this end, in order.</summary>
     public ConcurrentQueue<byte[]> Delivered { get; } = [];
 
+    /// <summary>Gets the options of every request this end made, in order.</summary>
+    public ConcurrentQueue<PeerSendOptions?> Requests { get; } = [];
+
     /// <inheritdoc />
     public IObservable<PeerReceivedEventArgs> Received => received;
 
@@ -115,6 +118,7 @@ internal sealed class LoopbackPeerTransport : IPeerTransport
             throw new IOException("The connection is gone");
         }
 
+        Requests.Enqueue(options);
         options?.Transmitted?.Invoke();
         if (IsSilent)
         {

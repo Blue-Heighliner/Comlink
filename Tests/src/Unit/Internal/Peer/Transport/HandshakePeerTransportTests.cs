@@ -84,6 +84,13 @@ public sealed class HandshakePeerTransportTests
             }
         };
 
+    private static IMemoryOwner<byte> Copy(byte[] data)
+    {
+        PooledMemoryOwner owner = PooledMemoryOwner.Rent(data.Length);
+        data.CopyTo(owner.Memory);
+        return owner;
+    }
+
     private static TestPacket Who(string user) => new() { Data = Encoding.UTF8.GetBytes(user) };
 
     private static string NameIn(object item) => Encoding.UTF8.GetString(((TestPacket)item).Data);
@@ -285,6 +292,29 @@ public sealed class HandshakePeerTransportTests
         using IMemoryOwner<byte> expected = a.Object.PacketSerializer!.Serialize(Who("ALICE"), null);
         Assert.Equal(expected.Memory.ToArray(), endB.Raw.Delivered.First());
         Assert.Equal(new byte[] { 1, 2, 3 }, endB.Raw.Delivered.ElementAt(1));
+    }
+
+    /// <summary>A handshake of frames sends each frame with the frame attached, so a packetizing transport above it can split it, and one of packets sends none.</summary>
+    [Fact]
+    public async Task Handshake_OfFrames_SendsEachItemWithItsFrameAttached()
+    {
+        Mock<RawPacketEngineController> a = Controller("ALICE", "BOB");
+        Mock<RawPacketEngineController> b = Controller("ALICE", "BOB");
+        (LoopbackPeerTransport rawA, LoopbackPeerTransport rawB) = LoopbackPeerTransport.CreatePair(["ALICE"], ["BOB"]);
+        static Handshake ForFrames(IHandshakeHandler handler)
+            => new(item => Copy(((TestPacket)item).Data), (data, _) => new TestPacket { Data = data.ToArray() }, true, handler);
+        End endA = new(new HandshakePeerTransport(rawA, a.Object, logger, ForFrames(Introduce("ALICE")), identify: true), rawA);
+        End endB = new(new HandshakePeerTransport(rawB, b.Object, logger, ForFrames(Introduce("BOB")), identify: true), rawB);
+        endA.Watch();
+        endB.Watch();
+
+        PeerConnection outbound = await endA.Transport.Connect(point);
+
+        Assert.Equal("BOB", outbound.User!.Name);
+        PeerSendOptions? sent = Assert.Single(rawA.Requests);
+        Assert.IsType<TestPacket>(sent!.Frame);
+        Assert.Equal("ALICE", NameIn(sent.Frame));
+        Assert.All(rawB.Requests, options => Assert.IsType<TestPacket>(options!.Frame));
     }
 
     /// <summary>A payload sent the moment the opener's connection is usable reaches the receiver even if the receiver has not finished establishing yet: it is held, then delivered in order.</summary>

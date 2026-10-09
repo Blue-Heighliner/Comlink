@@ -3,7 +3,7 @@ namespace BlueHeighliner.Comlink.Tests;
 /// <summary>Test <see cref="IEngineConfiguration"/> mapping the logical message fields onto <see cref="TestFrame"/>, and optionally the packet fields onto <see cref="TestPacket"/>.</summary>
 /// <param name="packets">Whether to turn packetization on with <see cref="TestPacket"/>.</param>
 /// <param name="messageExtra">Further message settings to state after the field mapping, such as the frame handler.</param>
-/// <param name="packetExtra">Further packet settings to state after the field mapping, such as the initial packet handler. Turns packetization on.</param>
+/// <param name="packetExtra">Further packet settings to state after the field mapping, such as the packet handshake handler. Turns packetization on.</param>
 /// <param name="heartbeats">Whether to state the heartbeat handler.</param>
 public sealed class TestEngineConfiguration(bool packets = false, Action<TestFrameBuilder>? messageExtra = null, Action<TestPacketBuilder>? packetExtra = null, bool heartbeats = true) : IEngineConfiguration
 {

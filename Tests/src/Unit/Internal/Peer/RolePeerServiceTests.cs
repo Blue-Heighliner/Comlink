@@ -38,7 +38,10 @@ public sealed class RolePeerServiceTests
 
         public async Task WaitFor(Func<bool> condition)
         {
-            for (int attempt = 0; attempt < 200 && !condition(); attempt++) { await Task.Delay(10); }
+            for (int attempt = 0; attempt < 200 && !condition(); attempt++)
+            {
+                await Task.Delay(10);
+            }
             Assert.True(condition());
         }
     }

@@ -224,9 +224,9 @@ public sealed class CompositePeerTransportTests
         Assert.True(packet.Length > 3);
     }
 
-    /// <summary>An initial packet with no packets configured stops the transport being created rather than failing every connection later.</summary>
+    /// <summary>A packet handshake with no packets configured stops the transport being created rather than failing every connection later.</summary>
     [Fact]
-    public void Factory_InitialPacketWithoutPackets_Throws()
+    public void Factory_PacketHandshakeWithoutPackets_Throws()
     {
         Mock<TestEngineController> controller = new() { CallBase = true };
         controller.Setup(c => c.PacketHandshakeHandler).Returns(Mock.Of<IHandshakeHandler>());

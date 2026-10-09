@@ -61,7 +61,10 @@ internal sealed class PacketScheduler(IPeerTransport transport, PeerConnection c
         lock (gate)
         {
             disposed = true;
-            while (queue.TryDequeue(out Item? item, out _)) { dropped.Add(item); }
+            while (queue.TryDequeue(out Item? item, out _))
+            {
+                dropped.Add(item);
+            }
         }
 
         foreach (Item item in dropped)

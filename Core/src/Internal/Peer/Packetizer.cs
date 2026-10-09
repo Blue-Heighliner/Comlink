@@ -82,10 +82,10 @@ internal sealed class Packetizer : IPacketizer
                 }
 
                 frameId = id;
-                engineController.FrameSerializer.ConfigurePacket(frame, packet);
                 IMemoryOwner<byte> data;
                 try
                 {
+                    engineController.FrameSerializer.ConfigurePacket(frame, packet);
                     data = serializer.Serialize(packet, frame);
                 }
                 finally

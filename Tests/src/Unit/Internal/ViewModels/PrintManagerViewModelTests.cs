@@ -386,7 +386,10 @@ public sealed class PrintManagerViewModelTests
         EntryItemViewModel entry = new(noteId.ToString(), "Note", EntryType.Note, DateTime.UtcNow);
 
         vm.EnqueueManual(entry);
-        for (int i = 0; i < 50 && s.PrintedLines.Count == 0; i++) { await Task.Delay(20); }
+        for (int i = 0; i < 50 && s.PrintedLines.Count == 0; i++)
+        {
+            await Task.Delay(20);
+        }
         await Task.Delay(50);
         Assert.Single(vm.Queue);
 

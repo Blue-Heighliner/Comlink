@@ -23,7 +23,10 @@ public sealed class LogEventsTests
     public void EveryEvent_IsInTheLogDocument()
     {
         string? directory = AppContext.BaseDirectory;
-        while (directory is not null && !File.Exists(Path.Combine(directory, "Docs", "Components", "Logging.md"))) { directory = Path.GetDirectoryName(directory); }
+        while (directory is not null && !File.Exists(Path.Combine(directory, "Docs", "Components", "Logging.md")))
+        {
+            directory = Path.GetDirectoryName(directory);
+        }
         string document = File.ReadAllText(Path.Combine(directory ?? throw new FileNotFoundException("Logging.md was not found above the test output"), "Docs", "Components", "Logging.md"));
 
         foreach (EventId id in All())
@@ -37,7 +40,10 @@ public sealed class LogEventsTests
     public void EveryEvent_HasACategory_AndIsDocumentedUnderIt()
     {
         string? directory = AppContext.BaseDirectory;
-        while (directory is not null && !File.Exists(Path.Combine(directory, "Docs", "Components", "Logging.md"))) { directory = Path.GetDirectoryName(directory); }
+        while (directory is not null && !File.Exists(Path.Combine(directory, "Docs", "Components", "Logging.md")))
+        {
+            directory = Path.GetDirectoryName(directory);
+        }
         string[] lines = File.ReadAllLines(Path.Combine(directory ?? throw new FileNotFoundException("Logging.md was not found above the test output"), "Docs", "Components", "Logging.md"));
         string[] categories = ["ACTIVITY", "FRAMES", "PACKETS", "APP", "ERROR", "CRASH"];
 

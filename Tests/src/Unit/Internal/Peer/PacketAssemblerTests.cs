@@ -56,7 +56,13 @@ public sealed class PacketAssemblerTests
         List<byte[]> packets = Packets(packetizer, payload);
         packets.Reverse();
 
-        for (int i = 0; i < packets.Count - 1; i++) { Assert.Null(Add(assembler, packets[i])); }
+        for (int i = 0; i < packets.Count - 1; i++)
+
+        {
+
+            Assert.Null(Add(assembler, packets[i]));
+
+        }
 
         Assert.Equal(payload, Add(assembler, packets[^1]));
     }
@@ -260,9 +266,21 @@ public sealed class PacketAssemblerTests
         byte[][] b = [.. Enumerable.Range(0, 4).Select(i => Wire(2, i, 4, 40, second[(i * 10)..((i * 10) + 10)]))];
         byte[][] c = [.. Enumerable.Range(0, 4).Select(i => Wire(3, i, 4, 40, Payload(10, seed: 99)))];
 
-        for (int i = 0; i < 3; i++) { Assert.Null(Add(assembler, a[i])); }
-        for (int i = 0; i < 3; i++) { Assert.Null(Add(assembler, b[i])); }
-        for (int i = 0; i < 3; i++) { Assert.Null(Add(assembler, c[i])); }
+        for (int i = 0; i < 3; i++)
+
+        {
+
+            Assert.Null(Add(assembler, a[i]));
+
+        }
+        for (int i = 0; i < 3; i++)
+        {
+            Assert.Null(Add(assembler, b[i]));
+        }
+        for (int i = 0; i < 3; i++)
+        {
+            Assert.Null(Add(assembler, c[i]));
+        }
 
         Assert.Equal(second, Add(assembler, b[3]));
         Assert.Null(Add(assembler, a[3]));

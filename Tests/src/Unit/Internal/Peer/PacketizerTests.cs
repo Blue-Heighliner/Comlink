@@ -62,6 +62,34 @@ public sealed class PacketizerTests
         public object Deserialize(ReadOnlyMemory<byte> data, object? packet) => throw new NotSupportedException();
     }
 
+    private sealed class ChangingIdsEngineController(int payloadSize) : RawPacketEngineController(payloadSize)
+    {
+        private int next;
+
+        public override string GetFrameId(object value) => (next++).ToString();
+    }
+
+    /// <summary>A packet handler that gives the packets of one frame different ids is refused, since a receiver could not put them back together.</summary>
+    [Fact]
+    public void Split_PacketsOfOneFrameWithDifferentIds_Throws()
+    {
+        Packetizer packetizer = new(new ChangingIdsEngineController(10));
+
+        Assert.Throws<InvalidOperationException>(() => packetizer.Split(Payload(35), 0, new TestFrame()));
+    }
+
+    /// <summary>A payload that fits one packet is not affected by the frame id check.</summary>
+    [Fact]
+    public void Split_SinglePacket_NeedsNoMatchingIds()
+    {
+        Packetizer packetizer = new(new ChangingIdsEngineController(100));
+
+        IReadOnlyList<Packet> packets = packetizer.Split(Payload(35), 0, new TestFrame());
+
+        Release(packets);
+        Assert.Single(packets);
+    }
+
     /// <summary>Every frame packet is marked as one and configured from their frame by the frame serializer, in order.</summary>
     [Fact]
     public void Split_FramePackets_AreMarkedAndConfiguredFromTheirFrame()

@@ -32,7 +32,10 @@ public sealed class DisconnectAlarmServiceTests : IAsyncLifetime
     private async Task WaitUntil(Func<bool> condition)
     {
         DateTime deadline = DateTime.UtcNow + TimeSpan.FromSeconds(3);
-        while (!condition() && DateTime.UtcNow < deadline) { await Task.Delay(10); }
+        while (!condition() && DateTime.UtcNow < deadline)
+        {
+            await Task.Delay(10);
+        }
     }
 
     /// <summary>A dropped connection starts the alarm, and it stops by itself after the duration.</summary>

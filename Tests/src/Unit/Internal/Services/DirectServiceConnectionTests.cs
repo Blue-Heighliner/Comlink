@@ -46,6 +46,23 @@ public sealed class DirectServiceConnectionTests
         Assert.Null(await conn.GetUserInfo());
     }
 
+    /// <summary>GetContext snapshots the installed user and the user directory, and throws when no user is installed.</summary>
+    [Fact]
+    public void GetContext_SnapshotsTheInstalledUserAndDirectory()
+    {
+        DirectServiceConnection conn = Build(out _, out Mock<IUserService> user, out _, out Mock<TestEngineController> dir, out _, out _);
+        dir.Setup(d => d.Users).Returns((IReadOnlyList<string>)["ALPHA", "BETA"]);
+        user.Setup(s => s.GetCurrentUserInfo()).Returns((UserInfo?)null);
+
+        Assert.Throws<InvalidOperationException>(() => conn.GetContext());
+
+        user.Setup(s => s.GetCurrentUserInfo()).Returns(new UserInfo { Name = "ALPHA" });
+        IEngineContext context = conn.GetContext();
+
+        Assert.Equal("ALPHA", context.CurrentUser.Name);
+        Assert.Equal(["ALPHA", "BETA"], context.Users.Keys);
+    }
+
     /// <summary>GetUserNames returns the names from the directory as a list.</summary>
     [Fact]
     public async Task GetUserNames_ReturnsUserNamesFromDirectory()

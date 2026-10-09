@@ -495,6 +495,69 @@ public sealed class EngineBuilderTests
         Assert.Empty(listener.OutgoingPoints);
     }
 
+    /// <summary>Each MSMT call sets only its own option, so the calls compose in any order and the options not stated keep the values the engine built.</summary>
+    [Fact]
+    public void Msmt_EachCallSetsItsOwnOption()
+    {
+        MsmtSessionPeerOptions options = new() { Credentials = new MsmtCredentials { Identity = TestMsmtCertificates.Create().Server, TrustedAuthorities = [] } };
+        (_, EngineController controller) = Build(engine => engine
+            .Msmt().KeepAliveMaxInterval(TimeSpan.FromMinutes(9)).StallTimeout(null).ResponseTimeout(TimeSpan.FromSeconds(3)).HandshakeTimeout(TimeSpan.FromSeconds(4))
+            .TcpKeepAliveTime(TimeSpan.FromSeconds(5)).MaximumSessionLifetime(TimeSpan.FromMinutes(6)).SessionLifetime(TimeSpan.FromMinutes(7)).KeepAliveMinInterval(TimeSpan.FromMinutes(8)));
+
+        MsmtSessionPeerOptions applied = controller.ConfigureConnectionOptions(options);
+
+        Assert.Equal(
+            new TimeSpan?[] { TimeSpan.FromSeconds(4), null, TimeSpan.FromSeconds(3), TimeSpan.FromSeconds(5) },
+            new TimeSpan?[] { applied.HandshakeTimeout, applied.StallTimeout, applied.ResponseTimeout, applied.TcpKeepAliveTime });
+        Assert.Equal(
+            [TimeSpan.FromMinutes(6), TimeSpan.FromMinutes(7), TimeSpan.FromMinutes(8), TimeSpan.FromMinutes(9)],
+            [applied.MaximumSessionLifetime, applied.SessionLifetime, applied.KeepAliveMinInterval, applied.KeepAliveMaxInterval]);
+        Assert.Same(options.Credentials, applied.Credentials);
+    }
+
+    /// <summary>The HDLC calls that name a line setting change the link options and the others change the peer options, each leaving every other option at its default.</summary>
+    [Fact]
+    public void Hdlc_LineAndPeerOptions_ComposeAcrossCalls()
+    {
+        HdlcPeerOptions defaults = new();
+        (_, EngineController controller) = Build(engine => engine
+            .Hdlc().ClockSpeed(9600).MaxInfoField(256).Crc(HdlcCrc.Crc16Ccitt).TransmitWindow(2).Loopback(true).DetectDisconnect(false));
+
+        HdlcPeerOptions options = controller.HdlcOptions;
+
+        Assert.Equal(9600, options.Link.ClockSpeed);
+        Assert.Equal(HdlcCrc.Crc16Ccitt, options.Link.Crc);
+        Assert.Equal([256, 2], [options.MaxInfoField, options.TransmitWindow]);
+        Assert.Equal([true, false], [options.Loopback, options.DetectDisconnect]);
+        Assert.Equal(defaults.Link.Encoding, options.Link.Encoding);
+        Assert.Equal(defaults.AcknowledgeDelay, options.AcknowledgeDelay);
+    }
+
+    /// <summary>A maximum payload size below one is refused when stated.</summary>
+    [Theory]
+    [InlineData(0)]
+    [InlineData(-5)]
+    public void Packets_NonPositiveMaxPayloadSize_Throws(int size)
+    {
+        EngineBuilder builder = new();
+        IEngineBuilder<TestFrame, TestPacket, TestMessagePriority, TestLevel, TestAspect> typed = builder.Types<TestFrame, TestPacket, TestMessagePriority, TestLevel, TestAspect>();
+
+        Assert.Throws<ArgumentOutOfRangeException>(() => typed.Packets<TestPacketHandler>(size));
+    }
+
+    /// <summary>A packet heartbeat handler takes precedence over a frame one, for the intervals as well as for what is sent.</summary>
+    [Fact]
+    public void PacketHeartbeat_TakesPrecedenceOverTheFrameHeartbeat()
+    {
+        ServiceCollection services = new();
+        services.AddSingleton(new TestHeartbeatHandler { Interval = TimeSpan.FromSeconds(5), RetryInterval = TimeSpan.FromSeconds(1) });
+        services.AddSingleton(new TestPacketHeartbeatHandler { Interval = TimeSpan.FromSeconds(11), RetryInterval = TimeSpan.FromSeconds(7) });
+        EngineBuilder builder = EngineBuilder.Build(new TestEngineConfiguration(packets: true, packetExtra: packet => packet.Heartbeat<TestPacketHeartbeatHandler>()));
+        EngineController controller = new(builder, new CurrentUserProvider(), null, services.BuildServiceProvider());
+
+        Assert.Equal([TimeSpan.FromSeconds(11), TimeSpan.FromSeconds(7)], [controller.HeartbeatInterval, controller.HeartbeatRetryInterval]);
+    }
+
     /// <summary>The stated MSMT options are used with the engine's own credentials, and the built options are used as they are when none are stated.</summary>
     [Fact]
     public void Stated_MsmtOptions_ReplaceTheSettingsUsedForEveryConnectionKeepingTheEnginesCredentials()

@@ -995,6 +995,37 @@ public sealed class DraftViewModelTests
         Assert.Equal("PUBLIC", vm.SelectedMessageLevel?.Name);
     }
 
+    /// <summary>Choosing a message level that the handler refuses with the chosen aspect moves the aspect, not the level, and every level stays offered while some aspect allows it.</summary>
+    [Fact]
+    public void ChoosingALevel_BlockedWithTheAspect_MovesTheAspect()
+    {
+        Mock<IEngineController> controller = Mock.Get(MakeEngineController());
+        controller.Setup(c => c.MessageLevels).Returns([new MessageLevel { Name = "PUBLIC", Color = "#000000", Key = TestLevel.Public }, new MessageLevel { Name = "SECRET", Color = "#000000", Key = TestLevel.Secret }]);
+        controller.Setup(c => c.MessageAspects).Returns([new MessageAspect { Name = "ENCRYPTED", Key = TestAspect.Encrypted }]);
+        controller.Setup(c => c.IsDraftAllowed(It.IsAny<IEngineContext>(), It.IsAny<Enum>(), It.IsAny<Enum?>(), It.IsAny<Enum?>(), It.IsAny<string>()))
+            .Returns((IEngineContext _, Enum priority, Enum? level, Enum? aspect, string tag) => !(TestLevel.Secret.Equals(level) && TestAspect.Encrypted.Equals(aspect)));
+        DraftEntity entity = new() { Body = "B", Addresses = [], FolderId = "root-drafts", MessageLevel = (int)TestLevel.Public, MessageAspect = (int)TestAspect.Encrypted };
+        DraftViewModel vm = new(entity, Mock.Of<IEntryService>(), Mock.Of<IEngineConnection>(), [], noLogger, controller.Object, currentMessageLevel: "SECRET");
+        Assert.Equal("ENCRYPTED", vm.SelectedMessageAspect?.Aspect?.Name);
+
+        vm.SelectedMessageLevel = vm.AvailableMessageLevels.Single(level => level.Name == "SECRET");
+
+        Assert.Equal("SECRET", vm.SelectedMessageLevel?.Name);
+        Assert.Null(vm.SelectedMessageAspect?.Aspect);
+        Assert.Equal(["PUBLIC", "SECRET"], vm.AvailableMessageLevels.Select(level => level.Name));
+    }
+
+    /// <summary>A draft stored with a combination the handler now refuses opens on an allowed one instead.</summary>
+    [Fact]
+    public void Constructor_StoredCombinationNowBlocked_OpensOnAnAllowedOne()
+    {
+        DraftEntity entity = new() { Tag = "URGENT", Priority = (int)TestMessagePriority.Flash };
+        DraftViewModel vm = Build(out _, out _, entity: entity, isAllowed: Blocking("URGENT", TestMessagePriority.Flash));
+
+        Assert.Equal("URGENT", vm.Tag);
+        Assert.Equal("ROUTINE", vm.SelectedPriority.Name);
+    }
+
     /// <summary>A stored aspect is selected again when the draft is opened.</summary>
     [Fact]
     public void MessageAspects_StoredAspectIsSelected()

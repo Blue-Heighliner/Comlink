@@ -507,9 +507,24 @@ internal sealed partial class DraftViewModel : ObservableObject, IDraftViewModel
                 return;
             }
 
-            AvailablePriorities = [.. allPriorities.Where(p => allowed.Any(c => c.Priority == p))];
-            AvailableMessageLevels = [.. allowedMessageLevels.Where(l => allowed.Any(c => c.Level == l))];
-            AvailableMessageAspects = [.. allMessageAspects.Where(a => allowed.Any(c => c.Aspect == a))];
+            // A list is only replaced when its contents change, since replacing one makes a picker drop and re-apply its selection.
+            List<MessagePriorityOption> priorities = [.. allPriorities.Where(p => allowed.Any(c => c.Priority == p))];
+            if (!priorities.SequenceEqual(AvailablePriorities))
+            {
+                AvailablePriorities = priorities;
+            }
+
+            List<MessageLevel> levels = [.. allowedMessageLevels.Where(l => allowed.Any(c => c.Level == l))];
+            if (!levels.SequenceEqual(AvailableMessageLevels))
+            {
+                AvailableMessageLevels = levels;
+            }
+
+            List<MessageAspectOption> aspects = [.. allMessageAspects.Where(a => allowed.Any(c => c.Aspect == a))];
+            if (!aspects.SequenceEqual(AvailableMessageAspects))
+            {
+                AvailableMessageAspects = aspects;
+            }
 
             if (allowed.Any(c => c.Priority == SelectedPriority && c.Level == SelectedMessageLevel && c.Aspect == SelectedMessageAspect))
             {
@@ -817,12 +832,6 @@ internal sealed partial class DraftViewModel : ObservableObject, IDraftViewModel
             return;
         }
 
-        if (!IsAllowed(SelectedPriority, SelectedMessageLevel, SelectedMessageAspect, Tag))
-        {
-            StatusMessage = engineController.Display("This combination is not allowed");
-            return;
-        }
-
         if (TagsEnabled && engineController.DraftTagRules.Validate(Tag) is { } tagError)
         {
             StatusMessage = engineController.Display(tagError);
@@ -833,6 +842,12 @@ internal sealed partial class DraftViewModel : ObservableObject, IDraftViewModel
         IsSaving = true;
         try
         {
+            if (!IsAllowed(SelectedPriority, SelectedMessageLevel, SelectedMessageAspect, Tag))
+            {
+                StatusMessage = engineController.Display("This combination is not allowed");
+                return;
+            }
+
             string plainBody = BuildPlainBody();
             string body = Header is { } header ? header + "\n" + plainBody : plainBody;
             ApplyToEntity();

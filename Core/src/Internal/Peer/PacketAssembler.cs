@@ -60,6 +60,11 @@ internal sealed class PacketAssembler(IEngineController engineController, int ma
         }
 
         string id = engineController.GetFrameId(decoded);
+        if (string.IsNullOrEmpty(id))
+        {
+            throw new InvalidDataException("The packet has no frame id");
+        }
+
         int index = engineController.GetPacketIndex(decoded);
         int count = engineController.GetPacketCount(decoded);
         int total = engineController.GetFrameLength(decoded);
@@ -97,7 +102,10 @@ internal sealed class PacketAssembler(IEngineController engineController, int ma
             {
                 payload = new Pending(count, total);
                 pending.Add(id, payload);
-                while (pending.Count > maxPendingFrames) { EvictOldest(except: id); }
+                while (pending.Count > maxPendingFrames)
+                {
+                    EvictOldest(except: id);
+                }
             }
             else if (payload.Count != count || payload.Total != total)
             {
@@ -130,7 +138,10 @@ internal sealed class PacketAssembler(IEngineController engineController, int ma
             payload.ReceivedCount++;
             payload.ReceivedBytes += chunk.Length;
             pendingBytes += chunk.Length;
-            while (pendingBytes > maxPendingBytes && pending.Count > 1) { EvictOldest(except: id); }
+            while (pendingBytes > maxPendingBytes && pending.Count > 1)
+            {
+                EvictOldest(except: id);
+            }
 
             if (payload.ReceivedCount < count)
             {

@@ -73,7 +73,10 @@ public sealed class RepositoryTests : IDisposable
 
             closed.Initialize();
             DateTime deadline = DateTime.UtcNow + TimeSpan.FromSeconds(5);
-            while ((await repo.GetAll()).Count == 0 && DateTime.UtcNow < deadline) { await Task.Delay(20); }
+            while ((await repo.GetAll()).Count == 0 && DateTime.UtcNow < deadline)
+            {
+                await Task.Delay(20);
+            }
 
             ActivityLogEntity today = Assert.Single(await repo.GetAll());
             Assert.Equal(["starting", "started"], today.EventEntries.Select(entry => entry.Message));
