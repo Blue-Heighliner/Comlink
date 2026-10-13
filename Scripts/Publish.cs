@@ -1,4 +1,4 @@
-#:package Markwardt.ScriptUtilities@0.2.0
+#:package Markwardt.ScriptUtilities
 #:property TreatWarningsAsErrors=true
 
 // Creates the GitHub Release/tag for a version (locally, since a repo ruleset blocks GITHUB_TOKEN from

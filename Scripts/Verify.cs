@@ -1,4 +1,4 @@
-#:package Markwardt.ScriptUtilities@0.2.0
+#:package Markwardt.ScriptUtilities
 #:property TreatWarningsAsErrors=true
 
 // Verifies that everything is checked for formatting and consistency: applies formatting fixes and

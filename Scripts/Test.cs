@@ -1,4 +1,4 @@
-#:package Markwardt.ScriptUtilities@0.2.0
+#:package Markwardt.ScriptUtilities
 #:property TreatWarningsAsErrors=true
 
 // Runs the test suite with coverage and prints a summary, mirroring what CI's Test step runs. File-based
