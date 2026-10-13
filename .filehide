@@ -1,0 +1,9 @@
+.claude
+.git
+.config
+.github
+CLAUDE.md
+.editorconfig
+.avalonia-build-tasks
+bin
+obj
