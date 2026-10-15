@@ -8,7 +8,7 @@
     <PackageVersion Include="Avalonia.AvaloniaEdit" Version="11.3.0" />
     <PackageVersion Include="Avalonia.Desktop" Version="11.3.0" />
     <PackageVersion Include="Avalonia.Themes.Fluent" Version="11.3.0" />
-    <PackageVersion Include="BlueHeighliner.MicroGate" Version="0.4.1" />
+    <PackageVersion Include="BlueHeighliner.MicroGate" Version="0.4.2" />
     <PackageVersion Include="BlueHeighliner.Msmt" Version="0.3.0" />
     <PackageVersion Include="CommunityToolkit.Mvvm" Version="8.4.0" />
     <PackageVersion Include="coverlet.collector" Version="6.0.4" />
