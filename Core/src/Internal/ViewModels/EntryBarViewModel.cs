@@ -308,10 +308,10 @@ internal sealed partial class EntryBarViewModel : ObservableObject, IEntryBarVie
         return string.IsNullOrEmpty(message.Tag) ? null : message.Tag;
     }
 
-    private string? GetMessageLevelColor(MessageData message)
+    private string? GetMessageLevelBackground(MessageData message)
     {
         string level = engineController.NameOfLevel(message);
-        return engineController.MessageLevels.IsRecognized(level) ? engineController.MessageLevels.GetColor(level) : null;
+        return engineController.MessageLevels.IsRecognized(level) ? engineController.MessageLevels.GetBackground(level) : null;
     }
 
     /// <summary>Loads the first page of entries for the given folder and resets pagination.</summary>
@@ -441,7 +441,7 @@ internal sealed partial class EntryBarViewModel : ObservableObject, IEntryBarVie
                         string timeText = m.ReceivedAt.ToString("dd-MMM-yyyy HH:mm").ToUpperInvariant();
                         EntryItemViewModel item = new(m.MessageId, m.Message.FromUser, EntryType.Message, m.ReceivedAt,
                             secondaryText: m.Message.Body.FirstLine, priorityText: GetPriorityLabel(m.Message), tagText: GetTagLabel(m.Message), timeText: timeText,
-                            messageLevelColorHex: GetMessageLevelColor(m.Message), isAlert: m.Message.IsAlert);
+                            messageLevelBackgroundHex: GetMessageLevelBackground(m.Message), isAlert: m.Message.IsAlert);
                         item.OverallStatus = m.ReadStatus;
                         items.Add(item);
                     }
@@ -457,7 +457,7 @@ internal sealed partial class EntryBarViewModel : ObservableObject, IEntryBarVie
                         string timeText = m.ReceivedAt.ToString("dd-MMM-yyyy HH:mm").ToUpperInvariant();
                         EntryItemViewModel item = new(m.MessageId, destinations, EntryType.Message, m.ReceivedAt,
                             secondaryText: m.Message.Body.FirstLine, priorityText: GetPriorityLabel(m.Message), tagText: GetTagLabel(m.Message), timeText: timeText, isOutboundMessage: true,
-                            messageLevelColorHex: GetMessageLevelColor(m.Message), isAlert: m.Message.IsAlert);
+                            messageLevelBackgroundHex: GetMessageLevelBackground(m.Message), isAlert: m.Message.IsAlert);
                         item.OverallStatus = m.OverallStatus;
                         items.Add(item);
                     }

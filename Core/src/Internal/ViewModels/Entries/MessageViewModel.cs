@@ -35,8 +35,10 @@ internal interface IMessageViewModel
     string Tag { get; }
     /// <summary>Gets the message level name this message was sent at, or an empty string when no message levels are configured.</summary>
     string MessageLevelName { get; }
-    /// <summary>Gets the hex color for <see cref="MessageLevelName"/>, or <see langword="null"/> when it has none recognized.</summary>
-    string? MessageLevelColorHex { get; }
+    /// <summary>Gets the hex background color for <see cref="MessageLevelName"/>, or <see langword="null"/> when it has none recognized.</summary>
+    string? MessageLevelBackgroundHex { get; }
+    /// <summary>Gets the hex color of the text on <see cref="MessageLevelBackgroundHex"/>, or <see langword="null"/> when <see cref="MessageLevelName"/> has none recognized.</summary>
+    string? MessageLevelForegroundHex { get; }
     /// <summary>Gets the message aspect name this message carries, or an empty string for none.</summary>
     string MessageAspectName { get; }
     /// <summary>
@@ -117,7 +119,8 @@ internal sealed partial class MessageViewModel : ObservableObject, IMessageViewM
         TagsEnabled = engineController.TagsEnabled;
         Tag = message.Tag;
         MessageLevelName = engineController.NameOfLevel(message);
-        MessageLevelColorHex = engineController.MessageLevels.IsRecognized(MessageLevelName) ? engineController.MessageLevels.GetColor(MessageLevelName) : null;
+        MessageLevelBackgroundHex = engineController.MessageLevels.IsRecognized(MessageLevelName) ? engineController.MessageLevels.GetBackground(MessageLevelName) : null;
+        MessageLevelForegroundHex = engineController.MessageLevels.IsRecognized(MessageLevelName) ? engineController.MessageLevels.GetForeground(MessageLevelName) : null;
         MessageAspectName = engineController.NameOfAspect(message);
         List<MessageAddress> addresses = [.. message.Addresses.Select(a => new MessageAddress { UserName = a.UserName, Type = a.Type.ParseAddressType(), Information = a.Information })];
         IReadOnlyList<AddressTypeOption> addressTypes = engineController.AddressTypes;
@@ -180,8 +183,10 @@ internal sealed partial class MessageViewModel : ObservableObject, IMessageViewM
     public string Tag { get; }
     /// <summary>Gets the message level name this message was sent at, or an empty string when no message levels are configured.</summary>
     public string MessageLevelName { get; }
-    /// <summary>Gets the hex color for <see cref="MessageLevelName"/>, or <see langword="null"/> when it has none recognized.</summary>
-    public string? MessageLevelColorHex { get; }
+    /// <summary>Gets the hex background color for <see cref="MessageLevelName"/>, or <see langword="null"/> when it has none recognized.</summary>
+    public string? MessageLevelBackgroundHex { get; }
+    /// <summary>Gets the hex color of the text on <see cref="MessageLevelBackgroundHex"/>, or <see langword="null"/> when <see cref="MessageLevelName"/> has none recognized.</summary>
+    public string? MessageLevelForegroundHex { get; }
     /// <inheritdoc />
     public string MessageAspectName { get; }
     /// <summary>Gets the uppercase display text for <see cref="ReadStatus"/>, or empty if <see langword="null"/>.</summary>

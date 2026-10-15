@@ -17,7 +17,8 @@
     <!-- Message Level Banner (row 0) -->
     <controls:MessageLevelBanner Grid.Row="0"
                                   Title="{Binding MessageLevelName}"
-                                  BannerColor="{Binding MessageLevelColor}"
+                                  BannerBackground="{Binding MessageLevelBackground}"
+                                  BannerForeground="{Binding MessageLevelForeground}"
                                   IsVisible="{Binding MessageLevelName, Converter={x:Static StringConverters.IsNotNullOrEmpty}}" />
 
     <!-- Custom Title Bar (row 1) - always shown; Server mode swaps the left-side drafts/notes/export/
@@ -46,7 +47,8 @@
                        AlertText="{Binding Alert.AlertText}"
                        AlertCommand="{Binding Alert.OpenOldestCommand}"
                        NetworkText="{Binding NetworkIndicator.Label}"
-                       NetworkColor="{Binding NetworkIndicator.ColorHex}" />
+                       NetworkBackground="{Binding NetworkIndicator.BackgroundHex}"
+                       NetworkForeground="{Binding NetworkIndicator.ForegroundHex}" />
 
     <!-- Main Content (row 2) -->
     <Panel Grid.Row="2">

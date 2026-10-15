@@ -1,7 +1,7 @@
 namespace BlueHeighliner.Comlink;
 
 /// <summary>
-/// A single named, colored security classification level. Levels are ordered: each level in
+/// A single named, colored security classification level, shown as a foreground color on a background color. Levels are ordered: each level in
 /// <see cref="IEngineController.MessageLevels"/> outranks every one stated before it (see
 /// <see cref="IEngineBuilder{TFrame, TPacket, TPriority, TLevel, TAspect}.Level"/>).
 /// </summary>
@@ -13,8 +13,10 @@ internal sealed record MessageLevel
     public Enum? Key { get; init; }
     /// <summary>Gets the integer value of <see cref="Key"/>, which is how the level is stored in drafts and so must never change for a member of the host's enum, or <see langword="null"/> without a key.</summary>
     public int? Value => Key is null ? null : Convert.ToInt32(Key);
-    /// <summary>Gets the hex color shown for this level in the top banner.</summary>
-    public required string Color { get; init; }
+    /// <summary>Gets the hex background color shown for this level: the top banner and the level's label in a message.</summary>
+    public required string Background { get; init; }
+    /// <summary>Gets the hex color of the text shown on <see cref="Background"/>.</summary>
+    public string Foreground { get; init; } = "#FFFFFF";
 }
 
 /// <summary>Extension helpers for looking up rank and display information from an ordered set of <see cref="MessageLevel"/> values.</summary>
@@ -36,9 +38,13 @@ internal static class MessageLevelExtensions
         return -1;
     }
 
-    /// <summary>Returns the <see cref="MessageLevel.Color"/> matching <paramref name="levelName"/>, or a neutral gray fallback if no level in <paramref name="levels"/> matches.</summary>
-    public static string GetColor(this IReadOnlyList<MessageLevel> levels, string levelName)
-        => levels.FirstOrDefault(l => string.Equals(l.Name, levelName, StringComparison.OrdinalIgnoreCase))?.Color ?? "#5A5A5A";
+    /// <summary>Returns the <see cref="MessageLevel.Background"/> matching <paramref name="levelName"/>, or a neutral gray fallback if no level in <paramref name="levels"/> matches.</summary>
+    public static string GetBackground(this IReadOnlyList<MessageLevel> levels, string levelName)
+        => levels.FirstOrDefault(l => string.Equals(l.Name, levelName, StringComparison.OrdinalIgnoreCase))?.Background ?? "#5A5A5A";
+
+    /// <summary>Returns the <see cref="MessageLevel.Foreground"/> matching <paramref name="levelName"/>, or white if no level in <paramref name="levels"/> matches.</summary>
+    public static string GetForeground(this IReadOnlyList<MessageLevel> levels, string levelName)
+        => levels.FirstOrDefault(l => string.Equals(l.Name, levelName, StringComparison.OrdinalIgnoreCase))?.Foreground ?? "#FFFFFF";
 
     /// <summary>Returns whether <paramref name="levelName"/> matches one of <paramref name="levels"/> - <see langword="false"/> for an empty string or a name from a message level no longer configured.</summary>
     public static bool IsRecognized(this IReadOnlyList<MessageLevel> levels, string levelName)

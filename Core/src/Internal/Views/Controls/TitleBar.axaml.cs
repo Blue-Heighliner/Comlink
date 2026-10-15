@@ -89,9 +89,13 @@ internal partial class TitleBar : UserControl
     public static readonly StyledProperty<string> NetworkTextProperty =
         AvaloniaProperty.Register<TitleBar, string>(nameof(NetworkText), string.Empty);
 
-    /// <summary>Identifies the <see cref="NetworkColor"/> styled property.</summary>
-    public static readonly StyledProperty<string> NetworkColorProperty =
-        AvaloniaProperty.Register<TitleBar, string>(nameof(NetworkColor), string.Empty);
+    /// <summary>Identifies the <see cref="NetworkBackground"/> styled property.</summary>
+    public static readonly StyledProperty<string> NetworkBackgroundProperty =
+        AvaloniaProperty.Register<TitleBar, string>(nameof(NetworkBackground), string.Empty);
+
+    /// <summary>Identifies the <see cref="NetworkForeground"/> styled property.</summary>
+    public static readonly StyledProperty<string> NetworkForegroundProperty =
+        AvaloniaProperty.Register<TitleBar, string>(nameof(NetworkForeground), string.Empty);
 
     /// <summary>Identifies the <see cref="IsAlerting"/> styled property.</summary>
     public static readonly StyledProperty<bool> IsAlertingProperty =
@@ -265,11 +269,18 @@ internal partial class TitleBar : UserControl
         set => SetValue(NetworkTextProperty, value);
     }
 
-    /// <summary>Gets or sets the hex color of the network indicator.</summary>
-    public string NetworkColor
+    /// <summary>Gets or sets the hex background color of the network indicator.</summary>
+    public string NetworkBackground
     {
-        get => GetValue(NetworkColorProperty);
-        set => SetValue(NetworkColorProperty, value);
+        get => GetValue(NetworkBackgroundProperty);
+        set => SetValue(NetworkBackgroundProperty, value);
+    }
+
+    /// <summary>Gets or sets the hex color of the text on the network indicator.</summary>
+    public string NetworkForeground
+    {
+        get => GetValue(NetworkForegroundProperty);
+        set => SetValue(NetworkForegroundProperty, value);
     }
 
     /// <summary>Gets or sets the text displayed in the alert box.</summary>
@@ -341,7 +352,7 @@ internal partial class TitleBar : UserControl
         {
             ApplyAlertText();
         }
-        if (change.Property == NetworkTextProperty || change.Property == NetworkColorProperty || change.Property == IsServerModeProperty || change.Property == IsErrorScreenVisibleProperty)
+        if (change.Property == NetworkTextProperty || change.Property == NetworkBackgroundProperty || change.Property == NetworkForegroundProperty || change.Property == IsServerModeProperty || change.Property == IsErrorScreenVisibleProperty)
         {
             ApplyNetworkIndicator();
         }
@@ -359,9 +370,13 @@ internal partial class TitleBar : UserControl
 
         box.IsVisible = !IsServerMode && !IsErrorScreenVisible && NetworkText.Length > 0;
         text.Text = NetworkText;
-        if (Color.TryParse(NetworkColor, out Color color))
+        if (Color.TryParse(NetworkBackground, out Color background))
         {
-            box.Background = new SolidColorBrush(color);
+            box.Background = new SolidColorBrush(background);
+        }
+        if (Color.TryParse(NetworkForeground, out Color foreground))
+        {
+            text.Foreground = new SolidColorBrush(foreground);
         }
     }
 

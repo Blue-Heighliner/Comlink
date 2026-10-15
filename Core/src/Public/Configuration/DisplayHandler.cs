@@ -30,11 +30,17 @@ public interface IDisplayHandler
     /// <summary>Gets the label of the network indicator while it shows offline. Defaults to <c>OFFLINE</c>.</summary>
     string? NetworkOfflineLabel => null;
 
-    /// <summary>Gets the color of the network indicator while it shows online, as a hex color such as <c>#2E7D32</c>. Defaults to green.</summary>
-    string? NetworkOnlineColor => null;
+    /// <summary>Gets the background color of the network indicator while it shows online, as a hex color such as <c>#2E7D32</c>. Defaults to green.</summary>
+    string? NetworkOnlineBackground => null;
 
-    /// <summary>Gets the color of the network indicator while it shows offline, as a hex color such as <c>#D35400</c>. Defaults to orange.</summary>
-    string? NetworkOfflineColor => null;
+    /// <summary>Gets the color of the text on the network indicator while it shows online, as a hex color such as <c>#FFFFFF</c>. Defaults to white.</summary>
+    string? NetworkOnlineForeground => null;
+
+    /// <summary>Gets the background color of the network indicator while it shows offline, as a hex color such as <c>#D35400</c>. Defaults to orange.</summary>
+    string? NetworkOfflineBackground => null;
+
+    /// <summary>Gets the color of the text on the network indicator while it shows offline, as a hex color such as <c>#FFFFFF</c>. Defaults to white.</summary>
+    string? NetworkOfflineForeground => null;
 
     /// <summary>Gets the text shown in the content area when no entry is selected. Defaults to <c>HOME</c>.</summary>
     string? HomeText => null;

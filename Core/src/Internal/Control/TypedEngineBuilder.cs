@@ -456,9 +456,16 @@ internal sealed class EngineBuilder<TFrame, TPacket, TPriority, TLevel, TAspect>
     }
 
     /// <inheritdoc />
-    public IMessageLevelBuilder<TFrame, TPacket, TPriority, TLevel, TAspect> Color(string color)
+    public IMessageLevelBuilder<TFrame, TPacket, TPriority, TLevel, TAspect> Background(string background)
     {
-        levels.Color(color);
+        levels.Background(background);
+        return this;
+    }
+
+    /// <inheritdoc />
+    public IMessageLevelBuilder<TFrame, TPacket, TPriority, TLevel, TAspect> Foreground(string foreground)
+    {
+        levels.Foreground(foreground);
         return this;
     }
 

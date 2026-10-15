@@ -225,7 +225,8 @@ public sealed class EngineBuilderTests
         Assert.Equal("Welcome", controller.HomeText);
         Assert.Equal(LogFieldWidths.None, controller.LogWidths);
         Assert.Equal(["LINKED", "OFFLINE"], [controller.GetNetworkIndicatorLabel(true), controller.GetNetworkIndicatorLabel(false)]);
-        Assert.Equal(["#2E7D32", "#112233"], [controller.GetNetworkIndicatorColor(true), controller.GetNetworkIndicatorColor(false)]);
+        Assert.Equal(["#2E7D32", "#112233"], [controller.GetNetworkIndicatorBackground(true), controller.GetNetworkIndicatorBackground(false)]);
+        Assert.Equal(["#FFFFFF", "#FFEEDD"], [controller.GetNetworkIndicatorForeground(true), controller.GetNetworkIndicatorForeground(false)]);
         Assert.Equal(icon, controller.WindowIconPath);
         Assert.True(controller.CommandLineOverridesAllowed);
     }
@@ -878,14 +879,15 @@ public sealed class EngineBuilderTests
         Assert.Equal(["Server1", "Server2"], controller.StorageServers);
     }
 
-    /// <summary>Levels take their order from how they are stated, their name from the member (or an override) and a neutral color unless stated.</summary>
+    /// <summary>Levels take their order from how they are stated, their name from the member (or an override) and a neutral background and white foreground unless stated.</summary>
     [Fact]
     public void MessageLevels_FollowTheStatedOrderWithOverrides()
     {
-        (_, EngineController controller) = Build(engine => engine.Level(TestLevel.High).Label("TOP").Color("#222222"));
+        (_, EngineController controller) = Build(engine => engine.Level(TestLevel.High).Label("TOP").Background("#222222").Foreground("#EEEEEE"));
 
         Assert.Equal(["PUBLIC", "TOP"], [controller.MessageLevels[0].Name, controller.MessageLevels[^1].Name]);
-        Assert.Equal(["#5A5A5A", "#222222"], [controller.MessageLevels[0].Color, controller.MessageLevels[^1].Color]);
+        Assert.Equal(["#5A5A5A", "#222222"], [controller.MessageLevels[0].Background, controller.MessageLevels[^1].Background]);
+        Assert.Equal(["#FFFFFF", "#EEEEEE"], [controller.MessageLevels[0].Foreground, controller.MessageLevels[^1].Foreground]);
     }
 
     /// <summary>A user's message level is the one on their entry, or the lowest configured level when none is stated.</summary>
@@ -893,7 +895,7 @@ public sealed class EngineBuilderTests
     public void GetUserMessageLevel_UsesTheEntryElseTheLowestLevel()
     {
         (_, EngineController controller) = Build(
-            engine => engine.Level(TestLevel.Low).Color("#111111").Level(TestLevel.High).Color("#222222"),
+            engine => engine.Level(TestLevel.Low).Background("#111111").Level(TestLevel.High).Background("#222222"),
             network: Network(("ALICE", new NetworkUserConfig { MessageLevel = "HIGH" })));
 
         Assert.Equal("HIGH", controller.GetUserMessageLevel("ALICE"));

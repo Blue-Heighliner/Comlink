@@ -3,7 +3,7 @@ namespace BlueHeighliner.Comlink;
 /// <summary>Collects what is stated through <see cref="IEngineBuilder{TFrame, TPacket, TPriority, TLevel, TAspect}"/> and <see cref="IMessageLevelBuilder{TFrame, TPacket, TPriority, TLevel, TAspect}"/>, recording what is stated about each level and turning it into the engine's message levels.</summary>
 internal sealed class MessageLevelBuilder<TLevel> where TLevel : struct, Enum
 {
-    private readonly Dictionary<TLevel, (string? Label, string? Color)> options = [];
+    private readonly Dictionary<TLevel, (string? Label, string? Background, string? Foreground)> options = [];
     private readonly List<TLevel> order = [];
     private TLevel current;
 
@@ -21,14 +21,24 @@ internal sealed class MessageLevelBuilder<TLevel> where TLevel : struct, Enum
     /// <inheritdoc cref="IMessageLevelBuilder{TFrame, TPacket, TPriority, TLevel, TAspect}.Label"/>
     public MessageLevelBuilder<TLevel> Label(string label)
     {
-        options[current] = (label, options.GetValueOrDefault(current).Color);
+        (_, string? background, string? foreground) = options.GetValueOrDefault(current);
+        options[current] = (label, background, foreground);
         return this;
     }
 
-    /// <inheritdoc cref="IMessageLevelBuilder{TFrame, TPacket, TPriority, TLevel, TAspect}.Color"/>
-    public MessageLevelBuilder<TLevel> Color(string color)
+    /// <inheritdoc cref="IMessageLevelBuilder{TFrame, TPacket, TPriority, TLevel, TAspect}.Background"/>
+    public MessageLevelBuilder<TLevel> Background(string background)
     {
-        options[current] = (options.GetValueOrDefault(current).Label, color);
+        (string? label, _, string? foreground) = options.GetValueOrDefault(current);
+        options[current] = (label, background, foreground);
+        return this;
+    }
+
+    /// <inheritdoc cref="IMessageLevelBuilder{TFrame, TPacket, TPriority, TLevel, TAspect}.Foreground"/>
+    public MessageLevelBuilder<TLevel> Foreground(string foreground)
+    {
+        (string? label, string? background, _) = options.GetValueOrDefault(current);
+        options[current] = (label, background, foreground);
         return this;
     }
 
@@ -39,13 +49,13 @@ internal sealed class MessageLevelBuilder<TLevel> where TLevel : struct, Enum
         List<MessageLevel> built =
         [.. order.Select(level =>
         {
-            (string? label, string? color) = options.GetValueOrDefault(level);
+            (string? label, string? background, string? foreground) = options.GetValueOrDefault(level);
             if (Convert.ToInt64(level) is < int.MinValue or > int.MaxValue)
             {
                 throw new InvalidOperationException($"The message level {typeof(TLevel).Name}.{level} has a value that does not fit an int, which is how message levels are stored");
             }
 
-            return new MessageLevel { Key = level, Name = label ?? level.ToString().ToUpperInvariant(), Color = color ?? "#5A5A5A" };
+            return new MessageLevel { Key = level, Name = label ?? level.ToString().ToUpperInvariant(), Background = background ?? "#5A5A5A", Foreground = foreground ?? "#FFFFFF" };
         })];
         if (built.GroupBy(level => level.Name, StringComparer.OrdinalIgnoreCase).FirstOrDefault(group => group.Count() > 1) is { } duplicate)
         {

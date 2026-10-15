@@ -54,7 +54,7 @@ public sealed class EntryItemViewModelTests
     {
         DateTime sortDate = new(2025, 7, 4, 12, 0, 0, DateTimeKind.Utc);
         EntryItemViewModel vm = new("msg123", "Hello", EntryType.Draft, sortDate,
-            secondaryText: "from ALPHA", timeText: "12:00", fixedStatusText: "DRAFT", messageLevelColorHex: "#C62828", isAlert: true);
+            secondaryText: "from ALPHA", timeText: "12:00", fixedStatusText: "DRAFT", messageLevelBackgroundHex: "#C62828", isAlert: true);
 
         Assert.Equal("msg123", vm.Id);
         Assert.Equal("Hello", vm.Title);
@@ -63,7 +63,7 @@ public sealed class EntryItemViewModelTests
         Assert.Equal("from ALPHA", vm.SecondaryText);
         Assert.Equal("12:00", vm.TimeText);
         Assert.Equal("DRAFT", vm.FixedStatusText);
-        Assert.Equal("#C62828", vm.MessageLevelColorHex);
+        Assert.Equal("#C62828", vm.MessageLevelBackgroundHex);
         Assert.True(vm.IsAlert);
         Assert.False(vm.IsSelected);
         Assert.Null(vm.OverallStatus);
@@ -105,12 +105,12 @@ public sealed class EntryItemViewModelTests
         Assert.Equal("#CCCCCC", vm.SecondaryTextColorHex);
     }
 
-    /// <summary>MessageLevelColorHex defaults to null when not given.</summary>
+    /// <summary>MessageLevelBackgroundHex defaults to null when not given.</summary>
     [Fact]
-    public void MessageLevelColorHex_NotGiven_DefaultsToNull()
+    public void MessageLevelBackgroundHex_NotGiven_DefaultsToNull()
     {
         EntryItemViewModel vm = new("x", "T", EntryType.Message, DateTime.UtcNow);
-        Assert.Null(vm.MessageLevelColorHex);
+        Assert.Null(vm.MessageLevelBackgroundHex);
     }
 
     /// <summary>IsSelected is observable and changes notify.</summary>

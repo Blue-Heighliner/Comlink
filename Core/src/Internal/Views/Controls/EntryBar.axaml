@@ -213,8 +213,8 @@
             <Border DockPanel.Dock="Top"
                     Height="3"
                     Margin="0,0,0,4"
-                    Background="{Binding MessageLevelColorHex, Converter={x:Static vm:ColorHexToBrushConverter.Instance}}"
-                    IsVisible="{Binding MessageLevelColorHex, Converter={x:Static StringConverters.IsNotNullOrEmpty}}" />
+                    Background="{Binding MessageLevelBackgroundHex, Converter={x:Static vm:ColorHexToBrushConverter.Instance}}"
+                    IsVisible="{Binding MessageLevelBackgroundHex, Converter={x:Static StringConverters.IsNotNullOrEmpty}}" />
             <Grid ColumnDefinitions="*,Auto" Background="Transparent">
               <Grid.ContextMenu>
                 <ContextMenu>

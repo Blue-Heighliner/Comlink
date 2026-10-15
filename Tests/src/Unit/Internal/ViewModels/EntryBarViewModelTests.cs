@@ -176,7 +176,7 @@ public sealed class EntryBarViewModelTests
     public void AvailableMessageLevelFilters_IsAnyFollowedByEveryConfiguredLevel()
     {
         Mock<TestEngineController> controller = new() { CallBase = true };
-        controller.Setup(c => c.MessageLevels).Returns([new MessageLevel { Name = "PUBLIC", Color = "#2E7D32" }, new MessageLevel { Name = "RESTRICTED", Key = TestLevel.Restricted, Color = "#C62828" }]);
+        controller.Setup(c => c.MessageLevels).Returns([new MessageLevel { Name = "PUBLIC", Background = "#2E7D32" }, new MessageLevel { Name = "RESTRICTED", Key = TestLevel.Restricted, Background = "#C62828" }]);
         EntryBarViewModel vm = new(new Mock<IEntryService>().Object, controller.Object);
 
         Assert.Equal(["Any", "PUBLIC", "RESTRICTED"], vm.AvailableMessageLevelFilters.Select(f => f.Label));
@@ -205,7 +205,7 @@ public sealed class EntryBarViewModelTests
     public async Task LoadFolder_SetsShowMessageLevelFilterWhenLevelsConfigured(FolderType folderType, bool expected)
     {
         Mock<TestEngineController> controller = new() { CallBase = true };
-        controller.Setup(c => c.MessageLevels).Returns([new MessageLevel { Name = "PUBLIC", Color = "#2E7D32" }]);
+        controller.Setup(c => c.MessageLevels).Returns([new MessageLevel { Name = "PUBLIC", Background = "#2E7D32" }]);
         Mock<IEntryService> svc = new();
         svc.Setup(s => s.GetMessages(It.IsAny<string>(), It.IsAny<int>(), It.IsAny<EntryFilter>())).ReturnsAsync((Items: new List<MessageEntity>(), Total: 0));
         svc.Setup(s => s.GetDrafts(It.IsAny<string>(), It.IsAny<int>(), It.IsAny<bool>(), It.IsAny<EntryFilter>())).ReturnsAsync((Items: new List<DraftEntity>(), Total: 0));
@@ -865,12 +865,12 @@ public sealed class EntryBarViewModelTests
         Assert.Null(vm.Entries[0].TagText);
     }
 
-    /// <summary>Inbox entries carry a MessageLevelColorHex resolved from the message's stored message level.</summary>
+    /// <summary>Inbox entries carry a MessageLevelBackgroundHex resolved from the message's stored message level.</summary>
     [Fact]
-    public async Task LoadFolder_Inbox_RecognizedMessageLevel_SetsMessageLevelColorHex()
+    public async Task LoadFolder_Inbox_RecognizedMessageLevel_SetsMessageLevelBackgroundHex()
     {
         Mock<TestEngineController> messageLevelProvider = new() { CallBase = true };
-        messageLevelProvider.Setup(p => p.MessageLevels).Returns([new MessageLevel { Name = "RESTRICTED", Key = TestLevel.Restricted, Color = "#C62828" }]);
+        messageLevelProvider.Setup(p => p.MessageLevels).Returns([new MessageLevel { Name = "RESTRICTED", Key = TestLevel.Restricted, Background = "#C62828" }]);
         Mock<IEntryService> svc = new();
         svc.Setup(s => s.GetMessages(It.IsAny<string>(), It.IsAny<int>()))
            .ReturnsAsync((Items: new List<MessageEntity> { MakeMessage("M1", messageLevel: "RESTRICTED") }, Total: 1));
@@ -878,15 +878,15 @@ public sealed class EntryBarViewModelTests
 
         await vm.LoadFolder(MakeFolder("root-inbox", FolderType.Inbox));
 
-        Assert.Equal("#C62828", vm.Entries[0].MessageLevelColorHex);
+        Assert.Equal("#C62828", vm.Entries[0].MessageLevelBackgroundHex);
     }
 
-    /// <summary>Outbox entries carry a MessageLevelColorHex the same way as Inbox entries.</summary>
+    /// <summary>Outbox entries carry a MessageLevelBackgroundHex the same way as Inbox entries.</summary>
     [Fact]
-    public async Task LoadFolder_Outbox_RecognizedMessageLevel_SetsMessageLevelColorHex()
+    public async Task LoadFolder_Outbox_RecognizedMessageLevel_SetsMessageLevelBackgroundHex()
     {
         Mock<TestEngineController> messageLevelProvider = new() { CallBase = true };
-        messageLevelProvider.Setup(p => p.MessageLevels).Returns([new MessageLevel { Name = "RESTRICTED", Key = TestLevel.Restricted, Color = "#C62828" }]);
+        messageLevelProvider.Setup(p => p.MessageLevels).Returns([new MessageLevel { Name = "RESTRICTED", Key = TestLevel.Restricted, Background = "#C62828" }]);
         Mock<IEntryService> svc = new();
         svc.Setup(s => s.GetMessages(It.IsAny<string>(), It.IsAny<int>()))
            .ReturnsAsync((Items: new List<MessageEntity> { MakeMessage("M1", messageLevel: "RESTRICTED") }, Total: 1));
@@ -894,12 +894,12 @@ public sealed class EntryBarViewModelTests
 
         await vm.LoadFolder(MakeFolder("root-outbox", FolderType.Outbox));
 
-        Assert.Equal("#C62828", vm.Entries[0].MessageLevelColorHex);
+        Assert.Equal("#C62828", vm.Entries[0].MessageLevelBackgroundHex);
     }
 
-    /// <summary>An unrecognized or empty stored message level yields a null MessageLevelColorHex rather than a fallback color.</summary>
+    /// <summary>An unrecognized or empty stored message level yields a null MessageLevelBackgroundHex rather than a fallback color.</summary>
     [Fact]
-    public async Task LoadFolder_Inbox_NoMessageLevel_MessageLevelColorHexIsNull()
+    public async Task LoadFolder_Inbox_NoMessageLevel_MessageLevelBackgroundHexIsNull()
     {
         Mock<IEntryService> svc = new();
         svc.Setup(s => s.GetMessages(It.IsAny<string>(), It.IsAny<int>()))
@@ -908,7 +908,7 @@ public sealed class EntryBarViewModelTests
 
         await vm.LoadFolder(MakeFolder("root-inbox", FolderType.Inbox));
 
-        Assert.Null(vm.Entries[0].MessageLevelColorHex);
+        Assert.Null(vm.Entries[0].MessageLevelBackgroundHex);
     }
 
     /// <summary>DeleteEntry passes the entry's IsOutboundMessage flag through to the service so self-addressed duplicates are disambiguated.</summary>

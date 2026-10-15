@@ -8,7 +8,6 @@
                HorizontalAlignment="Center"
                FontSize="12"
                FontWeight="SemiBold"
-               Foreground="White"
                LetterSpacing="2" />
   </Border>
 

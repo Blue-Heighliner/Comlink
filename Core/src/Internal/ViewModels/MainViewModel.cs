@@ -11,8 +11,10 @@ internal interface IMainViewModel
     string UserName { get; set; }
     /// <summary>Gets or sets the current user's message level name displayed in the title bar banner; see <see cref="IEngineController.GetUserMessageLevel"/>.</summary>
     string MessageLevelName { get; set; }
-    /// <summary>Gets or sets the current user's message level accent color as a hex string.</summary>
-    string MessageLevelColor { get; set; }
+    /// <summary>Gets or sets the current user's message level background color as a hex string.</summary>
+    string MessageLevelBackground { get; set; }
+    /// <summary>Gets or sets the color of the text on <see cref="MessageLevelBackground"/> as a hex string.</summary>
+    string MessageLevelForeground { get; set; }
     /// <summary>Gets or sets the application version string.</summary>
     string AppVersion { get; set; }
     /// <summary>Gets the application name, shown in the title bar's info popup.</summary>
@@ -242,7 +244,8 @@ internal sealed partial class MainViewModel : ObservableObject, IMainViewModel
     [ObservableProperty] private bool isKioskMode;
     [ObservableProperty] private string userName = string.Empty;
     [ObservableProperty] private string messageLevelName = string.Empty;
-    [ObservableProperty] private string messageLevelColor = "#1565C0";
+    [ObservableProperty] private string messageLevelBackground = "#1565C0";
+    [ObservableProperty] private string messageLevelForeground = "#FFFFFF";
     [ObservableProperty] private string appVersion;
     [ObservableProperty] private bool hasAutoForwardAccess;
 
@@ -431,9 +434,9 @@ internal sealed partial class MainViewModel : ObservableObject, IMainViewModel
                 string priorityText = engineController.NameOf(engineController.ResolvePriority(message.Priority));
                 string? tagText = engineController.TagsEnabled && !string.IsNullOrEmpty(message.Tag) ? message.Tag : null;
                 string messageLevelName = engineController.GetMessageLevelName(message.MessageLevel);
-                string? messageLevelColor = engineController.MessageLevels.IsRecognized(messageLevelName) ? engineController.MessageLevels.GetColor(messageLevelName) : null;
+                string? messageLevelColor = engineController.MessageLevels.IsRecognized(messageLevelName) ? engineController.MessageLevels.GetBackground(messageLevelName) : null;
                 EntryItemViewModel item = new(entity.MessageId, message.FromUser, EntryType.Message, entity.ReceivedAt,
-                    secondaryText: message.Body.FirstLine, priorityText: priorityText, tagText: tagText, timeText: timeText, messageLevelColorHex: messageLevelColor, isAlert: message.IsAlert);
+                    secondaryText: message.Body.FirstLine, priorityText: priorityText, tagText: tagText, timeText: timeText, messageLevelBackgroundHex: messageLevelColor, isAlert: message.IsAlert);
                 item.OverallStatus = entity.ReadStatus;
                 await entryBar.PrependEntry(item);
             }
@@ -525,7 +528,8 @@ internal sealed partial class MainViewModel : ObservableObject, IMainViewModel
         ApplyRole();
         string level = engineController.GetUserMessageLevel(info.Name);
         MessageLevelName = level;
-        MessageLevelColor = engineController.MessageLevels.GetColor(level);
+        MessageLevelBackground = engineController.MessageLevels.GetBackground(level);
+        MessageLevelForeground = engineController.MessageLevels.GetForeground(level);
         HasAutoForwardAccess = engineController.AutoForwarders.Any(forwarder => info.AutoForwarders.Contains(forwarder.Name));
         return Task.CompletedTask;
     }

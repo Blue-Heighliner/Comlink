@@ -115,7 +115,9 @@ internal sealed class ConfiguredEngineController : IEngineController
     /// <inheritdoc />
     public string GetNetworkIndicatorLabel(bool isOnline) => fallback.GetNetworkIndicatorLabel(isOnline);
     /// <inheritdoc />
-    public string GetNetworkIndicatorColor(bool isOnline) => fallback.GetNetworkIndicatorColor(isOnline);
+    public string GetNetworkIndicatorBackground(bool isOnline) => fallback.GetNetworkIndicatorBackground(isOnline);
+    /// <inheritdoc />
+    public string GetNetworkIndicatorForeground(bool isOnline) => fallback.GetNetworkIndicatorForeground(isOnline);
     /// <inheritdoc />
     public LogFieldWidths LogWidths => fallback.LogWidths;
     /// <inheritdoc />

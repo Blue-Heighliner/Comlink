@@ -330,7 +330,7 @@ public sealed class MainViewModelTests
         s.Connection.Setup(c => c.GetUserInfo(It.IsAny<CancellationToken>())).ReturnsAsync(MakeUserInfo("BETA"));
         s.FolderBar.Setup(f => f.Load()).Returns(Task.CompletedTask);
         s.EngineController.Setup(e => e.GetUserMessageLevel("BETA")).Returns("INTERNAL");
-        s.EngineController.Setup(e => e.MessageLevels).Returns([new MessageLevel { Name = "INTERNAL", Color = "#1565C0" }]);
+        s.EngineController.Setup(e => e.MessageLevels).Returns([new MessageLevel { Name = "INTERNAL", Background = "#1565C0" }]);
         MainViewModel vm = s.BuildVm();
 
         await vm.Initialize();
@@ -340,7 +340,7 @@ public sealed class MainViewModelTests
         s.FolderBar.Verify(f => f.Load(), Times.Once);
         Assert.Equal("BETA", vm.UserName);
         Assert.Equal("INTERNAL", vm.MessageLevelName);
-        Assert.Equal("#1565C0", vm.MessageLevelColor);
+        Assert.Equal("#1565C0", vm.MessageLevelBackground);
     }
 
     /// <summary>Initialize sets HasAutoForwardAccess when the user lists at least one configured auto forwarder.</summary>

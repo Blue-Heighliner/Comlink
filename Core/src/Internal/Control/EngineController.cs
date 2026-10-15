@@ -80,9 +80,12 @@ internal interface IEngineController
     /// <summary>The label the network indicator shows while online (<paramref name="isOnline"/> is <see langword="true"/>) or offline, from the display handler.</summary>
     /// <param name="isOnline">Whether the indicator shows online.</param>
     string GetNetworkIndicatorLabel(bool isOnline);
-    /// <summary>The hex color the network indicator shows while online or offline, from the display handler.</summary>
+    /// <summary>The hex background color the network indicator shows while online or offline, from the display handler.</summary>
     /// <param name="isOnline">Whether the indicator shows online.</param>
-    string GetNetworkIndicatorColor(bool isOnline);
+    string GetNetworkIndicatorBackground(bool isOnline);
+    /// <summary>The hex color of the text on the network indicator while online or offline, from the display handler.</summary>
+    /// <param name="isOnline">Whether the indicator shows online.</param>
+    string GetNetworkIndicatorForeground(bool isOnline);
     /// <summary>The fixed widths of the fields of a log line, from the log handler; no field is fixed without one.</summary>
     LogFieldWidths LogWidths { get; }
 
@@ -480,8 +483,11 @@ internal class EngineController(EngineBuilder builder, ICurrentUserProvider curr
     public virtual string GetNetworkIndicatorLabel(bool isOnline)
         => (isOnline ? builder.DisplayHandlerInstance?.NetworkOnlineLabel : builder.DisplayHandlerInstance?.NetworkOfflineLabel).OrNull() ?? (isOnline ? "ONLINE" : "OFFLINE");
     /// <inheritdoc />
-    public virtual string GetNetworkIndicatorColor(bool isOnline)
-        => (isOnline ? builder.DisplayHandlerInstance?.NetworkOnlineColor : builder.DisplayHandlerInstance?.NetworkOfflineColor).OrNull() ?? (isOnline ? "#2E7D32" : "#D35400");
+    public virtual string GetNetworkIndicatorBackground(bool isOnline)
+        => (isOnline ? builder.DisplayHandlerInstance?.NetworkOnlineBackground : builder.DisplayHandlerInstance?.NetworkOfflineBackground).OrNull() ?? (isOnline ? "#2E7D32" : "#D35400");
+    /// <inheritdoc />
+    public virtual string GetNetworkIndicatorForeground(bool isOnline)
+        => (isOnline ? builder.DisplayHandlerInstance?.NetworkOnlineForeground : builder.DisplayHandlerInstance?.NetworkOfflineForeground).OrNull() ?? "#FFFFFF";
     /// <inheritdoc />
     public virtual LogFieldWidths LogWidths => logHandler.Value is { } handler ? new LogFieldWidths(handler.CategoryWidth, handler.UserWidth, handler.IdWidth) : LogFieldWidths.None;
     /// <inheritdoc />

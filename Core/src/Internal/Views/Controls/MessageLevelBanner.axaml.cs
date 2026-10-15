@@ -8,11 +8,15 @@ internal partial class MessageLevelBanner : UserControl
     public static readonly StyledProperty<string> TitleProperty =
         AvaloniaProperty.Register<MessageLevelBanner, string>(nameof(Title), string.Empty);
 
-    /// <summary>Identifies the <see cref="BannerColor"/> styled property.</summary>
-    public static readonly StyledProperty<string> BannerColorProperty =
-        AvaloniaProperty.Register<MessageLevelBanner, string>(nameof(BannerColor), "#1565C0");
+    /// <summary>Identifies the <see cref="BannerBackground"/> styled property.</summary>
+    public static readonly StyledProperty<string> BannerBackgroundProperty =
+        AvaloniaProperty.Register<MessageLevelBanner, string>(nameof(BannerBackground), "#1565C0");
 
-    /// <summary>Initializes the control, loads the AXAML layout, and applies the initial banner color.</summary>
+    /// <summary>Identifies the <see cref="BannerForeground"/> styled property.</summary>
+    public static readonly StyledProperty<string> BannerForegroundProperty =
+        AvaloniaProperty.Register<MessageLevelBanner, string>(nameof(BannerForeground), "#FFFFFF");
+
+    /// <summary>Initializes the control, loads the AXAML layout, and applies the initial banner colors.</summary>
     public MessageLevelBanner()
     {
         InitializeComponent();
@@ -27,10 +31,17 @@ internal partial class MessageLevelBanner : UserControl
     }
 
     /// <summary>Gets or sets the hex color string used for the banner background.</summary>
-    public string BannerColor
+    public string BannerBackground
     {
-        get => GetValue(BannerColorProperty);
-        set => SetValue(BannerColorProperty, value);
+        get => GetValue(BannerBackgroundProperty);
+        set => SetValue(BannerBackgroundProperty, value);
+    }
+
+    /// <summary>Gets or sets the hex color string used for the banner's text.</summary>
+    public string BannerForeground
+    {
+        get => GetValue(BannerForegroundProperty);
+        set => SetValue(BannerForegroundProperty, value);
     }
 
     /// <inheritdoc />
@@ -47,7 +58,7 @@ internal partial class MessageLevelBanner : UserControl
             }
         }
 
-        if (change.Property == BannerColorProperty)
+        if (change.Property == BannerBackgroundProperty || change.Property == BannerForegroundProperty)
         {
             ApplyColor();
         }
@@ -56,9 +67,15 @@ internal partial class MessageLevelBanner : UserControl
     private void ApplyColor()
     {
         Border? border = this.FindControl<Border>("BannerBorder");
-        if (border is not null && Color.TryParse(BannerColor, out Color color))
+        if (border is not null && Color.TryParse(BannerBackground, out Color background))
         {
-            border.Background = new SolidColorBrush(color);
+            border.Background = new SolidColorBrush(background);
+        }
+
+        TextBlock? text = this.FindControl<TextBlock>("TitleText");
+        if (text is not null && Color.TryParse(BannerForeground, out Color foreground))
+        {
+            text.Foreground = new SolidColorBrush(foreground);
         }
     }
 

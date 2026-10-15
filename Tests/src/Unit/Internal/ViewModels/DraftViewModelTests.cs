@@ -981,7 +981,7 @@ public sealed class DraftViewModelTests
     public void MessageLevels_BlockedWithTag_AreNotOfferedAndSelectionMoves()
     {
         Mock<IEngineController> controller = Mock.Get(MakeEngineController());
-        controller.Setup(c => c.MessageLevels).Returns([new MessageLevel { Name = "PUBLIC", Color = "#000000", Key = TestLevel.Public }, new MessageLevel { Name = "SECRET", Color = "#000000", Key = TestLevel.Secret }]);
+        controller.Setup(c => c.MessageLevels).Returns([new MessageLevel { Name = "PUBLIC", Background = "#000000", Key = TestLevel.Public }, new MessageLevel { Name = "SECRET", Background = "#000000", Key = TestLevel.Secret }]);
         controller.Setup(c => c.IsDraftAllowed(It.IsAny<IEngineContext>(), It.IsAny<Enum>(), It.IsAny<Enum?>(), It.IsAny<Enum?>(), It.IsAny<string>()))
             .Returns((IEngineContext _, Enum priority, Enum? level, Enum? aspect, string tag) => !(tag == "LEAK" && TestLevel.Secret.Equals(level)));
         DraftEntity entity = new() { Body = "B", Addresses = [], FolderId = "root-drafts", MessageLevel = (int)TestLevel.Secret };
@@ -1000,7 +1000,7 @@ public sealed class DraftViewModelTests
     public void ChoosingALevel_BlockedWithTheAspect_MovesTheAspect()
     {
         Mock<IEngineController> controller = Mock.Get(MakeEngineController());
-        controller.Setup(c => c.MessageLevels).Returns([new MessageLevel { Name = "PUBLIC", Color = "#000000", Key = TestLevel.Public }, new MessageLevel { Name = "SECRET", Color = "#000000", Key = TestLevel.Secret }]);
+        controller.Setup(c => c.MessageLevels).Returns([new MessageLevel { Name = "PUBLIC", Background = "#000000", Key = TestLevel.Public }, new MessageLevel { Name = "SECRET", Background = "#000000", Key = TestLevel.Secret }]);
         controller.Setup(c => c.MessageAspects).Returns([new MessageAspect { Name = "ENCRYPTED", Key = TestAspect.Encrypted }]);
         controller.Setup(c => c.IsDraftAllowed(It.IsAny<IEngineContext>(), It.IsAny<Enum>(), It.IsAny<Enum?>(), It.IsAny<Enum?>(), It.IsAny<string>()))
             .Returns((IEngineContext _, Enum priority, Enum? level, Enum? aspect, string tag) => !(TestLevel.Secret.Equals(level) && TestAspect.Encrypted.Equals(aspect)));

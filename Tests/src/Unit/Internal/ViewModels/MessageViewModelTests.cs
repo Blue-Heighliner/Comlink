@@ -311,30 +311,31 @@ public sealed class MessageViewModelTests
         Assert.Equal("URGENT", vm.Tag);
     }
 
-    /// <summary>An empty or unrecognized message level (no message levels configured) yields a null MessageLevelColorHex rather than a fallback color.</summary>
+    /// <summary>An empty or unrecognized message level (no message levels configured) yields a null MessageLevelBackgroundHex and MessageLevelForegroundHex rather than a fallback color.</summary>
     [Fact]
-    public void Ctor_NoMessageLevel_MessageLevelColorHexIsNull()
+    public void Ctor_NoMessageLevel_MessageLevelBackgroundHexIsNull()
     {
         MessageEntity entity = MakeEntity();
 
         MessageViewModel vm = new(entity, format);
 
         Assert.Equal("", vm.MessageLevelName);
-        Assert.Null(vm.MessageLevelColorHex);
+        Assert.Null(vm.MessageLevelBackgroundHex);
+        Assert.Null(vm.MessageLevelForegroundHex);
     }
 
-    /// <summary>A recognized message level exposes both its name and its configured color.</summary>
+    /// <summary>A recognized message level exposes its name and its configured background and foreground colors.</summary>
     [Fact]
-    public void Ctor_RecognizedMessageLevel_ExposesNameAndColor()
+    public void Ctor_RecognizedMessageLevel_ExposesNameAndColors()
     {
         Mock<TestEngineController> controller = new() { CallBase = true };
-        controller.Setup(c => c.MessageLevels).Returns([new MessageLevel { Name = "RESTRICTED", Key = TestLevel.Restricted, Color = "#C62828" }]);
+        controller.Setup(c => c.MessageLevels).Returns([new MessageLevel { Name = "RESTRICTED", Key = TestLevel.Restricted, Background = "#C62828", Foreground = "#FFEE00" }]);
         MessageEntity entity = MakeEntity(messageLevel: "RESTRICTED");
 
         MessageViewModel vm = new(entity, controller.Object);
 
         Assert.Equal("RESTRICTED", vm.MessageLevelName);
-        Assert.Equal("#C62828", vm.MessageLevelColorHex);
+        Assert.Equal(("#C62828", "#FFEE00"), (vm.MessageLevelBackgroundHex, vm.MessageLevelForegroundHex));
     }
 
     /// <summary>DeliveryStatusRow.StatusText is the uppercase status name, and DisplayName includes addressed group context when present.</summary>

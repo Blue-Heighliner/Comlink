@@ -12,7 +12,11 @@ public interface IMessageLevelBuilder<TFrame, TPacket, TPriority, TLevel, TAspec
     /// <param name="label">The name.</param>
     IMessageLevelBuilder<TFrame, TPacket, TPriority, TLevel, TAspect> Label(string label);
 
-    /// <summary>Sets the hex color the level is shown in, in the top banner. Defaults to a neutral gray.</summary>
-    /// <param name="color">The color, such as <c>#2E7D32</c>.</param>
-    IMessageLevelBuilder<TFrame, TPacket, TPriority, TLevel, TAspect> Color(string color);
+    /// <summary>Sets the hex background color the level is shown on: the top banner and the level's label in a message. Defaults to a neutral gray.</summary>
+    /// <param name="background">The color, such as <c>#2E7D32</c>.</param>
+    IMessageLevelBuilder<TFrame, TPacket, TPriority, TLevel, TAspect> Background(string background);
+
+    /// <summary>Sets the hex color of the text shown on the level's background. Defaults to white.</summary>
+    /// <param name="foreground">The color, such as <c>#FFFFFF</c>.</param>
+    IMessageLevelBuilder<TFrame, TPacket, TPriority, TLevel, TAspect> Foreground(string foreground);
 }
