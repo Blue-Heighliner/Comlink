@@ -18,7 +18,8 @@ namespace BlueHeighliner.Comlink;
 /// connection's status table as incorrectly "down" for up to a full <see cref="SteadyInterval"/>. The same
 /// fast retry re-engages immediately after any later drop. The connection's live state is then observed the
 /// normal way, through <see cref="IPeerTransport.Connected"/>/<see cref="IPeerTransport.Disconnected"/>, by
-/// whichever caller subscribes to those observables. See <c>Docs/Components/Peer.md</c>.
+/// whichever caller subscribes to those observables. A connection also has to outlive <see cref="IEngineController.ConnectionSettleTime"/> after its heartbeat is acknowledged before it counts as up, since a node that refuses it drops it just after acknowledging; one lost
+/// within that time is a failed attempt, retried only after <see cref="FastRetryInterval"/>. See <c>Docs/Components/Peer.md</c>.
 /// </remarks>
 internal sealed class PeerConnectionMonitor(IEngineController engineController, ILogger? logger = null, TimeSpan? steadyInterval = null, TimeSpan? fastRetryInterval = null)
 {
@@ -35,9 +36,9 @@ internal sealed class PeerConnectionMonitor(IEngineController engineController, 
     /// <param name="target">The point to maintain a connection to.</param>
     /// <param name="cancellation">Stops sending heartbeats.</param>
     /// <param name="acknowledged">
-    /// Invoked with the connection each time the remote node acknowledges a heartbeat. A connection only counts as up once a heartbeat has
-    /// been acknowledged: a remote node that has closed the connection accepts it and drops it again without ever
-    /// answering, and treating the bare connection as up would flash it green every time.
+    /// Invoked with the connection each time the remote node acknowledges a heartbeat, the first time only once the connection has stayed up for the settle time. A connection only counts as up once a heartbeat has
+    /// been acknowledged and has outlived that: a remote node that has closed the connection accepts it and drops it again without ever
+    /// answering, and one that refuses it drops it right after acknowledging, so treating the bare connection as up would flash it green every time.
     /// </param>
     /// <returns>A handle that can pause, resume, or immediately trigger the heartbeat loop.</returns>
     public PeerLinkControl Maintain(IPeerTransport transport, ConnectionPoint target, CancellationToken cancellation, Action<PeerConnection>? acknowledged = null)
@@ -56,7 +57,9 @@ internal sealed class PeerConnectionMonitor(IEngineController engineController, 
             if (!control.IsClosed)
             {
                 bool connected;
+                string? failure = null;
                 PeerConnection? connection = null;
+                long attempted = control.BeginAttempt();
                 try
                 {
                     connection = await transport.Connect(target, cancellation);
@@ -93,15 +96,29 @@ internal sealed class PeerConnectionMonitor(IEngineController engineController, 
                             frame.TryDispose();
                         }
                     }
+
+                    // The transport acknowledges what it receives before the node on the other end has decided whether to keep the connection, and a node that refuses one
+                    // (a certificate that names no user of its network, say) drops it right after, so it only counts once it has outlived that.
+                    if (connected && !target.IsSerial)
+                    {
+                        await Task.Delay(engineController.ConnectionSettleTime, cancellation);
+                        if (control.WasLostSince(attempted))
+                        {
+                            connected = false;
+                            failure = "the connection was dropped as soon as it was made, which is how a node refuses one";
+                        }
+                    }
                 }
                 catch (Exception ex)
                 {
                     connected = false;
-                    if (!failureLogged && !cancellation.IsCancellationRequested)
-                    {
-                        failureLogged = true;
-                        logger?.Record(LogEvents.PeerConnectFailed, "Cannot reach {Point}, retrying: {Reason}", target, ex.Message);
-                    }
+                    failure = ex.Message;
+                }
+
+                if (failure is not null && !failureLogged && !cancellation.IsCancellationRequested)
+                {
+                    failureLogged = true;
+                    logger?.Record(LogEvents.PeerConnectFailed, "Cannot reach {Point}, retrying: {Reason}", target, failure);
                 }
 
                 if (connected)
@@ -111,6 +128,7 @@ internal sealed class PeerConnectionMonitor(IEngineController engineController, 
 
                 delay = connected ? SteadyInterval : FastRetryInterval;
                 control.ReportOutcome(connected);
+                control.EndAttempt();
                 if (connected && connection is not null)
                 {
                     try { acknowledged?.Invoke(connection); }

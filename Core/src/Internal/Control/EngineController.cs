@@ -295,8 +295,13 @@ internal interface IEngineController
     int PacketHeartbeatPriority { get; }
     /// <summary>Gets how long a connection waits between heartbeats while they succeed, as stated by the heartbeat handler in use (the packet one first), or 30 seconds when there is none.</summary>
     TimeSpan HeartbeatInterval { get; }
-    /// <summary>Gets how long a connection waits between heartbeats while they fail, as stated by the heartbeat handler in use (the packet one first), or 2 seconds when there is none.</summary>
+    /// <summary>Gets how long a connection waits between heartbeats while they fail, as stated by the heartbeat handler in use (the packet one first), or 5 seconds when there is none.</summary>
     TimeSpan HeartbeatRetryInterval { get; }
+    /// <summary>
+    /// Gets how long a connection this node opened must still be up, after its first heartbeat is acknowledged, before it counts as connected. A node that refuses a connection, for instance because the certificate names no user of its network,
+    /// accepts what the transport first sends and only then drops the connection, so a connection that is still there after this long has been accepted. A connection dropped within it counts as a failed attempt and is retried after <see cref="HeartbeatRetryInterval"/>. Not host-configurable.
+    /// </summary>
+    TimeSpan ConnectionSettleTime { get; }
     /// <summary>Creates a heartbeat frame. Only valid while <see cref="HeartbeatsEnabled"/>.</summary>
     object CreateHeartbeat();
     /// <summary>Returns whether <paramref name="frame"/> is a heartbeat, which is acknowledged and otherwise ignored; always <see langword="false"/> when no heartbeat handler is stated.</summary>
@@ -882,7 +887,9 @@ internal class EngineController(EngineBuilder builder, ICurrentUserProvider curr
     /// <inheritdoc />
     public virtual TimeSpan HeartbeatInterval => (packetHeartbeatHandler.Value ?? heartbeatHandler.Value)?.Interval ?? TimeSpan.FromSeconds(30);
     /// <inheritdoc />
-    public virtual TimeSpan HeartbeatRetryInterval => (packetHeartbeatHandler.Value ?? heartbeatHandler.Value)?.RetryInterval ?? TimeSpan.FromSeconds(2);
+    public virtual TimeSpan HeartbeatRetryInterval => (packetHeartbeatHandler.Value ?? heartbeatHandler.Value)?.RetryInterval ?? TimeSpan.FromSeconds(5);
+    /// <inheritdoc />
+    public virtual TimeSpan ConnectionSettleTime => TimeSpan.FromSeconds(2);
     /// <inheritdoc />
     public virtual int PacketHeartbeatPriority => PriorityValue((packetHeartbeatHandler.Value ?? throw new InvalidOperationException("No heartbeat packet handler is stated.")).Priority);
     /// <inheritdoc />

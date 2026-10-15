@@ -109,7 +109,7 @@ public sealed class PeerConnectionMonitorTests
     {
         Mock<IPeerTransport> transport = new();
         AutoConnect(transport);
-        EngineController controller = new(EngineBuilder.Build(new TestEngineConfiguration(heartbeats: false)), new CurrentUserProvider(), null);
+        EngineController controller = new NoSettleController(EngineBuilder.Build(new TestEngineConfiguration(heartbeats: false)));
         PeerConnectionMonitor monitor = new(controller, steadyInterval: TimeSpan.FromMinutes(10), fastRetryInterval: TimeSpan.FromMinutes(10));
         TaskCompletionSource up = new();
 
@@ -238,6 +238,54 @@ public sealed class PeerConnectionMonitorTests
         await Task.Delay(200);
 
         Assert.Equal(1, Heartbeats(transport));
+        cts.Cancel();
+    }
+
+    private sealed class NoSettleController(EngineBuilder builder) : EngineController(builder, new CurrentUserProvider(), null)
+    {
+        public override TimeSpan ConnectionSettleTime => TimeSpan.Zero;
+    }
+
+    private static Mock<TestEngineController> Settling(TimeSpan settle)
+    {
+        Mock<TestEngineController> controller = new() { CallBase = true };
+        controller.SetupGet(c => c.ConnectionSettleTime).Returns(settle);
+        return controller;
+    }
+
+    /// <summary>A connection the other node drops while it settles was refused: it is not acknowledged as up, and the loss does not wake the monitor, which waits out its retry interval instead of reconnecting at once.</summary>
+    [Fact]
+    public async Task Maintain_ConnectionDroppedWhileSettling_IsNotUp_AndIsRetriedOnlyAfterTheRetryInterval()
+    {
+        Mock<IPeerTransport> transport = new();
+        AutoAcknowledge(transport);
+        PeerConnectionMonitor monitor = new(Settling(TimeSpan.FromMilliseconds(400)).Object, steadyInterval: TimeSpan.FromMinutes(10), fastRetryInterval: TimeSpan.FromMinutes(10));
+        int acknowledged = 0;
+        using CancellationTokenSource cts = new();
+        PeerLinkControl control = monitor.Maintain(transport.Object, target, cts.Token, _ => Interlocked.Increment(ref acknowledged));
+        await WaitUntil(() => Heartbeats(transport) == 1, TimeSpan.FromSeconds(30));
+
+        control.NotifyLost();
+        await Task.Delay(800);
+
+        Assert.Equal((0, 1), (Volatile.Read(ref acknowledged), Heartbeats(transport)));
+        cts.Cancel();
+    }
+
+    /// <summary>A connection that is still there when the settle time has passed is acknowledged as up, and not before.</summary>
+    [Fact]
+    public async Task Maintain_ConnectionSurvivingTheSettleTime_IsAcknowledgedOnlyAfterIt()
+    {
+        Mock<IPeerTransport> transport = new();
+        AutoAcknowledge(transport);
+        PeerConnectionMonitor monitor = new(Settling(TimeSpan.FromMilliseconds(400)).Object, steadyInterval: TimeSpan.FromMinutes(10), fastRetryInterval: TimeSpan.FromMinutes(10));
+        int acknowledged = 0;
+        using CancellationTokenSource cts = new();
+        monitor.Maintain(transport.Object, target, cts.Token, _ => Interlocked.Increment(ref acknowledged));
+        await WaitUntil(() => Heartbeats(transport) == 1, TimeSpan.FromSeconds(30));
+
+        Assert.Equal(0, Volatile.Read(ref acknowledged));
+        await WaitUntil(() => Volatile.Read(ref acknowledged) == 1, TimeSpan.FromSeconds(5));
         cts.Cancel();
     }
 

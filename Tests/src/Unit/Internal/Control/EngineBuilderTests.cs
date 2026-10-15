@@ -362,7 +362,7 @@ public sealed class EngineBuilderTests
         EngineController none = new(EngineBuilder.Build(new TestEngineConfiguration(heartbeats: false)), new CurrentUserProvider(), null);
 
         Assert.Equal([TimeSpan.FromSeconds(5), TimeSpan.FromSeconds(1)], [frames.HeartbeatInterval, frames.HeartbeatRetryInterval]);
-        Assert.Equal([TimeSpan.FromSeconds(30), TimeSpan.FromSeconds(2)], [none.HeartbeatInterval, none.HeartbeatRetryInterval]);
+        Assert.Equal([TimeSpan.FromSeconds(30), TimeSpan.FromSeconds(5)], [none.HeartbeatInterval, none.HeartbeatRetryInterval]);
     }
 
     /// <summary>The maximum payload size is the argument of Packets and the window is stated on the packet configuration, defaulting to 1.</summary>

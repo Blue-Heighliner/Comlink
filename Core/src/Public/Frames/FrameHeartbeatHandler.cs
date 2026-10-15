@@ -15,7 +15,7 @@ public interface IFrameHeartbeatHandler<TFrame, TPriority> where TFrame : class 
     /// <summary>Gets how long a connection waits between heartbeats while the last one succeeded.</summary>
     TimeSpan Interval { get; }
 
-    /// <summary>Gets how long a connection waits before sending another heartbeat while the last one failed, which is how quickly a connection that is down is noticed to be back.</summary>
+    /// <summary>Gets how long a connection waits before sending another heartbeat while the last one failed, which is how quickly a connection that is down is noticed to be back. It is also how long a node waits before trying again after a connection could not be made or was refused, so it should be a few seconds, not a fraction of one.</summary>
     TimeSpan RetryInterval { get; }
 
     /// <summary>Returns whether <paramref name="frame"/> is a heartbeat.</summary>

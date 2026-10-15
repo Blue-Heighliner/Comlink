@@ -84,6 +84,9 @@ internal class TestEngineController : EngineController
     {
     }
 
+    /// <summary>Gets no settle time, so a connection counts as up as soon as its heartbeat is acknowledged and tests need not wait for it.</summary>
+    public override TimeSpan ConnectionSettleTime => TimeSpan.Zero;
+
     /// <summary>Gets ten priority levels, so tests may use any priority from 0 to 9 without it being brought within range.</summary>
     public override IReadOnlyList<MessagePriorityOption> Priorities { get; } = [.. Enum.GetValues<TestMessagePriority>().Take(10).Select((key, value) => new MessagePriorityOption { Name = key.ToString().ToUpperInvariant(), Value = value, Key = key })];
 }

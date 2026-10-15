@@ -61,6 +61,8 @@ internal sealed class ConfiguredEngineController : IEngineController
     /// <inheritdoc />
     public TimeSpan HeartbeatRetryInterval => fallback.HeartbeatRetryInterval;
     /// <inheritdoc />
+    public TimeSpan ConnectionSettleTime => fallback.ConnectionSettleTime;
+    /// <inheritdoc />
     public object CreateHeartbeat() => fallback.CreateHeartbeat();
     /// <inheritdoc />
     public bool IsHeartbeat(object frame) => fallback.IsHeartbeat(frame);

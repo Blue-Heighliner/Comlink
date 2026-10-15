@@ -10,7 +10,7 @@ public sealed class HeartbeatHandler : IPacketHeartbeatHandler<Packet, Priority>
     public TimeSpan Interval { get; } = TimeSpan.FromSeconds(30);
 
     /// <inheritdoc />
-    public TimeSpan RetryInterval { get; } = TimeSpan.FromSeconds(2);
+    public TimeSpan RetryInterval { get; } = TimeSpan.FromSeconds(5);
 
     /// <inheritdoc />
     public bool IsValid(Packet packet) => packet.IsHeartbeat;
