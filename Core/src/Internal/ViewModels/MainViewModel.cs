@@ -3,8 +3,8 @@ namespace BlueHeighliner.Comlink;
 /// <summary>ViewModel interface for the main application window.</summary>
 internal interface IMainViewModel
 {
-    /// <summary>Gets or sets a value indicating whether the install screen is visible instead of the main UI.</summary>
-    bool IsInstallScreenVisible { get; set; }
+    /// <summary>Gets or sets a value indicating whether the error screen is visible instead of the main UI, because the node cannot be identified from its certificate.</summary>
+    bool IsErrorScreenVisible { get; set; }
     /// <summary>Gets or sets a value indicating whether the UI is running in kiosk mode.</summary>
     bool IsKioskMode { get; set; }
     /// <summary>Gets or sets the local user name displayed in the title bar.</summary>
@@ -35,19 +35,19 @@ internal interface IMainViewModel
     bool IsClientMode { get; }
     /// <summary>Gets the connection status ViewModel — see <see cref="IsServerMode"/>/<see cref="IsClientMode"/>.</summary>
     IConnectionStatusViewModel ConnectionStatus { get; }
-    /// <summary>Gets a value indicating whether the normal 3-panel folder/entry/content layout should be shown — never in <see cref="IsServerMode"/>, and never while the install screen is visible.</summary>
+    /// <summary>Gets a value indicating whether the normal 3-panel folder/entry/content layout should be shown — never in <see cref="IsServerMode"/>, and never while the error screen is visible.</summary>
     bool ShowMainLayout { get; }
     /// <summary>
     /// Gets a value indicating whether the <see cref="IsServerMode"/> connections table should be shown —
     /// the view the title bar's CONNECTIONS button switches to, and the one shown by default. Mutually
-    /// exclusive with <see cref="ShowServerActivityView"/>; never shown while the install screen is visible.
+    /// exclusive with <see cref="ShowServerActivityView"/>; never shown while the error screen is visible.
     /// </summary>
     bool ShowConnectionsTable { get; }
     /// <summary>
     /// Gets a value indicating whether the <see cref="IsServerMode"/> activity log view — the same
     /// <see cref="EntryBar"/>/<see cref="ContentArea"/> pairing peer/client mode shows for the Activity
     /// folder, without a folder bar — should be shown in place of <see cref="ShowConnectionsTable"/>. The
-    /// view the title bar's ACTIVITY button switches to; never shown while the install screen is visible.
+    /// view the title bar's ACTIVITY button switches to; never shown while the error screen is visible.
     /// </summary>
     bool ShowServerActivityView { get; }
     /// <summary>Gets the folder bar ViewModel.</summary>
@@ -56,8 +56,8 @@ internal interface IMainViewModel
     IEntryBarViewModel EntryBar { get; }
     /// <summary>Gets the content area ViewModel.</summary>
     IContentAreaViewModel ContentArea { get; }
-    /// <summary>Gets the install screen ViewModel.</summary>
-    IInstallViewModel InstallView { get; }
+    /// <summary>Gets the error screen ViewModel.</summary>
+    IErrorViewModel ErrorView { get; }
     /// <summary>Gets the alert ViewModel driving the title bar's alarm box and sound.</summary>
     IAlertViewModel Alert { get; }
     /// <summary>Gets the network indicator ViewModel shown in the top bar of a client.</summary>
@@ -99,8 +99,8 @@ internal interface IMainViewModel
     IRelayCommand ShowPrintManagerCommand { get; }
     /// <summary>
     /// Re-reads the configuration files and applies what changed: the network file (connections are brought down or opened as it now defines them, and the
-    /// role, message level and access shown in the UI are updated), <c>Logging.json</c> and <c>User.json</c> (another user, or none, is switched to after the checks
-    /// of an install, and the UI follows). A network file that cannot be read is logged and leaves everything as it was.
+    /// role, message level and access shown in the UI are updated), <c>Logging.json</c> and the node's certificates (when the user certificate now names another user, that user is switched to and the UI follows, and when it can no longer be used the error screen takes the place of the app until a refresh finds it in order).
+    /// A network file that cannot be read is logged and leaves everything as it was.
     /// </summary>
     IAsyncRelayCommand RefreshCommand { get; }
     /// <summary>Restores the content area to its default (home) state, without disturbing any other ViewModel's state.</summary>
@@ -111,7 +111,7 @@ internal interface IMainViewModel
     IAsyncRelayCommand ShowActivityCommand { get; }
     /// <summary>Adds the given entry to the print queue as a manual print.</summary>
     IRelayCommand<EntryItemViewModel> PrintEntryCommand { get; }
-    /// <summary>Connects to the service, loads user info, and initializes either the main UI or the install screen.</summary>
+    /// <summary>Connects to the service, loads the user's info, and initializes the main UI, or shows the error screen when the node cannot be identified.</summary>
     Task Initialize();
 }
 
@@ -120,12 +120,12 @@ internal sealed partial class MainViewModel : ObservableObject, IMainViewModel
 {
     /// <summary>Initializes a new <see cref="MainViewModel"/> with all required engine and UI dependencies.</summary>
     /// <param name="connection">Service connection used for user and messaging operations.</param>
-    /// <param name="db">LiteDB context for lazy initialization after install.</param>
+    /// <param name="db">LiteDB context, opened on the user's data folder.</param>
     /// <param name="entryService">Entry CRUD service for messages, drafts, and notes.</param>
     /// <param name="folderBar">Folder tree ViewModel.</param>
     /// <param name="entryBar">Entry list ViewModel.</param>
     /// <param name="contentArea">Content area ViewModel.</param>
-    /// <param name="installViewModel">Install screen ViewModel.</param>
+    /// <param name="errorViewModel">Error screen ViewModel.</param>
     /// <param name="alert">Alert ViewModel driving the title bar's alarm box and sound.</param>
     /// <param name="networkIndicator">Network indicator ViewModel shown in the top bar of a client.</param>
     /// <param name="export">Export ViewModel driving the export screen.</param>
@@ -136,7 +136,8 @@ internal sealed partial class MainViewModel : ObservableObject, IMainViewModel
     /// <param name="printManager">Print manager ViewModel driving the print queue screen.</param>
     /// <param name="help">Help ViewModel driving the help window opened from the title bar.</param>
     /// <param name="connectionStatus">Connection status ViewModel driving <see cref="IsServerMode"/>'s connections table and <see cref="IsClientMode"/>'s connection row.</param>
-    /// <param name="currentUserProvider">Provides and accepts the current user name.</param>
+    /// <param name="currentUserProvider">Provides the current user name.</param>
+    /// <param name="userService">Says why the node cannot be identified, when it cannot.</param>
     /// <param name="engineController">Provides the application display name, whether the UI should run in kiosk mode, alert settings, message composition settings, and the configured node role.</param>
     /// <param name="networkReload">Re-reads the network configuration file on request, for <see cref="RefreshCommand"/>.</param>
     /// <param name="loggerFactory">Factory for creating named loggers.</param>
@@ -148,7 +149,7 @@ internal sealed partial class MainViewModel : ObservableObject, IMainViewModel
         IFolderBarViewModel folderBar,
         IEntryBarViewModel entryBar,
         IContentAreaViewModel contentArea,
-        IInstallViewModel installViewModel,
+        IErrorViewModel errorViewModel,
         IAlertViewModel alert,
         INetworkIndicatorViewModel networkIndicator,
         IExportViewModel export,
@@ -160,6 +161,7 @@ internal sealed partial class MainViewModel : ObservableObject, IMainViewModel
         IHelpViewModel help,
         IConnectionStatusViewModel connectionStatus,
         ICurrentUserProvider currentUserProvider,
+        IUserService userService,
         IEngineController engineController,
         INetworkReloadService networkReload,
         ILoggerFactory loggerFactory,
@@ -172,7 +174,8 @@ internal sealed partial class MainViewModel : ObservableObject, IMainViewModel
         this.folderBar = folderBar;
         this.entryBar = entryBar;
         this.contentArea = contentArea;
-        this.installViewModel = installViewModel;
+        this.errorViewModel = errorViewModel;
+        this.userService = userService;
         this.alert = alert;
         this.networkIndicator = networkIndicator;
         this.export = export;
@@ -202,7 +205,8 @@ internal sealed partial class MainViewModel : ObservableObject, IMainViewModel
     private readonly IFolderBarViewModel folderBar;
     private readonly IEntryBarViewModel entryBar;
     private readonly IContentAreaViewModel contentArea;
-    private readonly IInstallViewModel installViewModel;
+    private readonly IErrorViewModel errorViewModel;
+    private readonly IUserService userService;
     private readonly IAlertViewModel alert;
     private readonly INetworkIndicatorViewModel networkIndicator;
     private readonly IExportViewModel export;
@@ -223,7 +227,7 @@ internal sealed partial class MainViewModel : ObservableObject, IMainViewModel
     [NotifyPropertyChangedFor(nameof(ShowMainLayout))]
     [NotifyPropertyChangedFor(nameof(ShowConnectionsTable))]
     [NotifyPropertyChangedFor(nameof(ShowServerActivityView))]
-    private bool isInstallScreenVisible;
+    private bool isErrorScreenVisible;
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(ShowMainLayout))]
     [NotifyPropertyChangedFor(nameof(ShowConnectionsTable))]
@@ -245,11 +249,11 @@ internal sealed partial class MainViewModel : ObservableObject, IMainViewModel
     /// <inheritdoc />
     public IConnectionStatusViewModel ConnectionStatus => connectionStatus;
     /// <inheritdoc />
-    public bool ShowMainLayout => !IsServerMode && !IsInstallScreenVisible;
+    public bool ShowMainLayout => !IsServerMode && !IsErrorScreenVisible;
     /// <inheritdoc />
-    public bool ShowConnectionsTable => IsServerMode && !IsInstallScreenVisible && !IsServerActivityViewActive;
+    public bool ShowConnectionsTable => IsServerMode && !IsErrorScreenVisible && !IsServerActivityViewActive;
     /// <inheritdoc />
-    public bool ShowServerActivityView => IsServerMode && !IsInstallScreenVisible && IsServerActivityViewActive;
+    public bool ShowServerActivityView => IsServerMode && !IsErrorScreenVisible && IsServerActivityViewActive;
     /// <inheritdoc />
     public IFolderBarViewModel FolderBar => folderBar;
     /// <inheritdoc />
@@ -257,7 +261,7 @@ internal sealed partial class MainViewModel : ObservableObject, IMainViewModel
     /// <inheritdoc />
     public IContentAreaViewModel ContentArea => contentArea;
     /// <inheritdoc />
-    public IInstallViewModel InstallView => installViewModel;
+    public IErrorViewModel ErrorView => errorViewModel;
     /// <inheritdoc />
     public IAlertViewModel Alert => alert;
     /// <inheritdoc />
@@ -330,16 +334,6 @@ internal sealed partial class MainViewModel : ObservableObject, IMainViewModel
             {
                 contentArea.ShowHome();
             }
-        };
-
-        installViewModel.InstallSucceeded += async info =>
-        {
-            db.Initialize();
-            currentUserProvider.UserName = info.Name;
-            await ApplyUserInfo(info);
-            await StartMainUi();
-            logger.Record(LogEvents.AppStarted, "{AppName} started", engineController.AppName);
-            IsInstallScreenVisible = false;
         };
 
         contentArea.DraftSent += HandleDraftSent;
@@ -457,19 +451,17 @@ internal sealed partial class MainViewModel : ObservableObject, IMainViewModel
         try
         {
             await connection.Connect();
-            UserInfo? userInfo = await connection.GetUserInfo();
+            if (userService.Problem is { } problem)
+            {
+                ShowError(problem);
+                return;
+            }
 
-            if (userInfo is not null)
-            {
-                db.Initialize();
-                currentUserProvider.UserName = userInfo.Name;
-                await ApplyUserInfo(userInfo);
-                await StartMainUi();
-            }
-            else
-            {
-                IsInstallScreenVisible = true;
-            }
+            UserInfo userInfo = await connection.GetUserInfo() ?? throw new InvalidOperationException("The node has no current user");
+
+            db.Initialize();
+            await ApplyUserInfo(userInfo);
+            await StartMainUi();
         }
         catch (Exception ex)
         {
@@ -492,33 +484,39 @@ internal sealed partial class MainViewModel : ObservableObject, IMainViewModel
 
     private void OnNetworkReloaded() => _ = ApplyReloaded();
 
-    // The reload may also have changed who the user is (see IUserService.Refresh): another user's data is another database and another set of folders, and nobody leaves the install screen.
+    // The reload may also have changed who the user is (see IUserService.Refresh): another user's data is another database and another set of folders, and a certificate that cannot be used leaves nobody to show.
     private async Task ApplyReloaded()
     {
-        string? current = currentUserProvider.UserName;
-        if (string.IsNullOrEmpty(current))
+        if (userService.Problem is { } problem)
         {
-            DeselectFolderAndEntry();
-            contentArea.ShowHome();
-            UserName = string.Empty;
-            MessageLevelName = string.Empty;
-            HasAutoForwardAccess = false;
-            IsInstallScreenVisible = true;
+            ShowError(problem);
             return;
         }
 
-        if (!string.Equals(current, UserName, StringComparison.OrdinalIgnoreCase))
+        string current = currentUserProvider.UserName ?? string.Empty;
+        if (IsErrorScreenVisible || !string.Equals(current, UserName, StringComparison.OrdinalIgnoreCase))
         {
             DeselectFolderAndEntry();
             contentArea.ShowHome();
             db.Initialize();
             await ApplyUserInfo(engineController.GetUserInfo(current));
             await StartMainUi();
-            IsInstallScreenVisible = false;
+            IsErrorScreenVisible = false;
             return;
         }
 
         await ApplyUserInfo(engineController.GetUserInfo(current));
+    }
+
+    private void ShowError(string problem)
+    {
+        DeselectFolderAndEntry();
+        contentArea.ShowHome();
+        UserName = string.Empty;
+        MessageLevelName = string.Empty;
+        HasAutoForwardAccess = false;
+        errorViewModel.Message = problem;
+        IsErrorScreenVisible = true;
     }
 
     private Task ApplyUserInfo(UserInfo info)

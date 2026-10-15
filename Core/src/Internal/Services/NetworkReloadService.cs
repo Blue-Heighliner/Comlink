@@ -1,6 +1,6 @@
 namespace BlueHeighliner.Comlink;
 
-/// <summary>Re-reads the configuration files while the engine runs (the network file, <c>Logging.json</c> and <c>User.json</c>) and applies what changed.</summary>
+/// <summary>Re-reads the configuration files while the engine runs (the network file, <c>Logging.json</c> and the node's certificates) and applies what changed.</summary>
 internal interface INetworkReloadService
 {
     /// <summary>Raised after the file has been read again and whatever needed restarting has been restarted, so the UI can pick up the new values.</summary>
@@ -14,8 +14,8 @@ internal interface INetworkReloadService
     /// current as soon as the file has been read.
     /// </summary>
     /// <remarks>
-    /// <c>Logging.json</c> is read again too, so the log categories it turns on take effect at once, and so is <c>User.json</c>: when it now names another user, or none, the current user changes
-    /// (see <see cref="IUserService.Refresh"/>), and the connections are then started again for the new user instead of being adjusted.
+    /// <c>Logging.json</c> is read again too, so the log categories it turns on take effect at once, and so are the certificate files: when the user certificate now names another user, that user becomes
+    /// current (see <see cref="IUserService.Refresh"/>) and the connections are started again for them instead of being adjusted, and a replaced authority or user certificate for the same user restarts the connections.
     /// </remarks>
     /// <exception cref="Exception">The network file can no longer be read or parsed; the engine keeps running on the configuration it had.</exception>
     Task Reload();
@@ -46,8 +46,8 @@ internal sealed class NetworkReloadService(
         logSettings.Reload();
         logger.Record(LogEvents.NetworkConfigurationReloaded, "Network configuration reloaded");
 
-        // A new user's connections are started again from scratch, which reads the new configuration anyway.
-        if (!await userService.Refresh())
+        // Another user's connections are started again from scratch, which reads the new configuration anyway, and nobody has none to adjust.
+        if (!await userService.Refresh() && userService.Problem is null)
         {
             Apply(restartBefore, interfaceBefore);
         }
@@ -80,8 +80,5 @@ internal sealed class NetworkReloadService(
 
     private string InterfaceSettings() => string.Join('|', engineController.InterfacePort, CertificateSettings());
 
-    private string CertificateSettings()
-        => string.Join('|',
-            network.CertificateStore,
-            network.AuthorityCertificate);
+    private string CertificateSettings() => string.Join('|', userService.Identity.CertificateThumbprint, userService.Identity.AuthorityThumbprint);
 }

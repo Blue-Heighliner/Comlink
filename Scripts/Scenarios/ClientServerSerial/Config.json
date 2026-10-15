@@ -1,6 +1,4 @@
 {
-  "AuthorityCertificate": "../Root.cer",
-  "CertificateStore": "../ClientServer",
   "Users": {
     "SERVER": {
       "Role": "Server",

@@ -721,7 +721,7 @@ public sealed class DraftViewModelTests
 
     /// <summary>SendCommand reports that no user is installed when the send is refused for that reason, rather than failing on a missing result.</summary>
     [Fact]
-    public async Task SendCommand_NoUserInstalled_SaysSoAndKeepsDraftUnsent()
+    public async Task SendCommand_NoCurrentUser_SaysSoAndKeepsDraftUnsent()
     {
         DraftEntity entity = new() { Body = "World", Addresses = [new AddressData { UserName = "ALPHA", Type = "To" }], FolderId = "root-drafts" };
         DraftViewModel vm = Build(out Mock<IEntryService> entryMock, out Mock<IEngineConnection> connMock, entity: entity);
@@ -730,7 +730,7 @@ public sealed class DraftViewModelTests
 
         await vm.SendCommand.ExecuteAsync(null);
 
-        Assert.Equal("Cannot send until a user is installed", vm.StatusMessage);
+        Assert.Equal("Cannot send: this node has no user", vm.StatusMessage);
         Assert.False(vm.IsSent);
     }
 

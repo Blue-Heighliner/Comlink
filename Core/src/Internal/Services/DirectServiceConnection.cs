@@ -58,7 +58,7 @@ internal sealed class DirectServiceConnection : IEngineConnection
     /// <inheritdoc />
     public IEngineContext GetContext()
         => new EngineContext(
-            userService.GetCurrentUserInfo() ?? throw new InvalidOperationException("No user is installed"),
+            userService.GetCurrentUserInfo() ?? throw new InvalidOperationException("The node has no current user"),
             engineController.Users,
             engineController.GetUserInfo,
             peerService.IsUserConnected,
@@ -80,10 +80,6 @@ internal sealed class DirectServiceConnection : IEngineConnection
     /// <inheritdoc />
     public Task<List<string>> GetConnectedUsers(CancellationToken cancellation = default)
         => Task.FromResult<List<string>>([.. peerService.GetConnectedUsers()]);
-
-    /// <inheritdoc />
-    public Task<UserInfo?> InstallUser(string userName, CancellationToken cancellation = default)
-        => userService.Install(userName, cancellation);
 
     /// <inheritdoc />
     public async Task<SendMessageResult?> SendMessage(string body, List<AddressRequest> addresses, Enum? priority = null, string tag = "", Enum? messageLevel = null, Enum? messageAspect = null, CancellationToken cancellation = default)

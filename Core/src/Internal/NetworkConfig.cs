@@ -5,26 +5,12 @@ namespace BlueHeighliner.Comlink;
 /// place shared by every node, instead of per-node files or code. It is read from <c>Config.json</c> in the app's folder under the application data root,
 /// or, when the host allows command-line overrides (see <see cref="IEngineBuilder{TFrame, TPacket, TPriority, TLevel, TAspect}.CommandLineOverrides"/>), from the path given by the
 /// <c>--config</c> argument; its absence is not an error unless <c>--config</c> names a file that does not exist.
-/// The user this process runs as, for a node that should not show the install screen, is named by the <c>--user</c> argument (again only when
-/// overrides are allowed); that user is checked like an installed one. The <c>--log</c> argument names log categories to turn on (see <see cref="EnabledLogCategories"/>).
+/// The same arguments, again only when overrides are allowed, may name the authority certificate file (<c>--authority</c>) and the user certificate file (<c>--certificate</c>) in place of those the host stated,
+/// and which subject common name of the user certificate is the user this process runs as (<c>--user</c>). The <c>--log</c> argument names log categories to turn on (see <see cref="EnabledLogCategories"/>).
 /// </summary>
 internal sealed class NetworkConfig
 {
     private static readonly JsonSerializerOptions jsonOptions = new() { PropertyNameCaseInsensitive = true };
-
-    /// <summary>
-    /// Path to a public certificate file (for example <c>.cer</c>) for the certificate authority trusted to sign every user's identity
-    /// certificate, used instead of a system certificate store lookup. A relative path is resolved against the directory containing
-    /// the configuration file. Used together with <see cref="CertificateStore"/>.
-    /// </summary>
-    public string? AuthorityCertificate { get; set; }
-
-    /// <summary>
-    /// Path to a folder of PKCS#12 (<c>.pfx</c>) identity certificate files, one per user named <c>{USERNAME}.pfx</c>, that a node loads its own
-    /// identity certificate and private key from instead of a system certificate store lookup. A relative path is resolved against
-    /// the directory containing the configuration file. Used together with <see cref="AuthorityCertificate"/>.
-    /// </summary>
-    public string? CertificateStore { get; set; }
 
     /// <summary>
     /// Group definitions. Keys are group names; values are lists of member names, which may be user names or other group names,
@@ -35,14 +21,17 @@ internal sealed class NetworkConfig
     /// <summary>Every user of the network, keyed by user name; names are matched case-insensitively.</summary>
     public Dictionary<string, NetworkUserConfig> Users { get; set; } = [];
 
-    /// <summary>The user the process runs as, from the <c>--user</c> argument; <see langword="null"/> when it is not given.</summary>
+    /// <summary>The subject common name of the user certificate that is the user the process runs as, from the <c>--user</c> argument; <see langword="null"/> when it is not given.</summary>
     public string? User { get; set; }
+
+    /// <summary>The authority certificate file, from the <c>--authority</c> argument; <see langword="null"/> when it is not given.</summary>
+    public string? AuthorityCertificateOverride { get; private set; }
+
+    /// <summary>The user certificate file, from the <c>--certificate</c> argument; <see langword="null"/> when it is not given.</summary>
+    public string? UserCertificateOverride { get; private set; }
 
     /// <summary>The log categories named by the <c>--log</c> argument, a comma separated list, to write although they are not on by default; empty when it is not given.</summary>
     public IReadOnlyList<string> EnabledLogCategories { get; private set; } = [];
-
-    /// <summary>Absolute directory containing the loaded file, used to resolve relative certificate paths. <see langword="null"/> when no file was loaded.</summary>
-    private string? ConfigDirectory { get; set; }
 
     /// <summary>The arguments this configuration was loaded with, kept so it can be read again.</summary>
     private string[] arguments = [];
@@ -60,23 +49,21 @@ internal sealed class NetworkConfig
     public static NetworkConfig Load(string[] args, string appDataFolder)
     {
         string defaultPath = Path.Combine(appDataFolder, "Config.json");
-        int configIndex = Array.IndexOf(args, "--config");
-        string? path = configIndex >= 0 && configIndex + 1 < args.Length ? args[configIndex + 1] : File.Exists(defaultPath) ? defaultPath : null;
+        string? path = Argument(args, "--config") ?? (File.Exists(defaultPath) ? defaultPath : null);
 
         NetworkConfig config = new();
         if (path is not null)
         {
             config = JsonSerializer.Deserialize<NetworkConfig>(File.ReadAllText(path), jsonOptions) ?? new NetworkConfig();
-            config.ConfigDirectory = Path.GetDirectoryName(Path.GetFullPath(path));
             config.Validate();
         }
 
-        int userIndex = Array.IndexOf(args, "--user");
         config.arguments = args;
         config.appDataFolder = appDataFolder;
-        config.User = userIndex >= 0 && userIndex + 1 < args.Length ? args[userIndex + 1] : null;
-        int logIndex = Array.IndexOf(args, "--log");
-        config.EnabledLogCategories = logIndex >= 0 && logIndex + 1 < args.Length ? [.. args[logIndex + 1].Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)] : [];
+        config.User = Argument(args, "--user");
+        config.AuthorityCertificateOverride = Argument(args, "--authority");
+        config.UserCertificateOverride = Argument(args, "--certificate");
+        config.EnabledLogCategories = Argument(args, "--log") is { } log ? [.. log.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)] : [];
         return config;
     }
 
@@ -94,18 +81,15 @@ internal sealed class NetworkConfig
     }
 
     /// <summary>
-    /// Reads the file again, from wherever it was loaded from, and replaces the trusted authority, certificate store, groups and users with what
+    /// Reads the file again, from wherever it was loaded from, and replaces the groups and users with what
     /// it now says. The user the process runs as (<see cref="User"/>) is kept, since a running process does not become another user. If the file
     /// can no longer be read or parsed this throws and leaves the current contents as they were.
     /// </summary>
     public void Reload()
     {
         NetworkConfig fresh = Load(arguments, appDataFolder);
-        AuthorityCertificate = fresh.AuthorityCertificate;
-        CertificateStore = fresh.CertificateStore;
         UserGroups = fresh.UserGroups;
         Users = fresh.Users;
-        ConfigDirectory = fresh.ConfigDirectory;
     }
 
     /// <summary>Returns the entry for <paramref name="userName"/>, or <see langword="null"/> when the network does not list that user.</summary>
@@ -132,14 +116,8 @@ internal sealed class NetworkConfig
             }
             : null;
 
-    /// <summary>Resolves <see cref="AuthorityCertificate"/> against the directory of the loaded file when it is a relative path.</summary>
-    public string? GetAuthorityCertificatePath() => Resolve(AuthorityCertificate);
-
-    /// <summary>Returns where <paramref name="userName"/>'s identity certificate file is, <c>{CertificateStore}/{USERNAME}.pfx</c>, or <see langword="null"/> when there is no <see cref="CertificateStore"/>.</summary>
-    public string? GetCertificatePath(string userName) => Resolve(CertificateStore) is { } store ? Path.Combine(store, $"{userName}.pfx") : null;
-
-    private string? Resolve(string? path)
-        => path is null || ConfigDirectory is null || Path.IsPathRooted(path) ? path : Path.GetFullPath(Path.Combine(ConfigDirectory, path));
+    private static string? Argument(string[] args, string name)
+        => Array.IndexOf(args, name) is >= 0 and int index && index + 1 < args.Length ? args[index + 1] : null;
 }
 
 /// <summary>Everything the network file says about one user: the parts that become their <see cref="UserInfo"/>, and settings of the node they run.</summary>

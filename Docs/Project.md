@@ -23,9 +23,9 @@ between `sh` and `cmd.exe`.
   against `Sample` with `--no-build` (`ClientServer`: `Server`/`Client1`/`Client2`; `ClientServerSerial`: `Server`/`Client1`/`Client2`, Client1 joined to the server by two physically cabled local MicroGate ports and Client2 over MSMT/IP;
   `ServerCluster`: `Server1`/`Server2`/`Client1`/`Client2`), passing the scenario's
   own `Config.json` (the network configuration describing every user of that scenario) as `--config` and
-  naming the role's user with `--user`. Each role simulates one installation talking to the
+  naming the role's authority and identity files with `--authority` and `--certificate`, the identity naming the role's user. Each role simulates one installation talking to the
   others over loopback; `Scripts/Scenarios/Root.cer` is the shared certificate authority signing
-  every role's `{USERNAME}.pfx` identity in every scenario, and `Scripts/Scenarios/Root.pfx` holds that
+  every role's `{USERNAME}.pfx` identity (the `ClientServerSerial` scenario reuses the `ClientServer` ones), and `Scripts/Scenarios/Root.pfx` holds that
   authority's certificate with its private key (no password), so new identities can be issued from it.
 - `Scripts/Scenarios/<Scenario>/Run.task` - runs `Build.cs`, then every role `.cs` script of that
   scenario concurrently against the shared build, as ordered batches separated by a `-` wait marker

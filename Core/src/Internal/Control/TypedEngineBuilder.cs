@@ -85,6 +85,14 @@ internal sealed class EngineBuilder<TFrame, TPacket, TPriority, TLevel, TAspect>
     }
 
     /// <inheritdoc />
+    public IEngineBuilder<TFrame, TPacket, TPriority, TLevel, TAspect> Certificates(string authorityPath, string userPath)
+    {
+        state.AuthorityCertificateValue = authorityPath;
+        state.UserCertificateValue = userPath;
+        return this;
+    }
+
+    /// <inheritdoc />
     public IEngineBuilder<TFrame, TPacket, TPriority, TLevel, TAspect> CommandLineOverrides(bool allowed)
     {
         state.AreCommandLineOverridesAllowed = allowed;

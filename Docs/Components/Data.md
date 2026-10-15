@@ -8,7 +8,7 @@ A single file `Data.db` in `IEngineController.AppDataPath`, the current user's o
 
 ## LiteDbContext
 
-`LiteDbContext` owns the `LiteDatabase` instance and exposes typed collection handles. Call `Initialize()` after the user is known (on install or on startup when an existing user is loaded). Re-calling `Initialize()` is safe: it does nothing when the database is already open on the current user's folder and reopens it when the folder has changed. A storage server's repository calls it itself, since a server with a named user starts routing before its window has initialized the database.
+`LiteDbContext` owns the `LiteDatabase` instance and exposes typed collection handles. Call `Initialize()` after the user is known (at startup, and again when a refresh switches to another user). Re-calling `Initialize()` is safe: it does nothing when the database is already open on the current user's folder and reopens it when the folder has changed. A storage server's repository calls it itself, since a server with a named user starts routing before its window has initialized the database.
 
 Collections initialized:
 

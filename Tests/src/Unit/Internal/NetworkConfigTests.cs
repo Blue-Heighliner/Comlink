@@ -40,8 +40,8 @@ public sealed class NetworkConfigTests : IDisposable
         Assert.Empty(config.Users);
         Assert.Empty(config.UserGroups);
         Assert.Null(config.User);
-        Assert.Null(config.AuthorityCertificate);
-        Assert.Null(config.CertificateStore);
+        Assert.Null(config.AuthorityCertificateOverride);
+        Assert.Null(config.UserCertificateOverride);
     }
 
     /// <summary>Without --config, Config.json in the app data folder is used.</summary>
@@ -78,18 +78,17 @@ public sealed class NetworkConfigTests : IDisposable
         Assert.Equal("CAROL", NetworkConfig.Load(["--user", "CAROL"], directory).User);
     }
 
-    /// <summary>Reload reads the file again and replaces the users, groups and certificate settings, keeps the user the process runs as, and leaves everything as it was when the file cannot be read.</summary>
+    /// <summary>Reload reads the file again and replaces the users and groups, keeps the user the process runs as, and leaves everything as it was when the file cannot be read.</summary>
     [Fact]
     public void Reload_ReplacesWhatTheFileSays_KeepsTheRunningUser_AndSurvivesABrokenFile()
     {
-        Write("Config.json", """{ "CertificateStore": "a", "UserGroups": { "G": [ "A" ] }, "Users": { "A": { "Msmt": { "Port": 1 } } } }""");
+        Write("Config.json", """{ "UserGroups": { "G": [ "A" ] }, "Users": { "A": { "Msmt": { "Port": 1 } } } }""");
         NetworkConfig config = NetworkConfig.Load(["--user", "A"], directory);
 
-        Write("Config.json", """{ "CertificateStore": "b", "AuthorityCertificate": "root.cer", "UserGroups": { "H": [ "B" ] }, "Users": { "B": { "PeerPort": 2 } } }""");
+        Write("Config.json", """{ "UserGroups": { "H": [ "B" ] }, "Users": { "B": { "PeerPort": 2 } } }""");
         config.Reload();
 
         Assert.Equal("A", config.User);
-        Assert.Equal(("b", "root.cer"), (config.CertificateStore, config.AuthorityCertificate));
         Assert.Equal(["H"], config.UserGroups.Keys);
         Assert.Equal(["B"], config.Users.Keys);
 
@@ -154,21 +153,17 @@ public sealed class NetworkConfigTests : IDisposable
         Assert.Null(config.GetUserInfo("NOBODY"));
     }
 
-    /// <summary>Relative certificate paths resolve against the configuration file's directory, absolute ones are used as they are, each user's identity is {USERNAME}.pfx in the store, and without a store there is no path.</summary>
+    /// <summary>The --authority and --certificate arguments are read like --user, and a file that still has the retired certificate keys loads with them ignored.</summary>
     [Fact]
-    public void CertificatePaths_ResolveAgainstTheFilesDirectory()
+    public void CertificateArguments_AreReadAndRetiredKeysIgnored()
     {
-        string absolute = Path.Combine(directory, "absolute-store");
-        string path = Write("Network.json", """{ "AuthorityCertificate": "../Root.cer", "CertificateStore": "certs" }""");
-        string absolutePath = Write("Absolute.json", $$"""{ "CertificateStore": {{System.Text.Json.JsonSerializer.Serialize(absolute)}} }""");
+        string path = Write("Old.json", """{ "AuthorityCertificate": "../Root.cer", "CertificateStore": "certs", "Users": { "A": {} } }""");
 
-        NetworkConfig config = NetworkConfig.Load(["--config", path], directory);
+        NetworkConfig config = NetworkConfig.Load(["--config", path, "--authority", "root.cer", "--certificate", "me.pfx"], directory);
 
-        Assert.Equal(Path.GetFullPath(Path.Combine(directory, "..", "Root.cer")), config.GetAuthorityCertificatePath());
-        Assert.Equal(Path.Combine(directory, "certs", "ALICE.pfx"), config.GetCertificatePath("ALICE"));
-        Assert.Equal(Path.Combine(absolute, "BOB.pfx"), NetworkConfig.Load(["--config", absolutePath], directory).GetCertificatePath("BOB"));
-        Assert.Null(new NetworkConfig().GetCertificatePath("ALICE"));
-        Assert.Null(new NetworkConfig().GetAuthorityCertificatePath());
+        Assert.Equal(("root.cer", "me.pfx"), (config.AuthorityCertificateOverride, config.UserCertificateOverride));
+        Assert.Single(config.Users);
+        Assert.Null(NetworkConfig.Load([], directory).AuthorityCertificateOverride);
     }
 
     /// <summary>A recognized role parses regardless of case; an unset or unrecognized one is not a role.</summary>

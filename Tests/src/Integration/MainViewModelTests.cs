@@ -19,7 +19,7 @@ public sealed class MainViewModelTests
         public Mock<IFolderBarViewModel> FolderBar { get; } = new();
         public Mock<IEntryBarViewModel> EntryBar { get; } = new();
         public Mock<IContentAreaViewModel> ContentArea { get; } = new();
-        public Mock<IInstallViewModel> InstallView { get; } = new();
+        public Mock<IErrorViewModel> ErrorView { get; } = new();
         public Mock<IAlertViewModel> Alert { get; } = new();
         public Mock<INetworkIndicatorViewModel> NetworkIndicator { get; } = new();
         public Mock<IExportViewModel> Export { get; } = new();
@@ -31,6 +31,7 @@ public sealed class MainViewModelTests
         public Mock<IHelpViewModel> Help { get; } = new();
         public Mock<IConnectionStatusViewModel> ConnectionStatus { get; } = new();
         public Mock<ICurrentUserProvider> UserProvider { get; } = new();
+        public Mock<IUserService> Users { get; } = new();
         public Mock<INetworkReloadService> NetworkReload { get; } = new();
         public Mock<TestEngineController> EngineController { get; } = new() { CallBase = true };
         public Mock<IBodyDocumentFactory> BodyDocumentFactory { get; } = new();
@@ -52,7 +53,7 @@ public sealed class MainViewModelTests
                 FolderBar.Object,
                 EntryBar.Object,
                 ContentArea.Object,
-                InstallView.Object,
+                ErrorView.Object,
                 Alert.Object,
                 NetworkIndicator.Object,
                 Export.Object,
@@ -64,6 +65,7 @@ public sealed class MainViewModelTests
                 Help.Object,
                 ConnectionStatus.Object,
                 UserProvider.Object,
+                Users.Object,
                 EngineController.Object,
                 NetworkReload.Object,
                 noLogger,
@@ -71,7 +73,7 @@ public sealed class MainViewModelTests
         }
     }
 
-    /// <summary>FolderBar, EntryBar, ContentArea, InstallView, and Alert expose the injected interfaces.</summary>
+    /// <summary>FolderBar, EntryBar, ContentArea, ErrorView and Alert expose the injected interfaces.</summary>
     [Fact]
     public void Properties_ExposeInjectedSubViewModels()
     {
@@ -81,7 +83,7 @@ public sealed class MainViewModelTests
         Assert.Same(s.FolderBar.Object, vm.FolderBar);
         Assert.Same(s.EntryBar.Object, vm.EntryBar);
         Assert.Same(s.ContentArea.Object, vm.ContentArea);
-        Assert.Same(s.InstallView.Object, vm.InstallView);
+        Assert.Same(s.ErrorView.Object, vm.ErrorView);
         Assert.Same(s.Alert.Object, vm.Alert);
         Assert.Same(s.Export.Object, vm.Export);
         Assert.Same(s.Import.Object, vm.Import);
@@ -128,21 +130,69 @@ public sealed class MainViewModelTests
         Assert.True(vm.IsClientMode);
     }
 
-    /// <summary>When the reload left nobody installed (User.json was removed or its user failed the checks) the user is cleared and the install screen is shown again.</summary>
+    /// <summary>When the reload switched the node to another user (its certificate now names someone else) that user's database is opened and their folders are loaded.</summary>
     [Fact]
-    public async Task NetworkReloaded_WithNoUser_ShowsTheInstallScreen()
+    public async Task NetworkReloaded_WithAnotherUser_OpensTheirDatabaseAndFolders()
     {
         Setup s = new();
-        s.UserProvider.SetupGet(u => u.UserName).Returns((string?)null);
+        s.EngineController.Setup(e => e.GetUserInfo("BOB")).Returns(new UserInfo { Name = "BOB", Role = UserRole.Client });
+        s.EngineController.SetupGet(e => e.MessageLevels).Returns([]);
+        s.EngineController.SetupGet(e => e.AutoForwarders).Returns([]);
+        s.EngineController.Setup(e => e.GetUserMessageLevel("BOB")).Returns(string.Empty);
+        s.UserProvider.SetupGet(u => u.UserName).Returns("BOB");
+        s.FolderBar.Setup(f => f.Load()).Returns(Task.CompletedTask);
         MainViewModel vm = s.BuildVm();
         vm.UserName = "ALICE";
-        vm.IsInstallScreenVisible = false;
 
         s.NetworkReload.Raise(r => r.Reloaded += null);
         await Task.Delay(50);
 
+        Assert.Equal("BOB", vm.UserName);
+        s.Db.Verify(d => d.Initialize(), Times.Once);
+        s.FolderBar.Verify(f => f.Load(), Times.Once);
+        s.ContentArea.Verify(c => c.ShowHome(), Times.Once);
+    }
+
+    /// <summary>When the reload finds the certificate unusable the error screen takes the place of the app, showing why, and nothing of the last user is left on show.</summary>
+    [Fact]
+    public async Task NetworkReloaded_WithACertificateProblem_ShowsTheErrorScreen()
+    {
+        Setup s = new();
+        s.Users.SetupGet(u => u.Problem).Returns("The user certificate file 'x.pfx' was not found.");
+        MainViewModel vm = s.BuildVm();
+        vm.UserName = "ALICE";
+
+        s.NetworkReload.Raise(r => r.Reloaded += null);
+        await Task.Delay(50);
+
+        Assert.True(vm.IsErrorScreenVisible);
+        Assert.False(vm.ShowMainLayout);
         Assert.Equal(string.Empty, vm.UserName);
-        Assert.True(vm.IsInstallScreenVisible);
+        s.ErrorView.VerifySet(e => e.Message = "The user certificate file 'x.pfx' was not found.");
+        s.ContentArea.Verify(c => c.ShowHome(), Times.Once);
+    }
+
+    /// <summary>When a reload finds the certificate in order again, the error screen goes and the user's folders load.</summary>
+    [Fact]
+    public async Task NetworkReloaded_AfterTheProblemIsFixed_LeavesTheErrorScreen()
+    {
+        Setup s = new();
+        s.EngineController.Setup(e => e.GetUserInfo("ALICE")).Returns(new UserInfo { Name = "ALICE", Role = UserRole.Client });
+        s.EngineController.SetupGet(e => e.MessageLevels).Returns([]);
+        s.EngineController.SetupGet(e => e.AutoForwarders).Returns([]);
+        s.EngineController.Setup(e => e.GetUserMessageLevel("ALICE")).Returns(string.Empty);
+        s.UserProvider.SetupGet(u => u.UserName).Returns("ALICE");
+        s.FolderBar.Setup(f => f.Load()).Returns(Task.CompletedTask);
+        MainViewModel vm = s.BuildVm();
+        vm.IsErrorScreenVisible = true;
+
+        s.NetworkReload.Raise(r => r.Reloaded += null);
+        await Task.Delay(50);
+
+        Assert.False(vm.IsErrorScreenVisible);
+        Assert.Equal("ALICE", vm.UserName);
+        s.Db.Verify(d => d.Initialize(), Times.Once);
+        s.FolderBar.Verify(f => f.Load(), Times.Once);
     }
 
     /// <summary>AppName and AppVersion come from IEngineController, for the title bar's info popup.</summary>
@@ -271,9 +321,9 @@ public sealed class MainViewModelTests
         Assert.True(vm.IsKioskMode);
     }
 
-    /// <summary>Initialize connects, initializes the DB, applies user info, and loads the folder tree when a user is installed.</summary>
+    /// <summary>Initialize connects, initializes the DB, applies user info, and loads the folder tree for the user the node runs as.</summary>
     [Fact]
-    public async Task Initialize_UserInstalled_ConnectsAppliesUserInfoAndLoadsFolder()
+    public async Task Initialize_ConnectsAppliesUserInfoAndLoadsFolder()
     {
         Setup s = new();
         s.Connection.Setup(c => c.Connect(It.IsAny<CancellationToken>())).Returns(Task.CompletedTask);
@@ -291,10 +341,9 @@ public sealed class MainViewModelTests
         Assert.Equal("BETA", vm.UserName);
         Assert.Equal("INTERNAL", vm.MessageLevelName);
         Assert.Equal("#1565C0", vm.MessageLevelColor);
-        Assert.False(vm.IsInstallScreenVisible);
     }
 
-    /// <summary>Initialize sets HasAutoForwardAccess when the installed user lists at least one configured auto forwarder.</summary>
+    /// <summary>Initialize sets HasAutoForwardAccess when the user lists at least one configured auto forwarder.</summary>
     [Fact]
     public async Task Initialize_UserHasAutoForwardAccess_SetsHasAutoForwardAccessTrue()
     {
@@ -313,7 +362,7 @@ public sealed class MainViewModelTests
         Assert.True(vm.HasAutoForwardAccess);
     }
 
-    /// <summary>Initialize leaves HasAutoForwardAccess false when the installed user lists none of the configured auto forwarders.</summary>
+    /// <summary>Initialize leaves HasAutoForwardAccess false when the user lists none of the configured auto forwarders.</summary>
     [Fact]
     public async Task Initialize_UserHasNoAutoForwardAccess_LeavesHasAutoForwardAccessFalse()
     {
@@ -332,9 +381,26 @@ public sealed class MainViewModelTests
         Assert.False(vm.HasAutoForwardAccess);
     }
 
-    /// <summary>Initialize shows the install screen when no user is installed and does not load the folder bar.</summary>
+    /// <summary>Initialize shows the error screen with the reason when the node cannot be identified, and opens neither the database nor the folders.</summary>
     [Fact]
-    public async Task Initialize_NoUser_ShowsInstallScreen()
+    public async Task Initialize_WithACertificateProblem_ShowsTheErrorScreen()
+    {
+        Setup s = new();
+        s.Connection.Setup(c => c.Connect(It.IsAny<CancellationToken>())).Returns(Task.CompletedTask);
+        s.Users.SetupGet(u => u.Problem).Returns("The certificate is not issued to a user of the network.");
+        MainViewModel vm = s.BuildVm();
+
+        await vm.Initialize();
+
+        Assert.True(vm.IsErrorScreenVisible);
+        s.ErrorView.VerifySet(e => e.Message = "The certificate is not issued to a user of the network.");
+        s.FolderBar.Verify(f => f.Load(), Times.Never);
+        s.Db.Verify(d => d.Initialize(), Times.Never);
+    }
+
+    /// <summary>Initialize without a current user logs the failure and does not load the folder bar.</summary>
+    [Fact]
+    public async Task Initialize_NoUser_DoesNotLoadTheFolderBar()
     {
         Setup s = new();
         s.Connection.Setup(c => c.Connect(It.IsAny<CancellationToken>())).Returns(Task.CompletedTask);
@@ -343,7 +409,6 @@ public sealed class MainViewModelTests
 
         await vm.Initialize();
 
-        Assert.True(vm.IsInstallScreenVisible);
         s.FolderBar.Verify(f => f.Load(), Times.Never);
         s.Db.Verify(d => d.Initialize(), Times.Never);
     }

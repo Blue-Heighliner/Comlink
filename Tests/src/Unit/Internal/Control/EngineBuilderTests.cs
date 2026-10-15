@@ -241,7 +241,7 @@ public sealed class EngineBuilderTests
         Assert.Equal(root, alice.AppDataRoot);
         Assert.Equal(Path.Combine(root, "MyApp"), noUser.AppDataPath);
         Assert.Equal(Path.Combine(root, "MyApp", "ALICE"), alice.AppDataPath);
-        Assert.Equal(Path.Combine(root, "MyApp", "User.json"), alice.UserFilePath);
+        Assert.Equal(Path.Combine(root, "MyApp", "Logging.json"), alice.LoggingFilePath);
     }
 
     /// <summary>The app's folder, where the network configuration file is read from, is the data folder name under the absolute application data root, never relative to the working directory.</summary>
@@ -413,19 +413,6 @@ public sealed class EngineBuilderTests
         (_, EngineController controller) = Build(engine => engine);
 
         Assert.Empty(controller.GetUserData("ANYONE"));
-    }
-
-    /// <summary>A user name is found among the network's users, in the spelling the file uses, and nowhere else.</summary>
-    [Fact]
-    public void FindUserName_FindsNetworkUsersCaseInsensitively()
-    {
-        (_, EngineController none) = Build(engine => engine);
-        (_, EngineController networked) = Build(engine => engine, network: Network(("ALICE", new NetworkUserConfig()), ("BOB", new NetworkUserConfig())));
-
-        Assert.Null(none.FindUserName("CODE"));
-        Assert.Equal("ALICE", networked.FindUserName("alice"));
-        Assert.Equal("BOB", networked.FindUserName("Bob"));
-        Assert.Null(networked.FindUserName("NOBODY"));
     }
 
     /// <summary>A user the network does not list is just a name; a listed user's details are what the file says.</summary>

@@ -7,7 +7,7 @@ public sealed class ConfiguredOptionsTests
 
     private static NetworkConfig Network(NetworkUserConfig me) => new() { Users = new Dictionary<string, NetworkUserConfig> { ["ME"] = me } };
 
-    private static ConfiguredEngineController Configured(IEngineController fallback, NetworkUserConfig me) => new(fallback, Network(me), new CurrentUserProvider { UserName = "ME" });
+    private static ConfiguredEngineController Configured(IEngineController fallback, NetworkUserConfig me) => TestConfigured.Create(fallback, Network(me), new CurrentUserProvider { UserName = "ME" });
 
     /// <summary>The HDLC options the file states replace the defaults one by one, including nested link options and enum names, and everything it does not state stays as the host stated it.</summary>
     [Fact]

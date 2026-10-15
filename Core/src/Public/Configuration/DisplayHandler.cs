@@ -42,7 +42,7 @@ public interface IDisplayHandler
     /// <summary>Gets the text shown in the title bar's alert box while alarming, and the draft editor's alert checkbox label. Defaults to <c>ALERT</c>.</summary>
     string? AlertLabel => null;
 
-    /// <summary>Gets the word the user interface uses for a user of the network, in the install screen, the help and the connection tables. Defaults to <c>User</c>.</summary>
+    /// <summary>Gets the word the user interface uses for a user of the network, in the help and the connection tables. Defaults to <c>User</c>.</summary>
     string? UserLabel => null;
 
     /// <summary>Gets the plural of <see cref="UserLabel"/>. Defaults to <see cref="UserLabel"/> with an <c>s</c> added when that is stated, otherwise <c>Users</c>.</summary>

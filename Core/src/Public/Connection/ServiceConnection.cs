@@ -19,7 +19,7 @@ public interface IServiceConnection<TPriority, TLevel, TAspect> where TPriority 
     /// <param name="cancellation">Cancels the wait.</param>
     Task Connect(CancellationToken cancellation = default);
 
-    /// <summary>Returns this user's own <see cref="UserInfo"/>, or <see langword="null"/> if not yet registered.</summary>
+    /// <summary>Returns this user's own <see cref="UserInfo"/>, or <see langword="null"/> where no current user was given, which never happens in a running engine.</summary>
     /// <param name="cancellation">Cancels the wait.</param>
     Task<UserInfo?> GetUserInfo(CancellationToken cancellation = default);
 
@@ -30,15 +30,6 @@ public interface IServiceConnection<TPriority, TLevel, TAspect> where TPriority 
     /// <summary>Returns the names of every user currently reachable over at least one live peer connection, unlike <see cref="GetUserNames"/>'s fixed configured directory.</summary>
     /// <param name="cancellation">Cancels the wait.</param>
     Task<List<string>> GetConnectedUsers(CancellationToken cancellation = default);
-
-    /// <summary>
-    /// Registers this instance as the user named <paramref name="userName"/> and returns the resulting <see cref="UserInfo"/>, or <see langword="null"/> when the network has no user of that name.
-    /// The user's certificate must be in place: the file <c>{userName}.pfx</c> in the network's certificate store, issued to that user and signed by the authority certificate.
-    /// </summary>
-    /// <param name="userName">The user to install.</param>
-    /// <param name="cancellation">Cancels the wait.</param>
-    /// <exception cref="InvalidOperationException">The certificate is missing, not issued to the user or not signed by the authority certificate; nothing is installed.</exception>
-    Task<UserInfo?> InstallUser(string userName, CancellationToken cancellation = default);
 
     /// <summary>
     /// Sends a message with the given <paramref name="body"/> to the specified <paramref name="addresses"/>: the engine stores it in the Outbox and hands it to the host's frame handler

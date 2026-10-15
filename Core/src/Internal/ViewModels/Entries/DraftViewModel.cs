@@ -858,7 +858,7 @@ internal sealed partial class DraftViewModel : ObservableObject, IDraftViewModel
                 SelectedPriority.Key, Tag, SelectedMessageLevel?.Key, SelectedMessageAspect?.Aspect?.Key);
             if (result is null)
             {
-                StatusMessage = engineController.Display("Cannot send until a user is installed");
+                StatusMessage = engineController.Display("Cannot send: this node has no user");
                 return;
             }
 

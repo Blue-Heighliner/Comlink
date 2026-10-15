@@ -32,9 +32,10 @@ await Engine.Start<MyEngineConfiguration>(args, services => services.AddSingleto
    `InvalidOperationException` if the configuration cannot be constructed, the frame type is missing, or a logical field
    is unmapped. The bootstrap container stays alive for the life of the engine, since the configuration may have handed the
    builder functions that use what was injected.
-2. `NetworkConfig.Load` reads the network configuration from `Config.json` in the app data folder; when the configuration allowed command-line overrides (`CommandLineOverrides`, off by default), `--config`
-   and `--user` take precedence, and otherwise they are ignored.
-3. If the `--user` user's entry sets `Headless`, `Engine` builds and runs an `IHost` with no UI. Otherwise
+2. `NetworkConfig.Load` reads the network configuration from `Config.json` in the app data folder; when the configuration allowed command-line overrides (`CommandLineOverrides`, off by default), `--config`,
+   `--authority`, `--certificate` and `--user` take precedence, and otherwise they are ignored.
+3. The node then works out who it is from its certificate files (`Certificates`, or the arguments): the user is a subject common name of the user certificate that the network file lists. A certificate file that is missing or unreadable, a user certificate that does not chain to the authority certificate, one not issued to a user the network lists, or no certificate stated is recorded as a problem rather than thrown: the window shows an error screen in place of the app until a refresh finds the certificate in order. A headless node (the `Headless` entry of the user named by `--user`) has no window to show it in, so there `Engine.Start` throws an `InvalidOperationException`.
+   If the user's entry sets `Headless`, `Engine` builds and runs an `IHost` with no UI. Otherwise
    it builds and shows the Avalonia desktop application.
 4. In both cases the engine's services are registered from what the host stated, with a decorator layering
    the network file's node settings for the current user on top of the settings that have a corresponding
@@ -47,7 +48,7 @@ await Engine.Start<MyEngineConfiguration>(args, services => services.AddSingleto
 
 ## Modes
 
-The `--user` user's `Headless` setting selects between `Client` (desktop UI) and `Headless` (no UI) at
+The `Headless` setting of the user the certificate names selects between `Client` (desktop UI) and `Headless` (no UI) at
 startup. Both modes run the same peer listener, local interface listener, and persistence layer;
 Headless mode does not remove any dependency from the build, it only skips showing a window.
 

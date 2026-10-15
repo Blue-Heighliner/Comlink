@@ -17,8 +17,8 @@ internal sealed class EngineHost : IHostedService
         EngineMode mode,
         ILoggerFactory loggerFactory)
     {
-        this.userService = userService;
         this.database = database;
+        this.userService = userService;
         this.peerService = peerService;
         this.interfaceService = interfaceService;
         this.externalSystemsService = externalSystemsService;
@@ -29,8 +29,8 @@ internal sealed class EngineHost : IHostedService
         displayName = mode is EngineMode.Headless ? $"{engineController.AppName} (Headless)" : engineController.AppName;
     }
 
-    private readonly IUserService userService;
     private readonly ILiteDbContext database;
+    private readonly IUserService userService;
     private readonly IPeerService peerService;
     private readonly IInterfaceService interfaceService;
     private readonly IExternalSystemsService externalSystemsService;
@@ -39,21 +39,18 @@ internal sealed class EngineHost : IHostedService
     private readonly ILogger logger;
     private readonly string displayName;
     private CancellationTokenSource? cts;
-    private int networkingStarted;
     private int stopped;
 
     /// <inheritdoc />
-    public async Task StartAsync(CancellationToken cancellationToken)
+    public Task StartAsync(CancellationToken cancellationToken)
     {
         logger.Record(LogEvents.AppStarting, "{AppName} starting", displayName);
-        await userService.Load(cancellationToken);
+        if (userService.Problem is { } problem)
+        {
+            logger.Record(LogEvents.IdentityFailed, "Cannot identify the user: {Problem}", problem);
+        }
 
         cts = new CancellationTokenSource();
-
-        // Networking needs the current user (its identity certificate, and a Server's own place in the cluster), so on
-        // a first run it waits for the install screen instead of starting without one and staying offline until the
-        // next restart. Subscribing before checking means an install that lands in between is not missed.
-        userService.Installed += StartNetworking;
         userService.Changed += RestartNetworking;
         if (userService.GetCurrentUserInfo() is not null)
         {
@@ -61,9 +58,10 @@ internal sealed class EngineHost : IHostedService
         }
 
         logger.Record(LogEvents.AppStarted, "{AppName} started", displayName);
+        return Task.CompletedTask;
     }
 
-    // Every service that runs on a user's behalf (identity certificate, role, connections) ends with the token it was given and can be started again, so another user, or none, is a stop and a start.
+    // Every service that runs on a user's behalf (identity certificate, role, connections) ends with the token it was given and can be started again, so another user is a stop and a start, and nobody is a stop.
     private void RestartNetworking()
     {
         if (cts is null)
@@ -73,7 +71,6 @@ internal sealed class EngineHost : IHostedService
 
         cts.Cancel();
         cts = new CancellationTokenSource();
-        Interlocked.Exchange(ref networkingStarted, 0);
         if (userService.GetCurrentUserInfo() is not null)
         {
             StartNetworking();
@@ -82,11 +79,6 @@ internal sealed class EngineHost : IHostedService
 
     private void StartNetworking()
     {
-        if (Interlocked.Exchange(ref networkingStarted, 1) != 0)
-        {
-            return;
-        }
-
         database.Initialize();
         CancellationToken cancellation = cts!.Token;
         RunInBackground("Peer service", () => peerService.Start(cancellation), cancellation);
@@ -118,7 +110,6 @@ internal sealed class EngineHost : IHostedService
         }
 
         logger.Record(LogEvents.AppExited, "{AppName} exited", displayName);
-        userService.Installed -= StartNetworking;
         userService.Changed -= RestartNetworking;
         cts?.Cancel();
         return Task.CompletedTask;

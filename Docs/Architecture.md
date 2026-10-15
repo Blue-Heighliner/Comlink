@@ -50,7 +50,7 @@ Core/src/
     │                  playback, printer discovery/driving, external drive discovery
     ├── ExternalSystems/ The relay/mirror coordinator - see Components/ExternalSystems.md
     ├── Logging/       Daily file logger + activity log writer
-    ├── Models/        Shared DTOs (UserState, Folder, etc.)
+    ├── Models/        Shared DTOs (Folder, Message, etc.)
     ├── Peer/          P2P networking - send/receive messages between nodes over MSMT (IP) or a
     │   │              MicroGate serial cable, and the local interface listener (always active) -
     │   │              see Components/Interface.md
@@ -133,7 +133,7 @@ sequenceDiagram
 
 ## Startup Sequence
 
-`Engine.Start<T>(args, configureServices)` first constructs the host's `IEngineConfiguration` through dependency injection, from a bootstrap container holding logging plus the host's `configureServices` registrations, and runs it against an `EngineBuilder`, validating the result. The result says whether `--config` and `--user` may be honored at all, which is why it must exist before `NetworkConfig` does: a configuration must never depend on `NetworkConfig`, since that is exactly what it decides whether to load. `NetworkConfig.Load` reads the network configuration file (`Config.json` in the app data folder); if the configuration allowed command-line overrides (`CommandLineOverrides`, off by default), `--config` and `--user` take precedence, and otherwise they are ignored.
+`Engine.Start<T>(args, configureServices)` first constructs the host's `IEngineConfiguration` through dependency injection, from a bootstrap container holding logging plus the host's `configureServices` registrations, and runs it against an `EngineBuilder`, validating the result. The result says whether `--config`, `--authority`, `--certificate` and `--user` may be honored at all, which is why it must exist before `NetworkConfig` does: a configuration must never depend on `NetworkConfig`, since that is exactly what it decides whether to load. `NetworkConfig.Load` reads the network configuration file (`Config.json` in the app data folder); if the configuration allowed command-line overrides (`CommandLineOverrides`, off by default), those arguments take precedence, and otherwise they are ignored. Before anything else is built, `Engine.Start` then resolves who the node is (`MsmtCertificateLookup.ResolveIdentity`): the user is a subject common name of the user certificate (`Certificates`, or `--authority`/`--certificate`) that the network file lists, and the certificate must chain to the authority certificate. `MsmtCertificateLookup.CheckIdentity` records a missing or unreadable file, a certificate that does not chain, one issued to no listed user, or no certificate stated as a problem instead of throwing, and the GUI starts with an error screen in place of the app (no current user, no networking, database or folders) until a refresh finds the certificate in order. A headless node (the `Headless` entry of the user named by `--user`) has no window to show it in, so it fails the start with an `InvalidOperationException`. The result is registered with the engine, which holds the current user in `ICurrentUserProvider`.
 
 `EngineExtensions.UseEngine()` registers the core services, including the `IEngineController` built from the builder and wrapped by `ConfiguredEngineController` (which layers the current user's node settings from the network file on top of the settings that have a corresponding field, see [Configuration.md](Components/Configuration.md#network-configuration-file); the wrapped controller itself reads every user's info from the same file). For Client mode, `EngineUiExtensions.UseEngineUi()` additionally registers `MainWindow` and overrides `IBodyDocumentFactory`. The host's `configureServices` registrations run last, against the running engine's own container. `EngineHost` (an `IHostedService`) runs at startup:
 
@@ -143,31 +143,29 @@ sequenceDiagram
     participant EE as EngineExtensions
     participant EA as EngineUiExtensions
     participant EH as EngineHost
-    participant SS as UserService
     participant PS as PeerService
     participant IS as InterfaceService
     H->>EE: UseEngine(Client)
     H->>EA: UseEngineUi() [Client only]
     H->>EH: StartAsync
-    EH->>SS: Load()
     EH->>PS: Start()
     EH->>IS: Start()
 ```
 
-1. `UserService.Load` - restores the installed user from `User.json` (or the `--user` user), checking their certificate
-2. `PeerService.Start` — begins accepting peer connections
-3. `InterfaceService.Start` — begins accepting interface connections (always, regardless of mode)
-4. `EngineHooksService.Start` - subscribes to `IPeerService`'s connection and message events on behalf of the host's configured frame handler (`Frames<THandler>`, see [Configuration.md](Components/Configuration.md#frame-handler)); a no-op if none is configured
+1. `PeerService.Start` — begins accepting peer connections
+2. `InterfaceService.Start` — begins accepting interface connections (always, regardless of mode)
+3. `EngineHooksService.Start` - subscribes to `IPeerService`'s connection and message events on behalf of the host's configured frame handler (`Frames<THandler>`, see [Configuration.md](Components/Configuration.md#frame-handler)); a no-op if none is configured
 
-Steps 2 through 4 (and external systems) only run once a user is installed: a fresh installation has no name, so it cannot identify itself to peers, pick its own certificate, or stamp messages it routes. When no user is installed yet, `EngineHost` waits for `UserService.Installed` and starts networking then, without a restart.
+These start, with the database opened, only when a user is current (external systems and the disconnect alarm start alongside them); with a certificate problem none of them run. When "Refresh" in the title bar finds that the current user changed, including to or from nobody, `UserService.Changed` makes `EngineHost` cancel them all and start them again if there is a user.
 
 ## Data Storage
 
-All persistent data lives under `%APPDATA%/{AppName}`, in a folder per user (`IEngineController.AppDataPath`, always `%APPDATA%/{AppName}/{USERNAME}`, not configurable), beside the install state:
+All persistent data lives under `%APPDATA%/{AppName}`, in a folder per user (`IEngineController.AppDataPath`, always `%APPDATA%/{AppName}/{USERNAME}`, not configurable), beside the shared configuration files:
 
 ```
 %APPDATA%/{AppName}/
-├── User.json        Installed user (name): says whose folder to use
+├── Config.json      Network configuration file (optional, see Components/Config.md)
+├── Logging.json     Log categories to turn on (optional)
 └── {USERNAME}/      IEngineController.AppDataPath
     ├── Data.db      LiteDB file (messages, drafts, notes, folders, activity)
     └── Logs/

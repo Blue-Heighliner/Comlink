@@ -10,12 +10,14 @@ public static class Engine
     internal static NetworkConfig Network { get; private set; } = new();
     /// <summary>Records what Avalonia reports about itself once the engine's logging exists.</summary>
     internal static AvaloniaLogSink AvaloniaLog { get; } = new();
+    /// <summary>What checking the node's certificates found when it started: who the node is, or why that cannot be told.</summary>
+    internal static IdentityCheck Identity { get; private set; } = new() { Identity = new NodeIdentity { UserName = string.Empty, AuthorityFile = string.Empty, CertificateFile = string.Empty, CertificateThumbprint = string.Empty, AuthorityThumbprint = string.Empty } };
     /// <summary>Registers the host's own services, applied to the running engine's container as well as the one its configuration is built in.</summary>
     internal static Action<IServiceCollection>? ConfigureServices { get; private set; }
 
     /// <summary>
     /// Constructs <typeparamref name="TConfiguration"/> through dependency injection and runs it, loads the configuration
-    /// file if the configuration allows one, then starts the engine in Headless mode or GUI mode.
+    /// file if the configuration allows one and checks the certificates to work out who the node is, then starts the engine in Headless mode or GUI mode.
     /// </summary>
     /// <typeparam name="TConfiguration">
     /// Says how the engine runs; it must at least state the host's frame type. It is built from a container holding
@@ -26,7 +28,7 @@ public static class Engine
     /// </typeparam>
     /// <param name="args">Command-line arguments passed from the host entry point.</param>
     /// <param name="configureServices">Registers the host's own services: the ones <typeparamref name="TConfiguration"/> depends on, and any others the host wants in the running engine (for example a hosted service that uses <see cref="IServiceConnection{TPriority, TLevel, TAspect}"/>).</param>
-    /// <exception cref="InvalidOperationException"><typeparamref name="TConfiguration"/> cannot be constructed, or is incomplete or contradicts itself.</exception>
+    /// <exception cref="InvalidOperationException"><typeparamref name="TConfiguration"/> cannot be constructed, or is incomplete or contradicts itself, or a headless node's certificates are missing, invalid or not issued to a user of the network (any other node shows the problem in its window instead).</exception>
     public static async Task Start<TConfiguration>(string[] args, Action<IServiceCollection>? configureServices = null) where TConfiguration : class, IEngineConfiguration
     {
         ConfigureServices = configureServices;
@@ -34,9 +36,16 @@ public static class Engine
         await using (Builder)
         {
             Network = NetworkConfig.Load(Builder.AreCommandLineOverridesAllowed ? args : [], Builder.AppDataFolder);
+            Identity = MsmtCertificateLookup.CheckIdentity(Builder, Network);
 
-            if (Network.Find(Network.User)?.Headless == true)
+            // Without a window there is nowhere to show a problem, so a headless node that cannot be identified (it is the --user user that says it is headless) does not start.
+            if (Network.Find(Identity.Problem is null ? Identity.Identity.UserName : Network.User)?.Headless == true)
             {
+                if (Identity.Problem is { } problem)
+                {
+                    throw new InvalidOperationException(problem);
+                }
+
                 await RunHeadless();
             }
             else
@@ -48,7 +57,7 @@ public static class Engine
 
     private static async Task RunHeadless()
         => await Host.CreateDefaultBuilder()
-            .UseEngine(EngineMode.Headless, Builder, Network)
+            .UseEngine(EngineMode.Headless, Builder, Network, Identity)
             .ConfigureServices((_, services) => ConfigureServices?.Invoke(services))
             .ConfigureLogging(logging => logging.SetMinimumLevel(LogLevel.Information))
             .Build()

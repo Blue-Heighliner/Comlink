@@ -12,8 +12,8 @@ graph TD
     FBV[FolderBarViewModel]
     EBV[EntryBarViewModel]
     CAV[ContentAreaViewModel]
-    IV[InstallViewModel]
     AV[AlertViewModel]
+    ERV[ErrorViewModel]
     EXV[ExportViewModel]
     IMV[ImportViewModel]
     DVM[DraftViewModel]
@@ -24,8 +24,8 @@ graph TD
     MVM --> FBV
     MVM --> EBV
     MVM --> CAV
-    MVM --> IV
     MVM --> AV
+    MVM --> ERV
     MVM --> EXV
     MVM --> IMV
     CAV -->|ShowEntry| DVM
@@ -43,7 +43,7 @@ graph TD
 
 Root coordinator. Registered as singleton via `IMainViewModel → MainViewModel`; bound to `MainWindow(IMainViewModel)`.
 
-**Properties**: `IsInstallScreenVisible`, `IsKioskMode`, `UserName`, `MessageLevelName`, `MessageLevelColor` (the current user's message level, resolved via `IEngineController.GetUserMessageLevel`/`MessageLevels` and shown in the title bar's `MessageLevelBanner`, replacing what used to be a fixed "DEBUG" banner; empty and hidden when no message levels are configured), `AppVersion` (from `IEngineController.AppVersion`), `AppName` (from `IEngineController.AppName`), `Help (IHelpViewModel)`, `IsServerMode`/`IsClientMode` (fixed for the process's lifetime, from `IEngineController.Role`), `ShowMainLayout` (`!IsServerMode && !IsInstallScreenVisible`), `ShowConnectionsTable` (`IsServerMode && !IsInstallScreenVisible && !IsServerActivityViewActive`), `ShowServerActivityView` (`IsServerMode && !IsInstallScreenVisible && IsServerActivityViewActive`), plus `FolderBar (IFolderBarViewModel)`, `EntryBar (IEntryBarViewModel)`, `ContentArea (IContentAreaViewModel)`, `InstallView (IInstallViewModel)`, `Alert (IAlertViewModel)`, `Export (IExportViewModel)`, `Import (IImportViewModel)`, `StagedSend (IStagedSendViewModel)`, `Retrieve (IRetrieveViewModel)`, `AutoForward (IAutoForwardViewModel)`, `PrintManager (IPrintManagerViewModel)`, `ConnectionStatus (IConnectionStatusViewModel)`. `CanRetrieve (bool)` - `IsClientMode` and at least one `IEngineController.StorageServers` entry (fixed for the process's lifetime); gates whether the title bar's RETRIEVE button is shown at all (see `TitleBar.CanRetrieve`). `HasAutoForwardAccess (bool)` — whether the installed user is named in at least one `IEngineController.AutoForwardControllers` entry (case-insensitive), recomputed by `ApplyUserInfo` on install/login; gates whether the title bar's AUTO FORWARD button is shown at all (see `TitleBar.HasAutoForwardAccess`).
+**Properties**: `IsErrorScreenVisible` (true while the node cannot be identified; see [IErrorViewModel](#ierrorviewmodel--errorviewmodel)), `IsKioskMode`, `UserName`, `MessageLevelName`, `MessageLevelColor` (the current user's message level, resolved via `IEngineController.GetUserMessageLevel`/`MessageLevels` and shown in the title bar's `MessageLevelBanner`, replacing what used to be a fixed "DEBUG" banner; empty and hidden when no message levels are configured), `AppVersion` (from `IEngineController.AppVersion`), `AppName` (from `IEngineController.AppName`), `Help (IHelpViewModel)`, `IsServerMode`/`IsClientMode` (from `IEngineController.Role`, recomputed when a refresh changes it), `ShowMainLayout` (`!IsServerMode && !IsErrorScreenVisible`), `ShowConnectionsTable` (`IsServerMode && !IsErrorScreenVisible && !IsServerActivityViewActive`), `ShowServerActivityView` (`IsServerMode && !IsErrorScreenVisible && IsServerActivityViewActive`), plus `FolderBar (IFolderBarViewModel)`, `EntryBar (IEntryBarViewModel)`, `ContentArea (IContentAreaViewModel)`, `ErrorView (IErrorViewModel)`, `Alert (IAlertViewModel)`, `Export (IExportViewModel)`, `Import (IImportViewModel)`, `StagedSend (IStagedSendViewModel)`, `Retrieve (IRetrieveViewModel)`, `AutoForward (IAutoForwardViewModel)`, `PrintManager (IPrintManagerViewModel)`, `ConnectionStatus (IConnectionStatusViewModel)`. `CanRetrieve (bool)` - `IsClientMode` and at least one `IEngineController.StorageServers` entry (recomputed with the role); gates whether the title bar's RETRIEVE button is shown at all (see `TitleBar.CanRetrieve`). `HasAutoForwardAccess (bool)` — whether the current user is named in at least one `IEngineController.AutoForwardControllers` entry (case-insensitive), recomputed by `ApplyUserInfo` at startup and when a refresh switches user; gates whether the title bar's AUTO FORWARD button is shown at all (see `TitleBar.HasAutoForwardAccess`).
 
 **Server/Client mode UI** (see [IConnectionStatusViewModel](#iconnectionstatusviewmodel--connectionstatusviewmodel)): `MainWindow.axaml`'s `TitleBar` is always shown, in both modes — a `UserRole.Server` instance routes messages only and has no inbox/outbox/notes/drafts of its own, so `TitleBar.IsServerMode` (bound to `MainViewModel.IsServerMode`) hides the left-side drafts/notes/export/import/print action buttons and shows two view-switching buttons, CONNECTIONS and ACTIVITY, in that same left-side position instead — the window controls themselves (minimize/maximize/close) are unaffected by `IsServerMode` and always shown, same as peer/client mode. `ShowMainLayout` (the normal 3-panel folder/entry/content layout) is never shown in Server mode; instead, exactly one of two views is shown, mutually exclusive, toggled by those two buttons (`ShowConnectionsCommand`/`ShowActivityCommand` below) and defaulting to the connections table at startup:
 - `ShowConnectionsTable` shows up to two tables, stacked: a "SERVERS" table bound to `ConnectionStatus.ServerRows` (visible only while `ConnectionStatus.HasServerRows`) and a "CLIENTS" table bound to `ConnectionStatus.ClientRows` (visible only while `ConnectionStatus.HasClientRows`) — either table is hidden outright while it has no rows (e.g. no other servers configured, or no children configured).
@@ -53,10 +53,10 @@ A `UserRole.Client` instance keeps the normal layout, with a single `ConnectionR
 
 **Commands**: `CreateDraftCommand`, `CreateNoteCommand` (`IAsyncRelayCommand`); `ShowExportCommand`/`ShowImportCommand` (`IRelayCommand`) — each deselects the current folder and entry (`IFolderBarViewModel.DeselectFolder`/`IEntryBarViewModel.DeselectEntry`), refreshes its ViewModel's drive list (`RefreshDrivesCommand`), then displays it in the content area (see [IExportViewModel](#iexportviewmodel--exportviewmodel), [IImportViewModel](#iimportviewmodel--importviewmodel)); `ShowRetrieveCommand` (`IRelayCommand`) — deselects the current folder and entry, then displays `Retrieve` in the content area (see [IRetrieveViewModel](#iretrieveviewmodel--retrieveviewmodel)); `ShowAutoForwardCommand` (`IRelayCommand`) — deselects the current folder and entry, refreshes `AutoForward.RefreshCommand` (see [IAutoForwardViewModel](#iautoforwardviewmodel--autoforwardviewmodel)), then displays it in the content area; `RefreshCommand` (`IAsyncRelayCommand`) — bound to the "Refresh configuration" button of the title bar's info panel (`TitleBar.RefreshCommand`); awaits `INetworkReloadService.Reload()` (see [Services.md](Services.md#networkreloadservice)) and logs a failure instead of throwing, and `MainViewModel` also reacts to the service's `Reloaded` event by recomputing `IsServerMode`, `IsClientMode`, `CanRetrieve`, the message level and `HasAutoForwardAccess` from the reloaded info, and when the reload changed the current user by reopening that user's database and reloading the folders, or by showing the install screen again when nobody is current; `ShowPrintManagerCommand` (`IRelayCommand`) — deselects the current folder and entry, then displays `PrintManager` in the content area (see [IPrintManagerViewModel](#iprintmanagerviewmodel--printmanagerviewmodel)); `PrintEntryCommand` (`IRelayCommand<EntryItemViewModel>`) — calls `PrintManager.EnqueueManual(entry)`, bound to the entry list's right-click "Print" context menu item (`EntryBar.axaml`, via `$parent[Window].DataContext.PrintEntryCommand`); `ShowHomeCommand` (`IRelayCommand`) — calls `ContentAreaViewModel.ShowHome()` and nothing else. Bound to the "×" close button in `ExportView`/`ImportView`/`StagedSendView`/`RetrieveView`/`AutoForwardView`/`PrintManagerView` (via `$parent[Window].DataContext.ShowHomeCommand`, since those views' own `DataContext` is the export/import/staged-send/auto-forward/print-manager ViewModel, not `MainViewModel`) — closing restores the content area to its default state exactly as if the user had navigated away by picking a folder, without touching `Export`/`Import`/`Retrieve`/`AutoForward`/`PrintManager`'s own state, which remains intact for next time. `StagedSend` is the one exception: since `ContentAreaViewModel` discards it on the way out of any navigation (see [IContentAreaViewModel](#icontentareaviewmodel--contentareaviewmodel) above), closing it this way loses it exactly the same as navigating away any other way. `ShowConnectionsCommand` (`IRelayCommand`, `IsServerMode` only) — switches to `ShowConnectionsTable`. `ShowActivityCommand` (`IAsyncRelayCommand`, `IsServerMode` only) — switches to `ShowServerActivityView`, then either selects the Activity folder (`IFolderBarViewModel.SelectFolderByType(FolderType.Activity)`, which loads it into `EntryBar` the same way any folder selection does) if it is not already selected, or refreshes `EntryBar` in place if it is (so re-clicking ACTIVITY always shows the latest entries instead of a no-op).
 
-**Method**: `Task Initialize()` — connects, loads user info, shows main UI or install screen.
+**Method**: `Task Initialize()` — connects, then either shows the error screen (when `IUserService.Problem` is set; nothing else is opened) or loads the current user's info, opens the database and shows the main UI.
 
 **Wiring**:
-- `IInstallViewModel.InstallSucceeded` → initializes DB, applies user info, loads folder tree
+- `INetworkReloadService.Reloaded` (the title bar's "Refresh") → when `IUserService.Problem` is set, clears the user, deselects the folder and entry, shows the home content and the error screen with the problem as its message; otherwise reapplies the current user's role, message level and access, and when the user changed or the error screen was showing also reopens the database, reloads the folder tree, shows the home content and removes the error screen
 - `IEngineConnection.MessageReceived` → skips a message the Inbox already holds (`IEntryService.IncomingMessageExists`), otherwise stores it, prepends to entry bar when Inbox is active
 - `IEngineConnection.DeliveryStatusChanged` → passes to `IEntryBarViewModel.UpdateEntryStatus`
 
@@ -215,15 +215,13 @@ Read-only daily activity log. Constructed with `new ActivityLogViewModel(entity)
 
 ---
 
-## IInstallViewModel / InstallViewModel
+## IErrorViewModel / ErrorViewModel
 
-One-time setup screen. Registered as `IInstallViewModel → InstallViewModel` singleton.
+The screen shown in place of the app while the node cannot be identified, because its certificate is missing, unreadable, not signed by the authority, not issued to a user of the network, or not stated. Registered as `IErrorViewModel → ErrorViewModel` singleton; exposed as `MainViewModel.ErrorView` and shown by `ErrorView` over the window while `MainViewModel.IsErrorScreenVisible` is true.
 
-**Properties**: `UserName` (auto-uppercased), `ErrorMessage` (an unknown name, or the reason the user's certificate is not in order), `IsLoading`. A failed install, an unknown name or a certificate that is not in order, is written to the activity log as a warning as well as shown, centered, in `ErrorMessage`.
+**Properties**: `Message` — the reason, as `IUserService.Problem` words it.
 
-**Events**: `InstallSucceeded (Func<UserInfo, Task>)` — raised on success; consumed by `MainViewModel`.
-
-**Commands**: `InstallCommand (IAsyncRelayCommand)`.
+`ErrorView` shows the heading "Cannot identify the user" (written with the host's user label), `Message`, and a hint to press Refresh in the info panel of the title bar. Meanwhile `TitleBar.IsErrorScreenVisible` (bound to `MainViewModel.IsErrorScreenVisible`) hides the action buttons, the network indicator and the help button; the info button and the window controls stay. A refresh that finds the certificate in order removes the screen.
 
 ---
 
@@ -395,7 +393,7 @@ Content of the help window: a tabbed guide, each tab covering one way of using t
 - Every other role gets Getting started, Sending a message, Receiving messages, Notes and drafts, Folders and entries, Backup and restore, and Printing. A `Client` additionally gets a Connection tab about the status row and what happens while the server is unreachable.
 - The tag section of Sending a message appears only when `TagsEnabled`, and an alert section is always there (an alert is decided by the draft handler, not by the user); the tag and alert sections, and the alert section of Receiving messages, are titled with the host's own `TagLabel`/`AlertLabel`.
 
-The two title bar buttons live in `TitleBar`, immediately left of the window controls, and are always shown (including in Server mode and on the install screen). The `i` button opens a small popup with `AppName` and `AppVersion`. The `?` button opens a `HelpWindow` (a normal decorated window, `TabControl` with the tabs down the left) bound to `MainViewModel.Help`; pressing it again while the window is open brings it forward instead of opening a second one, and Escape closes it.
+The two title bar buttons live in `TitleBar`, immediately left of the window controls, and are always shown (including in Server mode and on the error screen). The `i` button opens a small popup with `AppName` and `AppVersion`. The `?` button opens a `HelpWindow` (a normal decorated window, `TabControl` with the tabs down the left) bound to `MainViewModel.Help`; pressing it again while the window is open brings it forward instead of opening a second one, and Escape closes it.
 
 ---
 

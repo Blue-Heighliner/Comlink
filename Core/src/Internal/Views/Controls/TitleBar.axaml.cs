@@ -65,9 +65,9 @@ internal partial class TitleBar : UserControl
     public static readonly StyledProperty<ICommand?> ShowPrintManagerCommandProperty =
         AvaloniaProperty.Register<TitleBar, ICommand?>(nameof(ShowPrintManagerCommand));
 
-    /// <summary>Identifies the <see cref="IsInstallScreenVisible"/> styled property.</summary>
-    public static readonly StyledProperty<bool> IsInstallScreenVisibleProperty =
-        AvaloniaProperty.Register<TitleBar, bool>(nameof(IsInstallScreenVisible));
+    /// <summary>Identifies the <see cref="IsErrorScreenVisible"/> styled property.</summary>
+    public static readonly StyledProperty<bool> IsErrorScreenVisibleProperty =
+        AvaloniaProperty.Register<TitleBar, bool>(nameof(IsErrorScreenVisible));
 
     /// <summary>Identifies the <see cref="IsServerMode"/> styled property.</summary>
     public static readonly StyledProperty<bool> IsServerModeProperty =
@@ -199,7 +199,7 @@ internal partial class TitleBar : UserControl
         set => SetValue(HasAutoForwardAccessProperty, value);
     }
 
-    /// <summary>Gets or sets the command invoked by the "Refresh configuration" button of the info panel, which re-reads the configuration files.</summary>
+    /// <summary>Gets or sets the command invoked by the "Refresh" button of the info panel, which re-reads the configuration files.</summary>
     public ICommand? RefreshCommand
     {
         get => GetValue(RefreshCommandProperty);
@@ -213,11 +213,11 @@ internal partial class TitleBar : UserControl
         set => SetValue(ShowPrintManagerCommandProperty, value);
     }
 
-    /// <summary>Gets or sets a value indicating whether the install screen is currently visible, which hides action buttons.</summary>
-    public bool IsInstallScreenVisible
+    /// <summary>Gets or sets a value indicating whether the error screen is currently visible, which hides the action buttons, the network indicator and the help button, leaving only the information button.</summary>
+    public bool IsErrorScreenVisible
     {
-        get => GetValue(IsInstallScreenVisibleProperty);
-        set => SetValue(IsInstallScreenVisibleProperty, value);
+        get => GetValue(IsErrorScreenVisibleProperty);
+        set => SetValue(IsErrorScreenVisibleProperty, value);
     }
 
     /// <summary>
@@ -294,7 +294,7 @@ internal partial class TitleBar : UserControl
         {
             UpdateUserInfo();
         }
-        if (change.Property == IsInstallScreenVisibleProperty || change.Property == IsServerModeProperty)
+        if (change.Property == IsErrorScreenVisibleProperty || change.Property == IsServerModeProperty)
         {
             UpdateActionButtonsVisibility();
         }
@@ -341,13 +341,13 @@ internal partial class TitleBar : UserControl
         {
             ApplyAlertText();
         }
-        if (change.Property == NetworkTextProperty || change.Property == NetworkColorProperty || change.Property == IsServerModeProperty || change.Property == IsInstallScreenVisibleProperty)
+        if (change.Property == NetworkTextProperty || change.Property == NetworkColorProperty || change.Property == IsServerModeProperty || change.Property == IsErrorScreenVisibleProperty)
         {
             ApplyNetworkIndicator();
         }
     }
 
-    // A server has no network indicator, and nobody is connected on the install screen; a client otherwise always has one.
+    // A server has no network indicator, and nobody is connected while the error screen is shown; a client otherwise always has one.
     private void ApplyNetworkIndicator()
     {
         Border? box = this.FindControl<Border>("NetworkBox");
@@ -357,7 +357,7 @@ internal partial class TitleBar : UserControl
             return;
         }
 
-        box.IsVisible = !IsServerMode && !IsInstallScreenVisible && NetworkText.Length > 0;
+        box.IsVisible = !IsServerMode && !IsErrorScreenVisible && NetworkText.Length > 0;
         text.Text = NetworkText;
         if (Color.TryParse(NetworkColor, out Color color))
         {
@@ -380,12 +380,17 @@ internal partial class TitleBar : UserControl
         StackPanel? actionButtons = this.FindControl<StackPanel>("ActionButtonsPanel");
         if (actionButtons is not null)
         {
-            actionButtons.IsVisible = !IsServerMode && !IsInstallScreenVisible;
+            actionButtons.IsVisible = !IsServerMode && !IsErrorScreenVisible;
         }
         StackPanel? serverViewButtons = this.FindControl<StackPanel>("ServerViewButtonsPanel");
         if (serverViewButtons is not null)
         {
-            serverViewButtons.IsVisible = IsServerMode && !IsInstallScreenVisible;
+            serverViewButtons.IsVisible = IsServerMode && !IsErrorScreenVisible;
+        }
+        Button? helpButton = this.FindControl<Button>("HelpButton");
+        if (helpButton is not null)
+        {
+            helpButton.IsVisible = !IsErrorScreenVisible;
         }
     }
 
@@ -413,7 +418,7 @@ internal partial class TitleBar : UserControl
         }
 
         Flyout flyout = new() { Content = content, Placement = PlacementMode.BottomEdgeAlignedRight };
-        Button refresh = new() { Content = "Refresh configuration", Margin = new Thickness(0, 8, 0, 0), HorizontalAlignment = HorizontalAlignment.Stretch, IsEnabled = RefreshCommand?.CanExecute(null) ?? false };
+        Button refresh = new() { Content = "Refresh", Margin = new Thickness(0, 8, 0, 0), HorizontalAlignment = HorizontalAlignment.Stretch, IsEnabled = RefreshCommand?.CanExecute(null) ?? false };
         refresh.Click += (_, _) =>
         {
             flyout.Hide();

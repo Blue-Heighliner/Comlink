@@ -39,7 +39,7 @@ internal sealed class DailyFileLoggerProvider : ILoggerProvider
                 return dir;
             }
 
-            // The folder follows the user: lines logged before one is installed or named go to the application's own folder.
+            // The folder follows the user: lines logged before the node's user is known go to the application's own folder.
             Directory.CreateDirectory(dir);
             logDirectory = dir;
             crossProcessMutex = null;

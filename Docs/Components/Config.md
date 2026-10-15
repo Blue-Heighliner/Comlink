@@ -1,23 +1,24 @@
 # Network Configuration File Reference
 
-The engine defines the schema of one JSON file that describes a whole network: every user, their role, ports and connections, and who is in which group. It is shared by every node of the network, so nothing about a user is stated in code or in per-node files. It works identically in every build configuration; `Config.json` in the app data folder (`%APPDATA%/{AppName}/Config.json`, beside `User.json`) is always read, and whether the command-line arguments below may override it is decided solely by the host, through `IEngineBuilder.CommandLineOverrides(bool)` (see [Configuration.md](Configuration.md#command-line-overrides)); they are ignored unless the host allows them.
+The engine defines the schema of one JSON file that describes a whole network: every user, their role, ports and connections, and who is in which group. It is shared by every node of the network, so nothing about a user is stated in code or in per-node files. It works identically in every build configuration; `Config.json` in the app data folder (`%APPDATA%/{AppName}/Config.json`, beside `Logging.json`) is always read, and whether the command-line arguments below may override it is decided solely by the host, through `IEngineBuilder.CommandLineOverrides(bool)` (see [Configuration.md](Configuration.md#command-line-overrides)); they are ignored unless the host allows them.
 
 ```sh
-Sample.exe --config path/to/Config.json --user CLIENT1
+Sample.exe --config path/to/Config.json --authority Root.cer --certificate CLIENT1.pfx
 ```
 
 - `--config <path>` names the file (only when the host allows command-line overrides). When omitted, `Config.json` in the app data folder is used if it exists, and otherwise the network is empty. A `--config` path that does not exist or cannot be read makes the process throw at startup.
 - `--log <categories>` (also only when overrides are allowed) turns on log categories that are not on by default, as a comma separated list such as `Frames,Packets`, in addition to those named by `Logging.json`; see the logging component.
-- `--user <name>` (also only when overrides are allowed) names the user this process runs as, so a node starts as that user without the install screen and uses that user's `Headless` choice. The named user must be a user of this file and have their certificate in order, exactly as when installing; otherwise nobody is installed and the install screen is shown. Without the argument the user is the one installed through the install screen (the name of a user in this file, case-insensitive, whose certificate must be in order), which is remembered between runs.
+- `--authority <path>` and `--certificate <path>` (also only when overrides are allowed) name the authority certificate file and the user's PKCS#12 identity file instead of those the host stated with `Certificates`; a relative path is relative to the working directory.
+- `--user <name>` (also only when overrides are allowed) picks which subject common name of the user certificate is the user this process runs as, for a certificate issued to several names. Without it the first common name the file lists is used. The name must be one of the certificate's common names and a user of this file.
 
-The file is read again while the application runs when the user presses "Refresh configuration" in the info panel of the title bar; see [Configuration.md](Configuration.md#network-configuration-file) for what that applies. Property names are PascalCase; deserialization is case-insensitive, and so are user names. Unrecognised fields are silently ignored and missing fields use their defaults. An empty file (`{}`) is an empty network. By convention user names are all uppercase.
+Who the node is comes from the certificate, never from this file: the user is a subject common name of the user certificate, matched case-insensitively to a user listed here (the name is then spelled as this file spells it). The certificate must chain to the authority certificate, the only trusted root; when a certificate file is missing or unreadable, does not chain, is issued to no user of this file, or is not stated, the node shows an error screen instead of the app and refuses to connect until a refresh finds the certificate in order (a headless node, having no window, throws at startup instead). The certificate files are not part of this file and are never resolved relative to it.
+
+The file is read again while the application runs when the user presses "Refresh" in the info panel of the title bar; see [Configuration.md](Configuration.md#network-configuration-file) for what that applies. Property names are PascalCase; deserialization is case-insensitive, and so are user names. Unrecognised fields are silently ignored and missing fields use their defaults. An empty file (`{}`) is an empty network. By convention user names are all uppercase.
 
 ## Schema
 
 ```json
 {
-  "AuthorityCertificate": "../Root.cer",
-  "CertificateStore": ".",
   "UserGroups": {
     "OPS": [ "USER-A", "USER-B" ]
   },
@@ -40,18 +41,6 @@ The file is read again while the application runs when the user presses "Refresh
 ```
 
 ## Network
-
-### `AuthorityCertificate`
-
-**Type:** `string | null` | **Default:** `null`
-
-Path to a public certificate file (for example `.cer`) of the one certificate authority every identity certificate must chain to, and the only one a node trusts. A relative path resolves against the directory of the configuration file. Required for connections: without it, and `CertificateStore`, connections cannot be set up.
-
-### `CertificateStore`
-
-**Type:** `string | null` | **Default:** `null`
-
-Path to a folder of PKCS#12 (`.pfx`) files, one per user named `{USERNAME}.pfx` (for example `CLIENT1.pfx`, matching the user name's case on a case-sensitive file system), holding each user's identity certificate and private key. A node loads the running user's own identity from it, and only from it; the certificate's common name is the user name, which is how a connecting node is recognized. A relative path resolves against the directory of the configuration file. Required for connections together with `AuthorityCertificate`.
 
 ### `UserGroups`
 
@@ -162,9 +151,9 @@ App-specific string keys and values attached to the user. The engine does not in
 
 ## Settings of the node a user runs
 
-These apply to a node running as this user; the one marked "launched" only when the user is named with `--user`, since an installed user is not known until networking starts.
+These apply to a node running as this user, the one its certificate names.
 
-### `Headless` (launched)
+### `Headless`
 
 **Type:** `bool` | **Default:** `false`
 
@@ -178,8 +167,6 @@ One server with two clients that each name it as their parent, the server storin
 
 ```json
 {
-  "AuthorityCertificate": "../Root.cer",
-  "CertificateStore": ".",
   "Users": {
     "SERVER":  { "Role": "Server", "IpHost": "127.0.0.1", "Msmt": { "Port": 50121 }, "InterfacePort": 50120, "Children": [ "CLIENT1", "CLIENT2" ], "MessageLevel": "RESTRICTED" },
     "CLIENT1": { "Role": "Client", "InterfacePort": 50122, "Parent": "SERVER", "MessageLevel": "INTERNAL" },
@@ -195,5 +182,5 @@ One server with two clients that each name it as their parent, the server storin
 ```
 
 ```sh
-Sample.exe --config Config.json --user GATEWAY
+Sample.exe --config Config.json --authority Root.cer --certificate GATEWAY.pfx
 ```

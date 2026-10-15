@@ -1,4 +1,4 @@
-#:package Markwardt.ScriptUtilities@0.2.0
+#:package Markwardt.ScriptUtilities
 #:property TreatWarningsAsErrors=true
 
 // Manual test scenario: a two-server cluster (Server1, Server2), each with one Client child (Client1
@@ -10,4 +10,4 @@
 
 using Markwardt.ScriptUtilities;
 
-(await Script.Run("dotnet", "run", "--no-build", "--project", "Sample/Sample.csproj", "--", "--config", "Scripts/Scenarios/ServerCluster/Config.json", "--user", "SERVER2")).Verify();
+(await Script.Run("dotnet", "run", "--no-build", "--project", "Sample/Sample.csproj", "--", "--config", "Scripts/Scenarios/ServerCluster/Config.json", "--authority", "Scripts/Scenarios/Root.cer", "--certificate", "Scripts/Scenarios/ServerCluster/SERVER2.pfx")).Verify();

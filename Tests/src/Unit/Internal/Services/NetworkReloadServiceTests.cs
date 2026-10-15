@@ -10,6 +10,7 @@ public sealed class NetworkReloadServiceTests : IDisposable
     private readonly Mock<IUserService> users = new();
     private readonly NetworkConfig network;
     private readonly NetworkReloadService service;
+    private NodeIdentity identity = TestConfigured.Identity("root.cer", "me.pfx", "ME") with { CertificateThumbprint = "A", AuthorityThumbprint = "R" };
 
     /// <summary>Writes the initial file and builds the service over it, with ME as the current user.</summary>
     public NetworkReloadServiceTests()
@@ -17,6 +18,8 @@ public sealed class NetworkReloadServiceTests : IDisposable
         Directory.CreateDirectory(directory);
         Write("""{ "Users": { "ME": { "PeerPort": 1000, "InterfacePort": 2000, "OutgoingPoints": [ { "IpAddress": "10.0.0.1", "Port": 1 } ], "MessageLevel": "LOW" } } }""");
         network = NetworkConfig.Load([], directory);
+        users.Setup(u => u.Identity).Returns(() => identity);
+        users.Setup(u => u.Refresh(It.IsAny<CancellationToken>())).ReturnsAsync(false);
         CurrentUserProvider user = new() { UserName = "ME" };
         EngineController controller = new(EngineBuilder.Build(new TestEngineConfiguration()), user, network);
         service = new NetworkReloadService(network, controller, peer.Object, listener.Object, logSettings.Object, users.Object, LoggerFactory.Create(_ => { }));
@@ -81,11 +84,13 @@ public sealed class NetworkReloadServiceTests : IDisposable
         peer.Verify(p => p.Restart(), Times.Never);
     }
 
-    /// <summary>Changing the certificate store or authority restarts both, since certificates are fixed when a listener or peer service is created.</summary>
-    [Fact]
-    public async Task Reload_CertificatesChanged_RestartsBoth()
+    /// <summary>A replaced user certificate or authority certificate for the same user restarts both the peer layer and the interface listener, since certificates are fixed when they are created.</summary>
+    [Theory]
+    [InlineData("B", "R")]
+    [InlineData("A", "S")]
+    public async Task Reload_CertificatesReplaced_RestartsBoth(string certificateThumbprint, string authorityThumbprint)
     {
-        Write("""{ "CertificateStore": "certs", "AuthorityCertificate": "root.cer", "Users": { "ME": { "PeerPort": 1000, "InterfacePort": 2000, "OutgoingPoints": [ { "IpAddress": "10.0.0.1", "Port": 1 } ] } } }""");
+        users.Setup(u => u.Refresh(It.IsAny<CancellationToken>())).ReturnsAsync(false).Callback(() => identity = identity with { CertificateThumbprint = certificateThumbprint, AuthorityThumbprint = authorityThumbprint });
 
         await service.Reload();
 
@@ -119,7 +124,7 @@ public sealed class NetworkReloadServiceTests : IDisposable
         logSettings.Verify(l => l.Reload(), Times.Once);
     }
 
-    /// <summary>When User.json changed who the user is, the connections are started again for that user, so they are neither reconfigured nor restarted here, and the reload is still announced.</summary>
+    /// <summary>When the certificate now names another user, the connections are started again for that user, so they are neither reconfigured nor restarted here, and the reload is still announced.</summary>
     [Fact]
     public async Task Reload_UserChanged_AdjustsNothingAndAnnounces()
     {

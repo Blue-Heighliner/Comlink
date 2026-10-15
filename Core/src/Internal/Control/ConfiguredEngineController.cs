@@ -3,30 +3,32 @@ namespace BlueHeighliner.Comlink;
 /// <summary>
 /// Engine-level decorator applying the network configuration file's node settings for the user this process runs as, over
 /// whichever <see cref="IEngineController"/> is built from the host's <see cref="IEngineConfiguration"/> (an
-/// <see cref="EngineController"/>): the identity certificate file, and the alert, tag and print
+/// <see cref="EngineController"/>): the identity certificate, and the alert, tag and print
 /// settings, field by field; every other member, including the entire message-format surface and everything
 /// about users (which the wrapped <see cref="EngineController"/> reads from the same file), delegates straight to the wrapped provider.
-/// Registered by <see cref="EngineExtensions.UseEngine"/>. The user is the one named on the command line, or else the installed
-/// user, whose folder <see cref="AppDataPath"/> names even before the install state has been read.
+/// Registered by <see cref="EngineExtensions.UseEngine"/>. The user is the one the node's certificate names (see <see cref="NodeIdentity"/>).
 /// </summary>
 internal sealed class ConfiguredEngineController : IEngineController
 {
     /// <summary>Initializes a new instance wrapping <paramref name="fallback"/> with config overrides.</summary>
     /// <param name="fallback">The registered control-interface implementation to fall back to when config does not override.</param>
     /// <param name="config">The network configuration providing the node settings.</param>
-    /// <param name="currentUserProvider">Tracks the user name of the currently running instance, needed by <see cref="ConnectionOptions"/>.</param>
-    public ConfiguredEngineController(IEngineController fallback, NetworkConfig config, ICurrentUserProvider currentUserProvider)
+    /// <param name="currentUserProvider">Tracks the user name of the currently running instance.</param>
+    /// <param name="identity">Who the node is and where its certificate files are, needed by <see cref="ConnectionOptions"/>.</param>
+    public ConfiguredEngineController(IEngineController fallback, NetworkConfig config, ICurrentUserProvider currentUserProvider, NodeIdentity identity)
     {
         this.fallback = fallback;
         this.config = config;
         this.currentUserProvider = currentUserProvider;
+        this.identity = identity;
     }
 
     private readonly IEngineController fallback;
     private readonly NetworkConfig config;
     private readonly ICurrentUserProvider currentUserProvider;
+    private readonly NodeIdentity identity;
 
-    private NetworkUserConfig? Current => config.Find(DebugUserName ?? currentUserProvider.UserName);
+    private NetworkUserConfig? Current => config.Find(currentUserProvider.UserName);
 
     /// <inheritdoc />
     public Type FrameType => fallback.FrameType;
@@ -107,9 +109,7 @@ internal sealed class ConfiguredEngineController : IEngineController
     /// <inheritdoc />
     public string AppDataRoot => fallback.AppDataRoot;
     /// <inheritdoc />
-    public string AppDataPath => currentUserProvider.UserName is null && DebugUserName is { } debug && fallback.FindUserName(debug) is { } name ? Path.Combine(Path.GetDirectoryName(fallback.UserFilePath)!, name) : fallback.AppDataPath;
-    /// <inheritdoc />
-    public string UserFilePath => fallback.UserFilePath;
+    public string AppDataPath => fallback.AppDataPath;
     /// <inheritdoc />
     public bool IsKioskMode => fallback.IsKioskMode;
     /// <inheritdoc />
@@ -149,8 +149,6 @@ internal sealed class ConfiguredEngineController : IEngineController
     /// <inheritdoc />
     public string? WindowIconPath => fallback.WindowIconPath;
 
-    /// <inheritdoc />
-    public string? DebugUserName => config.User ?? fallback.DebugUserName;
     /// <inheritdoc />
     public IReadOnlyList<string> Users => fallback.Users;
     /// <inheritdoc />
@@ -223,22 +221,8 @@ internal sealed class ConfiguredEngineController : IEngineController
     public bool CanDelete(FolderType folderType) => fallback.CanDelete(folderType);
 
     /// <inheritdoc />
-    /// <exception cref="InvalidOperationException">The network's <c>CertificateStore</c> or <c>AuthorityCertificate</c> is not set, or there is no current user to load a certificate for.</exception>
-    public MsmtSessionPeerOptions ConnectionOptions
-    {
-        get
-        {
-            string? store = config.CertificateStore;
-            string? authorityFile = config.GetAuthorityCertificatePath();
-            if (store is null || authorityFile is null)
-            {
-                throw new InvalidOperationException("Peer authentication requires the network's CertificateStore and AuthorityCertificate to be set.");
-            }
-
-            string userName = currentUserProvider.UserName ?? DebugUserName?.ToUpperInvariant() ?? throw new InvalidOperationException("Peer authentication requires a current user to load an identity certificate for.");
-            return ApplyMsmt(fallback.ConfigureConnectionOptions(MsmtCertificateLookup.BuildPeerOptionsFromFiles(config.GetCertificatePath(userName)!, authorityFile)));
-        }
-    }
+    /// <exception cref="InvalidOperationException">A certificate file is missing.</exception>
+    public MsmtSessionPeerOptions ConnectionOptions => ApplyMsmt(fallback.ConfigureConnectionOptions(MsmtCertificateLookup.BuildPeerOptionsFromFiles(identity.CertificateFile, identity.AuthorityFile)));
 
     /// <inheritdoc />
     public MsmtSessionPeerOptions ConfigureConnectionOptions(MsmtSessionPeerOptions options) => ApplyMsmt(fallback.ConfigureConnectionOptions(options));
@@ -301,11 +285,6 @@ internal sealed class ConfiguredEngineController : IEngineController
     public IReadOnlyList<string> StorageServers => fallback.StorageServers;
     /// <inheritdoc />
     public IReadOnlyList<AutoForwarderDefinition> AutoForwarders => fallback.AutoForwarders;
-
-    /// <inheritdoc />
-    public string? FindUserName(string name) => fallback.FindUserName(name);
-    /// <inheritdoc />
-    public string? GetCertificateProblem(string userName) => fallback.GetCertificateProblem(userName);
 
     /// <inheritdoc />
     public UserInfo GetUserInfo(string userName) => fallback.GetUserInfo(userName);

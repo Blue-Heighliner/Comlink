@@ -20,11 +20,14 @@ public sealed class MyEngineConfiguration : IEngineConfiguration
 {
     public void Configure(IEngineBuilder engine) => engine.Types<MyFrame, MyPacket, MyPriority, MyMessageLevel, MyMessageAspect>()
         .Priority(MyPriority.Normal)
+        .Certificates("Authority.cer", "Certificate.pfx")
         .Frames<MyFrameHandler>();
 }
 
 await Engine.Start<MyEngineConfiguration>(args);
 ```
+
+`Certificates` names the authority certificate and the user's identity file; the node is the user that identity names (see below), so a host that omits it shows the error screen instead of the app unless both files come from the command line.
 
 The handler reacts to what happens and acts through the context it is handed. For example, a client that sends each message to its server and records each frame it receives:
 
@@ -72,10 +75,10 @@ public void Configure(IEngineBuilder engine) => engine.Types<MyFrame, MyPriority
 ## The network configuration file
 
 A host describes its whole network in one JSON file (see [Config.md](Components/Config.md) for the schema): every user
-with their role, listen ports, outgoing connections, message level and node settings, plus groups and the trusted
-certificate authority. The engine always reads `Config.json` from the app data folder (`%APPDATA%/{AppName}/`); nothing about a user is stated in
-code, and the user installs by name on the install screen. Stating `CommandLineOverrides(true)` additionally
-lets `--config` name another file and `--user` name the user, who is checked like an installed one.
+with their role, listen ports, outgoing connections, message level and node settings, plus groups. The engine always reads `Config.json` from the app data folder (`%APPDATA%/{AppName}/`); nothing about a user is stated in
+code, and nothing is installed: the node is the user named by a subject common name of its user certificate (`Certificates`), which the file must list, and the
+certificate must chain to the authority certificate. Stating `CommandLineOverrides(true)` additionally
+lets `--config` name another file, `--authority` and `--certificate` name the certificate files, and `--user` pick which common name of the certificate is the user.
 
 ```csharp
 public void Configure(IEngineBuilder engine) => engine.Types<MyFrame, MyPriority, MyMessageLevel, MyMessageAspect>()
@@ -86,5 +89,5 @@ public void Configure(IEngineBuilder engine) => engine.Types<MyFrame, MyPriority
 ## Running headless
 
 Set `Headless` on a user's entry in the network configuration file and run as that
-user (installed, or `--user` when overrides are allowed), to run with no UI. `Engine.Start` is called exactly the same
-way: the same configuration drives both modes.
+user (the one the certificate names), to run with no UI. `Engine.Start` is called exactly the same
+way: the same configuration drives both modes. A headless node has no window to show a certificate problem in, so there `Engine.Start` throws an `InvalidOperationException` instead.

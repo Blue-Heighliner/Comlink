@@ -9,6 +9,6 @@ public interface IConnectionInfo
     /// <summary>Gets a value indicating whether the remote node opened the connection to this node's listener. A serial connection is never inbound, since both ends open the port.</summary>
     bool IsInbound { get; }
 
-    /// <summary>Gets the name of the user this node runs as, for a handshake packet to say who is speaking. <see langword="null"/> before a user is installed or named.</summary>
+    /// <summary>Gets the name of the user this node runs as, for a handshake packet to say who is speaking. <see langword="null"/> only where no current user was given, which never happens in a running engine.</summary>
     string? LocalUser { get; }
 }

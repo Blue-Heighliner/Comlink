@@ -26,7 +26,7 @@ internal sealed class EngineBuilder : IEngineBuilder, IAsyncDisposable
     public string AppDataRoot => Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData) is { Length: > 0 } root && Path.IsPathRooted(root) ? root : throw new InvalidOperationException("The operating system gave no absolute application data folder, and nothing is stored in the working directory instead.");
     /// <summary>The name of the folder under <see cref="AppDataRoot"/> that holds the app's data: what the display handler states, otherwise the entry assembly's name.</summary>
     public string DataFolderName => DisplayHandlerInstance?.DataFolderName.OrNull() ?? Assembly.GetEntryAssembly()?.GetName().Name ?? "App";
-    /// <summary>Absolute path to the app's folder under the application data root, which holds the network configuration file, the install state and every user's data.</summary>
+    /// <summary>Absolute path to the app's folder under the application data root, which holds the network configuration file and every user's data.</summary>
     public string AppDataFolder => Path.Combine(AppDataRoot, DataFolderName);
     /// <summary>The configured message levels, in ascending order; empty when none were stated.</summary>
     public List<MessageLevel> MessageLevelValues { get; } = [];
@@ -58,7 +58,11 @@ internal sealed class EngineBuilder : IEngineBuilder, IAsyncDisposable
     public ServiceRegistration<IHandshakeHandler>? PacketHandshakeHandler { get; set; }
     /// <summary>The frame handshake handler, if stated.</summary>
     public ServiceRegistration<IHandshakeHandler>? FrameHandshakeHandler { get; set; }
-    /// <summary>Whether the <c>--config</c> and <c>--user</c> arguments are honored.</summary>
+    /// <summary>The authority certificate file, if stated.</summary>
+    public string? AuthorityCertificateValue { get; set; }
+    /// <summary>The user certificate file, if stated.</summary>
+    public string? UserCertificateValue { get; set; }
+    /// <summary>Whether the command-line overrides (<c>--config</c>, <c>--authority</c>, <c>--certificate</c>, <c>--user</c> and <c>--log</c>) are honored.</summary>
     public bool AreCommandLineOverridesAllowed { get; set; }
     /// <summary>The external systems.</summary>
     public List<IExternalSystem> ExternalSystems { get; } = [];

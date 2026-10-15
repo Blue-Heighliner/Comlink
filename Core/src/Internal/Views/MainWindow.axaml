@@ -2,7 +2,7 @@
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
              xmlns:vm="using:BlueHeighliner.Comlink"
         xmlns:controls="using:BlueHeighliner.Comlink"
-        xmlns:installViews="using:BlueHeighliner.Comlink"
+        xmlns:errorViews="using:BlueHeighliner.Comlink"
         x:Class="BlueHeighliner.Comlink.MainWindow"
         x:DataType="vm:MainViewModel"
         Width="1280" Height="800"
@@ -37,7 +37,7 @@
                        HasAutoForwardAccess="{Binding HasAutoForwardAccess}"
                        RefreshCommand="{Binding RefreshCommand}"
                        ShowPrintManagerCommand="{Binding ShowPrintManagerCommand}"
-                       IsInstallScreenVisible="{Binding IsInstallScreenVisible}"
+                       IsErrorScreenVisible="{Binding IsErrorScreenVisible}"
                        IsServerMode="{Binding IsServerMode}"
                        ShowConnectionsCommand="{Binding ShowConnectionsCommand}"
                        ShowActivityCommand="{Binding ShowActivityCommand}"
@@ -51,9 +51,9 @@
     <!-- Main Content (row 2) -->
     <Panel Grid.Row="2">
 
-      <!-- Install Screen -->
-      <installViews:InstallView DataContext="{Binding InstallView}"
-                                IsVisible="{Binding $parent[Window].DataContext.IsInstallScreenVisible}" />
+      <!-- Error screen, in place of the app while the node cannot be identified -->
+      <errorViews:ErrorView DataContext="{Binding ErrorView}"
+                            IsVisible="{Binding $parent[Window].DataContext.IsErrorScreenVisible}" />
 
       <!-- Main 3-panel layout: inbox/outbox/notes/drafts UI, never shown in Server mode -->
       <Grid IsVisible="{Binding ShowMainLayout}"

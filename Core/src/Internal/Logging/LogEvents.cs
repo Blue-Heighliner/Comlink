@@ -89,9 +89,6 @@ internal static class LogEvents
     /// <summary>A server has no live connection to a recipient.</summary>
     public static EventId CannotDeliverNoConnection { get; } = Define(54, nameof(CannotDeliverNoConnection), LogCategories.App);
 
-    /// <summary>An install on the install screen is refused: the name is not a user of the network, or the certificate is missing, not issued to them or not signed by the authority.</summary>
-    public static EventId InstallFailed { get; } = Define(55, nameof(InstallFailed), LogCategories.Activity);
-
     /// <summary>An operation of an external system throws: connecting, polling, releasing, sending, filtering or processing.</summary>
     public static EventId ExternalSystemFailed { get; } = Define(57, nameof(ExternalSystemFailed), LogCategories.App);
 
@@ -104,7 +101,7 @@ internal static class LogEvents
     /// <summary>The host starts.</summary>
     public static EventId AppStarting { get; } = Define(65, nameof(AppStarting), LogCategories.Activity);
 
-    /// <summary>Startup is done, once the networking services are launched or deferred until a user is installed, or once a user is installed on the install screen and the main window opens.</summary>
+    /// <summary>Startup is done, once the networking services are launched.</summary>
     public static EventId AppStarted { get; } = Define(66, nameof(AppStarted), LogCategories.Activity);
 
     /// <summary>The host begins shutting down, so the application is exiting.</summary>
@@ -149,12 +146,6 @@ internal static class LogEvents
     /// <summary>The initial setup of the main window's view model throws.</summary>
     public static EventId InitializationFailed { get; } = Define(88, nameof(InitializationFailed), LogCategories.Error);
 
-    /// <summary>Reading `User.json` throws.</summary>
-    public static EventId LoadUserStateFailed { get; } = Define(89, nameof(LoadUserStateFailed), LogCategories.Error);
-
-    /// <summary>At startup the remembered user or the `--user` name is not in the network file or its certificate fails the check.</summary>
-    public static EventId NotInstalled { get; } = Define(90, nameof(NotInstalled), LogCategories.Activity);
-
     /// <summary>An exception reaches the top-level handler of the application; the activity log says so in general terms.</summary>
     public static EventId UnexpectedError { get; } = Define(93, nameof(UnexpectedError), LogCategories.Activity);
 
@@ -185,9 +176,6 @@ internal static class LogEvents
     /// <summary>A reload requested by the user fails; the activity log says so without the cause.</summary>
     public static EventId NetworkReloadNotDone { get; } = Define(103, nameof(NetworkReloadNotDone), LogCategories.Activity);
 
-    /// <summary>The remembered user cannot be read at startup; the activity log says so without the cause.</summary>
-    public static EventId UserSettingsUnreadable { get; } = Define(104, nameof(UserSettingsUnreadable), LogCategories.Activity);
-
     /// <summary>A background service ends unexpectedly; the activity log says so in general terms.</summary>
     public static EventId ServiceStopped { get; } = Define(105, nameof(ServiceStopped), LogCategories.Activity);
 
@@ -214,6 +202,12 @@ internal static class LogEvents
 
     /// <summary>Avalonia reports a warning or an error about itself, such as a binding that could not be resolved.</summary>
     public static EventId AvaloniaReported { get; } = Define(116, nameof(AvaloniaReported), LogCategories.Avalonia);
+
+    /// <summary>A refresh finds that the node's certificate now names another user, which becomes the current user.</summary>
+    public static EventId UserChanged { get; } = Define(117, nameof(UserChanged), LogCategories.Activity);
+
+    /// <summary>The node cannot be identified, at startup or after a refresh: a certificate file is missing or unreadable, the user certificate is not signed by the authority certificate, or it is not issued to a user of the network. The UI shows the problem in place of the app.</summary>
+    public static EventId IdentityFailed { get; } = Define(118, nameof(IdentityFailed), LogCategories.Activity);
 
     /// <summary>Gets every event, in no particular order.</summary>
     public static IReadOnlyList<EventId> All { get; } = [.. typeof(LogEvents).GetProperties(BindingFlags.Public | BindingFlags.Static).Where(property => property.PropertyType == typeof(EventId)).Select(property => (EventId)property.GetValue(null)!)];

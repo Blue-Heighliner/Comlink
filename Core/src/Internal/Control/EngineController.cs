@@ -60,23 +60,18 @@ internal interface IEngineController
     /// </summary>
     int PacketWindow { get; }
 
-    /// <summary>The application name, used in log headers and as the name of the folder holding the install state.</summary>
+    /// <summary>The application name, used in log headers and as the default name of the folder under the application data root.</summary>
     string AppName { get; }
     /// <summary>The application version, shown in the title bar and the info popup.</summary>
     string AppVersion { get; }
     /// <summary>Absolute path to the directory every application data directory lives in: <c>%APPDATA%</c>.</summary>
     string AppDataRoot { get; }
     /// <summary>
-    /// Absolute path to the current user's data directory, <c>{AppDataRoot}/{AppName}/{USERNAME}</c>, which holds their database and logs. Before a
-    /// user is installed or named there is no user folder yet, so it is <c>{AppDataRoot}/{AppName}</c>.
+    /// Absolute path to the current user's data directory, <c>{AppDataRoot}/{DataFolderName}/{USERNAME}</c>, which holds their database and logs. Without a current user
+    /// (only before the node's identity is known) it is <c>{AppDataRoot}/{DataFolderName}</c>.
     /// </summary>
     string AppDataPath { get; }
-    /// <summary>
-    /// Absolute path to the file remembering which user is installed, <c>{AppDataRoot}/{AppName}/User.json</c>. It lives beside the user
-    /// folders rather than in one, since it is what says whose folder to use, and holds nothing else, so deleting it only uninstalls the user.
-    /// </summary>
-    string UserFilePath { get; }
-    /// <summary>Absolute path to <c>Logging.json</c>, which turns on the log categories that are not on by default; it lives beside <c>User.json</c> and need not exist.</summary>
+    /// <summary>Absolute path to <c>Logging.json</c>, which turns on the log categories that are not on by default; it lives in <c>{AppDataRoot}/{DataFolderName}</c>, beside <c>Config.json</c>, and need not exist.</summary>
     string LoggingFilePath { get; }
     /// <summary><see langword="true"/> to enable kiosk mode, which hides the minimize and maximize buttons and has the close button restart rather than exit.</summary>
     bool IsKioskMode { get; }
@@ -96,8 +91,6 @@ internal interface IEngineController
     /// <summary>Optional <c>avares://</c> URI or file path of the window icon to apply to the main window, or <see langword="null"/> to use the OS default.</summary>
     string? WindowIconPath { get; }
 
-    /// <summary>The overridden user name for development/testing, or <see langword="null"/> if no override is active.</summary>
-    string? DebugUserName { get; }
     /// <summary>Every known user and group name in the messaging system.</summary>
     IReadOnlyList<string> Users { get; }
     /// <summary>Every defined group as a map of group name to member names (which may be user names or other group names).</summary>
@@ -256,7 +249,7 @@ internal interface IEngineController
 
     /// <summary>Gets the handler that carries out the handshake of frames on each new connection (see <see cref="IFrameBuilder{TFrame, TPacket, TPriority, TLevel, TAspect}.Handshake{THandler}"/>), or <see langword="null"/> for none.</summary>
     IHandshakeHandler? FrameHandshakeHandler { get; }
-    /// <summary>When <see langword="true"/>, the <c>--config</c> and <c>--user</c> command-line arguments override where the network configuration file and the running user come from (see <see cref="IEngineBuilder{TFrame, TPacket, TPriority, TLevel, TAspect}.CommandLineOverrides"/>); when <see langword="false"/> (the default) they are ignored and only <c>Config.json</c> and <c>User.json</c> in the app data folder are used.</summary>
+    /// <summary>When <see langword="true"/>, the <c>--config</c>, <c>--authority</c>, <c>--certificate</c> and <c>--user</c> command-line arguments override the network configuration file, the certificate files and the running user (see <see cref="IEngineBuilder{TFrame, TPacket, TPriority, TLevel, TAspect}.CommandLineOverrides"/>); when <see langword="false"/> (the default) they are ignored and only <c>Config.json</c> in the app data folder and the certificates the host stated are used.</summary>
     bool CommandLineOverridesAllowed { get; }
 
     /// <summary>
@@ -360,20 +353,12 @@ internal interface IEngineController
     /// <summary>Gets the slice of the payload <paramref name="packet"/> carries.</summary>
     ReadOnlyMemory<byte> GetPacketPayload(object packet);
 
-    /// <summary>Returns the name, as the network configuration file spells it, of the user <paramref name="name"/> names (compared case-insensitively), or <see langword="null"/> when the network has no such user.</summary>
-    /// <param name="name">The user name to look for.</param>
-    string? FindUserName(string name);
     /// <summary>
-    /// Returns why <paramref name="userName"/> cannot run on this node as that user, or <see langword="null"/> when it can: the network's <c>CertificateStore</c> and <c>AuthorityCertificate</c> are set, the store holds the file <c>{userName}.pfx</c>,
-    /// the certificate in it has the user name as its subject common name, and it is signed by the authority certificate, which is the only authority trusted.
+    /// Returns what is known about <paramref name="userName"/>: what the network configuration file states (see <see cref="IEngineBuilder{TFrame, TPacket, TPriority, TLevel, TAspect}.CommandLineOverrides"/>), or a user with just
+    /// that name when it states none. For the current user this is where <see cref="Role"/>, <see cref="PeerPort"/>, <see cref="InterfacePort"/>,
+    /// <see cref="OutgoingPoints"/> and <see cref="Servers"/> come from.
     /// </summary>
-    /// <param name="userName">The user name to check.</param>
-    string? GetCertificateProblem(string userName);    /// <summary>
-                                                       /// Returns what is known about <paramref name="userName"/>: what the network configuration file states (see <see cref="IEngineBuilder{TFrame, TPacket, TPriority, TLevel, TAspect}.CommandLineOverrides"/>), or a user with just
-                                                       /// that name when it states none. For the current user this is where <see cref="Role"/>, <see cref="PeerPort"/>, <see cref="InterfacePort"/>,
-                                                       /// <see cref="OutgoingPoints"/> and <see cref="Servers"/> come from.
-                                                       /// </summary>
-                                                       /// <param name="userName">The user to describe.</param>
+    /// <param name="userName">The user to describe.</param>
     UserInfo GetUserInfo(string userName);
     /// <summary>
     /// Returns the app-specific information attached to <paramref name="userName"/>, an empty map when there is none. The
@@ -488,8 +473,6 @@ internal class EngineController(EngineBuilder builder, ICurrentUserProvider curr
     /// <inheritdoc />
     public virtual string AppDataPath => currentUserProvider.UserName is { Length: > 0 } user ? Path.Combine(AppDataRoot, DataFolderName, user) : Path.Combine(AppDataRoot, DataFolderName);
     /// <inheritdoc />
-    public virtual string UserFilePath => Path.Combine(AppDataRoot, DataFolderName, "User.json");
-    /// <inheritdoc />
     public virtual string LoggingFilePath => Path.Combine(AppDataRoot, DataFolderName, "Logging.json");
     /// <inheritdoc />
     public virtual bool IsKioskMode => builder.DisplayHandlerInstance?.IsKiosk ?? false;
@@ -512,8 +495,6 @@ internal class EngineController(EngineBuilder builder, ICurrentUserProvider curr
     /// <inheritdoc />
     public virtual string? WindowIconPath => builder.DisplayHandlerInstance?.Icon.OrNull();
 
-    /// <inheritdoc />
-    public virtual string? DebugUserName => null;
     /// <inheritdoc />
     public virtual IReadOnlyList<string> Users
     {
@@ -677,7 +658,7 @@ internal class EngineController(EngineBuilder builder, ICurrentUserProvider curr
     public virtual bool PrintReceivedDefaultEnabled => printHandler.Value?.PrintReceivedByDefault ?? false;
 
     /// <inheritdoc />
-    public virtual MsmtSessionPeerOptions ConnectionOptions => throw new InvalidOperationException("Peer authentication requires the network's CertificateStore and AuthorityCertificate to be set.");
+    public virtual MsmtSessionPeerOptions ConnectionOptions => throw new InvalidOperationException("Peer authentication requires the node's certificates, which only the configured controller reads from the files.");
 
     /// <inheritdoc />
     public virtual MsmtSessionPeerOptions ConfigureConnectionOptions(MsmtSessionPeerOptions options) => builder.MsmtOptionsValue is { } stated
@@ -918,12 +899,6 @@ internal class EngineController(EngineBuilder builder, ICurrentUserProvider curr
     /// <inheritdoc />
     public virtual ReadOnlyMemory<byte> GetPacketPayload(object value) => packetAdapter.Value.GetPayload(value);
 
-    /// <inheritdoc />
-    public virtual string? FindUserName(string name) => network.Users.Keys.FirstOrDefault(user => string.Equals(user, name, StringComparison.OrdinalIgnoreCase));
-
-    /// <inheritdoc />
-    public virtual string? GetCertificateProblem(string userName)
-        => MsmtCertificateLookup.GetProblem(network.GetCertificatePath(userName), network.GetAuthorityCertificatePath(), userName);
     /// <inheritdoc />
     public virtual UserInfo GetUserInfo(string userName)
     {

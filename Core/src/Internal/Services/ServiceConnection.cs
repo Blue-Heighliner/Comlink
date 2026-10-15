@@ -36,9 +36,6 @@ internal sealed class ServiceConnection<TPriority, TLevel, TAspect> : IServiceCo
     public Task<List<string>> GetConnectedUsers(CancellationToken cancellation = default) => engineConnection.GetConnectedUsers(cancellation);
 
     /// <inheritdoc />
-    public Task<UserInfo?> InstallUser(string userName, CancellationToken cancellation = default) => engineConnection.InstallUser(userName, cancellation);
-
-    /// <inheritdoc />
     public Task<SendMessageResult?> SendMessage(string body, List<AddressRequest> addresses, TPriority? priority = null, string tag = "", TLevel? messageLevel = null, TAspect? messageAspect = null, CancellationToken cancellation = default)
         => engineConnection.SendMessage(body, addresses, priority, tag, messageLevel, messageAspect, cancellation);
 

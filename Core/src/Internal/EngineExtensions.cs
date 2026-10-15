@@ -12,18 +12,20 @@ internal static class EngineExtensions
     /// <param name="mode">Whether to run as a GUI client or headless peer client.</param>
     /// <param name="engine">What the host stated in its <see cref="IEngineConfiguration"/>.</param>
     /// <param name="network">The loaded network configuration: the users of the network and the node settings for this process.</param>
-    public static IHostBuilder UseEngine(this IHostBuilder builder, EngineMode mode, EngineBuilder engine, NetworkConfig network)
+    /// <param name="identity">What checking the node's certificates found: who the node is, or why that cannot be told.</param>
+    public static IHostBuilder UseEngine(this IHostBuilder builder, EngineMode mode, EngineBuilder engine, NetworkConfig network, IdentityCheck identity)
     {
         return builder.ConfigureServices((_, services) =>
         {
             services.AddSingleton(typeof(EngineMode), mode);
             services.AddSingleton(engine);
             services.AddSingleton(network);
-            services.AddSingleton<ICurrentUserProvider, CurrentUserProvider>();
+            services.AddSingleton(identity);
+            services.AddSingleton<ICurrentUserProvider>(new CurrentUserProvider { UserName = identity.Problem is null ? identity.Identity.UserName : null });
             services.AddSingleton<IEngineController>(sp =>
             {
                 ICurrentUserProvider currentUser = sp.GetRequiredService<ICurrentUserProvider>();
-                return new ConfiguredEngineController(new EngineController(engine, currentUser, network, sp), network, currentUser);
+                return new ConfiguredEngineController(new EngineController(engine, currentUser, network, sp), network, currentUser, identity.Identity);
             });
 
             services.AddSingleton<RolePeerService>();

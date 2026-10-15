@@ -2,7 +2,7 @@ namespace BlueHeighliner.Comlink;
 
 /// <summary>
 /// ViewModel for the auto forward screen: choosing one of the auto forwarders this instance's own
-/// installed user has access to (see <see cref="UserInfo.AutoForwarders"/>), then adding to and
+/// user has access to (see <see cref="UserInfo.AutoForwarders"/>), then adding to and
 /// removing from its locally-saved target list. Registered as a DI singleton (see <see cref="MainViewModel.AutoForward"/>)
 /// so its state survives navigating the content area away to other views and back.
 /// </summary>

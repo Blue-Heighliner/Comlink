@@ -13,7 +13,7 @@ internal interface ILogSettings
 }
 
 /// <summary>
-/// The categories enabled beyond the defaults, from <c>Logging.json</c> beside <c>User.json</c> in the app data folder (a JSON list of category names, <c>["Frames", "Packets"]</c>)
+/// The categories enabled beyond the defaults, from <c>Logging.json</c> beside <c>Config.json</c> in the app data folder (a JSON list of category names, <c>["Frames", "Packets"]</c>)
 /// and from the <c>--log</c> argument (a comma separated list), when the host allows command-line overrides.
 /// </summary>
 internal sealed class LogSettings : ILogSettings

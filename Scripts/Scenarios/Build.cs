@@ -1,4 +1,4 @@
-#:package Markwardt.ScriptUtilities@0.2.0
+#:package Markwardt.ScriptUtilities
 #:property TreatWarningsAsErrors=true
 
 // Builds Sample once, shared by every scenario's role scripts (which pass --no-build to `dotnet run`

@@ -100,12 +100,20 @@ public interface IEngineBuilder<TFrame, TPacket, TPriority, TLevel, TAspect> whe
 
 
     /// <summary>
-    /// Sets whether command-line arguments may override where the network configuration file (the file that describes every user
-    /// of the network) and the running user come from: <c>--config</c> names the file to read instead of <c>Config.json</c> in the
-    /// app's folder under the application data root, and <c>--user</c> names the user the process runs as, which is then checked like an installed user, and <c>--log</c> names log categories to turn on beyond the defaults (a comma separated list). The file
-    /// in the app data folder is always read; only the arguments are ignored when this is disallowed.
+    /// Sets the certificate files the node authenticates with. The user the node runs as is the subject common name of the user certificate, so there is nothing to install or name.
+    /// Either is required unless the command line (see <see cref="CommandLineOverrides"/>) supplies it, and the node does not start without both.
     /// </summary>
-    /// <param name="allowed"><see langword="true"/> to honor <c>--config</c>, <c>--user</c> and <c>--log</c>, <see langword="false"/> to ignore them. Disallowed unless this is called.</param>
+    /// <param name="authorityPath">The public certificate file (for example <c>.cer</c>) of the certificate authority trusted to sign every user certificate, the only authority trusted. A relative path is relative to the app's folder under the application data root.</param>
+    /// <param name="userPath">The PKCS#12 (<c>.pfx</c>) file with the user's identity certificate and private key, which must chain to the authority certificate and be issued to a user of the network. A relative path is relative to the app's folder under the application data root.</param>
+    IEngineBuilder<TFrame, TPacket, TPriority, TLevel, TAspect> Certificates(string authorityPath, string userPath);
+
+    /// <summary>
+    /// Sets whether command-line arguments may override what the host stated: <c>--config</c> names the network configuration file to read instead of <c>Config.json</c> in the
+    /// app's folder under the application data root, <c>--authority</c> and <c>--certificate</c> name the authority and user certificate files instead of those of <see cref="Certificates"/>,
+    /// <c>--user</c> names which subject common name of the user certificate is the user the process runs as, and <c>--log</c> names log categories to turn on beyond the defaults (a comma separated list).
+    /// The file in the app data folder is always read; only the arguments are ignored when this is disallowed.
+    /// </summary>
+    /// <param name="allowed"><see langword="true"/> to honor <c>--config</c>, <c>--authority</c>, <c>--certificate</c>, <c>--user</c> and <c>--log</c>, <see langword="false"/> to ignore them. Disallowed unless this is called.</param>
     IEngineBuilder<TFrame, TPacket, TPriority, TLevel, TAspect> CommandLineOverrides(bool allowed);
 
     /// <summary>Adds an external system, a conduit relaying messages to and from a system outside Comlink.</summary>

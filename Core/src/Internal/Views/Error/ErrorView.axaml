@@ -1,0 +1,44 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:vm="using:BlueHeighliner.Comlink"
+             x:Class="BlueHeighliner.Comlink.ErrorView"
+             x:DataType="vm:ErrorViewModel"
+             Background="#1E1E1E">
+
+  <Panel>
+    <Border HorizontalAlignment="Center"
+            VerticalAlignment="Center"
+            Background="#252526"
+            CornerRadius="8"
+            Padding="40,36"
+            Width="520"
+            BorderBrush="#3E3E42"
+            BorderThickness="1">
+
+      <StackPanel Spacing="20">
+
+        <TextBlock Text="{vm:Display 'Cannot identify the user'}"
+                   Foreground="#F44336"
+                   FontSize="16"
+                   FontWeight="Bold"
+                   HorizontalAlignment="Center"
+                   TextAlignment="Center"
+                   TextWrapping="Wrap" />
+
+        <TextBlock Text="{Binding Message}"
+                   Foreground="#CCCCCC"
+                   FontSize="13"
+                   TextAlignment="Center"
+                   TextWrapping="Wrap" />
+
+        <TextBlock Text="Fix the certificate, then press Refresh in the information panel of the title bar."
+                   Foreground="#858585"
+                   FontSize="12"
+                   TextAlignment="Center"
+                   TextWrapping="Wrap" />
+
+      </StackPanel>
+    </Border>
+  </Panel>
+
+</UserControl>

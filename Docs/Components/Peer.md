@@ -4,7 +4,7 @@ The peer layer is pure transport: it moves frames between nodes and says who eac
 
 ## User Roles
 
-`UserRole` (the `Role` of the current user's entry in the network configuration file, see [Configuration.md](Configuration.md#user-info)) selects one of two networking topologies for a running instance. `EngineExtensions.UseEngine` registers `RolePeerService` as the one `IPeerService` and `IConnectionStatusService`; it reads `IEngineController.Role` when networking starts, after the user is installed or named by `--user`, and creates the matching implementation (`ClientPeerService` or `ServerRoutingService`; a user with no role is a client), forwarding its events. Until then no user is connected and there are no connection statuses; nothing re-checks the role at runtime.
+`UserRole` (the `Role` of the current user's entry in the network configuration file, see [Configuration.md](Configuration.md#user-info)) selects one of two networking topologies for a running instance. `EngineExtensions.UseEngine` registers `RolePeerService` as the one `IPeerService` and `IConnectionStatusService`; it reads `IEngineController.Role` when networking starts (the user is known by then, from the certificate) and creates the matching implementation (`ClientPeerService` or `ServerRoutingService`; a user with no role is a client), forwarding its events. Until then no user is connected and there are no connection statuses; nothing re-checks the role at runtime except a refresh, which restarts the implementation when the role changed.
 
 | Role | `IPeerService` implementation | Behavior |
 |------|-------------------------------|----------|
@@ -73,7 +73,7 @@ The `Sample` project's `EngineConfiguration` states a `Frame` DTO and its `Frame
 
 ## Connection Lifecycle
 
-Each role's service wraps one `IPeerTransport`, created via `IPeerTransportFactory` once a current user is registered. Over IP that is an MSMT peer configured with `IEngineController.ConnectionOptions` (see [MsmtIntegration.md](MsmtIntegration.md)); over serial it is one MicroGate link per outgoing serial point. The transport transparently owns both directions - there is no separate inbound/outbound class - and outermost it identifies every connection (see [Identification.md](Identification.md)):
+Each role's service wraps one `IPeerTransport`, created via `IPeerTransportFactory`. Over IP that is an MSMT peer configured with `IEngineController.ConnectionOptions` (see [MsmtIntegration.md](MsmtIntegration.md)); over serial it is one MicroGate link per outgoing serial point. The transport transparently owns both directions - there is no separate inbound/outbound class - and outermost it identifies every connection (see [Identification.md](Identification.md)):
 
 ### Inbound
 1. `Start` calls `IPeerTransport.StartListener` on `PeerPort` (all interfaces, IP only) where the role listens (a server for its children and other servers; a client only when a link is in listen mode) and starts a monitor for every outgoing point, then blocks until cancelled. If no identity certificate is available the IP half is left out, with a warning, and serial still works.

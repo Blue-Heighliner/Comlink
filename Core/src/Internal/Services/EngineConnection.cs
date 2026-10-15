@@ -9,21 +9,15 @@ internal interface IEngineConnection
     event Func<DeliveryStatusChangedEvent, Task>? DeliveryStatusChanged;
     /// <summary>Establishes the connection to the Engine service.</summary>
     Task Connect(CancellationToken cancellation = default);
-    /// <summary>Returns this user's own <see cref="UserInfo"/>, or <see langword="null"/> if not yet registered.</summary>
+    /// <summary>Returns this user's own <see cref="UserInfo"/>, or <see langword="null"/> where no current user was given, which never happens in a running engine.</summary>
     Task<UserInfo?> GetUserInfo(CancellationToken cancellation = default);
     /// <summary>Returns a snapshot of the engine as it is now, as a host's handlers see it.</summary>
-    /// <exception cref="InvalidOperationException">No user is installed.</exception>
+    /// <exception cref="InvalidOperationException">The node has no current user.</exception>
     IEngineContext GetContext();
     /// <summary>Returns the names of all known users in the messaging system.</summary>
     Task<List<string>> GetUserNames(CancellationToken cancellation = default);
     /// <summary>Returns the names of every user currently reachable over at least one live peer connection, unlike <see cref="GetUserNames"/>'s fixed configured directory.</summary>
     Task<List<string>> GetConnectedUsers(CancellationToken cancellation = default);
-    /// <summary>
-    /// Registers this instance as the user named <paramref name="userName"/> and returns the resulting <see cref="UserInfo"/>, or <see langword="null"/> when the network has no user of that name.
-    /// The user's certificate must be in place: the file <c>{userName}.pfx</c> in the network's certificate store, issued to that user and signed by the authority certificate.
-    /// </summary>
-    /// <exception cref="InvalidOperationException">The certificate is missing, not issued to the user or not signed by the authority certificate; nothing is installed.</exception>
-    Task<UserInfo?> InstallUser(string userName, CancellationToken cancellation = default);
     /// <summary>
     /// Sends a message with the given <paramref name="body"/> to the specified
     /// <paramref name="addresses"/>: the engine stores it in the Outbox and hands it to the host's frame handler (see <see cref="IFrameHandler{TFrame, TPriority, TLevel, TAspect}.OnSent"/>), which sends it and reports each

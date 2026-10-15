@@ -13,7 +13,7 @@ The composite routes each `Connect` by `ConnectionPoint.IsSerial` and each `Requ
 
 When the host has turned packetization on with `Packets`, the factory wraps the composite in a `PacketizingPeerTransport` (a decorator with the same contract, scheduling packets per connection), so every peer, client and server service gets packetization without knowing about it. Outermost it always adds a `HandshakePeerTransport`, which identifies each connection before publishing it; a packet handshake, when configured, is run by another `HandshakePeerTransport` beneath the packetizer, and a frame handshake by the outermost one. Neither adds anything to what crosses the connection (see [Identification.md](Identification.md#handshake)).
 
-The IP half needs an identity certificate for the current user, which is unavailable before a user is installed or on a node that never uses IP. In that case the factory logs a warning and builds the composite without it: IP requests then fail with `IOException` while serial keeps working. This is what allows a serial-only node to run with no certificates at all.
+The IP half needs the node's identity and authority certificate files, which startup has already checked. If they have become unusable since (for example a file was removed), the factory logs a warning and builds the composite without the IP half: IP requests then fail with `IOException` while serial keeps working.
 
 ## Points and connections
 

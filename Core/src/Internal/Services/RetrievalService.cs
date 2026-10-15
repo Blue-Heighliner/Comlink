@@ -7,7 +7,7 @@ internal interface IRetrievalService
     /// Hands <paramref name="criteria"/> to the host's frame handler (see <see cref="IFrameHandler{TFrame, TPriority, TLevel, TAspect}.OnRetrieval"/>), which sends the request to <paramref name="serverName"/> and whose answer arrives as received frames; nothing is returned for them here.
     /// Returns whether a handler took the request (not whether anything matched).
     /// </summary>
-    /// <exception cref="InvalidOperationException">No user is installed yet.</exception>
+    /// <exception cref="InvalidOperationException">The node has no current user.</exception>
     /// <exception cref="ArgumentException"><paramref name="serverName"/> is not one of the servers (see <see cref="IEngineController.StorageServers"/>), the only users a retrieval can be asked of.</exception>
     Task<bool> Request(string serverName, RetrievalCriteria criteria, CancellationToken cancellation = default);
 }
@@ -18,7 +18,7 @@ internal sealed class RetrievalService(IEngineController engineController, ICurr
     /// <inheritdoc />
     public Task<bool> Request(string serverName, RetrievalCriteria criteria, CancellationToken cancellation = default)
     {
-        _ = currentUserProvider.UserName ?? throw new InvalidOperationException("A retrieval request needs an installed user.");
+        _ = currentUserProvider.UserName ?? throw new InvalidOperationException("A retrieval request needs a current user.");
         if (!engineController.StorageServers.Contains(serverName, StringComparer.OrdinalIgnoreCase))
         {
             throw new ArgumentException($"{serverName} is not a server, and a retrieval can only be asked of one of the servers", nameof(serverName));

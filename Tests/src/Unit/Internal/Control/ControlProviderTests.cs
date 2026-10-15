@@ -143,19 +143,15 @@ public sealed class ControlProviderTests
         public override string AppName => "CustomApp";
     }
 
-    /// <summary>Without a user the wrapped provider's own path is used; with a network user named on the command line before anyone is installed, their folder under the data root is (a name that is not a user of the network gets none); an installed user's folder is the wrapped provider's.</summary>
+    /// <summary>The data folder is whatever the wrapped provider says: the user is fixed by the certificate, so the decorator has nothing to add.</summary>
     [Fact]
-    public void ConfiguredEngineController_AppDataPath_FollowsTheLaunchedUser()
+    public void ConfiguredEngineController_AppDataPath_IsTheWrappedControllersOwn()
     {
         Mock<IEngineController> fallback = new();
         fallback.Setup(f => f.AppDataPath).Returns("/base/path");
-        fallback.Setup(f => f.UserFilePath).Returns(Path.Combine("/base", "Data", "User.json"));
-        fallback.Setup(f => f.FindUserName("alice")).Returns("ALICE");
 
-        Assert.Equal("/base/path", new ConfiguredEngineController(fallback.Object, new NetworkConfig(), NoCurrentUser).AppDataPath);
-        Assert.Equal(Path.Combine(Path.GetDirectoryName(Path.Combine("/base", "Data", "User.json"))!, "ALICE"), new ConfiguredEngineController(fallback.Object, new NetworkConfig { User = "alice" }, NoCurrentUser).AppDataPath);
-        Assert.Equal("/base/path", new ConfiguredEngineController(fallback.Object, new NetworkConfig { User = "nobody" }, NoCurrentUser).AppDataPath);
-        Assert.Equal("/base/path", new ConfiguredEngineController(fallback.Object, new NetworkConfig { User = "alice" }, Me).AppDataPath);
+        Assert.Equal("/base/path", TestConfigured.Create(fallback.Object, new NetworkConfig(), NoCurrentUser).AppDataPath);
+        Assert.Equal("/base/path", TestConfigured.Create(fallback.Object, new NetworkConfig { User = "alice" }, Me).AppDataPath);
     }
 
     /// <summary>AppName, IsKioskMode, and HomeText are left entirely to the fallback, since none has a network file field.</summary>
@@ -167,7 +163,7 @@ public sealed class ControlProviderTests
         fallback.Setup(f => f.AppVersion).Returns("9.8.7");
         fallback.Setup(f => f.IsKioskMode).Returns(true);
         fallback.Setup(f => f.HomeText).Returns("FALLBACK-HOME");
-        ConfiguredEngineController controller = new(fallback.Object, new NetworkConfig(), NoCurrentUser);
+        ConfiguredEngineController controller = TestConfigured.Create(fallback.Object, new NetworkConfig(), NoCurrentUser);
 
         Assert.Equal("FallbackApp", controller.AppName);
         Assert.Equal("9.8.7", controller.AppVersion);
@@ -175,47 +171,15 @@ public sealed class ControlProviderTests
         Assert.Equal("FALLBACK-HOME", controller.HomeText);
     }
 
-    /// <summary>The default implementation has no debug override, and a user name is found only among the network's users.</summary>
+    /// <summary>User info is left entirely to the wrapped provider, since there is no corresponding network file field.</summary>
     [Fact]
-    public void EngineController_NoDebugOverride_FindsOnlyNetworkUsers()
-    {
-        TestEngineController controller = new();
-        Assert.Null(controller.DebugUserName);
-
-        Assert.Null(controller.FindUserName("CODE"));
-        Assert.Null(controller.FindUserName("UNKNOWN"));
-    }
-
-    /// <summary>DebugUserName returns the value from config.</summary>
-    [Fact]
-    public void ConfiguredEngineController_ReturnsDebugUserNameFromConfig()
-    {
-        ConfiguredEngineController controller = new(new TestEngineController(), new NetworkConfig { User = "ALPHA" }, NoCurrentUser);
-        Assert.Equal("ALPHA", controller.DebugUserName);
-    }
-
-    /// <summary>DebugUserName falls back to the wrapped provider when config has no override.</summary>
-    [Fact]
-    public void ConfiguredEngineController_FallsBackWhenDebugUserNameNotConfigured()
-    {
-        Mock<IEngineController> fallback = new();
-        fallback.Setup(f => f.DebugUserName).Returns("FALLBACK");
-        ConfiguredEngineController controller = new(fallback.Object, new NetworkConfig(), NoCurrentUser);
-
-        Assert.Equal("FALLBACK", controller.DebugUserName);
-    }
-
-    /// <summary>User lookup, the certificate check and user info are left entirely to the wrapped provider, since there is no corresponding network file field.</summary>
-    [Fact]
-    public void ConfiguredEngineController_UserResolution_AlwaysDelegatesToFallback()
+    public void ConfiguredEngineController_UserInfo_AlwaysDelegatesToFallback()
     {
         UserInfo fallbackInfo = new() { Name = "X" };
         Mock<IEngineController> fallback = new();
-        fallback.Setup(f => f.FindUserName("ANY")).Returns("X");
         fallback.Setup(f => f.GetUserInfo("X")).Returns(fallbackInfo);
-        ConfiguredEngineController controller = new(fallback.Object, new NetworkConfig(), NoCurrentUser);
+        ConfiguredEngineController controller = TestConfigured.Create(fallback.Object, new NetworkConfig(), NoCurrentUser);
 
-        Assert.Equal("X", controller.FindUserName("ANY"));
         Assert.Same(fallbackInfo, controller.GetUserInfo("X"));
     }
 
@@ -251,7 +215,7 @@ public sealed class ControlProviderTests
         IReadOnlyList<MessagePriorityOption> priorities = [new MessagePriorityOption { Name = "Low", Value = 0, Key = TestMessagePriority.Low }];
         fallback.Setup(f => f.Priorities).Returns(priorities);
         fallback.Setup(f => f.IsDraftAllowed(It.IsAny<IEngineContext>(), TestMessagePriority.Low, null, null, "SPAM")).Returns(false);
-        ConfiguredEngineController controller = new(fallback.Object, new NetworkConfig(), NoCurrentUser);
+        ConfiguredEngineController controller = TestConfigured.Create(fallback.Object, new NetworkConfig(), NoCurrentUser);
 
         Assert.False(controller.TagsEnabled);
         Assert.Equal("Category", controller.TagLabel);
@@ -265,7 +229,7 @@ public sealed class ControlProviderTests
     {
         Mock<IEngineController> fallback = new();
         fallback.Setup(f => f.PrintReceivedDefaultEnabled).Returns(true);
-        ConfiguredEngineController controller = new(fallback.Object, new NetworkConfig(), NoCurrentUser);
+        ConfiguredEngineController controller = TestConfigured.Create(fallback.Object, new NetworkConfig(), NoCurrentUser);
 
         Assert.True(controller.PrintReceivedDefaultEnabled);
     }
@@ -287,7 +251,7 @@ public sealed class ControlProviderTests
     {
         Mock<IEngineController> fallback = new();
         fallback.Setup(f => f.CanDelete(FolderType.Drafts)).Returns(false);
-        ConfiguredEngineController controller = new(fallback.Object, new NetworkConfig(), NoCurrentUser);
+        ConfiguredEngineController controller = TestConfigured.Create(fallback.Object, new NetworkConfig(), NoCurrentUser);
 
         Assert.False(controller.CanDelete(FolderType.Drafts));
     }
@@ -301,9 +265,9 @@ public sealed class ControlProviderTests
         Assert.Throws<InvalidOperationException>(() => controller.ConnectionOptions);
     }
 
-    /// <summary>When both the certificate store and the authority certificate are set, ConnectionOptions loads the current user's identity from {USERNAME}.pfx in the store and the authority from its file, </summary>
+    /// <summary>ConnectionOptions loads the identity from the node's user certificate file and the trusted authority from its authority file.</summary>
     [Fact]
-    public void ConfiguredEngineController_StoreAndAuthoritySet_LoadsFromFiles()
+    public void ConfiguredEngineController_ConnectionOptions_LoadsFromTheIdentityFiles()
     {
         string tempDir = Path.Combine(Path.GetTempPath(), $"comlink-cert-file-tests-{Guid.NewGuid():N}");
         Directory.CreateDirectory(tempDir);
@@ -311,13 +275,11 @@ public sealed class ControlProviderTests
         {
             (X509Certificate2 server, X509Certificate2 client, X509Certificate2Collection trustedAuthorities) = TestMsmtCertificates.Create();
             string authorityFile = Path.Combine(tempDir, "authority.cer");
-            File.WriteAllBytes(Path.Combine(tempDir, "ME.pfx"), client.Export(X509ContentType.Pfx));
+            string certificateFile = Path.Combine(tempDir, "certificate.pfx");
+            File.WriteAllBytes(certificateFile, client.Export(X509ContentType.Pfx));
             File.WriteAllBytes(authorityFile, trustedAuthorities[0].Export(X509ContentType.Cert));
 
-            ConfiguredEngineController controller = new(
-                new TestEngineController(),
-                new NetworkConfig { AuthorityCertificate = authorityFile, CertificateStore = tempDir },
-                Me);
+            ConfiguredEngineController controller = TestConfigured.Create(new TestEngineController(), new NetworkConfig(), Me, TestConfigured.Identity(authorityFile, certificateFile, "ME"));
 
             MsmtSessionPeerOptions options = controller.ConnectionOptions;
 
@@ -331,26 +293,10 @@ public sealed class ControlProviderTests
         }
     }
 
-    /// <summary>Setting only the certificate store without the authority certificate, or the reverse, throws, since the two must be set together.</summary>
+    /// <summary>A certificate file that is missing from where the identity says it is makes ConnectionOptions throw.</summary>
     [Fact]
-    public void ConfiguredEngineController_OnlyOneOfStoreAndAuthoritySet_Throws()
-    {
-        ConfiguredEngineController onlyStore = new(new TestEngineController(), new NetworkConfig { CertificateStore = "/tmp/store" }, Me);
-        ConfiguredEngineController onlyAuthority = new(new TestEngineController(), new NetworkConfig { AuthorityCertificate = "/tmp/authority.cer" }, Me);
-
-        Assert.Throws<InvalidOperationException>(() => onlyStore.ConnectionOptions);
-        Assert.Throws<InvalidOperationException>(() => onlyAuthority.ConnectionOptions);
-    }
-
-    /// <summary>An identity certificate file missing from the store throws, and so does having no user to load one for.</summary>
-    [Fact]
-    public void ConfiguredEngineController_IdentityFileMissingOrNoUser_Throws()
-    {
-        NetworkConfig config = new() { AuthorityCertificate = "/nonexistent/authority.cer", CertificateStore = "/nonexistent" };
-
-        Assert.Throws<InvalidOperationException>(() => new ConfiguredEngineController(new TestEngineController(), config, Me).ConnectionOptions);
-        Assert.Throws<InvalidOperationException>(() => new ConfiguredEngineController(new TestEngineController(), config, NoCurrentUser).ConnectionOptions);
-    }
+    public void ConfiguredEngineController_IdentityFileMissing_Throws()
+        => Assert.Throws<InvalidOperationException>(() => TestConfigured.Create(new TestEngineController(), new NetworkConfig(), Me, TestConfigured.Identity("/nonexistent/authority.cer", "/nonexistent/certificate.pfx", "ME")).ConnectionOptions);
 
     /// <summary>The default implementation always returns the well-known default ports.</summary>
     [Fact]
@@ -368,7 +314,7 @@ public sealed class ControlProviderTests
         Mock<IEngineController> fallback = new();
         fallback.Setup(f => f.PeerPort).Returns(11111);
         fallback.Setup(f => f.InterfacePort).Returns(22222);
-        ConfiguredEngineController controller = new(fallback.Object, new NetworkConfig(), NoCurrentUser);
+        ConfiguredEngineController controller = TestConfigured.Create(fallback.Object, new NetworkConfig(), NoCurrentUser);
 
         Assert.Equal(11111, controller.PeerPort);
         Assert.Equal(22222, controller.InterfacePort);
@@ -410,7 +356,7 @@ public sealed class ControlProviderTests
     {
         IpConnectionInfo connection = new() { Host = "10.0.0.1" };
         Mock<IEngineController> fallback = new();
-        ConfiguredEngineController controller = new(fallback.Object, new NetworkConfig(), Me);
+        ConfiguredEngineController controller = TestConfigured.Create(fallback.Object, new NetworkConfig(), Me);
 
         IpConnectionInfo expected = connection with { LocalUser = "ME" };
         Assert.Equal("ME", controller.WithLocalUser(connection).LocalUser);
@@ -428,7 +374,7 @@ public sealed class ControlProviderTests
         fallback.Setup(f => f.PacketHandshakeHandler).Returns(packets);
         fallback.Setup(f => f.FrameHandshakeHandler).Returns(frames);
         fallback.Setup(f => f.FrameHandler).Returns(network);
-        ConfiguredEngineController controller = new(fallback.Object, new NetworkConfig(), NoCurrentUser);
+        ConfiguredEngineController controller = TestConfigured.Create(fallback.Object, new NetworkConfig(), NoCurrentUser);
 
         Assert.Same(packets, controller.PacketHandshakeHandler);
         Assert.Same(frames, controller.FrameHandshakeHandler);
@@ -449,7 +395,7 @@ public sealed class ControlProviderTests
     {
         Mock<IEngineController> fallback = new();
         fallback.Setup(f => f.CommandLineOverridesAllowed).Returns(false);
-        ConfiguredEngineController controller = new(fallback.Object, new NetworkConfig(), NoCurrentUser);
+        ConfiguredEngineController controller = TestConfigured.Create(fallback.Object, new NetworkConfig(), NoCurrentUser);
 
         Assert.False(controller.CommandLineOverridesAllowed);
     }
@@ -459,7 +405,7 @@ public sealed class ControlProviderTests
     public void ConfiguredEngineController_PacketMembers_DelegateToFallback()
     {
         TestPacketEngineController fallback = new();
-        ConfiguredEngineController controller = new(fallback, new NetworkConfig(), NoCurrentUser);
+        ConfiguredEngineController controller = TestConfigured.Create(fallback, new NetworkConfig(), NoCurrentUser);
 
         Assert.Equal(typeof(TestPacket), controller.PacketType);
         Assert.Same(fallback.PacketSerializer, controller.PacketSerializer);
@@ -480,7 +426,7 @@ public sealed class ControlProviderTests
         Mock<IExternalSystem> externalSystem = new();
         Mock<IEngineController> fallback = new();
         fallback.Setup(f => f.ExternalSystems).Returns([externalSystem.Object]);
-        ConfiguredEngineController controller = new(fallback.Object, new NetworkConfig(), NoCurrentUser);
+        ConfiguredEngineController controller = TestConfigured.Create(fallback.Object, new NetworkConfig(), NoCurrentUser);
 
         Assert.Same(externalSystem.Object, Assert.Single(controller.ExternalSystems));
     }
@@ -489,7 +435,7 @@ public sealed class ControlProviderTests
     [Fact]
     public void ConfiguredEngineController_NoCertificateFilesConfigured_Throws()
     {
-        ConfiguredEngineController controller = new(new TestEngineController(), new NetworkConfig(), NoCurrentUser);
+        ConfiguredEngineController controller = TestConfigured.Create(new TestEngineController(), new NetworkConfig(), NoCurrentUser);
 
         Assert.Throws<InvalidOperationException>(() => controller.ConnectionOptions);
     }
@@ -546,72 +492,94 @@ public sealed class ControlProviderTests
         public void Dispose() => Directory.Delete(StoreDirectory, recursive: true);
     }
 
-    /// <summary>A certificate file named for the user, issued to them and signed by the authority certificate, has no problem.</summary>
+    private static EngineBuilder BuilderFor(CertificateFiles files)
+    {
+        EngineBuilder builder = EngineBuilder.Build(new TestEngineConfiguration());
+        builder.AuthorityCertificateValue = files.Authority;
+        builder.UserCertificateValue = files.Identity("Certificate");
+        return builder;
+    }
+
+    private static NetworkConfig NetworkOf(CertificateFiles files, string[] args, params string[] users)
+    {
+        NetworkConfig network = NetworkConfig.Load(args, files.StoreDirectory);
+        network.Users = users.ToDictionary(name => name, _ => new NetworkUserConfig(), StringComparer.OrdinalIgnoreCase);
+        return network;
+    }
+
+    /// <summary>A user certificate that chains to the authority and is issued to a user of the network names the node: the user is spelled as the network file spells it, and the files and thumbprints are recorded.</summary>
     [Fact]
-    public void CertificateProblem_GoodCertificate_IsNull()
+    public void ResolveIdentity_GoodCertificate_NamesTheUserAsTheNetworkSpellsIt()
+    {
+        using CertificateFiles files = new();
+        (Dictionary<string, X509Certificate2> identities, X509Certificate2Collection authorities) = TestMsmtCertificates.CreateNamed("Alice");
+        files.WriteAuthority(authorities);
+        files.WriteIdentity("Certificate", identities["Alice"]);
+
+        NodeIdentity identity = MsmtCertificateLookup.ResolveIdentity(BuilderFor(files), NetworkOf(files, [], "ALICE", "BOB"));
+
+        Assert.Equal(("ALICE", files.Authority, files.Identity("Certificate")), (identity.UserName, identity.AuthorityFile, identity.CertificateFile));
+        Assert.Equal((identities["Alice"].Thumbprint, authorities[0].Thumbprint), (identity.CertificateThumbprint, identity.AuthorityThumbprint));
+    }
+
+    /// <summary>The --authority and --certificate arguments name the files in place of the ones the host stated.</summary>
+    [Fact]
+    public void ResolveIdentity_CommandLineFiles_ReplaceTheStatedOnes()
     {
         using CertificateFiles files = new();
         (Dictionary<string, X509Certificate2> identities, X509Certificate2Collection authorities) = TestMsmtCertificates.CreateNamed("ALICE");
         files.WriteAuthority(authorities);
-        files.WriteIdentity("ALICE", identities["ALICE"]);
+        files.WriteIdentity("Other", identities["ALICE"]);
+        EngineBuilder builder = EngineBuilder.Build(new TestEngineConfiguration());
 
-        Assert.Null(MsmtCertificateLookup.GetProblem(files.Identity("ALICE"), files.Authority, "ALICE"));
+        NodeIdentity identity = MsmtCertificateLookup.ResolveIdentity(builder, NetworkOf(files, ["--authority", files.Authority, "--certificate", files.Identity("Other")], "ALICE"));
+
+        Assert.Equal(("ALICE", files.Identity("Other")), (identity.UserName, identity.CertificateFile));
     }
 
-    /// <summary>Without the store or the authority, or without the user's file, there is a problem.</summary>
+    /// <summary>A certificate or authority that is neither stated nor given on the command line, or whose file is missing, stops the node from starting.</summary>
     [Fact]
-    public void CertificateProblem_MissingPieces_AreReported()
+    public void ResolveIdentity_MissingPieces_Throw()
     {
         using CertificateFiles files = new();
         (Dictionary<string, X509Certificate2> identities, X509Certificate2Collection authorities) = TestMsmtCertificates.CreateNamed("ALICE");
         files.WriteAuthority(authorities);
+        EngineBuilder none = EngineBuilder.Build(new TestEngineConfiguration());
+        NetworkConfig network = NetworkOf(files, [], "ALICE");
 
-        Assert.NotNull(MsmtCertificateLookup.GetProblem(null, files.Authority, "ALICE"));
-        Assert.NotNull(MsmtCertificateLookup.GetProblem(files.Identity("ALICE"), null, "ALICE"));
-        Assert.NotNull(MsmtCertificateLookup.GetProblem(files.Identity("ALICE"), files.Authority, "ALICE"));
-        files.WriteIdentity("ALICE", identities["ALICE"]);
-        Assert.NotNull(MsmtCertificateLookup.GetProblem(files.Identity("ALICE"), Path.Combine(files.StoreDirectory, "nope.cer"), "ALICE"));
+        Assert.Contains("no authority certificate", Assert.Throws<InvalidOperationException>(() => MsmtCertificateLookup.ResolveIdentity(none, network)).Message);
+        none.AuthorityCertificateValue = files.Authority;
+        Assert.Contains("no user certificate", Assert.Throws<InvalidOperationException>(() => MsmtCertificateLookup.ResolveIdentity(none, network)).Message);
+        Assert.Contains("was not found", Assert.Throws<InvalidOperationException>(() => MsmtCertificateLookup.ResolveIdentity(BuilderFor(files), network)).Message);
+        files.WriteIdentity("Certificate", identities["ALICE"]);
+        File.Delete(files.Authority);
+        Assert.Contains("authority certificate file", Assert.Throws<InvalidOperationException>(() => MsmtCertificateLookup.ResolveIdentity(BuilderFor(files), network)).Message);
     }
 
-    /// <summary>A file named for one user that holds a certificate issued to someone else is a problem.</summary>
+    /// <summary>A certificate issued to someone the network does not list, or to someone other than the --user argument names, is refused.</summary>
     [Fact]
-    public void CertificateProblem_CertificateIssuedToSomeoneElse_IsReported()
+    public void ResolveIdentity_CertificateNotIssuedToAListedOrNamedUser_Throws()
     {
         using CertificateFiles files = new();
-        (Dictionary<string, X509Certificate2> identities, X509Certificate2Collection authorities) = TestMsmtCertificates.CreateNamed("ALICE", "BOB");
+        (Dictionary<string, X509Certificate2> identities, X509Certificate2Collection authorities) = TestMsmtCertificates.CreateNamed("ALICE");
         files.WriteAuthority(authorities);
-        files.WriteIdentity("ALICE", identities["BOB"]);
+        files.WriteIdentity("Certificate", identities["ALICE"]);
 
-        Assert.Contains("not issued to ALICE", MsmtCertificateLookup.GetProblem(files.Identity("ALICE"), files.Authority, "ALICE"));
+        Assert.Contains("not a user of the network", Assert.Throws<InvalidOperationException>(() => MsmtCertificateLookup.ResolveIdentity(BuilderFor(files), NetworkOf(files, [], "BOB"))).Message);
+        Assert.Contains("not issued to BOB", Assert.Throws<InvalidOperationException>(() => MsmtCertificateLookup.ResolveIdentity(BuilderFor(files), NetworkOf(files, ["--user", "BOB"], "ALICE", "BOB"))).Message);
+        Assert.Equal("ALICE", MsmtCertificateLookup.ResolveIdentity(BuilderFor(files), NetworkOf(files, ["--user", "alice"], "ALICE", "BOB")).UserName);
     }
 
-    /// <summary>A certificate signed by an authority other than the authority certificate is a problem.</summary>
+    /// <summary>A certificate signed by an authority other than the authority certificate is refused.</summary>
     [Fact]
-    public void CertificateProblem_SignedByAnotherAuthority_IsReported()
+    public void ResolveIdentity_SignedByAnotherAuthority_Throws()
     {
         using CertificateFiles files = new();
         (Dictionary<string, X509Certificate2> identities, _) = TestMsmtCertificates.CreateNamed("ALICE");
         (_, X509Certificate2Collection otherAuthorities) = TestMsmtCertificates.CreateNamed("BOB");
         files.WriteAuthority(otherAuthorities);
-        files.WriteIdentity("ALICE", identities["ALICE"]);
+        files.WriteIdentity("Certificate", identities["ALICE"]);
 
-        Assert.Contains("not signed by the authority certificate", MsmtCertificateLookup.GetProblem(files.Identity("ALICE"), files.Authority, "ALICE"));
-    }
-
-    /// <summary>The controller checks the files the network designates, and a network designating none has a problem for every user.</summary>
-    [Fact]
-    public void EngineController_GetCertificateProblem_UsesTheNetworksFiles()
-    {
-        using CertificateFiles files = new();
-        (Dictionary<string, X509Certificate2> identities, X509Certificate2Collection authorities) = TestMsmtCertificates.CreateNamed("ALICE");
-        files.WriteAuthority(authorities);
-        files.WriteIdentity("ALICE", identities["ALICE"]);
-
-        EngineController designated = new(EngineBuilder.Build(new TestEngineConfiguration()), new CurrentUserProvider(), new NetworkConfig { CertificateStore = files.StoreDirectory, AuthorityCertificate = files.Authority });
-        EngineController none = new(EngineBuilder.Build(new TestEngineConfiguration()), new CurrentUserProvider(), new NetworkConfig());
-
-        Assert.Null(designated.GetCertificateProblem("ALICE"));
-        Assert.NotNull(designated.GetCertificateProblem("BOB"));
-        Assert.NotNull(none.GetCertificateProblem("ALICE"));
+        Assert.Contains("not signed by the authority certificate", Assert.Throws<InvalidOperationException>(() => MsmtCertificateLookup.ResolveIdentity(BuilderFor(files), NetworkOf(files, [], "ALICE"))).Message);
     }
 }

@@ -23,6 +23,7 @@ public sealed class MyEngineConfiguration : IEngineConfiguration
     public void Configure(IEngineBuilder engine) => engine.Types<MyFrame, MyPriority, MyMessageLevel, MyMessageAspect>()
         .Display<MyDisplayHandler>()
         .Priority(MyPriority.Normal)
+        .Certificates("Authority.cer", "Certificate.pfx")
         .Frames<MyFrameHandler>()
         ;
 }

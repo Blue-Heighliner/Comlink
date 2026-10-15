@@ -132,7 +132,7 @@ public sealed class StagedSendViewModelTests
 
         StagedSendEntry entry = Assert.Single(vm.Queue);
         Assert.Equal(StagedSendStatus.Failed, entry.Status);
-        Assert.Equal("Cannot send until a user is installed", entry.StatusMessage);
+        Assert.Equal("Cannot send: this node has no user", entry.StatusMessage);
     }
 
     /// <summary>A send that throws marks that entry Failed with the exception message, without stopping the rest of the batch.</summary>

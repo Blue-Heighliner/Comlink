@@ -1,4 +1,4 @@
-#:package Markwardt.ScriptUtilities@0.2.0
+#:package Markwardt.ScriptUtilities
 #:property TreatWarningsAsErrors=true
 
 // Manual test scenario: one server with two client children (Client1, Client2). Both clients form a
@@ -9,4 +9,4 @@
 
 using Markwardt.ScriptUtilities;
 
-(await Script.Run("dotnet", "run", "--no-build", "--project", "Sample/Sample.csproj", "--", "--config", "Scripts/Scenarios/ClientServer/Config.json", "--user", "SERVER")).Verify();
+(await Script.Run("dotnet", "run", "--no-build", "--project", "Sample/Sample.csproj", "--", "--config", "Scripts/Scenarios/ClientServer/Config.json", "--authority", "Scripts/Scenarios/Root.cer", "--certificate", "Scripts/Scenarios/ClientServer/SERVER.pfx")).Verify();

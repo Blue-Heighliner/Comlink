@@ -15,10 +15,9 @@ internal interface IRolePeerService : IPeerService
 
 /// <summary>
 /// The <see cref="IPeerService"/> the rest of the engine depends on. Which implementation does the work is decided by
-/// <see cref="IEngineController.Role"/>, which comes from the installed user's <see cref="UserInfo"/> and so is not known
-/// until a user is installed; this therefore creates the <see cref="ClientPeerService"/> or
-/// <see cref="ServerRoutingService"/> when <see cref="Start"/> runs, and forwards its events. Until then no user is
-/// connected and nothing can be sent.
+/// <see cref="IEngineController.Role"/>, which comes from the current user's <see cref="UserInfo"/>; this therefore creates the
+/// <see cref="ClientPeerService"/> or <see cref="ServerRoutingService"/> when <see cref="Start"/> runs, and forwards its events.
+/// Until then no user is connected and nothing can be sent.
 /// </summary>
 internal sealed class RolePeerService(IServiceProvider services, IEngineController engineController) : IRolePeerService, IConnectionStatusService, IAsyncDisposable
 {

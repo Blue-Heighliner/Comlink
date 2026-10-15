@@ -4,7 +4,7 @@ namespace BlueHeighliner.Comlink;
 internal interface INetworkEnvironment
 {
     /// <summary>Creates a snapshot of the engine as it is now.</summary>
-    /// <exception cref="InvalidOperationException">No user is installed, which should never happen where a handler runs.</exception>
+    /// <exception cref="InvalidOperationException">The node has no current user, which should never happen where a handler runs.</exception>
     IEngineContext CreateEngineContext();
 
     /// <summary>Sends <paramref name="frame"/> to <paramref name="userName"/> over the connection identified as them.</summary>

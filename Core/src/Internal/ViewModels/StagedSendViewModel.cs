@@ -223,7 +223,7 @@ internal sealed partial class StagedSendViewModel : ObservableObject, IStagedSen
                 entry.Body, entry.Addresses, entry.Priority, entry.Tag, entry.MessageLevel);
             if (result is null)
             {
-                SetStatus(entry.Id, StagedSendStatus.Failed, engineController.Display("Cannot send until a user is installed"));
+                SetStatus(entry.Id, StagedSendStatus.Failed, engineController.Display("Cannot send: this node has no user"));
                 return;
             }
 

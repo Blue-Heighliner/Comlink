@@ -93,17 +93,6 @@ public sealed class DirectServiceConnectionTests
         Assert.Equal(["ALPHA", "BETA"], (await conn.GetConnectedUsers()).Order());
     }
 
-    /// <summary>InstallUser delegates to IUserService.Install and returns its result.</summary>
-    [Fact]
-    public async Task InstallUser_DelegatesToUserService()
-    {
-        DirectServiceConnection conn = Build(out _, out Mock<IUserService> user, out _, out _, out _, out _);
-        UserInfo info = new() { Name = "BRAVO" };
-        user.Setup(s => s.Install("CODE1", It.IsAny<CancellationToken>())).ReturnsAsync(info);
-
-        Assert.Same(info, await conn.InstallUser("CODE1"));
-    }
-
     /// <summary>A message the host's handler records as received is raised to the connection's listeners.</summary>
     [Fact]
     public async Task Connect_ThenMessageReceived_IsRaised()
