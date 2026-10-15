@@ -21,6 +21,13 @@ internal sealed class EngineBuilder : IEngineBuilder, IAsyncDisposable
     public ServiceRegistration<IDisplayHandler>? DisplayHandler { get; set; }
     /// <summary>The display handler, created once the configuration has finished, from the bootstrap container when there is one.</summary>
     public IDisplayHandler? DisplayHandlerInstance { get; private set; }
+    /// <summary>Absolute path to the application data root, <c>%APPDATA%</c>, which everything the engine stores lives under.</summary>
+    /// <exception cref="InvalidOperationException">The operating system names no absolute application data folder, which would otherwise put the data in the working directory.</exception>
+    public string AppDataRoot => Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData) is { Length: > 0 } root && Path.IsPathRooted(root) ? root : throw new InvalidOperationException("The operating system gave no absolute application data folder, and nothing is stored in the working directory instead.");
+    /// <summary>The name of the folder under <see cref="AppDataRoot"/> that holds the app's data: what the display handler states, otherwise the entry assembly's name.</summary>
+    public string DataFolderName => DisplayHandlerInstance?.DataFolderName.OrNull() ?? Assembly.GetEntryAssembly()?.GetName().Name ?? "App";
+    /// <summary>Absolute path to the app's folder under the application data root, which holds the network configuration file, the install state and every user's data.</summary>
+    public string AppDataFolder => Path.Combine(AppDataRoot, DataFolderName);
     /// <summary>The configured message levels, in ascending order; empty when none were stated.</summary>
     public List<MessageLevel> MessageLevelValues { get; } = [];
     /// <summary>The configured message aspects, in the order stated; empty when none were stated.</summary>

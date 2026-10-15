@@ -2,7 +2,7 @@ namespace BlueHeighliner.Comlink;
 
 /// <summary>
 /// The schema of the network configuration file: everything the engine needs to know about the users of one network, in one
-/// place shared by every node, instead of per-node files or code. It is read from <c>Config.json</c> in the current working directory,
+/// place shared by every node, instead of per-node files or code. It is read from <c>Config.json</c> in the app's folder under the application data root,
 /// or, when the host allows command-line overrides (see <see cref="IEngineBuilder{TFrame, TPacket, TPriority, TLevel, TAspect}.CommandLineOverrides"/>), from the path given by the
 /// <c>--config</c> argument; its absence is not an error unless <c>--config</c> names a file that does not exist.
 /// The user this process runs as, for a node that should not show the install screen, is named by the <c>--user</c> argument (again only when
@@ -38,7 +38,7 @@ internal sealed class NetworkConfig
     /// <summary>The user the process runs as, from the <c>--user</c> argument; <see langword="null"/> when it is not given.</summary>
     public string? User { get; set; }
 
-    /// <summary>The log categories named by the <c>--log</c> argument, a comma separated list, to write although they are off by default; empty when it is not given.</summary>
+    /// <summary>The log categories named by the <c>--log</c> argument, a comma separated list, to write although they are not on by default; empty when it is not given.</summary>
     public IReadOnlyList<string> EnabledLogCategories { get; private set; } = [];
 
     /// <summary>Absolute directory containing the loaded file, used to resolve relative certificate paths. <see langword="null"/> when no file was loaded.</summary>
@@ -47,19 +47,19 @@ internal sealed class NetworkConfig
     /// <summary>The arguments this configuration was loaded with, kept so it can be read again.</summary>
     private string[] arguments = [];
 
-    /// <summary>The directory <c>Config.json</c> was looked for in, or <see langword="null"/> for the current working directory.</summary>
-    private string? workingDirectory;
+    /// <summary>The app's folder under the application data root, where <c>Config.json</c> was looked for.</summary>
+    private string appDataFolder = "";
 
     /// <summary>
-    /// Loads the network configuration: the file named by <c>--config</c>, else <c>Config.json</c> in the current working
-    /// directory when it exists, else an empty configuration. The arguments are passed empty unless
+    /// Loads the network configuration: the file named by <c>--config</c>, else <c>Config.json</c> in the app's folder under the application
+    /// data root when it exists, else an empty configuration. The arguments are passed empty unless
     /// <see cref="IEngineController.CommandLineOverridesAllowed"/>.
     /// </summary>
     /// <param name="args">The process's command-line arguments.</param>
-    /// <param name="workingDirectory">The directory to look for <c>Config.json</c> in. <see langword="null"/> (the default) is the current working directory.</param>
-    public static NetworkConfig Load(string[] args, string? workingDirectory = null)
+    /// <param name="appDataFolder">The app's folder under the application data root, which <c>Config.json</c> is looked for in; never the working directory.</param>
+    public static NetworkConfig Load(string[] args, string appDataFolder)
     {
-        string defaultPath = Path.Combine(workingDirectory ?? Directory.GetCurrentDirectory(), "Config.json");
+        string defaultPath = Path.Combine(appDataFolder, "Config.json");
         int configIndex = Array.IndexOf(args, "--config");
         string? path = configIndex >= 0 && configIndex + 1 < args.Length ? args[configIndex + 1] : File.Exists(defaultPath) ? defaultPath : null;
 
@@ -73,7 +73,7 @@ internal sealed class NetworkConfig
 
         int userIndex = Array.IndexOf(args, "--user");
         config.arguments = args;
-        config.workingDirectory = workingDirectory;
+        config.appDataFolder = appDataFolder;
         config.User = userIndex >= 0 && userIndex + 1 < args.Length ? args[userIndex + 1] : null;
         int logIndex = Array.IndexOf(args, "--log");
         config.EnabledLogCategories = logIndex >= 0 && logIndex + 1 < args.Length ? [.. args[logIndex + 1].Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)] : [];
@@ -100,7 +100,7 @@ internal sealed class NetworkConfig
     /// </summary>
     public void Reload()
     {
-        NetworkConfig fresh = Load(arguments, workingDirectory);
+        NetworkConfig fresh = Load(arguments, appDataFolder);
         AuthorityCertificate = fresh.AuthorityCertificate;
         CertificateStore = fresh.CertificateStore;
         UserGroups = fresh.UserGroups;

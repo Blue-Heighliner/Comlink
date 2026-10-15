@@ -31,7 +31,7 @@ public sealed class NetworkConfigTests : IDisposable
         Assert.Contains($"\"{role}\" of user ALICE", error.Message);
     }
 
-    /// <summary>With no argument and no Config.json in the working directory, the network is empty.</summary>
+    /// <summary>With no argument and no Config.json in the app data folder, the network is empty.</summary>
     [Fact]
     public void Load_NoArgumentAndNoFile_IsEmpty()
     {
@@ -44,9 +44,9 @@ public sealed class NetworkConfigTests : IDisposable
         Assert.Null(config.CertificateStore);
     }
 
-    /// <summary>Without --config, Config.json in the working directory is used.</summary>
+    /// <summary>Without --config, Config.json in the app data folder is used.</summary>
     [Fact]
-    public void Load_NoArgument_UsesConfigJsonInTheWorkingDirectory()
+    public void Load_NoArgument_UsesConfigJsonInTheAppDataFolder()
     {
         Write("Config.json", """{ "Users": { "ALICE": { "IpHost": "10.0.0.5", "Msmt": { "Port": 1234 } } } }""");
 
@@ -123,7 +123,7 @@ public sealed class NetworkConfigTests : IDisposable
             }
             """);
 
-        NetworkConfig config = NetworkConfig.Load(["--config", path]);
+        NetworkConfig config = NetworkConfig.Load(["--config", path], directory);
         UserInfo info = config.GetUserInfo("alice")!;
         NetworkUserConfig node = config.Find("Alice")!;
 
@@ -162,11 +162,11 @@ public sealed class NetworkConfigTests : IDisposable
         string path = Write("Network.json", """{ "AuthorityCertificate": "../Root.cer", "CertificateStore": "certs" }""");
         string absolutePath = Write("Absolute.json", $$"""{ "CertificateStore": {{System.Text.Json.JsonSerializer.Serialize(absolute)}} }""");
 
-        NetworkConfig config = NetworkConfig.Load(["--config", path]);
+        NetworkConfig config = NetworkConfig.Load(["--config", path], directory);
 
         Assert.Equal(Path.GetFullPath(Path.Combine(directory, "..", "Root.cer")), config.GetAuthorityCertificatePath());
         Assert.Equal(Path.Combine(directory, "certs", "ALICE.pfx"), config.GetCertificatePath("ALICE"));
-        Assert.Equal(Path.Combine(absolute, "BOB.pfx"), NetworkConfig.Load(["--config", absolutePath]).GetCertificatePath("BOB"));
+        Assert.Equal(Path.Combine(absolute, "BOB.pfx"), NetworkConfig.Load(["--config", absolutePath], directory).GetCertificatePath("BOB"));
         Assert.Null(new NetworkConfig().GetCertificatePath("ALICE"));
         Assert.Null(new NetworkConfig().GetAuthorityCertificatePath());
     }
@@ -189,7 +189,7 @@ public sealed class NetworkConfigTests : IDisposable
             { "Users": { "A": { "Parent": "B", "Children": [ "C", { "User": "D", "Mode": "bogus" }, { "User": "E", "Mode": "Hdlc" } ] } } }
             """);
 
-        UserInfo info = NetworkConfig.Load(["--config", path]).GetUserInfo("A")!;
+        UserInfo info = NetworkConfig.Load(["--config", path], directory).GetUserInfo("A")!;
 
         Assert.Equal(new UserLink { User = "B" }, info.Parent);
         Assert.Equal([new UserLink { User = "C" }, new UserLink { User = "D" }, new UserLink { User = "E", Mode = ConnectionMode.Hdlc }], info.Children);
@@ -203,7 +203,7 @@ public sealed class NetworkConfigTests : IDisposable
             { "Users": { "ALL": { "Hdlc": { "Ports": "*" } }, "SOME": { "Hdlc": { "Address": 9, "Ports": [ "A", "B" ] } }, "NONE": { "Hdlc": { "Address": "x" } }, "BARE": {} } }
             """);
 
-        NetworkConfig config = NetworkConfig.Load(["--config", path]);
+        NetworkConfig config = NetworkConfig.Load(["--config", path], directory);
 
         Assert.Equal(["*"], config.GetUserInfo("ALL")!.HdlcPorts);
         Assert.Equal(["A", "B"], config.GetUserInfo("SOME")!.HdlcPorts);

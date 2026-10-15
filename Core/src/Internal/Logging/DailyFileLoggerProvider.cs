@@ -27,6 +27,7 @@ internal sealed class DailyFileLoggerProvider : ILoggerProvider
     private StreamWriter? writer;
     private string? writerDirectory;
     private volatile bool fileFailureReported;
+    private volatile bool disposed;
 
     private string LogDirectory
     {
@@ -67,6 +68,11 @@ internal sealed class DailyFileLoggerProvider : ILoggerProvider
         // that). The console copy still gets the line when the file cannot.
         try { Console.WriteLine(line); }
         catch { }
+
+        if (disposed)
+        {
+            return;
+        }
 
         try
         {
@@ -125,6 +131,7 @@ internal sealed class DailyFileLoggerProvider : ILoggerProvider
     /// <inheritdoc />
     public void Dispose()
     {
+        disposed = true;
         foreach (DailyFileLogger logger in loggers.Values)
         {
             logger.Dispose();

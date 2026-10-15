@@ -81,6 +81,12 @@ public interface IDisplayHandler
     /// <summary>Gets what the app calls <c>Outbox</c> wherever the user interface mentions it, in the case style of the text it replaces. Defaults to <c>Outbox</c>.</summary>
     string? OutboxLabel => null;
 
+    /// <summary>Gets the name of the root folder of received alerts, which exists only while <see cref="SeparateAlerts"/> is on. It names that one folder and nothing else: no other text in the user interface changes (<see cref="InboxLabel"/> is what the app calls an inbox elsewhere). Defaults to <see cref="AlertLabel"/> and <see cref="InboxLabel"/> in place of the words they name, so <c>Alert Inbox</c> when neither is stated.</summary>
+    string? AlertInboxLabel => null;
+
+    /// <summary>Gets the name of the root folder of sent alerts, which exists only while <see cref="SeparateAlerts"/> is on. It names that one folder and nothing else: no other text in the user interface changes (<see cref="OutboxLabel"/> is what the app calls an outbox elsewhere). Defaults to <see cref="AlertLabel"/> and <see cref="OutboxLabel"/> in place of the words they name, so <c>Alert Outbox</c> when neither is stated.</summary>
+    string? AlertOutboxLabel => null;
+
     /// <summary>Gets what the app calls <c>Drafts</c> wherever the user interface mentions it, in the case style of the text it replaces. Defaults to <c>Drafts</c>.</summary>
     string? DraftsLabel => null;
 

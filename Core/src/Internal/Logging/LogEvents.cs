@@ -212,6 +212,9 @@ internal static class LogEvents
     /// <summary>A packet arrives, traced as its serialized bytes with the user it comes from.</summary>
     public static EventId PacketReceived { get; } = Define(114, nameof(PacketReceived), LogCategories.Packets);
 
+    /// <summary>Avalonia reports a warning or an error about itself, such as a binding that could not be resolved.</summary>
+    public static EventId AvaloniaReported { get; } = Define(116, nameof(AvaloniaReported), LogCategories.Avalonia);
+
     /// <summary>Gets every event, in no particular order.</summary>
     public static IReadOnlyList<EventId> All { get; } = [.. typeof(LogEvents).GetProperties(BindingFlags.Public | BindingFlags.Static).Where(property => property.PropertyType == typeof(EventId)).Select(property => (EventId)property.GetValue(null)!)];
 

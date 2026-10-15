@@ -244,6 +244,16 @@ public sealed class EngineBuilderTests
         Assert.Equal(Path.Combine(root, "MyApp", "User.json"), alice.UserFilePath);
     }
 
+    /// <summary>The app's folder, where the network configuration file is read from, is the data folder name under the absolute application data root, never relative to the working directory.</summary>
+    [Fact]
+    public void AppDataFolder_IsAbsoluteUnderTheApplicationDataRoot()
+    {
+        (EngineBuilder builder, _) = Build(engine => engine.Display<TestDisplayHandler>());
+
+        Assert.True(Path.IsPathRooted(builder.AppDataFolder));
+        Assert.Equal(Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), "MyApp"), builder.AppDataFolder);
+    }
+
     /// <summary>Without a draft handler every combination is allowed, and a stated handler is asked with the host's own enum members.</summary>
     [Fact]
     public void DraftHandler_DecidesWhichCombinationsAreAllowed()
@@ -307,6 +317,18 @@ public sealed class EngineBuilderTests
         Assert.Equal("No such user. Users are listed.", plain.Display("No such user. Users are listed."));
         Assert.Equal("No such operator. Operators are listed.", named.Display("No such user. Users are listed."));
         Assert.Equal("NO SUCH OPERATOR", named.Display("NO SUCH USER"));
+    }
+
+    /// <summary>The separated alert folders have labels of their own, and without one are the alert label and the inbox or outbox label in place of the words they name.</summary>
+    [Fact]
+    public void Display_AlertFolders_UseTheirOwnLabelOrComposeTheOthers()
+    {
+        (_, EngineController plain) = Build(engine => engine);
+        (_, EngineController named) = Build(engine => engine.Display<TestDisplayHandler>());
+
+        Assert.Equal(["Alert Inbox", "Alert Outbox"], [plain.Display("Alert Inbox"), plain.Display("Alert Outbox")]);
+        Assert.Equal(["ALARM Received", "Flagged", "FLAGGED", "alarm received"], [named.Display("Alert Inbox"), named.Display("Alert Outbox"), named.Display("ALERT OUTBOX"), named.Display("alert inbox")]);
+        Assert.Equal(["Received", "Flagged"], [named.Rename("Inbox"), named.Rename("Alert Outbox")]);
     }
 
     /// <summary>A draft handler can turn tags off without affecting their label.</summary>

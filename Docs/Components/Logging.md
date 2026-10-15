@@ -59,17 +59,18 @@ Log categories follow the existing convention:
 |----------|-------|
 | `ACTIVITY` | What a user should read, written to the in-app log and the log file, in general terms without technical detail: the app starting, started and exited, failed installs, and a general notice of a problem whose detail is under `ERROR` or `CRASH` |
 | `FRAMES`, `PACKETS` | The bytes of every frame and every packet, off by default |
+| `AVALONIA` | What Avalonia reports about itself, such as a binding that could not be resolved, off by default; Avalonia's own console output is switched off, so this is the only place it appears |
 | `APP` | Technical events of the running application that a user has no use for: connections, services, the network layers and conditions that are handled |
 | `ERROR` | Something failed, with the technical detail and any exception |
 | `CRASH` | A failure the application cannot go on after, or that stops a part of it |
 
 There are no log levels: the category is the whole classification. The category of an engine event belongs to the event (`LogEvents.CategoryOf`), so the same event always lands in the same category and the providers route by it: the activity provider keeps the `ACTIVITY` events, the file provider writes every enabled category.
 
-Any other category string is valid and will appear in the file log.
+Any other category string is valid, but is off like `FRAMES` until `Logging.json` or `--log` names it.
 
 ### Enabling categories
 
-`ACTIVITY`, `APP`, `ERROR` and `CRASH` are always written; `FRAMES` and `PACKETS` are off by default, since they write every frame and packet. `ILogSettings` (`LogSettings`) turns them on from two places, which add up:
+Only `ACTIVITY`, `APP`, `ERROR` and `CRASH` are written by default, a whitelist in `LogCategories.OnByDefault`; every other category is off (`FRAMES` and `PACKETS` write every frame and packet, `AVALONIA` many entries), including a host's own, until named. `ILogSettings` (`LogSettings`) turns them on from two places, which add up:
 
 - `Logging.json` in the app data folder, beside `User.json` (`IEngineController.LoggingFilePath`): `["Frames", "Packets"]`, a JSON list of the categories to enable, names in any case, unknown names ignored. The file need not exist. A file that is not valid JSON is ignored at startup (nothing can be logged yet) and fails a refresh like an unreadable network file.
 - The `--log` argument, a comma separated list such as `--log Frames,Packets`, when the host allows command-line overrides.
@@ -138,6 +139,14 @@ Written only while the `PACKETS` category is turned on (see Enabling categories)
 |----|---------|----------|
 | 113 | `Sent {Length} bytes to {User}: {Bytes}` | A packet is sent. |
 | 114 | `Received {Length} bytes from {User}: {Bytes}` | A packet is received. |
+
+### AVALONIA
+
+Written only while the `AVALONIA` category is turned on (see Enabling categories). Avalonia's own console output is replaced by `AvaloniaLogSink`, which records warnings and errors here instead, so a binding error never reaches the console.
+
+| ID | Content | Scenario |
+|----|---------|----------|
+| 116 | `Avalonia {Level} in {Area} ({Source}): {Avalonia's own message}` | Avalonia reports a warning or an error about itself, such as a binding that could not be resolved. |
 
 ### APP
 

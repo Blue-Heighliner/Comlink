@@ -73,7 +73,7 @@ public void Configure(IEngineBuilder engine) => engine.Types<MyFrame, MyPriority
 
 A host describes its whole network in one JSON file (see [Config.md](Components/Config.md) for the schema): every user
 with their role, listen ports, outgoing connections, message level and node settings, plus groups and the trusted
-certificate authority. The engine always reads `Config.json` from the working directory; nothing about a user is stated in
+certificate authority. The engine always reads `Config.json` from the app data folder (`%APPDATA%/{AppName}/`); nothing about a user is stated in
 code, and the user installs by name on the install screen. Stating `CommandLineOverrides(true)` additionally
 lets `--config` name another file and `--user` name the user, who is checked like an installed one.
 

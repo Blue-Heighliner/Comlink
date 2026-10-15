@@ -1,9 +1,9 @@
 namespace BlueHeighliner.Comlink;
 
-/// <summary>Says which log categories are written. The categories that are off by default (see <see cref="LogCategories.OffByDefault"/>) are turned on by <c>Logging.json</c> and the <c>--log</c> argument.</summary>
+/// <summary>Says which log categories are written. Only the categories that are on by default (see <see cref="LogCategories.OnByDefault"/>) are written; every other is turned on by <c>Logging.json</c> and the <c>--log</c> argument.</summary>
 internal interface ILogSettings
 {
-    /// <summary>Returns whether entries of <paramref name="category"/> are written. A category the engine has no switch for, such as a host's own, always is.</summary>
+    /// <summary>Returns whether entries of <paramref name="category"/> are written: the categories on by default, and any other that <c>Logging.json</c> or the <c>--log</c> argument names.</summary>
     /// <param name="category">The category, in any case.</param>
     bool IsEnabled(string category);
 
@@ -34,7 +34,7 @@ internal sealed class LogSettings : ILogSettings
     private volatile HashSet<string> enabled = new(StringComparer.OrdinalIgnoreCase);
 
     /// <inheritdoc />
-    public bool IsEnabled(string category) => !LogCategories.OffByDefault.Contains(category, StringComparer.OrdinalIgnoreCase) || enabled.Contains(category);
+    public bool IsEnabled(string category) => LogCategories.OnByDefault.Contains(category, StringComparer.OrdinalIgnoreCase) || enabled.Contains(category);
 
     /// <inheritdoc />
     public void Reload()

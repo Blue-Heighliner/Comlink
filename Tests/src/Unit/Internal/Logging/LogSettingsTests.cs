@@ -18,16 +18,17 @@ public sealed class LogSettingsTests : IDisposable
 
     private void Write(string json) => File.WriteAllText(controller.Object.LoggingFilePath, json);
 
-    /// <summary>By default only the traces are off.</summary>
+    /// <summary>By default only the categories on the whitelist are written, so the traces, Avalonia's and a host's own are off.</summary>
     [Theory]
     [InlineData("ACTIVITY", true)]
     [InlineData("APP", true)]
     [InlineData("ERROR", true)]
     [InlineData("CRASH", true)]
-    [InlineData("SomethingOfTheHost", true)]
+    [InlineData("SomethingOfTheHost", false)]
+    [InlineData("AVALONIA", false)]
     [InlineData("FRAMES", false)]
     [InlineData("PACKETS", false)]
-    public void Defaults_OnlyTheTracesAreOff(string category, bool expected)
+    public void Defaults_OnlyTheWhitelistedCategoriesAreOn(string category, bool expected)
         => Assert.Equal(expected, new LogSettings(controller.Object, NetworkConfig.Load([], directory)).IsEnabled(category));
 
     /// <summary>Logging.json turns on the categories it names, in any case.</summary>
@@ -40,6 +41,15 @@ public sealed class LogSettingsTests : IDisposable
 
         Assert.True(settings.IsEnabled("FRAMES"));
         Assert.False(settings.IsEnabled("PACKETS"));
+    }
+
+    /// <summary>A category the engine has no switch for, such as a host's own, is written only once Logging.json names it.</summary>
+    [Fact]
+    public void LoggingFile_EnablesAHostsOwnCategory()
+    {
+        Write("""["SomethingOfTheHost"]""");
+
+        Assert.True(new LogSettings(controller.Object, NetworkConfig.Load([], directory)).IsEnabled("SOMETHINGOFTHEHOST"));
     }
 
     /// <summary>The --log argument turns on a comma separated list of categories, with or without the file.</summary>

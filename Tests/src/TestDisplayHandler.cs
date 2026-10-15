@@ -50,4 +50,7 @@ public sealed class TestDisplayHandler : IDisplayHandler
 
     /// <inheritdoc />
     public string? InboxLabel => "Received";
+
+    /// <inheritdoc />
+    public string? AlertOutboxLabel => "Flagged";
 }

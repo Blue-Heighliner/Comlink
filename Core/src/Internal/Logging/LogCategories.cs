@@ -18,9 +18,12 @@ internal static class LogCategories
     /// <summary>Gets the category of something that failed, with the technical detail.</summary>
     public static string Error { get; } = "ERROR";
 
-    /// <summary>Gets the categories that are not written unless <c>Logging.json</c> or the <c>--log</c> argument turns them on.</summary>
-    public static IReadOnlyList<string> OffByDefault { get; } = [Frames, Packets];
+    /// <summary>Gets the category of what Avalonia reports about itself, such as a binding that could not be resolved.</summary>
+    public static string Avalonia { get; } = "AVALONIA";
 
     /// <summary>Gets the category of a failure the application cannot go on after, or that stops a part of it.</summary>
     public static string Crash { get; } = "CRASH";
+
+    /// <summary>Gets the only categories that are written unless <c>Logging.json</c> or the <c>--log</c> argument turns another on; every other category, including a host's own, is off.</summary>
+    public static IReadOnlyList<string> OnByDefault { get; } = [Activity, App, Error, Crash];
 }

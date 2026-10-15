@@ -11,6 +11,7 @@ global using Avalonia.Platform;
 global using Avalonia.Data.Converters;
 global using Avalonia.Input;
 global using Avalonia.Interactivity;
+global using Avalonia.Logging;
 global using Avalonia.VisualTree;
 global using Avalonia.Markup.Xaml;
 global using Avalonia.Markup.Xaml.Styling;

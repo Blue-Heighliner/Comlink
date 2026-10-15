@@ -76,7 +76,7 @@ internal interface IEngineController
     /// folders rather than in one, since it is what says whose folder to use, and holds nothing else, so deleting it only uninstalls the user.
     /// </summary>
     string UserFilePath { get; }
-    /// <summary>Absolute path to <c>Logging.json</c>, which turns on the log categories that are off by default; it lives beside <c>User.json</c> and need not exist.</summary>
+    /// <summary>Absolute path to <c>Logging.json</c>, which turns on the log categories that are not on by default; it lives beside <c>User.json</c> and need not exist.</summary>
     string LoggingFilePath { get; }
     /// <summary><see langword="true"/> to enable kiosk mode, which hides the minimize and maximize buttons and has the close button restart rather than exit.</summary>
     bool IsKioskMode { get; }
@@ -256,7 +256,7 @@ internal interface IEngineController
 
     /// <summary>Gets the handler that carries out the handshake of frames on each new connection (see <see cref="IFrameBuilder{TFrame, TPacket, TPriority, TLevel, TAspect}.Handshake{THandler}"/>), or <see langword="null"/> for none.</summary>
     IHandshakeHandler? FrameHandshakeHandler { get; }
-    /// <summary>When <see langword="true"/>, the <c>--config</c> and <c>--user</c> command-line arguments override where the network configuration file and the running user come from (see <see cref="IEngineBuilder{TFrame, TPacket, TPriority, TLevel, TAspect}.CommandLineOverrides"/>); when <see langword="false"/> (the default) they are ignored and only <c>Config.json</c> and <c>User.json</c> in the working directory are used.</summary>
+    /// <summary>When <see langword="true"/>, the <c>--config</c> and <c>--user</c> command-line arguments override where the network configuration file and the running user come from (see <see cref="IEngineBuilder{TFrame, TPacket, TPriority, TLevel, TAspect}.CommandLineOverrides"/>); when <see langword="false"/> (the default) they are ignored and only <c>Config.json</c> and <c>User.json</c> in the app data folder are used.</summary>
     bool CommandLineOverridesAllowed { get; }
 
     /// <summary>
@@ -477,14 +477,14 @@ internal class EngineController(EngineBuilder builder, ICurrentUserProvider curr
     public virtual int PacketWindow => builder.PacketWindowValue ?? 1;
 
     /// <summary>Gets the name of the folder under the application data root that holds the app's data: what the display handler states, otherwise the entry assembly's name. It is not the app name, so renaming the app never moves the data.</summary>
-    protected string DataFolderName => builder.DisplayHandlerInstance?.DataFolderName.OrNull() ?? Assembly.GetEntryAssembly()?.GetName().Name ?? "App";
+    protected string DataFolderName => builder.DataFolderName;
 
     /// <inheritdoc />
     public virtual string AppName => builder.DisplayHandlerInstance?.AppName.OrNull() ?? Assembly.GetEntryAssembly()?.GetName().Name ?? "App";
     /// <inheritdoc />
     public virtual string AppVersion => builder.DisplayHandlerInstance?.Version.OrNull() ?? (Assembly.GetEntryAssembly()?.GetName().Version is { } version ? $"{version.Major}.{version.Minor}.{version.Build}" : "1.0.0");
     /// <inheritdoc />
-    public virtual string AppDataRoot => Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData);
+    public virtual string AppDataRoot => builder.AppDataRoot;
     /// <inheritdoc />
     public virtual string AppDataPath => currentUserProvider.UserName is { Length: > 0 } user ? Path.Combine(AppDataRoot, DataFolderName, user) : Path.Combine(AppDataRoot, DataFolderName);
     /// <inheritdoc />
@@ -634,6 +634,8 @@ internal class EngineController(EngineBuilder builder, ICurrentUserProvider curr
         {
             "Inbox" => display.InboxLabel,
             "Outbox" => display.OutboxLabel,
+            "Alert Inbox" => display.AlertInboxLabel,
+            "Alert Outbox" => display.AlertOutboxLabel,
             "Drafts" => display.DraftsLabel,
             "Draft" => display.DraftLabel,
             "Notes" => display.NotesLabel,
@@ -948,7 +950,8 @@ internal class EngineController(EngineBuilder builder, ICurrentUserProvider curr
 /// <summary>Extension members for <see cref="IEngineController"/>.</summary>
 internal static class EngineControllerExtensions
 {
-    private static readonly Regex conceptPattern = new(@"\b(Message Aspects|Message Aspect|Message Levels|Message Level|Priorities|Priority|Alerts|Alert|Users|User|Tags|Tag|Inbox|Outbox|Drafts|Draft|Notes|Note|Activity|Messages|Message)\b", RegexOptions.IgnoreCase | RegexOptions.Compiled);
+    private static readonly Regex alertFolderPattern = new(@"^Alert (Inbox|Outbox)$", RegexOptions.IgnoreCase | RegexOptions.Compiled);
+    private static readonly Regex conceptPattern = new(@"\b(Alert Inbox|Alert Outbox|Message Aspects|Message Aspect|Message Levels|Message Level|Priorities|Priority|Alerts|Alert|Users|User|Tags|Tag|Inbox|Outbox|Drafts|Draft|Notes|Note|Activity|Messages|Message)\b", RegexOptions.IgnoreCase | RegexOptions.Compiled);
 
     extension(IEngineController engineController)
     {
@@ -977,7 +980,7 @@ internal static class EngineControllerExtensions
                 ["Tags"] = engineController.TagPluralLabel,
                 ["Tag"] = engineController.TagLabel
             };
-            foreach (string concept in new[] { "Inbox", "Outbox", "Drafts", "Draft", "Notes", "Note", "Activity", "Messages", "Message" })
+            foreach (string concept in new[] { "Inbox", "Outbox", "Alert Inbox", "Alert Outbox", "Drafts", "Draft", "Notes", "Note", "Activity", "Messages", "Message" })
             {
                 replacements[concept] = engineController.Rename(concept);
             }
@@ -987,7 +990,7 @@ internal static class EngineControllerExtensions
                 string replacement = replacements[match.Value] is { Length: > 0 } named ? named : match.Value;
                 if (string.Equals(replacement, match.Value, StringComparison.OrdinalIgnoreCase))
                 {
-                    return match.Value;
+                    return alertFolderPattern.IsMatch(match.Value) ? string.Join(' ', match.Value.Split(' ').Select(engineController.Display)) : match.Value;
                 }
 
                 return match.Value.Length > 1 && match.Value == match.Value.ToUpperInvariant() ? replacement.ToUpperInvariant()

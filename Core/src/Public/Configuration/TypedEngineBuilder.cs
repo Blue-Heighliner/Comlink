@@ -102,8 +102,8 @@ public interface IEngineBuilder<TFrame, TPacket, TPriority, TLevel, TAspect> whe
     /// <summary>
     /// Sets whether command-line arguments may override where the network configuration file (the file that describes every user
     /// of the network) and the running user come from: <c>--config</c> names the file to read instead of <c>Config.json</c> in the
-    /// current working directory, and <c>--user</c> names the user the process runs as, which is then checked like an installed user, and <c>--log</c> names log categories to turn on beyond the defaults (a comma separated list). The file
-    /// in the working directory is always read; only the arguments are ignored when this is disallowed.
+    /// app's folder under the application data root, and <c>--user</c> names the user the process runs as, which is then checked like an installed user, and <c>--log</c> names log categories to turn on beyond the defaults (a comma separated list). The file
+    /// in the app data folder is always read; only the arguments are ignored when this is disallowed.
     /// </summary>
     /// <param name="allowed"><see langword="true"/> to honor <c>--config</c>, <c>--user</c> and <c>--log</c>, <see langword="false"/> to ignore them. Disallowed unless this is called.</param>
     IEngineBuilder<TFrame, TPacket, TPriority, TLevel, TAspect> CommandLineOverrides(bool allowed);

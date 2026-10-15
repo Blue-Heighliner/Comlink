@@ -40,6 +40,7 @@ internal sealed class EngineHost : IHostedService
     private readonly string displayName;
     private CancellationTokenSource? cts;
     private int networkingStarted;
+    private int stopped;
 
     /// <inheritdoc />
     public async Task StartAsync(CancellationToken cancellationToken)
@@ -111,6 +112,11 @@ internal sealed class EngineHost : IHostedService
     /// <inheritdoc />
     public Task StopAsync(CancellationToken cancellationToken)
     {
+        if (Interlocked.Exchange(ref stopped, 1) != 0)
+        {
+            return Task.CompletedTask;
+        }
+
         logger.Record(LogEvents.AppExited, "{AppName} exited", displayName);
         userService.Installed -= StartNetworking;
         userService.Changed -= RestartNetworking;

@@ -111,6 +111,8 @@ internal partial class TitleBar : UserControl
     public TitleBar()
     {
         InitializeComponent();
+        MinimizeButton.Content = CreateIcon(MinimizeButton, ("M3,8.5 H13", false));
+        ApplyKioskMode();
     }
 
     /// <summary>Gets or sets the user name displayed in the title bar.</summary>
@@ -498,16 +500,7 @@ internal partial class TitleBar : UserControl
     private void ApplyMaximizeSymbol(Window window)
     {
         bool isMaximized = window.WindowState is WindowState.Maximized;
-        Avalonia.Controls.Shapes.Path restore = new()
-        {
-            Data = Geometry.Parse("M3,1 H10 V8 H8 M1,3 H8 V10 H1 Z"),
-            StrokeThickness = 1.2,
-            Width = 11,
-            Height = 11,
-            Stretch = Stretch.None
-        };
-        restore.Bind(Avalonia.Controls.Shapes.Shape.StrokeProperty, MaximizeButton.GetObservable(TemplatedControl.ForegroundProperty));
-        MaximizeButton.Content = isMaximized ? restore : "\u25A1";
+        MaximizeButton.Content = CreateIcon(MaximizeButton, (isMaximized ? "M5.5,3.5 H12.5 V10.5 H10.5 M3.5,5.5 H10.5 V12.5 H3.5 Z" : "M3.5,3.5 H12.5 V12.5 H3.5 Z", false));
         ToolTip.SetTip(MaximizeButton, isMaximized ? "Restore" : "Maximize");
     }
 
@@ -526,8 +519,33 @@ internal partial class TitleBar : UserControl
         }
         if (close is not null)
         {
-            close.Content = IsKioskMode ? "↺" : "✕";
+            close.Content = IsKioskMode
+                ? CreateIcon(close, ("M12.7,9.7 A5,5 0 1 1 11.2,4.2", false), ("M9.8,5.9 L13.4,6 L12.6,2.5 Z", true))
+                : CreateIcon(close, ("M3.5,3.5 L12.5,12.5 M12.5,3.5 L3.5,12.5", false));
         }
+    }
+
+    private Viewbox CreateIcon(Button button, params (string Data, bool IsFilled)[] shapes)
+    {
+        Canvas canvas = new() { Width = 16, Height = 16 };
+        foreach ((string data, bool isFilled) in shapes)
+        {
+            Avalonia.Controls.Shapes.Path path = new()
+            {
+                Data = Geometry.Parse(data),
+                StrokeThickness = 1.5,
+                StrokeLineCap = PenLineCap.Round,
+                StrokeJoin = PenLineJoin.Round
+            };
+            path.Bind(Avalonia.Controls.Shapes.Shape.StrokeProperty, button.GetObservable(TemplatedControl.ForegroundProperty));
+            if (isFilled)
+            {
+                path.Bind(Avalonia.Controls.Shapes.Shape.FillProperty, button.GetObservable(TemplatedControl.ForegroundProperty));
+            }
+            canvas.Children.Add(path);
+        }
+
+        return new Viewbox { Width = 22, Height = 22, Child = canvas };
     }
 
     private void OnDragAreaPressed(object? sender, PointerPressedEventArgs e)

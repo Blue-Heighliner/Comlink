@@ -5,6 +5,7 @@ namespace BlueHeighliner.Comlink;
 internal partial class EngineApp : Application
 {
     private IHost? host;
+    private Task? shutdown;
 
     /// <inheritdoc />
     public override void Initialize()
@@ -33,6 +34,8 @@ internal partial class EngineApp : Application
             }
             catch { }
         };
+
+        Engine.AvaloniaLog.Attach(host.Services.GetRequiredService<ILoggerFactory>().CreateLogger(LogCategories.Avalonia), host.Services.GetRequiredService<ILogSettings>());
 
         IEngineController displayController = host.Services.GetRequiredService<IEngineController>();
         DisplayExtension.Source = text => displayController.Display(text);
@@ -68,7 +71,8 @@ internal partial class EngineApp : Application
             desktop.Exit += (_, _) =>
             {
                 exiting = true;
-                Task.Run(() => Shutdown(host)).Wait(TimeSpan.FromSeconds(10));
+                shutdown ??= Task.Run(() => Shutdown(host));
+                shutdown.Wait(TimeSpan.FromSeconds(10));
             };
         }
 

@@ -171,17 +171,14 @@
                 Spacing="0">
       <Button x:Name="MinimizeButton"
               Classes="winctrl"
-              Content="&#x2212;"
               ToolTip.Tip="Minimize"
               Click="OnMinimize" />
       <Button x:Name="MaximizeButton"
               Classes="winctrl"
-              Content="&#x25A1;"
               ToolTip.Tip="Maximize"
               Click="OnMaximize" />
       <Button x:Name="CloseButton"
               Classes="winctrl close"
-              Content="&#x2715;"
               ToolTip.Tip="Close"
               Click="OnClose" />
     </StackPanel>

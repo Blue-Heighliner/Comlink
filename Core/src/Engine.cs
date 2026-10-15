@@ -6,8 +6,10 @@ public static class Engine
 {
     /// <summary>What the host stated in its <see cref="IEngineConfiguration"/>.</summary>
     internal static EngineBuilder Builder { get; private set; } = new();
-    /// <summary>The network configuration loaded from the command-line arguments and working directory, when the host allows one.</summary>
+    /// <summary>The network configuration loaded from the command-line arguments and the app data folder, when the host allows one.</summary>
     internal static NetworkConfig Network { get; private set; } = new();
+    /// <summary>Records what Avalonia reports about itself once the engine's logging exists.</summary>
+    internal static AvaloniaLogSink AvaloniaLog { get; } = new();
     /// <summary>Registers the host's own services, applied to the running engine's container as well as the one its configuration is built in.</summary>
     internal static Action<IServiceCollection>? ConfigureServices { get; private set; }
 
@@ -31,7 +33,7 @@ public static class Engine
         Builder = EngineBuilder.Build<TConfiguration>(configureServices);
         await using (Builder)
         {
-            Network = NetworkConfig.Load(Builder.AreCommandLineOverridesAllowed ? args : []);
+            Network = NetworkConfig.Load(Builder.AreCommandLineOverridesAllowed ? args : [], Builder.AppDataFolder);
 
             if (Network.Find(Network.User)?.Headless == true)
             {
@@ -60,6 +62,6 @@ public static class Engine
             // where a popup's GPU surface gets stuck and stops repainting until the process restarts.
             .With(new X11PlatformOptions { OverlayPopups = true })
             .UseEngineStyles()
-            .LogToTrace()
+            .AfterSetup(_ => Logger.Sink = AvaloniaLog)
             .StartWithClassicDesktopLifetime(args);
 }
