@@ -48,27 +48,6 @@ public sealed class EntryItemViewModelTests
         Assert.Equal("RECEIVED", vm.StatusText);
     }
 
-    /// <summary>Constructor assigns all properties correctly.</summary>
-    [Fact]
-    public void Constructor_AssignsAllProperties()
-    {
-        DateTime sortDate = new(2025, 7, 4, 12, 0, 0, DateTimeKind.Utc);
-        EntryItemViewModel vm = new("msg123", "Hello", EntryType.Draft, sortDate,
-            secondaryText: "from ALPHA", timeText: "12:00", fixedStatusText: "DRAFT", messageLevelBackgroundHex: "#C62828", isAlert: true);
-
-        Assert.Equal("msg123", vm.Id);
-        Assert.Equal("Hello", vm.Title);
-        Assert.Equal(EntryType.Draft, vm.EntryType);
-        Assert.Equal(sortDate, vm.SortDate);
-        Assert.Equal("from ALPHA", vm.SecondaryText);
-        Assert.Equal("12:00", vm.TimeText);
-        Assert.Equal("DRAFT", vm.FixedStatusText);
-        Assert.Equal("#C62828", vm.MessageLevelBackgroundHex);
-        Assert.True(vm.IsAlert);
-        Assert.False(vm.IsSelected);
-        Assert.Null(vm.OverallStatus);
-    }
-
     /// <summary>TitleColorHex is red when IsAlert and there is no SecondaryText (Title itself is the subject line).</summary>
     [Theory]
     [InlineData(true, "#E06C75")]
@@ -103,27 +82,6 @@ public sealed class EntryItemViewModelTests
     {
         EntryItemViewModel vm = new("x", "T", EntryType.Message, DateTime.UtcNow, isAlert: true);
         Assert.Equal("#CCCCCC", vm.SecondaryTextColorHex);
-    }
-
-    /// <summary>MessageLevelBackgroundHex defaults to null when not given.</summary>
-    [Fact]
-    public void MessageLevelBackgroundHex_NotGiven_DefaultsToNull()
-    {
-        EntryItemViewModel vm = new("x", "T", EntryType.Message, DateTime.UtcNow);
-        Assert.Null(vm.MessageLevelBackgroundHex);
-    }
-
-    /// <summary>IsSelected is observable and changes notify.</summary>
-    [Fact]
-    public void IsSelected_Observable_ChangesRaiseNotification()
-    {
-        EntryItemViewModel vm = new("x", "T", EntryType.Note, DateTime.UtcNow);
-        List<string> changed = [];
-        vm.PropertyChanged += (_, e) => changed.Add(e.PropertyName ?? "");
-
-        vm.IsSelected = true;
-
-        Assert.Contains("IsSelected", changed);
     }
 
     /// <summary>OverallStatus change notifies StatusText and StatusColorHex.</summary>

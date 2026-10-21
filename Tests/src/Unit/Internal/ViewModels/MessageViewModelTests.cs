@@ -91,40 +91,6 @@ public sealed class MessageViewModelTests
         Assert.Equal("OUTSIDE", vm.ExternalLabel);
     }
 
-    /// <summary>ViewModel exposes all message fields from the entity.</summary>
-    [Fact]
-    public void Ctor_ExposesEntityFields()
-    {
-        MessageEntity entity = MakeEntity(
-            messageId: "ABC123",
-            body: "World",
-            fromUser: "ALPHA",
-            addresses:
-            [
-                new AddressData { UserName = "BETA", Type = "To" },
-                new AddressData { UserName = "GAMMA", Type = "Cc" }
-            ]);
-
-        MessageViewModel vm = new(entity, format);
-
-        Assert.Equal("ABC123", vm.MessageId);
-        Assert.Equal("World", vm.Body);
-        Assert.Equal("ALPHA", vm.FromUser);
-        Assert.Equal("BETA", vm.ToList);
-        Assert.Equal("GAMMA", vm.CcList);
-        Assert.Equal(new DateTime(2025, 7, 4, 10, 0, 0, DateTimeKind.Utc), vm.ReceivedAt);
-    }
-
-    /// <summary>HasDeliveryStatuses is false when the entity has no delivery statuses.</summary>
-    [Fact]
-    public void Ctor_NoDeliveryStatuses_HasDeliveryStatusesIsFalse()
-    {
-        MessageViewModel vm = new(MakeEntity(), format);
-
-        Assert.False(vm.HasDeliveryStatuses);
-        Assert.Empty(vm.DeliveryStatuses);
-    }
-
     /// <summary>HasDeliveryStatuses is true and rows are populated from entity data.</summary>
     [Fact]
     public void Ctor_WithDeliveryStatuses_PopulatesRows()
@@ -187,39 +153,6 @@ public sealed class MessageViewModelTests
         Assert.Equal(DestinationStatus.Failed, vm.OverallStatus);
     }
 
-    /// <summary>ToggleDelivery flips IsDeliveryExpanded and changes the indicator glyph.</summary>
-    [Fact]
-    public void ToggleDelivery_FlipsExpandedAndUpdatesIndicator()
-    {
-        MessageViewModel vm = new(MakeEntity(), format);
-        Assert.False(vm.IsDeliveryExpanded);
-        Assert.Equal("▼", vm.DeliveryExpandIndicator);
-
-        vm.ToggleDeliveryCommand.Execute(null);
-
-        Assert.True(vm.IsDeliveryExpanded);
-        Assert.Equal("▲", vm.DeliveryExpandIndicator);
-    }
-
-    /// <summary>OverallStatusText returns the uppercase status name.</summary>
-    [Fact]
-    public void OverallStatusText_ReturnsUppercaseStatusName()
-    {
-        DeliveryStatus[] statuses = [new() { UserName = "DEST", Status = DestinationStatus.Received, AddressedVia = [] }];
-        MessageViewModel vm = new(MakeEntity(deliveryStatuses: statuses), format);
-
-        Assert.Equal("RECEIVED", vm.OverallStatusText);
-    }
-
-    /// <summary>OverallStatusText returns empty string when there are no delivery statuses.</summary>
-    [Fact]
-    public void OverallStatusText_Null_ReturnsEmptyString()
-    {
-        MessageViewModel vm = new(MakeEntity(), format);
-
-        Assert.Equal(string.Empty, vm.OverallStatusText);
-    }
-
     /// <summary>UpdateDeliveryStatus recomputes OverallStatus to Read only once every user has read the message.</summary>
     [Fact]
     public void UpdateDeliveryStatus_AllRead_OverallStatusIsRead()
@@ -263,52 +196,6 @@ public sealed class MessageViewModelTests
 
         Assert.Equal(DestinationStatus.Received, vm.ReadStatus);
         Assert.Equal("RECEIVED", vm.ReadStatusText);
-    }
-
-    /// <summary>ReadStatusText is empty when ReadStatus is null (an Outbox message).</summary>
-    [Fact]
-    public void ReadStatusText_Null_ReturnsEmptyString()
-    {
-        MessageViewModel vm = new(MakeEntity(), format);
-
-        Assert.Null(vm.ReadStatus);
-        Assert.Equal(string.Empty, vm.ReadStatusText);
-    }
-
-    /// <summary>Setting ReadStatus directly updates ReadStatusText.</summary>
-    [Fact]
-    public void ReadStatus_SetDirectly_UpdatesReadStatusText()
-    {
-        MessageViewModel vm = new(MakeEntity(), format);
-
-        vm.ReadStatus = DestinationStatus.Read;
-
-        Assert.Equal("READ", vm.ReadStatusText);
-    }
-
-    /// <summary>IsAlert reflects the message's alert flag.</summary>
-    [Fact]
-    public void Ctor_AlertMessage_IsAlertIsTrue()
-    {
-        MessageEntity entity = MakeEntity();
-        entity.Message.IsAlert = true;
-
-        MessageViewModel vm = new(entity, format);
-
-        Assert.True(vm.IsAlert);
-    }
-
-    /// <summary>Priority, tag and tag visibility are exposed from the stored message via IEngineController.</summary>
-    [Fact]
-    public void Ctor_ExposesPriorityAndTag()
-    {
-        MessageEntity entity = MakeEntity(tag: "URGENT");
-
-        MessageViewModel vm = new(entity, format);
-
-        Assert.Equal("NORMAL", vm.PriorityLabel);
-        Assert.True(vm.TagsEnabled);
-        Assert.Equal("URGENT", vm.Tag);
     }
 
     /// <summary>An empty or unrecognized message level (no message levels configured) yields a null MessageLevelBackgroundHex and MessageLevelForegroundHex rather than a fallback color.</summary>

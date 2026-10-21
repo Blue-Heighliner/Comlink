@@ -14,9 +14,11 @@ namespace BlueHeighliner.Comlink;
 internal interface IPrintDriver
 {
     /// <summary>Returns the names of every printer currently available on this computer.</summary>
-    IReadOnlyList<string> GetAvailablePrinters();
+    /// <param name="cancellation">Cancellation token.</param>
+    Task<IReadOnlyList<string>> GetAvailablePrinters(CancellationToken cancellation = default);
     /// <summary>Returns the name of this computer's default printer, or <see langword="null"/> if none is configured.</summary>
-    string? GetDefaultPrinter();
+    /// <param name="cancellation">Cancellation token.</param>
+    Task<string?> GetDefaultPrinter(CancellationToken cancellation = default);
     /// <summary>
     /// Prints a single line to the named printer. The returned task completes once the printer confirms the
     /// line has finished printing — the print queue will not print the next line (or check for a
@@ -46,9 +48,9 @@ internal interface IPrintDriver
 internal sealed class PrintDriver : IPrintDriver
 {
     /// <inheritdoc />
-    public IReadOnlyList<string> GetAvailablePrinters() => PrintOperations.GetAvailablePrinters();
+    public Task<IReadOnlyList<string>> GetAvailablePrinters(CancellationToken cancellation = default) => PrintOperations.GetAvailablePrinters(cancellation);
     /// <inheritdoc />
-    public string? GetDefaultPrinter() => PrintOperations.GetDefaultPrinter();
+    public Task<string?> GetDefaultPrinter(CancellationToken cancellation = default) => PrintOperations.GetDefaultPrinter(cancellation);
     /// <inheritdoc />
     public Task PrintLine(string printerName, string line, CancellationToken cancellation = default)
         => PrintOperations.PrintRaw(printerName, line + "\r\n", cancellation);
@@ -68,28 +70,28 @@ file static class PrintOperations
     private static readonly TimeSpan pollInterval = TimeSpan.FromMilliseconds(150);
     private static readonly TimeSpan maxWait = TimeSpan.FromSeconds(30);
 
-    public static IReadOnlyList<string> GetAvailablePrinters()
+    public static async Task<IReadOnlyList<string>> GetAvailablePrinters(CancellationToken cancellation)
     {
         if (OperatingSystem.IsWindows())
         {
-            return GetWindowsPrinters();
+            return await GetWindowsPrinters(cancellation);
         }
         if (OperatingSystem.IsLinux())
         {
-            return GetLinuxPrinters();
+            return await GetLinuxPrinters(cancellation);
         }
         return [];
     }
 
-    public static string? GetDefaultPrinter()
+    public static async Task<string?> GetDefaultPrinter(CancellationToken cancellation)
     {
         if (OperatingSystem.IsWindows())
         {
-            return GetWindowsDefaultPrinter();
+            return await GetWindowsDefaultPrinter(cancellation);
         }
         if (OperatingSystem.IsLinux())
         {
-            return GetLinuxDefaultPrinter();
+            return await GetLinuxDefaultPrinter(cancellation);
         }
         return null;
     }
@@ -107,9 +109,9 @@ file static class PrintOperations
         return Task.CompletedTask;
     }
 
-    private static IReadOnlyList<string> GetWindowsPrinters()
+    private static async Task<IReadOnlyList<string>> GetWindowsPrinters(CancellationToken cancellation)
     {
-        string? output = RunPowerShell("Get-CimInstance -ClassName Win32_Printer | Select-Object -ExpandProperty Name");
+        string? output = await RunPowerShell("Get-CimInstance -ClassName Win32_Printer | Select-Object -ExpandProperty Name", cancellation);
         if (output is null)
         {
             return [];
@@ -117,10 +119,10 @@ file static class PrintOperations
         return output.Split('\n', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries).ToList();
     }
 
-    private static string? GetWindowsDefaultPrinter()
+    private static async Task<string?> GetWindowsDefaultPrinter(CancellationToken cancellation)
     {
-        string? output = RunPowerShell(
-            "Get-CimInstance -ClassName Win32_Printer | Where-Object { $_.Default } | Select-Object -First 1 -ExpandProperty Name");
+        string? output = await RunPowerShell(
+            "Get-CimInstance -ClassName Win32_Printer | Where-Object { $_.Default } | Select-Object -First 1 -ExpandProperty Name", cancellation);
         if (output is null)
         {
             return null;
@@ -129,22 +131,35 @@ file static class PrintOperations
         return string.IsNullOrEmpty(name) ? null : name;
     }
 
-    private static string? ReadWithTimeout(Process process)
+    private static async Task<string?> ReadWithTimeout(Process process, CancellationToken cancellation)
     {
-        Task<string> stdout = process.StandardOutput.ReadToEndAsync();
-        Task<string> stderr = process.StandardError.ReadToEndAsync();
-        if (!process.WaitForExit(TimeSpan.FromSeconds(15)))
+        using CancellationTokenSource timeout = CancellationTokenSource.CreateLinkedTokenSource(cancellation);
+        timeout.CancelAfter(TimeSpan.FromSeconds(15));
+        Task<string> stdout = process.StandardOutput.ReadToEndAsync(timeout.Token);
+        Task<string> stderr = process.StandardError.ReadToEndAsync(timeout.Token);
+        try
+        {
+            await process.WaitForExitAsync(timeout.Token);
+            await Task.WhenAll(stdout, stderr);
+            return await stdout;
+        }
+        catch (OperationCanceledException)
         {
             // lpstat blocks for a long time when the CUPS daemon is unreachable, and this runs while the print manager is being constructed.
-            process.Kill(entireProcessTree: true);
+            try
+            {
+                process.Kill(entireProcessTree: true);
+            }
+            catch (InvalidOperationException)
+            {
+            }
+
+            cancellation.ThrowIfCancellationRequested();
             return null;
         }
-
-        Task.WaitAll(stdout, stderr);
-        return stdout.Result;
     }
 
-    private static string? RunPowerShell(string command)
+    private static async Task<string?> RunPowerShell(string command, CancellationToken cancellation)
     {
         try
         {
@@ -163,9 +178,9 @@ file static class PrintOperations
             process.Start();
             // Drain (rather than inherit) stderr too, so a tool's own diagnostic chatter never leaks to
             // the app's console — this is a best-effort discovery call, so it's discarded, not logged.
-            return ReadWithTimeout(process);
+            return await ReadWithTimeout(process, cancellation);
         }
-        catch
+        catch (Exception ex) when (ex is not OperationCanceledException)
         {
             return null;
         }
@@ -344,9 +359,9 @@ file static class PrintOperations
     [DllImport("winspool.drv", EntryPoint = "GetJobW", SetLastError = true, CharSet = CharSet.Unicode)]
     private static extern bool GetJob(nint hPrinter, int jobId, int level, nint pJob, int cbBuf, out int pcbNeeded);
 
-    private static IReadOnlyList<string> GetLinuxPrinters()
+    private static async Task<IReadOnlyList<string>> GetLinuxPrinters(CancellationToken cancellation)
     {
-        string? output = RunCommand("lpstat", "-p");
+        string? output = await RunCommand(cancellation, "lpstat", "-p");
         if (output is null)
         {
             return [];
@@ -368,9 +383,9 @@ file static class PrintOperations
         return printers;
     }
 
-    private static string? GetLinuxDefaultPrinter()
+    private static async Task<string?> GetLinuxDefaultPrinter(CancellationToken cancellation)
     {
-        string? output = RunCommand("lpstat", "-d");
+        string? output = await RunCommand(cancellation, "lpstat", "-d");
         if (output is null)
         {
             return null;
@@ -406,7 +421,7 @@ file static class PrintOperations
                 // not-yet-completed jobs and check whether our specific job is still among them. Each line
                 // starts with the job ID as its own whitespace-delimited token (e.g. "PRINTER-12  user  ...");
                 // comparing only a line prefix would let "PRINTER-2" wrongly match a line for "PRINTER-20".
-                string? pending = RunCommand("lpstat", "-W", "not-completed", "-o", printerName);
+                string? pending = await RunCommand(cancellation, "lpstat", "-W", "not-completed", "-o", printerName);
                 bool stillPending = pending is not null &&
                     pending.Split('\n').Any(line => line.Split(' ', StringSplitOptions.RemoveEmptyEntries) is [var firstToken, ..] && firstToken == jobId);
                 if (!stillPending)
@@ -468,7 +483,7 @@ file static class PrintOperations
         return spaceIndex < 0 ? rest.Trim() : rest[..spaceIndex];
     }
 
-    private static string? RunCommand(string fileName, params string[] arguments)
+    private static async Task<string?> RunCommand(CancellationToken cancellation, string fileName, params string[] arguments)
     {
         try
         {
@@ -491,9 +506,9 @@ file static class PrintOperations
             // Drain (rather than inherit) stderr too, so a tool's own diagnostic chatter — e.g. lpstat's
             // "No destinations added." when no printer is configured — never leaks to the app's console;
             // this is a best-effort discovery/status call, so it's discarded, not logged.
-            return ReadWithTimeout(process);
+            return await ReadWithTimeout(process, cancellation);
         }
-        catch
+        catch (Exception ex) when (ex is not OperationCanceledException)
         {
             return null;
         }

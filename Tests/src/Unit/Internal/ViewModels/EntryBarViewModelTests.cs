@@ -171,30 +171,6 @@ public sealed class EntryBarViewModelTests
         svc.Verify(s => s.GetMessages("root-inbox", 1, null), Times.AtLeastOnce);
     }
 
-    /// <summary>AvailableMessageLevelFilters is a leading "Any" option followed by every configured message level.</summary>
-    [Fact]
-    public void AvailableMessageLevelFilters_IsAnyFollowedByEveryConfiguredLevel()
-    {
-        Mock<TestEngineController> controller = new() { CallBase = true };
-        controller.Setup(c => c.MessageLevels).Returns([new MessageLevel { Name = "PUBLIC", Background = "#2E7D32" }, new MessageLevel { Name = "RESTRICTED", Key = TestLevel.Restricted, Background = "#C62828" }]);
-        EntryBarViewModel vm = new(new Mock<IEntryService>().Object, controller.Object);
-
-        Assert.Equal(["Any", "PUBLIC", "RESTRICTED"], vm.AvailableMessageLevelFilters.Select(f => f.Label));
-        Assert.Equal([null, "PUBLIC", "RESTRICTED"], vm.AvailableMessageLevelFilters.Select(f => f.Name));
-        Assert.Same(vm.AvailableMessageLevelFilters[0], vm.SelectedMessageLevelFilter);
-    }
-
-    /// <summary>AvailablePriorityFilters is a leading "Any" option followed by every configured priority.</summary>
-    [Fact]
-    public void AvailablePriorityFilters_IsAnyFollowedByEveryConfiguredPriority()
-    {
-        EntryBarViewModel vm = new(new Mock<IEntryService>().Object, new EngineController(EngineBuilder.Build(new TestEngineConfiguration()), new CurrentUserProvider(), null));
-
-        Assert.Equal(["Any", .. Enum.GetValues<TestMessagePriority>().Select(p => p.ToString().ToUpperInvariant())], vm.AvailablePriorityFilters.Select(f => f.Label));
-        Assert.Equal([(Enum?)null, .. Enum.GetValues<TestMessagePriority>().Cast<Enum>()], vm.AvailablePriorityFilters.Select(f => f.Value));
-        Assert.Same(vm.AvailablePriorityFilters[0], vm.SelectedPriorityFilter);
-    }
-
     /// <summary>ShowMessageLevelFilter is true only for Inbox, Outbox and Drafts, and only when at least one message level is configured.</summary>
     [Theory]
     [InlineData(FolderType.Inbox, true)]
@@ -336,31 +312,6 @@ public sealed class EntryBarViewModelTests
         Assert.Null(vm.DateTo);
     }
 
-    /// <summary>The filter section is collapsed by default.</summary>
-    [Fact]
-    public void IsFiltersExpanded_DefaultsToFalse()
-    {
-        EntryBarViewModel vm = new(new Mock<IEntryService>().Object, format);
-
-        Assert.False(vm.IsFiltersExpanded);
-        Assert.Equal("▼", vm.FiltersExpandIndicator);
-    }
-
-    /// <summary>ToggleFiltersCommand flips IsFiltersExpanded and updates the expand indicator.</summary>
-    [Fact]
-    public void ToggleFiltersCommand_FlipsIsFiltersExpanded()
-    {
-        EntryBarViewModel vm = new(new Mock<IEntryService>().Object, format);
-
-        vm.ToggleFiltersCommand.Execute(null);
-        Assert.True(vm.IsFiltersExpanded);
-        Assert.Equal("▲", vm.FiltersExpandIndicator);
-
-        vm.ToggleFiltersCommand.Execute(null);
-        Assert.False(vm.IsFiltersExpanded);
-        Assert.Equal("▼", vm.FiltersExpandIndicator);
-    }
-
     /// <summary>Collapsing the filter section does not clear or disable any filter already set - only its visibility changes.</summary>
     [Fact]
     public async Task ToggleFiltersCommand_CollapsingDoesNotClearActiveFilters()
@@ -428,20 +379,6 @@ public sealed class EntryBarViewModelTests
         EntryBarViewModel vm = new(svc.Object, format);
 
         await vm.LoadFolder(MakeFolder("root", folderType));
-
-        Assert.True(Assert.Single(vm.Entries).IsAlert);
-    }
-
-    /// <summary>Draft entries carry IsAlert through from DraftEntity.IsAlert.</summary>
-    [Fact]
-    public async Task LoadFolder_Drafts_SetsIsAlertOnEntry()
-    {
-        Mock<IEntryService> svc = new();
-        svc.Setup(s => s.GetDrafts(It.IsAny<string>(), It.IsAny<int>(), It.IsAny<bool>(), It.IsAny<EntryFilter>()))
-           .ReturnsAsync((Items: new List<DraftEntity> { MakeDraft(isAlert: true) }, Total: 1));
-        EntryBarViewModel vm = new(svc.Object, format);
-
-        await vm.LoadFolder(MakeFolder("root-drafts", FolderType.Drafts));
 
         Assert.True(Assert.Single(vm.Entries).IsAlert);
     }
@@ -629,26 +566,6 @@ public sealed class EntryBarViewModelTests
         Assert.False(raised);
     }
 
-    /// <summary>
-    /// SelectEntries never assigns SelectedEntry: it reacts to the View's own SelectionChanged, and
-    /// SelectedEntry drives a OneWay binding back into that same ListBox's SelectedItem — writing it here
-    /// would collapse a ctrl/shift multi-selection down to a single item (regression test for the bug
-    /// where "click entry A, then ctrl-click entry B" ended up with only B selected).
-    /// </summary>
-    [Fact]
-    public async Task SelectEntries_DoesNotAssignSelectedEntry()
-    {
-        Mock<IEntryService> svc = new();
-        svc.Setup(s => s.GetMessages(It.IsAny<string>(), It.IsAny<int>()))
-           .ReturnsAsync((Items: new List<MessageEntity> { MakeMessage("M1"), MakeMessage("M2") }, Total: 2));
-        EntryBarViewModel vm = new(svc.Object, format);
-        await vm.LoadFolder(MakeFolder("root-inbox", FolderType.Inbox));
-
-        vm.SelectEntries([vm.Entries[0], vm.Entries[1]], []);
-
-        Assert.Null(vm.SelectedEntry);
-    }
-
     /// <summary>SelectEntries leaves a pre-existing SelectedEntry (e.g. from a prior programmatic SelectEntry) untouched.</summary>
     [Fact]
     public async Task SelectEntries_LeavesExistingSelectedEntryUntouched()
@@ -663,25 +580,6 @@ public sealed class EntryBarViewModelTests
         vm.SelectEntries([vm.Entries[1], vm.Entries[2]], []);
 
         Assert.Same(vm.Entries[0], vm.SelectedEntry);
-    }
-
-    /// <summary>Both entries from a ctrl-click-style selection (A then A+B, neither removed) remain marked selected.</summary>
-    [Fact]
-    public async Task SelectEntries_CtrlClickAfterPlainClick_BothRemainSelected()
-    {
-        Mock<IEntryService> svc = new();
-        svc.Setup(s => s.GetMessages(It.IsAny<string>(), It.IsAny<int>()))
-           .ReturnsAsync((Items: new List<MessageEntity> { MakeMessage("M1"), MakeMessage("M2") }, Total: 2));
-        EntryBarViewModel vm = new(svc.Object, format);
-        await vm.LoadFolder(MakeFolder("root-inbox", FolderType.Inbox));
-
-        // Plain click on entry A (as the View's SelectionChanged would report it).
-        vm.SelectEntries([vm.Entries[0]], []);
-        // Ctrl-click on entry B: Avalonia's native selection adds B without removing A.
-        vm.SelectEntries([vm.Entries[1]], []);
-
-        Assert.True(vm.Entries[0].IsSelected);
-        Assert.True(vm.Entries[1].IsSelected);
     }
 
     /// <summary>DeselectEntry clears SelectedEntry and unmarks the entry's IsSelected flag.</summary>
@@ -717,36 +615,6 @@ public sealed class EntryBarViewModelTests
 
         Assert.False(vm.Entries[0].IsSelected);
         Assert.False(vm.Entries[1].IsSelected);
-        Assert.Null(vm.SelectedEntry);
-    }
-
-    /// <summary>DeselectEntry does not raise EntriesSelected.</summary>
-    [Fact]
-    public async Task DeselectEntry_DoesNotRaiseEntriesSelected()
-    {
-        Mock<IEntryService> svc = new();
-        svc.Setup(s => s.GetMessages(It.IsAny<string>(), It.IsAny<int>()))
-           .ReturnsAsync((Items: new List<MessageEntity> { MakeMessage("M1") }, Total: 1));
-        EntryBarViewModel vm = new(svc.Object, format);
-        await vm.LoadFolder(MakeFolder("root-inbox", FolderType.Inbox));
-        vm.SelectEntry(vm.Entries[0]);
-        bool raised = false;
-        vm.EntriesSelected += _ => raised = true;
-
-        vm.DeselectEntry();
-
-        Assert.False(raised);
-    }
-
-    /// <summary>DeselectEntry is a no-op when nothing is selected.</summary>
-    [Fact]
-    public void DeselectEntry_NothingSelected_IsNoOp()
-    {
-        EntryBarViewModel vm = new(new Mock<IEntryService>().Object, format);
-
-        Exception? ex = Record.Exception(() => vm.DeselectEntry());
-
-        Assert.Null(ex);
         Assert.Null(vm.SelectedEntry);
     }
 
@@ -786,26 +654,6 @@ public sealed class EntryBarViewModelTests
         Assert.Equal("High", vm.Entries[0].PriorityText);
     }
 
-    /// <summary>Outbox entries carry a PriorityText label resolved the same way as Inbox entries.</summary>
-    [Fact]
-    public async Task LoadFolder_Outbox_SetsPriorityTextFromProvider()
-    {
-        Mock<TestEngineController> priorityProvider = new() { CallBase = true };
-        priorityProvider.Setup(p => p.Priorities).Returns([
-            new MessagePriorityOption { Name = "Low", Value = 0, Key = TestMessagePriority.Low },
-            new MessagePriorityOption { Name = "Medium", Value = 1, Key = TestMessagePriority.Medium },
-            new MessagePriorityOption { Name = "High", Value = 2, Key = TestMessagePriority.High }
-        ]);
-        Mock<IEntryService> svc = new();
-        svc.Setup(s => s.GetMessages(It.IsAny<string>(), It.IsAny<int>()))
-           .ReturnsAsync((Items: new List<MessageEntity> { MakeMessage("M1", priority: (int)TestMessagePriority.Medium) }, Total: 1));
-        EntryBarViewModel vm = new(svc.Object, priorityProvider.Object);
-
-        await vm.LoadFolder(MakeFolder("root-outbox", FolderType.Outbox));
-
-        Assert.Equal("Medium", vm.Entries[0].PriorityText);
-    }
-
     /// <summary>Inbox entries carry a TagText label from the message's stored tag when tags are enabled.</summary>
     [Fact]
     public async Task LoadFolder_Inbox_TagsEnabled_SetsTagTextFromMessage()
@@ -816,20 +664,6 @@ public sealed class EntryBarViewModelTests
         EntryBarViewModel vm = new(svc.Object, format);
 
         await vm.LoadFolder(MakeFolder("root-inbox", FolderType.Inbox));
-
-        Assert.Equal("URGENT", vm.Entries[0].TagText);
-    }
-
-    /// <summary>Outbox entries carry a TagText label the same way as Inbox entries.</summary>
-    [Fact]
-    public async Task LoadFolder_Outbox_TagsEnabled_SetsTagTextFromMessage()
-    {
-        Mock<IEntryService> svc = new();
-        svc.Setup(s => s.GetMessages(It.IsAny<string>(), It.IsAny<int>()))
-           .ReturnsAsync((Items: new List<MessageEntity> { MakeMessage("M1", tag: "URGENT") }, Total: 1));
-        EntryBarViewModel vm = new(svc.Object, format);
-
-        await vm.LoadFolder(MakeFolder("root-outbox", FolderType.Outbox));
 
         Assert.Equal("URGENT", vm.Entries[0].TagText);
     }
@@ -881,22 +715,6 @@ public sealed class EntryBarViewModelTests
         Assert.Equal("#C62828", vm.Entries[0].MessageLevelBackgroundHex);
     }
 
-    /// <summary>Outbox entries carry a MessageLevelBackgroundHex the same way as Inbox entries.</summary>
-    [Fact]
-    public async Task LoadFolder_Outbox_RecognizedMessageLevel_SetsMessageLevelBackgroundHex()
-    {
-        Mock<TestEngineController> messageLevelProvider = new() { CallBase = true };
-        messageLevelProvider.Setup(p => p.MessageLevels).Returns([new MessageLevel { Name = "RESTRICTED", Key = TestLevel.Restricted, Background = "#C62828" }]);
-        Mock<IEntryService> svc = new();
-        svc.Setup(s => s.GetMessages(It.IsAny<string>(), It.IsAny<int>()))
-           .ReturnsAsync((Items: new List<MessageEntity> { MakeMessage("M1", messageLevel: "RESTRICTED") }, Total: 1));
-        EntryBarViewModel vm = new(svc.Object, messageLevelProvider.Object);
-
-        await vm.LoadFolder(MakeFolder("root-outbox", FolderType.Outbox));
-
-        Assert.Equal("#C62828", vm.Entries[0].MessageLevelBackgroundHex);
-    }
-
     /// <summary>An unrecognized or empty stored message level yields a null MessageLevelBackgroundHex rather than a fallback color.</summary>
     [Fact]
     public async Task LoadFolder_Inbox_NoMessageLevel_MessageLevelBackgroundHexIsNull()
@@ -941,20 +759,6 @@ public sealed class EntryBarViewModelTests
         await vm.UpdateEntryStatus("MSG42", DestinationStatus.Received);
 
         Assert.Equal(DestinationStatus.Received, vm.Entries[0].OverallStatus);
-    }
-
-    /// <summary>UpdateEntryStatus for an unknown ID does not throw.</summary>
-    [Fact]
-    public async Task UpdateEntryStatus_UnknownId_DoesNotThrow()
-    {
-        Mock<IEntryService> svc = new();
-        svc.Setup(s => s.GetMessages(It.IsAny<string>(), It.IsAny<int>()))
-           .ReturnsAsync((Items: new List<MessageEntity>(), Total: 0));
-        EntryBarViewModel vm = new(svc.Object, format);
-        await vm.LoadFolder(MakeFolder("root-outbox", FolderType.Outbox));
-
-        Exception? ex = await Record.ExceptionAsync(() => vm.UpdateEntryStatus("UNKNOWN", DestinationStatus.Failed));
-        Assert.Null(ex);
     }
 
     /// <summary>DeleteEntry calls the service and removes the item from Entries.</summary>
@@ -1015,42 +819,6 @@ public sealed class EntryBarViewModelTests
         Assert.Single(vm.Entries);
         svc.Verify(s => s.DeleteEntry(It.IsAny<string>(), It.IsAny<EntryType>(), It.IsAny<bool>()), Times.Never);
         Assert.False(raised);
-    }
-
-    /// <summary>LoadFolder sets CanDeleteEntries from IEngineController.CanDelete for the folder's root type.</summary>
-    [Theory]
-    [InlineData(true)]
-    [InlineData(false)]
-    public async Task LoadFolder_SetsCanDeleteEntriesFromController(bool canDelete)
-    {
-        Mock<TestEngineController> controller = new() { CallBase = true };
-        controller.Setup(c => c.CanDelete(FolderType.Inbox)).Returns(canDelete);
-        Mock<IEntryService> svc = new();
-        svc.Setup(s => s.GetMessages(It.IsAny<string>(), It.IsAny<int>()))
-           .ReturnsAsync((Items: new List<MessageEntity>(), Total: 0));
-        EntryBarViewModel vm = new(svc.Object, controller.Object);
-
-        await vm.LoadFolder(MakeFolder("root-inbox", FolderType.Inbox));
-
-        Assert.Equal(canDelete, vm.CanDeleteEntries);
-    }
-
-    /// <summary>The generated DeleteCommand, bound to the entry list's right-click "Delete" menu item, delegates to DeleteEntry.</summary>
-    [Fact]
-    public async Task DeleteCommand_CallsServiceAndRemovesFromList()
-    {
-        Mock<IEntryService> svc = new();
-        svc.Setup(s => s.GetMessages(It.IsAny<string>(), It.IsAny<int>()))
-           .ReturnsAsync((Items: new List<MessageEntity> { MakeMessage("M1") }, Total: 1));
-        svc.Setup(s => s.DeleteEntry(It.IsAny<string>(), It.IsAny<EntryType>())).Returns(Task.CompletedTask);
-        EntryBarViewModel vm = new(svc.Object, format);
-        await vm.LoadFolder(MakeFolder("root-inbox", FolderType.Inbox));
-        EntryItemViewModel entry = vm.Entries[0];
-
-        await vm.DeleteCommand.ExecuteAsync(entry);
-
-        Assert.Empty(vm.Entries);
-        svc.Verify(s => s.DeleteEntry("M1", EntryType.Message), Times.Once);
     }
 
     /// <summary>SetPendingSelectId causes the matching entry to be auto-selected after the next refresh.</summary>

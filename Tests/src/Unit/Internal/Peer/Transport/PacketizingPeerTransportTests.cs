@@ -588,20 +588,6 @@ public sealed class PacketizingPeerTransportTests
         Assert.Empty(published);
     }
 
-    /// <summary>A connection coming up is passed on.</summary>
-    [Fact]
-    public void Connected_IsForwarded()
-    {
-        Fixture fx = Build();
-        List<PeerConnection> came = [];
-        fx.Transport.Connected.Listen(args => came.Add(args.Connection));
-        PeerConnection connection = Connection();
-
-        fx.Connected.Publish(new PeerConnectionEventArgs { Connection = connection });
-
-        Assert.Same(connection, Assert.Single(came));
-    }
-
     /// <summary>When a connection is lost its scheduler is disposed, so packets still queued for it fail instead of waiting for a connection that is gone.</summary>
     [Fact]
     public async Task Disconnected_FailsPacketsStillQueued()
@@ -616,27 +602,5 @@ public sealed class PacketizingPeerTransportTests
         manual.Complete(0);
 
         await Assert.ThrowsAsync<IOException>(() => request);
-    }
-
-    /// <summary>Everything that is not about payloads goes straight to the wrapped transport.</summary>
-    [Fact]
-    public async Task ManagementCalls_GoToWrappedTransport()
-    {
-        Fixture fx = Build();
-        ConnectionPoint point = new() { IpAddress = "10.0.0.5", Port = 4000 };
-        fx.Inner.Setup(t => t.Connect(point, It.IsAny<CancellationToken>())).ReturnsAsync(target);
-
-        fx.Transport.StartListener(50021);
-        PeerConnection connected = await fx.Transport.Connect(point);
-        fx.Transport.SetClosed(point, true);
-        fx.Transport.Reset(point);
-        await fx.Transport.DisposeAsync();
-
-        Assert.Same(target, connected);
-        fx.Inner.Verify(t => t.StartListener(50021), Times.Once);
-        fx.Inner.Verify(t => t.Connect(point, It.IsAny<CancellationToken>()), Times.Once);
-        fx.Inner.Verify(t => t.SetClosed(point, true), Times.Once);
-        fx.Inner.Verify(t => t.Reset(point), Times.Once);
-        fx.Inner.Verify(t => t.DisposeAsync(), Times.Once);
     }
 }

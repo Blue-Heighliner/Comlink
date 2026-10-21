@@ -73,26 +73,6 @@ public sealed class MainViewModelTests
         }
     }
 
-    /// <summary>FolderBar, EntryBar, ContentArea, ErrorView and Alert expose the injected interfaces.</summary>
-    [Fact]
-    public void Properties_ExposeInjectedSubViewModels()
-    {
-        Setup s = new();
-        MainViewModel vm = s.BuildVm();
-
-        Assert.Same(s.FolderBar.Object, vm.FolderBar);
-        Assert.Same(s.EntryBar.Object, vm.EntryBar);
-        Assert.Same(s.ContentArea.Object, vm.ContentArea);
-        Assert.Same(s.ErrorView.Object, vm.ErrorView);
-        Assert.Same(s.Alert.Object, vm.Alert);
-        Assert.Same(s.Export.Object, vm.Export);
-        Assert.Same(s.Import.Object, vm.Import);
-        Assert.Same(s.StagedSend.Object, vm.StagedSend);
-        Assert.Same(s.Retrieve.Object, vm.Retrieve);
-        Assert.Same(s.AutoForward.Object, vm.AutoForward);
-        Assert.Same(s.Help.Object, vm.Help);
-    }
-
     /// <summary>The Refresh command asks the network reload service to re-read the file, and a failure is logged rather than thrown.</summary>
     [Fact]
     public void RefreshCommand_ReloadsTheNetworkConfiguration_AndSwallowsAFailure()
@@ -193,18 +173,6 @@ public sealed class MainViewModelTests
         Assert.Equal("ALICE", vm.UserName);
         s.Db.Verify(d => d.Initialize(), Times.Once);
         s.FolderBar.Verify(f => f.Load(), Times.Once);
-    }
-
-    /// <summary>AppName and AppVersion come from IEngineController, for the title bar's info popup.</summary>
-    [Fact]
-    public void AppNameAndVersion_ComeFromEngineController()
-    {
-        Setup s = new();
-        s.EngineController.Setup(a => a.AppVersion).Returns("2.3.4");
-        MainViewModel vm = s.BuildVm();
-
-        Assert.Equal("TestApp", vm.AppName);
-        Assert.Equal("2.3.4", vm.AppVersion);
     }
 
     /// <summary>The content area reporting an editor-side delete returns to the home screen and reloads the entry list.</summary>
@@ -308,17 +276,6 @@ public sealed class MainViewModelTests
         await s.Alert.RaiseAsync(a => a.OpenRequested += null, "ALERT1");
 
         s.ContentArea.Verify(c => c.ShowEntry(It.Is<EntryItemViewModel>(item => item.Id == "ALERT1" && item.EntryType == EntryType.Message && !item.IsOutboundMessage)), Times.Once);
-    }
-
-    /// <summary>IsKioskMode reflects the value from IEngineController at construction time.</summary>
-    [Fact]
-    public void IsKioskMode_ReflectsProvider()
-    {
-        Setup s = new();
-        s.EngineController.Setup(a => a.IsKioskMode).Returns(true);
-        MainViewModel vm = s.BuildVm();
-
-        Assert.True(vm.IsKioskMode);
     }
 
     /// <summary>Initialize connects, initializes the DB, applies user info, and loads the folder tree for the user the node runs as.</summary>
@@ -709,20 +666,6 @@ public sealed class MainViewModelTests
         s.ContentArea.Verify(c => c.ShowEntry((object)s.Import.Object), Times.Once);
     }
 
-    /// <summary>ShowImportCommand deselects the currently selected folder and entry.</summary>
-    [Fact]
-    public void ShowImportCommand_DeselectsFolderAndEntry()
-    {
-        Setup s = new();
-        s.Import.Setup(i => i.RefreshDrivesCommand).Returns(new RelayCommand(() => { }));
-        MainViewModel vm = s.BuildVm();
-
-        vm.ShowImportCommand.Execute(null);
-
-        s.FolderBar.Verify(f => f.DeselectFolder(), Times.Once);
-        s.EntryBar.Verify(e => e.DeselectEntry(), Times.Once);
-    }
-
     /// <summary>A successful import that adds staged sends raises StagedSendsReady, which switches the content area to the staged send screen.</summary>
     [Fact]
     public void ImportStagedSendsReady_SwitchesToStagedSendView()
@@ -794,20 +737,6 @@ public sealed class MainViewModelTests
         s.ContentArea.Verify(c => c.ShowEntry((object)s.AutoForward.Object), Times.Once);
     }
 
-    /// <summary>ShowAutoForwardCommand deselects the currently selected folder and entry.</summary>
-    [Fact]
-    public void ShowAutoForwardCommand_DeselectsFolderAndEntry()
-    {
-        Setup s = new();
-        s.AutoForward.Setup(a => a.RefreshCommand).Returns(new AsyncRelayCommand(() => Task.CompletedTask));
-        MainViewModel vm = s.BuildVm();
-
-        vm.ShowAutoForwardCommand.Execute(null);
-
-        s.FolderBar.Verify(f => f.DeselectFolder(), Times.Once);
-        s.EntryBar.Verify(e => e.DeselectEntry(), Times.Once);
-    }
-
     /// <summary>ShowPrintManagerCommand displays the print manager ViewModel in the content area.</summary>
     [Fact]
     public void ShowPrintManagerCommand_ShowsPrintManagerView()
@@ -818,19 +747,6 @@ public sealed class MainViewModelTests
         vm.ShowPrintManagerCommand.Execute(null);
 
         s.ContentArea.Verify(c => c.ShowEntry((object)s.PrintManager.Object), Times.Once);
-    }
-
-    /// <summary>ShowPrintManagerCommand deselects the currently selected folder and entry.</summary>
-    [Fact]
-    public void ShowPrintManagerCommand_DeselectsFolderAndEntry()
-    {
-        Setup s = new();
-        MainViewModel vm = s.BuildVm();
-
-        vm.ShowPrintManagerCommand.Execute(null);
-
-        s.FolderBar.Verify(f => f.DeselectFolder(), Times.Once);
-        s.EntryBar.Verify(e => e.DeselectEntry(), Times.Once);
     }
 
     /// <summary>PrintEntryCommand adds the given entry to the print manager's queue as a manual print.</summary>

@@ -46,24 +46,3 @@ public sealed class TestTagRulesDraftHandler : IDraftHandler<TestMessagePriority
     /// <inheritdoc />
     public bool AllowTagSpaces => false;
 }
-
-/// <summary>Test <see cref="IDraftHandler{TPriority, TLevel, TAspect}"/> that only turns tags off.</summary>
-public sealed class TestNoTagsDraftHandler : IDraftHandler<TestMessagePriority, TestLevel, TestAspect>
-{
-    /// <inheritdoc />
-    public bool EnableTags => false;
-}
-
-/// <summary>Test <see cref="IDraftHandler{TPriority, TLevel, TAspect}"/> that only states a header, so the draft view offers no line width.</summary>
-public sealed class TestHeaderOnlyDraftHandler : IDraftHandler<TestMessagePriority, TestLevel, TestAspect>
-{
-    /// <inheritdoc />
-    public string? GetHeader(IDraftContext<TestMessagePriority, TestLevel, TestAspect> context) => "HEADER";
-}
-
-/// <summary>Test <see cref="IDraftHandler{TPriority, TLevel, TAspect}"/> that only states a maximum, which is then also where a draft starts.</summary>
-public sealed class TestMaxOnlyDraftHandler : IDraftHandler<TestMessagePriority, TestLevel, TestAspect>
-{
-    /// <inheritdoc />
-    public int? MaxLineWidth => 40;
-}

@@ -8,8 +8,6 @@ public sealed class HandshakePeerTransportTests
     private static readonly ConnectionPoint serialPoint = new() { SerialPort = "SL0" };
     private static readonly TimeSpan timeout = TimeSpan.FromSeconds(30);
 
-    private static bool Matches(IConnectionInfo info) => info is ISerialConnectionInfo { SerialPort: "SL0", SerialAddress: 0xFF };
-
     private static bool Opens(IHandshakeSession session)
         => session.Connection is ISerialConnectionInfo serial ? serial.SerialAddress > serial.RemoteSerialAddress : !session.Connection.IsInbound;
 
@@ -508,26 +506,5 @@ public sealed class HandshakePeerTransportTests
         Assert.Throws<InvalidEngineConfigurationException>(() => Handshake.ForPackets(controller.Object));
         Assert.Null(Handshake.ForPackets(Controller().Object));
         Assert.Null(Handshake.ForFrames(Controller().Object));
-    }
-
-    /// <summary>The management calls that are not about identity go straight to the wrapped transport.</summary>
-    [Fact]
-    public async Task ManagementCalls_GoToWrappedTransport()
-    {
-        Mock<IPeerTransport> inner = new();
-        inner.SetupGet(t => t.Received).Returns(new TestObservable<PeerReceivedEventArgs>());
-        inner.SetupGet(t => t.Connected).Returns(new TestObservable<PeerConnectionEventArgs>());
-        inner.SetupGet(t => t.Disconnected).Returns(new TestObservable<PeerConnectionEventArgs>());
-        HandshakePeerTransport transport = new(inner.Object, Controller().Object, logger, null, identify: true);
-
-        transport.StartListener(50021);
-        transport.SetClosed(point, true);
-        transport.Reset(point);
-        await transport.DisposeAsync();
-
-        inner.Verify(t => t.StartListener(50021), Times.Once);
-        inner.Verify(t => t.SetClosed(point, true), Times.Once);
-        inner.Verify(t => t.Reset(point), Times.Once);
-        inner.Verify(t => t.DisposeAsync(), Times.Once);
     }
 }

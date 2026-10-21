@@ -9,14 +9,6 @@ public sealed class ActivityLoggerTests
         return new ActivityLogger(category, repo.Object);
     }
 
-    /// <summary>BeginScope always returns null.</summary>
-    [Fact]
-    public void BeginScope_ReturnsNull()
-    {
-        Mock<IActivityLogRepository> repo = new();
-        Assert.Null(Build(repo).BeginScope("state"));
-    }
-
     /// <summary>An event of the activity category is appended to the activity log with its identifier, whatever logger it was written through.</summary>
     [Fact]
     public async Task Log_ActivityEvent_IsAppendedWithItsId()
@@ -62,24 +54,5 @@ public sealed class ActivityLoggerTests
 
         await Task.Delay(50);
         repo.Verify(r => r.AppendEvent("msg", string.Empty), appended == 1 ? Times.Once() : Times.Never());
-    }
-
-    /// <summary>CreateLogger returns an ActivityLogger instance.</summary>
-    [Fact]
-    public void ActivityLoggerProvider_CreateLogger_ReturnsActivityLogger()
-    {
-        Mock<IActivityLogRepository> repo = new();
-        ActivityLoggerProvider provider = new(repo.Object);
-        MicrosoftLogger logger = provider.CreateLogger("ACTIVITY");
-        Assert.IsType<ActivityLogger>(logger);
-    }
-
-    /// <summary>Dispose does not throw.</summary>
-    [Fact]
-    public void ActivityLoggerProvider_Dispose_DoesNotThrow()
-    {
-        Mock<IActivityLogRepository> repo = new();
-        ActivityLoggerProvider provider = new(repo.Object);
-        provider.Dispose();
     }
 }

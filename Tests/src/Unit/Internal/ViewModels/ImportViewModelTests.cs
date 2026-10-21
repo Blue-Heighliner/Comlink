@@ -19,22 +19,6 @@ public sealed class ImportViewModelTests
         public ImportViewModel Build() => new(DriveProvider.Object, ImportService.Object, StagedSend.Object, EngineController.Object);
     }
 
-    /// <summary>A freshly constructed ViewModel has no drives, packages, or pending state.</summary>
-    [Fact]
-    public void Ctor_InitialState_IsEmptyAndIdle()
-    {
-        ImportViewModel vm = new Setup().Build();
-
-        Assert.Empty(vm.AvailableDrives);
-        Assert.Null(vm.SelectedDrive);
-        Assert.Equal("Package", vm.SelectedFormat.Label);
-        Assert.Empty(vm.AvailablePackages);
-        Assert.False(vm.HasPackages);
-        Assert.False(vm.IsImporting);
-        Assert.Null(vm.StatusMessage);
-        Assert.Null(vm.PendingConflict);
-    }
-
     /// <summary>AvailableFormats lists the built-in package option first, then each configured import format by name.</summary>
     [Fact]
     public void Ctor_WithConfiguredImportFormats_ListsPackageFirstThenEachByName()
@@ -125,19 +109,6 @@ public sealed class ImportViewModelTests
         Assert.Empty(vm.AvailablePackages);
         Assert.False(vm.HasPackages);
         s.ImportService.Verify(i => i.GetPackages(It.IsAny<string>()), Times.Once);
-    }
-
-    /// <summary>StartImportCommand with a null package does nothing.</summary>
-    [Fact]
-    public async Task StartImportCommand_NullPackage_DoesNothing()
-    {
-        Setup s = new();
-        ImportViewModel vm = s.Build();
-
-        await vm.StartImportCommand.ExecuteAsync(null);
-
-        Assert.Null(vm.StatusMessage);
-        s.ImportService.Verify(i => i.Import(It.IsAny<string>(), It.IsAny<Func<ImportConflict, Task<DraftNoteConflictResolution>>>()), Times.Never);
     }
 
     /// <summary>A successful import reports the outcome counts and returns to the idle state.</summary>

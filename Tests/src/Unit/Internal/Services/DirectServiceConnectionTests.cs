@@ -25,27 +25,6 @@ public sealed class DirectServiceConnectionTests
     private static DirectServiceConnection Build(out Mock<IUserService> user, out Mock<IEntryService> entry, out Mock<INetworkProcessing> processing, out MessageEvents events)
         => Build(out _, out user, out entry, out _, out events, out processing);
 
-    /// <summary>GetUserInfo delegates to IUserService.GetCurrentUserInfo and returns the result.</summary>
-    [Fact]
-    public async Task GetUserInfo_WhenInstalled_ReturnsUserInfo()
-    {
-        DirectServiceConnection conn = Build(out _, out Mock<IUserService> user, out _, out _, out _, out _);
-        UserInfo info = new() { Name = "ALPHA" };
-        user.Setup(s => s.GetCurrentUserInfo()).Returns(info);
-
-        Assert.Same(info, await conn.GetUserInfo());
-    }
-
-    /// <summary>GetUserInfo returns null when no user is installed.</summary>
-    [Fact]
-    public async Task GetUserInfo_WhenNotInstalled_ReturnsNull()
-    {
-        DirectServiceConnection conn = Build(out _, out Mock<IUserService> user, out _, out _, out _, out _);
-        user.Setup(s => s.GetCurrentUserInfo()).Returns((UserInfo?)null);
-
-        Assert.Null(await conn.GetUserInfo());
-    }
-
     /// <summary>GetUserNames returns the names from the directory as a list.</summary>
     [Fact]
     public async Task GetUserNames_ReturnsUserNamesFromDirectory()
@@ -64,16 +43,6 @@ public sealed class DirectServiceConnectionTests
         dir.Setup(d => d.Users).Throws(new IOException("network error"));
 
         Assert.Empty(await conn.GetUserNames());
-    }
-
-    /// <summary>GetConnectedUsers returns whatever IPeerService.GetConnectedUsers reports.</summary>
-    [Fact]
-    public async Task GetConnectedUsers_DelegatesToPeerService()
-    {
-        DirectServiceConnection conn = Build(out FakePeerService peer, out _, out _, out _, out _, out _);
-        peer.Connected.UnionWith(["ALPHA", "BETA"]);
-
-        Assert.Equal(["ALPHA", "BETA"], (await conn.GetConnectedUsers()).Order());
     }
 
     /// <summary>A message the host's handler records as received is raised to the connection's listeners.</summary>

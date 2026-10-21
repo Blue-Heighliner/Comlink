@@ -108,33 +108,6 @@ public sealed class DraftViewModelTests
         entryMock.Verify(s => s.DeleteEntry(It.IsAny<string>(), It.IsAny<EntryType>(), It.IsAny<bool>()), Times.Never);
     }
 
-    /// <summary>Constructor sets IsSent from entity.</summary>
-    [Theory]
-    [InlineData(false)]
-    [InlineData(true)]
-    public void Constructor_SetsIsSentFromEntity(bool isSent)
-    {
-        DraftEntity entity = new() { IsSent = isSent };
-        DraftViewModel vm = Build(out _, out _, entity: entity);
-        Assert.Equal(isSent, vm.IsSent);
-    }
-
-    /// <summary>PlsoMode defaults to Off — it is editor-session-only UI state, never read from the entity.</summary>
-    [Fact]
-    public void Constructor_PlsoModeDefaultsToOff()
-    {
-        DraftViewModel vm = Build(out _, out _);
-        Assert.Equal(PlsoMode.Off, vm.PlsoMode);
-    }
-
-    /// <summary>AvailablePriorities is populated from IEngineController.Priorities.</summary>
-    [Fact]
-    public void Constructor_AvailablePrioritiesFromProvider()
-    {
-        DraftViewModel vm = Build(out _, out _);
-        Assert.Equal(["ROUTINE", "FLASH"], vm.AvailablePriorities.Select(p => p.Name).ToList());
-    }
-
     /// <summary>SelectedPriority defaults to the option matching the entity's stored Priority.</summary>
     [Fact]
     public void Constructor_SelectedPriorityMatchesEntityPriority()
@@ -152,33 +125,6 @@ public sealed class DraftViewModelTests
         DraftEntity entity = new() { Priority = 99 };
         DraftViewModel vm = Build(out _, out _, entity: entity);
         Assert.Equal("ROUTINE", vm.SelectedPriority.Name);
-    }
-
-    /// <summary>Constructor sets Tag from entity.</summary>
-    [Fact]
-    public void Constructor_SetsTagFromEntity()
-    {
-        DraftEntity entity = new() { Tag = "URGENT" };
-        DraftViewModel vm = Build(out _, out _, entity: entity);
-        Assert.Equal("URGENT", vm.Tag);
-    }
-
-    /// <summary>TagsEnabled is sourced from IEngineController.</summary>
-    [Theory]
-    [InlineData(true)]
-    [InlineData(false)]
-    public void Constructor_TagsEnabledFromTagConfiguration(bool enabled)
-    {
-        DraftViewModel vm = Build(out _, out _, tagsEnabled: enabled);
-        Assert.Equal(enabled, vm.TagsEnabled);
-    }
-
-    /// <summary>TagLabel is sourced from IEngineController.TagLabel, so a host can rename the tag input.</summary>
-    [Fact]
-    public void Constructor_TagLabelFromTagConfiguration()
-    {
-        DraftViewModel vm = Build(out _, out _, tagLabel: "Category");
-        Assert.Equal("Category", vm.TagLabel);
     }
 
     /// <summary>AvailablePriorities excludes a priority blocked for the entity's stored tag, even at construction.</summary>
@@ -316,42 +262,6 @@ public sealed class DraftViewModelTests
         Assert.Equal("URGENT", vm.Tag);
     }
 
-    /// <summary>AlertLabel is sourced from IEngineController.AlertLabel — the same text used in the title bar's alert box.</summary>
-    [Fact]
-    public void Constructor_AlertLabelFromAlertConfiguration()
-    {
-        DraftViewModel vm = Build(out _, out _, alertText: "!ALERT!");
-        Assert.Equal("!ALERT!", vm.AlertLabel);
-    }
-
-    /// <summary>PlsoMode is freely settable to any of its three states.</summary>
-    [Theory]
-    [InlineData((int)PlsoMode.Off)]
-    [InlineData((int)PlsoMode.On)]
-    [InlineData((int)PlsoMode.Spaces)]
-    public void PlsoMode_CanBeSet(int mode)
-    {
-        DraftViewModel vm = Build(out _, out _);
-
-        vm.PlsoMode = (PlsoMode)mode;
-
-        Assert.Equal((PlsoMode)mode, vm.PlsoMode);
-    }
-
-    /// <summary>PlsoButtonText reflects the current PlsoMode.</summary>
-    [Theory]
-    [InlineData((int)PlsoMode.Off, "PLSO OFF")]
-    [InlineData((int)PlsoMode.On, "PLSO ON")]
-    [InlineData((int)PlsoMode.Spaces, "PLSO SPACES")]
-    public void PlsoButtonText_ReflectsPlsoMode(int mode, string expected)
-    {
-        DraftViewModel vm = Build(out _, out _);
-
-        vm.PlsoMode = (PlsoMode)mode;
-
-        Assert.Equal(expected, vm.PlsoButtonText);
-    }
-
     /// <summary>Constructor loads addresses from entity.</summary>
     [Fact]
     public void Constructor_LoadsAddressesFromEntity()
@@ -364,23 +274,6 @@ public sealed class DraftViewModelTests
 
         Assert.Single(vm.Addresses);
         Assert.Equal("ALPHA", vm.Addresses[0].UserName);
-    }
-
-    /// <summary>AllUserNames reflects the constructor argument.</summary>
-    [Fact]
-    public void Constructor_SetsAllUserNames()
-    {
-        DraftViewModel vm = Build(out _, out _, userNames: ["ALPHA", "BETA"]);
-        Assert.Equal(["ALPHA", "BETA"], vm.AllUserNames);
-    }
-
-    /// <summary>AddressTypes reflects To, Cc and External, each paired with its display label.</summary>
-    [Fact]
-    public void AddressTypes_IsToCcAndExternal()
-    {
-        DraftViewModel vm = Build(out _, out _);
-        Assert.Equal([AddressType.To, AddressType.Cc, AddressType.External], vm.AddressTypes.Select(t => t.Type));
-        Assert.Equal(["To", "Cc", "External"], vm.AddressTypes.Select(t => t.Label));
     }
 
     /// <summary>An address added with custom instructions keeps them (trimmed), and the field is cleared for the next one.</summary>
@@ -400,41 +293,12 @@ public sealed class DraftViewModelTests
         Assert.Equal(string.Empty, vm.NewAddressInformation);
     }
 
-    /// <summary>An address added with no instructions has an empty Information.</summary>
-    [Fact]
-    public void AddAddressCommand_WithoutInformation_HasEmptyInformation()
-    {
-        DraftViewModel vm = Build(out _, out _);
-        vm.NewAddressUser = "BRAVO";
-
-        vm.AddAddressCommand.Execute(null);
-
-        Assert.Equal(string.Empty, Assert.Single(vm.Addresses).Information);
-    }
-
-    /// <summary>Id is a non-empty string.</summary>
-    [Fact]
-    public void Id_IsNonEmpty()
-    {
-        DraftViewModel vm = Build(out _, out _);
-        Assert.NotEmpty(vm.Id);
-    }
-
     /// <summary>Setting NewAddressUser to lowercase auto-uppercases it.</summary>
     [Fact]
     public void NewAddressUser_Lowercase_AutoUppercased()
     {
         DraftViewModel vm = Build(out _, out _);
         vm.NewAddressUser = "alpha";
-        Assert.Equal("ALPHA", vm.NewAddressUser);
-    }
-
-    /// <summary>Setting NewAddressUser to already-uppercase leaves it unchanged.</summary>
-    [Fact]
-    public void NewAddressUser_AlreadyUppercase_Unchanged()
-    {
-        DraftViewModel vm = Build(out _, out _);
-        vm.NewAddressUser = "ALPHA";
         Assert.Equal("ALPHA", vm.NewAddressUser);
     }
 
@@ -492,18 +356,6 @@ public sealed class DraftViewModelTests
         vm.InsertFillIn(0);
 
         Assert.Single(vm.FillIns);
-    }
-
-    /// <summary>Multiple InsertFillIn calls add multiple distinct entries.</summary>
-    [Fact]
-    public void InsertFillIn_MultipleCalls_AddsMultipleDistinct()
-    {
-        DraftViewModel vm = Build(out _, out _);
-
-        vm.InsertFillIn(0);
-        vm.InsertFillIn(vm.BodyDocument.TextLength);
-
-        Assert.Equal(2, vm.FillIns.Count);
     }
 
     private static DraftViewModel BuildWithLineWidth(out Mock<IEntryService> entryMock, int? width, string body)

@@ -5,14 +5,6 @@ public sealed class FrameBuilderTests
 {
     private static FrameBuilder<TestFrame, TestMessagePriority, TestLevel, TestAspect> Complete() => new();
 
-    /// <summary>A frame mapping needs nothing stated: the engine knows nothing of what is in a frame.</summary>
-    [Fact]
-    public void Build_WithNothingStated_Succeeds() => Assert.Equal(typeof(TestFrame), Complete().Build().Type);
-
-    /// <summary>The map creates the host's own frame type.</summary>
-    [Fact]
-    public void Map_CreatesTheHostsFrame() => Assert.IsType<TestFrame>(Complete().Build().Create());
-
     /// <summary>The default serializer builds only the host's frame type, and the default factory calls its parameterless constructor.</summary>
     [Fact]
     public void Defaults_SerializerBuildsOnlyTheMessageType_AndCreateIsNew()

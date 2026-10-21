@@ -45,9 +45,11 @@ internal interface IPrintManagerViewModel
     /// copies decided by <see cref="IEngineController"/>). Off by default; see <see cref="IEngineController"/>.
     /// </summary>
     bool PrintReceivedEnabled { get; set; }
-    /// <summary>Gets the printers available on this computer; see <see cref="IEngineController"/>.</summary>
+    /// <summary>Gets the printers available on this computer. Empty until <see cref="Ready"/> completes.</summary>
     IReadOnlyList<string> AvailablePrinters { get; }
-    /// <summary>Gets or sets the printer the queue prints to. Initializes to this computer's default printer.</summary>
+    /// <summary>Gets a task that completes once the available printers and this computer's default have been discovered.</summary>
+    Task Ready { get; }
+    /// <summary>Gets or sets the printer the queue prints to. Initializes to this computer's default printer once it is discovered, unless a printer was chosen by then.</summary>
     string? SelectedPrinter { get; set; }
     /// <summary>Removes every entry from the print queue, interrupting whichever entry is currently printing.</summary>
     IRelayCommand PurgeCommand { get; }
@@ -97,8 +99,7 @@ internal sealed partial class PrintManagerViewModel : ObservableObject, IPrintMa
         logger = loggerFactory.CreateLogger(LogCategories.App);
 
         printReceivedEnabled = engineController.PrintReceivedDefaultEnabled;
-        AvailablePrinters = printDriver.GetAvailablePrinters();
-        selectedPrinter = printDriver.GetDefaultPrinter();
+        Ready = LoadPrinters();
 
         entryService.MessageInserted += OnMessageInserted;
     }
@@ -133,11 +134,19 @@ internal sealed partial class PrintManagerViewModel : ObservableObject, IPrintMa
 
     [ObservableProperty] private bool printReceivedEnabled;
     [ObservableProperty] private string? selectedPrinter;
+    [ObservableProperty] private IReadOnlyList<string> availablePrinters = [];
 
     /// <inheritdoc />
     public ObservableCollection<PrintQueueEntry> Queue { get; } = [];
     /// <inheritdoc />
-    public IReadOnlyList<string> AvailablePrinters { get; }
+    public Task Ready { get; }
+
+    private async Task LoadPrinters()
+    {
+        AvailablePrinters = await printDriver.GetAvailablePrinters();
+        string? defaultPrinter = await printDriver.GetDefaultPrinter();
+        SelectedPrinter ??= defaultPrinter;
+    }
 
     private Task OnMessageInserted(MessageEntity entity)
     {

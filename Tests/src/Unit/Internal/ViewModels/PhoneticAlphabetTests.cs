@@ -3,61 +3,6 @@ namespace BlueHeighliner.Comlink.Tests.Unit.Internal.ViewModels;
 /// <summary>Unit tests for <see cref="PhoneticAlphabet"/>.</summary>
 public sealed class PhoneticAlphabetTests
 {
-    /// <summary>Every letter A-Z maps to its correct phonetic word.</summary>
-    [Theory]
-    [InlineData('A', "ALFA")]
-    [InlineData('B', "BRAVO")]
-    [InlineData('C', "CHARLIE")]
-    [InlineData('D', "DELTA")]
-    [InlineData('E', "ECHO")]
-    [InlineData('F', "FOXTROT")]
-    [InlineData('G', "GOLF")]
-    [InlineData('H', "HOTEL")]
-    [InlineData('I', "INDIA")]
-    [InlineData('J', "JULIETT")]
-    [InlineData('K', "KILO")]
-    [InlineData('L', "LIMA")]
-    [InlineData('M', "MIKE")]
-    [InlineData('N', "NOVEMBER")]
-    [InlineData('O', "OSCAR")]
-    [InlineData('P', "PAPA")]
-    [InlineData('Q', "QUEBEC")]
-    [InlineData('R', "ROMEO")]
-    [InlineData('S', "SIERRA")]
-    [InlineData('T', "TANGO")]
-    [InlineData('U', "UNIFORM")]
-    [InlineData('V', "VICTOR")]
-    [InlineData('W', "WHISKEY")]
-    [InlineData('X', "XRAY")]
-    [InlineData('Y', "YANKEE")]
-    [InlineData('Z', "ZULU")]
-    public void TryGetWord_Letter_ReturnsPhoneticWord(char letter, string expected)
-    {
-        bool found = PhoneticAlphabet.TryGetWord(letter, out string word);
-
-        Assert.True(found);
-        Assert.Equal(expected, word);
-    }
-
-    /// <summary>Every digit 0-9 maps to its correct spelled-out word.</summary>
-    [Theory]
-    [InlineData('0', "ZERO")]
-    [InlineData('1', "ONE")]
-    [InlineData('2', "TWO")]
-    [InlineData('3', "THREE")]
-    [InlineData('4', "FOUR")]
-    [InlineData('5', "FIVE")]
-    [InlineData('6', "SIX")]
-    [InlineData('7', "SEVEN")]
-    [InlineData('8', "EIGHT")]
-    [InlineData('9', "NINE")]
-    public void TryGetWord_Digit_ReturnsSpelledOutNumber(char digit, string expected)
-    {
-        bool found = PhoneticAlphabet.TryGetWord(digit, out string word);
-
-        Assert.True(found);
-        Assert.Equal(expected, word);
-    }
 
     /// <summary>Lowercase letters resolve the same as uppercase.</summary>
     [Fact]

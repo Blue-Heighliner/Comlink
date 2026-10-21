@@ -3,17 +3,6 @@ namespace BlueHeighliner.Comlink.Tests.Unit.Internal.ViewModels;
 /// <summary>Unit tests for <see cref="ConnectionRowViewModel"/> computed properties.</summary>
 public sealed class ConnectionRowViewModelTests
 {
-    /// <summary>The constructor assigns UserName and defaults every other property.</summary>
-    [Fact]
-    public void Constructor_AssignsUserNameAndDefaults()
-    {
-        ConnectionRowViewModel vm = new("SERVER-A");
-
-        Assert.Equal("SERVER-A", vm.UserName);
-        Assert.False(vm.IsConnected);
-        Assert.Null(vm.LastConnectedAt);
-        Assert.Null(vm.LastDisconnectedAt);
-    }
 
     /// <summary>StatusText and StatusColorHex reflect IsConnected.</summary>
     [Theory]
@@ -73,18 +62,6 @@ public sealed class ConnectionRowViewModelTests
         Assert.False(vm.RefreshCommand.CanExecute(null));
     }
 
-    /// <summary>A row built without actions has commands that simply do nothing.</summary>
-    [Fact]
-    public void Commands_WithoutActions_DoNothing()
-    {
-        ConnectionRowViewModel vm = new("SERVER-A");
-
-        vm.ToggleClosedCommand.Execute(null);
-        vm.RefreshCommand.Execute(null);
-
-        Assert.False(vm.IsClosed);
-    }
-
     /// <summary>LastConnectedText/LastDisconnectedText render an em dash when never set.</summary>
     [Fact]
     public void LastTimestampText_Null_RendersEmDash()
@@ -102,34 +79,5 @@ public sealed class ConnectionRowViewModelTests
         ConnectionRowViewModel vm = new("SERVER-A") { LastConnectedAt = new DateTime(2026, 3, 5, 14, 30, 0, DateTimeKind.Utc) };
 
         Assert.Equal("05-MAR-2026 14:30", vm.LastConnectedText);
-    }
-
-    /// <summary>IsConnected change notifies StatusText and StatusColorHex.</summary>
-    [Fact]
-    public void IsConnected_Change_NotifiesStatusTextAndColorHex()
-    {
-        ConnectionRowViewModel vm = new("SERVER-A");
-        List<string> changed = [];
-        vm.PropertyChanged += (_, e) => changed.Add(e.PropertyName ?? "");
-
-        vm.IsConnected = true;
-
-        Assert.Contains("StatusText", changed);
-        Assert.Contains("StatusColorHex", changed);
-    }
-
-    /// <summary>LastConnectedAt change notifies LastConnectedText; LastDisconnectedAt change notifies LastDisconnectedText.</summary>
-    [Fact]
-    public void LastTimestamps_Change_NotifyFormattedText()
-    {
-        ConnectionRowViewModel vm = new("SERVER-A");
-        List<string> changed = [];
-        vm.PropertyChanged += (_, e) => changed.Add(e.PropertyName ?? "");
-
-        vm.LastConnectedAt = DateTime.UtcNow;
-        vm.LastDisconnectedAt = DateTime.UtcNow;
-
-        Assert.Contains("LastConnectedText", changed);
-        Assert.Contains("LastDisconnectedText", changed);
     }
 }

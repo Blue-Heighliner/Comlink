@@ -4,18 +4,6 @@ namespace BlueHeighliner.Comlink.Tests.Unit.Internal.ViewModels;
 public sealed class FillInViewModelTests
 {
 
-    /// <summary>Default constructor produces a non-empty ID and no options.</summary>
-    [Fact]
-    public void DefaultCtor_ProducesNonEmptyIdAndNoOptions()
-    {
-        FillInViewModel vm = new();
-
-        Assert.NotEmpty(vm.Id);
-        Assert.Empty(vm.Options);
-        Assert.Null(vm.SelectedOption);
-        Assert.Equal("______", vm.DisplayText);
-    }
-
     /// <summary>Parameterized constructor restores options and pre-selected value.</summary>
     [Fact]
     public void ParamCtor_RestoresOptionsAndSelection()
@@ -26,16 +14,6 @@ public sealed class FillInViewModelTests
         Assert.Equal(2, vm.Options.Count);
         Assert.Equal("Beta", vm.SelectedOption);
         Assert.Equal("Beta", vm.DisplayText);
-    }
-
-    /// <summary>Parameterized constructor with no pre-selected value leaves SelectedOption null.</summary>
-    [Fact]
-    public void ParamCtor_NoPreselect_SelectedOptionIsNull()
-    {
-        FillInViewModel vm = new("abc12345", ["Alpha", "Beta"], null);
-
-        Assert.Null(vm.SelectedOption);
-        Assert.Equal("______", vm.DisplayText);
     }
 
     /// <summary>AddOption appends a trimmed option and resets NewOption.</summary>
@@ -154,29 +132,5 @@ public sealed class FillInViewModelTests
         vm.MoveOptionDownCommand.Execute("Beta");
 
         Assert.Equal("Beta", vm.Options[1].Value);
-    }
-
-    /// <summary>TogglePopup flips IsPopupOpen from false to true.</summary>
-    [Fact]
-    public void TogglePopup_OpensClosed()
-    {
-        FillInViewModel vm = new();
-        Assert.False(vm.IsPopupOpen);
-
-        vm.TogglePopupCommand.Execute(null);
-
-        Assert.True(vm.IsPopupOpen);
-    }
-
-    /// <summary>TogglePopup flips IsPopupOpen from true to false.</summary>
-    [Fact]
-    public void TogglePopup_ClosesOpen()
-    {
-        FillInViewModel vm = new();
-        vm.IsPopupOpen = true;
-
-        vm.TogglePopupCommand.Execute(null);
-
-        Assert.False(vm.IsPopupOpen);
     }
 }

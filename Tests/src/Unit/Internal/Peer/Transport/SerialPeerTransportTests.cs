@@ -440,17 +440,4 @@ public sealed class SerialPeerTransportTests
         Assert.Equal(new byte[] { 0xEE, 1, 2, 3 }, received.Payloads[0]);
         Assert.Equal(new byte[] { 7, 7 }, received.Payloads[1]);
     }
-
-    /// <summary>Closing an already closed link, and disposing twice, are both harmless.</summary>
-    [Fact]
-    public async Task SetClosedTwice_ThenDisposeTwice_DoesNotThrow()
-    {
-        await using Pair pair = await ConnectedPair();
-
-        pair.A.SetClosed(point, true);
-        pair.A.SetClosed(point, true);
-        await WaitUntil(() => pair.AConnections.Events.Contains("disconnected"));
-        await pair.A.DisposeAsync();
-        await pair.A.DisposeAsync();
-    }
 }

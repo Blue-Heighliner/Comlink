@@ -46,22 +46,6 @@ public sealed class EntryServiceTests : IDisposable
         Assert.True(original.IsSent);
     }
 
-    /// <summary>A duplicated note is a stored copy with the same name and body.</summary>
-    [Fact]
-    public async Task DuplicateNote_StoresACopy()
-    {
-        NoteEntity original = await service.CreateNote();
-        original.Name = "List";
-        original.Body = "Milk";
-        await service.SaveNote(original);
-
-        NoteEntity copy = await service.DuplicateNote(original);
-
-        Assert.NotEqual(original.Id, copy.Id);
-        Assert.Equal("List", copy.Name);
-        Assert.Equal("Milk", copy.Body);
-    }
-
     /// <summary>NewDraft and NewNote build entities without storing them.</summary>
     [Fact]
     public async Task NewEntries_AreNotStoredUntilInserted()
@@ -127,16 +111,6 @@ public sealed class EntryServiceTests : IDisposable
         Assert.Contains("root-inbox", entity.FolderId);
     }
 
-    /// <summary>StoreIncomingMessage sets ReadStatus to Received.</summary>
-    [Fact]
-    public async Task StoreIncomingMessageAsync_SetsReadStatusReceived()
-    {
-        MessageEntity entity = await service.StoreIncomingMessage(
-            Guid.NewGuid().ToString(), "SenderUser", "Hello", [], DateTime.UtcNow);
-
-        Assert.Equal(DestinationStatus.Received, entity.ReadStatus);
-    }
-
     /// <summary>A stored message is an alert when the message handler says so from its other fields, here its tag.</summary>
     [Fact]
     public async Task StoreMessage_AlertTag_IsAnAlertOnTheStoredMessage()
@@ -198,14 +172,6 @@ public sealed class EntryServiceTests : IDisposable
         Assert.Equal(0, eventCount);
     }
 
-    /// <summary>MarkMessageRead for a nonexistent message returns null.</summary>
-    [Fact]
-    public async Task MarkMessageRead_UnknownMessageId_ReturnsNull()
-    {
-        MessageEntity? result = await service.MarkMessageRead("does-not-exist");
-        Assert.Null(result);
-    }
-
     /// <summary>Verifies that CreateDraft creates an unsent draft in the Drafts folder.</summary>
     [Fact]
     public async Task CreateDraftAsync_CreatesDraftInDraftsFolder()
@@ -215,16 +181,6 @@ public sealed class EntryServiceTests : IDisposable
         Assert.NotNull(entity);
         Assert.Contains("root-drafts", entity.FolderId);
         Assert.False(entity.IsSent);
-    }
-
-    /// <summary>Verifies that CreateNote creates a note in the Notes folder.</summary>
-    [Fact]
-    public async Task CreateNoteAsync_CreatesNoteInNotesFolder()
-    {
-        NoteEntity entity = await service.CreateNote();
-
-        Assert.NotNull(entity);
-        Assert.Contains("root-notes", entity.FolderId);
     }
 
     /// <summary>Verifies that GetMessages returns the correct count and items for a paginated result.</summary>

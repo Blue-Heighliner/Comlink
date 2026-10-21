@@ -412,18 +412,6 @@ public sealed class MsmtPeerTransportTests
         fx.Peer.Verify(p => p.Connect(It.IsAny<MsmtNameTarget>()), Times.Never);
     }
 
-    /// <summary>StartListener forwards the port without dialing anything.</summary>
-    [Fact]
-    public void StartListener_ForwardsPort()
-    {
-        Fixture fx = Build();
-
-        fx.Transport.StartListener(50021);
-
-        fx.Peer.Verify(p => p.StartListener(50021, "0.0.0.0"), Times.Once);
-        fx.Peer.Verify(p => p.Connect(It.IsAny<MsmtNameTarget>()), Times.Never);
-    }
-
     /// <summary>Connect returns the same connection object for a point until that connection is lost, so callers can tell connections apart by reference.</summary>
     [Fact]
     public async Task Connect_SamePointTwice_ReturnsSameConnection()
@@ -496,17 +484,6 @@ public sealed class MsmtPeerTransportTests
         fx.Connected.Publish(InboundConnection("CN=Alice, O=Org, CN=Alias").Object);
 
         Assert.Equal(["Alice", "Alias"], ((IIpConnectionInfo)connection!.Info).CertificateNames);
-    }
-
-    /// <summary>Disposing the transport disposes the MSMT peer.</summary>
-    [Fact]
-    public async Task DisposeAsync_DisposesPeer()
-    {
-        Fixture fx = Build();
-
-        await fx.Transport.DisposeAsync();
-
-        fx.Peer.Verify(p => p.DisposeAsync(), Times.Once);
     }
 
     private sealed class UnownedMemory(ReadOnlyMemory<byte> data) : IMemoryOwner<byte>

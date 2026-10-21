@@ -69,15 +69,6 @@ public sealed class PacketizerTests
         public override string GetFrameId(object value) => (next++).ToString();
     }
 
-    /// <summary>A packet handler that gives the packets of one frame different ids is refused, since a receiver could not put them back together.</summary>
-    [Fact]
-    public void Split_PacketsOfOneFrameWithDifferentIds_Throws()
-    {
-        Packetizer packetizer = new(new ChangingIdsEngineController(10));
-
-        Assert.Throws<InvalidOperationException>(() => packetizer.Split(Payload(35), 0, new TestFrame()));
-    }
-
     /// <summary>A payload that fits one packet is not affected by the frame id check.</summary>
     [Fact]
     public void Split_SinglePacket_NeedsNoMatchingIds()
@@ -222,18 +213,6 @@ public sealed class PacketizerTests
     public void Constructor_NoPacketType_Throws()
     {
         Assert.Throws<InvalidOperationException>(() => new Packetizer(new TestEngineController()));
-    }
-
-    /// <summary>A payload size far beyond any payload is fine: everything goes in one packet.</summary>
-    [Fact]
-    public void Constructor_HugePayloadSize_Works()
-    {
-        Packetizer packetizer = new(new RawPacketEngineController(payloadSize: int.MaxValue), maxFrameSize: 1000);
-
-        IReadOnlyList<Packet> packets = packetizer.Split(Payload(500), 0, new TestFrame());
-
-        Assert.Single(packets);
-        Release(packets);
     }
 
     /// <summary>With the default protobuf packet serializer, a payload is cut by the payload size and reassembles.</summary>

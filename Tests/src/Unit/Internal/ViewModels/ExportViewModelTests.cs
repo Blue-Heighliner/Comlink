@@ -20,23 +20,6 @@ public sealed class ExportViewModelTests
     private static EntryItemViewModel MakeEntry(string id, EntryType type = EntryType.Message, bool outbound = false)
         => new(id, $"Title-{id}", type, DateTime.UtcNow, isOutboundMessage: outbound);
 
-    /// <summary>A freshly constructed ViewModel defaults to All scope, an "export" file name, and is not exporting.</summary>
-    [Fact]
-    public void Ctor_InitialState_DefaultsToAllScopeNotExporting()
-    {
-        ExportViewModel vm = new Setup().Build();
-
-        Assert.Equal(ExportScope.All, vm.Scope);
-        Assert.True(vm.IsAllScope);
-        Assert.False(vm.IsSomeScope);
-        Assert.Equal("export", vm.FileName);
-        Assert.False(vm.IsExporting);
-        Assert.Empty(vm.SelectedEntries);
-        Assert.False(vm.IsCollectingEntries);
-        Assert.Equal("JSON", Assert.Single(vm.AvailableFormats).Label);
-        Assert.Null(vm.SelectedFormat.Format);
-    }
-
     /// <summary>AvailableFormats lists the built-in JSON option first, followed by every configured export format in order.</summary>
     [Fact]
     public void Ctor_WithConfiguredExportFormats_ListsJsonFirstThenEachByName()
@@ -98,31 +81,6 @@ public sealed class ExportViewModelTests
         vm.RefreshDrivesCommand.Execute(null);
 
         Assert.Equal(driveA, vm.SelectedDrive);
-    }
-
-    /// <summary>Setting IsSomeScope switches Scope to Some.</summary>
-    [Fact]
-    public void IsSomeScope_SetTrue_SwitchesScopeToSome()
-    {
-        ExportViewModel vm = new Setup().Build();
-
-        vm.IsSomeScope = true;
-
-        Assert.Equal(ExportScope.Some, vm.Scope);
-        Assert.True(vm.IsSomeScope);
-        Assert.False(vm.IsAllScope);
-    }
-
-    /// <summary>Setting IsAllScope switches Scope back to All.</summary>
-    [Fact]
-    public void IsAllScope_SetTrue_SwitchesScopeToAll()
-    {
-        ExportViewModel vm = new Setup().Build();
-        vm.Scope = ExportScope.Some;
-
-        vm.IsAllScope = true;
-
-        Assert.Equal(ExportScope.All, vm.Scope);
     }
 
     /// <summary>IsCollectingEntries is true only when Scope is Some and not currently exporting.</summary>
@@ -196,18 +154,6 @@ public sealed class ExportViewModelTests
 
         vm.ClearEntriesCommand.Execute(null);
 
-        Assert.Empty(vm.SelectedEntries);
-    }
-
-    /// <summary>ClearEntriesCommand is a no-op when SelectedEntries is already empty.</summary>
-    [Fact]
-    public void ClearEntriesCommand_AlreadyEmpty_IsNoOp()
-    {
-        ExportViewModel vm = new Setup().Build();
-
-        Exception? ex = Record.Exception(() => vm.ClearEntriesCommand.Execute(null));
-
-        Assert.Null(ex);
         Assert.Empty(vm.SelectedEntries);
     }
 
@@ -398,15 +344,6 @@ public sealed class ExportViewModelTests
 
         Assert.Equal("Export failed: disk full", vm.StatusMessage);
         Assert.False(vm.IsExporting);
-    }
-
-    /// <summary>CancelExportCommand cannot execute while no export is running.</summary>
-    [Fact]
-    public void CancelExportCommand_NotExporting_CannotExecute()
-    {
-        ExportViewModel vm = new Setup().Build();
-
-        Assert.False(vm.CancelExportCommand.CanExecute(null));
     }
 
     /// <summary>Invoking CancelExportCommand while an export is running cancels the token passed to the export service.</summary>

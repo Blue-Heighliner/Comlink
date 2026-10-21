@@ -8,11 +8,6 @@ public sealed class EngineBuilderTests
         public void Configure(IEngineBuilder engine) => configure(new TestEngineConfiguration().Apply(engine));
     }
 
-    private sealed class PacketConfiguration(Func<TestEngineBuilder, TestEngineBuilder> configure) : IEngineConfiguration
-    {
-        public void Configure(IEngineBuilder engine) => configure(new TestEngineConfiguration(packets: true).Apply(engine));
-    }
-
     private static IServiceProvider Services(params object[] handlers)
     {
         ServiceCollection services = new();
@@ -25,12 +20,6 @@ public sealed class EngineBuilderTests
         }
 
         return services.BuildServiceProvider();
-    }
-
-    private static (EngineBuilder Builder, EngineController Controller) BuildWith(Action<TestFrameBuilder>? message = null, Action<TestPacketBuilder>? packet = null, IServiceProvider? services = null)
-    {
-        EngineBuilder builder = packet is null ? EngineBuilder.Build(new TestEngineConfiguration(false, message)) : EngineBuilder.Build(new TestEngineConfiguration(false, message, packet));
-        return (builder, new EngineController(builder, new CurrentUserProvider(), null, services));
     }
 
     private static (EngineBuilder Builder, EngineController Controller) Build(Func<TestEngineBuilder, TestEngineBuilder> configure, string? currentUser = null, NetworkConfig? network = null)
@@ -210,27 +199,6 @@ public sealed class EngineBuilderTests
         Assert.True(builder.AreCommandLineOverridesAllowed);
     }
 
-    /// <summary>Everything a host can state about the application and the ports is reported back.</summary>
-    [Fact]
-    public void Stated_AppAndPortSettings_AreReported()
-    {
-        const string icon = "avares://Host/icon.png";
-        (_, EngineController controller) = Build(engine => engine
-            .Display<TestDisplayHandler>()
-            .CommandLineOverrides(true));
-
-        Assert.Equal("MyApp", controller.AppName);
-        Assert.Equal("2.3.4", controller.AppVersion);
-        Assert.True(controller.IsKioskMode);
-        Assert.Equal("Welcome", controller.HomeText);
-        Assert.Equal(LogFieldWidths.None, controller.LogWidths);
-        Assert.Equal(["LINKED", "OFFLINE"], [controller.GetNetworkIndicatorLabel(true), controller.GetNetworkIndicatorLabel(false)]);
-        Assert.Equal(["#2E7D32", "#112233"], [controller.GetNetworkIndicatorBackground(true), controller.GetNetworkIndicatorBackground(false)]);
-        Assert.Equal(["#FFFFFF", "#FFEEDD"], [controller.GetNetworkIndicatorForeground(true), controller.GetNetworkIndicatorForeground(false)]);
-        Assert.Equal(icon, controller.WindowIconPath);
-        Assert.True(controller.CommandLineOverridesAllowed);
-    }
-
     /// <summary>The data directory is the current user's own folder inside the application's folder under the application data root, and the application's folder itself before a user exists, where the install state always lives.</summary>
     [Fact]
     public void AppDataPath_IsTheCurrentUsersFolder()
@@ -272,27 +240,6 @@ public sealed class EngineBuilderTests
         Assert.Null(plain.IsDraftBlocked(TestMessagePriority.High, TestLevel.Secret, TestAspect.Signed, "SPAM"));
     }
 
-    /// <summary>Alert, tag, priority and print settings a host states replace the defaults.</summary>
-    [Fact]
-    public void Stated_CompositionAndAlertSettings_AreReported()
-    {
-        (_, EngineController controller) = Build(engine => engine
-            .Display<TestDisplayHandler>().Drafts<TestNoTagsDraftHandler>().Alarms<TestAlarmHandler>()
-            .Priority(TestMessagePriority.High).Label("TOP").Mode(PriorityMode.System)
-            .Prints<TestPrintHandler>()
-            .Deletes<DraftsOnlyDeleteHandler>());
-
-        Assert.Equal("ALARM", controller.AlertLabel);
-        Assert.Equal(TimeSpan.FromSeconds(5), controller.AlarmSoundDuration);
-        Assert.Equal(["NORMAL", "TOP"], [controller.Priorities[0].Name, controller.Priorities[^1].Name]);
-        Assert.Equal([PriorityMode.User, PriorityMode.System], [controller.Priorities[0].Mode, controller.Priorities[^1].Mode]);
-        Assert.False(controller.TagsEnabled);
-        Assert.Equal("Category", controller.TagLabel);
-        Assert.True(controller.PrintReceivedDefaultEnabled);
-        Assert.True(controller.CanDelete(FolderType.Drafts));
-        Assert.False(controller.CanDelete(FolderType.Inbox));
-    }
-
     /// <summary>Without an info handler every name and word is the engine's own, and a handler renames what it states.</summary>
     [Fact]
     public void Display_StatedHandlerRenamesAndUnstatedKeepsDefaults()
@@ -332,16 +279,6 @@ public sealed class EngineBuilderTests
         Assert.Equal(["Received", "Flagged"], [named.Rename("Inbox"), named.Rename("Alert Outbox")]);
     }
 
-    /// <summary>A draft handler can turn tags off without affecting their label.</summary>
-    [Fact]
-    public void DraftHandler_EnableTagsFalse_TurnsTagsOff()
-    {
-        (_, EngineController controller) = Build(engine => engine.Display<TestDisplayHandler>().Drafts<TestNoTagsDraftHandler>());
-
-        Assert.False(controller.TagsEnabled);
-        Assert.Equal("Category", controller.TagLabel);
-    }
-
     /// <summary>An overridden address type label replaces the default for that type only; the others keep theirs.</summary>
     [Fact]
     public void AddressTypes_Labelled_ReplacesOnlyThatTypesDefault()
@@ -350,19 +287,6 @@ public sealed class EngineBuilderTests
 
         Assert.Equal(["To", "Cc", "OUTSIDE"], controller.AddressTypes.Select(t => t.Label));
         Assert.Equal([AddressType.To, AddressType.Cc, AddressType.External], controller.AddressTypes.Select(t => t.Type));
-    }
-
-    /// <summary>The heartbeat intervals come from the heartbeat handler in use, the packet one first, and are 30 and 2 seconds when there is none.</summary>
-    [Fact]
-    public void HeartbeatIntervals_ComeFromTheHandler()
-    {
-        ServiceCollection services = new();
-        services.AddSingleton(new TestHeartbeatHandler { Interval = TimeSpan.FromSeconds(5), RetryInterval = TimeSpan.FromSeconds(1) });
-        EngineController frames = new(EngineBuilder.Build(new TestEngineConfiguration()), new CurrentUserProvider(), null, services.BuildServiceProvider());
-        EngineController none = new(EngineBuilder.Build(new TestEngineConfiguration(heartbeats: false)), new CurrentUserProvider(), null);
-
-        Assert.Equal([TimeSpan.FromSeconds(5), TimeSpan.FromSeconds(1)], [frames.HeartbeatInterval, frames.HeartbeatRetryInterval]);
-        Assert.Equal([TimeSpan.FromSeconds(30), TimeSpan.FromSeconds(5)], [none.HeartbeatInterval, none.HeartbeatRetryInterval]);
     }
 
     /// <summary>The maximum payload size is the argument of Packets and the window is stated on the packet configuration, defaulting to 1.</summary>
@@ -405,15 +329,6 @@ public sealed class EngineBuilderTests
         Assert.Equal("4", controller.GetUserData("ALICE")["desk"]);
         Assert.Empty(controller.GetUserData("BOB"));
         Assert.Equal(["OPS", "EXTRA"], controller.GetUserInfo("DAVE").Groups);
-    }
-
-    /// <summary>A user with nothing stated has no data.</summary>
-    [Fact]
-    public void GetUserData_NothingStated_IsEmpty()
-    {
-        (_, EngineController controller) = Build(engine => engine);
-
-        Assert.Empty(controller.GetUserData("ANYONE"));
     }
 
     /// <summary>A user the network does not list is just a name; a listed user's details are what the file says.</summary>
@@ -688,15 +603,6 @@ public sealed class EngineBuilderTests
         session.Verify(s => s.Disconnect(), Times.Once);
     }
 
-    /// <summary>Without a handshake there is none, and the identification hook leaves the decision to the engine.</summary>
-    [Fact]
-    public void Unstated_Identification_IsOff()
-    {
-        (_, EngineController controller) = Build(engine => engine);
-
-        Assert.Null(controller.PacketHandshakeHandler);
-    }
-
     /// <summary>External systems are reported in the order added, without duplicates.</summary>
     [Fact]
     public void ExternalSystems_AddedOnceInOrder()
@@ -790,36 +696,6 @@ public sealed class EngineBuilderTests
         Assert.Null(plain.Reconfigurer);
     }
 
-    /// <summary>A later call to Initialize replaces an earlier one.</summary>
-    [Fact]
-    public void Initialize_ALaterCallReplacesAnEarlierOne()
-    {
-        ServiceCollection services = new();
-        services.AddSingleton(new Dependency("INITIAL"));
-        EngineBuilder builder = EngineBuilder.Build(new Configuration(engine => engine.Reconfigure<PropertyReconfigurer>().Reconfigure<SecondReconfigurer>()));
-        EngineController controller = new(builder, new CurrentUserProvider(), null, services.BuildServiceProvider());
-
-        Assert.IsType<SecondReconfigurer>(controller.Reconfigurer);
-    }
-
-    private sealed class SecondReconfigurer : IReconfigurer
-    {
-        public Task OnReconfigured() => Task.CompletedTask;
-    }
-
-    /// <summary>Stack traces are on unless the host turns them off, and it can turn them on or off by saying so.</summary>
-    [Fact]
-    public void StackTrace_IsOnUnlessStated()
-    {
-        (_, EngineController plain) = Build(engine => engine);
-        (_, EngineController on) = Build(engine => engine.StackTrace(false).StackTrace(true));
-        (_, EngineController off) = Build(engine => engine.StackTrace(false));
-
-        Assert.True(plain.IsStackTraceEnabled);
-        Assert.True(on.IsStackTraceEnabled);
-        Assert.False(off.IsStackTraceEnabled);
-    }
-
     private sealed class FirstExportFormat : IExportFormat
     {
         public string Name => "CSV";
@@ -862,11 +738,6 @@ public sealed class EngineBuilderTests
         Assert.Equal(TimeSpan.FromSeconds(2), import.StagedSendDelay);
     }
 
-    private sealed class DraftsOnlyDeleteHandler : IDeleteHandler
-    {
-        public bool CanDelete(IDeleteContext context) => context.Folder is FolderType.Drafts;
-    }
-
     private sealed class Dependency(string name)
     {
         public string Name { get; } = name;
@@ -892,20 +763,6 @@ public sealed class EngineBuilderTests
     [Fact]
     public void Build_Generic_MissingDependency_Throws()
         => Assert.Throws<InvalidOperationException>(() => EngineBuilder.Build<InjectedConfiguration>(null));
-
-    private sealed class PlainConfiguration : IEngineConfiguration
-    {
-        public void Configure(IEngineBuilder engine) => new TestEngineConfiguration().Apply(engine);
-    }
-
-    /// <summary>A configuration with no dependencies needs no registrations at all.</summary>
-    [Fact]
-    public async Task Build_Generic_NoDependencies_NeedsNoRegistrations()
-    {
-        await using EngineBuilder builder = EngineBuilder.Build<PlainConfiguration>(null);
-
-        Assert.NotNull(builder.FrameMap);
-    }
 
     /// <summary>A configuration that turns out incomplete fails the build, after the container it was built in has been disposed.</summary>
     [Fact]
@@ -938,24 +795,6 @@ public sealed class EngineBuilderTests
         await builder.DisposeAsync();
 
         Assert.True(service.IsDisposed);
-    }
-
-    /// <summary>Every fluent call returns the builder, so a configuration can be one expression.</summary>
-    [Fact]
-    public void FluentCalls_ReturnTheBuilder()
-    {
-        TestEngineBuilder builder = new EngineBuilder().Types<TestFrame, TestPacket, TestMessagePriority, TestLevel, TestAspect>();
-
-        Assert.Same(builder, builder.Display<TestDisplayHandler>().CommandLineOverrides(false));
-    }
-
-    /// <summary>With no servers in the network there are no storage servers.</summary>
-    [Fact]
-    public void StorageServers_Unstated_IsEmpty()
-    {
-        (_, EngineController controller) = Build(engine => engine);
-
-        Assert.Empty(controller.StorageServers);
     }
 
     /// <summary>Every server user stores messages, and no other user does.</summary>

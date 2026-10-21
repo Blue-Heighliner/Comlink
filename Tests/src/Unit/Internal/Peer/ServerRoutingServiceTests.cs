@@ -685,14 +685,6 @@ public sealed class ServerRoutingServiceTests
         await Stop(fx);
     }
 
-    private static TestFrame RetrievalTo(string server, string from) => new()
-    {
-        MessageId = "REQ1",
-        FromUser = from,
-        IsRetrieval = true,
-        Addresses = [new TestAddressEntry { UserName = server, Type = "To" }]
-    };
-
     /// <summary>A frame from a child is raised with the child as its source; the server itself sends nothing, since where it goes is the handler's to say.</summary>
     [Fact]
     public async Task FromChild_IsRaisedWithTheChildAsSource_AndNothingIsSent()

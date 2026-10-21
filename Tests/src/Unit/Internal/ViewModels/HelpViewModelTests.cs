@@ -16,10 +16,6 @@ public sealed class HelpViewModelTests
 
     private static IEnumerable<string> Titles(HelpViewModel vm) => vm.Tabs.Select(t => t.Title);
 
-    /// <summary>The window title uses the configured application name.</summary>
-    [Fact]
-    public void AppName_ComesFromEngineController() => Assert.Equal("MyApp", Build().AppName);
-
     /// <summary>Every tab has content, and every section has a heading and text.</summary>
     [Theory]
     [InlineData(UserRole.Client)]

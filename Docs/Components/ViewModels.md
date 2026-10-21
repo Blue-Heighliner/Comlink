@@ -364,8 +364,9 @@ Drives the print manager screen: printer selection, the "print received" toggle,
 **Properties**:
 - `Queue (ObservableCollection<PrintQueueEntry>)` — the current print queue, always kept in next-to-print-first order (see `PrintQueueEntry` below)
 - `PrintReceivedEnabled (bool)` — initializes from `IEngineController.PrintReceivedDefaultEnabled` (`false` by default); while `true`, every message `IEntryService.MessageInserted` raises is auto-queued (see below)
-- `AvailablePrinters (IReadOnlyList<string>)` — from `IPrintDriver.GetAvailablePrinters()`, read once at construction
-- `SelectedPrinter (string?)` — initializes from `IPrintDriver.GetDefaultPrinter()`; setting it (re)starts the print loop if the queue is non-empty and no job is currently printing
+- `AvailablePrinters (IReadOnlyList<string>)` — from `IPrintDriver.GetAvailablePrinters()`, discovered once in the background after construction (empty until `Ready` completes), since asking the OS can take seconds
+- `Ready (Task)` — completes once the printers and the default are discovered
+- `SelectedPrinter (string?)` — set to `IPrintDriver.GetDefaultPrinter()` when discovery completes, unless a printer was chosen by then; setting it (re)starts the print loop if the queue is non-empty and no job is currently printing
 
 **Commands**:
 - `PurgeCommand (IRelayCommand)` — clears every entry from the queue; if a job is mid-print, the loop detects this the next time it checks between lines (see below) and treats it as an interruption with no restart, since the job is gone

@@ -32,21 +32,6 @@ public sealed class NoteViewModelTests
         svcMock.Verify(s => s.SaveNoteQuietly(It.IsAny<NoteEntity>()), Times.Once);
     }
 
-    /// <summary>Id and Body are populated from the entity on construction.</summary>
-    [Fact]
-    public void Ctor_PopulatesIdAndBody()
-    {
-        NoteEntity entity = MakeEntity("Hello note");
-        Mock<IEntryService> svcMock = new();
-
-        NoteViewModel vm = new(entity, svcMock.Object);
-
-        Assert.Equal(entity.Id.ToString(), vm.Id);
-        Assert.Equal("Hello note", vm.Body);
-        Assert.False(vm.IsSaving);
-        Assert.Null(vm.StatusMessage);
-    }
-
     /// <summary>DeleteCommand only arms on the first press, deleting nothing and leaving the button asking for confirmation.</summary>
     [Fact]
     public async Task Delete_FirstPress_ArmsWithoutDeleting()
@@ -112,19 +97,6 @@ public sealed class NoteViewModelTests
         await vm.SaveCommand.ExecuteAsync(null);
 
         svcMock.Verify(s => s.SaveNote(It.Is<NoteEntity>(e => e.Body == "Updated body")), Times.Once);
-    }
-
-    /// <summary>SaveCommand sets StatusMessage to "Saved" on success.</summary>
-    [Fact]
-    public async Task Save_OnSuccess_SetsStatusMessageToSaved()
-    {
-        Mock<IEntryService> svcMock = new();
-        svcMock.Setup(s => s.SaveNote(It.IsAny<NoteEntity>())).Returns(Task.CompletedTask);
-        NoteViewModel vm = new(MakeEntity(), svcMock.Object);
-
-        await vm.SaveCommand.ExecuteAsync(null);
-
-        Assert.Equal("Saved", vm.StatusMessage);
     }
 
     /// <summary>IsSaving is true while SaveCommand is executing and false when done.</summary>

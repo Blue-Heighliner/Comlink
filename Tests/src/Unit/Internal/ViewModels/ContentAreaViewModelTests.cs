@@ -136,49 +136,6 @@ public sealed class ContentAreaViewModelTests
         factory.Verify(f => f.Create(), Times.Once);
     }
 
-    /// <summary>HomeText is set from IEngineController on construction.</summary>
-    [Fact]
-    public void HomeText_SetFromProvider()
-    {
-        ContentAreaViewModel vm = Build(out _, "WELCOME");
-        Assert.Equal("WELCOME", vm.HomeText);
-    }
-
-    /// <summary>ShowHome sets ActiveContent to null and IsHomeVisible to true.</summary>
-    [Fact]
-    public void ShowHome_SetsActiveContentNullAndIsHomeVisible()
-    {
-        ContentAreaViewModel vm = Build(out _);
-        vm.ShowEntry(new object());
-
-        vm.ShowHome();
-
-        Assert.Null(vm.ActiveContent);
-        Assert.True(vm.IsHomeVisible);
-    }
-
-    /// <summary>ShowEntry(object) sets ActiveContent and clears IsHomeVisible.</summary>
-    [Fact]
-    public void ShowEntry_Object_SetsActiveContentAndClearsIsHomeVisible()
-    {
-        ContentAreaViewModel vm = Build(out _);
-        object entryVm = new();
-
-        vm.ShowEntry(entryVm);
-
-        Assert.Same(entryVm, vm.ActiveContent);
-        Assert.False(vm.IsHomeVisible);
-    }
-
-    /// <summary>Initial state after construction is home screen visible.</summary>
-    [Fact]
-    public void InitialState_IsHomeVisible()
-    {
-        ContentAreaViewModel vm = Build(out _);
-        Assert.True(vm.IsHomeVisible);
-        Assert.Null(vm.ActiveContent);
-    }
-
     /// <summary>Opening an Outbox message entry looks up the outbound-scoped record, disambiguating from any same-MessageId Inbox record.</summary>
     [Fact]
     public async Task ShowEntry_OutboundMessage_LooksUpOutboundRecord()

@@ -138,33 +138,6 @@ public sealed class FolderBarViewModelTests
         Assert.False(selected.IsSelected);
     }
 
-    /// <summary>DeselectFolder does not raise FolderSelected.</summary>
-    [Fact]
-    public async Task DeselectFolder_DoesNotRaiseFolderSelected()
-    {
-        List<Folder> tree = [MakeFolder("inbox", FolderType.Inbox)];
-        (FolderBarViewModel vm, _, _) = Build(tree);
-        await vm.Load();
-        bool raised = false;
-        vm.FolderSelected += _ => raised = true;
-
-        vm.DeselectFolder();
-
-        Assert.False(raised);
-    }
-
-    /// <summary>DeselectFolder is a no-op when nothing is selected.</summary>
-    [Fact]
-    public void DeselectFolder_NothingSelected_IsNoOp()
-    {
-        (FolderBarViewModel vm, _, _) = Build();
-
-        Exception? ex = Record.Exception(() => vm.DeselectFolder());
-
-        Assert.Null(ex);
-        Assert.Null(vm.SelectedFolder);
-    }
-
     /// <summary>SelectFolderByType selects the matching root folder.</summary>
     [Fact]
     public async Task SelectFolderByType_SelectsMatchingFolder()

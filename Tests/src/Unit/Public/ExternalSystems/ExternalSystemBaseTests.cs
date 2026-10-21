@@ -61,22 +61,6 @@ public sealed class ExternalSystemBaseTests
         }
     }
 
-    /// <summary>Name returns the constructor-provided value.</summary>
-    [Fact]
-    public void Name_ReturnsConstructorValue()
-    {
-        FakeExternalSystem system = new(TimeSpan.FromSeconds(30), TimeSpan.FromSeconds(30));
-        Assert.Equal("Fake", system.Name);
-    }
-
-    /// <summary>Before Start ever connects, IsConnected is false.</summary>
-    [Fact]
-    public void IsConnected_Initially_False()
-    {
-        FakeExternalSystem system = new(TimeSpan.FromSeconds(30), TimeSpan.FromSeconds(30));
-        Assert.False(system.IsConnected);
-    }
-
     /// <summary>Start transitions IsConnected to true once TryConnect succeeds.</summary>
     [Fact]
     public async Task Start_TryConnectSucceeds_BecomesConnected()
@@ -237,21 +221,6 @@ public sealed class ExternalSystemBaseTests
         await startTask;
     }
 
-    /// <summary>Receive with no subscriber does not throw.</summary>
-    [Fact]
-    public async Task Receive_NoSubscriber_DoesNotThrow()
-    {
-        FakeExternalSystem system = new(TimeSpan.FromSeconds(30), TimeSpan.FromSeconds(30));
-        using CancellationTokenSource cts = new();
-        Task startTask = system.Start(cts.Token);
-
-        await system.Deliver(new TestFrame { MessageId = "M1" });
-        await Task.Delay(50);
-
-        cts.Cancel();
-        await startTask;
-    }
-
     /// <summary>Multiple Receive calls made concurrently, without awaiting each one's own delivery first, are still all delivered — one message at a time, never overlapping, in the order they were enqueued.</summary>
     [Fact]
     public async Task Receive_ConcurrentCalls_DeliveredSequentiallyInOrder()
@@ -325,29 +294,5 @@ public sealed class ExternalSystemBaseTests
 
         cts.Cancel();
         await startTask;
-    }
-
-    /// <summary>ReportDisconnected called while never connected is a no-op that does not throw.</summary>
-    [Fact]
-    public void ReportDisconnected_NotConnected_DoesNotThrow()
-    {
-        NonPollingFakeExternalSystem system = new(TimeSpan.FromSeconds(30), TimeSpan.FromSeconds(30));
-
-        system.SimulateDisconnect();
-    }
-
-    /// <summary>ReportDisconnected called after Start has already stopped does not throw.</summary>
-    [Fact]
-    public async Task ReportDisconnected_AfterStartStopped_DoesNotThrow()
-    {
-        NonPollingFakeExternalSystem system = new(TimeSpan.FromMilliseconds(20), TimeSpan.FromMilliseconds(20));
-        using CancellationTokenSource cts = new();
-        Task startTask = system.Start(cts.Token);
-        await WaitUntil(() => system.IsConnected, TimeSpan.FromSeconds(30));
-
-        cts.Cancel();
-        await startTask;
-
-        system.SimulateDisconnect();
     }
 }

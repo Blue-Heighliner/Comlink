@@ -10,8 +10,8 @@ public sealed class PrintManagerViewModelTests
     {
         public Setup()
         {
-            PrintDriver.Setup(p => p.GetAvailablePrinters()).Returns(["PRINTER-A", "PRINTER-B"]);
-            PrintDriver.Setup(p => p.GetDefaultPrinter()).Returns("PRINTER-A");
+            PrintDriver.Setup(p => p.GetAvailablePrinters(It.IsAny<CancellationToken>())).ReturnsAsync(["PRINTER-A", "PRINTER-B"]);
+            PrintDriver.Setup(p => p.GetDefaultPrinter(It.IsAny<CancellationToken>())).ReturnsAsync("PRINTER-A");
             EngineController.Setup(p => p.PrintReceivedDefaultEnabled).Returns(false);
             EngineController.Setup(r => r.GetPrintCount(It.IsAny<Message>())).Returns(1);
             PrintDriver.Setup(p => p.PrintLine(It.IsAny<string>(), It.IsAny<string>(), It.IsAny<CancellationToken>()))
@@ -65,42 +65,25 @@ public sealed class PrintManagerViewModelTests
     private static EntryItemViewModel MakeEntryItem(string id, string title, EntryType entryType = EntryType.Note)
         => new(id, title, entryType, DateTime.UtcNow);
 
-    /// <summary>SelectedPrinter initializes from IPrintDriver.GetDefaultPrinter().</summary>
+    /// <summary>Printers are discovered without blocking construction: the lists fill in once discovery completes, and a printer chosen meanwhile is kept over the default.</summary>
     [Fact]
-    public void Ctor_SelectedPrinterFromDefaultProvider()
-    {
-        PrintManagerViewModel vm = new Setup().Build();
-        Assert.Equal("PRINTER-A", vm.SelectedPrinter);
-    }
-
-    /// <summary>AvailablePrinters is populated from IPrintDriver.GetAvailablePrinters().</summary>
-    [Fact]
-    public void Ctor_AvailablePrintersFromProvider()
-    {
-        PrintManagerViewModel vm = new Setup().Build();
-        Assert.Equal(["PRINTER-A", "PRINTER-B"], vm.AvailablePrinters);
-    }
-
-    /// <summary>PrintReceivedEnabled initializes from IEngineController.PrintReceivedDefaultEnabled.</summary>
-    [Theory]
-    [InlineData(false)]
-    [InlineData(true)]
-    public void Ctor_PrintReceivedEnabledFromDefaultProvider(bool enabled)
+    public async Task Discovery_CompletesAfterConstruction_KeepsAnEarlyChoice()
     {
         Setup s = new();
-        s.EngineController.Setup(p => p.PrintReceivedDefaultEnabled).Returns(enabled);
+        TaskCompletionSource<IReadOnlyList<string>> printers = new();
+        s.PrintDriver.Setup(p => p.GetAvailablePrinters(It.IsAny<CancellationToken>())).Returns(printers.Task);
 
         PrintManagerViewModel vm = s.Build();
+        Assert.False(vm.Ready.IsCompleted);
+        Assert.Empty(vm.AvailablePrinters);
+        Assert.Null(vm.SelectedPrinter);
 
-        Assert.Equal(enabled, vm.PrintReceivedEnabled);
-    }
+        vm.SelectedPrinter = "PRINTER-B";
+        printers.SetResult(["PRINTER-A", "PRINTER-B"]);
+        await vm.Ready;
 
-    /// <summary>The queue is empty on construction.</summary>
-    [Fact]
-    public void Ctor_QueueIsEmpty()
-    {
-        PrintManagerViewModel vm = new Setup().Build();
-        Assert.Empty(vm.Queue);
+        Assert.Equal(["PRINTER-A", "PRINTER-B"], vm.AvailablePrinters);
+        Assert.Equal("PRINTER-B", vm.SelectedPrinter);
     }
 
     /// <summary>EnqueueManual adds a manual entry to the queue.</summary>
@@ -108,7 +91,7 @@ public sealed class PrintManagerViewModelTests
     public void EnqueueManual_AddsToQueue()
     {
         Setup s = new();
-        s.PrintDriver.Setup(p => p.GetDefaultPrinter()).Returns((string?)null);
+        s.PrintDriver.Setup(p => p.GetDefaultPrinter(It.IsAny<CancellationToken>())).ReturnsAsync((string?)null);
         PrintManagerViewModel vm = s.Build();
 
         vm.EnqueueManual(MakeEntryItem("N1", "My Note"));
@@ -124,7 +107,7 @@ public sealed class PrintManagerViewModelTests
     public void Queue_ManualEntry_SortsAheadOfHigherPriorityReceivedEntry()
     {
         Setup s = new();
-        s.PrintDriver.Setup(p => p.GetDefaultPrinter()).Returns((string?)null);
+        s.PrintDriver.Setup(p => p.GetDefaultPrinter(It.IsAny<CancellationToken>())).ReturnsAsync((string?)null);
         s.EngineController.Setup(p => p.PrintReceivedDefaultEnabled).Returns(true);
         PrintManagerViewModel vm = s.Build();
 
@@ -141,7 +124,7 @@ public sealed class PrintManagerViewModelTests
     public void MessageInserted_PrintReceivedDisabled_DoesNotEnqueue()
     {
         Setup s = new();
-        s.PrintDriver.Setup(p => p.GetDefaultPrinter()).Returns((string?)null);
+        s.PrintDriver.Setup(p => p.GetDefaultPrinter(It.IsAny<CancellationToken>())).ReturnsAsync((string?)null);
         PrintManagerViewModel vm = s.Build();
 
         s.EntryService.Raise(e => e.MessageInserted += null, MakeMessage("MSG1", "body", 0));
@@ -154,7 +137,7 @@ public sealed class PrintManagerViewModelTests
     public void MessageInserted_PrintReceivedEnabled_EnqueuesGetPrintCountCopies()
     {
         Setup s = new();
-        s.PrintDriver.Setup(p => p.GetDefaultPrinter()).Returns((string?)null);
+        s.PrintDriver.Setup(p => p.GetDefaultPrinter(It.IsAny<CancellationToken>())).ReturnsAsync((string?)null);
         s.EngineController.Setup(r => r.GetPrintCount(It.IsAny<Message>())).Returns(3);
         PrintManagerViewModel vm = s.Build();
         vm.PrintReceivedEnabled = true;
@@ -171,7 +154,7 @@ public sealed class PrintManagerViewModelTests
     public void MessageInserted_PrintCountZero_EnqueuesNothing()
     {
         Setup s = new();
-        s.PrintDriver.Setup(p => p.GetDefaultPrinter()).Returns((string?)null);
+        s.PrintDriver.Setup(p => p.GetDefaultPrinter(It.IsAny<CancellationToken>())).ReturnsAsync((string?)null);
         s.EngineController.Setup(r => r.GetPrintCount(It.IsAny<Message>())).Returns(0);
         PrintManagerViewModel vm = s.Build();
         vm.PrintReceivedEnabled = true;
@@ -186,7 +169,7 @@ public sealed class PrintManagerViewModelTests
     public void Queue_ReceivedEntries_SortByDescendingPriority()
     {
         Setup s = new();
-        s.PrintDriver.Setup(p => p.GetDefaultPrinter()).Returns((string?)null);
+        s.PrintDriver.Setup(p => p.GetDefaultPrinter(It.IsAny<CancellationToken>())).ReturnsAsync((string?)null);
         s.EngineController.Setup(p => p.PrintReceivedDefaultEnabled).Returns(true);
         PrintManagerViewModel vm = s.Build();
 
@@ -201,7 +184,7 @@ public sealed class PrintManagerViewModelTests
     public void Queue_EqualPriorityReceivedEntries_PreserveFifoOrder()
     {
         Setup s = new();
-        s.PrintDriver.Setup(p => p.GetDefaultPrinter()).Returns((string?)null);
+        s.PrintDriver.Setup(p => p.GetDefaultPrinter(It.IsAny<CancellationToken>())).ReturnsAsync((string?)null);
         s.EngineController.Setup(p => p.PrintReceivedDefaultEnabled).Returns(true);
         PrintManagerViewModel vm = s.Build();
 
@@ -216,7 +199,7 @@ public sealed class PrintManagerViewModelTests
     public void RemoveCommand_RemovesOnlyTargetedEntry()
     {
         Setup s = new();
-        s.PrintDriver.Setup(p => p.GetDefaultPrinter()).Returns((string?)null);
+        s.PrintDriver.Setup(p => p.GetDefaultPrinter(It.IsAny<CancellationToken>())).ReturnsAsync((string?)null);
         PrintManagerViewModel vm = s.Build();
         vm.EnqueueManual(MakeEntryItem("N1", "First"));
         vm.EnqueueManual(MakeEntryItem("N2", "Second"));
@@ -233,7 +216,7 @@ public sealed class PrintManagerViewModelTests
     public void PurgeCommand_ClearsQueue()
     {
         Setup s = new();
-        s.PrintDriver.Setup(p => p.GetDefaultPrinter()).Returns((string?)null);
+        s.PrintDriver.Setup(p => p.GetDefaultPrinter(It.IsAny<CancellationToken>())).ReturnsAsync((string?)null);
         PrintManagerViewModel vm = s.Build();
         vm.EnqueueManual(MakeEntryItem("N1", "First"));
         vm.EnqueueManual(MakeEntryItem("N2", "Second"));

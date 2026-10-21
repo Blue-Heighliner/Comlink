@@ -711,8 +711,8 @@ Unlike the settings above, this is real OS-level behavior, not configuration or 
 ### `IPrintDriver` (not configurable)
 
 ```csharp
-IReadOnlyList<string> GetAvailablePrinters();
-string? GetDefaultPrinter();
+Task<IReadOnlyList<string>> GetAvailablePrinters(CancellationToken cancellation = default);
+Task<string?> GetDefaultPrinter(CancellationToken cancellation = default);
 Task PrintLine(string printerName, string line, CancellationToken cancellation = default);
 Task PageFeed(string printerName, CancellationToken cancellation = default);
 ```

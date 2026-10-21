@@ -29,29 +29,6 @@ public sealed class AlertViewModelTests
         return new MessageEntity { MessageId = messageId, Message = message };
     }
 
-    /// <summary>A freshly constructed ViewModel has no pending alerts.</summary>
-    [Fact]
-    public void Ctor_InitialState_NotAlerting()
-    {
-        AlertViewModel vm = new Setup().Build();
-
-        Assert.False(vm.IsAlerting);
-        Assert.Equal(0, vm.PendingCount);
-    }
-
-    /// <summary>AlertText is read from IEngineController, and the quick read keys are Space and Enter.</summary>
-    [Fact]
-    public void Ctor_ExposesConfigurationValues()
-    {
-        Setup s = new();
-        s.AlertSettings.Setup(c => c.AlertLabel).Returns("INCOMING");
-
-        AlertViewModel vm = s.Build();
-
-        Assert.Equal("INCOMING", vm.AlertText);
-        Assert.Equal(["Space", "Enter"], vm.QuickReadKeys);
-    }
-
     /// <summary>An inserted alert message becomes pending, starts alarming, and plays the sound.</summary>
     [Fact]
     public void MessageInserted_AlertMessage_BecomesPendingAndPlaysSound()

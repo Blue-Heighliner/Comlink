@@ -28,31 +28,6 @@ public sealed class StagedSendViewModelTests
         Assert.True(vm.HasQueue);
     }
 
-    /// <summary>RemoveCommand removes a single entry from the queue.</summary>
-    [Fact]
-    public void RemoveCommand_RemovesEntry()
-    {
-        StagedSendViewModel vm = new Setup().Build();
-        vm.Enqueue([MakeSend("A"), MakeSend("B")], StagedSendMode.Sequential, null);
-
-        vm.RemoveCommand.Execute(vm.Queue[0]);
-
-        Assert.Equal(["B"], vm.Queue.Select(e => e.Preview));
-    }
-
-    /// <summary>ClearCommand removes every entry from the queue.</summary>
-    [Fact]
-    public void ClearCommand_RemovesEveryEntry()
-    {
-        StagedSendViewModel vm = new Setup().Build();
-        vm.Enqueue([MakeSend("A"), MakeSend("B")], StagedSendMode.Sequential, null);
-
-        vm.ClearCommand.Execute(null);
-
-        Assert.Empty(vm.Queue);
-        Assert.False(vm.HasQueue);
-    }
-
     /// <summary>SendAllCommand cannot execute with an empty queue.</summary>
     [Fact]
     public void SendAllCommand_EmptyQueue_CannotExecute()

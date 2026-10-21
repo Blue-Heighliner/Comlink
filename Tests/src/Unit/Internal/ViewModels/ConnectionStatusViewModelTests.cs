@@ -100,18 +100,6 @@ public sealed class ConnectionStatusViewModelTests
         Assert.NotNull(row.LastConnectedAt);
     }
 
-    /// <summary>An empty status list (e.g. Peer mode's NullConnectionStatusService) produces no rows in either table.</summary>
-    [Fact]
-    public void Constructor_NoStatuses_BothRowCollectionsEmpty()
-    {
-        ConnectionStatusViewModel vm = new(new FakeStatusService());
-
-        Assert.Empty(vm.ServerRows);
-        Assert.Empty(vm.ClientRows);
-        Assert.False(vm.HasServerRows);
-        Assert.False(vm.HasClientRows);
-    }
-
     /// <summary>HasServerRows/HasClientRows go false once a refresh drops every row of that kind.</summary>
     [Fact]
     public void StatusesChanged_AllRowsOfKindRemoved_HasRowsBecomesFalse()

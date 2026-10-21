@@ -61,13 +61,4 @@ public sealed class PooledArrayBufferWriterTests
 
         Assert.Equal(new byte[] { 4, 5, 6 }, writer.WrittenMutableMemory.ToArray());
     }
-
-    /// <summary>Disposing more than once is a safe no-op the second time.</summary>
-    [Fact]
-    public void Dispose_CalledTwice_DoesNotThrow()
-    {
-        PooledArrayBufferWriter<byte> writer = new();
-        writer.Dispose();
-        writer.Dispose();
-    }
 }

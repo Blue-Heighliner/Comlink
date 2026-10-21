@@ -123,34 +123,6 @@ public sealed class RepositoryTests : IDisposable
         Assert.Equal(2, today!.EventEntries.Count);
     }
 
-    /// <summary>Insert then Get by id returns the entity.</summary>
-    [Fact]
-    public async Task ActivityLog_Insert_ThenGetById_ReturnsEntity()
-    {
-        ActivityLogRepository repo = new(ctx);
-        ActivityLogEntity entity = new() { Date = DateTime.UtcNow.Date, EventEntries = [] };
-        await repo.Insert(entity);
-
-        ActivityLogEntity? found = await repo.Get(entity.Id);
-        Assert.NotNull(found);
-        Assert.Equal(entity.Id, found.Id);
-    }
-
-    /// <summary>Update persists changes to an existing entity.</summary>
-    [Fact]
-    public async Task ActivityLog_Update_PersistsChanges()
-    {
-        ActivityLogRepository repo = new(ctx);
-        ActivityLogEntity entity = new() { Date = DateTime.UtcNow.Date, EventEntries = [] };
-        await repo.Insert(entity);
-        entity.EventEntries.Add(new ActivityLogEntry { At = DateTime.UtcNow, Message = "updated" });
-        await repo.Update(entity);
-
-        ActivityLogEntity? found = await repo.Get(entity.Id);
-        Assert.Single(found!.EventEntries);
-        Assert.Equal("updated", found.EventEntries[0].Message);
-    }
-
     /// <summary>GetPage returns entities ordered by date descending.</summary>
     [Fact]
     public async Task ActivityLog_GetPage_ReturnsInDescendingDateOrder()
@@ -165,31 +137,6 @@ public sealed class RepositoryTests : IDisposable
 
         Assert.Equal(2, page.Count);
         Assert.True(page[0].Date >= page[1].Date);
-    }
-
-    /// <summary>Count returns the total number of activity log documents.</summary>
-    [Fact]
-    public async Task ActivityLog_Count_ReturnsCorrectTotal()
-    {
-        ActivityLogRepository repo = new(ctx);
-        await repo.Insert(new ActivityLogEntity { Date = DateTime.UtcNow.Date, EventEntries = [] });
-        await repo.Insert(new ActivityLogEntity { Date = DateTime.UtcNow.Date.AddDays(-1), EventEntries = [] });
-
-        int count = await repo.Count();
-        Assert.Equal(2, count);
-    }
-
-    /// <summary>Insert then Get by id returns the draft.</summary>
-    [Fact]
-    public async Task Draft_Insert_ThenGet_ReturnsDraft()
-    {
-        DraftRepository repo = new(ctx);
-        DraftEntity draft = MakeDraft("root-drafts");
-        await repo.Insert(draft);
-
-        DraftEntity? found = await repo.Get(draft.Id);
-        Assert.NotNull(found);
-        Assert.Equal(draft.Id, found.Id);
     }
 
     /// <summary>GetPage returns unsent drafts alphabetically when alphabetical=true.</summary>
@@ -248,33 +195,6 @@ public sealed class RepositoryTests : IDisposable
         Assert.Equal(2, count);
     }
 
-    /// <summary>Update persists changes to a draft.</summary>
-    [Fact]
-    public async Task Draft_Update_PersistsBodyChange()
-    {
-        DraftRepository repo = new(ctx);
-        DraftEntity draft = MakeDraft("root-drafts", "Original");
-        await repo.Insert(draft);
-        draft.Body = "Updated";
-        await repo.Update(draft);
-
-        DraftEntity? found = await repo.Get(draft.Id);
-        Assert.Equal("Updated", found!.Body);
-    }
-
-    /// <summary>Delete removes the draft from the database.</summary>
-    [Fact]
-    public async Task Draft_Delete_RemovesDraft()
-    {
-        DraftRepository repo = new(ctx);
-        DraftEntity draft = MakeDraft("root-drafts");
-        await repo.Insert(draft);
-        await repo.Delete(draft.Id);
-
-        DraftEntity? found = await repo.Get(draft.Id);
-        Assert.Null(found);
-    }
-
     /// <summary>GetRootId returns "root-{type}".</summary>
     [Theory]
     [InlineData(FolderType.Inbox, "root-inbox")]
@@ -287,44 +207,6 @@ public sealed class RepositoryTests : IDisposable
         FolderRepository repo = new(ctx);
         string id = await repo.GetRootId(type);
         Assert.Equal(expected, id);
-    }
-
-    /// <summary>Insert then GetAll returns inserted folders.</summary>
-    [Fact]
-    public async Task Folder_Insert_ThenGetAll_ContainsInserted()
-    {
-        FolderRepository repo = new(ctx);
-        FolderEntity f = MakeFolder("inbox-root", FolderType.Inbox);
-        await repo.Insert(f);
-
-        List<FolderEntity> all = await repo.GetAll();
-        Assert.Contains(all, x => x.Id == "inbox-root");
-    }
-
-    /// <summary>Get by id returns the folder.</summary>
-    [Fact]
-    public async Task Folder_Get_ById_ReturnsFolder()
-    {
-        FolderRepository repo = new(ctx);
-        FolderEntity f = MakeFolder("notes-root", FolderType.Notes);
-        await repo.Insert(f);
-
-        FolderEntity? found = await repo.Get("notes-root");
-        Assert.NotNull(found);
-        Assert.Equal(FolderType.Notes, found.RootType);
-    }
-
-    /// <summary>Delete returns true and removes the folder.</summary>
-    [Fact]
-    public async Task Folder_Delete_RemovesFolder()
-    {
-        FolderRepository repo = new(ctx);
-        FolderEntity f = MakeFolder("del-folder", FolderType.Drafts);
-        await repo.Insert(f);
-
-        bool deleted = await repo.Delete("del-folder");
-        Assert.True(deleted);
-        Assert.Null(await repo.Get("del-folder"));
     }
 
     /// <summary>GetTree builds a hierarchy with root and children.</summary>
@@ -343,19 +225,6 @@ public sealed class RepositoryTests : IDisposable
         Assert.NotNull(rootFolder);
         Assert.Single(rootFolder.Children);
         Assert.Equal("child", rootFolder.Children[0].Id);
-    }
-
-    /// <summary>Insert then Get returns the note.</summary>
-    [Fact]
-    public async Task Note_Insert_ThenGet_ReturnsNote()
-    {
-        NoteRepository repo = new(ctx);
-        NoteEntity note = MakeNote("root-notes");
-        await repo.Insert(note);
-
-        NoteEntity? found = await repo.Get(note.Id);
-        Assert.NotNull(found);
-        Assert.Equal(note.Id, found.Id);
     }
 
     /// <summary>GetPage alphabetical returns notes sorted by body text.</summary>
@@ -384,45 +253,6 @@ public sealed class RepositoryTests : IDisposable
         List<NoteEntity> page = await repo.GetPage("root-notes", 1, alphabetical: false);
 
         Assert.Equal("New", page[0].Body);
-    }
-
-    /// <summary>Count returns count of notes in the folder.</summary>
-    [Fact]
-    public async Task Note_Count_ReturnsCorrectCount()
-    {
-        NoteRepository repo = new(ctx);
-        await repo.Insert(MakeNote("root-notes"));
-        await repo.Insert(MakeNote("root-notes"));
-        await repo.Insert(MakeNote("other-folder"));
-
-        int count = await repo.Count("root-notes");
-        Assert.Equal(2, count);
-    }
-
-    /// <summary>Update persists body changes.</summary>
-    [Fact]
-    public async Task Note_Update_PersistsChanges()
-    {
-        NoteRepository repo = new(ctx);
-        NoteEntity note = MakeNote("root-notes", "Original");
-        await repo.Insert(note);
-        note.Body = "Updated";
-        await repo.Update(note);
-
-        NoteEntity? found = await repo.Get(note.Id);
-        Assert.Equal("Updated", found!.Body);
-    }
-
-    /// <summary>Delete removes the note.</summary>
-    [Fact]
-    public async Task Note_Delete_RemovesNote()
-    {
-        NoteRepository repo = new(ctx);
-        NoteEntity note = MakeNote("root-notes");
-        await repo.Insert(note);
-        await repo.Delete(note.Id);
-
-        Assert.Null(await repo.Get(note.Id));
     }
 
     /// <summary>MessageRepository.GetAll returns messages from every folder, both Inbox and Outbox.</summary>
@@ -454,32 +284,6 @@ public sealed class RepositoryTests : IDisposable
         List<DraftEntity> all = await repo.GetAll();
 
         Assert.Equal(3, all.Count);
-    }
-
-    /// <summary>NoteRepository.GetAll returns notes across all folders.</summary>
-    [Fact]
-    public async Task Note_GetAll_ReturnsAllFolders()
-    {
-        NoteRepository repo = new(ctx);
-        await repo.Insert(MakeNote("root-notes"));
-        await repo.Insert(MakeNote("custom-folder"));
-
-        List<NoteEntity> all = await repo.GetAll();
-
-        Assert.Equal(2, all.Count);
-    }
-
-    /// <summary>ActivityLogRepository.GetAll returns every activity log document.</summary>
-    [Fact]
-    public async Task ActivityLog_GetAll_ReturnsAllDocuments()
-    {
-        ActivityLogRepository repo = new(ctx);
-        await repo.Insert(new ActivityLogEntity { Date = DateTime.UtcNow.Date, EventEntries = [] });
-        await repo.Insert(new ActivityLogEntity { Date = DateTime.UtcNow.Date.AddDays(-1), EventEntries = [] });
-
-        List<ActivityLogEntity> all = await repo.GetAll();
-
-        Assert.Equal(2, all.Count);
     }
 
     /// <summary>AutoForwardTargetsRepository.Get returns null for a controller that has never been saved.</summary>

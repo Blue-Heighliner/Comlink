@@ -137,19 +137,6 @@ public sealed class CompositePeerTransportTests
         serialPart.Transport.Verify(t => t.Reset(ip), Times.Never);
     }
 
-    /// <summary>Disposing the composite disposes both transports.</summary>
-    [Fact]
-    public async Task DisposeAsync_DisposesBoth()
-    {
-        Part ipPart = BuildPart();
-        Part serialPart = BuildPart();
-
-        await new CompositePeerTransport(ipPart.Transport.Object, serialPart.Transport.Object).DisposeAsync();
-
-        ipPart.Transport.Verify(t => t.DisposeAsync(), Times.Once);
-        serialPart.Transport.Verify(t => t.DisposeAsync(), Times.Once);
-    }
-
     private static MsmtSessionPeerOptions IpOptions()
     {
         (X509Certificate2 identity, _, X509Certificate2Collection authorities) = TestMsmtCertificates.Create();

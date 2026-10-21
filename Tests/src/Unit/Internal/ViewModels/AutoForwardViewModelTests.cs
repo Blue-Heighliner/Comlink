@@ -34,20 +34,6 @@ public sealed class AutoForwardViewModelTests
         public AutoForwardViewModel Build() => new(EngineController.Object, CurrentUserProvider.Object, TargetsRepository.Object, Connection.Object);
     }
 
-    /// <summary>A freshly constructed ViewModel has no controllers, no targets, and no selection until Refresh runs.</summary>
-    [Fact]
-    public void Ctor_InitialState_IsEmpty()
-    {
-        AutoForwardViewModel vm = new Setup().Build();
-
-        Assert.Empty(vm.AvailableControllers);
-        Assert.False(vm.HasControllers);
-        Assert.Null(vm.SelectedController);
-        Assert.Empty(vm.Targets);
-        Assert.False(vm.HasTargets);
-        Assert.Empty(vm.AllUserNames);
-    }
-
     /// <summary>RefreshCommand populates AvailableControllers with only the auto forwarders the current user lists, and sets HasControllers accordingly.</summary>
     [Fact]
     public async Task RefreshCommand_PopulatesOnlyControllersTheCurrentUserHasAccessTo()

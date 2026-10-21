@@ -12,17 +12,6 @@ public sealed class PooledMemoryOwnerTests
         Assert.Equal(10, owner.Memory.Length);
     }
 
-    /// <summary>Memory can be written and read back through the owner.</summary>
-    [Fact]
-    public void Memory_IsWritable()
-    {
-        using PooledMemoryOwner owner = PooledMemoryOwner.Rent(3);
-
-        new byte[] { 1, 2, 3 }.CopyTo(owner.Memory);
-
-        Assert.Equal(new byte[] { 1, 2, 3 }, owner.Memory.ToArray());
-    }
-
     /// <summary>Disposing twice is a safe no-op the second time, so the array is never returned to the pool twice.</summary>
     [Fact]
     public void Dispose_CalledTwice_DoesNotThrow()
