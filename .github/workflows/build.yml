@@ -37,8 +37,8 @@ jobs:
       - name: Build
         run: dotnet build -p:RestoreLockedMode=true
 
-      # Only checks - never fixes or commits. Run Scripts/Verify.cs locally to apply formatting fixes
-      # and the coverage badge, and push the result, before committing and before dispatching a publish.
+      # Only checks - never fixes or commits. The formatting fixes and the coverage badge are applied locally
+      # (see Verification in AGENTS.md), and the result pushed, before committing and before dispatching a publish.
       - name: Verify formatting
         run: dotnet format --verify-no-changes
 

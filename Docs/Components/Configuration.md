@@ -133,7 +133,7 @@ The current user's info is what decides how this node behaves, and the user is k
 
 **Network file:** this is the file; each field above has the same name in a user's entry (see [Config.md](Config.md)), and the entry also carries the settings of the node that user runs.
 
-**Sample:** each scenario under `Scripts/Scenarios/` (`ClientServer`, `ClientServerSerial`, `ServerCluster`) has its own `Config.json` describing its whole network: role, IP host, parent and children, message level and storage for each of its users. Each scenario script passes it with `--config`, and names the node's user through the `--certificate` file it passes, which is issued to that user.
+**Sample:** each scenario under `Scripts/Support/` (`ClientServer`, `ClientServerSerial`, `ServerCluster`) has its own `Config.json` describing its whole network: role, IP host, parent and children, message level and storage for each of its users. Each scenario script passes it with `--config`, and names the node's user through the `--certificate` file it passes, which is issued to that user.
 
 ---
 
@@ -576,7 +576,7 @@ States the two files the node proves who it is with: the public certificate (`.c
 
 **Network file:** none; certificates are never resolved relative to the network file, and the file has no keys for them. It only lists the users a certificate may name.
 
-**Sample:** states `Certificates("Authority.cer", "Certificate.pfx")`, so a node run by hand looks for those two files in its app data folder. Each scenario script instead passes `--authority Scripts/Scenarios/Root.cer` and `--certificate Scripts/Scenarios/<ClientServer|ServerCluster>/<USERNAME>.pfx` (the `ClientServerSerial` scenario reuses the `ClientServer` certificates).
+**Sample:** states `Certificates("Authority.cer", "Certificate.pfx")`, so a node run by hand looks for those two files in its app data folder. Each scenario script instead passes `--authority Scripts/Support/Root.cer` and `--certificate Scripts/Support/<ClientServer|ServerCluster>/<USERNAME>.pfx` (the `ClientServerSerial` scenario reuses the `ClientServer` certificates).
 
 ---
 
@@ -596,7 +596,7 @@ engine.Msmt().HandshakeTimeout(TimeSpan.FromSeconds(20));
 
 **Network file:** none; the certificates are the files of [`Certificates`](#certificates).
 
-**Sample:** Sample states only the `Msmt()` timeouts here; its certificates are stated through `Certificates`, and `Scripts/Scenarios/` checks in a `{USERNAME}.pfx` per role, signed by the shared `Root.cer`.
+**Sample:** Sample states only the `Msmt()` timeouts here; its certificates are stated through `Certificates`, and `Scripts/Support/` checks in a `{USERNAME}.pfx` per role, signed by the shared `Root.cer`.
 
 ---
 

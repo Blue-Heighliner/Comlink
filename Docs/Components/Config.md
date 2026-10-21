@@ -163,7 +163,7 @@ Run with no GUI, as a normal peer.
 
 ### A client/server hierarchy
 
-One server with two clients that each name it as their parent, the server storing messages (`Scripts/Scenarios/ClientServer/Config.json`):
+One server with two clients that each name it as their parent, the server storing messages (`Scripts/Support/ClientServer/Config.json`):
 
 ```json
 {

@@ -4,10 +4,10 @@
 // Manual test scenario: a two-server cluster (Server1, Server2), each with one Client child (Client1
 // under Server1, Client2 under Server2). Both servers form a long-term connection to each other in
 // addition to hosting their own child, so each server's connections table shows one row for the other
-// server. Run via Run.task, or standalone (after Build.cs) in its own terminal alongside Server1.cs,
+// server. Run via Scripts/RunServerCluster.task, or standalone (after Support/Build.cs) in its own terminal alongside Server1.cs,
 // Server2.cs, and Client2.cs, from the repo root:
-//   dotnet run Scripts/Scenarios/ServerCluster/Client1.cs
+//   dotnet run Scripts/Support/ServerCluster/Client1.cs
 
 using Markwardt.ScriptUtilities;
 
-(await Script.Run("dotnet", "run", "--no-build", "--project", "Sample/Sample.csproj", "--", "--config", "Scripts/Scenarios/ServerCluster/Config.json", "--authority", "Scripts/Scenarios/Root.cer", "--certificate", "Scripts/Scenarios/ServerCluster/CLIENT1.pfx")).Verify();
+(await Script.Run("dotnet", "run", "--no-build", "--project", "Sample/Sample.csproj", "--", "--config", "Scripts/Support/ServerCluster/Config.json", "--authority", "Scripts/Support/Root.cer", "--certificate", "Scripts/Support/ServerCluster/CLIENT1.pfx")).Verify();
