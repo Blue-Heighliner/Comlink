@@ -223,7 +223,7 @@ internal sealed partial class MainViewModel : ObservableObject, IMainViewModel
     private readonly INetworkReloadService networkReload;
     private readonly IBodyDocumentFactory bodyDocumentFactory;
     private readonly ILoggerFactory loggerFactory;
-    private readonly ILogger logger;
+    private readonly MicrosoftLogger logger;
 
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(ShowMainLayout))]

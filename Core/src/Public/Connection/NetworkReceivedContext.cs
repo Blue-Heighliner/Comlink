@@ -1,11 +1,8 @@
 namespace BlueHeighliner.Comlink;
 
-/// <summary>Handed to <see cref="IFrameHandler{TFrame, TPriority, TLevel, TAspect}.OnReceived"/>.</summary>
+/// <summary>Handed to <see cref="IFrameHandler{TFrame, TPriority, TLevel, TAspect}.OnReceived"/>. What a handler acts with is in <see cref="INetwork{TFrame, TPriority, TLevel, TAspect}"/> and <see cref="IUserCatalog"/>, which it asks for through dependency injection.</summary>
 /// <typeparam name="TFrame">The host's frame type.</typeparam>
-/// <typeparam name="TPriority">The enum the host stated for its priorities.</typeparam>
-/// <typeparam name="TLevel">The enum the host stated for its message levels.</typeparam>
-/// <typeparam name="TAspect">The enum the host stated for its message aspects.</typeparam>
-public interface INetworkReceivedContext<TFrame, TPriority, TLevel, TAspect> : INetworkContext<TFrame, TPriority, TLevel, TAspect> where TFrame : class where TPriority : struct, Enum where TLevel : struct, Enum where TAspect : struct, Enum
+public interface INetworkReceivedContext<TFrame> where TFrame : class
 {
     /// <summary>Gets the frame that was received. The engine never disposes it: if the frame type is <see cref="IDisposable"/>, disposing it is up to the handler.</summary>
     TFrame Frame { get; }

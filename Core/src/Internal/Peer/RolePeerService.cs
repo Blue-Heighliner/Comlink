@@ -67,7 +67,7 @@ internal sealed class RolePeerService(IServiceProvider services, IEngineControll
             catch (OperationCanceledException) when (run.IsCancellationRequested) { }
             catch (InvalidOperationException ex) when (ex is not InvalidEngineConfigurationException)
             {
-                ILogger? logger = services.GetService<ILoggerFactory>()?.CreateLogger(LogCategories.App);
+                MicrosoftLogger? logger = services.GetService<ILoggerFactory>()?.CreateLogger(LogCategories.App);
                 logger?.Record(LogEvents.NetworkingCouldNotStart, "Networking could not start: {Message}", ex.Message);
                 logger?.Record(LogEvents.NetworkingNotWorking, "Networking is not working: {Reason}", "its certificates or settings could not be used");
             }

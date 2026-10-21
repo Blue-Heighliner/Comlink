@@ -13,7 +13,7 @@ internal sealed class TracingPeerTransport : IPeerTransport
     /// <param name="category">The trace category.</param>
     /// <param name="sent">The event written for bytes sent.</param>
     /// <param name="receivedEvent">The event written for bytes received.</param>
-    public TracingPeerTransport(IPeerTransport inner, ILogger logger, ILogSettings settings, string category, EventId sent, EventId receivedEvent)
+    public TracingPeerTransport(IPeerTransport inner, MicrosoftLogger logger, ILogSettings settings, string category, EventId sent, EventId receivedEvent)
     {
         this.settings = settings;
         this.category = category;
@@ -27,7 +27,7 @@ internal sealed class TracingPeerTransport : IPeerTransport
     }
 
     private readonly IPeerTransport inner;
-    private readonly ILogger logger;
+    private readonly MicrosoftLogger logger;
     private readonly ILogSettings settings;
     private readonly string category;
     private readonly EventId sent;

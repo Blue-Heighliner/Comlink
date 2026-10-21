@@ -85,6 +85,20 @@ internal sealed class EngineBuilder<TFrame, TPacket, TPriority, TLevel, TAspect>
     }
 
     /// <inheritdoc />
+    public IEngineBuilder<TFrame, TPacket, TPriority, TLevel, TAspect> StackTrace(bool enabled)
+    {
+        state.IsStackTraceEnabled = enabled;
+        return this;
+    }
+
+    /// <inheritdoc />
+    public IEngineBuilder<TFrame, TPacket, TPriority, TLevel, TAspect> Reconfigure<TReconfigurer>() where TReconfigurer : class, IReconfigurer
+    {
+        state.Reconfigurer = ServiceRegistration<IReconfigurer>.Of(typeof(TReconfigurer), instance => (IReconfigurer)instance);
+        return this;
+    }
+
+    /// <inheritdoc />
     public IEngineBuilder<TFrame, TPacket, TPriority, TLevel, TAspect> Certificates(string authorityPath, string userPath)
     {
         state.AuthorityCertificateValue = authorityPath;

@@ -11,6 +11,7 @@ public sealed class LogSettingsTests : IDisposable
     {
         Directory.CreateDirectory(directory);
         controller.SetupGet(c => c.LoggingFilePath).Returns(Path.Combine(directory, "Logging.json"));
+        controller.SetupGet(c => c.LogCategoriesOnByDefault).Returns(LogCategories.OnByDefault);
     }
 
     /// <inheritdoc />
@@ -30,6 +31,23 @@ public sealed class LogSettingsTests : IDisposable
     [InlineData("PACKETS", false)]
     public void Defaults_OnlyTheWhitelistedCategoriesAreOn(string category, bool expected)
         => Assert.Equal(expected, new LogSettings(controller.Object, NetworkConfig.Load([], directory)).IsEnabled(category));
+
+    /// <summary>A list from the host replaces the whitelist: its categories are on in any case, the engine's own that it leaves out are off, and Logging.json still adds.</summary>
+    [Fact]
+    public void HostList_ReplacesTheWhitelist()
+    {
+        controller.SetupGet(c => c.LogCategoriesOnByDefault).Returns(["frames", "SomethingOfTheHost", "APP"]);
+        Write("""["Packets"]""");
+
+        LogSettings settings = new(controller.Object, NetworkConfig.Load([], directory));
+
+        Assert.True(settings.IsEnabled("FRAMES"));
+        Assert.True(settings.IsEnabled("somethingofthehost"));
+        Assert.True(settings.IsEnabled("APP"));
+        Assert.True(settings.IsEnabled("PACKETS"));
+        Assert.False(settings.IsEnabled("ERROR"));
+        Assert.False(settings.IsEnabled("ACTIVITY"));
+    }
 
     /// <summary>Logging.json turns on the categories it names, in any case.</summary>
     [Fact]

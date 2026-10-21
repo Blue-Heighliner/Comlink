@@ -26,7 +26,7 @@ internal sealed class ClientPeerService : IPeerService, IConnectionStatusService
 
     private readonly IPeerTransportFactory transportFactory;
     private readonly IEngineController engineController;
-    private readonly ILogger logger;
+    private readonly MicrosoftLogger logger;
     private readonly PointMaintenance points;
     private readonly Lock reconfigureLock = new();
 

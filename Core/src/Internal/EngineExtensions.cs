@@ -59,29 +59,70 @@ internal static class EngineExtensions
     }
 
     /// <summary>
-    /// Scans the Engine assembly and registers each concrete class as its <c>IThing</c> interface singleton
-    /// using <see cref="ServiceCollectionDescriptorExtensions.TryAddSingleton{TService,TImplementation}"/>.
+    /// Registers what the host's configuration and handlers are built from: the host's own registrations, then every concrete class of the host's assemblies as its <c>IThing</c> interface singleton
+    /// (see <see cref="AddHostConventionSingletons"/>), which never replaces a registration the host made itself.
     /// </summary>
+    /// <param name="builder">The host builder to configure.</param>
+    /// <param name="configure">Registers the host's own services, or <see langword="null"/> for none.</param>
+    /// <param name="assemblies">The host's assemblies to scan.</param>
+    public static IHostBuilder UseHostServices(this IHostBuilder builder, Action<IServiceCollection>? configure, IReadOnlyList<Assembly> assemblies)
+        => builder.ConfigureServices((_, services) =>
+        {
+            configure?.Invoke(services);
+            services.AddHostConventionSingletons(assemblies);
+        });
+
+    /// <summary>
+    /// Scans <paramref name="assemblies"/> and registers each concrete class as its <c>IThing</c> interface singleton, constructed through dependency injection (see <see cref="ServiceInstantiation"/>),
+    /// with <see cref="ServiceCollectionDescriptorExtensions.TryAddSingleton{TService}(IServiceCollection, Func{IServiceProvider, TService})"/>, so a service the host registered by hand always takes precedence.
+    /// </summary>
+    /// <param name="services">The services to add to.</param>
+    /// <param name="assemblies">The host's assemblies to scan.</param>
+    public static IServiceCollection AddHostConventionSingletons(this IServiceCollection services, IEnumerable<Assembly> assemblies)
+    {
+        foreach ((Type iface, Type type) in assemblies.Distinct().SelectMany(ConventionPairs))
+        {
+            if (!typeof(IEngineConfiguration).IsAssignableFrom(type))
+            {
+                services.TryAddSingleton(iface, provider => provider.Create(type));
+            }
+        }
+
+        return services;
+    }
+
     private static void AddConventionSingletons(this IServiceCollection services)
     {
-        Assembly assembly = typeof(EngineExtensions).Assembly;
-        foreach (Type type in assembly.GetTypes())
+        foreach ((Type iface, Type type) in ConventionPairs(typeof(EngineExtensions).Assembly))
         {
-            if (type.IsAbstract || !type.IsClass || type.IsNested || type.IsGenericTypeDefinition)
-            {
-                continue;
-            }
-            if (type.IsDefined(typeof(ConstructedManuallyAttribute), false))
-            {
-                continue;
-            }
-            Type? iface = type.GetInterfaces()
-                .FirstOrDefault(i => i.Name == $"I{type.Name}");
-            if (iface is null)
-            {
-                continue;
-            }
             services.TryAddSingleton(iface, type);
+        }
+    }
+
+    // Each concrete class that implements the interface named for it, such as MyService for IMyService. A class marked ConstructedManually is built where it is used, so it is left out.
+    private static IEnumerable<(Type Interface, Type Type)> ConventionPairs(Assembly assembly)
+    {
+        Type[] types;
+        try
+        {
+            types = assembly.GetTypes();
+        }
+        catch (ReflectionTypeLoadException ex)
+        {
+            types = [.. ex.Types.OfType<Type>()];
+        }
+
+        foreach (Type type in types)
+        {
+            if (type.IsAbstract || !type.IsClass || type.IsNested || type.IsGenericTypeDefinition || type.IsDefined(typeof(ConstructedManuallyAttribute), false))
+            {
+                continue;
+            }
+
+            if (type.GetInterfaces().FirstOrDefault(candidate => candidate.Name == $"I{type.Name}" && !candidate.IsGenericTypeDefinition) is { } iface)
+            {
+                yield return (iface, type);
+            }
         }
     }
 }

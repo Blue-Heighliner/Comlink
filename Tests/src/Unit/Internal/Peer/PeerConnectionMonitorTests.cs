@@ -92,7 +92,7 @@ public sealed class PeerConnectionMonitorTests
         Assert.Contains("handshake rejected", message);
     }
 
-    private sealed class RecordingLogger : ILogger
+    private sealed class RecordingLogger : MicrosoftLogger
     {
         public List<(EventId Id, string Message)> Entries { get; } = [];
 

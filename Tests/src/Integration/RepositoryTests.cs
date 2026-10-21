@@ -48,13 +48,13 @@ public sealed class RepositoryTests : IDisposable
     public async Task ActivityLog_AppendEvent_CreatesEntityForToday()
     {
         ActivityLogRepository repo = new(ctx);
-        await repo.AppendEvent("first event", 7);
+        await repo.AppendEvent("first event", "CL7");
 
         ActivityLogEntity? today = (await repo.GetAll()).SingleOrDefault();
         Assert.NotNull(today);
         Assert.Single(today.EventEntries);
         Assert.Equal("first event", today.EventEntries[0].Message);
-        Assert.Equal(7, today.EventEntries[0].EventId);
+        Assert.Equal("CL7", today.EventEntries[0].EventId);
     }
 
     /// <summary>What is logged before the database is open waits, and is written with the time it was logged once the database opens.</summary>
@@ -67,8 +67,8 @@ public sealed class RepositoryTests : IDisposable
             ActivityLogRepository repo = new(closed);
             DateTime before = DateTime.UtcNow;
 
-            await repo.AppendEvent("starting", 65);
-            await repo.AppendEvent("started", 66);
+            await repo.AppendEvent("starting", "CL65");
+            await repo.AppendEvent("started", "CL66");
             Assert.False(closed.IsOpen);
 
             closed.Initialize();
@@ -80,10 +80,10 @@ public sealed class RepositoryTests : IDisposable
 
             ActivityLogEntity today = Assert.Single(await repo.GetAll());
             Assert.Equal(["starting", "started"], today.EventEntries.Select(entry => entry.Message));
-            Assert.Equal([65, 66], today.EventEntries.Select(entry => entry.EventId));
+            Assert.Equal(["CL65", "CL66"], today.EventEntries.Select(entry => entry.EventId));
             Assert.All(today.EventEntries, entry => Assert.InRange(entry.At.ToUniversalTime(), before.AddSeconds(-1), DateTime.UtcNow.AddSeconds(1)));
 
-            await repo.AppendEvent("later", 67);
+            await repo.AppendEvent("later", "CL67");
             Assert.Equal(3, (await repo.GetAll()).Single().EventEntries.Count);
         }
         finally
@@ -92,13 +92,32 @@ public sealed class RepositoryTests : IDisposable
         }
     }
 
+    /// <summary>An activity log written when event identifiers were numbers is still read, its identifiers as the engine's event of that number.</summary>
+    [Fact]
+    public void ActivityLog_WrittenWithNumericIds_IsStillRead()
+    {
+        using LiteDB.LiteDatabase database = new(new MemoryStream());
+        LiteDB.ILiteCollection<LiteDB.BsonDocument> raw = database.GetCollection("activity_logs");
+        raw.Insert(new LiteDB.BsonDocument
+        {
+            ["Date"] = DateTime.UtcNow.Date,
+            ["EventEntries"] = new LiteDB.BsonArray { new LiteDB.BsonDocument { ["At"] = DateTime.UtcNow, ["Message"] = "old", ["EventId"] = 65 } }
+        });
+
+        ActivityLogEntity entity = database.GetCollection<ActivityLogEntity>("activity_logs").FindAll().Single();
+
+        ActivityLogEntry entry = Assert.Single(entity.EventEntries);
+        Assert.Equal("old", entry.Message);
+        Assert.Equal("CL65", entry.EventId);
+    }
+
     /// <summary>Appending twice adds to the same day's entity.</summary>
     [Fact]
     public async Task ActivityLog_AppendEvent_AccumulatesOnSameDay()
     {
         ActivityLogRepository repo = new(ctx);
-        await repo.AppendEvent("A", 1);
-        await repo.AppendEvent("B", 2);
+        await repo.AppendEvent("A", "CL1");
+        await repo.AppendEvent("B", "CL2");
 
         ActivityLogEntity? today = (await repo.GetAll()).SingleOrDefault();
         Assert.Equal(2, today!.EventEntries.Count);

@@ -4,11 +4,11 @@ namespace BlueHeighliner.Comlink.Tests;
 internal sealed class TestFrameHandler : IFrameHandler<TestFrame, TestMessagePriority, TestLevel, TestAspect>
 {
     /// <inheritdoc />
-    public Task OnConnected(INetworkConnectedContext<TestFrame, TestMessagePriority, TestLevel, TestAspect> context) => Task.CompletedTask;
+    public Task OnConnected(INetworkConnectedContext context) => Task.CompletedTask;
 
     /// <inheritdoc />
-    public Task OnDisconnected(INetworkDisconnectedContext<TestFrame, TestMessagePriority, TestLevel, TestAspect> context) => Task.CompletedTask;
+    public Task OnDisconnected(INetworkDisconnectedContext context) => Task.CompletedTask;
 
     /// <inheritdoc />
-    public Task OnReceived(INetworkReceivedContext<TestFrame, TestMessagePriority, TestLevel, TestAspect> context) => Task.CompletedTask;
+    public Task OnReceived(INetworkReceivedContext<TestFrame> context) => Task.CompletedTask;
 }

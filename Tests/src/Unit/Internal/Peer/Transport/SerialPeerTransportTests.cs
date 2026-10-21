@@ -9,7 +9,7 @@ public sealed class SerialPeerTransportTests
         await peer.Connect(255, 255);
     }
 
-    private static readonly ILogger logger = LoggerFactory.Create(_ => { }).CreateLogger("test");
+    private static readonly MicrosoftLogger logger = LoggerFactory.Create(_ => { }).CreateLogger("test");
     private static readonly ConnectionPoint point = new() { SerialPort = "SL0" };
     private static readonly TimeSpan timeout = TimeSpan.FromSeconds(30);
 

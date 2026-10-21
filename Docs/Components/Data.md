@@ -130,7 +130,7 @@ One record per day, accumulated throughout the day.
 |-------|------|
 | `Id` | `ObjectId` |
 | `Date` | `DateOnly` |
-| `EventEntries` | `List<ActivityLogEntry>` | The day's events: `{ At, Message, EventId }`, where `EventId` is the identifier of the kind of event (`0` for none) |
+| `EventEntries` | `List<ActivityLogEntry>` | The day's events: `{ At, Message, EventId }`, where `EventId` is the text identifier of the kind of event (`CL56`; empty for none). Entries stored when identifiers were numbers are read as the engine event of that number (`65` as `CL65`), by a mapper `LiteDbContext` registers; an export written then is read the same way |
 | `FolderId` | `string` |
 
 ### `FolderEntity`

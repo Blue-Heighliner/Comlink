@@ -10,7 +10,7 @@ namespace BlueHeighliner.Comlink;
 internal sealed class PacketizingPeerTransport : IPeerTransport
 {
     /// <summary>Initializes a new <see cref="PacketizingPeerTransport"/> over <paramref name="inner"/>.</summary>
-    public PacketizingPeerTransport(IPeerTransport inner, IPacketizer packetizer, int window, ILogger logger)
+    public PacketizingPeerTransport(IPeerTransport inner, IPacketizer packetizer, int window, MicrosoftLogger logger)
     {
         this.inner = inner;
         this.packetizer = packetizer;
@@ -24,7 +24,7 @@ internal sealed class PacketizingPeerTransport : IPeerTransport
     private readonly IPeerTransport inner;
     private readonly IPacketizer packetizer;
     private readonly int window;
-    private readonly ILogger logger;
+    private readonly MicrosoftLogger logger;
     private readonly ConcurrentDictionary<PeerConnection, IPacketAssembler> assemblers = new();
     private readonly ConcurrentDictionary<PeerConnection, PacketScheduler> schedulers = new();
     private readonly PeerEvent<PeerReceivedEventArgs> received = new();

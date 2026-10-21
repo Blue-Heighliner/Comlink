@@ -21,14 +21,6 @@ internal sealed class FrameHandshakeHandlerAdapter<TFrame>(IFrameHandshakeHandle
     {
         public IConnectionInfo Connection => session.Connection;
 
-        public UserInfo CurrentUser => session.Engine.CurrentUser;
-
-        public IReadOnlyDictionary<string, UserInfo> Users => session.Engine.Users;
-
-        public IReadOnlyDictionary<string, UserInfo> ConnectedUsers => session.Engine.ConnectedUsers;
-
-        public IReadOnlyList<string> GetGroupMembers(string groupName) => session.Engine.GetGroupMembers(groupName);
-
         public Task Connected(string userName) => session.Connected(userName);
 
         public Task Disconnect() => session.Disconnect();

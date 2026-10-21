@@ -6,9 +6,6 @@ internal interface IHandshakeSession
     /// <summary>Gets what is known about the connection.</summary>
     IConnectionInfo Connection { get; }
 
-    /// <summary>Gets a snapshot of the engine.</summary>
-    IEngineContext Engine { get; }
-
     /// <summary>Marks the connection fully connected as <paramref name="userName"/>, after everything awaited before it has been sent.</summary>
     /// <param name="userName">The user on the other end.</param>
     Task Connected(string userName);

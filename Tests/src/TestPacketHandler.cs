@@ -13,7 +13,7 @@ public sealed class TestPacketHandler : IPacketHandler<TestFrame, TestPacket>
     public bool IsFramePacket(TestPacket packet) => packet.IsFramePacket;
 
     /// <inheritdoc />
-    public TestPacket CreateFramePacket(FramePacketCreateContext<TestFrame> context)
+    public TestPacket CreateFramePacket(IFramePacketCreateContext<TestFrame> context)
         => new()
         {
             IsFramePacket = true,

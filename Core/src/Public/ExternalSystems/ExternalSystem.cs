@@ -39,7 +39,7 @@ public interface IExternalSystem
     /// from the container it was built in, which writes to none of the engine's logs. This logger is the engine's own.
     /// </summary>
     /// <param name="logger">The logger to use from this point on.</param>
-    void AttachLogger(ILogger logger);
+    void AttachLogger(MicrosoftLogger logger);
 }
 
 /// <summary>
@@ -67,7 +67,7 @@ public interface IExternalSystem
 /// <param name="pollInterval">How long to wait between connection-status polls while connected; defaults to 5 seconds. Overriding this is intended for unit testing.</param>
 public abstract class ExternalSystemBase<TFrame>(string name, TimeSpan? connectRetryInterval = null, TimeSpan? pollInterval = null) : IExternalSystem where TFrame : class
 {
-    private ILogger logger = NullLogger.Instance;
+    private MicrosoftLogger logger = NullLogger.Instance;
     private readonly TimeSpan connectRetryInterval = connectRetryInterval ?? TimeSpan.FromSeconds(5);
     private readonly TimeSpan pollInterval = pollInterval ?? TimeSpan.FromSeconds(5);
     private readonly Channel<TFrame> receivedMessages = Channel.CreateUnbounded<TFrame>();
@@ -186,7 +186,7 @@ public abstract class ExternalSystemBase<TFrame>(string name, TimeSpan? connectR
     }
 
     /// <inheritdoc />
-    public void AttachLogger(ILogger logger) => this.logger = logger;
+    public void AttachLogger(MicrosoftLogger logger) => this.logger = logger;
 
     /// <summary>
     /// Called by a derived class whenever its connection delivers an inbound message while connected. First

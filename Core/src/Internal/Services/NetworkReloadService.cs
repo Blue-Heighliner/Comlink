@@ -15,7 +15,7 @@ internal interface INetworkReloadService
     /// </summary>
     /// <remarks>
     /// <c>Logging.json</c> is read again too, so the log categories it turns on take effect at once, and so are the certificate files: when the user certificate now names another user, that user becomes
-    /// current (see <see cref="IUserService.Refresh"/>) and the connections are started again for them instead of being adjusted, and a replaced authority or user certificate for the same user restarts the connections.
+    /// current (see <see cref="IUserService.Refresh"/>) and the connections are started again for them instead of being adjusted, and a replaced authority or user certificate for the same user restarts the connections. Once all of that is applied, the host's <see cref="IReconfigurer"/> is called, unless there is no current user.
     /// </remarks>
     /// <exception cref="Exception">The network file can no longer be read or parsed; the engine keeps running on the configuration it had.</exception>
     Task Reload();
@@ -29,9 +29,10 @@ internal sealed class NetworkReloadService(
     IInterfaceService interfaceService,
     ILogSettings logSettings,
     IUserService userService,
+    IReconfigurationService reconfiguration,
     ILoggerFactory loggerFactory) : INetworkReloadService
 {
-    private readonly ILogger logger = loggerFactory.CreateLogger(LogCategories.App);
+    private readonly MicrosoftLogger logger = loggerFactory.CreateLogger(LogCategories.App);
 
     /// <inheritdoc />
     public event Action? Reloaded;
@@ -51,6 +52,8 @@ internal sealed class NetworkReloadService(
         {
             Apply(restartBefore, interfaceBefore);
         }
+
+        await reconfiguration.Run();
 
         Reloaded?.Invoke();
     }

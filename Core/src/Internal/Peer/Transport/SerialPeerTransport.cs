@@ -9,7 +9,7 @@ namespace BlueHeighliner.Comlink;
 internal sealed class SerialPeerTransport : IPeerTransport
 {
     /// <summary>Initializes a new <see cref="SerialPeerTransport"/>.</summary>
-    public SerialPeerTransport(IHdlcPeerFactory peerFactory, ILogger logger, TimeSpan? reconnectDelay = null, HdlcPeerOptions? options = null, TimeSpan? candidateTimeout = null)
+    public SerialPeerTransport(IHdlcPeerFactory peerFactory, MicrosoftLogger logger, TimeSpan? reconnectDelay = null, HdlcPeerOptions? options = null, TimeSpan? candidateTimeout = null)
     {
         this.peerFactory = peerFactory;
         this.options = options ?? new();
@@ -20,7 +20,7 @@ internal sealed class SerialPeerTransport : IPeerTransport
 
     private readonly IHdlcPeerFactory peerFactory;
     private readonly HdlcPeerOptions options;
-    private readonly ILogger logger;
+    private readonly MicrosoftLogger logger;
     private readonly TimeSpan? reconnectDelay;
     private readonly TimeSpan? candidateTimeout;
     private readonly ConcurrentDictionary<string, Lazy<SerialLink>> links = new();

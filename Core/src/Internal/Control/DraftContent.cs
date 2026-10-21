@@ -1,6 +1,6 @@
 namespace BlueHeighliner.Comlink;
 
-/// <summary>The engine's untyped statement of a draft's current aspects, which a <see cref="IDraftFrameHandler"/> turns into the host's typed <see cref="DraftState{TPriority, TLevel, TAspect}"/>.</summary>
+/// <summary>The engine's untyped statement of a draft's current aspects, which a <see cref="IDraftFrameHandler"/> turns into the host's typed <see cref="IDraftContext{TPriority, TLevel, TAspect}"/>.</summary>
 internal sealed record DraftContent
 {
     /// <summary>Gets the draft's tag, or an empty string for none.</summary>

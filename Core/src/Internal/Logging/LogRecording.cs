@@ -10,7 +10,7 @@ internal static class LogRecording
     /// <param name="eventId">The event, one of <see cref="LogEvents"/>.</param>
     /// <param name="message">The message template.</param>
     /// <param name="args">The values of the template's placeholders.</param>
-    public static void Record(this ILogger logger, EventId eventId, string message, params object?[] args) => logger.LogInformation(eventId, message, args);
+    public static void Record(this MicrosoftLogger logger, EventId eventId, string message, params object?[] args) => logger.LogInformation(eventId, message, args);
 
     /// <summary>Records <paramref name="eventId"/> with its message and the exception that caused it.</summary>
     /// <param name="logger">The logger.</param>
@@ -18,6 +18,6 @@ internal static class LogRecording
     /// <param name="exception">The exception, written after the entry.</param>
     /// <param name="message">The message template.</param>
     /// <param name="args">The values of the template's placeholders.</param>
-    public static void Record(this ILogger logger, EventId eventId, Exception? exception, string message, params object?[] args) => logger.LogInformation(eventId, exception, message, args);
+    public static void Record(this MicrosoftLogger logger, EventId eventId, Exception? exception, string message, params object?[] args) => logger.LogInformation(eventId, exception, message, args);
 #pragma warning restore CA2254
 }

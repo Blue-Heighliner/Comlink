@@ -64,6 +64,10 @@ internal sealed class EngineBuilder : IEngineBuilder, IAsyncDisposable
     public string? UserCertificateValue { get; set; }
     /// <summary>Whether the command-line overrides (<c>--config</c>, <c>--authority</c>, <c>--certificate</c>, <c>--user</c> and <c>--log</c>) are honored.</summary>
     public bool AreCommandLineOverridesAllowed { get; set; }
+    /// <summary>Whether a log entry that reports an exception also carries its stack trace; on unless stated.</summary>
+    public bool IsStackTraceEnabled { get; set; } = true;
+    /// <summary>The reconfigurer that runs once the engine is ready, if stated.</summary>
+    public ServiceRegistration<IReconfigurer>? Reconfigurer { get; set; }
     /// <summary>The external systems.</summary>
     public List<IExternalSystem> ExternalSystems { get; } = [];
     /// <summary>Registers the services typed by the host's enums, once <c>Types</c> has stated them.</summary>
@@ -86,13 +90,18 @@ internal sealed class EngineBuilder : IEngineBuilder, IAsyncDisposable
     /// </summary>
     /// <typeparam name="TConfiguration">The host's configuration type.</typeparam>
     /// <param name="configureServices">Registers the services the configuration depends on.</param>
+    /// <param name="assemblies">The host's assemblies, whose classes are registered under the interface named for them unless the host registered that interface itself, or <see langword="null"/> for none.</param>
     /// <exception cref="InvalidOperationException">The configuration cannot be constructed, or is incomplete or contradicts itself.</exception>
-    public static EngineBuilder Build<TConfiguration>(Action<IServiceCollection>? configureServices) where TConfiguration : class, IEngineConfiguration
+    public static EngineBuilder Build<TConfiguration>(Action<IServiceCollection>? configureServices, IReadOnlyList<Assembly>? assemblies = null) where TConfiguration : class, IEngineConfiguration
     {
         ServiceCollection services = new();
         services.AddLogging();
         configureServices?.Invoke(services);
-        services.AddSingleton<TConfiguration>();
+        services.TryAddSingleton<IDebugMode, DebugMode>();
+        services.TryAddSingleton<IDataPool, DataPool>();
+        services.TryAddSingleton<ILogger, Logger>();
+        services.AddHostConventionSingletons(assemblies ?? []);
+        services.AddSingleton(provider => provider.Create<TConfiguration>());
         ServiceProvider provider = services.BuildServiceProvider();
         try
         {
@@ -137,7 +146,11 @@ internal sealed class EngineBuilder : IEngineBuilder, IAsyncDisposable
         }
 
         AreTypesStated = true;
-        TypedServices = services => services.AddSingleton<IServiceConnection<TPriority, TLevel, TAspect>>(provider => new ServiceConnection<TPriority, TLevel, TAspect>(provider.GetRequiredService<IEngineConnection>()));
+        TypedServices = services =>
+        {
+            services.AddSingleton<IServiceConnection<TPriority, TLevel, TAspect>>(provider => new ServiceConnection<TPriority, TLevel, TAspect>(provider.GetRequiredService<IEngineConnection>()));
+            services.AddSingleton<INetwork<TFrame, TPriority, TLevel, TAspect>>(provider => new Network<TFrame, TPriority, TLevel, TAspect>(provider.GetRequiredService<INetworkEnvironment>(), provider.GetRequiredService<IUserCatalog>()));
+        };
         if (typeof(TPriority) == typeof(NoPriority))
         {
             PriorityOptions.AddRange(new PriorityBuilder<TPriority>().Priority(default).Build());

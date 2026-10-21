@@ -9,14 +9,14 @@ internal sealed class ActivityLoggerProvider : ILoggerProvider
     private readonly IActivityLogRepository repository;
 
     /// <inheritdoc />
-    public ILogger CreateLogger(string categoryName) => new ActivityLogger(categoryName, repository);
+    public MicrosoftLogger CreateLogger(string categoryName) => new ActivityLogger(categoryName, repository);
 
     /// <inheritdoc />
     public void Dispose() { }
 }
 
 /// <summary>Logger that appends messages to the daily activity log for the events whose category is "ACTIVITY".</summary>
-internal sealed class ActivityLogger : ILogger
+internal sealed class ActivityLogger : MicrosoftLogger
 {
     /// <summary>Initializes a new <see cref="ActivityLogger"/> for the specified category.</summary>
     public ActivityLogger(string categoryName, IActivityLogRepository repository)
@@ -42,10 +42,10 @@ internal sealed class ActivityLogger : ILogger
         {
             return;
         }
-        _ = Write(formatter(state, exception), eventId.Id);
+        _ = Write(formatter(state, exception), eventId.Name ?? string.Empty);
     }
 
-    private async Task Write(string message, int eventId)
+    private async Task Write(string message, string eventId)
     {
         try { await repository.AppendEvent(message, eventId); }
         catch { }

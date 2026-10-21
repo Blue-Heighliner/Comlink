@@ -5,14 +5,15 @@ public sealed class LogEventsTests
 {
     private static IReadOnlyList<EventId> All() => LogEvents.All;
 
-    /// <summary>Every event has its own positive identifier and is named for its property.</summary>
+    /// <summary>Every event has its own positive number, and the identifier it is logged with is that number after the CL prefix.</summary>
     [Fact]
-    public void EveryEvent_HasAUniquePositiveIdAndName()
+    public void EveryEvent_HasAUniquePositiveNumberAndPrefixedId()
     {
         IReadOnlyList<EventId> events = All();
 
         Assert.NotEmpty(events);
         Assert.All(events, id => Assert.True(id.Id > 0));
+        Assert.All(events, id => Assert.Equal($"CL{id.Id}", id.Name));
         Assert.Equal(events.Count, events.Select(id => id.Id).Distinct().Count());
         Assert.Equal(events.Count, events.Select(id => id.Name).Distinct().Count());
         Assert.Equal(events.Count, typeof(LogEvents).GetProperties(BindingFlags.Public | BindingFlags.Static).Count(property => property.PropertyType == typeof(EventId)));
@@ -31,7 +32,7 @@ public sealed class LogEventsTests
 
         foreach (EventId id in All())
         {
-            Assert.Contains($"| {id.Id} |", document);
+            Assert.Contains($"| {id.Name} |", document);
         }
     }
 
@@ -52,7 +53,7 @@ public sealed class LogEventsTests
             string category = Assert.IsType<string>(LogEvents.CategoryOf(id));
             Assert.Contains(category, categories);
             int heading = Array.FindIndex(lines, line => line == $"### {category}");
-            int row = Array.FindIndex(lines, line => line.StartsWith($"| {id.Id} |", StringComparison.Ordinal));
+            int row = Array.FindIndex(lines, line => line.StartsWith($"| {id.Name} |", StringComparison.Ordinal));
             int next = Array.FindIndex(lines, heading + 1, line => line.StartsWith("### ", StringComparison.Ordinal));
             Assert.True(heading >= 0 && row > heading && (next < 0 || row < next), $"{id.Name} is not documented under {category}");
         }

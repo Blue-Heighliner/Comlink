@@ -3,7 +3,7 @@ namespace BlueHeighliner.Comlink;
 /// <summary>
 /// A message as the engine uses it: what the user composes and reads, and what the engine stores in the Inbox and the Outbox. The engine has no frame of its own and
 /// does not know how a message travels, so a host's frame handler turns a <see cref="Message{TPriority, TLevel, TAspect}"/> into its own frame to send it (see <see cref="IFrameHandler{TFrame, TPriority, TLevel, TAspect}.OnSent"/>)
-/// and a received frame into a <see cref="Message{TPriority, TLevel, TAspect}"/> to record it (see <see cref="INetworkContext{TFrame, TPriority, TLevel, TAspect}.ReceiveMessage"/>).
+/// and a received frame into a <see cref="Message{TPriority, TLevel, TAspect}"/> to record it (see <see cref="INetwork{TFrame, TPriority, TLevel, TAspect}.ReceiveMessage"/>).
 /// </summary>
 /// <typeparam name="TPriority">The enum the host stated for its priorities.</typeparam>
 /// <typeparam name="TLevel">The enum the host stated for its message levels.</typeparam>

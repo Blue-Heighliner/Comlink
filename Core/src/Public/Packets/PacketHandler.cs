@@ -16,11 +16,11 @@ public interface IPacketHandler<TFrame, TPacket> where TFrame : class where TPac
     /// <summary>
     /// Creates a new packet carrying <paramref name="context"/>, for which <see cref="IsFramePacket"/> returns <see langword="true"/>. The engine calls it once for each packet of a frame, in order, and every
     /// packet of one frame must have the same frame id (see <see cref="GetFrameId"/>), which is the handler's to generate: unique among the frames in flight over a connection, and derived from
-    /// <see cref="FramePacketCreateContext{TFrame}.Frame"/> (the same instance for every packet of one frame) or from state the handler keeps, so that the packets of one frame agree on it. The engine rejects a frame whose packets disagree.
+    /// <see cref="IFramePacketCreateContext{TFrame}.Frame"/> (the same instance for every packet of one frame) or from state the handler keeps, so that the packets of one frame agree on it. The engine rejects a frame whose packets disagree.
     /// </summary>
     /// <param name="context">The piece of the frame and where it belongs.</param>
     /// <returns>The new packet.</returns>
-    TPacket CreateFramePacket(FramePacketCreateContext<TFrame> context);
+    TPacket CreateFramePacket(IFramePacketCreateContext<TFrame> context);
 
     /// <summary>Gets the identifier shared by every packet of one frame from <paramref name="packet"/>. Two frames in flight over one connection must not share one.</summary>
     /// <param name="packet">The packet.</param>

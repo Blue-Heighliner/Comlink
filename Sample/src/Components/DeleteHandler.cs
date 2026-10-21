@@ -4,5 +4,5 @@ namespace BlueHeighliner.Comlink.Sample;
 public sealed class DeleteHandler : IDeleteHandler
 {
     /// <inheritdoc />
-    public bool CanDelete(DeleteContext context) => context.Folder is FolderType.Drafts or FolderType.Notes;
+    public bool CanDelete(IDeleteContext context) => context.Folder is FolderType.Drafts or FolderType.Notes;
 }

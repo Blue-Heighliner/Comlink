@@ -72,7 +72,7 @@ internal sealed class ImportService : IImportService
         this.engineController = engineController;
     }
 
-    private readonly ILogger logger;
+    private readonly MicrosoftLogger logger;
     private readonly IMessageRepository messages;
     private readonly IDraftRepository drafts;
     private readonly INoteRepository notes;

@@ -5,9 +5,16 @@ public sealed class DraftViewModelTests
 {
     private static readonly ILoggerFactory noLogger = LoggerFactory.Create(_ => { });
 
+    // Blocks whatever the given predicate does not allow, with the given reason, as the engine controller reports a draft handler's decision.
+    private static void SetupBlocked(Mock<IEngineController> controller, Func<Enum, Enum?, Enum?, string, bool> isAllowed, string reason = "")
+    {
+        controller.Setup(c => c.IsDraftBlocked(It.IsAny<Enum>(), It.IsAny<Enum?>(), It.IsAny<Enum?>(), It.IsAny<string>()))
+            .Returns((Enum priority, Enum? level, Enum? aspect, string tag) => isAllowed(priority, level, aspect, tag) ? null : reason);
+    }
+
     private static IEngineController MakeEngineController(
         string alertText = "ALERT",
-        bool tagsEnabled = true, string tagLabel = "Tag", Func<Enum, Enum?, Enum?, string, bool>? isAllowed = null)
+        bool tagsEnabled = true, string tagLabel = "Tag", Func<Enum, Enum?, Enum?, string, bool>? isAllowed = null, string blockReason = "")
     {
         Mock<IEngineController> mock = new();
         mock.Setup(a => a.AlertLabel).Returns(alertText);
@@ -19,7 +26,7 @@ public sealed class DraftViewModelTests
         mock.Setup(t => t.TagsEnabled).Returns(tagsEnabled);
         mock.Setup(t => t.TagLabel).Returns(tagLabel);
         mock.Setup(t => t.DraftTagRules).Returns(TagRules.Unrestricted);
-        mock.Setup(p => p.IsDraftAllowed(It.IsAny<IEngineContext>(), It.IsAny<Enum>(), It.IsAny<Enum?>(), It.IsAny<Enum?>(), It.IsAny<string>())).Returns((IEngineContext _, Enum priority, Enum? level, Enum? aspect, string tag) => isAllowed?.Invoke(priority, level, aspect, tag) ?? true);
+        SetupBlocked(mock, (priority, level, aspect, tag) => isAllowed?.Invoke(priority, level, aspect, tag) ?? true, blockReason);
         mock.Setup(a => a.AddressTypes).Returns([
             new AddressTypeOption { Type = AddressType.To, Label = "To" },
             new AddressTypeOption { Type = AddressType.Cc, Label = "Cc" },
@@ -41,7 +48,8 @@ public sealed class DraftViewModelTests
         string alertText = "ALERT",
         bool tagsEnabled = true,
         string tagLabel = "Tag",
-        Func<Enum, Enum?, Enum?, string, bool>? isAllowed = null)
+        Func<Enum, Enum?, Enum?, string, bool>? isAllowed = null,
+        string blockReason = "")
     {
         entryMock = new Mock<IEntryService>();
         connMock = new Mock<IEngineConnection>();
@@ -54,7 +62,7 @@ public sealed class DraftViewModelTests
             FolderId = "root-drafts"
         };
         return new DraftViewModel(ent, entryMock.Object, connMock.Object, userNames ?? [], noLogger,
-            MakeEngineController(alertText, tagsEnabled, tagLabel, isAllowed));
+            MakeEngineController(alertText, tagsEnabled, tagLabel, isAllowed, blockReason));
     }
 
     private static DraftViewModel BuildDeletable(out Mock<IEntryService> entryMock, bool canDelete)
@@ -195,6 +203,68 @@ public sealed class DraftViewModelTests
         vm.Tag = "SPAM";
 
         Assert.Equal(string.Empty, vm.Tag);
+    }
+
+    /// <summary>A tag blocked with every combination is refused with the handler's reason, so the user is told why it cannot be entered.</summary>
+    [Fact]
+    public void Tag_BlockedWithEveryCombination_IsRefusedAndTheUserIsToldWhy()
+    {
+        DraftViewModel vm = Build(out _, out _, isAllowed: Blocking("SPAM", null), blockReason: "SPAM is never allowed");
+
+        vm.Tag = "SPAM";
+
+        Assert.Equal(string.Empty, vm.Tag);
+        Assert.Equal("SPAM is never allowed", vm.StatusMessage);
+    }
+
+    /// <summary>A blocked tag with no reason from the handler is refused with a general message.</summary>
+    [Fact]
+    public void Tag_BlockedWithoutAReason_IsRefusedWithAGeneralMessage()
+    {
+        DraftViewModel vm = Build(out _, out _, isAllowed: Blocking("SPAM", null));
+
+        vm.Tag = "SPAM";
+
+        Assert.Equal(string.Empty, vm.Tag);
+        Assert.Equal("This combination is not allowed", vm.StatusMessage);
+    }
+
+    /// <summary>The tag box is given the last accepted tag for a typed tag that is blocked, and the reason, rather than leaving the blocked text showing.</summary>
+    [Fact]
+    public void FilterTag_BlockedTag_GivesTheLastAcceptedTagAndSaysWhy()
+    {
+        DraftViewModel vm = Build(out _, out _, isAllowed: Blocking("SPAM", null), blockReason: "SPAM is never allowed");
+        vm.Tag = "URGENT";
+
+        string shown = vm.FilterTag("SPAM");
+
+        Assert.Equal("URGENT", shown);
+        Assert.Equal("SPAM is never allowed", vm.StatusMessage);
+    }
+
+    /// <summary>A tag that is not blocked is given back as the tag rules make it, without a message.</summary>
+    [Fact]
+    public void FilterTag_AllowedTag_IsGivenBackWithoutAMessage()
+    {
+        DraftViewModel vm = Build(out _, out _, isAllowed: Blocking("SPAM", null), blockReason: "SPAM is never allowed");
+
+        Assert.Equal("URGENT", vm.FilterTag("URGENT"));
+        Assert.Null(vm.StatusMessage);
+    }
+
+    /// <summary>A tag that only blocks some combinations is accepted, the choices that make a blocked combination move, and the user is told why.</summary>
+    [Fact]
+    public void Tag_BlockingTheChosenCombination_MovesTheChoicesAndSaysWhy()
+    {
+        DraftEntity entity = new() { Priority = (int)TestMessagePriority.Flash };
+        DraftViewModel vm = Build(out _, out _, entity: entity, isAllowed: Blocking("URGENT", TestMessagePriority.Flash), blockReason: "URGENT may not be sent at flash");
+        Assert.Equal("FLASH", vm.SelectedPriority.Name);
+
+        vm.Tag = "URGENT";
+
+        Assert.Equal("URGENT", vm.Tag);
+        Assert.Equal("ROUTINE", vm.SelectedPriority.Name);
+        Assert.Equal("URGENT may not be sent at flash", vm.StatusMessage);
     }
 
     /// <summary>Setting Tag to a value not blocked for the current priority is accepted.</summary>
@@ -963,8 +1033,7 @@ public sealed class DraftViewModelTests
     {
         Mock<IEngineController> controller = Mock.Get(MakeEngineController());
         controller.Setup(c => c.MessageAspects).Returns([new MessageAspect { Name = "ENCRYPTED", Key = TestAspect.Encrypted }, new MessageAspect { Name = "SIGNED", Key = TestAspect.Signed }]);
-        controller.Setup(c => c.IsDraftAllowed(It.IsAny<IEngineContext>(), It.IsAny<Enum>(), It.IsAny<Enum?>(), It.IsAny<Enum?>(), It.IsAny<string>()))
-            .Returns((IEngineContext _, Enum priority, Enum? level, Enum? aspect, string tag) => !TestAspect.Signed.Equals(aspect) && !(priority.Equals(TestMessagePriority.Flash) && TestAspect.Encrypted.Equals(aspect)));
+        SetupBlocked(controller, (priority, level, aspect, tag) => !TestAspect.Signed.Equals(aspect) && !(priority.Equals(TestMessagePriority.Flash) && TestAspect.Encrypted.Equals(aspect)));
         DraftEntity entity = new() { Body = "B", Addresses = [], FolderId = "root-drafts", MessageAspect = (int)TestAspect.Encrypted };
         DraftViewModel vm = new(entity, Mock.Of<IEntryService>(), Mock.Of<IEngineConnection>(), [], noLogger, controller.Object);
         Assert.Equal(["", "ENCRYPTED"], vm.AvailableMessageAspects.Select(option => option.Label));
@@ -982,8 +1051,7 @@ public sealed class DraftViewModelTests
     {
         Mock<IEngineController> controller = Mock.Get(MakeEngineController());
         controller.Setup(c => c.MessageLevels).Returns([new MessageLevel { Name = "PUBLIC", Background = "#000000", Key = TestLevel.Public }, new MessageLevel { Name = "SECRET", Background = "#000000", Key = TestLevel.Secret }]);
-        controller.Setup(c => c.IsDraftAllowed(It.IsAny<IEngineContext>(), It.IsAny<Enum>(), It.IsAny<Enum?>(), It.IsAny<Enum?>(), It.IsAny<string>()))
-            .Returns((IEngineContext _, Enum priority, Enum? level, Enum? aspect, string tag) => !(tag == "LEAK" && TestLevel.Secret.Equals(level)));
+        SetupBlocked(controller, (priority, level, aspect, tag) => !(tag == "LEAK" && TestLevel.Secret.Equals(level)));
         DraftEntity entity = new() { Body = "B", Addresses = [], FolderId = "root-drafts", MessageLevel = (int)TestLevel.Secret };
         DraftViewModel vm = new(entity, Mock.Of<IEntryService>(), Mock.Of<IEngineConnection>(), [], noLogger, controller.Object, currentMessageLevel: "SECRET");
         Assert.Equal("SECRET", vm.SelectedMessageLevel?.Name);
@@ -1002,8 +1070,7 @@ public sealed class DraftViewModelTests
         Mock<IEngineController> controller = Mock.Get(MakeEngineController());
         controller.Setup(c => c.MessageLevels).Returns([new MessageLevel { Name = "PUBLIC", Background = "#000000", Key = TestLevel.Public }, new MessageLevel { Name = "SECRET", Background = "#000000", Key = TestLevel.Secret }]);
         controller.Setup(c => c.MessageAspects).Returns([new MessageAspect { Name = "ENCRYPTED", Key = TestAspect.Encrypted }]);
-        controller.Setup(c => c.IsDraftAllowed(It.IsAny<IEngineContext>(), It.IsAny<Enum>(), It.IsAny<Enum?>(), It.IsAny<Enum?>(), It.IsAny<string>()))
-            .Returns((IEngineContext _, Enum priority, Enum? level, Enum? aspect, string tag) => !(TestLevel.Secret.Equals(level) && TestAspect.Encrypted.Equals(aspect)));
+        SetupBlocked(controller, (priority, level, aspect, tag) => !(TestLevel.Secret.Equals(level) && TestAspect.Encrypted.Equals(aspect)));
         DraftEntity entity = new() { Body = "B", Addresses = [], FolderId = "root-drafts", MessageLevel = (int)TestLevel.Public, MessageAspect = (int)TestAspect.Encrypted };
         DraftViewModel vm = new(entity, Mock.Of<IEntryService>(), Mock.Of<IEngineConnection>(), [], noLogger, controller.Object, currentMessageLevel: "SECRET");
         Assert.Equal("ENCRYPTED", vm.SelectedMessageAspect?.Aspect?.Name);

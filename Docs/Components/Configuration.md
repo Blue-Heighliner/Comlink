@@ -25,6 +25,12 @@ await Engine.Start<MyEngineConfiguration>(args);
 
 **Dependency injection:** `Engine.Start<T>` builds a bootstrap container holding logging (`ILoggerFactory`, `ILogger<T>`) plus whatever the host's `configureServices` argument registers, and constructs `T` from it, so a configuration's constructor can take services. The bootstrap container is deliberately separate from the running engine's: the engine's own logging providers need the engine's configuration (for the log file location), so a configuration built from the running container could not take a logger without a cycle, and it has to be built before the container exists anyway, because it decides whether `--config` is read and so what the container is built from. The same `configureServices` registrations are applied again to the running engine's container, which is also where a host registers anything else it wants running alongside the engine (for example a hosted service that uses `IServiceConnection`); a service registered there therefore exists once in each container. The bootstrap container lives until the engine exits, since a configuration may have handed the builder functions that use what was injected.
 
+**Constructing the host's types.** Everything the engine constructs for the host, its configuration, handlers, serializers, formats, reconfigurer and the services found by convention below, is built through dependency injection: constructor arguments come from the container, and so does every `required` property that has a setter, an `init` one included, so a type can take a dependency without a constructor (a required property whose type is nullable is optional, and is left unset when the container has no such service). A type the host registered itself in `configureServices` is constructed by the container, which fills constructor arguments only.
+
+**Services found by convention.** Every concrete class of the assembly the configuration is in, and of the entry assembly, is registered as a singleton under the interface named for it, so `MyService` answers for `IMyService` without being registered, in both containers. A registration the host made itself in `configureServices` always takes precedence, whether it was made before or after, and by `Add` or `TryAdd`. The scan skips abstract, static, nested and generic classes, an interface whose name is not the class's with an `I` in front, and any class that is an `IEngineConfiguration`. It finds the engine's own services the same way for the engine's assembly.
+
+**Services the engine offers.** A component of the host, a handler, a hosted service or any class built through dependency injection, can ask for the services the engine exposes for it: `IUserCatalog`, `INetwork<,,,>`, `IServiceConnection<,,>`, `ILogger`, `IDebugMode` and `IDataPool`. `IDebugMode`, `IDataPool` and `ILogger` are also in the bootstrap container, so the configuration and the display handler can take them; `ILogger` there writes nothing, since the engine's logging does not exist yet. The rest exist only in the running engine's container, so only what is built from it can take them.
+
 ## Network Configuration File
 
 The engine defines the schema of one network configuration file, shared by every node of a network (see [Config.md](Config.md) for every field). It holds the info for all users of the network, and who is in which group, so no user, port or connection is stated in code. It is read from the path given by the `--config` command-line argument, otherwise from `Config.json` in the app data folder (`%APPDATA%/{AppName}/Config.json`, beside `Logging.json`; nothing the engine reads or writes by default is in the working directory); a missing default file is an empty network, while a `--config` path that does not exist is an error. The file can be read again while the application runs (the "Refresh" button of the title bar's info panel): connections no longer defined are brought down and newly defined ones opened while unchanged connections are left alone, and the rest is applied as it is next read. The same refresh reads the certificate files again (see [Certificates](#certificates)). The file does not say who the node is: that is its certificate's user.
@@ -51,7 +57,7 @@ A **frame** is the data format of all network traffic other than packets: every 
 
 `Types` supplies the concrete frame type used throughout the engine, on the wire (peer and interface connections). `Frames<THandler>` states the handler and starts the frame settings such as the heartbeat; `AutoForwarder` is stated on the engine builder. The frame type needs no field mapping: the engine never reads a field of it. The type must satisfy whatever serializer is used for the wire, which by default is a `ProtobufSerializer` that builds only the frame type (so `[ProtoContract]`/`[ProtoMember]` attributes). `Serializer<TSerializer>` on the frame builder replaces it with a type implementing `IFrameSerializer` (derive from `FrameSerializer<TFrame, TPacket>` to work with the frame and packet types rather than `object`), instantiated through the running engine's dependency injection container, as long as every node this instance talks to (including its own interface connections) uses a matching one: Comlink never negotiates or advertises which format a payload used, so a mismatch deserializes garbage or throws rather than failing cleanly. A serializer can write into a `PooledBufferWriter` (an `IBufferWriter<byte>`, which a `Utf8JsonWriter` accepts) and return its `ToOwner()` to keep the buffers it hands back pooled rather than allocated per frame; `JsonSerializer` does this. A frame or packet type may implement `IDisposable` when it holds values that need disposal: the engine disposes the instances it creates or deserializes and never exposes to the host, namely a heartbeat, the packets it makes to carry a frame (once serialized), the packets that carried a received frame (once the frame has been deserialized and handed on) and frames it drops. Any frame or packet instance the host sees, such as the `Frame` of a handler's `OnReceived`, an item given to an initial handler or anything the host creates and sends itself, is never disposed by the engine and is the host's to dispose. `IFrameSerializer.Deserialize` is given the bytes and the first packet that carried the frame across (`null` when packetization is disabled, or the frame arrived over an interface connection), so a serializer can read what the host's own packet fields say about the frame; a custom serializer must make its format self-describing enough to rebuild the right type itself (the default wraps every payload in an outer envelope naming the type). Both serializers' `Deserialize` return a value or throw `InvalidDataException` for bytes they cannot or will not build (such as a type the sender names that is not this engine's own); the engine treats a throw as a rejected frame or packet. `Create` replaces `new TFrame()` for building an empty frame.
 
-Packetization is off unless `Packets<THandler>(maxPayloadSize)` is called, which needs a packet type stated in `Types` (calling it with `NoPacket` throws). With it, payloads are broken into prioritized packets of the host's packet type and reassembled on the other side. The host only states how its packet carries a piece of a frame, with a packet handler (the type argument of `Packets<THandler>`, instantiated through dependency injection like the other handlers, implementing `IPacketHandler<TFrame, TPacket>`): `CreateFramePacket` takes a `FramePacketCreateContext<TFrame>` (the frame the packet is being created from, always set, the packet index, packet count, frame length and the payload slice, which is only valid during the call so a packet that stores it must copy it) and returns a packet; `IsFramePacket` says whether a given packet carries a piece of a frame, as opposed to one that carries no frame, such as a packet a handshake handler sends, and the engine refuses to reassemble a packet that does not; and getters read the same aspects back. The frame id (`GetFrameId`, a string) is the handler's to generate: every packet of one frame must report the same one and two frames in flight over a connection must not share one, so a handler typically derives it from the frame it is given or remembers it while a frame's packets are created; the engine rejects a frame whose packets disagree. The handler is required; all splitting, reassembly and priority scheduling is the engine's, so a host gets its own packet format and serialization without writing any packetization logic. The packet serializer, a type implementing `IPacketSerializer` (derive from `PacketSerializer<TFrame, TPacket>`) stated with `Serializer<TSerializer>` on the packet builder and instantiated the same way, defaults to a `ProtobufSerializer` that wraps every packet in an envelope naming its type, a fixed overhead per packet that a leaner custom serializer avoids. `IFrameSerializer.ConfigurePacket(frame, packet)` is called on every outgoing frame packet, once per packet in order and before the packet is serialized, so the frame serializer can set the host's own packet properties from the frame being packetized. `IPacketSerializer.Serialize` is also given the packet and the original frame being packetized (`null` for a packet that carries no frame, such as one an initial packet handler sends), so a packet's encoding can depend on its frame. The maximum payload size (the argument of `Packets`, at least 1) is the largest slice of a serialized frame a packet carries, in bytes. It limits the payload only: the packet's own fields come on top of it. `Window` (on the packet configuration, default 1) is how many packets may be in flight over one connection at once, and must be at least 1. The engine applies no other limit: a packet larger than a connection can carry (the HDLC `MaxInfoField`, say) fails to send, with the reason logged, so on a serial network the payload size must leave room within `MaxInfoField` for a packet's own fields. Every node must be configured alike, since neither side can tell whether the other packetizes. Interface connections are never packetized.
+Packetization is off unless `Packets<THandler>(maxPayloadSize)` is called, which needs a packet type stated in `Types` (calling it with `NoPacket` throws). With it, payloads are broken into prioritized packets of the host's packet type and reassembled on the other side. The host only states how its packet carries a piece of a frame, with a packet handler (the type argument of `Packets<THandler>`, instantiated through dependency injection like the other handlers, implementing `IPacketHandler<TFrame, TPacket>`): `CreateFramePacket` takes an `IFramePacketCreateContext<TFrame>` (the frame the packet is being created from, always set, the packet index, packet count, frame length and the payload slice, which is only valid during the call so a packet that stores it must copy it) and returns a packet; `IsFramePacket` says whether a given packet carries a piece of a frame, as opposed to one that carries no frame, such as a packet a handshake handler sends, and the engine refuses to reassemble a packet that does not; and getters read the same aspects back. The frame id (`GetFrameId`, a string) is the handler's to generate: every packet of one frame must report the same one and two frames in flight over a connection must not share one, so a handler typically derives it from the frame it is given or remembers it while a frame's packets are created; the engine rejects a frame whose packets disagree. The handler is required; all splitting, reassembly and priority scheduling is the engine's, so a host gets its own packet format and serialization without writing any packetization logic. The packet serializer, a type implementing `IPacketSerializer` (derive from `PacketSerializer<TFrame, TPacket>`) stated with `Serializer<TSerializer>` on the packet builder and instantiated the same way, defaults to a `ProtobufSerializer` that wraps every packet in an envelope naming its type, a fixed overhead per packet that a leaner custom serializer avoids. `IFrameSerializer.ConfigurePacket(frame, packet)` is called on every outgoing frame packet, once per packet in order and before the packet is serialized, so the frame serializer can set the host's own packet properties from the frame being packetized. `IPacketSerializer.Serialize` is also given the packet and the original frame being packetized (`null` for a packet that carries no frame, such as one an initial packet handler sends), so a packet's encoding can depend on its frame. The maximum payload size (the argument of `Packets`, at least 1) is the largest slice of a serialized frame a packet carries, in bytes. It limits the payload only: the packet's own fields come on top of it. `Window` (on the packet configuration, default 1) is how many packets may be in flight over one connection at once, and must be at least 1. The engine applies no other limit: a packet larger than a connection can carry (the HDLC `MaxInfoField`, say) fails to send, with the reason logged, so on a serial network the payload size must leave room within `MaxInfoField` for a packet's own fields. Every node must be configured alike, since neither side can tell whether the other packetizes. Interface connections are never packetized.
 
 Internally the configuration becomes a `FrameMap` (type, serializer, create, heartbeat) and a `PacketMap`, whose accessors and handlers take the frame or packet as an `object`, since that is the boundary every other layer (LiteDB storage, MSMT wire serialization) operates at. A packet member of an engine that never called `Packets` throws `NotSupportedException`, because nothing calls them.
 
@@ -183,7 +189,10 @@ public sealed class MyDraftHandler : IDraftHandler<MyPriority, MyMessageLevel, M
     public int? DefaultLineWidth => 60;
     public int MinLineWidth => 30;
     public int? MaxLineWidth => 80;
-    public string? GetHeader(DraftState<MyPriority, MyMessageLevel> state) => state.Tag.Length > 0 ? $"CATEGORY: {state.Tag}" : null;
+    public string? IsBlocked(IDraftBlockContext<MyPriority, MyMessageLevel, MyMessageAspect> context)
+        => context.Tag is "SPAM" ? "The tag SPAM is not allowed" : null;
+
+    public string? GetHeader(IDraftContext<MyPriority, MyMessageLevel, MyMessageAspect> context) => context.Tag.Length > 0 ? $"CATEGORY: {context.Tag}" : null;
 }
 ```
 
@@ -195,9 +204,11 @@ How drafts are composed, stated by a handler implementing `IDraftHandler<TPriori
 
 **Defaults.** `DefaultTag`, `DefaultPriority` and `DefaultMessageLevel` say what a new draft starts with (none by default: no tag, the lowest priority the user may choose, and the highest message level the user may use). The tag is made to fit the tag rules, and a level the user may not choose, or a message level above their own, is brought to what they may.
 
-**Alert and identifier.** `IsAlert(state)` says whether the draft's message is an alert (default: no), from its tag, body or other aspects: there is no alert flag for the user to set. `NextId(previous)` generates the message identifier (see [Message Identifiers](#message-identifiers)).
+**Blocked combinations.** `IsBlocked(context)` says whether a combination of priority, message level, message aspect and tag may not be entered (`IDraftBlockContext`: those four, nothing else): `null` when it may, otherwise the reason it may not, which is what the user is told (the default blocks nothing). The draft view asks it for every choice the user could make, so a choice that would make a blocked combination cannot be made: the other choices are held to combinations that are not blocked. A tag that every combination is blocked for is refused as it is typed (the box keeps the last tag that was accepted) and the user is told the reason, in the message area of the draft view; so is the user when a tag that only blocks some combinations makes the other choices move to ones that are not, and when a send is refused. When the reason is empty the user is told only that the combination is not allowed. A blocked combination is therefore never entered and never sent. The handler gets who is on the network from the `IUserCatalog` it asks for through dependency injection, not from the context.
 
-**Header.** `GetHeader` is given the draft's current state (`DraftState`: tag, priority, message level, message aspect, body, recipients and line width) and returns the header every message sent from the draft must start with, or `null` for none. The engine asks again whenever one of those aspects changes, so the header follows the draft. A header is shown in the draft view as an uneditable segment above the editable body (wrapped for viewing like the body), is not part of the saved draft, and is put in front of the body followed by a line break when the draft is sent, so the sent message, and the copy in the Outbox, start with it.
+**Alert and identifier.** `IsAlert(context)` (an `IDraftContext`) says whether the draft's message is an alert (default: no), from its tag, body or other aspects: there is no alert flag for the user to set. `NextId(previous)` generates the message identifier (see [Message Identifiers](#message-identifiers)).
+
+**Header.** `GetHeader` is given the draft's current state (`IDraftContext`, which is an `IDraftBlockContext` that also has the draft's body, recipients and line width: tag, priority, message level, message aspect, body, recipients and line width) and returns the header every message sent from the draft must start with, or `null` for none. The engine asks again whenever one of those aspects changes, so the header follows the draft. A header is shown in the draft view as an uneditable segment above the editable body (wrapped for viewing like the body), is not part of the saved draft, and is put in front of the body followed by a line break when the draft is sent, so the sent message, and the copy in the Outbox, start with it.
 
 **Default:** without a handler, no width control, the editor wraps at the window, and there is no header.
 
@@ -318,13 +329,53 @@ The draft view shows a picker with a blank entry for none first and then each as
 engine.Logs<MyLogHandler>();
 ```
 
-The layout of the lines of the log file. An `ILogHandler` gives the fixed width of any of the three fields of a line, category (`CategoryWidth`), user (`UserWidth`) and event ID (`IdWidth`), each an `int?` where `null` leaves the field at its natural length. Fixed text is padded on the right with hyphens and cut when longer, and a fixed ID is padded with hyphens and never cut. The rules, the line format and every event are in the logging component. Which log categories are written is not a handler setting: see the logging component. Instantiated through dependency injection like the other handlers.
+The layout of the lines of the log file. An `ILogHandler` gives the fixed width of any of the three fields of a line, category (`CategoryWidth`), user (`UserWidth`) and event ID (`IdWidth`), each an `int?` where `null` leaves the field at its natural length. Fixed text is padded on the right with hyphens and cut when longer, and a fixed ID is padded with hyphens and never cut. The rules, the line format and every event are in the logging component. `CategoriesOnByDefault` (`null` by default, meaning the engine's own list) replaces the list of categories that are written without being enabled; which others are enabled is in the logging component. Instantiated through dependency injection like the other handlers.
 
 **Default:** no handler, so no field is fixed and lines do not align.
 
 **Network file:** none; the layout is stated in code.
 
-**Sample:** `LogHandler` fixes the level to 4, the category to 8, the user to 8 and the event ID to 2, so the Sample's lines align.
+**Sample:** `LogHandler` fixes the level to 4, the category to 8, the user to 8 and the event ID to 5, so the Sample's lines align.
+
+---
+
+### Stack Traces
+
+```csharp
+engine.StackTrace(true);   // log the whole stack trace of every exception (the default)
+engine.StackTrace(false);  // log only what the exception says
+```
+
+Whether a log entry that reports an exception also carries the exception's entire stack trace. Without it the entry is followed by the type and message of the exception and of each exception inside it; with it, by the exception's whole text, stack trace included. It applies to every entry that reports an exception, the engine's own and those written by the host's components through `ILogger`. A host that wants traces only while it is being developed asks for the `IDebugMode` in its configuration's constructor and states `StackTrace(debug.IsDebug)`; `IsDebug` is whether the host's own assembly was compiled with the `DEBUG` constant, which the package's build targets (`build/BlueHeighliner.Comlink.targets`, imported automatically from the NuGet package) record in the host's assembly, since a `#if DEBUG` in the engine could only say how the always-Release package was compiled.
+
+**Default:** on.
+
+**Network file:** none; it is stated in code.
+
+**Sample:** `EngineConfiguration` states `StackTrace(debug.IsDebug)`, so the Sample logs stack traces in a debug build only.
+
+---
+
+### Reconfigurer
+
+```csharp
+engine.Reconfigure<MyReconfigurer>();
+
+public sealed class MyReconfigurer : IReconfigurer
+{
+    public required IUserCatalog Users { get; init; }
+
+    public Task OnReconfigured() { ... }
+}
+```
+
+The host's own work after the configuration is loaded, for anything that depends on who is on the network and who this node is. The `IReconfigurer` stated with `Reconfigure<TReconfigurer>()` is built through dependency injection from the running engine's container and its `OnReconfigured` is called every time the configuration has been loaded and the current user identified: at start-up, after the network configuration file has been read and the services are set up and before the engine starts connecting, and again after every refresh once the refresh has been applied (the connections adjusted or restarted, and the user switched when the certificate named another). That includes a refresh that finds a user after none could be identified. It is never called while there is no current user, which is while the certificate cannot be used and the error screen shows, and it is not called for a refresh whose network configuration file cannot be read, since that changes nothing. The engine waits for it. An exception it throws, or one thrown building it, is logged (as events under `ERROR` and `ACTIVITY`) and the engine goes on. Only one reconfigurer can be stated; a later call replaces an earlier one.
+
+**Default:** none.
+
+**Network file:** none; it is code, not a setting.
+
+**Sample:** `Reconfigurer` logs how many users and groups the network has each time the configuration is loaded, taking the `IUserCatalog` and `ILogger` as required properties.
 
 ---
 
@@ -351,11 +402,11 @@ engine.Deletes<MyDeleteHandler>();
 
 public sealed class MyDeleteHandler : IDeleteHandler
 {
-    public bool CanDelete(DeleteContext context) => context.Folder is FolderType.Drafts or FolderType.Notes;
+    public bool CanDelete(IDeleteContext context) => context.Folder is FolderType.Drafts or FolderType.Notes;
 }
 ```
 
-Whether the user can delete entries and subfolders, decided per root folder, never per entry, by the `IDeleteHandler` stated with `Deletes<THandler>()` (instantiated through dependency injection like the other handlers). Its `CanDelete` is given a `DeleteContext` holding the root folder type (`FolderType.Inbox`/`Outbox`/`Drafts`/`Notes`/`Activity`) that the entry or subfolder being deleted is under. Consulted by `EntryBarViewModel.DeleteEntry` before deleting; the active folder's `RootType` is passed straight through, and when the handler returns `false`, `DeleteEntry` is a silent no-op (the entry stays in the data store and in the list) rather than throwing. `LoadFolder` also caches the result on `EntryBarViewModel.CanDeleteEntries`, which drives whether the entry list's right-click "Delete" context menu item is shown at all. Draft and note editors also show a DELETE button, gated on the same rule for `FolderType.Drafts`/`FolderType.Notes` when the editor is created. See `Docs/Components/ViewModels.md`.
+Whether the user can delete entries and subfolders, decided per root folder, never per entry, by the `IDeleteHandler` stated with `Deletes<THandler>()` (instantiated through dependency injection like the other handlers). Its `CanDelete` is given an `IDeleteContext` holding the root folder type (`FolderType.Inbox`/`Outbox`/`Drafts`/`Notes`/`Activity`) that the entry or subfolder being deleted is under. Consulted by `EntryBarViewModel.DeleteEntry` before deleting; the active folder's `RootType` is passed straight through, and when the handler returns `false`, `DeleteEntry` is a silent no-op (the entry stays in the data store and in the list) rather than throwing. `LoadFolder` also caches the result on `EntryBarViewModel.CanDeleteEntries`, which drives whether the entry list's right-click "Delete" context menu item is shown at all. Draft and note editors also show a DELETE button, gated on the same rule for `FolderType.Drafts`/`FolderType.Notes` when the editor is created. See `Docs/Components/ViewModels.md`.
 
 **Default:** allowed for every folder type; deletion is unrestricted unless a host locks down specific folders.
 
@@ -603,14 +654,14 @@ Each external system is constructed directly by the configuration, not resolved 
 ```csharp
 engine.Frames<MyFrameHandler>();
 
-public sealed class MyFrameHandler : IFrameHandler<MyFrame, MyPriority, MyMessageLevel, MyMessageAspect>
+public sealed class MyFrameHandler(IUserCatalog users, INetwork<MyFrame, MyPriority, MyMessageLevel, MyMessageAspect> network) : IFrameHandler<MyFrame, MyPriority, MyMessageLevel, MyMessageAspect>
 {
-    public Task OnConnected(INetworkConnectedContext<MyFrame, MyPriority, MyMessageLevel, MyMessageAspect> context) { ... }
-    public Task OnDisconnected(INetworkDisconnectedContext<MyFrame, MyPriority, MyMessageLevel, MyMessageAspect> context) { ... }
-    public Task OnReceived(INetworkReceivedContext<MyFrame, MyPriority, MyMessageLevel, MyMessageAspect> context) { ... }
-    public Task OnSent(INetworkSentContext<MyFrame, MyPriority, MyMessageLevel, MyMessageAspect> context) { ... }
-    public Task OnRead(INetworkReadContext<MyFrame, MyPriority, MyMessageLevel, MyMessageAspect> context) { ... }
-    public Task OnRetrieval(INetworkRetrievalContext<MyFrame, MyPriority, MyMessageLevel, MyMessageAspect> context) { ... }
+    public Task OnConnected(INetworkConnectedContext context) { ... }
+    public Task OnDisconnected(INetworkDisconnectedContext context) { ... }
+    public Task OnReceived(INetworkReceivedContext<MyFrame> context) { ... }
+    public Task OnSent(INetworkSentContext<MyPriority, MyMessageLevel, MyMessageAspect> context) { ... }
+    public Task OnRead(INetworkReadContext<MyPriority, MyMessageLevel, MyMessageAspect> context) { ... }
+    public Task OnRetrieval(INetworkRetrievalContext context) { ... }
 }
 ```
 
@@ -623,15 +674,15 @@ Events:
 - `OnRead` fires when the user opens an unread Inbox message, handed that `Message<,,>`.
 - `OnRetrieval` fires when the user submits a retrieval, handed the `Server` (a `UserInfo`) and the `Criteria`.
 
-Every context extends the common `IEngineContext` (`CurrentUser`, `Users` and `ConnectedUsers`, both read-only dictionaries of `UserInfo` by name where a user is connected when its name is a key of `ConnectedUsers`, and `GetGroupMembers(groupName)`) and `INetworkContext<TFrame>`, which adds:
+A context holds only what is specific to the event it describes, as above. Everything a handler acts with, and everything it asks about the network, is a service it asks for through dependency injection (in its constructor or in `required` `init` properties), so it can be mocked and is the same wherever it is used. Who is on the network is the `IUserCatalog`: `CurrentUser`, `Users` and `ConnectedUsers` (read-only dictionaries of `UserInfo` by name, where a user is connected when its name is a key of `ConnectedUsers`) and `Groups` (a read-only dictionary of `GroupInfo` by group id, whose `Members` are the users of the group with the groups inside it expanded). Each property reads the current state when it is asked, so it follows a refreshed configuration and the connections as they come and go. What a handler does is the `INetwork<TFrame, TPriority, TLevel, TAspect>`, typed by what the host stated in `Types`:
 - `Send(user, priority, frame)`: sends the frame, exactly as given, to `user`, who must be directly connected to the current user (a client's only such user is its server; a server's are its children and sibling servers), and returns whether they accepted it, or `false` when they are not connected. There is no routing or hopping: reaching anyone further away is the handler's job, by sending to the node that is directly connected and putting the real recipients in the frame. The priority is a required `TPriority`.
 - `ReceiveMessage(message)`: records a `Message<TPriority, TLevel, TAspect>` as received, so it is stored in the Inbox and shown (and alarms, when it is an alert). A message with a priority, level or aspect that is not configured throws.
 - `SetSentStatus(messageId, user, status)` (also taking several users at once) and `SetReceivedStatus(messageId, status)`: change the delivery status of a stored sent or received message.
 - `SetNetworkIndicator(isOnline)`: the only thing that sets the network indicator.
 - `GetDestinations(minimumLevel, out excluded, targets)` / `GetDestinations(message, out excluded)`: the set of users that some user and group names, or all the non-external addresses of a message, stand for, with groups expanded to their members recursively. Users whose own message level ranks below the minimum level (the message's own level for the message overload; `null` for no minimum) are left out of the result and returned in `excluded`, for the handler to report as failed.
-- `SendInterface(priority, frame)`, which sends a frame to every interface connected to the local interface listener, `SendToExternalSystems(frame)`, `StoreMessage(message)`, `FindStoredMessages(criteria)` and `GetAutoForwardTargets(controllerName)`.
+- `SendInterface(priority, frame)`, which sends a frame to every interface connected to the local interface listener, `SendToExternalSystems(frame)`, `StoreMessage(message)`, `FindStoredMessages(criteria)` and `GetAutoForwardTargets(controllerName)`, which leaves out the current user.
 
-The handler is stated by type and instantiated through the running engine's dependency injection container, so its constructor can take services.
+The handler is stated by type and instantiated through the running engine's dependency injection container (as described under Dependency injection at the top of this file), so it can take any service.
 
 **Network indicator.** A client shows a network indicator in the top bar (to the right of the alert indicator in a client), always present, online or offline, in the label and colors (background and foreground) the display handler states for each. Nothing sets it but the handler (`SetNetworkIndicator`, typically from `OnConnected` and `OnDisconnected` for its parent). It starts offline. A server has no indicator, and it is hidden on the install screen.
 

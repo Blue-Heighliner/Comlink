@@ -88,7 +88,7 @@ internal sealed partial class StagedSendViewModel : ObservableObject, IStagedSen
     private readonly IEngineController engineController;
     private readonly IEngineConnection connection;
     private readonly IEntryService entryService;
-    private readonly ILogger logger;
+    private readonly MicrosoftLogger logger;
     private readonly List<StagedSendEntry> queue = [];
     private readonly Lock gate = new();
     private StagedSendMode mode = StagedSendMode.Sequential;

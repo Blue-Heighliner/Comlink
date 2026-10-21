@@ -84,7 +84,7 @@ jobs:
           cache: true
           cache-dependency-path: "**/packages.lock.json"
 
-      # Core.csproj carries no <Version> of its own - the version always comes from the "version" input to
+      # Core.csproj and Testing.csproj carry no <Version> of their own - the version always comes from the "version" input to
       # this workflow, and this step fails the run rather than falling back to any default if it's missing
       # or malformed. The matching GitHub Release/tag is expected to already exist - Scripts/Publish.cs
       # creates it locally (as an Admin, since a tag ruleset blocks GITHUB_TOKEN from creating one here).
@@ -105,11 +105,13 @@ jobs:
           echo "override=-p:Version=$VERSION" >> "$GITHUB_OUTPUT"
 
       - name: Pack
-        # GeneratePackageOnBuild (Core/Core.csproj) is only meant to fire from `dotnet build`;
+        # GeneratePackageOnBuild (Core/Core.csproj and Testing/Testing.csproj) is only meant to fire from `dotnet build`;
         # combined with an explicit `dotnet pack` invocation it conflicts with `pack`'s own
         # Build-then-Pack target ordering and the build never runs (NU5026: DLL not found).
         # Disabling it here lets `dotnet pack`'s own wiring build first as normal.
-        run: dotnet pack Core/Core.csproj --configuration Release --output nupkgs -p:GeneratePackageOnBuild=false -p:RestoreLockedMode=true ${{ steps.version.outputs.override }}
+        run: |
+          dotnet pack Core/Core.csproj --configuration Release --output nupkgs -p:GeneratePackageOnBuild=false -p:RestoreLockedMode=true ${{ steps.version.outputs.override }}
+          dotnet pack Testing/Testing.csproj --configuration Release --output nupkgs -p:GeneratePackageOnBuild=false -p:RestoreLockedMode=true ${{ steps.version.outputs.override }}
 
       - name: Push to GitHub Packages
         run: >

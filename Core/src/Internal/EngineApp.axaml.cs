@@ -19,7 +19,7 @@ internal partial class EngineApp : Application
         host = Host.CreateDefaultBuilder()
             .UseEngine(EngineMode.Client, Engine.Builder, Engine.Network, Engine.Identity)
             .UseEngineUi()
-            .ConfigureServices((_, services) => Engine.ConfigureServices?.Invoke(services))
+            .UseHostServices(Engine.ConfigureServices, Engine.HostAssemblies)
             .ConfigureLogging(logging => logging.SetMinimumLevel(LogLevel.Information))
             .Build();
 
@@ -28,7 +28,7 @@ internal partial class EngineApp : Application
             Exception? ex = e.ExceptionObject as Exception;
             try
             {
-                ILogger? logger = host.Services.GetService<ILoggerFactory>()?.CreateLogger(LogCategories.App);
+                MicrosoftLogger? logger = host.Services.GetService<ILoggerFactory>()?.CreateLogger(LogCategories.App);
                 logger?.Record(LogEvents.UnhandledException, ex, "Unhandled exception: {Message}", ex?.Message ?? "Unknown error");
                 logger?.Record(LogEvents.UnexpectedError, "The application ran into an unexpected error");
             }

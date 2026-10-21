@@ -38,7 +38,7 @@ internal sealed class ServerRoutingService : IPeerService, IConnectionStatusServ
     private readonly IPeerTransportFactory transportFactory;
     private readonly IEngineController engineController;
     private readonly ICurrentUserProvider currentUserProvider;
-    private readonly ILogger logger;
+    private readonly MicrosoftLogger logger;
     private readonly PointMaintenance maintenance;
     private readonly Lock reconfigureLock = new();
 

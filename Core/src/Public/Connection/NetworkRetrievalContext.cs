@@ -1,11 +1,7 @@
 namespace BlueHeighliner.Comlink;
 
-/// <summary>Handed to <see cref="IFrameHandler{TFrame, TPriority, TLevel, TAspect}.OnRetrieval"/>.</summary>
-/// <typeparam name="TFrame">The host's frame type.</typeparam>
-/// <typeparam name="TPriority">The enum the host stated for its priorities.</typeparam>
-/// <typeparam name="TLevel">The enum the host stated for its message levels.</typeparam>
-/// <typeparam name="TAspect">The enum the host stated for its message aspects.</typeparam>
-public interface INetworkRetrievalContext<TFrame, TPriority, TLevel, TAspect> : INetworkContext<TFrame, TPriority, TLevel, TAspect> where TFrame : class where TPriority : struct, Enum where TLevel : struct, Enum where TAspect : struct, Enum
+/// <summary>Handed to <see cref="IFrameHandler{TFrame, TPriority, TLevel, TAspect}.OnRetrieval"/>. What a handler acts with is in <see cref="INetwork{TFrame, TPriority, TLevel, TAspect}"/> and <see cref="IUserCatalog"/>, which it asks for through dependency injection.</summary>
+public interface INetworkRetrievalContext
 {
     /// <summary>Gets the server the user asked, one of the users the network configuration states as servers.</summary>
     UserInfo Server { get; }

@@ -123,9 +123,15 @@ internal sealed class ConfiguredEngineController : IEngineController
     /// <inheritdoc />
     public LogFieldWidths LogWidths => fallback.LogWidths;
     /// <inheritdoc />
+    public IReadOnlyList<string> LogCategoriesOnByDefault => fallback.LogCategoriesOnByDefault;
+    /// <inheritdoc />
     public string LoggingFilePath => fallback.LoggingFilePath;
     /// <inheritdoc />
     public bool SeparateAlerts => fallback.SeparateAlerts;
+    /// <inheritdoc />
+    public bool IsStackTraceEnabled => fallback.IsStackTraceEnabled;
+    /// <inheritdoc />
+    public IReconfigurer? Reconfigurer => fallback.Reconfigurer;
     /// <inheritdoc />
     public string HomeText => fallback.HomeText;
     /// <inheritdoc />
@@ -155,6 +161,8 @@ internal sealed class ConfiguredEngineController : IEngineController
 
     /// <inheritdoc />
     public IReadOnlyList<string> Users => fallback.Users;
+    /// <inheritdoc />
+    public IReadOnlyList<string> UserNames => fallback.UserNames;
     /// <inheritdoc />
     public IReadOnlyDictionary<string, IReadOnlyList<string>> UserGroups => fallback.UserGroups;
     /// <inheritdoc />
@@ -208,7 +216,7 @@ internal sealed class ConfiguredEngineController : IEngineController
     /// <inheritdoc />
     public string TagLabel => fallback.TagLabel;
     /// <inheritdoc />
-    public bool IsDraftAllowed(IEngineContext context, Enum priority, Enum? level, Enum? aspect, string tag) => fallback.IsDraftAllowed(context, priority, level, aspect, tag);
+    public string? IsDraftBlocked(Enum priority, Enum? level, Enum? aspect, string tag) => fallback.IsDraftBlocked(priority, level, aspect, tag);
     /// <inheritdoc />
     public IReadOnlyList<AddressTypeOption> AddressTypes => fallback.AddressTypes;
     /// <inheritdoc />

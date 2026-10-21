@@ -16,7 +16,7 @@ public interface IEngineBuilder<TFrame, TPacket, TPriority, TLevel, TAspect> whe
 {
     /// <summary>
     /// Adds an auto forwarder called <paramref name="name"/>, shown as an option in the client's auto forward screen to every user whose <c>AutoForwarders</c> in the network configuration file lists the name, each of whom keeps their own
-    /// target list there. The engine only keeps the lists; what an auto forwarder accepts and the forwarding are the handler's (see <see cref="INetworkContext{TFrame, TPriority, TLevel, TAspect}.GetAutoForwardTargets"/>).
+    /// target list there. The engine only keeps the lists; what an auto forwarder accepts and the forwarding are the handler's (see <see cref="INetwork{TFrame, TPriority, TLevel, TAspect}.GetAutoForwardTargets"/>).
     /// Stating a name that is already an auto forwarder changes nothing.
     /// </summary>
     /// <param name="name">The auto forwarder's name, which is also the key of its target lists.</param>
@@ -106,6 +106,19 @@ public interface IEngineBuilder<TFrame, TPacket, TPriority, TLevel, TAspect> whe
     /// <param name="authorityPath">The public certificate file (for example <c>.cer</c>) of the certificate authority trusted to sign every user certificate, the only authority trusted. A relative path is relative to the app's folder under the application data root.</param>
     /// <param name="userPath">The PKCS#12 (<c>.pfx</c>) file with the user's identity certificate and private key, which must chain to the authority certificate and be issued to a user of the network. A relative path is relative to the app's folder under the application data root.</param>
     IEngineBuilder<TFrame, TPacket, TPriority, TLevel, TAspect> Certificates(string authorityPath, string userPath);
+
+    /// <summary>
+    /// Sets whether a log entry that reports an exception also carries the exception's entire stack trace. On by default. When turned off such an entry carries only the exception's type and message, and those of the exceptions inside it.
+    /// It applies to every entry that reports an exception, the engine's own and those written through <see cref="ILogger"/>. A host that wants traces only while it is being developed can ask for the <see cref="IDebugMode"/> in its configuration's constructor and pass <see cref="IDebugMode.IsDebug"/>.
+    /// </summary>
+    /// <param name="enabled"><see langword="true"/> to log stack traces, <see langword="false"/> not to.</param>
+    IEngineBuilder<TFrame, TPacket, TPriority, TLevel, TAspect> StackTrace(bool enabled);
+
+    /// <summary>
+    /// States a type that is called each time the configuration has been loaded and the current user identified, at start-up and after every refresh, and never while there is no current user (see <see cref="IReconfigurer"/>). It is built through dependency injection from the running engine's services. Only one can be stated; a later call replaces an earlier one.
+    /// </summary>
+    /// <typeparam name="TReconfigurer">The type to call.</typeparam>
+    IEngineBuilder<TFrame, TPacket, TPriority, TLevel, TAspect> Reconfigure<TReconfigurer>() where TReconfigurer : class, IReconfigurer;
 
     /// <summary>
     /// Sets whether command-line arguments may override what the host stated: <c>--config</c> names the network configuration file to read instead of <c>Config.json</c> in the

@@ -14,18 +14,20 @@ public sealed class PublicApiTests
 
         Assert.Equal(
             [
-                "ActivityLogEventEntry", "ActivityLogExportData", "AddressRequest", "AddressType", "ConnectionMode", "ConnectionPoint", "DeleteContext",
-                "DeliveryStatusChangedEvent", "DestinationStatus", "DraftExportData", "DraftState`3", "Engine", "ExternalSystemBase`1", "FolderType", "FrameOrigin",
-                "FramePacketCreateContext`1", "FrameSerializer`2", "HdlcRemote", "IAddressTypeBuilder`5", "IAlarmHandler", "IConnectionInfo", "IDeleteHandler", "IDisplayHandler",
-                "IDraftHandler`3", "IEngineBuilder", "IEngineBuilder`5", "IEngineConfiguration", "IEngineContext", "IExportFormat", "IExternalSystem", "IFrameBuilder`5",
-                "IFrameHandler`4", "IFrameHandshakeContext`1", "IFrameHandshakeHandler`1", "IFrameHeartbeatHandler`2", "IFrameSerializer", "IHdlcBuilder`5", "IImportFormat`2",
-                "IImportFormatContext`2", "IIpConnectionInfo", "ILogHandler", "IMessageAspectBuilder`5", "IMessageLevelBuilder`5", "IMsmtBuilder`5", "INetworkConnectedContext`4",
-                "INetworkContext`4", "INetworkDisconnectedContext`4", "INetworkReadContext`4", "INetworkReceivedContext`4", "INetworkRetrievalContext`4", "INetworkSentContext`4",
-                "IPacketBuilder`5", "IPacketHandler`2", "IPacketHandshakeContext`1", "IPacketHandshakeHandler`1", "IPacketHeartbeatHandler`2", "IPacketSerializer",
-                "IPrintHandler`3", "IPriorityLevelBuilder`5", "ISerialConnectionInfo", "IServiceConnection`3", "Message`3", "MessageAddress", "MessageDeliveryStatus",
-                "MessageExportData", "NoMessageAspect", "NoMessageLevel", "NoPacket", "NoPriority", "NoteExportData", "PacketSerializer`2", "PooledBufferWriter", "PriorityMode",
-                "ProtobufSerializer", "RetrievalCriteria", "SendMessageResult", "StagedSendData`2", "StagedSendMode", "TagCase", "UserIdentity", "UserInfo", "UserLink",
-                "UserRole"
+                "ActivityLogEventEntry", "ActivityLogExportData", "AddressRequest", "AddressType", "BiDictionary`2", "Bit", "BitEndianness", "ConnectionMode",
+                "ConnectionPoint", "DeliveryStatusChangedEvent", "DestinationStatus", "DraftExportData", "Engine", "ExternalSystemBase`1", "FolderType",
+                "FrameOrigin", "FrameSerializer`2", "GroupInfo", "HdlcRemote", "IAddressTypeBuilder`5", "IAlarmHandler", "IConnectionInfo", "IDataPool",
+                "IDebugMode", "IDeleteContext", "IDeleteHandler", "IDisplayHandler", "IDraftBlockContext`3", "IDraftContext`3", "IDraftHandler`3", "IEngineBuilder",
+                "IEngineBuilder`5", "IEngineConfiguration", "IExportFormat", "IExternalSystem", "IFrameBuilder`5", "IFrameHandler`4", "IFrameHandshakeContext`1",
+                "IFrameHandshakeHandler`1", "IFrameHeartbeatHandler`2", "IFramePacketCreateContext`1", "IFrameSerializer", "IHdlcBuilder`5", "IImportFormat`2",
+                "IImportFormatContext`2", "IIpConnectionInfo", "ILogger", "ILogHandler", "IMessageAspectBuilder`5", "IMessageLevelBuilder`5", "IMsmtBuilder`5",
+                "INetwork`4", "INetworkConnectedContext", "INetworkDisconnectedContext", "INetworkReadContext`3", "INetworkReceivedContext`1",
+                "INetworkRetrievalContext", "INetworkSentContext`3", "IPacketBuilder`5", "IPacketHandler`2", "IPacketHandshakeContext`1",
+                "IPacketHandshakeHandler`1", "IPacketHeartbeatHandler`2", "IPacketSerializer", "IPrintHandler`3", "IPriorityLevelBuilder`5", "IReconfigurer",
+                "ISerialConnectionInfo", "IServiceConnection`3", "IUserCatalog", "LogCategories", "MemoryOwner`1", "Message`3", "MessageAddress",
+                "MessageDeliveryStatus", "MessageExportData", "NoMessageAspect", "NoMessageLevel", "NoPacket", "NoPriority", "NoteExportData", "PacketSerializer`2",
+                "PooledBufferWriter", "PriorityMode", "ProtobufSerializer", "RetrievalCriteria", "SendMessageResult", "StagedSendData`2", "StagedSendMode",
+                "TagCase", "UserIdentity", "UserInfo", "UserLink", "UserRole"
             ],
             exported);
     }

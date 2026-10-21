@@ -3,7 +3,7 @@ namespace BlueHeighliner.Comlink.Tests.Unit.Internal.Peer.Transport;
 /// <summary>Unit tests for <see cref="HandshakePeerTransport"/>, over an in-memory pair of transports.</summary>
 public sealed class HandshakePeerTransportTests
 {
-    private static readonly ILogger logger = LoggerFactory.Create(_ => { }).CreateLogger("test");
+    private static readonly MicrosoftLogger logger = LoggerFactory.Create(_ => { }).CreateLogger("test");
     private static readonly ConnectionPoint point = new() { IpAddress = "10.0.0.5", Port = 4000 };
     private static readonly ConnectionPoint serialPoint = new() { SerialPort = "SL0" };
     private static readonly TimeSpan timeout = TimeSpan.FromSeconds(30);

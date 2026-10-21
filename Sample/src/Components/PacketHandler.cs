@@ -14,7 +14,7 @@ public sealed class PacketHandler : IPacketHandler<Frame, Packet>
     public bool IsFramePacket(Packet packet) => packet.IsFramePacket;
 
     /// <inheritdoc />
-    public Packet CreateFramePacket(FramePacketCreateContext<Frame> context)
+    public Packet CreateFramePacket(IFramePacketCreateContext<Frame> context)
         => new()
         {
             IsFramePacket = true,

@@ -9,7 +9,7 @@ namespace BlueHeighliner.Comlink;
 /// <typeparam name="TAspect">The enum the host stated for its message aspects.</typeparam>
 public interface IServiceConnection<TPriority, TLevel, TAspect> where TPriority : struct, Enum where TLevel : struct, Enum where TAspect : struct, Enum
 {
-    /// <summary>Raised when the host's frame handler records a message as received (see <see cref="INetworkContext{TFrame, TPriority, TLevel, TAspect}.ReceiveMessage"/>).</summary>
+    /// <summary>Raised when the host's frame handler records a message as received (see <see cref="INetwork{TFrame, TPriority, TLevel, TAspect}.ReceiveMessage"/>).</summary>
     event Func<Message<TPriority, TLevel, TAspect>, Task>? MessageReceived;
 
     /// <summary>Raised when the delivery status of an outbound message changes.</summary>

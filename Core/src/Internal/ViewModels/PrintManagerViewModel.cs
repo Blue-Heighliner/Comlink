@@ -109,7 +109,7 @@ internal sealed partial class PrintManagerViewModel : ObservableObject, IPrintMa
     private readonly IActivityLogRepository activityLogs;
     private readonly IEngineController engineController;
     private readonly IPrintDriver printDriver;
-    private readonly ILogger logger;
+    private readonly MicrosoftLogger logger;
     private readonly List<PrintQueueEntry> queue = [];
     private readonly Lock gate = new();
     private bool isProcessing;

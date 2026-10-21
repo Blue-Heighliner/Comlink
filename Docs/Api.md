@@ -14,6 +14,8 @@ priorities and message levels are all checked against those types. After `Types`
 frame handler that implements the protocol) is stated and anything else that should differ from the engine's defaults is optional (see [Configuration.md](Components/Configuration.md)).
 Core has no frame DTO of its own.
 
+Everything the engine constructs for the host (its configuration, handlers, serializers and reconfigurer) takes its dependencies as constructor arguments or as `required` properties, and the classes of the host's assemblies are registered under the interface named for them, so a service needs no registration unless the host wants a different one. Handlers act through services they ask for, such as `IUserCatalog` and `INetwork`, rather than through what a method is handed.
+
 `Engine.Start<TConfiguration>(string[] args, Action<IServiceCollection>? configureServices = null)` is the only entry
 point. The host never builds an engine object: it names the type that describes what it wants, and the engine constructs
 it through dependency injection, so a configuration can take services in its constructor (a logger, options, its own
@@ -42,7 +44,8 @@ await Engine.Start<MyEngineConfiguration>(args, services => services.AddSingleto
    field, and the host's
    `configureServices` registrations run again against the engine's own container, so a service the configuration used
    and a service the running engine uses are separate instances.
-5. Once started, a host interacts with the running engine through `IServiceConnection<TPriority, TLevel, TAspect>`, sending
+5. Each time the configuration has been loaded and the current user identified, at start-up (before the engine connects to anyone) and after every refresh, the engine calls the host's reconfigurer, if it stated one (`Reconfigure<T>()`), and never while there is no current user.
+6. Once started, a host interacts with the running engine through `IServiceConnection<TPriority, TLevel, TAspect>`, sending
    messages, observing delivery status, and reading/writing entries: the same surface whether
    running with or without a UI.
 

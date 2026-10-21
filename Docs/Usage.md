@@ -29,24 +29,24 @@ await Engine.Start<MyEngineConfiguration>(args);
 
 `Certificates` names the authority certificate and the user's identity file; the node is the user that identity names (see below), so a host that omits it shows the error screen instead of the app unless both files come from the command line.
 
-The handler reacts to what happens and acts through the context it is handed. For example, a client that sends each message to its server and records each frame it receives:
+The handler reacts to what happens, through the context each method is handed, and acts through services it asks for with dependency injection. For example, a client that sends each message to its server and records each frame it receives:
 
 ```csharp
-public sealed class MyFrameHandler : IFrameHandler<MyFrame, MyPriority, MyMessageLevel, MyMessageAspect>
+public sealed class MyFrameHandler(IUserCatalog users, INetwork<MyFrame, MyPriority, MyMessageLevel, MyMessageAspect> network) : IFrameHandler<MyFrame, MyPriority, MyMessageLevel, MyMessageAspect>
 {
-    public async Task OnSent(INetworkSentContext<MyFrame, MyPriority, MyMessageLevel, MyMessageAspect> context)
+    public async Task OnSent(INetworkSentContext<MyPriority, MyMessageLevel, MyMessageAspect> context)
     {
         Message<MyPriority, MyMessageLevel, MyMessageAspect> message = context.Message;
         MyFrame frame = new() { Id = message.Id, FromUser = message.FromUser, Body = message.Body, To = [.. message.Addresses.Select(a => a.UserName)] };
-        bool accepted = await context.Send(context.CurrentUser.Parent!.User, message.Priority, frame);
+        bool accepted = await network.Send(users.CurrentUser.Parent!.User, message.Priority, frame);
         foreach (string user in frame.To)
         {
-            await context.SetSentStatus(message.Id, user, accepted ? DestinationStatus.Sent : DestinationStatus.Failed);
+            await network.SetSentStatus(message.Id, user, accepted ? DestinationStatus.Sent : DestinationStatus.Failed);
         }
     }
 
-    public Task OnReceived(INetworkReceivedContext<MyFrame, MyPriority, MyMessageLevel, MyMessageAspect> context)
-        => context.ReceiveMessage(new Message<MyPriority, MyMessageLevel, MyMessageAspect>
+    public Task OnReceived(INetworkReceivedContext<MyFrame> context)
+        => network.ReceiveMessage(new Message<MyPriority, MyMessageLevel, MyMessageAspect>
         {
             Id = context.Frame.Id,
             FromUser = context.Frame.FromUser,

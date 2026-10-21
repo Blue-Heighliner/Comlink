@@ -56,5 +56,6 @@
 
   <ItemGroup>
     <None Include="../README.md" Pack="true" PackagePath="\" />
+    <None Include="build/BlueHeighliner.Comlink.targets" Pack="true" PackagePath="build/" />
   </ItemGroup>
 </Project>

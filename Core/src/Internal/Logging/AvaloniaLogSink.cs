@@ -8,13 +8,13 @@ namespace BlueHeighliner.Comlink;
 [ExcludeFromCodeCoverage]
 internal sealed class AvaloniaLogSink : ILogSink
 {
-    private volatile ILogger? logger;
+    private volatile MicrosoftLogger? logger;
     private volatile ILogSettings? settings;
 
     /// <summary>Starts recording what Avalonia reports to <paramref name="logger"/>, subject to <paramref name="settings"/>.</summary>
     /// <param name="logger">The logger of the <see cref="LogCategories.Avalonia"/> category.</param>
     /// <param name="settings">Says whether that category is written.</param>
-    public void Attach(ILogger logger, ILogSettings settings)
+    public void Attach(MicrosoftLogger logger, ILogSettings settings)
     {
         this.settings = settings;
         this.logger = logger;

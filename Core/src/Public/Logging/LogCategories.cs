@@ -1,7 +1,7 @@
 namespace BlueHeighliner.Comlink;
 
-/// <summary>The log categories the engine writes under. A category is the only way a log entry is classified; there are no levels.</summary>
-internal static class LogCategories
+/// <summary>The log categories the engine writes under, which a component of the host can write under too (see <see cref="ILogger"/>). A category is the only way a log entry is classified; there are no levels.</summary>
+public static class LogCategories
 {
     /// <summary>Gets the category of what the user reads in the activity log, in general terms.</summary>
     public static string Activity { get; } = "ACTIVITY";

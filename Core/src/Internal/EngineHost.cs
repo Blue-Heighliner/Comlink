@@ -7,6 +7,7 @@ internal sealed class EngineHost : IHostedService
     /// <summary>Initializes a new <see cref="EngineHost"/> with required engine services.</summary>
     public EngineHost(
         IUserService userService,
+        IReconfigurationService reconfiguration,
         IPeerService peerService,
         IInterfaceService interfaceService,
         IExternalSystemsService externalSystemsService,
@@ -19,36 +20,42 @@ internal sealed class EngineHost : IHostedService
     {
         this.database = database;
         this.userService = userService;
+        this.reconfiguration = reconfiguration;
         this.peerService = peerService;
         this.interfaceService = interfaceService;
         this.externalSystemsService = externalSystemsService;
         this.engineHooksService = engineHooksService;
         this.disconnectAlarmService = disconnectAlarmService;
+        this.engineController = engineController;
         engineController.Validate();
         logger = loggerFactory.CreateLogger(LogCategories.App);
         displayName = mode is EngineMode.Headless ? $"{engineController.AppName} (Headless)" : engineController.AppName;
     }
 
     private readonly ILiteDbContext database;
+    private readonly IEngineController engineController;
     private readonly IUserService userService;
+    private readonly IReconfigurationService reconfiguration;
     private readonly IPeerService peerService;
     private readonly IInterfaceService interfaceService;
     private readonly IExternalSystemsService externalSystemsService;
     private readonly IEngineHooksService engineHooksService;
     private readonly IDisconnectAlarmService disconnectAlarmService;
-    private readonly ILogger logger;
+    private readonly MicrosoftLogger logger;
     private readonly string displayName;
     private CancellationTokenSource? cts;
     private int stopped;
 
     /// <inheritdoc />
-    public Task StartAsync(CancellationToken cancellationToken)
+    public async Task StartAsync(CancellationToken cancellationToken)
     {
         logger.Record(LogEvents.AppStarting, "{AppName} starting", displayName);
         if (userService.Problem is { } problem)
         {
             logger.Record(LogEvents.IdentityFailed, "Cannot identify the user: {Problem}", problem);
         }
+
+        await reconfiguration.Run();
 
         cts = new CancellationTokenSource();
         userService.Changed += RestartNetworking;
@@ -58,7 +65,6 @@ internal sealed class EngineHost : IHostedService
         }
 
         logger.Record(LogEvents.AppStarted, "{AppName} started", displayName);
-        return Task.CompletedTask;
     }
 
     // Every service that runs on a user's behalf (identity certificate, role, connections) ends with the token it was given and can be started again, so another user is a stop and a start, and nobody is a stop.

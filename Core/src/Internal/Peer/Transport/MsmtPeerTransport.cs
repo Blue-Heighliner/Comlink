@@ -10,7 +10,7 @@ namespace BlueHeighliner.Comlink;
 internal sealed class MsmtPeerTransport : IPeerTransport
 {
     /// <summary>Initializes a new <see cref="MsmtPeerTransport"/> over <paramref name="peer"/>, logging to <paramref name="logger"/> (nothing when <see langword="null"/>).</summary>
-    public MsmtPeerTransport(IMsmtSessionPeer peer, ILogger? logger = null)
+    public MsmtPeerTransport(IMsmtSessionPeer peer, MicrosoftLogger? logger = null)
     {
         this.peer = peer;
         this.logger = logger ?? NullLogger.Instance;
@@ -21,7 +21,7 @@ internal sealed class MsmtPeerTransport : IPeerTransport
     }
 
     private readonly IMsmtSessionPeer peer;
-    private readonly ILogger logger;
+    private readonly MicrosoftLogger logger;
     private readonly ConcurrentDictionary<IMsmtConnection, PeerConnection> connections = new();
     private readonly ConcurrentDictionary<PeerConnection, IMsmtConnection> handles = new();
     private readonly ConcurrentDictionary<string, IMsmtConnection> outbound = new();

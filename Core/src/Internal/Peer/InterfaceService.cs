@@ -8,7 +8,7 @@ namespace BlueHeighliner.Comlink;
 /// handler decides what to do with it, for example to send it on as if this user had originated it itself.
 /// </summary>
 /// <remarks>
-/// The handler can also send a frame to every connected interface (see <see cref="INetworkContext{TFrame, TPriority, TLevel, TAspect}.SendInterface"/>). Interface connections are bidirectional MSMT session connections, so the frame
+/// The handler can also send a frame to every connected interface (see <see cref="INetwork{TFrame, TPriority, TLevel, TAspect}.SendInterface"/>). Interface connections are bidirectional MSMT session connections, so the frame
 /// goes back down the connection the interface itself opened.
 /// </remarks>
 internal interface IInterfaceService : IAsyncDisposable
@@ -48,7 +48,7 @@ internal sealed class InterfaceService : IInterfaceService
     private readonly IEngineController engineController;
     private readonly INetworkProcessing processing;
     private readonly IUserService userService;
-    private readonly ILogger logger;
+    private readonly MicrosoftLogger logger;
 
     private readonly ConcurrentDictionary<IMsmtConnection, bool> connections = new();
     private readonly Lock runLock = new();

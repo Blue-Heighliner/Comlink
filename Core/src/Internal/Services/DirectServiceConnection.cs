@@ -31,7 +31,7 @@ internal sealed class DirectServiceConnection : IEngineConnection
     private readonly IMessageEvents events;
     private readonly INetworkProcessing processing;
     private readonly IIdGenerator ids;
-    private readonly ILogger logger;
+    private readonly MicrosoftLogger logger;
 
     /// <inheritdoc />
     public event Func<Message, Task>? MessageReceived;
@@ -54,15 +54,6 @@ internal sealed class DirectServiceConnection : IEngineConnection
     /// <inheritdoc />
     public Task<UserInfo?> GetUserInfo(CancellationToken cancellation = default)
         => Task.FromResult(userService.GetCurrentUserInfo());
-
-    /// <inheritdoc />
-    public IEngineContext GetContext()
-        => new EngineContext(
-            userService.GetCurrentUserInfo() ?? throw new InvalidOperationException("The node has no current user"),
-            engineController.Users,
-            engineController.GetUserInfo,
-            peerService.IsUserConnected,
-            engineController.GetGroupMembers);
 
     /// <inheritdoc />
     public Task<List<string>> GetUserNames(CancellationToken cancellation = default)

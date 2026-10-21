@@ -13,13 +13,12 @@ internal sealed class PeerTransportFactory(
     IHdlcPeerFactory microGateFactory,
     IEngineController engineController,
     ILoggerFactory loggerFactory,
-    ILogSettings logSettings,
-    IEngineContextFactory? contexts = null) : IPeerTransportFactory
+    ILogSettings logSettings) : IPeerTransportFactory
 {
     /// <inheritdoc />
     public IPeerTransport Create()
     {
-        ILogger logger = loggerFactory.CreateLogger(LogCategories.App);
+        MicrosoftLogger logger = loggerFactory.CreateLogger(LogCategories.App);
         IPacketizer? packetizer = CreatePacketizer();
         if (packetizer is not null && engineController.MaxPayloadSize >= engineController.HdlcOptions.MaxInfoField)
         {
@@ -50,14 +49,14 @@ internal sealed class PeerTransportFactory(
         {
             if (Handshake.ForPackets(engineController) is { } handshake)
             {
-                transport = new HandshakePeerTransport(transport, engineController, logger, handshake, identify: false, contexts: contexts);
+                transport = new HandshakePeerTransport(transport, engineController, logger, handshake, identify: false);
             }
             transport = new PacketizingPeerTransport(transport, packetizer, engineController.PacketWindow, logger);
         }
 
         transport = new TracingPeerTransport(transport, loggerFactory.CreateLogger(LogCategories.Frames), logSettings, LogCategories.Frames, LogEvents.FrameSent, LogEvents.FrameReceived);
 
-        return new HandshakePeerTransport(transport, engineController, logger, Handshake.ForFrames(engineController), identify: true, contexts: contexts);
+        return new HandshakePeerTransport(transport, engineController, logger, Handshake.ForFrames(engineController), identify: true);
     }
 
     private IPacketizer? CreatePacketizer()

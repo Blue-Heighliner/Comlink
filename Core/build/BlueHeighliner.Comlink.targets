@@ -1,0 +1,13 @@
+<Project>
+  <!--
+    Stamps the project being built with whether its own DEBUG compiler constant is defined, which IDebugMode reads from the entry assembly.
+    A #if DEBUG inside Core could only say how Core itself was compiled, and the package is always a Release build, so the host's own constant has to be recorded in the host's assembly.
+    Imported automatically from the NuGet package; the projects of this repository that run as hosts import it by path.
+  -->
+  <ItemGroup Condition="$(DefineConstants.Contains('DEBUG'))">
+    <AssemblyAttribute Include="System.Reflection.AssemblyMetadataAttribute">
+      <_Parameter1>BlueHeighliner.Comlink.Debug</_Parameter1>
+      <_Parameter2>true</_Parameter2>
+    </AssemblyAttribute>
+  </ItemGroup>
+</Project>

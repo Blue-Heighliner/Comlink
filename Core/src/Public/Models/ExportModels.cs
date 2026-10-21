@@ -122,6 +122,7 @@ public sealed record ActivityLogEventEntry
     public required DateTime At { get; init; }
     /// <summary>Human-readable description of the event.</summary>
     public required string Message { get; init; }
-    /// <summary>The unique identifier of the kind of event this is, or <c>0</c> for an entry that has none.</summary>
-    public int EventId { get; init; }
+    /// <summary>The identifier of the kind of event this is, such as <c>CL56</c>, or empty for an entry that has none. A package written when identifiers were plain numbers is read with <c>CL</c> in front of the number.</summary>
+    [JsonConverter(typeof(EventIdJsonConverter))]
+    public string EventId { get; init; } = string.Empty;
 }

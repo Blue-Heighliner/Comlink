@@ -15,6 +15,8 @@ namespace BlueHeighliner.Comlink.Sample;
 /// <item><description>drafts - a <see cref="DraftHandler"/> blocks the <c>SPAM</c> tag and the high priority, shows a draft 60 monospace characters wide by default (the user may change it between 10 and 90; it only changes how the draft is shown, never its text), and gives each kind of message its own header: <c>ALERT - ACTION REQUIRED</c> for an alert, <c>URGENT - PLEASE REPLY</c> or <c>REPORT - FOR YOUR REVIEW</c> for those tags, plus <c>RESTRICTED - DO NOT FORWARD</c> at the restricted message level, and no header at all for any other message (a plain one, or one tagged <c>NOTICE</c>).</description></item>
 /// <item><description>deleting - a <see cref="DeleteHandler"/> lets users delete only drafts and notes can be deleted; Inbox, Outbox, and Activity are protected.</description></item>
 /// <item><description>connection identification - a <see cref="HandshakeHandler"/> carries out a handshake of packets on every connection: the node that opens it sends a <see cref="Packet"/> whose chunk is its user name, the accepting node answers with one carrying its own, and each marks the connection connected as the user the other named, instead of by the peer's certificate or (for a serial cable) its port. Like all traffic between nodes they are serialized instances of the packet type, nothing else.</description></item>
+/// <item><description>stack traces - logged with every exception only while the Sample is a debug build (the default is always), taken from the <see cref="IDebugMode"/> service the configuration asks for in its constructor.</description></item>
+/// <item><description>reconfigurer - an <see cref="Reconfigurer"/> logs how many users and groups the network has each time the configuration is loaded.</description></item>
 /// <item><description>certificates - <c>Authority.cer</c> and <c>Certificate.pfx</c> in the app data folder, the files every node proves who it is with; the user is the certificate's subject common name.</description></item>
 /// <item><description>command-line overrides - allowed, so Sample honors <c>--config</c>, <c>--authority</c> and <c>--certificate</c> (which its scenario scripts pass, one certificate per node), unlike the engine default.</description></item>
 /// <item><description>packetization - enabled with <see cref="Packet"/>, with a maximum payload size of 512 bytes (so a packet, with its own fields on top, stays within what one HDLC frame carries, as set by the HDLC options below) and the default window and serializer.</description></item>
@@ -30,7 +32,7 @@ namespace BlueHeighliner.Comlink.Sample;
 /// Actual alarm sound playback and printer discovery and driving are real platform behavior always provided by the
 /// engine itself, not something Sample states here.
 /// </summary>
-public sealed class EngineConfiguration : IEngineConfiguration
+public sealed class EngineConfiguration(IDebugMode debug) : IEngineConfiguration
 {
     /// <summary>Application entry point; starts the engine with this configuration.</summary>
     [STAThread]
@@ -45,7 +47,9 @@ public sealed class EngineConfiguration : IEngineConfiguration
             .Drafts<DraftHandler>()
             .Prints<PrintHandler>()
             .Logs<LogHandler>()
+            .StackTrace(debug.IsDebug)
             .Certificates("Authority.cer", "Certificate.pfx")
+            .Reconfigure<Reconfigurer>()
             .CommandLineOverrides(true)
             .AutoForwarder(FrameHandler.EscalationForwarder)
             .Frames<FrameHandler>()

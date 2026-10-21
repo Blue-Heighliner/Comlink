@@ -15,7 +15,7 @@ internal sealed record ServiceRegistration<TService>(Func<IServiceProvider?, TSe
         => new(services =>
         {
             ServiceProvider? empty = services is null ? new ServiceCollection().BuildServiceProvider() : null;
-            try { return adapt(ActivatorUtilities.GetServiceOrCreateInstance(services ?? empty!, type)); }
+            try { return adapt((services ?? empty!).GetOrCreate(type)); }
             finally { empty?.Dispose(); }
         });
 }

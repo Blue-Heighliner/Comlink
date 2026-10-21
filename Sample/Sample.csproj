@@ -27,4 +27,6 @@
   <ItemGroup>
     <ProjectReference Include="..\Core\Core.csproj" />
   </ItemGroup>
+
+  <Import Project="..\Core\build\BlueHeighliner.Comlink.targets" />
 </Project>

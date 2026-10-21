@@ -13,7 +13,7 @@ internal sealed class SerialLink : IAsyncDisposable
         ConnectionPoint point,
         IHdlcPeerFactory peerFactory,
         HdlcPeerOptions options,
-        ILogger logger,
+        MicrosoftLogger logger,
         PeerEvent<PeerReceivedEventArgs> received,
         PeerEvent<PeerConnectionEventArgs> connected,
         PeerEvent<PeerConnectionEventArgs> disconnected,
@@ -43,7 +43,7 @@ internal sealed class SerialLink : IAsyncDisposable
     private readonly ConnectionPoint point;
     private readonly IHdlcPeerFactory peerFactory;
     private readonly HdlcPeerOptions options;
-    private readonly ILogger logger;
+    private readonly MicrosoftLogger logger;
     private readonly PeerEvent<PeerReceivedEventArgs> received;
     private readonly PeerEvent<PeerConnectionEventArgs> connected;
     private readonly PeerEvent<PeerConnectionEventArgs> disconnected;

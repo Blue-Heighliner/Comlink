@@ -1,11 +1,14 @@
 namespace BlueHeighliner.Comlink;
 
-/// <summary>What every <see cref="IFrameHandler{TFrame, TPriority, TLevel, TAspect}"/> method is handed: the engine, and the ways a handler acts on it.</summary>
+/// <summary>
+/// The ways a handler acts on the engine: sending frames, recording messages and delivery statuses, and keeping and finding messages. It is a service, not part of what a handler is handed: a handler asks for it
+/// through dependency injection, in its constructor or in a <see langword="required"/> <see langword="init"/> property, for the types the host stated in <see cref="IEngineBuilder.Types{TFrame, TPacket, TPriority, TLevel, TAspect}"/>.
+/// </summary>
 /// <typeparam name="TFrame">The host's frame type.</typeparam>
 /// <typeparam name="TPriority">The enum the host stated for its priorities.</typeparam>
 /// <typeparam name="TLevel">The enum the host stated for its message levels.</typeparam>
 /// <typeparam name="TAspect">The enum the host stated for its message aspects.</typeparam>
-public interface INetworkContext<TFrame, TPriority, TLevel, TAspect> : IEngineContext where TFrame : class where TPriority : struct, Enum where TLevel : struct, Enum where TAspect : struct, Enum
+public interface INetwork<TFrame, TPriority, TLevel, TAspect> where TFrame : class where TPriority : struct, Enum where TLevel : struct, Enum where TAspect : struct, Enum
 {
     /// <summary>
     /// Sends <paramref name="frame"/> to <paramref name="userName"/> over the connection identified as them, and completes once the transport has

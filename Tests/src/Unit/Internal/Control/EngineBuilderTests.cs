@@ -255,21 +255,21 @@ public sealed class EngineBuilderTests
         Assert.Equal(Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), "MyApp"), builder.AppDataFolder);
     }
 
-    /// <summary>Without a draft handler every combination is allowed, and a stated handler is asked with the host's own enum members.</summary>
+    /// <summary>Without a draft handler no combination is blocked, and a stated handler is asked with the host's own enum members and gives its reason.</summary>
     [Fact]
-    public void DraftHandler_DecidesWhichCombinationsAreAllowed()
+    public void DraftHandler_DecidesWhichCombinationsAreBlocked()
     {
         Mock<IDraftHandler<TestMessagePriority, TestLevel, TestAspect>> handler = new() { CallBase = true };
-        handler.Setup(b => b.IsAllowed(It.IsAny<IEngineContext>(), TestMessagePriority.High, TestLevel.Secret, TestAspect.Signed, "SPAM")).Returns(false);
+        handler.Setup(b => b.IsBlocked(It.Is<IDraftBlockContext<TestMessagePriority, TestLevel, TestAspect>>(context => context.Priority == TestMessagePriority.High && context.MessageLevel == TestLevel.Secret && context.MessageAspect == TestAspect.Signed && context.Tag == "SPAM"))).Returns("No spam at the top");
         ServiceCollection services = new();
         services.AddSingleton(handler.Object);
         EngineBuilder builder = EngineBuilder.Build(new Configuration(engine => engine.Drafts<IDraftHandler<TestMessagePriority, TestLevel, TestAspect>>()));
         EngineController stated = new(builder, new CurrentUserProvider(), null, services.BuildServiceProvider());
         (_, EngineController plain) = Build(engine => engine);
 
-        Assert.False(stated.IsDraftAllowed(Mock.Of<IEngineContext>(), TestMessagePriority.High, TestLevel.Secret, TestAspect.Signed, "SPAM"));
-        Assert.True(stated.IsDraftAllowed(Mock.Of<IEngineContext>(), TestMessagePriority.High, null, null, "OK"));
-        Assert.True(plain.IsDraftAllowed(Mock.Of<IEngineContext>(), TestMessagePriority.High, TestLevel.Secret, TestAspect.Signed, "SPAM"));
+        Assert.Equal("No spam at the top", stated.IsDraftBlocked(TestMessagePriority.High, TestLevel.Secret, TestAspect.Signed, "SPAM"));
+        Assert.Null(stated.IsDraftBlocked(TestMessagePriority.High, null, null, "OK"));
+        Assert.Null(plain.IsDraftBlocked(TestMessagePriority.High, TestLevel.Secret, TestAspect.Signed, "SPAM"));
     }
 
     /// <summary>Alert, tag, priority and print settings a host states replace the defaults.</summary>
@@ -607,6 +607,24 @@ public sealed class EngineBuilderTests
         Assert.Equal(new LogFieldWidths(8, 7, 3), fixedWidths.LogWidths);
     }
 
+    /// <summary>Without a stated list the engine's own categories are on by default, and a log handler's list replaces it.</summary>
+    [Fact]
+    public void LogHandler_StatesTheCategoriesOnByDefault()
+    {
+        Mock<ILogHandler> handler = new() { CallBase = true };
+        handler.SetupGet(h => h.CategoriesOnByDefault).Returns(["frames", "Mine"]);
+        ServiceCollection services = new();
+        services.AddSingleton(handler.Object);
+        EngineBuilder builder = EngineBuilder.Build(new Configuration(engine => engine.Logs<ILogHandler>()));
+        EngineController stated = new(builder, new CurrentUserProvider(), null, services.BuildServiceProvider());
+        (_, EngineController none) = Build(engine => engine);
+        (_, EngineController unstated) = Build(engine => engine.Logs<TestLogHandler>());
+
+        Assert.Equal(LogCategories.OnByDefault, none.LogCategoriesOnByDefault);
+        Assert.Equal(LogCategories.OnByDefault, unstated.LogCategoriesOnByDefault);
+        Assert.Equal(["frames", "Mine"], stated.LogCategoriesOnByDefault);
+    }
+
     /// <summary>The packet handshake handler is reported and used.</summary>
     [Fact]
     public async Task Stated_PacketHandshake_IsUsed()
@@ -650,10 +668,6 @@ public sealed class EngineBuilderTests
     {
         Mock<IHandshakeSession> session = new();
         IpConnectionInfo info = new() { Host = "10.0.0.1", LocalUser = "ME" };
-        Mock<IEngineContext> engine = new();
-        engine.Setup(e => e.CurrentUser).Returns(new UserInfo { Name = "ME" });
-        engine.Setup(e => e.ConnectedUsers).Returns(new Dictionary<string, UserInfo> { ["BOB"] = new UserInfo { Name = "BOB" } });
-        session.Setup(s => s.Engine).Returns(engine.Object);
         session.Setup(s => s.Connection).Returns(info);
         IPacketHandshakeContext<TestPacket>? seen = null;
         Mock<IPacketHandshakeHandler<TestPacket>> handler = new();
@@ -665,9 +679,6 @@ public sealed class EngineBuilderTests
         await controller.PacketHandshakeHandler!.OnConnected(session.Object);
 
         Assert.NotNull(seen);
-        Assert.Equal("ME", seen.CurrentUser.Name);
-        Assert.Contains("BOB", seen.ConnectedUsers.Keys);
-        Assert.DoesNotContain("X", seen.ConnectedUsers.Keys);
         Assert.Same(info, seen.Connection);
         await seen.Send(sent);
         await seen.Connected("ALICE");
@@ -701,11 +712,11 @@ public sealed class EngineBuilderTests
     {
         public Dependency Dependency { get; } = dependency;
 
-        public Task OnConnected(INetworkConnectedContext<TestFrame, TestMessagePriority, TestLevel, TestAspect> context) => Task.CompletedTask;
+        public Task OnConnected(INetworkConnectedContext context) => Task.CompletedTask;
 
-        public Task OnDisconnected(INetworkDisconnectedContext<TestFrame, TestMessagePriority, TestLevel, TestAspect> context) => Task.CompletedTask;
+        public Task OnDisconnected(INetworkDisconnectedContext context) => Task.CompletedTask;
 
-        public Task OnReceived(INetworkReceivedContext<TestFrame, TestMessagePriority, TestLevel, TestAspect> context) => Task.CompletedTask;
+        public Task OnReceived(INetworkReceivedContext<TestFrame> context) => Task.CompletedTask;
     }
 
     private sealed class DependentHandlerConfiguration : IEngineConfiguration
@@ -727,6 +738,86 @@ public sealed class EngineBuilderTests
 
         Assert.NotNull(controller.FrameHandler);
         Assert.Same(controller.FrameHandler, controller.FrameHandler);
+    }
+
+    private sealed class PropertyDisplayHandler : IDisplayHandler
+    {
+        public required Dependency Dependency { get; init; }
+
+        public string? AppName => Dependency.Name;
+    }
+
+    /// <summary>A handler takes what it needs as required init properties as well as constructor arguments, which the engine fills in from the container.</summary>
+    [Fact]
+    public void Handler_RequiredInitProperties_AreFilledFromTheContainer()
+    {
+        ServiceCollection services = new();
+        services.AddSingleton(new Dependency("PROPERTY-INJECTED"));
+
+        EngineBuilder builder = EngineBuilder.Build(new Configuration(engine => engine.Display<PropertyDisplayHandler>()), services.BuildServiceProvider());
+
+        Assert.Equal("PROPERTY-INJECTED", builder.DisplayHandlerInstance!.AppName);
+    }
+
+    private sealed class PropertyReconfigurer : IReconfigurer
+    {
+        public required Dependency Dependency { get; init; }
+
+        public int Calls { get; private set; }
+
+        public Task OnReconfigured()
+        {
+            Calls++;
+            return Task.CompletedTask;
+        }
+    }
+
+    /// <summary>Without a reconfigurer none is reported, and a stated one is built through dependency injection, constructor and required properties alike, once.</summary>
+    [Fact]
+    public async Task Initialize_StatesTheInitializer_BuiltFromTheContainer()
+    {
+        ServiceCollection services = new();
+        services.AddSingleton(new Dependency("INITIAL"));
+        EngineBuilder builder = EngineBuilder.Build(new Configuration(engine => engine.Reconfigure<PropertyReconfigurer>()));
+        EngineController stated = new(builder, new CurrentUserProvider(), null, services.BuildServiceProvider());
+        (_, EngineController plain) = Build(engine => engine);
+
+        PropertyReconfigurer reconfigurer = Assert.IsType<PropertyReconfigurer>(stated.Reconfigurer);
+        await reconfigurer.OnReconfigured();
+
+        Assert.Equal(("INITIAL", 1), (reconfigurer.Dependency.Name, reconfigurer.Calls));
+        Assert.Same(reconfigurer, stated.Reconfigurer);
+        Assert.Null(plain.Reconfigurer);
+    }
+
+    /// <summary>A later call to Initialize replaces an earlier one.</summary>
+    [Fact]
+    public void Initialize_ALaterCallReplacesAnEarlierOne()
+    {
+        ServiceCollection services = new();
+        services.AddSingleton(new Dependency("INITIAL"));
+        EngineBuilder builder = EngineBuilder.Build(new Configuration(engine => engine.Reconfigure<PropertyReconfigurer>().Reconfigure<SecondReconfigurer>()));
+        EngineController controller = new(builder, new CurrentUserProvider(), null, services.BuildServiceProvider());
+
+        Assert.IsType<SecondReconfigurer>(controller.Reconfigurer);
+    }
+
+    private sealed class SecondReconfigurer : IReconfigurer
+    {
+        public Task OnReconfigured() => Task.CompletedTask;
+    }
+
+    /// <summary>Stack traces are on unless the host turns them off, and it can turn them on or off by saying so.</summary>
+    [Fact]
+    public void StackTrace_IsOnUnlessStated()
+    {
+        (_, EngineController plain) = Build(engine => engine);
+        (_, EngineController on) = Build(engine => engine.StackTrace(false).StackTrace(true));
+        (_, EngineController off) = Build(engine => engine.StackTrace(false));
+
+        Assert.True(plain.IsStackTraceEnabled);
+        Assert.True(on.IsStackTraceEnabled);
+        Assert.False(off.IsStackTraceEnabled);
     }
 
     private sealed class FirstExportFormat : IExportFormat
@@ -773,7 +864,7 @@ public sealed class EngineBuilderTests
 
     private sealed class DraftsOnlyDeleteHandler : IDeleteHandler
     {
-        public bool CanDelete(DeleteContext context) => context.Folder is FolderType.Drafts;
+        public bool CanDelete(IDeleteContext context) => context.Folder is FolderType.Drafts;
     }
 
     private sealed class Dependency(string name)

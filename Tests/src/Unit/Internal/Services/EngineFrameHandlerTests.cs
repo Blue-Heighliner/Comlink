@@ -7,17 +7,13 @@ public sealed class EngineFrameHandlerTests
     [Fact]
     public async Task OnSent_MarksUsersBelowTheMessageLevelFailed_AndLeavesThemOutOfTheDestinations()
     {
-        Mock<IEngineContext> engine = new();
-        engine.SetupGet(e => e.Users).Returns(new Dictionary<string, UserInfo>());
-        engine.Setup(e => e.GetGroupMembers(It.IsAny<string>())).Returns([]);
+        IReadOnlySet<string> excluded = new HashSet<string>(["CAROL"]);
         Mock<INetworkEnvironment> environment = new();
-        environment.Setup(e => e.CreateEngineContext()).Returns(engine.Object);
-        environment.Setup(e => e.IsAtLeast("BOB", TestLevel.Secret)).Returns(true);
-        environment.Setup(e => e.IsAtLeast("CAROL", TestLevel.Secret)).Returns(false);
+        environment.Setup(e => e.GetDestinations(TestLevel.Secret, It.IsAny<IEnumerable<string>>(), out excluded)).Returns(new HashSet<string>(["BOB"]));
         IReadOnlySet<string>? seen = null;
         Mock<IFrameHandler<TestFrame, TestMessagePriority, TestLevel, TestAspect>> handler = new();
-        handler.Setup(p => p.OnSent(It.IsAny<INetworkSentContext<TestFrame, TestMessagePriority, TestLevel, TestAspect>>()))
-            .Callback((INetworkSentContext<TestFrame, TestMessagePriority, TestLevel, TestAspect> context) => seen = context.Destinations)
+        handler.Setup(p => p.OnSent(It.IsAny<INetworkSentContext<TestMessagePriority, TestLevel, TestAspect>>()))
+            .Callback((INetworkSentContext<TestMessagePriority, TestLevel, TestAspect> context) => seen = context.Destinations)
             .Returns(Task.CompletedTask);
         EngineFrameHandler<TestFrame, TestMessagePriority, TestLevel, TestAspect> adapter = new(handler.Object);
         Message message = new()
@@ -43,12 +39,9 @@ public sealed class EngineFrameHandlerTests
     [Fact]
     public async Task OnSent_WithNoDestinations_DoesNotCallTheHandler()
     {
-        Mock<IEngineContext> engine = new();
-        engine.SetupGet(e => e.Users).Returns(new Dictionary<string, UserInfo>());
-        engine.Setup(e => e.GetGroupMembers(It.IsAny<string>())).Returns([]);
+        IReadOnlySet<string> excluded = new HashSet<string>(["BOB"]);
         Mock<INetworkEnvironment> environment = new();
-        environment.Setup(e => e.CreateEngineContext()).Returns(engine.Object);
-        environment.Setup(e => e.IsAtLeast(It.IsAny<string>(), It.IsAny<Enum>())).Returns(false);
+        environment.Setup(e => e.GetDestinations(TestLevel.Secret, It.IsAny<IEnumerable<string>>(), out excluded)).Returns(new HashSet<string>());
         Mock<IFrameHandler<TestFrame, TestMessagePriority, TestLevel, TestAspect>> handler = new();
         EngineFrameHandler<TestFrame, TestMessagePriority, TestLevel, TestAspect> adapter = new(handler.Object);
         Message message = new()
@@ -64,7 +57,7 @@ public sealed class EngineFrameHandlerTests
 
         await adapter.OnSent(environment.Object, message);
 
-        handler.Verify(p => p.OnSent(It.IsAny<INetworkSentContext<TestFrame, TestMessagePriority, TestLevel, TestAspect>>()), Times.Never);
+        handler.Verify(p => p.OnSent(It.IsAny<INetworkSentContext<TestMessagePriority, TestLevel, TestAspect>>()), Times.Never);
         environment.Verify(e => e.SetSentStatus("M1", "BOB", DestinationStatus.Failed), Times.Once);
     }
 }

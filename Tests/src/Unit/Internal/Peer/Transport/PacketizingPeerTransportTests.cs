@@ -7,7 +7,7 @@ public sealed class PacketizingPeerTransportTests
         => transport.Request(connection, data, (options ?? new PeerSendOptions()) with { Frame = options?.Frame ?? new TestFrame() }, cancellation);
 
     private static readonly PeerConnection target = new(new ConnectionPoint { IpAddress = "10.0.0.5", Port = 4000 }, new IpConnectionInfo { Host = "10.0.0.5", Port = 4000 }, () => { });
-    private static readonly ILogger logger = LoggerFactory.Create(_ => { }).CreateLogger("test");
+    private static readonly MicrosoftLogger logger = LoggerFactory.Create(_ => { }).CreateLogger("test");
     private static int Header => RawPacketSerializer.HeaderSize;
 
     private sealed record Sent(byte[] Data, PeerSendOptions? Options);

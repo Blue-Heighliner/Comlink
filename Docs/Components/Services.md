@@ -28,7 +28,7 @@ graph TD
     EBV -->|EntrySelected event| CAV
 ```
 
-Message and delivery-status persistence (`StoreIncomingMessage`, `StoreSentMessage`, `UpdateDeliveryStatus`) all go through `EntryService`. The engine does not receive, route, receipt, retrieve or indicate anything itself: the host's frame handler does, through the contexts of `NetworkProcessing`. In Headless mode, no ViewModels are constructed, so a host consuming `IEngineConnection` in that mode observes messages and delivery-status changes purely as events/calls and is responsible for its own persistence if it needs any — the data layer is Client-mode-only (see below).
+Message and delivery-status persistence (`StoreIncomingMessage`, `StoreSentMessage`, `UpdateDeliveryStatus`) all go through `EntryService`. The engine does not receive, route, receipt, retrieve or indicate anything itself: the host's frame handler does, through the `INetwork` it asks for. In Headless mode, no ViewModels are constructed, so a host consuming `IEngineConnection` in that mode observes messages and delivery-status changes purely as events/calls and is responsible for its own persistence if it needs any — the data layer is Client-mode-only (see below).
 
 ## UserService
 
@@ -53,11 +53,17 @@ bool changed = await service.Refresh(cancellation);
 
 ---
 
+## UserCatalog
+
+The public `IUserCatalog`, which a handler or any other component asks for through dependency injection instead of being handed it in a context. It reads the current state every time a property is read, so a value is a snapshot only until it is read again: `CurrentUser` is the user `UserService` says the node runs as (it throws without one, which is only so while the error screen shows and no handler runs), `Users` is every user the network configuration file lists with everything known about them (`IEngineController.GetUserInfo`), `ConnectedUsers` those with a live peer connection (`IPeerService.IsUserConnected`, resolved when asked since the peer service is built from the transport that may ask for the catalog), and `Groups` every group by id as a `GroupInfo` whose `Members` are users, groups inside it expanded. Keys are case-insensitive.
+
+---
+
 ## NetworkProcessing and NetworkEnvironment
 
-The engine's only protocol surface. `NetworkProcessing` runs the host's `IFrameHandler<TFrame, TPriority, TLevel, TAspect>` (through `EngineFrameHandler<,,,>`, which gives it contexts typed by the host's enums) for `OnConnected`, `OnDisconnected`, `OnReceived`, `OnSent`, `OnRead` and `OnRetrieval`. Each call runs in the background and a handler that throws is logged (`FrameHandlerFailed`) and never reaches the engine.
+The engine's only protocol surface. `NetworkProcessing` runs the host's `IFrameHandler<TFrame, TPriority, TLevel, TAspect>` (through `EngineFrameHandler<,,,>`, which gives it a small context for each event: the user that connected or disconnected, the received frame with its origin and source user, the sent message with its destinations, the opened message, or the retrieval's server and criteria) for `OnConnected`, `OnDisconnected`, `OnReceived`, `OnSent`, `OnRead` and `OnRetrieval`. Each call runs in the background and a handler that throws is logged (`FrameHandlerFailed`) and never reaches the engine.
 
-Every context carries the operations of `NetworkEnvironment`:
+Everything a handler does is an operation of `NetworkEnvironment`, which the host's handler reaches through the public `INetwork<TFrame, TPriority, TLevel, TAspect>` it asks for (`Network<,,,>` adapts the environment's untyped operations to the host's types, and also answers `GetDestinations` and `GetAutoForwardTargets`, the latter leaving out the current user). A context never carries them:
 - `Send(user, priority, frame)` hands a frame to the peer layer with the wire priority of the given level, and reports whether the directly connected user accepted it. A user who is not directly connected fails. The frame is sent exactly as given.
 - `ReceiveMessage(message)` records a `Message` as received: it is validated against the configured priorities, levels and aspects and raised as `MessageReceived`, which `MainViewModel` stores in the Inbox and shows.
 - `SetSentStatus(messageId, user, status)` moves the stored Outbox status of one recipient, and `SetReceivedStatus(messageId, status)` marks a stored Inbox message `Read`. A status only moves forward, so a late earlier one is ignored.
@@ -65,6 +71,7 @@ Every context carries the operations of `NetworkEnvironment`:
 - `SendInterface(priority, frame)` sends to every connected interface (`InterfaceService.Send`), and `SendToExternalSystems(frame)` to every external system.
 - `StoreMessage`/`FindStoredMessages` keep and look up messages in the server-side store (`MessageStorageService`).
 - `GetAutoForwardTargets(controllerName)` reads the targets a user chose for an auto forwarder.
+- `GetUser(name)` is what the network lists about a user, or just the name for anyone else (an external system), and `GetDestinations(minimumLevel, targets, out excluded)` expands groups and leaves out users whose message level ranks below the minimum, which is also how `EngineFrameHandler` finds the destinations of a sent message and marks the excluded ones `Failed` before the handler runs.
 
 `DirectServiceConnection.SendMessage` stores the sent message in the Outbox with `Sending` statuses and hands the `Message` to `OnSent`; routing, expansion of groups, message level checks and the actual sends are the handler's. Frames from peers (`FrameOrigin.Peer`), the local interface (`FrameOrigin.Interface`) and external systems (`FrameOrigin.ExternalSystem`) all arrive in `OnReceived`.
 

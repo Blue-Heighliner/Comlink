@@ -12,7 +12,7 @@ internal static class PeerConnectionNotifier
     /// <param name="userName">The user that connected or disconnected.</param>
     /// <param name="action">Describes the transition for the failure log message (e.g. <c>"connecting"</c>, <c>"disconnecting"</c>).</param>
     /// <param name="logger">Logger for a handler failure.</param>
-    public static void Raise(Func<string, Task>? subscribers, string userName, string action, ILogger logger)
+    public static void Raise(Func<string, Task>? subscribers, string userName, string action, MicrosoftLogger logger)
     {
         if (subscribers is null || string.IsNullOrEmpty(userName))
         {

@@ -6,7 +6,7 @@ namespace BlueHeighliner.Comlink;
 /// and it is dropped if it takes too long.
 /// </summary>
 /// <typeparam name="TFrame">The host's frame type.</typeparam>
-public interface IFrameHandshakeContext<TFrame> : IEngineContext where TFrame : class
+public interface IFrameHandshakeContext<TFrame> where TFrame : class
 {
     /// <summary>Gets what is known about the connection.</summary>
     IConnectionInfo Connection { get; }

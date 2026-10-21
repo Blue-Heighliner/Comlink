@@ -13,6 +13,12 @@ A messaging engine built on .NET 10, with a built-in Avalonia desktop GUI. Nodes
 dotnet add package BlueHeighliner.Comlink
 ```
 
+To unit test custom handlers without running the engine, add the mocks of the contexts the engine hands them and of the services it offers (`BlueHeighliner.Comlink.Testing`, built on Moq):
+
+```sh
+dotnet add package BlueHeighliner.Comlink.Testing
+```
+
 ## Getting started
 
 A host implements `IEngineConfiguration`, whose fluent `Configure` method states how the engine runs (starting with the types it is typed by: its own frame DTO, priority enum and message level enum), and starts the engine with `Engine.Start<T>`, which constructs it through dependency injection:
@@ -39,6 +45,7 @@ See `Sample/` for a complete, runnable host, and `Docs/Usage.md` for further exa
 |------|--------|
 | [Docs/Api.md](Docs/Api.md) | Public API design and flow - `IEngineConfiguration`, `IEngineBuilder`, `Engine.Start` |
 | [Docs/Architecture.md](Docs/Architecture.md) | High-level design decisions |
+| [Docs/Exposed.md](Docs/Exposed.md) | The services, utilities and test mocks intentionally exposed for use in a host's own code |
 | [Docs/Project.md](Docs/Project.md) | This repo's own tooling: `Scripts/`, publishing, CI |
 | [Docs/Usage.md](Docs/Usage.md) | Runnable usage examples |
 | [Docs/Components/](Docs/Components/) | One file per complex internal component/subsystem |

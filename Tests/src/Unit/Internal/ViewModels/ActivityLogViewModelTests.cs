@@ -65,16 +65,16 @@ public sealed class ActivityLogViewModelTests
             Date = new DateTime(2025, 7, 4),
             EventEntries =
             [
-                new ActivityLogEntry { At = new DateTime(2025, 7, 4, 12, 0, 0, DateTimeKind.Utc), Message = "Structured", EventId = 7 },
+                new ActivityLogEntry { At = new DateTime(2025, 7, 4, 12, 0, 0, DateTimeKind.Utc), Message = "Structured", EventId = "CL7" },
                 new ActivityLogEntry { At = new DateTime(2025, 7, 4, 11, 0, 0, DateTimeKind.Utc), Message = "NoId" }
             ]
         };
 
         ActivityLogViewModel natural = new(entity);
-        ActivityLogViewModel fixedWidth = new(entity, 3);
+        ActivityLogViewModel fixedWidth = new(entity, 5);
 
-        Assert.Equal("7", natural.Events.Single(row => row.Message == "Structured").IdText);
-        Assert.Equal("7--", fixedWidth.Events.Single(row => row.Message == "Structured").IdText);
+        Assert.Equal("CL7", natural.Events.Single(row => row.Message == "Structured").IdText);
+        Assert.Equal("CL7--", fixedWidth.Events.Single(row => row.Message == "Structured").IdText);
         Assert.Equal(string.Empty, fixedWidth.Events.Single(row => row.Message == "NoId").IdText);
     }
 }

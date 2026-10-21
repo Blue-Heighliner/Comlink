@@ -13,7 +13,7 @@ public sealed class TestDraftHandler : IDraftHandler<TestMessagePriority, TestLe
     public int? MaxLineWidth => 80;
 
     /// <inheritdoc />
-    public string? GetHeader(DraftState<TestMessagePriority, TestLevel, TestAspect> state) => state.Tag.Length > 0 ? $"TAG: {state.Tag}" : null;
+    public string? GetHeader(IDraftContext<TestMessagePriority, TestLevel, TestAspect> context) => context.Tag.Length > 0 ? $"TAG: {context.Tag}" : null;
 }
 
 /// <summary>Test <see cref="IDraftHandler{TPriority, TLevel, TAspect}"/> that only states what tags may be: uppercase, two to six characters, letters and numbers only, and what a new draft starts with.</summary>
@@ -58,7 +58,7 @@ public sealed class TestNoTagsDraftHandler : IDraftHandler<TestMessagePriority, 
 public sealed class TestHeaderOnlyDraftHandler : IDraftHandler<TestMessagePriority, TestLevel, TestAspect>
 {
     /// <inheritdoc />
-    public string? GetHeader(DraftState<TestMessagePriority, TestLevel, TestAspect> state) => "HEADER";
+    public string? GetHeader(IDraftContext<TestMessagePriority, TestLevel, TestAspect> context) => "HEADER";
 }
 
 /// <summary>Test <see cref="IDraftHandler{TPriority, TLevel, TAspect}"/> that only states a maximum, which is then also where a draft starts.</summary>

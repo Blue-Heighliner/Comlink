@@ -22,7 +22,7 @@ public sealed class ExternalSystemsServiceTests
             return Task.FromResult(true);
         }
 
-        public void AttachLogger(ILogger logger) { }
+        public void AttachLogger(MicrosoftLogger logger) { }
 
         public async Task Deliver(object message)
         {

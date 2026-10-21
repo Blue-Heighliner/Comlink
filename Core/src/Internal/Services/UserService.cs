@@ -44,7 +44,7 @@ internal sealed class UserService : IUserService
     private readonly ICurrentUserProvider currentUserProvider;
     private readonly EngineBuilder builder;
     private readonly NetworkConfig network;
-    private readonly ILogger logger;
+    private readonly MicrosoftLogger logger;
     private volatile NodeIdentity identity;
     private volatile string? problem;
 

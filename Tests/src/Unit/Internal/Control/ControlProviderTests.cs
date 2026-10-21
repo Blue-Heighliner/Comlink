@@ -194,7 +194,7 @@ public sealed class ControlProviderTests
         Assert.Equal(Enumerable.Range(0, priorities.Count), priorities.Select(p => p.Value));
         Assert.True(controller.TagsEnabled);
         Assert.Equal("Tag", controller.TagLabel);
-        Assert.True(controller.IsDraftAllowed(Mock.Of<IEngineContext>(), TestMessagePriority.Normal, null, null, "ANY"));
+        Assert.Null(controller.IsDraftBlocked(TestMessagePriority.Normal, null, null, "ANY"));
     }
 
     /// <summary>Priorities returns the same list instance/values on every access.</summary>
@@ -205,7 +205,7 @@ public sealed class ControlProviderTests
         Assert.Equal(controller.Priorities, controller.Priorities);
     }
 
-    /// <summary>Falls back to the wrapped provider for TagsEnabled/TagLabel when not configured; Priorities/IsDraftAllowed always delegate.</summary>
+    /// <summary>Falls back to the wrapped provider for TagsEnabled/TagLabel when not configured; Priorities/IsDraftBlocked always delegate.</summary>
     [Fact]
     public void ConfiguredEngineController_FallsBackWhenMessageCompositionNotConfigured()
     {
@@ -214,13 +214,13 @@ public sealed class ControlProviderTests
         fallback.Setup(f => f.TagLabel).Returns("Category");
         IReadOnlyList<MessagePriorityOption> priorities = [new MessagePriorityOption { Name = "Low", Value = 0, Key = TestMessagePriority.Low }];
         fallback.Setup(f => f.Priorities).Returns(priorities);
-        fallback.Setup(f => f.IsDraftAllowed(It.IsAny<IEngineContext>(), TestMessagePriority.Low, null, null, "SPAM")).Returns(false);
+        fallback.Setup(f => f.IsDraftBlocked(TestMessagePriority.Low, null, null, "SPAM")).Returns("no spam");
         ConfiguredEngineController controller = TestConfigured.Create(fallback.Object, new NetworkConfig(), NoCurrentUser);
 
         Assert.False(controller.TagsEnabled);
         Assert.Equal("Category", controller.TagLabel);
         Assert.Same(priorities, controller.Priorities);
-        Assert.False(controller.IsDraftAllowed(Mock.Of<IEngineContext>(), TestMessagePriority.Low, null, null, "SPAM"));
+        Assert.Equal("no spam", controller.IsDraftBlocked(TestMessagePriority.Low, null, null, "SPAM"));
     }
 
     /// <summary>Falls back to the wrapped provider when not configured.</summary>

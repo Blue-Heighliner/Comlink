@@ -10,3 +10,4 @@ global using BlueHeighliner.Comlink;
 global using BlueHeighliner.MicroGate;
 global using Message = BlueHeighliner.Comlink.Message<BlueHeighliner.Comlink.Sample.Priority, BlueHeighliner.Comlink.Sample.Level, BlueHeighliner.Comlink.Sample.Aspect>;
 global using System.Runtime.CompilerServices;
+global using MicrosoftLogger = Microsoft.Extensions.Logging.ILogger;

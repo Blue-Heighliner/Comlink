@@ -11,8 +11,8 @@ public sealed class DraftHandler : IDraftHandler<Priority, Level, Aspect>
     private readonly string run = Guid.NewGuid().ToString("N")[..16].ToUpperInvariant();
 
     /// <inheritdoc />
-    public bool IsAllowed(IEngineContext context, Priority priority, Level? level, Aspect? aspect, string tag)
-        => priority is not Priority.High && !string.Equals(tag, "SPAM", StringComparison.Ordinal);
+    public string? IsBlocked(IDraftBlockContext<Priority, Level, Aspect> context)
+        => string.Equals(context.Tag, "SPAM", StringComparison.Ordinal) ? "The tag SPAM is not allowed" : context.Priority is Priority.High ? "The high priority is not allowed" : null;
 
     /// <inheritdoc />
     public int? DefaultLineWidth => 60;
@@ -48,7 +48,7 @@ public sealed class DraftHandler : IDraftHandler<Priority, Level, Aspect>
     public bool AllowTagSpaces => false;
 
     /// <inheritdoc />
-    public bool IsAlert(DraftState<Priority, Level, Aspect> state) => state.Tag is "ALERT";
+    public bool IsAlert(IDraftContext<Priority, Level, Aspect> context) => context.Tag is "ALERT";
 
     /// <inheritdoc />
     public string NextId(string? previous)
@@ -58,23 +58,23 @@ public sealed class DraftHandler : IDraftHandler<Priority, Level, Aspect>
     }
 
     /// <inheritdoc />
-    public string? GetHeader(DraftState<Priority, Level, Aspect> state)
+    public string? GetHeader(IDraftContext<Priority, Level, Aspect> context)
     {
         List<string> lines = [];
-        if (IsAlert(state))
+        if (IsAlert(context))
         {
             lines.Add("ALERT - ACTION REQUIRED");
         }
-        else if (state.Tag is "URGENT")
+        else if (context.Tag is "URGENT")
         {
             lines.Add("URGENT - PLEASE REPLY");
         }
-        else if (state.Tag is "REPORT")
+        else if (context.Tag is "REPORT")
         {
             lines.Add("REPORT - FOR YOUR REVIEW");
         }
 
-        if (state.MessageLevel is Level.Restricted)
+        if (context.MessageLevel is Level.Restricted)
         {
             lines.Add("RESTRICTED - DO NOT FORWARD");
         }

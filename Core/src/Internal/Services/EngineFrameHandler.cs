@@ -46,29 +46,33 @@ internal interface IEngineFrameHandler
 internal sealed class EngineFrameHandler<TFrame, TPriority, TLevel, TAspect>(IFrameHandler<TFrame, TPriority, TLevel, TAspect> handler) : IEngineFrameHandler where TFrame : class where TPriority : struct, Enum where TLevel : struct, Enum where TAspect : struct, Enum
 {
     /// <inheritdoc />
-    public Task OnConnected(INetworkEnvironment environment, string userName) => handler.OnConnected(new NetworkConnectedContext<TFrame, TPriority, TLevel, TAspect>(environment, userName));
+    public Task OnConnected(INetworkEnvironment environment, string userName) => handler.OnConnected(new NetworkConnectedContext(environment.GetUser(userName)));
 
     /// <inheritdoc />
-    public Task OnDisconnected(INetworkEnvironment environment, string userName) => handler.OnDisconnected(new NetworkDisconnectedContext<TFrame, TPriority, TLevel, TAspect>(environment, userName));
+    public Task OnDisconnected(INetworkEnvironment environment, string userName) => handler.OnDisconnected(new NetworkDisconnectedContext(environment.GetUser(userName)));
 
     /// <inheritdoc />
-    public Task OnReceived(INetworkEnvironment environment, object frame, FrameOrigin origin, string sourceUser) => handler.OnReceived(new NetworkReceivedContext<TFrame, TPriority, TLevel, TAspect>(environment, (TFrame)frame, origin, sourceUser));
+    public Task OnReceived(INetworkEnvironment environment, object frame, FrameOrigin origin, string sourceUser) => handler.OnReceived(new NetworkReceivedContext<TFrame>((TFrame)frame, origin, environment.GetUser(sourceUser)));
 
     /// <inheritdoc />
     public async Task OnSent(INetworkEnvironment environment, Message message)
     {
-        NetworkSentContext<TFrame, TPriority, TLevel, TAspect> context = new(environment, message);
-        await context.SetSentStatus(message.Id, context.Excluded, DestinationStatus.Failed);
-
-        if (context.Destinations.Count > 0)
+        Message<TPriority, TLevel, TAspect> typed = message.ToTyped<TPriority, TLevel, TAspect>();
+        IReadOnlySet<string> destinations = environment.GetDestinations(typed.MessageLevel is { } level ? (Enum)level : null, typed.Addresses.Where(address => address.Type is not AddressType.External).Select(address => address.UserName), out IReadOnlySet<string> excluded);
+        foreach (string user in excluded)
         {
-            await handler.OnSent(context);
+            await environment.SetSentStatus(message.Id, user, DestinationStatus.Failed);
+        }
+
+        if (destinations.Count > 0)
+        {
+            await handler.OnSent(new NetworkSentContext<TPriority, TLevel, TAspect>(typed, destinations));
         }
     }
 
     /// <inheritdoc />
-    public Task OnRead(INetworkEnvironment environment, Message message) => handler.OnRead(new NetworkReadContext<TFrame, TPriority, TLevel, TAspect>(environment, message));
+    public Task OnRead(INetworkEnvironment environment, Message message) => handler.OnRead(new NetworkReadContext<TPriority, TLevel, TAspect>(message.ToTyped<TPriority, TLevel, TAspect>()));
 
     /// <inheritdoc />
-    public Task OnRetrieval(INetworkEnvironment environment, string server, RetrievalCriteria criteria) => handler.OnRetrieval(new NetworkRetrievalContext<TFrame, TPriority, TLevel, TAspect>(environment, server, criteria));
+    public Task OnRetrieval(INetworkEnvironment environment, string server, RetrievalCriteria criteria) => handler.OnRetrieval(new NetworkRetrievalContext(environment.GetUser(server), criteria));
 }

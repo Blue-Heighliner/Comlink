@@ -35,14 +35,14 @@ between `sh` and `cmd.exe`.
 
 Run `Scripts/Publish.cs` locally to cut a release:
 
-1. It prompts for the version to publish (e.g. `1.2.3`) — `Core/Core.csproj` carries no `<Version>` of its
+1. It prompts for the version to publish (e.g. `1.2.3`) — `Core/Core.csproj` and `Testing/Testing.csproj` carry no `<Version>` of their
    own, so this is what actually gets built and published.
 2. It creates the GitHub Release (and its underlying tag) for that version locally via `gh release
    create` — done locally because a repo ruleset blocks the default `GITHUB_TOKEN` from creating tags.
 3. It dispatches `build.yml`'s `workflow_dispatch` trigger with the version as input. The workflow
    verifies the dispatcher has Admin permission on the repo, refuses to run from anything but `main`,
-   packs `Core/Core.csproj`, pushes the package to GitHub Packages and nuget.org, and uploads the
-   `.nupkg` as a release asset (no `.snupkg` — see the `DebugType` comment in `Core/Core.csproj` for why).
+   packs `Core/Core.csproj` and `Testing/Testing.csproj` (the `BlueHeighliner.Comlink.Testing` package, which depends on the `BlueHeighliner.Comlink` package of the same version), pushes both packages to GitHub Packages and nuget.org, and uploads the
+   `.nupkg` files as release assets (no `.snupkg` — see the `DebugType` comment in `Core/Core.csproj` for why).
 4. It waits for that run to finish, rolling the release/tag back if the workflow fails, so a failed
    publish never leaves one behind. If it can't confirm the run happened at all, it leaves the release
    in place instead, rather than risk deleting one that's still running.

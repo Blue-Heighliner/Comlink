@@ -6,7 +6,7 @@ namespace BlueHeighliner.Comlink;
 /// and it is dropped if it takes too long.
 /// </summary>
 /// <typeparam name="TPacket">The host's packet type.</typeparam>
-public interface IPacketHandshakeContext<TPacket> : IEngineContext where TPacket : class
+public interface IPacketHandshakeContext<TPacket> where TPacket : class
 {
     /// <summary>Gets what is known about the connection.</summary>
     IConnectionInfo Connection { get; }

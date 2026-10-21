@@ -3,7 +3,7 @@ namespace BlueHeighliner.Comlink;
 /// <summary>The engine's own connection to itself, with messages as the engine holds them. Hosts see it as an <see cref="IServiceConnection{TPriority, TLevel, TAspect}"/>, typed by their own enums.</summary>
 internal interface IEngineConnection
 {
-    /// <summary>Raised when the host's frame handler records a message as received (see <see cref="INetworkContext{TFrame, TPriority, TLevel, TAspect}.ReceiveMessage"/>).</summary>
+    /// <summary>Raised when the host's frame handler records a message as received (see <see cref="INetwork{TFrame, TPriority, TLevel, TAspect}.ReceiveMessage"/>).</summary>
     event Func<Message, Task>? MessageReceived;
     /// <summary>Raised when the delivery status of an outbound message changes.</summary>
     event Func<DeliveryStatusChangedEvent, Task>? DeliveryStatusChanged;
@@ -11,9 +11,6 @@ internal interface IEngineConnection
     Task Connect(CancellationToken cancellation = default);
     /// <summary>Returns this user's own <see cref="UserInfo"/>, or <see langword="null"/> where no current user was given, which never happens in a running engine.</summary>
     Task<UserInfo?> GetUserInfo(CancellationToken cancellation = default);
-    /// <summary>Returns a snapshot of the engine as it is now, as a host's handlers see it.</summary>
-    /// <exception cref="InvalidOperationException">The node has no current user.</exception>
-    IEngineContext GetContext();
     /// <summary>Returns the names of all known users in the messaging system.</summary>
     Task<List<string>> GetUserNames(CancellationToken cancellation = default);
     /// <summary>Returns the names of every user currently reachable over at least one live peer connection, unlike <see cref="GetUserNames"/>'s fixed configured directory.</summary>

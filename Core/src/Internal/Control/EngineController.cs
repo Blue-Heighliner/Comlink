@@ -77,6 +77,10 @@ internal interface IEngineController
     bool IsKioskMode { get; }
     /// <summary>Whether alert messages are kept in their own alert inbox and alert outbox, apart from the normal inbox and outbox, from the display handler.</summary>
     bool SeparateAlerts { get; }
+    /// <summary>Whether a log entry that reports an exception also carries its entire stack trace, as stated with <see cref="IEngineBuilder{TFrame, TPacket, TPriority, TLevel, TAspect}.StackTrace"/>. On unless stated.</summary>
+    bool IsStackTraceEnabled { get; }
+    /// <summary>The host's reconfigurer, or <see langword="null"/> when it stated none.</summary>
+    IReconfigurer? Reconfigurer { get; }
     /// <summary>The label the network indicator shows while online (<paramref name="isOnline"/> is <see langword="true"/>) or offline, from the display handler.</summary>
     /// <param name="isOnline">Whether the indicator shows online.</param>
     string GetNetworkIndicatorLabel(bool isOnline);
@@ -88,6 +92,8 @@ internal interface IEngineController
     string GetNetworkIndicatorForeground(bool isOnline);
     /// <summary>The fixed widths of the fields of a log line, from the log handler; no field is fixed without one.</summary>
     LogFieldWidths LogWidths { get; }
+    /// <summary>The log categories that are written unless <c>Logging.json</c> or <c>--log</c> turns more on: the log handler's, or else <see cref="LogCategories.OnByDefault"/>.</summary>
+    IReadOnlyList<string> LogCategoriesOnByDefault { get; }
 
     /// <summary>The text displayed in the content area when no entry is selected.</summary>
     string HomeText { get; }
@@ -96,6 +102,8 @@ internal interface IEngineController
 
     /// <summary>Every known user and group name in the messaging system.</summary>
     IReadOnlyList<string> Users { get; }
+    /// <summary>The name of every user the network configuration file lists, groups left out.</summary>
+    IReadOnlyList<string> UserNames { get; }
     /// <summary>Every defined group as a map of group name to member names (which may be user names or other group names).</summary>
     IReadOnlyDictionary<string, IReadOnlyList<string>> UserGroups { get; }
     /// <summary>Returns the names of the users that belong to the group <paramref name="groupName"/>, with the groups inside it expanded (a group that contains itself is expanded once), or an empty list when there is no such group.</summary>
@@ -179,13 +187,12 @@ internal interface IEngineController
     /// <summary>Returns the text to show for <paramref name="label"/>, the engine's own name for a concept of the app: what the host's display handler calls it (see <see cref="IDisplayHandler.InboxLabel"/> and the members like it), or <paramref name="label"/> itself.</summary>
     /// <param name="label">The engine's name for the concept.</param>
     string Rename(string label);
-    /// <summary>Returns whether a draft may have this combination (see <see cref="IDraftHandler{TPriority, TLevel, TAspect}.IsAllowed"/>); every combination is allowed when no draft handler is stated.</summary>
-    /// <param name="context">A snapshot of the engine.</param>
+    /// <summary>Returns why a draft may not have this combination (see <see cref="IDraftHandler{TPriority, TLevel, TAspect}.IsBlocked"/>), or <see langword="null"/> when it may; no combination is blocked when no draft handler is stated.</summary>
     /// <param name="priority">The priority as the host's enum member.</param>
     /// <param name="level">The message level as the host's enum member, or <see langword="null"/> for none.</param>
     /// <param name="aspect">The message aspect as the host's enum member, or <see langword="null"/> for none.</param>
     /// <param name="tag">The tag, empty for none.</param>
-    bool IsDraftAllowed(IEngineContext context, Enum priority, Enum? level, Enum? aspect, string tag);
+    string? IsDraftBlocked(Enum priority, Enum? level, Enum? aspect, string tag);
     /// <summary>
     /// Every address type, in a fixed order (<see cref="AddressType.To"/>, <see cref="AddressType.Cc"/>,
     /// <see cref="AddressType.External"/>), paired with its display label - shown in the address type picker, the
@@ -452,6 +459,7 @@ internal class EngineController(EngineBuilder builder, ICurrentUserProvider curr
     private readonly Lazy<ILogHandler?> logHandler = new(() => builder.LogHandler?.Create(services));
     private readonly Lazy<IPrintPolicy?> printHandler = new(() => builder.PrintHandler?.Create(services));
     private readonly Lazy<IDeleteHandler?> deleteHandler = new(() => builder.DeleteHandler?.Create(services));
+    private readonly Lazy<IReconfigurer?> reconfigurer = new(() => builder.Reconfigurer?.Create(services));
     private readonly Lazy<IEngineFrameHandler?> frameHandler = new(() => builder.FrameHandler?.Create(services));
     private readonly IReadOnlyList<MessagePriorityOption> defaultPriorities = [new MessagePriorityOption { Name = "NORMAL", Value = 0, Key = NoPriority.Normal }];
     private readonly IReadOnlyList<AddressType> addressTypeOrder = [AddressType.To, AddressType.Cc, AddressType.External];
@@ -496,6 +504,12 @@ internal class EngineController(EngineBuilder builder, ICurrentUserProvider curr
     /// <inheritdoc />
     public virtual LogFieldWidths LogWidths => logHandler.Value is { } handler ? new LogFieldWidths(handler.CategoryWidth, handler.UserWidth, handler.IdWidth) : LogFieldWidths.None;
     /// <inheritdoc />
+    public virtual IReadOnlyList<string> LogCategoriesOnByDefault => logHandler.Value?.CategoriesOnByDefault ?? LogCategories.OnByDefault;
+    /// <inheritdoc />
+    public virtual bool IsStackTraceEnabled => builder.IsStackTraceEnabled;
+    /// <inheritdoc />
+    public virtual IReconfigurer? Reconfigurer => reconfigurer.Value;
+    /// <inheritdoc />
     public virtual bool SeparateAlerts => builder.DisplayHandlerInstance?.SeparateAlerts ?? false;
     /// <inheritdoc />
     public virtual string HomeText => builder.DisplayHandlerInstance?.HomeText.OrNull() ?? "HOME";
@@ -506,6 +520,8 @@ internal class EngineController(EngineBuilder builder, ICurrentUserProvider curr
     /// <inheritdoc />
     public virtual string? WindowIconPath => builder.DisplayHandlerInstance?.Icon.OrNull();
 
+    /// <inheritdoc />
+    public virtual IReadOnlyList<string> UserNames => [.. network.Users.Keys];
     /// <inheritdoc />
     public virtual IReadOnlyList<string> Users
     {
@@ -648,7 +664,7 @@ internal class EngineController(EngineBuilder builder, ICurrentUserProvider curr
     /// <inheritdoc />
     public virtual string TagLabel => builder.DisplayHandlerInstance?.TagLabel.OrNull() ?? "Tag";
     /// <inheritdoc />
-    public virtual bool IsDraftAllowed(IEngineContext context, Enum priority, Enum? level, Enum? aspect, string tag) => draftHandler.Value?.IsAllowed(context, priority, level, aspect, tag) ?? true;
+    public virtual string? IsDraftBlocked(Enum priority, Enum? level, Enum? aspect, string tag) => draftHandler.Value?.IsBlocked(priority, level, aspect, tag);
     /// <inheritdoc />
     public virtual IReadOnlyList<AddressTypeOption> AddressTypes
         => [.. addressTypeOrder.Select(type => new AddressTypeOption { Type = type, Label = builder.AddressTypeLabels.TryGetValue(type, out string? label) ? label : type.ToString() })];

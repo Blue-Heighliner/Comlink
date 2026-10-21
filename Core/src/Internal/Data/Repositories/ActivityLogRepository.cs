@@ -16,7 +16,7 @@ internal interface IActivityLogRepository
     /// <summary>Persists changes to an existing activity log document.</summary>
     Task Update(ActivityLogEntity entity);
     /// <summary>Appends an event string, tagged with the identifier of its kind of event, to today's activity log, creating the document if necessary.</summary>
-    Task AppendEvent(string eventText, int eventId);
+    Task AppendEvent(string eventText, string eventId);
 }
 
 /// <summary>Provides data-access operations for <see cref="ActivityLogEntity"/> documents.</summary>
@@ -66,7 +66,7 @@ internal sealed class ActivityLogRepository : IActivityLogRepository
         => Task.Run(() => ctx.ActivityLogs.Update(entity));
 
     /// <inheritdoc />
-    public async Task AppendEvent(string eventText, int eventId)
+    public async Task AppendEvent(string eventText, string eventId)
     {
         ActivityLogEntry entry = new() { At = DateTime.UtcNow, Message = eventText, EventId = eventId };
         lock (pendingLock)

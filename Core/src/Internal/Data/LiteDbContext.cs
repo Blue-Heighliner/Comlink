@@ -114,6 +114,9 @@ internal sealed class LiteDbContext : ILiteDbContext
         {
             MessageData message = new() { Addresses = [new AddressData { UserName = string.Empty, Type = string.Empty, Information = string.Empty }] };
             BsonMapper mapper = BsonMapper.Global;
+            mapper.RegisterType(
+                entry => new BsonDocument { ["At"] = entry.At, ["Message"] = entry.Message, ["EventId"] = entry.EventId },
+                value => new ActivityLogEntry { At = value["At"].AsDateTime, Message = value["Message"].AsString ?? string.Empty, EventId = value["EventId"] is { IsInt32: true } number ? LogEvents.FromNumber(number.AsInt32) : value["EventId"].AsString ?? string.Empty });
             mapper.ToDocument(new MessageEntity
             {
                 MessageId = string.Empty,

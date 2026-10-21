@@ -3,7 +3,7 @@ namespace BlueHeighliner.Comlink.Tests.Unit.Internal.Peer.Transport;
 /// <summary>Unit tests for <see cref="TracingPeerTransport"/>.</summary>
 public sealed class TracingPeerTransportTests
 {
-    private sealed class RecordingLogger : ILogger
+    private sealed class RecordingLogger : MicrosoftLogger
     {
         public List<(EventId Id, string Message)> Entries { get; } = [];
 

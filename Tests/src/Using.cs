@@ -1,3 +1,4 @@
+global using System.Diagnostics;
 global using System.Reflection;
 global using Microsoft.Extensions.DependencyInjection;
 global using Microsoft.Extensions.Logging;
@@ -27,3 +28,8 @@ global using System.Runtime.CompilerServices;
 global using TestEngineBuilder = BlueHeighliner.Comlink.IEngineBuilder<BlueHeighliner.Comlink.Tests.TestFrame, BlueHeighliner.Comlink.Tests.TestPacket, BlueHeighliner.Comlink.Tests.TestMessagePriority, BlueHeighliner.Comlink.Tests.TestLevel, BlueHeighliner.Comlink.Tests.TestAspect>;
 global using TestFrameBuilder = BlueHeighliner.Comlink.IFrameBuilder<BlueHeighliner.Comlink.Tests.TestFrame, BlueHeighliner.Comlink.Tests.TestPacket, BlueHeighliner.Comlink.Tests.TestMessagePriority, BlueHeighliner.Comlink.Tests.TestLevel, BlueHeighliner.Comlink.Tests.TestAspect>;
 global using TestPacketBuilder = BlueHeighliner.Comlink.IPacketBuilder<BlueHeighliner.Comlink.Tests.TestFrame, BlueHeighliner.Comlink.Tests.TestPacket, BlueHeighliner.Comlink.Tests.TestMessagePriority, BlueHeighliner.Comlink.Tests.TestLevel, BlueHeighliner.Comlink.Tests.TestAspect>;
+global using BlueHeighliner.Comlink.Testing;
+global using Microsoft.Extensions.DependencyInjection.Extensions;
+global using Microsoft.Extensions.Hosting;
+global using System.Reflection.Emit;
+global using MicrosoftLogger = Microsoft.Extensions.Logging.ILogger;

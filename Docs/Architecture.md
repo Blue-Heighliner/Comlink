@@ -1,20 +1,24 @@
 # Architecture Overview
 
-Comlink is a messaging system. The solution has three projects:
+Comlink is a messaging system. The solution has four projects:
 
 | Project | Description |
 |---------|-------------|
 | **Core** | The whole engine, in one library — networking, data, services, ViewModels, and the Avalonia UI layer (Views, Themes, converters). The only project that depends on Avalonia. Published as the `BlueHeighliner.Comlink` NuGet package. |
 | **Sample** | Host application demonstrating `Core`'s `IEngineConfiguration`/`Engine.Start` API. References `Core`. |
-| **Tests** | xUnit tests. References `Core`. |
+| **Testing** | Mocks of every context the engine hands to a host's handlers, for unit testing custom handler types without the engine. References `Core` and Moq. Published as the `BlueHeighliner.Comlink.Testing` NuGet package, in the `BlueHeighliner.Comlink.Testing` namespace. |
+| **Tests** | xUnit tests. References `Core` and `Testing`. |
 
 ```mermaid
 graph LR
     Core["Core\n(engine library + UI layer)"]
     Sample["Sample\n(host app)"]
+    Testing["Testing\n(context mocks)"]
     Tests["Tests\n(xUnit)"]
     Core --> Sample
+    Core --> Testing
     Core --> Tests
+    Testing --> Tests
 ```
 
 ## Modes

@@ -2,7 +2,7 @@ namespace BlueHeighliner.Comlink;
 
 /// <summary>
 /// The storage half of a server: keeps the messages the host's frame handler tells it to keep, and finds the kept messages that fit the criteria of a retrieval. The engine neither decides what is kept nor who may retrieve
-/// it, nor sends what is found: those are the handler's, through its context (see <see cref="INetworkContext{TFrame, TPriority, TLevel, TAspect}.StoreMessage"/> and <see cref="INetworkContext{TFrame, TPriority, TLevel, TAspect}.FindStoredMessages"/>).
+/// it, nor sends what is found: those are the handler's, through its network service (see <see cref="INetwork{TFrame, TPriority, TLevel, TAspect}.StoreMessage"/> and <see cref="INetwork{TFrame, TPriority, TLevel, TAspect}.FindStoredMessages"/>).
 /// </summary>
 internal interface IMessageStorageService
 {
@@ -28,7 +28,7 @@ internal sealed class MessageStorageService : IMessageStorageService
 
     private readonly IStoredMessageRepository repository;
     private readonly IEngineController engineController;
-    private readonly ILogger logger;
+    private readonly MicrosoftLogger logger;
 
     /// <inheritdoc />
     public async Task Store(Message message)

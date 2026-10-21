@@ -53,7 +53,7 @@ internal sealed class DailyFileLoggerProvider : ILoggerProvider
     }
 
     /// <inheritdoc />
-    public ILogger CreateLogger(string categoryName)
+    public MicrosoftLogger CreateLogger(string categoryName)
         => loggers.GetOrAdd(categoryName, name => new DailyFileLogger(name, this, currentUser, lineFormatter));
 
     /// <summary>Returns whether entries of <paramref name="category"/> are written at all.</summary>
@@ -145,7 +145,7 @@ internal sealed class DailyFileLoggerProvider : ILoggerProvider
 
 /// <summary>Per-category logger that formats and forwards log entries to <see cref="DailyFileLoggerProvider"/>.</summary>
 [ExcludeFromCodeCoverage]
-internal sealed class DailyFileLogger : ILogger, IDisposable
+internal sealed class DailyFileLogger : MicrosoftLogger, IDisposable
 {
     /// <summary>Initializes a new <see cref="DailyFileLogger"/> for the specified category.</summary>
     public DailyFileLogger(string categoryName, DailyFileLoggerProvider provider, ICurrentUserProvider currentUser, ILogLineFormatter lineFormatter)
@@ -183,7 +183,7 @@ internal sealed class DailyFileLogger : ILogger, IDisposable
         string line = lineFormatter.Format(DateTime.Now, category, currentUser.UserName, eventId, formatter(state, exception));
         if (exception is not null)
         {
-            line += Environment.NewLine + exception;
+            line += Environment.NewLine + lineFormatter.FormatException(exception);
         }
 
         provider.Write(line);

@@ -1,7 +1,7 @@
 namespace BlueHeighliner.Comlink;
 
 /// <summary>
-/// Controls how drafts are composed: how wide a line may be, a header every message must start with, and which combinations of priority, level, aspect and tag are allowed. State one with <see cref="IEngineBuilder{TFrame, TPacket, TPriority, TLevel, TAspect}.Drafts{THandler}"/>. Every member is optional.
+/// Controls how drafts are composed: how wide a line may be, a header every message must start with, and which combinations of priority, level, aspect and tag are blocked. State one with <see cref="IEngineBuilder{TFrame, TPacket, TPriority, TLevel, TAspect}.Drafts{THandler}"/>. Every member is optional.
 /// </summary>
 /// <typeparam name="TPriority">The enum whose members are the priority levels.</typeparam>
 /// <typeparam name="TLevel">The enum whose members are the message levels.</typeparam>
@@ -30,23 +30,20 @@ public interface IDraftHandler<TPriority, TLevel, TAspect> where TPriority : str
     bool IsTagRequired => false;
 
     /// <summary>
-    /// Says whether a draft may have this combination of priority, message level, message aspect and tag. The draft view asks it for every choice the user could make and offers only the allowed ones, and a draft that is
-    /// already a blocked combination cannot be sent, so a blocked combination is never composed. Defaults to <see langword="true"/>: every combination is allowed.
+    /// Says whether a draft may not have the combination of priority, message level, message aspect and tag in <paramref name="context"/>. The draft view asks it for every choice the user could make: a choice that would make a blocked
+    /// combination cannot be made, and when the user types a tag that would, the tag is refused and the user is told why, so a blocked combination is never entered and never sent. Defaults to <see langword="null"/>: nothing is blocked.
+    /// To tell who the current user is or who is connected, ask for the <see cref="IUserCatalog"/> through dependency injection.
     /// </summary>
-    /// <param name="context">A snapshot of the engine, such as the current user and the users who are connected.</param>
-    /// <param name="priority">The priority the draft would be sent at.</param>
-    /// <param name="level">The message level the draft would be sent at, or <see langword="null"/> when no message levels are configured.</param>
-    /// <param name="aspect">The message aspect the draft would carry, or <see langword="null"/> for none.</param>
-    /// <param name="tag">The tag the draft would have, empty for none, as the user typed it after the tag rules have been applied.</param>
-    /// <returns><see langword="true"/> if the combination is allowed, <see langword="false"/> if it is blocked.</returns>
-    bool IsAllowed(IEngineContext context, TPriority priority, TLevel? level, TAspect? aspect, string tag) => true;
+    /// <param name="context">The combination.</param>
+    /// <returns><see langword="null"/> if the combination is allowed, otherwise why it is blocked, in words the user reads; when empty the user is told only that the combination is not allowed.</returns>
+    string? IsBlocked(IDraftBlockContext<TPriority, TLevel, TAspect> context) => null;
 
     /// <summary>
-    /// Says whether a message sent from the draft in <paramref name="state"/> is an alert, which alarms the recipient's Client-mode UI until it is read. Asked as the user edits the draft, to show the alert mark, and when it is sent, to
+    /// Says whether a message sent from the draft in <paramref name="context"/> is an alert, which alarms the recipient's Client-mode UI until it is read. Asked as the user edits the draft, to show the alert mark, and when it is sent, to
     /// set <see cref="Message.IsAlert"/>. Defaults to <see langword="false"/>: nothing is an alert unless the host says so.
     /// </summary>
-    /// <param name="state">The draft as it currently is.</param>
-    bool IsAlert(DraftState<TPriority, TLevel, TAspect> state) => false;
+    /// <param name="context">The draft as it currently is.</param>
+    bool IsAlert(IDraftContext<TPriority, TLevel, TAspect> context) => false;
 
     /// <summary>
     /// Gets the identifier of the next message the user sends, given <paramref name="previous"/>, the one the engine generated last, which it keeps between runs (<see langword="null"/> before the first). An identifier is shared
@@ -83,10 +80,10 @@ public interface IDraftHandler<TPriority, TLevel, TAspect> where TPriority : str
     bool AllowTagSpaces => true;
 
     /// <summary>
-    /// Returns the header every message sent from the draft in <paramref name="state"/> must start with, or <see langword="null"/> (the default) for none. The engine asks again whenever one of the draft's aspects
+    /// Returns the header every message sent from the draft in <paramref name="context"/> must start with, or <see langword="null"/> (the default) for none. The engine asks again whenever one of the draft's aspects
     /// (its tag, priority, message level, alert flag, recipients or line width) changes. The draft view shows a header above the body, where the user cannot edit it, and it is put in front of the body, followed by a line break, when the draft is sent.
     /// It is shown wrapped to the line width like the body, but only shown so: no line break is added to it or to the body.
     /// </summary>
-    /// <param name="state">The draft as it currently is.</param>
-    string? GetHeader(DraftState<TPriority, TLevel, TAspect> state) => null;
+    /// <param name="context">The draft as it currently is.</param>
+    string? GetHeader(IDraftContext<TPriority, TLevel, TAspect> context) => null;
 }

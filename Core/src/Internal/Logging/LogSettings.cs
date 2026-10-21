@@ -1,6 +1,6 @@
 namespace BlueHeighliner.Comlink;
 
-/// <summary>Says which log categories are written. Only the categories that are on by default (see <see cref="LogCategories.OnByDefault"/>) are written; every other is turned on by <c>Logging.json</c> and the <c>--log</c> argument.</summary>
+/// <summary>Says which log categories are written. Only the categories that are on by default (the log handler's, or else <see cref="LogCategories.OnByDefault"/>) are written; every other is turned on by <c>Logging.json</c> and the <c>--log</c> argument.</summary>
 internal interface ILogSettings
 {
     /// <summary>Returns whether entries of <paramref name="category"/> are written: the categories on by default, and any other that <c>Logging.json</c> or the <c>--log</c> argument names.</summary>
@@ -25,16 +25,18 @@ internal sealed class LogSettings : ILogSettings
     {
         this.engineController = engineController;
         this.network = network;
+        onByDefault = new(() => new HashSet<string>(engineController.LogCategoriesOnByDefault, StringComparer.OrdinalIgnoreCase));
         try { Reload(); }
         catch (InvalidDataException) { }
     }
 
     private readonly IEngineController engineController;
     private readonly NetworkConfig network;
+    private readonly Lazy<HashSet<string>> onByDefault;
     private volatile HashSet<string> enabled = new(StringComparer.OrdinalIgnoreCase);
 
     /// <inheritdoc />
-    public bool IsEnabled(string category) => LogCategories.OnByDefault.Contains(category, StringComparer.OrdinalIgnoreCase) || enabled.Contains(category);
+    public bool IsEnabled(string category) => onByDefault.Value.Contains(category) || enabled.Contains(category);
 
     /// <inheritdoc />
     public void Reload()

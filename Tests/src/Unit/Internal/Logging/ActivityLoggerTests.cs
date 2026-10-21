@@ -5,7 +5,7 @@ public sealed class ActivityLoggerTests
 {
     private static ActivityLogger Build(Mock<IActivityLogRepository> repo, string category = "APP")
     {
-        repo.Setup(r => r.AppendEvent(It.IsAny<string>(), It.IsAny<int>())).Returns(Task.CompletedTask);
+        repo.Setup(r => r.AppendEvent(It.IsAny<string>(), It.IsAny<string>())).Returns(Task.CompletedTask);
         return new ActivityLogger(category, repo.Object);
     }
 
@@ -27,7 +27,7 @@ public sealed class ActivityLoggerTests
         logger.Log(LogLevel.Information, LogEvents.AppStarted, "started", null, (s, _) => s);
 
         await Task.Delay(50);
-        repo.Verify(r => r.AppendEvent("started", LogEvents.AppStarted.Id), Times.Once);
+        repo.Verify(r => r.AppendEvent("started", LogEvents.AppStarted.Name!), Times.Once);
     }
 
     /// <summary>An event of any other category is not appended.</summary>
@@ -41,7 +41,7 @@ public sealed class ActivityLoggerTests
         logger.Log(LogLevel.Information, id, "msg", null, (s, _) => s);
 
         await Task.Delay(50);
-        repo.Verify(r => r.AppendEvent(It.IsAny<string>(), It.IsAny<int>()), Times.Never);
+        repo.Verify(r => r.AppendEvent(It.IsAny<string>(), It.IsAny<string>()), Times.Never);
     }
 
     public static IEnumerable<object[]> OtherCategoryEvents() => [[LogEvents.UnhandledException], [LogEvents.ConnectionEventHandlerFailed], [LogEvents.CannotDeliverNoConnection], [LogEvents.FrameSent], [LogEvents.PacketReceived]];
@@ -61,7 +61,7 @@ public sealed class ActivityLoggerTests
         logger.Log(LogLevel.Information, default, "msg", null, (s, _) => s);
 
         await Task.Delay(50);
-        repo.Verify(r => r.AppendEvent("msg", 0), appended == 1 ? Times.Once() : Times.Never());
+        repo.Verify(r => r.AppendEvent("msg", string.Empty), appended == 1 ? Times.Once() : Times.Never());
     }
 
     /// <summary>CreateLogger returns an ActivityLogger instance.</summary>
@@ -70,7 +70,7 @@ public sealed class ActivityLoggerTests
     {
         Mock<IActivityLogRepository> repo = new();
         ActivityLoggerProvider provider = new(repo.Object);
-        ILogger logger = provider.CreateLogger("ACTIVITY");
+        MicrosoftLogger logger = provider.CreateLogger("ACTIVITY");
         Assert.IsType<ActivityLogger>(logger);
     }
 

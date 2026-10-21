@@ -15,4 +15,11 @@ public interface ILogHandler
 
     /// <summary>Gets the width of the event ID field, in characters, or <see langword="null"/> (the default) for none. An ID is padded on the right with hyphens, never cut, and a line written without an event has an ID field of hyphens.</summary>
     int? IdWidth => null;
+
+    /// <summary>
+    /// Gets the categories that are written unless <c>Logging.json</c> or the <c>--log</c> argument turns more on, or <see langword="null"/> (the default) for the engine's own, <see cref="LogCategories.OnByDefault"/>: <c>ACTIVITY</c>, <c>APP</c>, <c>ERROR</c> and <c>CRASH</c>.
+    /// It is the whole list, not an addition to the default one: a category left out is off, one of the engine's own as much as any other, so a host can silence <c>APP</c> or turn on <c>FRAMES</c>, or one of its own categories (see <see cref="ILogger"/>), from the start.
+    /// Names are compared in any case.
+    /// </summary>
+    IReadOnlyList<string>? CategoriesOnByDefault => null;
 }

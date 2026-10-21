@@ -19,7 +19,7 @@ internal sealed class ActivityEventRow
     {
         TimeText = entry.At.ToString("HH:mm", CultureInfo.InvariantCulture);
         Message = entry.Message;
-        IdText = entry.EventId == 0 ? string.Empty : entry.EventId.ToString(CultureInfo.InvariantCulture).PadRight(idWidth ?? 0, '-');
+        IdText = entry.EventId.Length is 0 ? string.Empty : entry.EventId.PadRight(idWidth ?? 0, '-');
     }
 
     /// <summary>Gets the formatted timestamp for display.</summary>

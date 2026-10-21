@@ -8,6 +8,7 @@ public sealed class NetworkReloadServiceTests : IDisposable
     private readonly Mock<IInterfaceService> listener = new();
     private readonly Mock<ILogSettings> logSettings = new();
     private readonly Mock<IUserService> users = new();
+    private readonly Mock<IReconfigurationService> reconfiguration = new();
     private readonly NetworkConfig network;
     private readonly NetworkReloadService service;
     private NodeIdentity identity = TestConfigured.Identity("root.cer", "me.pfx", "ME") with { CertificateThumbprint = "A", AuthorityThumbprint = "R" };
@@ -22,7 +23,7 @@ public sealed class NetworkReloadServiceTests : IDisposable
         users.Setup(u => u.Refresh(It.IsAny<CancellationToken>())).ReturnsAsync(false);
         CurrentUserProvider user = new() { UserName = "ME" };
         EngineController controller = new(EngineBuilder.Build(new TestEngineConfiguration()), user, network);
-        service = new NetworkReloadService(network, controller, peer.Object, listener.Object, logSettings.Object, users.Object, LoggerFactory.Create(_ => { }));
+        service = new NetworkReloadService(network, controller, peer.Object, listener.Object, logSettings.Object, users.Object, reconfiguration.Object, LoggerFactory.Create(_ => { }));
     }
 
     /// <inheritdoc />
@@ -139,5 +140,33 @@ public sealed class NetworkReloadServiceTests : IDisposable
         peer.Verify(p => p.Reconfigure(), Times.Never);
         listener.Verify(l => l.Restart(), Times.Never);
         Assert.Equal(1, announced);
+    }
+
+    /// <summary>The host's reconfigurer is called once after every successful reload, once the reload has been applied and announced to nobody yet, even when the user changed.</summary>
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task Reload_CallsTheReconfigurerAfterApplyingIt_AndBeforeAnnouncing(bool userChanged)
+    {
+        users.Setup(u => u.Refresh(It.IsAny<CancellationToken>())).ReturnsAsync(userChanged);
+        List<string> order = [];
+        reconfiguration.Setup(r => r.Run()).Callback(() => order.Add("reconfigured")).Returns(Task.CompletedTask);
+        peer.Setup(p => p.Reconfigure()).Callback(() => order.Add("applied"));
+        service.Reloaded += () => order.Add("announced");
+
+        await service.Reload();
+
+        Assert.Equal(userChanged ? ["reconfigured", "announced"] : ["applied", "reconfigured", "announced"], order);
+    }
+
+    /// <summary>A reload that cannot read the file changes nothing, so the reconfigurer is not called.</summary>
+    [Fact]
+    public async Task Reload_UnreadableFile_DoesNotCallTheReconfigurer()
+    {
+        Write("{ not json");
+
+        await Assert.ThrowsAnyAsync<Exception>(() => service.Reload());
+
+        reconfiguration.Verify(r => r.Run(), Times.Never);
     }
 }

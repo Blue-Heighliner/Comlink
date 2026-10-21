@@ -22,15 +22,13 @@ internal sealed class HandshakePeerTransport : IPeerTransport
     /// <param name="logger">Receives a warning for every connection that is refused.</param>
     /// <param name="handshake">The handshake to carry out, or <see langword="null"/> for none.</param>
     /// <param name="identify">Whether to identify the node on the other end once the handshake is done. Only the outermost handshake transport does.</param>
-    /// <param name="contexts">Creates the engine snapshot a handler sees, or <see langword="null"/> for one that knows no connected users.</param>
-    public HandshakePeerTransport(IPeerTransport inner, IEngineController engineController, ILogger logger, Handshake? handshake, bool identify, IEngineContextFactory? contexts = null)
+    public HandshakePeerTransport(IPeerTransport inner, IEngineController engineController, MicrosoftLogger logger, Handshake? handshake, bool identify)
     {
         this.inner = inner;
         this.engineController = engineController;
         this.logger = logger;
         this.handshake = handshake;
         this.identify = identify;
-        this.contexts = contexts;
 
         inner.Received.Listen(OnReceived);
         inner.Connected.Listen(OnConnected);
@@ -39,10 +37,9 @@ internal sealed class HandshakePeerTransport : IPeerTransport
 
     private readonly IPeerTransport inner;
     private readonly IEngineController engineController;
-    private readonly ILogger logger;
+    private readonly MicrosoftLogger logger;
     private readonly Handshake? handshake;
     private readonly bool identify;
-    private readonly IEngineContextFactory? contexts;
     private readonly ConditionalWeakTable<PeerConnection, Session> sessions = new();
     private readonly PeerEvent<PeerReceivedEventArgs> received = new();
     private readonly PeerEvent<PeerConnectionEventArgs> connected = new();
@@ -418,8 +415,6 @@ internal sealed class HandshakePeerTransport : IPeerTransport
     private sealed class InitialSession(HandshakePeerTransport owner, Session session) : IHandshakeSession
     {
         public IConnectionInfo Connection => owner.engineController.WithLocalUser(session.Connection.Info);
-
-        public IEngineContext Engine => owner.contexts?.Create() ?? new EngineContext(new UserInfo { Name = Connection.LocalUser ?? string.Empty }, owner.engineController.Users, owner.engineController.GetUserInfo, _ => false, owner.engineController.GetGroupMembers);
 
         public Task Connected(string userName)
         {

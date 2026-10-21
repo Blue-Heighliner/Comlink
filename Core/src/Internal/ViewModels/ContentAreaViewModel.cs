@@ -90,7 +90,7 @@ internal sealed partial class ContentAreaViewModel : ObservableObject, IContentA
     private readonly IActivityLogRepository activityLogs;
     private readonly IEngineController engineController;
     private readonly ILoggerFactory loggerFactory;
-    private readonly ILogger logger;
+    private readonly MicrosoftLogger logger;
     private readonly ICurrentUserProvider currentUserProvider;
     private readonly IStagedSendViewModel stagedSend;
     private readonly IBodyDocumentFactory? bodyDocumentFactory;

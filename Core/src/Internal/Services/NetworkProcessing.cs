@@ -35,7 +35,7 @@ internal interface INetworkProcessing
 /// <inheritdoc cref="INetworkProcessing" />
 internal sealed class NetworkProcessing(IEngineController engineController, INetworkEnvironment environment, ILoggerFactory loggerFactory) : INetworkProcessing
 {
-    private readonly ILogger logger = loggerFactory.CreateLogger(LogCategories.App);
+    private readonly MicrosoftLogger logger = loggerFactory.CreateLogger(LogCategories.App);
 
     /// <inheritdoc />
     public void Connected(string userName) => Run(handler => handler.OnConnected(environment, userName), "OnConnected", userName);

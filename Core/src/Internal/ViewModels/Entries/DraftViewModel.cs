@@ -25,7 +25,7 @@ internal interface IDraftViewModel
     string AlertLabel { get; }
     /// <summary>
     /// Gets the message priority levels available to choose from; see <see cref="IEngineController.Priorities"/>.
-    /// Excludes any priority that <see cref="IEngineController.IsDraftAllowed"/> blocks with the current
+    /// Excludes any priority that <see cref="IEngineController.IsDraftBlocked"/> blocks with the current
     /// message level, message aspect and <see cref="Tag"/>, so a blocked combination can never be selected in the first place.
     /// Recomputed whenever any of those change.
     /// </summary>
@@ -36,7 +36,7 @@ internal interface IDraftViewModel
     /// Gets the message levels available to send this draft at: every level configured with
     /// <see cref="IEngineBuilder{TFrame, TPacket, TPriority, TLevel, TAspect}.Level"/> up to and including the current user's own assigned level (see
     /// <see cref="IEngineController.GetUserMessageLevel"/>): a user can declassify to a lower level but never send
-    /// above their own clearance, and without the ones <see cref="IEngineController.IsDraftAllowed"/> blocks with the current priority, message aspect and tag.
+    /// above their own clearance, and without the ones <see cref="IEngineController.IsDraftBlocked"/> blocks with the current priority, message aspect and tag.
     /// Empty when no message levels are configured, in which case the picker is hidden.
     /// </summary>
     IReadOnlyList<MessageLevel> AvailableMessageLevels { get; }
@@ -44,7 +44,7 @@ internal interface IDraftViewModel
     MessageLevel? SelectedMessageLevel { get; set; }
     /// <summary>
     /// Gets the choices for the message aspect this draft carries: none, then each aspect configured with <see cref="IEngineBuilder{TFrame, TPacket, TPriority, TLevel, TAspect}.Aspect"/>.
-    /// Without the ones <see cref="IEngineController.IsDraftAllowed"/> blocks with the current priority, message level and tag.
+    /// Without the ones <see cref="IEngineController.IsDraftBlocked"/> blocks with the current priority, message level and tag.
     /// Empty when no message aspects are configured, in which case the picker is hidden.
     /// </summary>
     IReadOnlyList<MessageAspectOption> AvailableMessageAspects { get; }
@@ -52,9 +52,10 @@ internal interface IDraftViewModel
     MessageAspectOption? SelectedMessageAspect { get; set; }
     /// <summary>
     /// Gets or sets the short, user-inputted tag identifying the type of this message; see
-    /// the tag rules (see <see cref="IEngineController.DraftTagRules"/>). Setting a tag that <see cref="IEngineController.IsDraftAllowed"/>
-    /// blocks with the current priority, message level and message aspect is rejected — the value silently reverts to the
-    /// last valid tag — so a blocked combination can never be entered.
+    /// the tag rules (see <see cref="IEngineController.DraftTagRules"/>). Setting a tag that <see cref="IEngineController.IsDraftBlocked"/>
+    /// blocks with every combination of priority, message level and message aspect is rejected: the value reverts to the
+    /// last valid tag and <see cref="StatusMessage"/> says why, so a blocked combination can never be entered. A tag that only blocks some combinations is accepted
+    /// and the other choices move to a combination that is not blocked, which <see cref="StatusMessage"/> also says.
     /// </summary>
     string Tag { get; set; }
     /// <summary>Gets a value indicating whether the tag input is shown; see <see cref="IEngineController"/>.</summary>
@@ -83,7 +84,10 @@ internal interface IDraftViewModel
     IReadOnlyDictionary<string, IFillInViewModel> FillIns { get; }
     /// <summary>Gets the most characters a tag may have, or <see langword="null"/> for no maximum, which the tag box is sized to fit exactly.</summary>
     int? TagMaxLength { get; }
-    /// <summary>Returns <paramref name="tag"/> as the tag rules make it: in the forced case, without what is not allowed, and cut to the maximum length.</summary>
+    /// <summary>
+    /// Returns <paramref name="tag"/> as the tag rules make it: in the forced case, without what is not allowed, and cut to the maximum length. A tag that every combination is blocked for is not
+    /// let through: the last tag accepted is returned in its place and <see cref="StatusMessage"/> says why, so the box can show it.
+    /// </summary>
     /// <param name="tag">The tag as entered.</param>
     string FilterTag(string tag);
     /// <summary>Gets or sets how many monospace characters wide a line of the draft is shown, or <see langword="null"/> for no limit. Kept within the range the draft handler states. It only changes how the text is shown: no line break is ever added to the text.</summary>
@@ -325,7 +329,7 @@ internal sealed partial class DraftViewModel : ObservableObject, IDraftViewModel
     private readonly IReadOnlyList<MessagePriorityOption> allPriorities;
     private readonly IReadOnlyList<MessageLevel> allowedMessageLevels;
     private readonly IReadOnlyList<MessageAspectOption> allMessageAspects;
-    private readonly ILogger logger;
+    private readonly MicrosoftLogger logger;
     private DraftEntity entity;
     private string lastValidTag = string.Empty;
     private bool isReady;
@@ -385,7 +389,11 @@ internal sealed partial class DraftViewModel : ObservableObject, IDraftViewModel
     /// <inheritdoc />
     public IReadOnlyList<AddressTypeOption> AddressTypes { get; }
     /// <inheritdoc />
-    public string FilterTag(string tag) => engineController.DraftTagRules.Filter(tag);
+    public string FilterTag(string tag)
+    {
+        string filtered = engineController.DraftTagRules.Filter(tag);
+        return isReady && filtered != lastValidTag && !AnyCombinationAllowed(filtered) ? RejectTag(filtered) : filtered;
+    }
 
     /// <inheritdoc />
     public int? TagMaxLength => engineController.DraftTagRules.MaxLength;
@@ -472,7 +480,6 @@ internal sealed partial class DraftViewModel : ObservableObject, IDraftViewModel
 
     private List<(MessagePriorityOption Priority, MessageLevel? Level, MessageAspectOption? Aspect)> AllowedCombinations(string draftTag)
     {
-        IEngineContext context = connection.GetContext();
         List<(MessagePriorityOption, MessageLevel?, MessageAspectOption?)> allowed = [];
         foreach (MessagePriorityOption priority in allPriorities.Where(p => p.Mode is PriorityMode.User))
         {
@@ -480,7 +487,7 @@ internal sealed partial class DraftViewModel : ObservableObject, IDraftViewModel
             {
                 foreach (MessageAspectOption? aspect in allMessageAspects.Count == 0 ? [null] : allMessageAspects.Cast<MessageAspectOption?>())
                 {
-                    if (engineController.IsDraftAllowed(context, priority.Key, level?.Key, aspect?.Aspect?.Key, draftTag))
+                    if (engineController.IsDraftBlocked(priority.Key, level?.Key, aspect?.Aspect?.Key, draftTag) is null)
                     {
                         allowed.Add((priority, level, aspect));
                     }
@@ -491,8 +498,19 @@ internal sealed partial class DraftViewModel : ObservableObject, IDraftViewModel
         return allowed;
     }
 
-    private bool IsAllowed(MessagePriorityOption priority, MessageLevel? level, MessageAspectOption? aspect, string draftTag)
-        => engineController.IsDraftAllowed(connection.GetContext(), priority.Key, level?.Key, aspect?.Aspect?.Key, draftTag);
+    private bool AnyCombinationAllowed(string draftTag) => AllowedCombinations(draftTag).Count > 0;
+
+    private string? BlockedReason(MessagePriorityOption priority, MessageLevel? level, MessageAspectOption? aspect, string draftTag)
+        => engineController.IsDraftBlocked(priority.Key, level?.Key, aspect?.Aspect?.Key, draftTag) is { } given ? Explain(given) : null;
+
+    private string Explain(string reason) => engineController.Display(string.IsNullOrWhiteSpace(reason) ? "This combination is not allowed" : reason);
+
+    // The tag is refused whole, so it says why the tag the user was typing is blocked with what is chosen now, which is what the host's reason is about.
+    private string RejectTag(string rejected)
+    {
+        StatusMessage = BlockedReason(SelectedPriority, SelectedMessageLevel, SelectedMessageAspect, rejected) ?? Explain(string.Empty);
+        return lastValidTag;
+    }
 
     // Each list keeps only what some allowed combination with the tag uses, and when the current choices are not an allowed combination the one just changed stays
     // and the others move to the allowed combination that keeps the most of what was chosen.
@@ -531,6 +549,12 @@ internal sealed partial class DraftViewModel : ObservableObject, IDraftViewModel
                 return;
             }
 
+            // The choices are about to move, because the combination they make is blocked: the user is told why, in the host's words when it gave any.
+            if (isReady && BlockedReason(SelectedPriority, SelectedMessageLevel, SelectedMessageAspect, Tag) is { } blockedReason)
+            {
+                StatusMessage = blockedReason;
+            }
+
             List<(MessagePriorityOption Priority, MessageLevel? Level, MessageAspectOption? Aspect)> candidates = [.. allowed.Where(c => changed switch
             {
                 DraftChoice.Priority => c.Priority == SelectedPriority,
@@ -560,12 +584,12 @@ internal sealed partial class DraftViewModel : ObservableObject, IDraftViewModel
             return;
         }
 
-        if (AllowedCombinations(value).Count == 0)
+        if (!AnyCombinationAllowed(value))
         {
             // Reject the change: every combination is blocked with this tag, so revert to the last valid tag instead of
             // letting the blocked value stand. Re-enters this method with a value that is never blocked
             // (by invariant, lastValidTag was itself accepted previously), so this does not recurse further.
-            Tag = lastValidTag;
+            Tag = RejectTag(value);
             return;
         }
 
@@ -842,9 +866,9 @@ internal sealed partial class DraftViewModel : ObservableObject, IDraftViewModel
         IsSaving = true;
         try
         {
-            if (!IsAllowed(SelectedPriority, SelectedMessageLevel, SelectedMessageAspect, Tag))
+            if (BlockedReason(SelectedPriority, SelectedMessageLevel, SelectedMessageAspect, Tag) is { } blockedReason)
             {
-                StatusMessage = engineController.Display("This combination is not allowed");
+                StatusMessage = blockedReason;
                 return;
             }
 
