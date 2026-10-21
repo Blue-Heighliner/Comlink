@@ -9,6 +9,7 @@ internal sealed class FakeHdlcCable
 {
     private readonly Lock gate = new();
     private readonly FakeHdlcPeer?[] attached = new FakeHdlcPeer?[2];
+    private int peersCreated;
 
     /// <summary>Creates a cable whose peers report <paramref name="maxPayloadSize"/> as their largest frame.</summary>
     public FakeHdlcCable(int maxPayloadSize = 4090)
@@ -34,7 +35,7 @@ internal sealed class FakeHdlcCable
     public bool EnforcesAddresses { get; set; }
 
     /// <summary>Number of peers created on either end so far.</summary>
-    public int PeersCreated { get; private set; }
+    public int PeersCreated => Volatile.Read(ref peersCreated);
 
     /// <summary>The (local address, remote address, options) every <c>Connect</c> on any end was given, in order.</summary>
     public List<(byte Address, byte RemoteAddress, HdlcPeerOptions Options)> Starts { get; } = [];
@@ -91,7 +92,7 @@ internal sealed class FakeHdlcCable
     {
         public IHdlcPeer Create()
         {
-            cable.PeersCreated++;
+            Interlocked.Increment(ref cable.peersCreated);
             return new FakeHdlcPeer(cable, end);
         }
     }

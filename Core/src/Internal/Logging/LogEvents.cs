@@ -221,9 +221,9 @@ internal static class LogEvents
     /// <summary>Gets every event, in no particular order.</summary>
     public static IReadOnlyList<EventId> All { get; } = [.. typeof(LogEvents).GetProperties(BindingFlags.Public | BindingFlags.Static).Where(property => property.PropertyType == typeof(EventId)).Select(property => (EventId)property.GetValue(null)!)];
 
-    /// <summary>Gets the category an event is logged under, or <see langword="null"/> for an identifier that is not one of the engine's events.</summary>
+    /// <summary>Gets the category an event is logged under, or <see langword="null"/> for an identifier that is not one of the engine's events, which a log of the host's own or a library's can look like by its number alone.</summary>
     /// <param name="eventId">The event.</param>
-    public static string? CategoryOf(EventId eventId) => Categories.GetValueOrDefault(eventId.Id);
+    public static string? CategoryOf(EventId eventId) => eventId.Id > 0 && eventId.Name == $"{Prefix}{eventId.Id}" ? Categories.GetValueOrDefault(eventId.Id) : null;
 
     /// <summary>Returns the identifier of the engine's event that data written when identifiers were plain numbers means by <paramref name="number"/>, or empty for <c>0</c>, which was no event.</summary>
     /// <param name="number">The number that was written.</param>

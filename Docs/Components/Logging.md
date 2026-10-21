@@ -162,7 +162,7 @@ Technical events of the running application: connections, the wire and the netwo
 | CL43 | `Dropped a connection that {Reason}` | An IP connection cannot be identified or fails its handshake. |
 | CL44 | `Dropped a packet that could not be assembled: {Message}` | A received packet fails reassembly. |
 | CL45 | `IP connections are unavailable: {Message}` | The IP transport cannot be built, for example because certificates are missing. |
-| CL46 | `The maximum payload size of {PayloadSize} bytes leaves no room for a packet's own fields within the HDLC MaxInfoField of {MaxInfoField} bytes, so packets will fail to send over serial connections` | Packetization is on and its maximum payload size is not below the HDLC frame limit. |
+| CL46 | `The payload size of {MaxPayloadSize} bytes leaves no room for a packet's own fields within the HDLC MaxInfoField of {MaxInfoField} bytes, so packets will fail to send over serial connections` | Packetization is on and its maximum payload size is not below the HDLC frame limit. |
 | CL47 | `Serial link to {Point} {Problem}` | A serial link drops other than by being closed (`lost`), fails to open (`cannot be established, retrying: ...`, once per outage) or its HDLC layer reports an error (`met an error: ...`). |
 | CL115 | `Cannot reach {Point}, retrying: {Reason}` | The connection to an outgoing point cannot be opened, or its heartbeat throws, or the connection is dropped as soon as it is made (how a node refuses one), logged once per outage with the reason (a failed TLS handshake, a refused connection, a timeout). |
 | CL54 | `Cannot deliver to {User}: no connection is identified as them` | A server has no live connection to a recipient. |

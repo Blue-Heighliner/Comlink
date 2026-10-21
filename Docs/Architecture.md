@@ -6,7 +6,7 @@ Comlink is a messaging system. The solution has four projects:
 |---------|-------------|
 | **Core** | The whole engine, in one library — networking, data, services, ViewModels, and the Avalonia UI layer (Views, Themes, converters). The only project that depends on Avalonia. Published as the `BlueHeighliner.Comlink` NuGet package. |
 | **Sample** | Host application demonstrating `Core`'s `IEngineConfiguration`/`Engine.Start` API. References `Core`. |
-| **Testing** | Mocks of every context the engine hands to a host's handlers, for unit testing custom handler types without the engine. References `Core` and Moq. Published as the `BlueHeighliner.Comlink.Testing` NuGet package, in the `BlueHeighliner.Comlink.Testing` namespace. |
+| **Testing** | Mocks of every context the engine hands to a host's handlers and of every service it offers, for unit testing custom handler types and components without the engine. References `Core` and Moq. Published as the `BlueHeighliner.Comlink.Testing` NuGet package, in the `BlueHeighliner.Comlink.Testing` namespace. |
 | **Tests** | xUnit tests. References `Core` and `Testing`. |
 
 ```mermaid
@@ -76,7 +76,7 @@ sequenceDiagram
     participant DVM as DraftViewModel
     participant SC as IEngineConnection
     participant NP as Frame handler
-    participant PS as PeerService
+    participant PS as RolePeerService
     participant RP as Remote node
     DVM->>SC: SendMessage
     SC->>SC: Store in the Outbox (every recipient Sending)
@@ -93,7 +93,7 @@ sequenceDiagram
 ```mermaid
 sequenceDiagram
     participant RN as Remote Node
-    participant PS as PeerService
+    participant PS as RolePeerService
     participant NP as Frame handler
     participant DSC as DirectServiceConnection
     participant MVM as MainViewModel
@@ -147,7 +147,7 @@ sequenceDiagram
     participant EE as EngineExtensions
     participant EA as EngineUiExtensions
     participant EH as EngineHost
-    participant PS as PeerService
+    participant PS as RolePeerService
     participant IS as InterfaceService
     H->>EE: UseEngine(Client)
     H->>EA: UseEngineUi() [Client only]
@@ -156,7 +156,7 @@ sequenceDiagram
     EH->>IS: Start()
 ```
 
-1. `PeerService.Start` — begins accepting peer connections
+1. `RolePeerService.Start` — begins accepting peer connections
 2. `InterfaceService.Start` — begins accepting interface connections (always, regardless of mode)
 3. `EngineHooksService.Start` - subscribes to `IPeerService`'s connection and message events on behalf of the host's configured frame handler (`Frames<THandler>`, see [Configuration.md](Components/Configuration.md#frame-handler)); a no-op if none is configured
 

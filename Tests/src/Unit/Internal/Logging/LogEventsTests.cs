@@ -19,6 +19,16 @@ public sealed class LogEventsTests
         Assert.Equal(events.Count, typeof(LogEvents).GetProperties(BindingFlags.Public | BindingFlags.Static).Count(property => property.PropertyType == typeof(EventId)));
     }
 
+    /// <summary>An event that only has the number of one of the engine's, such as one a library logs, is not taken for it.</summary>
+    [Fact]
+    public void CategoryOf_IgnoresEventsThatAreNotTheEngines()
+    {
+        Assert.Equal(LogCategories.Crash, LogEvents.CategoryOf(LogEvents.UnhandledException));
+        Assert.Null(LogEvents.CategoryOf(new EventId(LogEvents.UnhandledException.Id)));
+        Assert.Null(LogEvents.CategoryOf(new EventId(LogEvents.UnhandledException.Id, "Starting")));
+        Assert.Null(LogEvents.CategoryOf(new EventId(0, "CL1")));
+    }
+
     /// <summary>Every event in the code appears in the log document under its identifier.</summary>
     [Fact]
     public void EveryEvent_IsInTheLogDocument()

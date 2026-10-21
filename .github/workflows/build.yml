@@ -126,17 +126,31 @@ jobs:
       # -> Add policy) naming this repo and this workflow file; assumed already done by the time this
       # job runs. NUGET_USER is just the nuget.org profile name of a member of the policy-owning
       # account/org - not a secret, but kept as one here for convenience.
-      - name: NuGet.org login (OIDC)
-        id: nuget-login
+      # The key is single-use, so each package gets its own login and push.
+      - name: NuGet.org login (OIDC) for Core
+        id: nuget-login-core
         uses: NuGet/login@v1
         with:
           user: ${{ secrets.NUGET_USER }}
 
-      - name: Push to NuGet.org
+      - name: Push Core to NuGet.org
         run: >
-          dotnet nuget push "nupkgs/*.nupkg"
+          dotnet nuget push "nupkgs/BlueHeighliner.Comlink.${{ steps.version.outputs.version }}.nupkg"
           --source "https://api.nuget.org/v3/index.json"
-          --api-key ${{ steps.nuget-login.outputs.NUGET_API_KEY }}
+          --api-key ${{ steps.nuget-login-core.outputs.NUGET_API_KEY }}
+          --skip-duplicate
+
+      - name: NuGet.org login (OIDC) for Testing
+        id: nuget-login-testing
+        uses: NuGet/login@v1
+        with:
+          user: ${{ secrets.NUGET_USER }}
+
+      - name: Push Testing to NuGet.org
+        run: >
+          dotnet nuget push "nupkgs/BlueHeighliner.Comlink.Testing.${{ steps.version.outputs.version }}.nupkg"
+          --source "https://api.nuget.org/v3/index.json"
+          --api-key ${{ steps.nuget-login-testing.outputs.NUGET_API_KEY }}
           --skip-duplicate
 
       # No .snupkg: Core.csproj deliberately omits IncludeSymbols/SymbolPackageFormat since its debug
