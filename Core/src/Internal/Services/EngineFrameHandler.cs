@@ -46,13 +46,13 @@ internal interface IEngineFrameHandler
 internal sealed class EngineFrameHandler<TFrame, TPriority, TLevel, TAspect>(IFrameHandler<TFrame, TPriority, TLevel, TAspect> handler) : IEngineFrameHandler where TFrame : class where TPriority : struct, Enum where TLevel : struct, Enum where TAspect : struct, Enum
 {
     /// <inheritdoc />
-    public Task OnConnected(INetworkEnvironment environment, string userName) => handler.OnConnected(new NetworkConnectedContext(environment.GetUser(userName)));
+    public Task OnConnected(INetworkEnvironment environment, string userName) => handler.OnConnected(new NetworkConnectedContext(userName));
 
     /// <inheritdoc />
-    public Task OnDisconnected(INetworkEnvironment environment, string userName) => handler.OnDisconnected(new NetworkDisconnectedContext(environment.GetUser(userName)));
+    public Task OnDisconnected(INetworkEnvironment environment, string userName) => handler.OnDisconnected(new NetworkDisconnectedContext(userName));
 
     /// <inheritdoc />
-    public Task OnReceived(INetworkEnvironment environment, object frame, FrameOrigin origin, string sourceUser) => handler.OnReceived(new NetworkReceivedContext<TFrame>((TFrame)frame, origin, environment.GetUser(sourceUser)));
+    public Task OnReceived(INetworkEnvironment environment, object frame, FrameOrigin origin, string sourceUser) => handler.OnReceived(new NetworkReceivedContext<TFrame>((TFrame)frame, origin, sourceUser));
 
     /// <inheritdoc />
     public async Task OnSent(INetworkEnvironment environment, Message message)
@@ -74,5 +74,5 @@ internal sealed class EngineFrameHandler<TFrame, TPriority, TLevel, TAspect>(IFr
     public Task OnRead(INetworkEnvironment environment, Message message) => handler.OnRead(new NetworkReadContext<TPriority, TLevel, TAspect>(message.ToTyped<TPriority, TLevel, TAspect>()));
 
     /// <inheritdoc />
-    public Task OnRetrieval(INetworkEnvironment environment, string server, RetrievalCriteria criteria) => handler.OnRetrieval(new NetworkRetrievalContext(environment.GetUser(server), criteria));
+    public Task OnRetrieval(INetworkEnvironment environment, string server, RetrievalCriteria criteria) => handler.OnRetrieval(new NetworkRetrievalContext(server, criteria));
 }

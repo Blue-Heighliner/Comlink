@@ -16,7 +16,7 @@ public interface ILogger
     /// <exception cref="ArgumentException"><paramref name="id"/> is empty or only white space.</exception>
     void Log(string category, string id, string message);
 
-    /// <summary>Writes an entry that reports an exception. The line carries the exception's type and message, and, unless <see cref="IEngineBuilder{TFrame, TPacket, TPriority, TLevel, TAspect}.StackTrace"/> was turned off, its whole stack trace too.</summary>
+    /// <summary>Writes an entry that reports an exception. The line carries the exception's type and message, and, unless <see cref="IEngineBuilder{TFrame, TPacket, TPriority, TLevel, TAspect, TProfile}.StackTrace"/> was turned off, its whole stack trace too.</summary>
     /// <param name="category">The category, in any case; see <see cref="LogCategories"/> for the engine's own.</param>
     /// <param name="id">The identifier of the kind of event this is, such as <c>MYAPP7</c>; the engine's own start with <c>CL</c>.</param>
     /// <param name="exception">The exception to report.</param>

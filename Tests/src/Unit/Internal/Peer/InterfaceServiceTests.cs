@@ -7,7 +7,7 @@ public sealed class InterfaceServiceTests
     private readonly IEngineController format = new TestEngineController();
     private static readonly ProtobufSerializer serializer = new();
 
-    private static UserInfo MakeUserInfo(string name) => new() { Name = name };
+    private static UserInfo<object> MakeUserInfo(string name) => new() { Name = name };
 
     /// <summary>A frame received from an interface is handed to the frame handler as coming from the interface, under the installed user's name.</summary>
     [Fact]
@@ -40,7 +40,7 @@ public sealed class InterfaceServiceTests
     {
         Mock<INetworkProcessing> processing = new();
         Mock<IUserService> user = new();
-        user.Setup(s => s.GetCurrentUserInfo()).Returns((UserInfo?)null);
+        user.Setup(s => s.GetCurrentUserInfo()).Returns((UserInfo<object>?)null);
         InterfaceService svc = new(Mock.Of<IMsmtSessionPeer.IFactory>(), format, processing.Object, user.Object, noLogger);
 
         using IMemoryOwner<byte> buf = serializer.Serialize(new TestFrame { Body = "Hi" });

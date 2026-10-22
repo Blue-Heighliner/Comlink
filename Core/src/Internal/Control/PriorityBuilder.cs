@@ -1,13 +1,13 @@
 namespace BlueHeighliner.Comlink;
 
-/// <summary>Collects what is stated through <see cref="IEngineBuilder{TFrame, TPacket, TPriority, TLevel, TAspect}"/> and <see cref="IPriorityLevelBuilder{TFrame, TPacket, TPriority, TLevel, TAspect}"/>, recording what is stated about each level and turning it into the engine's priority options.</summary>
+/// <summary>Collects what is stated through <see cref="IEngineBuilder{TFrame, TPacket, TPriority, TLevel, TAspect, TProfile}"/> and <see cref="IPriorityLevelBuilder{TFrame, TPacket, TPriority, TLevel, TAspect, TProfile}"/>, recording what is stated about each level and turning it into the engine's priority options.</summary>
 internal sealed class PriorityBuilder<TPriority> where TPriority : struct, Enum
 {
     private readonly Dictionary<TPriority, (string? Label, PriorityMode? Mode)> options = [];
     private readonly List<TPriority> order = [];
     private TPriority current;
 
-    /// <inheritdoc cref="IEngineBuilder{TFrame, TPacket, TPriority, TLevel, TAspect}.Priority(TPriority)"/>
+    /// <inheritdoc cref="IEngineBuilder{TFrame, TPacket, TPriority, TLevel, TAspect, TProfile}.Priority(TPriority)"/>
     public PriorityBuilder<TPriority> Priority(TPriority priority)
     {
         current = priority;
@@ -18,14 +18,14 @@ internal sealed class PriorityBuilder<TPriority> where TPriority : struct, Enum
         return this;
     }
 
-    /// <inheritdoc cref="IPriorityLevelBuilder{TFrame, TPacket, TPriority, TLevel, TAspect}.Label"/>
+    /// <inheritdoc cref="IPriorityLevelBuilder{TFrame, TPacket, TPriority, TLevel, TAspect, TProfile}.Label"/>
     public PriorityBuilder<TPriority> Label(string label)
     {
         options[current] = (label, options.GetValueOrDefault(current).Mode);
         return this;
     }
 
-    /// <inheritdoc cref="IPriorityLevelBuilder{TFrame, TPacket, TPriority, TLevel, TAspect}.Mode"/>
+    /// <inheritdoc cref="IPriorityLevelBuilder{TFrame, TPacket, TPriority, TLevel, TAspect, TProfile}.Mode"/>
     public PriorityBuilder<TPriority> Mode(PriorityMode mode)
     {
         options[current] = (options.GetValueOrDefault(current).Label, mode);

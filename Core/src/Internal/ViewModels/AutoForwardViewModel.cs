@@ -2,7 +2,7 @@ namespace BlueHeighliner.Comlink;
 
 /// <summary>
 /// ViewModel for the auto forward screen: choosing one of the auto forwarders this instance's own
-/// user has access to (see <see cref="UserInfo.AutoForwarders"/>), then adding to and
+/// user has access to (see <see cref="IUserInfo.AutoForwarders"/>), then adding to and
 /// removing from its locally-saved target list. Registered as a DI singleton (see <see cref="MainViewModel.AutoForward"/>)
 /// so its state survives navigating the content area away to other views and back.
 /// </summary>
@@ -34,7 +34,7 @@ internal interface IAutoForwardViewModel
 internal sealed partial class AutoForwardViewModel : ObservableObject, IAutoForwardViewModel
 {
     /// <summary>Initializes a new <see cref="AutoForwardViewModel"/> with the configured controllers, current user, target-list storage, and user directory.</summary>
-    /// <param name="engineController">Supplies the auto forwarders added via <see cref="IEngineBuilder{TFrame, TPacket, TPriority, TLevel, TAspect}.AutoForwarder"/>.</param>
+    /// <param name="engineController">Supplies the auto forwarders added via <see cref="IEngineBuilder{TFrame, TPacket, TPriority, TLevel, TAspect, TProfile}.AutoForwarder"/>.</param>
     /// <param name="currentUserProvider">Determines which controllers the current user has access to.</param>
     /// <param name="targetsRepository">Loads and saves each controller's locally-saved target list.</param>
     /// <param name="connection">Supplies known user names for target auto-complete.</param>

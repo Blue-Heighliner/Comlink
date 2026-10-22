@@ -2,8 +2,8 @@ namespace BlueHeighliner.Comlink;
 
 /// <summary>
 /// Runs the host's own work each time the engine's configuration has been loaded: when it is first read at start-up and again every time it is refreshed. By then the network configuration file has been read, the services are set up and the current user has been identified,
-/// so anything that depends on who is on the network, and who this node is, can be done here. State one with <see cref="IEngineBuilder{TFrame, TPacket, TPriority, TLevel, TAspect}.Reconfigure{TReconfigurer}"/>. It is built through dependency injection from the running engine's services,
-/// so it can ask for any of them, such as the <see cref="IUserCatalog"/>.
+/// so anything that depends on who is on the network, and who this node is, can be done here. State one with <see cref="IEngineBuilder{TFrame, TPacket, TPriority, TLevel, TAspect, TProfile}.Reconfigure{TReconfigurer}"/>. It is built through dependency injection from the running engine's services,
+/// so it can ask for any of them, such as the <see cref="IUserCatalog{TProfile}"/>.
 /// </summary>
 public interface IReconfigurer
 {

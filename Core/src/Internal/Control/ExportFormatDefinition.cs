@@ -1,6 +1,6 @@
 namespace BlueHeighliner.Comlink;
 
-/// <summary>A custom export format added via <see cref="IEngineBuilder{TFrame, TPacket, TPriority, TLevel, TAspect}.Export{TFormat}"/>.</summary>
+/// <summary>A custom export format added via <see cref="IEngineBuilder{TFrame, TPacket, TPriority, TLevel, TAspect, TProfile}.Export{TFormat}"/>.</summary>
 internal sealed record ExportFormatDefinition
 {
     /// <summary>Display name shown for this format in the client's export screen.</summary>

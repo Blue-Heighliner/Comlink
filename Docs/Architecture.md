@@ -24,7 +24,7 @@ The engine runs in one of two modes selected at startup via `EngineMode`:
 | Mode | Description |
 |------|-------------|
 | `Client` | Desktop UI via Engine's Avalonia layer. Includes LiteDB persistence, all ViewModels, and a peer listener for receiving connections. |
-| `Headless` | Runs as a normal peer client — same LiteDB persistence, same `IServiceConnection<TPriority, TLevel, TAspect>` — but with no UI. |
+| `Headless` | Runs as a normal peer client — same LiteDB persistence, same `IServiceConnection<TPriority, TLevel, TAspect, TProfile>` — but with no UI. |
 
 Both modes run the role's peer service to accept and send messages over [MSMT](Components/MsmtIntegration.md), and both always run `InterfaceService`, hosting the local interface listener for external programs — see [Interface.md](Components/Interface.md). The interface listener is not tied to Headless mode; it is active regardless of which mode the engine runs in.
 
@@ -37,9 +37,9 @@ Core/src/
 ├── Engine.cs, EngineConfiguration.cs   The primary public types: the entry point and the configuration a host passes to it
 ├── Public/        The rest of the package's public surface
 │   ├── Configuration/   The fluent builders a configuration is written against, and the types they take
-│   ├── Connection/      IServiceConnection<TPriority, TLevel, TAspect>, the handler contexts and their models
+│   ├── Connection/      IServiceConnection<TPriority, TLevel, TAspect, TProfile>, the handler contexts and their models
 │   ├── ExternalSystems/ The external system contract and its base class
-│   ├── Models/          Types that appear in configuration (UserInfo, ConnectionPoint, IConnectionInfo, ...)
+│   ├── Models/          Types that appear in configuration (IUserInfo, UserInfo<TProfile>, ConnectionPoint, IConnectionInfo, ...)
 │   └── Serialization/   The frame and packet serializer contracts, their abstract bases, and the protobuf default
 └── Internal/      Everything else, never public
     ├── Control/       The controller the builder's state becomes, the network file's node settings decorator, and the builders' implementations

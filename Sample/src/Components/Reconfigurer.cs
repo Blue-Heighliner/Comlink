@@ -4,7 +4,7 @@ namespace BlueHeighliner.Comlink.Sample;
 public sealed class Reconfigurer : IReconfigurer
 {
     /// <summary>Gets who is on the network, which the engine supplies.</summary>
-    public required IUserCatalog Users { get; init; }
+    public required IUserCatalog<NoProfile> Users { get; init; }
 
     /// <summary>Gets the engine's log, which the engine supplies.</summary>
     public required ILogger Logger { get; init; }

@@ -1,7 +1,7 @@
 namespace BlueHeighliner.Comlink;
 
 /// <summary>
-/// The MSMT settings a host can state for every IP connection, inbound and outbound, including the interface listener (see <see cref="IMsmtBuilder{TFrame, TPacket, TPriority, TLevel, TAspect}"/>). The identity
+/// The MSMT settings a host can state for every IP connection, inbound and outbound, including the interface listener (see <see cref="IMsmtBuilder{TFrame, TPacket, TPriority, TLevel, TAspect, TProfile}"/>). The identity
 /// certificate and trusted authorities are not among them; the engine supplies those. Each default is the MSMT package's own.
 /// </summary>
 internal sealed record MsmtConnectionOptions

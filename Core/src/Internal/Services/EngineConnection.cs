@@ -1,6 +1,6 @@
 namespace BlueHeighliner.Comlink;
 
-/// <summary>The engine's own connection to itself, with messages as the engine holds them. Hosts see it as an <see cref="IServiceConnection{TPriority, TLevel, TAspect}"/>, typed by their own enums.</summary>
+/// <summary>The engine's own connection to itself, with messages as the engine holds them. Hosts see it as an <see cref="IServiceConnection{TPriority, TLevel, TAspect, TProfile}"/>, typed by their own enums.</summary>
 internal interface IEngineConnection
 {
     /// <summary>Raised when the host's frame handler records a message as received (see <see cref="INetwork{TFrame, TPriority, TLevel, TAspect}.ReceiveMessage"/>).</summary>
@@ -9,8 +9,8 @@ internal interface IEngineConnection
     event Func<DeliveryStatusChangedEvent, Task>? DeliveryStatusChanged;
     /// <summary>Establishes the connection to the Engine service.</summary>
     Task Connect(CancellationToken cancellation = default);
-    /// <summary>Returns this user's own <see cref="UserInfo"/>, or <see langword="null"/> where no current user was given, which never happens in a running engine.</summary>
-    Task<UserInfo?> GetUserInfo(CancellationToken cancellation = default);
+    /// <summary>Returns this user's own <see cref="IUserInfo"/>, or <see langword="null"/> where no current user was given, which never happens in a running engine.</summary>
+    Task<IUserInfo?> GetUserInfo(CancellationToken cancellation = default);
     /// <summary>Returns the names of all known users in the messaging system.</summary>
     Task<List<string>> GetUserNames(CancellationToken cancellation = default);
     /// <summary>Returns the names of every user currently reachable over at least one live peer connection, unlike <see cref="GetUserNames"/>'s fixed configured directory.</summary>
@@ -20,10 +20,10 @@ internal interface IEngineConnection
     /// <paramref name="addresses"/>: the engine stores it in the Outbox and hands it to the host's frame handler (see <see cref="IFrameHandler{TFrame, TPriority, TLevel, TAspect}.OnSent"/>), which sends it and reports each
     /// destination's outcome as delivery status changes. Whether the message is an alert, which alarms recipients' Client-mode UI until it is read (see <c>Docs/Components/ViewModels.md</c>), is not
     /// chosen here: the host's draft handler decides it from the message's other properties (see <see cref="SendMessageResult.IsAlert"/>). <paramref name="priority"/>
-    /// is the message's priority, which the handler sends it with (see <see cref="IFrameBuilder{TFrame, TPacket, TPriority, TLevel, TAspect}"/>). <paramref name="tag"/>
-    /// is stored in the message's tag field (see <see cref="IFrameBuilder{TFrame, TPacket, TPriority, TLevel, TAspect}"/>). <paramref name="messageLevel"/>
+    /// is the message's priority, which the handler sends it with (see <see cref="IFrameBuilder{TFrame, TPacket, TPriority, TLevel, TAspect, TProfile}"/>). <paramref name="tag"/>
+    /// is stored in the message's tag field (see <see cref="IFrameBuilder{TFrame, TPacket, TPriority, TLevel, TAspect, TProfile}"/>). <paramref name="messageLevel"/>
     /// is the message level this message is sent at, a member of the enum the host stated for its message levels (or <see langword="null"/> for none), which must be a configured one or the call throws; a destination user whose own assigned level ranks lower
-    /// is never sent the message (see <see cref="IFrameBuilder{TFrame, TPacket, TPriority, TLevel, TAspect}"/>). <paramref name="messageAspect"/> is the message aspect the message carries, a member of the enum the host stated with
+    /// is never sent the message (see <see cref="IFrameBuilder{TFrame, TPacket, TPriority, TLevel, TAspect, TProfile}"/>). <paramref name="messageAspect"/> is the message aspect the message carries, a member of the enum the host stated with
     /// <c>MessageAspects</c> (or <see langword="null"/> for none), which must be a configured one or the call throws.
     /// </summary>
     Task<SendMessageResult?> SendMessage(string body, List<AddressRequest> addresses, Enum? priority = null, string tag = "", Enum? messageLevel = null, Enum? messageAspect = null, CancellationToken cancellation = default);

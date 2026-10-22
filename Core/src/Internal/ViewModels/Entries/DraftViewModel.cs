@@ -34,7 +34,7 @@ internal interface IDraftViewModel
     MessagePriorityOption SelectedPriority { get; set; }
     /// <summary>
     /// Gets the message levels available to send this draft at: every level configured with
-    /// <see cref="IEngineBuilder{TFrame, TPacket, TPriority, TLevel, TAspect}.Level"/> up to and including the current user's own assigned level (see
+    /// <see cref="IEngineBuilder{TFrame, TPacket, TPriority, TLevel, TAspect, TProfile}.Level"/> up to and including the current user's own assigned level (see
     /// <see cref="IEngineController.GetUserMessageLevel"/>): a user can declassify to a lower level but never send
     /// above their own clearance, and without the ones <see cref="IEngineController.IsDraftBlocked"/> blocks with the current priority, message aspect and tag.
     /// Empty when no message levels are configured, in which case the picker is hidden.
@@ -43,7 +43,7 @@ internal interface IDraftViewModel
     /// <summary>Gets or sets the message level this draft will be sent at, or <see langword="null"/> when no message levels are configured.</summary>
     MessageLevel? SelectedMessageLevel { get; set; }
     /// <summary>
-    /// Gets the choices for the message aspect this draft carries: none, then each aspect configured with <see cref="IEngineBuilder{TFrame, TPacket, TPriority, TLevel, TAspect}.Aspect"/>.
+    /// Gets the choices for the message aspect this draft carries: none, then each aspect configured with <see cref="IEngineBuilder{TFrame, TPacket, TPriority, TLevel, TAspect, TProfile}.Aspect"/>.
     /// Without the ones <see cref="IEngineController.IsDraftBlocked"/> blocks with the current priority, message level and tag.
     /// Empty when no message aspects are configured, in which case the picker is hidden.
     /// </summary>

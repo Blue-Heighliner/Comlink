@@ -9,8 +9,8 @@ internal interface IUserService
     NodeIdentity Identity { get; }
     /// <summary>Gets why the node cannot be identified as of the last check, which the UI shows in place of the app, or <see langword="null"/> when it can.</summary>
     string? Problem { get; }
-    /// <summary>Returns a <see cref="UserInfo"/> for the user this node runs as, or <see langword="null"/> while <see cref="Problem"/> is set.</summary>
-    UserInfo? GetCurrentUserInfo();
+    /// <summary>Returns a <see cref="IUserInfo"/> for the user this node runs as, or <see langword="null"/> while <see cref="Problem"/> is set.</summary>
+    IUserInfo? GetCurrentUserInfo();
     /// <summary>
     /// Reads the certificate files again, with the network file as it is now, and works out who the node is: when the certificate now names another user, that user becomes current, and when it can no longer be used
     /// nobody is current and <see cref="Problem"/> says why; <see cref="Changed"/> announces either. A certificate that is replaced but still names the same user changes <see cref="Identity"/> only, which the caller sees by comparing thumbprints.
@@ -58,7 +58,7 @@ internal sealed class UserService : IUserService
     public string? Problem => problem;
 
     /// <inheritdoc />
-    public UserInfo? GetCurrentUserInfo() => currentUserProvider.UserName is { Length: > 0 } name ? engineController.GetUserInfo(name) : null;
+    public IUserInfo? GetCurrentUserInfo() => currentUserProvider.UserName is { Length: > 0 } name ? engineController.GetUserInfo(name) : null;
 
     /// <inheritdoc />
     public Task<bool> Refresh(CancellationToken cancellation = default)

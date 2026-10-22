@@ -356,7 +356,7 @@ internal sealed class HandshakePeerTransport : IPeerTransport
     {
         ConnectionInfo info = connection.Info;
         string? name = connection.InitialUser ?? info switch { SerialConnectionInfo serial => SerialUser(serial), IpConnectionInfo ip => MatchCertificate(ip.CertificateNames), _ => null };
-        return name is null ? null : new UserIdentity { Name = name, Data = engineController.GetUserData(name) };
+        return name is null ? null : new UserIdentity { Name = name };
     }
 
     private string? SerialUser(SerialConnectionInfo info)

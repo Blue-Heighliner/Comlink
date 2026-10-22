@@ -3,8 +3,6 @@ namespace BlueHeighliner.Comlink.Tests.Unit.Public.Testing;
 /// <summary>Unit tests for the context fakes of <c>BlueHeighliner.Comlink.Testing</c>: each hands out what it was given, follows later changes, and records what a handler does with it.</summary>
 public sealed class FakeContextsTests
 {
-    private static readonly UserInfo alice = new() { Name = "ALICE" };
-
     /// <summary>The delete context hands out its folder, and changing it changes what the context says.</summary>
     [Fact]
     public void FakeDeleteContext_HandsOutItsFolder()
@@ -55,15 +53,15 @@ public sealed class FakeContextsTests
         Message<TestMessagePriority, TestLevel, TestAspect> message = new() { Id = "M1", FromUser = "ALICE", Body = "Hi", Addresses = [], SentAt = DateTime.UtcNow, Priority = TestMessagePriority.Normal };
         RetrievalCriteria criteria = new();
 
-        Assert.Same(alice, new FakeNetworkConnectedContext(alice).TargetUser);
-        Assert.Same(alice, new FakeNetworkDisconnectedContext(alice).TargetUser);
-        FakeNetworkReceivedContext<TestFrame> received = new(frame, alice, FrameOrigin.Interface);
-        Assert.Equal((frame, alice, FrameOrigin.Interface), (received.Frame, received.SourceUser, received.Origin));
+        Assert.Equal("ALICE", new FakeNetworkConnectedContext("ALICE").TargetUser);
+        Assert.Equal("ALICE", new FakeNetworkDisconnectedContext("ALICE").TargetUser);
+        FakeNetworkReceivedContext<TestFrame> received = new(frame, "ALICE", FrameOrigin.Interface);
+        Assert.Equal((frame, "ALICE", FrameOrigin.Interface), (received.Frame, received.SourceUser, received.Origin));
         FakeNetworkSentContext<TestMessagePriority, TestLevel, TestAspect> sent = new(message, new HashSet<string> { "BOB" });
         Assert.Equal(("M1", "BOB"), (sent.Message.Id, Assert.Single(sent.Destinations)));
         Assert.Same(message, new FakeNetworkReadContext<TestMessagePriority, TestLevel, TestAspect>(message).Message);
-        FakeNetworkRetrievalContext retrieval = new(alice, criteria);
-        Assert.Equal((alice, criteria), (retrieval.Server, retrieval.Criteria));
+        FakeNetworkRetrievalContext retrieval = new("SERVER", criteria);
+        Assert.Equal(("SERVER", criteria), (retrieval.Server, retrieval.Criteria));
     }
 
     /// <summary>The handshake contexts record what a handler sends and how it connects and disconnects, accept what is sent unless told otherwise, and finish at once.</summary>

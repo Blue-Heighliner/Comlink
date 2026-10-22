@@ -2,12 +2,13 @@ namespace BlueHeighliner.Comlink;
 
 /// <summary>
 /// High-level client API for host code to interact with a running engine. The engine registers it, typed by the enums the host stated with
-/// <see cref="IEngineBuilder.Types{TFrame, TPacket, TPriority, TLevel, TAspect}"/>, in both Client and Headless mode.
+/// <see cref="IEngineBuilder.Types{TFrame, TPacket, TPriority, TLevel, TAspect, TProfile}"/>, in both Client and Headless mode.
 /// </summary>
 /// <typeparam name="TPriority">The enum the host stated for its priorities.</typeparam>
 /// <typeparam name="TLevel">The enum the host stated for its message levels.</typeparam>
 /// <typeparam name="TAspect">The enum the host stated for its message aspects.</typeparam>
-public interface IServiceConnection<TPriority, TLevel, TAspect> where TPriority : struct, Enum where TLevel : struct, Enum where TAspect : struct, Enum
+/// <typeparam name="TProfile">The record type the host stated for user profiles in its <c>Types</c> call, or <see cref="NoProfile"/>.</typeparam>
+public interface IServiceConnection<TPriority, TLevel, TAspect, TProfile> where TPriority : struct, Enum where TLevel : struct, Enum where TAspect : struct, Enum where TProfile : class
 {
     /// <summary>Raised when the host's frame handler records a message as received (see <see cref="INetwork{TFrame, TPriority, TLevel, TAspect}.ReceiveMessage"/>).</summary>
     event Func<Message<TPriority, TLevel, TAspect>, Task>? MessageReceived;
@@ -19,9 +20,9 @@ public interface IServiceConnection<TPriority, TLevel, TAspect> where TPriority 
     /// <param name="cancellation">Cancels the wait.</param>
     Task Connect(CancellationToken cancellation = default);
 
-    /// <summary>Returns this user's own <see cref="UserInfo"/>, or <see langword="null"/> where no current user was given, which never happens in a running engine.</summary>
+    /// <summary>Returns this user's own <see cref="UserInfo{TProfile}"/>, or <see langword="null"/> where no current user was given, which never happens in a running engine.</summary>
     /// <param name="cancellation">Cancels the wait.</param>
-    Task<UserInfo?> GetUserInfo(CancellationToken cancellation = default);
+    Task<UserInfo<TProfile>?> GetUserInfo(CancellationToken cancellation = default);
 
     /// <summary>Returns the names of all known users in the messaging system.</summary>
     /// <param name="cancellation">Cancels the wait.</param>

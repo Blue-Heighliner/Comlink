@@ -3,7 +3,7 @@ namespace BlueHeighliner.Comlink;
 /// <summary>
 /// A single named, colored security classification level, shown as a foreground color on a background color. Levels are ordered: each level in
 /// <see cref="IEngineController.MessageLevels"/> outranks every one stated before it (see
-/// <see cref="IEngineBuilder{TFrame, TPacket, TPriority, TLevel, TAspect}.Level"/>).
+/// <see cref="IEngineBuilder{TFrame, TPacket, TPriority, TLevel, TAspect, TProfile}.Level"/>).
 /// </summary>
 internal sealed record MessageLevel
 {

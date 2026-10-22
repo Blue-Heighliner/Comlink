@@ -1,7 +1,7 @@
 namespace BlueHeighliner.Comlink;
 
 /// <summary>
-/// A message a custom import format's reader (see <see cref="IEngineBuilder{TFrame, TPacket, TPriority, TLevel, TAspect}.Import{TFormat}"/>) has prepared
+/// A message a custom import format's reader (see <see cref="IEngineBuilder{TFrame, TPacket, TPriority, TLevel, TAspect, TProfile}.Import{TFormat}"/>) has prepared
 /// to send, added via <see cref="IImportFormatContext{TPriority, TLevel}.AddStagedSend"/>. Shown to the user in the staged
 /// send screen for review, and sent only once they press its final send button - never sent automatically.
 /// </summary>

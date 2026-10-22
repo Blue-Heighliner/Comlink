@@ -6,7 +6,7 @@ public sealed class NetworkTests
     private delegate void DestinationsCallback(Enum? minimumLevel, IEnumerable<string> targets, out IReadOnlySet<string> excluded);
 
     private readonly Mock<INetworkEnvironment> environment = new();
-    private readonly Mock<IUserCatalog> users = new();
+    private readonly Mock<IUserDirectory> users = new();
 
     private Network<TestFrame, TestMessagePriority, TestLevel, TestAspect> Build() => new(environment.Object, users.Object);
 
@@ -24,7 +24,7 @@ public sealed class NetworkTests
     [Fact]
     public async Task GetAutoForwardTargets_LeavesOutTheCurrentUser()
     {
-        users.SetupGet(u => u.CurrentUser).Returns(new UserInfo { Name = "ME" });
+        users.SetupGet(u => u.CurrentUser).Returns(new UserInfo<object> { Name = "ME" });
         environment.Setup(e => e.GetAutoForwardTargets("Alerts")).ReturnsAsync(["BOB", "ME", "CAROL"]);
 
         Assert.Equal(["BOB", "CAROL"], await Build().GetAutoForwardTargets("Alerts"));

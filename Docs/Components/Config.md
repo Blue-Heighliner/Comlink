@@ -32,7 +32,7 @@ The file is read again while the application runs when the user presses "Refresh
       "Parent": null,
       "Children": [],
       "MessageLevel": null,
-      "Data": { "role": "clerk" },
+      "Profile": { "Role": "clerk" },
 
       "Headless": false
     }
@@ -59,7 +59,7 @@ Group name to member names. Members may be user names or other group names, enab
 
 **Type:** `object` | **Default:** `{}`
 
-Every user of the network, keyed by user name. The fields of an entry are in two groups: what is known about the user, which becomes their `UserInfo`, and the settings of the node that user runs, which apply only while that user is the current one.
+Every user of the network, keyed by user name. The fields of an entry are in two groups: what is known about the user, which becomes their `UserInfo<TProfile>`, and the settings of the node that user runs, which apply only while that user is the current one.
 
 ## What is known about a user
 
@@ -143,11 +143,11 @@ The names of the auto forwarders the user has access to (see [Configuration.md](
 
 The name of the message level the user runs at (see [Configuration.md](Configuration.md#message-levels)).
 
-### `Data`
+### `Profile`
 
-**Type:** `object` | **Default:** `{}`
+**Type:** `object` | **Default:** none
 
-App-specific string keys and values attached to the user. The engine does not interpret them; they travel with the user's `UserIdentity` wherever the user is identified.
+An object of the host's own shape, such as `{ "Desk": "4B", "Floor": 2 }`. When the host states a record type as the profile type of its `Types` call it is read into that type, names matched without regard to case and enums written by name, and is `UserInfo<TProfile>.Profile`; with `NoProfile`, or without the key, `Profile` is `null`. A profile that does not fit the type makes the file invalid (naming the user).
 
 ## Settings of the node a user runs
 

@@ -3,7 +3,7 @@ namespace BlueHeighliner.Comlink;
 /// <summary>
 /// The schema of the network configuration file: everything the engine needs to know about the users of one network, in one
 /// place shared by every node, instead of per-node files or code. It is read from <c>Config.json</c> in the app's folder under the application data root,
-/// or, when the host allows command-line overrides (see <see cref="IEngineBuilder{TFrame, TPacket, TPriority, TLevel, TAspect}.CommandLineOverrides"/>), from the path given by the
+/// or, when the host allows command-line overrides (see <see cref="IEngineBuilder{TFrame, TPacket, TPriority, TLevel, TAspect, TProfile}.CommandLineOverrides"/>), from the path given by the
 /// <c>--config</c> argument; its absence is not an error unless <c>--config</c> names a file that does not exist.
 /// The same arguments, again only when overrides are allowed, may name the authority certificate file (<c>--authority</c>) and the user certificate file (<c>--certificate</c>) in place of those the host stated,
 /// and which subject common name of the user certificate is the user this process runs as (<c>--user</c>). The <c>--log</c> argument names log categories to turn on (see <see cref="EnabledLogCategories"/>).
@@ -11,6 +11,8 @@ namespace BlueHeighliner.Comlink;
 internal sealed class NetworkConfig
 {
     private static readonly JsonSerializerOptions jsonOptions = new() { PropertyNameCaseInsensitive = true };
+
+    private static readonly JsonSerializerOptions profileOptions = new() { PropertyNameCaseInsensitive = true, Converters = { new JsonStringEnumConverter(allowIntegerValues: false) } };
 
     /// <summary>
     /// Group definitions. Keys are group names; values are lists of member names, which may be user names or other group names,
@@ -39,6 +41,9 @@ internal sealed class NetworkConfig
     /// <summary>The app's folder under the application data root, where <c>Config.json</c> was looked for.</summary>
     private string appDataFolder = "";
 
+    /// <summary>The type each user's profile is read into, kept so the file can be read again, or <see langword="null"/> when the host stated none.</summary>
+    private Type? profileType;
+
     /// <summary>
     /// Loads the network configuration: the file named by <c>--config</c>, else <c>Config.json</c> in the app's folder under the application
     /// data root when it exists, else an empty configuration. The arguments are passed empty unless
@@ -46,7 +51,8 @@ internal sealed class NetworkConfig
     /// </summary>
     /// <param name="args">The process's command-line arguments.</param>
     /// <param name="appDataFolder">The app's folder under the application data root, which <c>Config.json</c> is looked for in; never the working directory.</param>
-    public static NetworkConfig Load(string[] args, string appDataFolder)
+    /// <param name="profileType">The type each user's <c>Profile</c> is read into, or <see langword="null"/> when the host stated none, in which case profiles are ignored. A profile that cannot be read into it fails the load.</param>
+    public static NetworkConfig Load(string[] args, string appDataFolder, Type? profileType = null)
     {
         string defaultPath = Path.Combine(appDataFolder, "Config.json");
         string? path = Argument(args, "--config") ?? (File.Exists(defaultPath) ? defaultPath : null);
@@ -55,11 +61,12 @@ internal sealed class NetworkConfig
         if (path is not null)
         {
             config = JsonSerializer.Deserialize<NetworkConfig>(File.ReadAllText(path), jsonOptions) ?? new NetworkConfig();
-            config.Validate();
+            config.Validate(profileType);
         }
 
         config.arguments = args;
         config.appDataFolder = appDataFolder;
+        config.profileType = profileType;
         config.User = Argument(args, "--user");
         config.AuthorityCertificateOverride = Argument(args, "--authority");
         config.UserCertificateOverride = Argument(args, "--certificate");
@@ -69,13 +76,25 @@ internal sealed class NetworkConfig
 
     /// <summary>Checks the file for mistakes that must stop networking from starting.</summary>
     /// <exception cref="InvalidDataException">A user's role is not <c>Client</c> or <c>Server</c>.</exception>
-    private void Validate()
+    private void Validate(Type? profileType)
     {
         foreach ((string name, NetworkUserConfig user) in Users)
         {
             if (!string.IsNullOrWhiteSpace(user.Role) && user.GetRole() is null)
             {
                 throw new InvalidDataException($"The role \"{user.Role}\" of user {name} is not recognized: it must be Client or Server");
+            }
+
+            if (profileType is not null && user.Profile is { ValueKind: not (JsonValueKind.Null or JsonValueKind.Undefined) } profile)
+            {
+                try
+                {
+                    user.ProfileValue = profile.Deserialize(profileType, profileOptions);
+                }
+                catch (Exception ex) when (ex is JsonException or NotSupportedException)
+                {
+                    throw new InvalidDataException($"The profile of user {name} is not a valid {profileType.Name}: {ex.Message}", ex);
+                }
             }
         }
     }
@@ -87,7 +106,7 @@ internal sealed class NetworkConfig
     /// </summary>
     public void Reload()
     {
-        NetworkConfig fresh = Load(arguments, appDataFolder);
+        NetworkConfig fresh = Load(arguments, appDataFolder, profileType);
         UserGroups = fresh.UserGroups;
         Users = fresh.Users;
     }
@@ -95,10 +114,10 @@ internal sealed class NetworkConfig
     /// <summary>Returns the entry for <paramref name="userName"/>, or <see langword="null"/> when the network does not list that user.</summary>
     public NetworkUserConfig? Find(string? userName) => userName is null ? null : Users.FirstOrDefault(user => string.Equals(user.Key, userName, StringComparison.OrdinalIgnoreCase)).Value;
 
-    /// <summary>Returns what the network says about <paramref name="userName"/> as an engine <see cref="UserInfo"/>, or <see langword="null"/> when the user is not listed.</summary>
-    public UserInfo? GetUserInfo(string userName)
+    /// <summary>Returns what the network says about <paramref name="userName"/> as an engine <see cref="IUserInfo"/>, or <see langword="null"/> when the user is not listed.</summary>
+    public UserInfo<object>? GetUserInfo(string userName)
         => Find(userName) is { } user
-            ? new UserInfo
+            ? new UserInfo<object>
             {
                 Name = Users.Keys.First(key => string.Equals(key, userName, StringComparison.OrdinalIgnoreCase)),
                 Role = user.GetRole(),
@@ -111,7 +130,7 @@ internal sealed class NetworkConfig
                 Children = [.. user.Children.Select(child => child.ToLink())],
                 AutoForwarders = [.. user.AutoForwarders],
                 MessageLevel = user.MessageLevel,
-                Data = new Dictionary<string, string>(user.Data),
+                Profile = user.ProfileValue,
                 Groups = [.. UserGroups.Where(group => group.Value.Contains(userName, StringComparer.OrdinalIgnoreCase)).Select(group => group.Key)]
             }
             : null;
@@ -120,7 +139,7 @@ internal sealed class NetworkConfig
         => Array.IndexOf(args, name) is >= 0 and int index && index + 1 < args.Length ? args[index + 1] : null;
 }
 
-/// <summary>Everything the network file says about one user: the parts that become their <see cref="UserInfo"/>, and settings of the node they run.</summary>
+/// <summary>Everything the network file says about one user: the parts that become their <see cref="IUserInfo"/>, and settings of the node they run.</summary>
 internal sealed class NetworkUserConfig
 {
     /// <summary>Networking role of a node this user runs: <c>"Peer"</c>, <c>"Client"</c>, or <c>"Server"</c> (case-insensitive). <see langword="null"/> or unrecognized is <c>"Peer"</c>.</summary>
@@ -150,8 +169,12 @@ internal sealed class NetworkUserConfig
     /// <summary>The name of the message level this user runs at. <see langword="null"/> is the lowest configured level.</summary>
     public string? MessageLevel { get; init; }
 
-    /// <summary>App-specific string keys and values attached to this user; the engine does not interpret them.</summary>
-    public Dictionary<string, string> Data { get; init; } = [];
+    /// <summary>The user's profile as written in the file, an object of the host's own shape; the engine does not interpret it. <see langword="null"/> when the key is missing or <c>null</c>.</summary>
+    public JsonElement? Profile { get; init; }
+
+    /// <summary>The <see cref="Profile"/> read into the type the host stated with <c>UserProfile</c>, or <see langword="null"/> when there is no profile or no type was stated.</summary>
+    [JsonIgnore]
+    public object? ProfileValue { get; set; }
 
     /// <summary>Run headless, as a normal peer with no GUI, when this user is the one the process is launched as (see <see cref="NetworkConfig.User"/>).</summary>
     public bool Headless { get; init; }

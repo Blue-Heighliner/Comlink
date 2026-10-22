@@ -1,7 +1,7 @@
 namespace BlueHeighliner.Comlink;
 
 /// <summary>
-/// Implements <see cref="IEngineBuilder"/> and holds what the typed <see cref="EngineBuilder{TFrame, TPacket, TPriority, TLevel, TAspect}"/> it returns collects from the host in <see cref="IEngineConfiguration.Configure"/>.
+/// Implements <see cref="IEngineBuilder"/> and holds what the typed <see cref="EngineBuilder{TFrame, TPacket, TPriority, TLevel, TAspect, TProfile}"/> it returns collects from the host in <see cref="IEngineConfiguration.Configure"/>.
 /// Nothing is interpreted here; <see cref="EngineController"/> reads the collected state and applies the defaults for
 /// whatever was left unstated.
 /// </summary>
@@ -11,7 +11,7 @@ internal sealed class EngineBuilder : IEngineBuilder, IAsyncDisposable
 
     /// <summary>Work the typed builders still have to do once the configuration has finished stating things, such as turning what was collected into the frame mapping.</summary>
     public List<Action> Completions { get; } = [];
-    /// <summary>Whether <see cref="Types{TFrame, TPriority, TLevel, TAspect}"/> has been called.</summary>
+    /// <summary>Whether <see cref="Types{TFrame, TPriority, TLevel, TAspect, TProfile}"/> has been called.</summary>
     public bool AreTypesStated { get; private set; }
     /// <summary>The frame mapping, or <see langword="null"/> until <c>Frames</c> is called.</summary>
     public FrameMap? FrameMap { get; set; }
@@ -66,6 +66,8 @@ internal sealed class EngineBuilder : IEngineBuilder, IAsyncDisposable
     public bool AreCommandLineOverridesAllowed { get; set; }
     /// <summary>Whether a log entry that reports an exception also carries its stack trace; on unless stated.</summary>
     public bool IsStackTraceEnabled { get; set; } = true;
+    /// <summary>The type each user's profile in the network configuration is read into, or <see langword="null"/> when the host stated <see cref="NoProfile"/>.</summary>
+    public Type? UserProfileType { get; set; }
     /// <summary>The reconfigurer that runs once the engine is ready, if stated.</summary>
     public ServiceRegistration<IReconfigurer>? Reconfigurer { get; set; }
     /// <summary>The external systems.</summary>
@@ -134,11 +136,11 @@ internal sealed class EngineBuilder : IEngineBuilder, IAsyncDisposable
     }
 
     /// <inheritdoc />
-    public IEngineBuilder<TFrame, NoPacket, TPriority, TLevel, TAspect> Types<TFrame, TPriority, TLevel, TAspect>() where TFrame : class, new() where TPriority : struct, Enum where TLevel : struct, Enum where TAspect : struct, Enum
-        => Types<TFrame, NoPacket, TPriority, TLevel, TAspect>();
+    public IEngineBuilder<TFrame, NoPacket, TPriority, TLevel, TAspect, TProfile> Types<TFrame, TPriority, TLevel, TAspect, TProfile>() where TFrame : class, new() where TPriority : struct, Enum where TLevel : struct, Enum where TAspect : struct, Enum where TProfile : class
+        => Types<TFrame, NoPacket, TPriority, TLevel, TAspect, TProfile>();
 
     /// <inheritdoc />
-    public IEngineBuilder<TFrame, TPacket, TPriority, TLevel, TAspect> Types<TFrame, TPacket, TPriority, TLevel, TAspect>() where TFrame : class, new() where TPacket : class, new() where TPriority : struct, Enum where TLevel : struct, Enum where TAspect : struct, Enum
+    public IEngineBuilder<TFrame, TPacket, TPriority, TLevel, TAspect, TProfile> Types<TFrame, TPacket, TPriority, TLevel, TAspect, TProfile>() where TFrame : class, new() where TPacket : class, new() where TPriority : struct, Enum where TLevel : struct, Enum where TAspect : struct, Enum where TProfile : class
     {
         if (AreTypesStated)
         {
@@ -148,15 +150,17 @@ internal sealed class EngineBuilder : IEngineBuilder, IAsyncDisposable
         AreTypesStated = true;
         TypedServices = services =>
         {
-            services.AddSingleton<IServiceConnection<TPriority, TLevel, TAspect>>(provider => new ServiceConnection<TPriority, TLevel, TAspect>(provider.GetRequiredService<IEngineConnection>()));
-            services.AddSingleton<INetwork<TFrame, TPriority, TLevel, TAspect>>(provider => new Network<TFrame, TPriority, TLevel, TAspect>(provider.GetRequiredService<INetworkEnvironment>(), provider.GetRequiredService<IUserCatalog>()));
+            services.AddSingleton<IServiceConnection<TPriority, TLevel, TAspect, TProfile>>(provider => new ServiceConnection<TPriority, TLevel, TAspect, TProfile>(provider.GetRequiredService<IEngineConnection>()));
+            services.AddSingleton<INetwork<TFrame, TPriority, TLevel, TAspect>>(provider => new Network<TFrame, TPriority, TLevel, TAspect>(provider.GetRequiredService<INetworkEnvironment>(), provider.GetRequiredService<IUserDirectory>()));
+            services.AddSingleton<IUserCatalog<TProfile>>(provider => new UserCatalog<TProfile>(provider.GetRequiredService<IUserDirectory>()));
         };
+        UserProfileType = typeof(TProfile) == typeof(NoProfile) ? null : typeof(TProfile);
         if (typeof(TPriority) == typeof(NoPriority))
         {
             PriorityOptions.AddRange(new PriorityBuilder<TPriority>().Priority(default).Build());
         }
 
-        return new EngineBuilder<TFrame, TPacket, TPriority, TLevel, TAspect>(this);
+        return new EngineBuilder<TFrame, TPacket, TPriority, TLevel, TAspect, TProfile>(this);
     }
 
     /// <inheritdoc />

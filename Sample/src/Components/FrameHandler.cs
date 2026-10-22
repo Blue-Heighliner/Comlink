@@ -11,7 +11,7 @@ namespace BlueHeighliner.Comlink.Sample;
 /// is a recipient and once to each other server that owns a recipient (a frame that came from another server is only delivered locally). It answers a retrieval request addressed to it with the stored messages.</item>
 /// </list>
 /// </summary>
-public sealed class FrameHandler(IUserCatalog users, INetwork<Frame, Priority, Level, Aspect> network) : IFrameHandler<Frame, Priority, Level, Aspect>
+public sealed class FrameHandler(IUserCatalog<NoProfile> users, INetwork<Frame, Priority, Level, Aspect> network) : IFrameHandler<Frame, Priority, Level, Aspect>
 {
     /// <summary>Gets the name of the auto forwarder whose target list receives a copy of every received alert or <c>URGENT</c>-tagged message.</summary>
     public static string EscalationForwarder { get; } = "Escalation";
@@ -19,7 +19,7 @@ public sealed class FrameHandler(IUserCatalog users, INetwork<Frame, Priority, L
     /// <inheritdoc />
     public Task OnConnected(INetworkConnectedContext context)
     {
-        if (users.CurrentUser.Role is UserRole.Client && context.TargetUser.Name == users.CurrentUser.Parent?.User)
+        if (users.CurrentUser.Role is UserRole.Client && context.TargetUser == users.CurrentUser.Parent?.User)
         {
             network.SetNetworkIndicator(true);
         }
@@ -30,7 +30,7 @@ public sealed class FrameHandler(IUserCatalog users, INetwork<Frame, Priority, L
     /// <inheritdoc />
     public Task OnDisconnected(INetworkDisconnectedContext context)
     {
-        if (users.CurrentUser.Role is UserRole.Client && context.TargetUser.Name == users.CurrentUser.Parent?.User)
+        if (users.CurrentUser.Role is UserRole.Client && context.TargetUser == users.CurrentUser.Parent?.User)
         {
             network.SetNetworkIndicator(false);
         }
@@ -78,7 +78,7 @@ public sealed class FrameHandler(IUserCatalog users, INetwork<Frame, Priority, L
                 Id = Guid.NewGuid().ToString("N"),
                 Sender = users.CurrentUser.Name,
                 Timestamp = DateTime.UtcNow,
-                Recipients = [new() { User = context.Server.Name }],
+                Recipients = [new() { User = context.Server }],
                 RetrievalFrom = context.Criteria.From,
                 RetrievalTo = context.Criteria.To,
                 RetrievalAuthors = [.. context.Criteria.Authors],
@@ -165,7 +165,7 @@ public sealed class FrameHandler(IUserCatalog users, INetwork<Frame, Priority, L
             return;
         }
 
-        if (context.Frame.IsMessage && context.SourceUser.Role is not UserRole.Server)
+        if (context.Frame.IsMessage && !IsServer(context.SourceUser))
         {
             await network.StoreMessage(context.Frame.ToMessage());
         }
@@ -175,9 +175,11 @@ public sealed class FrameHandler(IUserCatalog users, INetwork<Frame, Priority, L
             context,
             context.Frame,
             network.GetDestinations(context.Frame.IsMessage ? (Level?)context.Frame.Confidentiality : null, out _, context.Frame.Recipients.Where(recipient => recipient.Kind is not "OUTSIDE").Select(recipient => recipient.User)),
-            context.SourceUser.Role is not UserRole.Server
+            !IsServer(context.SourceUser)
         );
     }
+
+    private bool IsServer(string userName) => users.Users.TryGetValue(userName, out UserInfo<NoProfile>? info) && info.Role is UserRole.Server;
 
     // A retrieval request names the server it is for: this one answers it, and a request that came from a client is handed on to the other server it names.
     private async Task Answer(INetworkReceivedContext<Frame> context, Frame request)
@@ -185,7 +187,7 @@ public sealed class FrameHandler(IUserCatalog users, INetwork<Frame, Priority, L
         string server = request.Recipients.FirstOrDefault()?.User ?? string.Empty;
         if (server != users.CurrentUser.Name)
         {
-            if (context.SourceUser.Role is not UserRole.Server && server.Length > 0)
+            if (!IsServer(context.SourceUser) && server.Length > 0)
             {
                 await network.Send(server, request.Priority, request);
             }
@@ -214,7 +216,7 @@ public sealed class FrameHandler(IUserCatalog users, INetwork<Frame, Priority, L
         HashSet<string> hops = [];
         foreach (string user in recipients)
         {
-            if (!users.Users.TryGetValue(user, out UserInfo? info))
+            if (!users.Users.TryGetValue(user, out UserInfo<NoProfile>? info))
             {
                 continue;
             }

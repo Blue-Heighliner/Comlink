@@ -1,27 +1,21 @@
 namespace BlueHeighliner.Comlink;
 
-/// <inheritdoc cref="IUserCatalog" />
-/// <param name="services">Resolves the peer service on demand, since the peer service is built from the transport that may ask for the catalog.</param>
-/// <param name="engineController">Supplies the user directory and what is known about each user.</param>
-/// <param name="userService">Supplies the user the node runs as.</param>
-internal sealed class UserCatalog(IServiceProvider services, IEngineController engineController, IUserService userService) : IUserCatalog
+/// <inheritdoc cref="IUserCatalog{TProfile}" />
+/// <param name="directory">Supplies who is on the network.</param>
+internal sealed class UserCatalog<TProfile>(IUserDirectory directory) : IUserCatalog<TProfile> where TProfile : class
 {
     /// <inheritdoc />
-    public UserInfo CurrentUser => userService.GetCurrentUserInfo() ?? throw new InvalidOperationException("The node has no current user, which only happens while its certificate cannot be used.");
+    public UserInfo<TProfile> CurrentUser => UserInfo<TProfile>.From(directory.CurrentUser);
 
     /// <inheritdoc />
-    public IReadOnlyDictionary<string, UserInfo> Users => engineController.UserNames.ToDictionary(name => name, engineController.GetUserInfo, StringComparer.OrdinalIgnoreCase);
+    public IReadOnlyDictionary<string, UserInfo<TProfile>> Users => Typed(directory.Users);
 
     /// <inheritdoc />
-    public IReadOnlyDictionary<string, UserInfo> ConnectedUsers
-    {
-        get
-        {
-            IPeerService peers = services.GetRequiredService<IPeerService>();
-            return Users.Where(user => peers.IsUserConnected(user.Key)).ToDictionary(user => user.Key, user => user.Value, StringComparer.OrdinalIgnoreCase);
-        }
-    }
+    public IReadOnlyDictionary<string, UserInfo<TProfile>> ConnectedUsers => Typed(directory.ConnectedUsers);
 
     /// <inheritdoc />
-    public IReadOnlyDictionary<string, GroupInfo> Groups => engineController.UserGroups.Keys.ToDictionary(id => id, id => new GroupInfo { Id = id, Members = engineController.GetGroupMembers(id) }, StringComparer.OrdinalIgnoreCase);
+    public IReadOnlyDictionary<string, GroupInfo> Groups => directory.Groups;
+
+    private Dictionary<string, UserInfo<TProfile>> Typed(IReadOnlyDictionary<string, IUserInfo> users)
+        => users.ToDictionary(user => user.Key, user => UserInfo<TProfile>.From(user.Value), StringComparer.OrdinalIgnoreCase);
 }

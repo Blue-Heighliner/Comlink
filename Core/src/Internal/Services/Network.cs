@@ -7,7 +7,7 @@ namespace BlueHeighliner.Comlink;
 /// <typeparam name="TAspect">The enum the host stated for its message aspects.</typeparam>
 /// <param name="environment">What the engine lets a handler do, with frames as plain objects.</param>
 /// <param name="users">Says who the current user is.</param>
-internal sealed class Network<TFrame, TPriority, TLevel, TAspect>(INetworkEnvironment environment, IUserCatalog users) : INetwork<TFrame, TPriority, TLevel, TAspect> where TFrame : class where TPriority : struct, Enum where TLevel : struct, Enum where TAspect : struct, Enum
+internal sealed class Network<TFrame, TPriority, TLevel, TAspect>(INetworkEnvironment environment, IUserDirectory users) : INetwork<TFrame, TPriority, TLevel, TAspect> where TFrame : class where TPriority : struct, Enum where TLevel : struct, Enum where TAspect : struct, Enum
 {
     /// <inheritdoc />
     public Task<bool> Send(string userName, TPriority priority, TFrame frame) => environment.Send(userName, priority, frame);

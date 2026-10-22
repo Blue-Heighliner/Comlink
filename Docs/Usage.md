@@ -18,7 +18,7 @@ public sealed class MyFrame
 
 public sealed class MyEngineConfiguration : IEngineConfiguration
 {
-    public void Configure(IEngineBuilder engine) => engine.Types<MyFrame, MyPacket, MyPriority, MyMessageLevel, MyMessageAspect>()
+    public void Configure(IEngineBuilder engine) => engine.Types<MyFrame, MyPacket, MyPriority, MyMessageLevel, MyMessageAspect, NoProfile>()
         .Priority(MyPriority.Normal)
         .Certificates("Authority.cer", "Certificate.pfx")
         .Frames<MyFrameHandler>();
@@ -32,7 +32,7 @@ await Engine.Start<MyEngineConfiguration>(args);
 The handler reacts to what happens, through the context each method is handed, and acts through services it asks for with dependency injection. For example, a client that sends each message to its server and records each frame it receives:
 
 ```csharp
-public sealed class MyFrameHandler(IUserCatalog users, INetwork<MyFrame, MyPriority, MyMessageLevel, MyMessageAspect> network) : IFrameHandler<MyFrame, MyPriority, MyMessageLevel, MyMessageAspect>
+public sealed class MyFrameHandler(IUserCatalog<NoProfile> users, INetwork<MyFrame, MyPriority, MyMessageLevel, MyMessageAspect> network) : IFrameHandler<MyFrame, MyPriority, MyMessageLevel, MyMessageAspect>
 {
     public async Task OnSent(INetworkSentContext<MyPriority, MyMessageLevel, MyMessageAspect> context)
     {
@@ -67,7 +67,7 @@ unless stated) and no window icon (the display handler's `Icon` is the operating
 A host only states what it needs distinct behavior for; every other setting keeps the engine's default.
 
 ```csharp
-public void Configure(IEngineBuilder engine) => engine.Types<MyFrame, MyPriority, MyMessageLevel, MyMessageAspect>()
+public void Configure(IEngineBuilder engine) => engine.Types<MyFrame, MyPriority, MyMessageLevel, MyMessageAspect, NoProfile>()
     .Display<MyDisplayHandler>()
     .Frames<MyFrameHandler>();
 ```
@@ -81,7 +81,7 @@ certificate must chain to the authority certificate. Stating `CommandLineOverrid
 lets `--config` name another file, `--authority` and `--certificate` name the certificate files, and `--user` pick which common name of the certificate is the user.
 
 ```csharp
-public void Configure(IEngineBuilder engine) => engine.Types<MyFrame, MyPriority, MyMessageLevel, MyMessageAspect>()
+public void Configure(IEngineBuilder engine) => engine.Types<MyFrame, MyPriority, MyMessageLevel, MyMessageAspect, NoProfile>()
     .Frames<MyFrameHandler>()
     .CommandLineOverrides(true);
 ```

@@ -79,7 +79,7 @@ public sealed class DirectServiceConnectionTests
     public async Task SendMessage_StoresTheMessage_AndHandsItToTheHandler()
     {
         DirectServiceConnection conn = Build(out Mock<IUserService> user, out Mock<IEntryService> entry, out Mock<INetworkProcessing> processing, out _);
-        user.Setup(s => s.GetCurrentUserInfo()).Returns(new UserInfo { Name = "ME" });
+        user.Setup(s => s.GetCurrentUserInfo()).Returns(new UserInfo<object> { Name = "ME" });
         Message? stored = null;
         entry.Setup(e => e.StoreSentMessage(It.IsAny<Message>())).Callback<Message>(message => stored = message).ReturnsAsync(new MessageEntity());
 
@@ -99,7 +99,7 @@ public sealed class DirectServiceConnectionTests
     public async Task SendMessage_NoUser_ReturnsNull()
     {
         DirectServiceConnection conn = Build(out Mock<IUserService> user, out Mock<IEntryService> entry, out Mock<INetworkProcessing> processing, out _);
-        user.Setup(s => s.GetCurrentUserInfo()).Returns((UserInfo?)null);
+        user.Setup(s => s.GetCurrentUserInfo()).Returns((UserInfo<object>?)null);
 
         Assert.Null(await conn.SendMessage("hello", []));
         entry.Verify(e => e.StoreSentMessage(It.IsAny<Message>()), Times.Never);

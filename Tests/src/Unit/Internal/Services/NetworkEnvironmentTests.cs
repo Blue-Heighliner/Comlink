@@ -3,8 +3,8 @@ namespace BlueHeighliner.Comlink.Tests.Unit.Internal.Services;
 /// <summary>Unit tests for <see cref="NetworkEnvironment"/>.</summary>
 public sealed class NetworkEnvironmentTests
 {
-    private static NetworkEnvironment Build(Mock<TestEngineController> controller, IUserCatalog? users = null)
-        => new(Mock.Of<IServiceProvider>(), controller.Object, users ?? Mock.Of<IUserCatalog>(), Mock.Of<IEntryService>(), Mock.Of<IMessageEvents>(), Mock.Of<IMessageStorageService>(), Mock.Of<IAutoForwardTargetsRepository>(), Mock.Of<INetworkIndicator>(), LoggerFactory.Create(_ => { }));
+    private static NetworkEnvironment Build(Mock<TestEngineController> controller, IUserDirectory? users = null)
+        => new(Mock.Of<IServiceProvider>(), controller.Object, users ?? Mock.Of<IUserDirectory>(), Mock.Of<IEntryService>(), Mock.Of<IMessageEvents>(), Mock.Of<IMessageStorageService>(), Mock.Of<IAutoForwardTargetsRepository>(), Mock.Of<INetworkIndicator>(), LoggerFactory.Create(_ => { }));
 
     /// <summary>A user is at least a level when their own level ranks at or above it, and a user with no level of their own runs at the lowest.</summary>
     [Fact]
@@ -24,7 +24,7 @@ public sealed class NetworkEnvironmentTests
 
     private static NetworkEnvironment BuildWithGroups(Mock<TestEngineController> controller)
     {
-        Mock<IUserCatalog> catalog = new();
+        Mock<IUserDirectory> catalog = new();
         catalog.SetupGet(c => c.Groups).Returns(new Dictionary<string, GroupInfo>
         {
             ["OPS"] = new() { Id = "OPS", Members = ["ALICE", "BOB"] },
@@ -58,18 +58,5 @@ public sealed class NetworkEnvironmentTests
 
         Assert.True(destinations.SetEquals(["ALICE"]));
         Assert.True(excluded.SetEquals(["BOB"]));
-    }
-
-    /// <summary>A user is the one the catalog lists, or only a name for anyone else, such as an external system.</summary>
-    [Fact]
-    public void GetUser_IsTheListedUserInfo_OrJustAName()
-    {
-        Mock<IUserCatalog> catalog = new();
-        catalog.SetupGet(c => c.Users).Returns(new Dictionary<string, UserInfo> { ["ALICE"] = new UserInfo { Name = "ALICE", Role = UserRole.Server } });
-        NetworkEnvironment environment = Build(new Mock<TestEngineController>(), catalog.Object);
-
-        Assert.Equal(UserRole.Server, environment.GetUser("ALICE").Role);
-        Assert.Equal("FEED", environment.GetUser("FEED").Name);
-        Assert.Null(environment.GetUser("FEED").Role);
     }
 }

@@ -52,7 +52,7 @@ internal sealed class DirectServiceConnection : IEngineConnection
     private Task OnDeliveryStatusChanged(DeliveryStatusChangedEvent change) => DeliveryStatusChanged.InvokeAll(change);
 
     /// <inheritdoc />
-    public Task<UserInfo?> GetUserInfo(CancellationToken cancellation = default)
+    public Task<IUserInfo?> GetUserInfo(CancellationToken cancellation = default)
         => Task.FromResult(userService.GetCurrentUserInfo());
 
     /// <inheritdoc />
@@ -75,7 +75,7 @@ internal sealed class DirectServiceConnection : IEngineConnection
     /// <inheritdoc />
     public async Task<SendMessageResult?> SendMessage(string body, List<AddressRequest> addresses, Enum? priority = null, string tag = "", Enum? messageLevel = null, Enum? messageAspect = null, CancellationToken cancellation = default)
     {
-        UserInfo? userInfo = userService.GetCurrentUserInfo();
+        IUserInfo? userInfo = userService.GetCurrentUserInfo();
         if (userInfo is null)
         {
             return null;

@@ -46,7 +46,7 @@ public sealed class FrameBuilderTests
     private sealed class AutoForwarderConfiguration : IEngineConfiguration
     {
         public void Configure(IEngineBuilder engine)
-            => engine.Types<TestFrame, TestPacket, TestMessagePriority, TestLevel, TestAspect>()
+            => engine.Types<TestFrame, TestPacket, TestMessagePriority, TestLevel, TestAspect, NoProfile>()
                 .Priority(TestMessagePriority.Normal)
                 .AutoForwarder("Alerts").AutoForwarder("Other").AutoForwarder("Alerts")
                 .Frames<TestFrameHandler>();

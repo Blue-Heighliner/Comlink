@@ -1,7 +1,7 @@
 namespace BlueHeighliner.Comlink;
 
 /// <summary>
-/// Controls how drafts are composed: how wide a line may be, a header every message must start with, and which combinations of priority, level, aspect and tag are blocked. State one with <see cref="IEngineBuilder{TFrame, TPacket, TPriority, TLevel, TAspect}.Drafts{THandler}"/>. Every member is optional.
+/// Controls how drafts are composed: how wide a line may be, a header every message must start with, and which combinations of priority, level, aspect and tag are blocked. State one with <see cref="IEngineBuilder{TFrame, TPacket, TPriority, TLevel, TAspect, TProfile}.Drafts{THandler}"/>. Every member is optional.
 /// </summary>
 /// <typeparam name="TPriority">The enum whose members are the priority levels.</typeparam>
 /// <typeparam name="TLevel">The enum whose members are the message levels.</typeparam>
@@ -32,7 +32,7 @@ public interface IDraftHandler<TPriority, TLevel, TAspect> where TPriority : str
     /// <summary>
     /// Says whether a draft may not have the combination of priority, message level, message aspect and tag in <paramref name="context"/>. The draft view asks it for every choice the user could make: a choice that would make a blocked
     /// combination cannot be made, and when the user types a tag that would, the tag is refused and the user is told why, so a blocked combination is never entered and never sent. Defaults to <see langword="null"/>: nothing is blocked.
-    /// To tell who the current user is or who is connected, ask for the <see cref="IUserCatalog"/> through dependency injection.
+    /// To tell who the current user is or who is connected, ask for the <see cref="IUserCatalog{TProfile}"/> through dependency injection.
     /// </summary>
     /// <param name="context">The combination.</param>
     /// <returns><see langword="null"/> if the combination is allowed, otherwise why it is blocked, in words the user reads; when empty the user is told only that the combination is not allowed.</returns>

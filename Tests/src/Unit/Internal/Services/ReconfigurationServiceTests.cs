@@ -13,7 +13,7 @@ public sealed class ReconfigurationServiceTests
     [Fact]
     public async Task Run_WithACurrentUser_CallsTheReconfigurerEachTime()
     {
-        users.Setup(u => u.GetCurrentUserInfo()).Returns(new UserInfo { Name = "ME" });
+        users.Setup(u => u.GetCurrentUserInfo()).Returns(new UserInfo<object> { Name = "ME" });
         controller.SetupGet(c => c.Reconfigurer).Returns(reconfigurer.Object);
         ReconfigurationService service = Build();
 
@@ -27,7 +27,7 @@ public sealed class ReconfigurationServiceTests
     [Fact]
     public async Task Run_WithoutACurrentUser_NeverCallsTheReconfigurer()
     {
-        users.Setup(u => u.GetCurrentUserInfo()).Returns((UserInfo?)null);
+        users.Setup(u => u.GetCurrentUserInfo()).Returns((UserInfo<object>?)null);
         controller.SetupGet(c => c.Reconfigurer).Returns(reconfigurer.Object);
 
         await Build().Run();
@@ -40,7 +40,7 @@ public sealed class ReconfigurationServiceTests
     [Fact]
     public async Task Run_WithoutAReconfigurer_DoesNothing()
     {
-        users.Setup(u => u.GetCurrentUserInfo()).Returns(new UserInfo { Name = "ME" });
+        users.Setup(u => u.GetCurrentUserInfo()).Returns(new UserInfo<object> { Name = "ME" });
         controller.SetupGet(c => c.Reconfigurer).Returns((IReconfigurer?)null);
 
         await Build().Run();
@@ -50,7 +50,7 @@ public sealed class ReconfigurationServiceTests
     [Fact]
     public async Task Run_AReconfigurerThatFails_IsLoggedNotThrown()
     {
-        users.Setup(u => u.GetCurrentUserInfo()).Returns(new UserInfo { Name = "ME" });
+        users.Setup(u => u.GetCurrentUserInfo()).Returns(new UserInfo<object> { Name = "ME" });
         controller.SetupGet(c => c.Reconfigurer).Returns(reconfigurer.Object);
         reconfigurer.Setup(r => r.OnReconfigured()).ThrowsAsync(new InvalidOperationException("boom"));
 

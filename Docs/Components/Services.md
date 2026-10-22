@@ -37,7 +37,7 @@ Says which user this node runs as, or why that cannot be told, and checks again 
 **Key responsibilities**:
 - Hold the node's `Identity` as of the last check: the user and the thumbprints of the user and authority certificates
 - Hold the `Problem` that stops the node from being identified, or `null`
-- Return the current user's `UserInfo` from the network file (`GetCurrentUserInfo`, `null` while there is a problem)
+- Return the current user's `IUserInfo` from the network file (`GetCurrentUserInfo`, `null` while there is a problem)
 - Check the certificate files again (`Refresh`), switching to another user, or to nobody, as the certificate says
 
 **Starting identity**: `Engine.Start` checks the identity before the container is built (`MsmtCertificateLookup.CheckIdentity`, returning an `IdentityCheck` of the identity and any problem) and registers the result; `ICurrentUserProvider` starts with that user, or with nobody when there is a problem. The check reads both files, requires the user certificate to chain to the authority certificate alone (custom root trust, no revocation check), and takes the first subject common name the network file lists (or the one `--user` picks), spelled as the file spells it. A missing or unreadable file, a certificate that does not chain, one issued to no listed user, or no certificate stated or passed is a problem: it is logged as `Cannot identify the user: {Problem}`, kept in `Problem` and shown on the error screen, and the app starts without a user. Only a headless node, which has no window to show it in, fails `Engine.Start` with an `InvalidOperationException`.
@@ -46,22 +46,22 @@ Says which user this node runs as, or why that cannot be told, and checks again 
 
 ```csharp
 // Consumers call:
-UserInfo? info = service.GetCurrentUserInfo();
+IUserInfo? info = service.GetCurrentUserInfo();
 NodeIdentity identity = service.Identity;
 bool changed = await service.Refresh(cancellation);
 ```
 
 ---
 
-## UserCatalog
+## UserDirectory and UserCatalog
 
-The public `IUserCatalog`, which a handler or any other component asks for through dependency injection instead of being handed it in a context. It reads the current state every time a property is read, so a value is a snapshot only until it is read again: `CurrentUser` is the user `UserService` says the node runs as (it throws without one, which is only so while the error screen shows and no handler runs), `Users` is every user the network configuration file lists with everything known about them (`IEngineController.GetUserInfo`), `ConnectedUsers` those with a live peer connection (`IPeerService.IsUserConnected`, resolved when asked since the peer service is built from the transport that may ask for the catalog), and `Groups` every group by id as a `GroupInfo` whose `Members` are users, groups inside it expanded. Keys are case-insensitive.
+The public `IUserCatalog<TProfile>` (a thin typed layer over the internal `IUserDirectory`, which works in `IUserInfo`; `UserCatalog<TProfile>` turns each user into a `UserInfo<TProfile>` as it is handed to the host), which a handler or any other component asks for through dependency injection instead of being handed it in a context. It reads the current state every time a property is read, so a value is a snapshot only until it is read again: `CurrentUser` is the user `UserService` says the node runs as (it throws without one, which is only so while the error screen shows and no handler runs), `Users` is every user the network configuration file lists with everything known about them (`IEngineController.GetUserInfo`), `ConnectedUsers` those with a live peer connection (`IPeerService.IsUserConnected`, resolved when asked since the peer service is built from the transport that may ask for the catalog), and `Groups` every group by id as a `GroupInfo` whose `Members` are users, groups inside it expanded. Keys are case-insensitive.
 
 ---
 
 ## NetworkProcessing and NetworkEnvironment
 
-The engine's only protocol surface. `NetworkProcessing` runs the host's `IFrameHandler<TFrame, TPriority, TLevel, TAspect>` (through `EngineFrameHandler<,,,>`, which gives it a small context for each event: the user that connected or disconnected, the received frame with its origin and source user, the sent message with its destinations, the opened message, or the retrieval's server and criteria) for `OnConnected`, `OnDisconnected`, `OnReceived`, `OnSent`, `OnRead` and `OnRetrieval`. Each call runs in the background and a handler that throws is logged (`FrameHandlerFailed`) and never reaches the engine.
+The engine's only protocol surface. `NetworkProcessing` runs the host's `IFrameHandler<TFrame, TPriority, TLevel, TAspect>` (through `EngineFrameHandler<,,,>`, which gives it a small context for each event: the name of the user that connected or disconnected, the received frame with its origin and the name of its source user, the sent message with its destinations, the opened message, or the retrieval's server name and criteria) for `OnConnected`, `OnDisconnected`, `OnReceived`, `OnSent`, `OnRead` and `OnRetrieval`. Each call runs in the background and a handler that throws is logged (`FrameHandlerFailed`) and never reaches the engine.
 
 Everything a handler does is an operation of `NetworkEnvironment`, which the host's handler reaches through the public `INetwork<TFrame, TPriority, TLevel, TAspect>` it asks for (`Network<,,,>` adapts the environment's untyped operations to the host's types, and also answers `GetDestinations` and `GetAutoForwardTargets`, the latter leaving out the current user). A context never carries them:
 - `Send(user, priority, frame)` hands a frame to the peer layer with the wire priority of the given level, and reports whether the directly connected user accepted it. A user who is not directly connected fails. The frame is sent exactly as given.

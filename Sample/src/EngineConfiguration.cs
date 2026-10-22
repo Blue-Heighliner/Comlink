@@ -41,7 +41,7 @@ public sealed class EngineConfiguration(IDebugMode debug) : IEngineConfiguration
 
     /// <inheritdoc />
     public void Configure(IEngineBuilder engine)
-        => engine.Types<Frame, Packet, Priority, Level, Aspect>()
+        => engine.Types<Frame, Packet, Priority, Level, Aspect, NoProfile>()
             .Display<DisplayHandler>()
             .Deletes<DeleteHandler>()
             .Drafts<DraftHandler>()

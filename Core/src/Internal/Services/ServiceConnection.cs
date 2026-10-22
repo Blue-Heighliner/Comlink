@@ -1,10 +1,11 @@
 namespace BlueHeighliner.Comlink;
 
-/// <summary>Presents the engine's own connection as an <see cref="IServiceConnection{TPriority, TLevel, TAspect}"/>, typed by the host's enums.</summary>
+/// <summary>Presents the engine's own connection as an <see cref="IServiceConnection{TPriority, TLevel, TAspect, TProfile}"/>, typed by the host's enums.</summary>
 /// <typeparam name="TPriority">The enum the host stated for its priorities.</typeparam>
 /// <typeparam name="TLevel">The enum the host stated for its message levels.</typeparam>
 /// <typeparam name="TAspect">The enum the host stated for its message aspects.</typeparam>
-internal sealed class ServiceConnection<TPriority, TLevel, TAspect> : IServiceConnection<TPriority, TLevel, TAspect> where TPriority : struct, Enum where TLevel : struct, Enum where TAspect : struct, Enum
+/// <typeparam name="TProfile">The record type the host stated for user profiles.</typeparam>
+internal sealed class ServiceConnection<TPriority, TLevel, TAspect, TProfile> : IServiceConnection<TPriority, TLevel, TAspect, TProfile> where TPriority : struct, Enum where TLevel : struct, Enum where TAspect : struct, Enum where TProfile : class
 {
     /// <summary>Creates a connection over <paramref name="engineConnection"/>.</summary>
     /// <param name="engineConnection">The engine's own connection.</param>
@@ -27,7 +28,7 @@ internal sealed class ServiceConnection<TPriority, TLevel, TAspect> : IServiceCo
     public Task Connect(CancellationToken cancellation = default) => engineConnection.Connect(cancellation);
 
     /// <inheritdoc />
-    public Task<UserInfo?> GetUserInfo(CancellationToken cancellation = default) => engineConnection.GetUserInfo(cancellation);
+    public async Task<UserInfo<TProfile>?> GetUserInfo(CancellationToken cancellation = default) => await engineConnection.GetUserInfo(cancellation) is { } info ? UserInfo<TProfile>.From(info) : null;
 
     /// <inheritdoc />
     public Task<List<string>> GetUserNames(CancellationToken cancellation = default) => engineConnection.GetUserNames(cancellation);

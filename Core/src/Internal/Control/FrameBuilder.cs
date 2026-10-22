@@ -1,6 +1,6 @@
 namespace BlueHeighliner.Comlink;
 
-/// <summary>Collects what is stated through <see cref="IFrameBuilder{TFrame, TPacket, TPriority, TLevel, TAspect}"/>, collecting the mappings and turning them into a <see cref="FrameMap"/>.</summary>
+/// <summary>Collects what is stated through <see cref="IFrameBuilder{TFrame, TPacket, TPriority, TLevel, TAspect, TProfile}"/>, collecting the mappings and turning them into a <see cref="FrameMap"/>.</summary>
 internal sealed class FrameBuilder<TFrame, TPriority, TLevel, TAspect> where TFrame : class, new() where TPriority : struct, Enum where TLevel : struct, Enum where TAspect : struct, Enum
 {
     private ServiceRegistration<IFrameSerializer> serializer = new(_ => new ProtobufSerializer(typeof(TFrame)));
@@ -14,21 +14,21 @@ internal sealed class FrameBuilder<TFrame, TPriority, TLevel, TAspect> where TFr
     /// <summary>The handler that carries out the host's protocol, if stated.</summary>
     public ServiceRegistration<IEngineFrameHandler>? FrameHandler { get; private set; }
 
-    /// <inheritdoc cref="IFrameBuilder{TFrame, TPacket, TPriority, TLevel, TAspect}.Heartbeat{THandler}"/>
+    /// <inheritdoc cref="IFrameBuilder{TFrame, TPacket, TPriority, TLevel, TAspect, TProfile}.Heartbeat{THandler}"/>
     public FrameBuilder<TFrame, TPriority, TLevel, TAspect> Heartbeat<THandler>() where THandler : IFrameHeartbeatHandler<TFrame, TPriority>
     {
         heartbeat = ServiceRegistration<IHeartbeatItemHandler>.Of(typeof(THandler), handler => new FrameHeartbeatItemHandler<TFrame, TPriority>((IFrameHeartbeatHandler<TFrame, TPriority>)handler));
         return this;
     }
 
-    /// <inheritdoc cref="IFrameBuilder{TFrame, TPacket, TPriority, TLevel, TAspect}.Serializer{TSerializer}"/>
+    /// <inheritdoc cref="IFrameBuilder{TFrame, TPacket, TPriority, TLevel, TAspect, TProfile}.Serializer{TSerializer}"/>
     public FrameBuilder<TFrame, TPriority, TLevel, TAspect> Serializer<TSerializer>() where TSerializer : IFrameSerializer
     {
         serializer = ServiceRegistration<IFrameSerializer>.Of(typeof(TSerializer), instance => (IFrameSerializer)instance);
         return this;
     }
 
-    /// <inheritdoc cref="IFrameBuilder{TFrame, TPacket, TPriority, TLevel, TAspect}.Create"/>
+    /// <inheritdoc cref="IFrameBuilder{TFrame, TPacket, TPriority, TLevel, TAspect, TProfile}.Create"/>
     public FrameBuilder<TFrame, TPriority, TLevel, TAspect> Create(Func<TFrame> create)
     {
         this.create = create;
@@ -54,7 +54,7 @@ internal sealed class FrameBuilder<TFrame, TPriority, TLevel, TAspect> where TFr
             Heartbeat = heartbeat
         };
 
-    /// <inheritdoc cref="IFrameBuilder{TFrame, TPacket, TPriority, TLevel, TAspect}.Handshake{THandler}"/>
+    /// <inheritdoc cref="IFrameBuilder{TFrame, TPacket, TPriority, TLevel, TAspect, TProfile}.Handshake{THandler}"/>
     public FrameBuilder<TFrame, TPriority, TLevel, TAspect> Handshake<THandler>() where THandler : IFrameHandshakeHandler<TFrame>
     {
         HandshakeHandler = ServiceRegistration<IHandshakeHandler>.Of(typeof(THandler), handler => new FrameHandshakeHandlerAdapter<TFrame>((IFrameHandshakeHandler<TFrame>)handler));

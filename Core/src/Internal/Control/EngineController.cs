@@ -77,7 +77,7 @@ internal interface IEngineController
     bool IsKioskMode { get; }
     /// <summary>Whether alert messages are kept in their own alert inbox and alert outbox, apart from the normal inbox and outbox, from the display handler.</summary>
     bool SeparateAlerts { get; }
-    /// <summary>Whether a log entry that reports an exception also carries its entire stack trace, as stated with <see cref="IEngineBuilder{TFrame, TPacket, TPriority, TLevel, TAspect}.StackTrace"/>. On unless stated.</summary>
+    /// <summary>Whether a log entry that reports an exception also carries its entire stack trace, as stated with <see cref="IEngineBuilder{TFrame, TPacket, TPriority, TLevel, TAspect, TProfile}.StackTrace"/>. On unless stated.</summary>
     bool IsStackTraceEnabled { get; }
     /// <summary>The host's reconfigurer, or <see langword="null"/> when it stated none.</summary>
     IReconfigurer? Reconfigurer { get; }
@@ -110,7 +110,7 @@ internal interface IEngineController
     /// <param name="groupName">The group to expand.</param>
     IReadOnlyList<string> GetGroupMembers(string groupName);
 
-    /// <summary>Port for the inbound IP listener: the MSMT port of the current user (see <see cref="UserInfo.MsmtPort"/>), 50021 by default.</summary>
+    /// <summary>Port for the inbound IP listener: the MSMT port of the current user (see <see cref="IUserInfo.MsmtPort"/>), 50021 by default.</summary>
     int PeerPort { get; }
     /// <summary>Port for the inbound interface listener. Always active, regardless of mode.</summary>
     int InterfacePort { get; }
@@ -165,7 +165,7 @@ internal interface IEngineController
     /// <summary>Gets the plural of <see cref="MessageAspectLabel"/>.</summary>
     string MessageAspectPluralLabel { get; }
     /// <summary>
-    /// Gets the message aspects a message can carry, in the order stated with <see cref="IEngineBuilder{TFrame, TPacket, TPriority, TLevel, TAspect}.Aspect"/>; empty when none were stated, which turns the feature off.
+    /// Gets the message aspects a message can carry, in the order stated with <see cref="IEngineBuilder{TFrame, TPacket, TPriority, TLevel, TAspect, TProfile}.Aspect"/>; empty when none were stated, which turns the feature off.
     /// </summary>
     IReadOnlyList<MessageAspect> MessageAspects { get; }
     /// <summary>Gets the name of the configured message aspect <paramref name="aspect"/>, or an empty string for <see langword="null"/>.</summary>
@@ -197,19 +197,19 @@ internal interface IEngineController
     /// Every address type, in a fixed order (<see cref="AddressType.To"/>, <see cref="AddressType.Cc"/>,
     /// <see cref="AddressType.External"/>), paired with its display label - shown in the address type picker, the
     /// per-address badge, and the message view's section headers. A label defaults to the enum name unless overridden
-    /// with <see cref="IAddressTypeBuilder{TFrame, TPacket, TPriority, TLevel, TAspect}.Label"/>.
+    /// with <see cref="IAddressTypeBuilder{TFrame, TPacket, TPriority, TLevel, TAspect, TProfile}.Label"/>.
     /// </summary>
     IReadOnlyList<AddressTypeOption> AddressTypes { get; }
     /// <summary>
     /// Every configured message level, in ascending order (index 0 is lowest); empty when
-    /// <see cref="IEngineBuilder{TFrame, TPacket, TPriority, TLevel, TAspect}.Level"/> was never stated, which turns the whole feature off. A
+    /// <see cref="IEngineBuilder{TFrame, TPacket, TPriority, TLevel, TAspect, TProfile}.Level"/> was never stated, which turns the whole feature off. A
     /// message may only be sent at one of these levels, and a destination user's own assigned level (see
     /// <see cref="GetUserMessageLevel"/>) must rank at or above it.
     /// </summary>
     IReadOnlyList<MessageLevel> MessageLevels { get; }
 
     /// <summary>
-    /// Returns the message level name the given user runs at; see <see cref="UserInfo.MessageLevel"/>.
+    /// Returns the message level name the given user runs at; see <see cref="IUserInfo.MessageLevel"/>.
     /// Defaults to the lowest configured level for a user with no assignment, or an empty string when no message
     /// levels are configured at all.
     /// </summary>
@@ -226,17 +226,17 @@ internal interface IEngineController
     /// <summary>The peer options - including TLS identity certificate and trusted certificate authorities - used for both inbound and outbound MSMT session peer connections.</summary>
     MsmtSessionPeerOptions ConnectionOptions { get; }
 
-    /// <summary>Applies the host's adjustment of the MSMT options (see <see cref="IEngineBuilder{TFrame, TPacket, TPriority, TLevel, TAspect}.Msmt"/>) to <paramref name="options"/>, returning them unchanged if none was stated.</summary>
+    /// <summary>Applies the host's adjustment of the MSMT options (see <see cref="IEngineBuilder{TFrame, TPacket, TPriority, TLevel, TAspect, TProfile}.Msmt"/>) to <paramref name="options"/>, returning them unchanged if none was stated.</summary>
     MsmtSessionPeerOptions ConfigureConnectionOptions(MsmtSessionPeerOptions options);
 
-    /// <summary>The options used for every MicroGate serial connection, after the host's adjustment (see <see cref="IEngineBuilder{TFrame, TPacket, TPriority, TLevel, TAspect}.Hdlc"/>).</summary>
+    /// <summary>The options used for every MicroGate serial connection, after the host's adjustment (see <see cref="IEngineBuilder{TFrame, TPacket, TPriority, TLevel, TAspect, TProfile}.Hdlc"/>).</summary>
     HdlcPeerOptions HdlcOptions { get; }
 
     /// <summary>The configured role for this instance.</summary>
     UserRole Role { get; }
     /// <summary>
     /// The points this node connects out to, and keeps connected, worked out from its links: for each link to its parent or a child whose mode is
-    /// <see cref="ConnectionMode.MsmtConnect"/>, the other user's <see cref="UserInfo.IpHost"/> and <see cref="UserInfo.MsmtPort"/>, and for the <see cref="ConnectionMode.Hdlc"/> links together one point per HDLC port
+    /// <see cref="ConnectionMode.MsmtConnect"/>, the other user's <see cref="IUserInfo.IpHost"/> and <see cref="IUserInfo.MsmtPort"/>, and for the <see cref="ConnectionMode.Hdlc"/> links together one point per HDLC port
     /// the node opens (a serial cable joins two nodes and is opened from both ends); the parent's comes first.
     /// Who is on the other end of a connection is still worked out
     /// when it forms.
@@ -254,12 +254,12 @@ internal interface IEngineController
     /// </summary>
     IReadOnlyDictionary<string, ServerUserConfig> Servers { get; }
 
-    /// <summary>Gets the handler that carries out the handshake of packets on each new connection (see <see cref="IPacketBuilder{TFrame, TPacket, TPriority, TLevel, TAspect}.Handshake{THandler}"/>), or <see langword="null"/> for none. Requires <see cref="PacketType"/>.</summary>
+    /// <summary>Gets the handler that carries out the handshake of packets on each new connection (see <see cref="IPacketBuilder{TFrame, TPacket, TPriority, TLevel, TAspect, TProfile}.Handshake{THandler}"/>), or <see langword="null"/> for none. Requires <see cref="PacketType"/>.</summary>
     IHandshakeHandler? PacketHandshakeHandler { get; }
 
-    /// <summary>Gets the handler that carries out the handshake of frames on each new connection (see <see cref="IFrameBuilder{TFrame, TPacket, TPriority, TLevel, TAspect}.Handshake{THandler}"/>), or <see langword="null"/> for none.</summary>
+    /// <summary>Gets the handler that carries out the handshake of frames on each new connection (see <see cref="IFrameBuilder{TFrame, TPacket, TPriority, TLevel, TAspect, TProfile}.Handshake{THandler}"/>), or <see langword="null"/> for none.</summary>
     IHandshakeHandler? FrameHandshakeHandler { get; }
-    /// <summary>When <see langword="true"/>, the <c>--config</c>, <c>--authority</c>, <c>--certificate</c> and <c>--user</c> command-line arguments override the network configuration file, the certificate files and the running user (see <see cref="IEngineBuilder{TFrame, TPacket, TPriority, TLevel, TAspect}.CommandLineOverrides"/>); when <see langword="false"/> (the default) they are ignored and only <c>Config.json</c> in the app data folder and the certificates the host stated are used.</summary>
+    /// <summary>When <see langword="true"/>, the <c>--config</c>, <c>--authority</c>, <c>--certificate</c> and <c>--user</c> command-line arguments override the network configuration file, the certificate files and the running user (see <see cref="IEngineBuilder{TFrame, TPacket, TPriority, TLevel, TAspect, TProfile}.CommandLineOverrides"/>); when <see langword="false"/> (the default) they are ignored and only <c>Config.json</c> in the app data folder and the certificates the host stated are used.</summary>
     bool CommandLineOverridesAllowed { get; }
 
     /// <summary>
@@ -272,19 +272,19 @@ internal interface IEngineController
     /// </summary>
     IReadOnlyList<IExternalSystem> ExternalSystems { get; }
 
-    /// <summary>The handler that reacts to a user connecting or disconnecting and to a message being received (see <see cref="IEngineBuilder{TFrame, TPacket, TPriority, TLevel, TAspect}.Frames{THandler}"/>), or <see langword="null"/> for none.</summary>
+    /// <summary>The handler that reacts to a user connecting or disconnecting and to a message being received (see <see cref="IEngineBuilder{TFrame, TPacket, TPriority, TLevel, TAspect, TProfile}.Frames{THandler}"/>), or <see langword="null"/> for none.</summary>
     IEngineFrameHandler? FrameHandler { get; }
 
-    /// <summary>Every custom export format added via <see cref="IEngineBuilder{TFrame, TPacket, TPriority, TLevel, TAspect}.Export{TFormat}"/>, in the order added; empty if none.</summary>
+    /// <summary>Every custom export format added via <see cref="IEngineBuilder{TFrame, TPacket, TPriority, TLevel, TAspect, TProfile}.Export{TFormat}"/>, in the order added; empty if none.</summary>
     IReadOnlyList<ExportFormatDefinition> ExportFormats { get; }
 
-    /// <summary>Every custom import format added via <see cref="IEngineBuilder{TFrame, TPacket, TPriority, TLevel, TAspect}.Import{TFormat}"/>, in the order added; empty if none.</summary>
+    /// <summary>Every custom import format added via <see cref="IEngineBuilder{TFrame, TPacket, TPriority, TLevel, TAspect, TProfile}.Import{TFormat}"/>, in the order added; empty if none.</summary>
     IReadOnlyList<ImportFormatDefinition> ImportFormats { get; }
 
     /// <summary>Every server user, from <see cref="Servers"/>: each keeps a copy of every message one of its own children sends and answers retrieval requests for them, so a retrieval names the server the message is stored on. Empty if none.</summary>
     IReadOnlyList<string> StorageServers { get; }
 
-    /// <summary>Every auto forwarder added via <see cref="IEngineBuilder{TFrame, TPacket, TPriority, TLevel, TAspect}.AutoForwarder"/>, in the order added.</summary>
+    /// <summary>Every auto forwarder added via <see cref="IEngineBuilder{TFrame, TPacket, TPriority, TLevel, TAspect, TProfile}.AutoForwarder"/>, in the order added.</summary>
     IReadOnlyList<AutoForwarderDefinition> AutoForwarders { get; }
 
     /// <summary>Creates a new, empty instance of <see cref="FrameType"/>.</summary>
@@ -369,19 +369,12 @@ internal interface IEngineController
     ReadOnlyMemory<byte> GetPacketPayload(object packet);
 
     /// <summary>
-    /// Returns what is known about <paramref name="userName"/>: what the network configuration file states (see <see cref="IEngineBuilder{TFrame, TPacket, TPriority, TLevel, TAspect}.CommandLineOverrides"/>), or a user with just
+    /// Returns what is known about <paramref name="userName"/>: what the network configuration file states (see <see cref="IEngineBuilder{TFrame, TPacket, TPriority, TLevel, TAspect, TProfile}.CommandLineOverrides"/>), or a user with just
     /// that name when it states none. For the current user this is where <see cref="Role"/>, <see cref="PeerPort"/>, <see cref="InterfacePort"/>,
     /// <see cref="OutgoingPoints"/> and <see cref="Servers"/> come from.
     /// </summary>
     /// <param name="userName">The user to describe.</param>
-    UserInfo GetUserInfo(string userName);
-    /// <summary>
-    /// Returns the app-specific information attached to <paramref name="userName"/>, an empty map when there is none. The
-    /// engine does not interpret it: it travels with the user's <see cref="UserIdentity"/>, so a host can attach whatever
-    /// it needs to a user (a role, a station, a display name) and read it back wherever the user is identified.
-    /// </summary>
-    /// <param name="userName">The user to describe.</param>
-    IReadOnlyDictionary<string, string> GetUserData(string userName);
+    IUserInfo GetUserInfo(string userName);
 
     /// <summary>Adds what the engine knows about this node, namely which user it runs as, to a description of a new connection before it is handed to a host's handler.</summary>
     /// <param name="connection">What is known about the connection.</param>
@@ -515,7 +508,7 @@ internal class EngineController(EngineBuilder builder, ICurrentUserProvider curr
     public virtual string HomeText => builder.DisplayHandlerInstance?.HomeText.OrNull() ?? "HOME";
     private readonly NetworkConfig network = networkConfig ?? new();
 
-    private UserInfo? CurrentUserInfo => currentUserProvider.UserName is { Length: > 0 } name ? GetUserInfo(name) : null;
+    private IUserInfo? CurrentUserInfo => currentUserProvider.UserName is { Length: > 0 } name ? GetUserInfo(name) : null;
 
     /// <inheritdoc />
     public virtual string? WindowIconPath => builder.DisplayHandlerInstance?.Icon.OrNull();
@@ -731,7 +724,7 @@ internal class EngineController(EngineBuilder builder, ICurrentUserProvider curr
 
     // The points a node dials for some of its links: for each MsmtConnect link the other user's IP host and MSMT port, and, for all its Hdlc links together, one point
     // per HDLC port the node opens, which tries each of those links' users in turn since nothing says which port is cabled to whom.
-    private List<ConnectionPoint> LinkPoints(UserInfo current, IEnumerable<(UserLink Link, bool IsParent)> links)
+    private List<ConnectionPoint> LinkPoints(IUserInfo current, IEnumerable<(UserLink Link, bool IsParent)> links)
     {
         List<ConnectionPoint> points = [];
         List<HdlcRemote> remotes = [];
@@ -740,7 +733,7 @@ internal class EngineController(EngineBuilder builder, ICurrentUserProvider curr
             switch (ModeOf(link, isParent))
             {
                 case ConnectionMode.MsmtConnect:
-                    UserInfo target = GetUserInfo(link.User);
+                    IUserInfo target = GetUserInfo(link.User);
                     points.Add(new ConnectionPoint { IpAddress = target.IpHost ?? "127.0.0.1", Port = target.MsmtPort ?? 50021 });
                     break;
                 case ConnectionMode.Hdlc:
@@ -775,7 +768,7 @@ internal class EngineController(EngineBuilder builder, ICurrentUserProvider curr
         return points;
     }
 
-    private IReadOnlyList<string> HdlcPortNames(UserInfo current)
+    private IReadOnlyList<string> HdlcPortNames(IUserInfo current)
     {
         if (current.HdlcPorts is not ["*"])
         {
@@ -812,7 +805,7 @@ internal class EngineController(EngineBuilder builder, ICurrentUserProvider curr
         : Priorities.FirstOrDefault(priority => key.Equals(priority.Key))?.Value
             ?? throw new InvalidOperationException($"A priority of {key.GetType().Name}.{key} is used, which is not one of the configured priorities: {string.Join(", ", Priorities.Select(priority => priority.Name))}");
 
-    private ServerUserConfig BuildServerConfig(UserInfo server)
+    private ServerUserConfig BuildServerConfig(IUserInfo server)
         => new()
         {
             Children = [.. server.Children.Select(child => child.User)]
@@ -929,14 +922,12 @@ internal class EngineController(EngineBuilder builder, ICurrentUserProvider curr
     public virtual ReadOnlyMemory<byte> GetPacketPayload(object value) => packetAdapter.Value.GetPayload(value);
 
     /// <inheritdoc />
-    public virtual UserInfo GetUserInfo(string userName)
+    public virtual IUserInfo GetUserInfo(string userName)
     {
-        UserInfo info = network.GetUserInfo(userName) ?? new UserInfo { Name = userName };
+        UserInfo<object> info = network.GetUserInfo(userName) ?? new UserInfo<object> { Name = userName };
         return info with { Groups = [.. UserGroups.Where(group => group.Value.Contains(userName, StringComparer.OrdinalIgnoreCase)).Select(group => group.Key)] };
     }
 
-    /// <inheritdoc />
-    public virtual IReadOnlyDictionary<string, string> GetUserData(string userName) => GetUserInfo(userName).Data;
 
     /// <inheritdoc />
     public virtual IConnectionInfo WithLocalUser(IConnectionInfo connection) => connection;

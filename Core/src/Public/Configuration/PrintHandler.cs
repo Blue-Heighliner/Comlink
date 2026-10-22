@@ -1,6 +1,6 @@
 namespace BlueHeighliner.Comlink;
 
-/// <summary>Controls how the print manager behaves. State one with <see cref="IEngineBuilder{TFrame, TPacket, TPriority, TLevel, TAspect}.Prints{THandler}"/>. Every member is optional.</summary>
+/// <summary>Controls how the print manager behaves. State one with <see cref="IEngineBuilder{TFrame, TPacket, TPriority, TLevel, TAspect, TProfile}.Prints{THandler}"/>. Every member is optional.</summary>
 /// <typeparam name="TPriority">The enum the host stated for its priorities.</typeparam>
 /// <typeparam name="TLevel">The enum the host stated for its message levels.</typeparam>
 /// <typeparam name="TAspect">The enum the host stated for its message aspects.</typeparam>

@@ -46,7 +46,7 @@ public sealed class PeerNetworkTests
             controller.Setup(c => c.ParentPoints).Returns(role is UserRole.Client ? [.. outgoing.Take(1)] : []);
             controller.Setup(c => c.ParentUser).Returns(role is UserRole.Client ? "Server" : null);
             controller.Setup(c => c.Servers).Returns(servers ?? new Dictionary<string, ServerUserConfig>());
-            controller.Setup(c => c.GetUserInfo(user)).Returns(new UserInfo { Name = user, Role = role, Children = [.. (children ?? []).Select(name => (UserLink)name)] });
+            controller.Setup(c => c.GetUserInfo(user)).Returns(new UserInfo<object> { Name = user, Role = role, Children = [.. (children ?? []).Select(name => (UserLink)name)] });
             controller.Setup(c => c.ConnectionOptions).Returns(new MsmtSessionPeerOptions
             {
                 Credentials = new MsmtCredentials { Identity = identity, TrustedAuthorities = authorities },

@@ -44,7 +44,7 @@ public sealed class UserServiceTests : IDisposable
     [Fact]
     public void GetCurrentUserInfo_IsTheCertificatesUser()
     {
-        UserInfo info = new() { Name = "ALICE" };
+        UserInfo<object> info = new() { Name = "ALICE" };
         controller.Setup(c => c.GetUserInfo("ALICE")).Returns(info);
         UserService service = Start("Alice");
 

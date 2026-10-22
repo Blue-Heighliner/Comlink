@@ -9,7 +9,7 @@ Engine never reads environment variables, hardcodes paths, or calls host-specifi
 ```csharp
 public sealed class MyEngineConfiguration : IEngineConfiguration
 {
-    public void Configure(IEngineBuilder engine) => engine.Types<MyFrame, MyPriority, MyMessageLevel, MyMessageAspect>()
+    public void Configure(IEngineBuilder engine) => engine.Types<MyFrame, MyPriority, MyMessageLevel, MyMessageAspect, NoProfile>()
         .Display<MyDisplayHandler>()
         .Frames<MyFrameHandler>()
             // ...the frames...
@@ -19,7 +19,7 @@ public sealed class MyEngineConfiguration : IEngineConfiguration
 await Engine.Start<MyEngineConfiguration>(args);
 ```
 
-`IEngineBuilder` has only `Types`, which fixes the frame, packet, priority, message level and message aspect types and returns the `IEngineBuilder<TFrame, TPacket, TPriority, TLevel, TAspect>` that carries every other setting, so a handler states its priority as a member of the host's own priority enum, a draft handler states its message level as a member of the host's message level enum, and the priority and message level sub-configurations take members of those enums, all checked by the compiler. `Types<TFrame, TPriority, TLevel, TAspect>()` is for a configuration without packets and states `NoPacket` as the packet type, and a configuration without priorities or message levels states `NoPriority` (one level, `NORMAL`) or `NoMessageLevel` (no members, which turns message levels off). The builders (internal) implement these by recording what they are told; nothing is interpreted while configuring. `EngineController` (internal) reads the recorded state through `IEngineController` and supplies the default for every setting the host left alone, which is what every service, ViewModel and repository in the engine depends on. Keeping the recording separate from the reading means a configuration can be checked as a whole (`Engine.Start` throws an `InvalidOperationException` naming missing types or an unstated handler before any service starts), and that tests can replace a single behavior of the controller.
+`IEngineBuilder` has only `Types`, which fixes the frame, packet, priority, message level, message aspect and user profile types and returns the `IEngineBuilder<TFrame, TPacket, TPriority, TLevel, TAspect, TProfile>` that carries every other setting, so a handler states its priority as a member of the host's own priority enum, a draft handler states its message level as a member of the host's message level enum, and the priority and message level sub-configurations take members of those enums, all checked by the compiler. `Types<TFrame, TPriority, TLevel, TAspect, TProfile>()` is for a configuration without packets and states `NoPacket` as the packet type, and a configuration without priorities or message levels states `NoPriority` (one level, `NORMAL`) or `NoMessageLevel` (no members, which turns message levels off). The builders (internal) implement these by recording what they are told; nothing is interpreted while configuring. `EngineController` (internal) reads the recorded state through `IEngineController` and supplies the default for every setting the host left alone, which is what every service, ViewModel and repository in the engine depends on. Keeping the recording separate from the reading means a configuration can be checked as a whole (`Engine.Start` throws an `InvalidOperationException` naming missing types or an unstated handler before any service starts), and that tests can replace a single behavior of the controller.
 
 **A configuration describes non-config-file behavior only. It must never read `NetworkConfig` itself, and it must never read an environment variable.** Everything about the network's users, and the settings of the node a user runs, comes from the network configuration file, applied by the engine itself: the users' info is read by `EngineController`, and the node settings (identity certificate file, alert, tag and print settings) are applied as a decorator layered on top of it (see [Network Configuration File](#network-configuration-file) below). This split keeps "what does this app do out of the box" (the configuration) and "who is on this network and how do they run" (the file) as two independent, separately testable concerns, and means a host is never tempted to reimplement file parsing just to add one small piece of non-file behavior.
 
@@ -29,7 +29,7 @@ await Engine.Start<MyEngineConfiguration>(args);
 
 **Services found by convention.** Every concrete class of the assembly the configuration is in, and of the entry assembly, is registered as a singleton under the interface named for it, so `MyService` answers for `IMyService` without being registered, in both containers. A registration the host made itself in `configureServices` always takes precedence, whether it was made before or after, and by `Add` or `TryAdd`. The scan skips abstract, static, nested and generic classes, an interface whose name is not the class's with an `I` in front, and any class that is an `IEngineConfiguration`. It finds the engine's own services the same way for the engine's assembly.
 
-**Services the engine offers.** A component of the host, a handler, a hosted service or any class built through dependency injection, can ask for the services the engine exposes for it: `IUserCatalog`, `INetwork<,,,>`, `IServiceConnection<,,>`, `ILogger`, `IDebugMode` and `IDataPool`. `IDebugMode`, `IDataPool` and `ILogger` are also in the bootstrap container, so the configuration and the display handler can take them; `ILogger` there writes nothing, since the engine's logging does not exist yet. The rest exist only in the running engine's container, so only what is built from it can take them.
+**Services the engine offers.** A component of the host, a handler, a hosted service or any class built through dependency injection, can ask for the services the engine exposes for it: `IUserCatalog<TProfile>`, `INetwork<,,,>`, `IServiceConnection<,,,>`, `ILogger`, `IDebugMode` and `IDataPool`. `IDebugMode`, `IDataPool` and `ILogger` are also in the bootstrap container, so the configuration and the display handler can take them; `ILogger` there writes nothing, since the engine's logging does not exist yet. The rest exist only in the running engine's container, so only what is built from it can take them.
 
 ## Network Configuration File
 
@@ -44,7 +44,7 @@ The engine defines the schema of one network configuration file, shared by every
 ### Frame Format
 
 ```csharp
-engine.Types<MyFrame, MyPacket, MyPriority, MyMessageLevel, MyMessageAspect>()
+engine.Types<MyFrame, MyPacket, MyPriority, MyMessageLevel, MyMessageAspect, NoProfile>()
     .AutoForwarder("Escalation")
     .Frames<MyFrameHandler>()
         .Heartbeat<MyFrameHeartbeatHandler>()
@@ -125,7 +125,15 @@ Everything about one user is stated on that user's entry in the [network configu
 | `Parent` | The user above this one in a hierarchy, by name or as an object forcing the connection mode (`MsmtListen`, `MsmtConnect` or `Hdlc`); by default the node dials it | none |
 | `Children` | The users below this one, for a `Server`, each by name or as an object forcing the connection mode; by default the node listens for them | none |
 | `MessageLevel` | The name of the level the user runs at (see [Message Levels](#message-levels)) | the lowest configured level |
-| `Data` | App-specific string keys and values; the engine does not interpret them, they travel with the user's `UserIdentity` | none |
+| `Profile` | An object of the host's own shape, read into the record type stated as `TProfile` in `Types` (see below) | none |
+
+**Profile.** A host that wants typed data on its users states the record type as the last type argument of `Types` (`NoProfile` for none), and the `Profile` object of each user is read into it, names matched without regard to case and enums written by name (in any case; flags as `"Read, Write"`; a number is refused). The result is `UserInfo<TProfile>.Profile`, typed as the host stated it. Everywhere the engine hands a user to the host it is a `UserInfo<TProfile>` (`IUserCatalog<TProfile>`, `IServiceConnection<,,,>.GetUserInfo`), which implements the non-generic `IUserInfo` for code that does not care about the profile (it has everything but a typed profile; `IUserInfo.Profile` is an `object?`). The contexts a frame handler is handed carry only user names, so a handler looks a user up in the `IUserCatalog<TProfile>` it asks for, and the handler itself is not typed by the profile. `Profile` is `null` for `NoProfile`, whatever the file holds, and for a user whose entry has no `Profile` key (or a `null` one). The profiles are read when the file is loaded, not when they are used: one that does not fit the type makes the whole file invalid, naming the user, at start-up and on a refresh (the refresh fails and changes nothing, like any unreadable file).
+
+```csharp
+engine.Types<MyFrame, MyPriority, MyMessageLevel, MyMessageAspect, DeskProfile>()
+
+public sealed record DeskProfile(string Desk, int Floor);
+```
 
 The current user's info is what decides how this node behaves, and the user is known before the engine starts. The topology a `Server` routes with, every server in the cluster and the children each owns, is every user in the [directory](#user-directory) whose role is `Server`, with its `Children`. Every node on a network uses the same file, since a node learns about other users, such as which servers store messages, from it.
 
@@ -200,11 +208,11 @@ How drafts are composed, stated by a handler implementing `IDraftHandler<TPriori
 
 **Line width.** The draft editor shows the body in a monospace font. With `DefaultLineWidth` or `MaxLineWidth` stated, the draft view offers a width control, the user sets how many characters wide a line is shown, between `MinLineWidth` (1 by default, and never below the header) and `MaxLineWidth` (no maximum by default). **The width is only how the draft is shown:** the editor wraps the text, and the header above it, at that many characters, at the last space that fits or in the middle of a word that is wider than a line by itself, and no line break is ever added to the text, so changing the width never changes the draft or the message that is sent. The cut-off is shown: a dashed ruler runs down the body at the last column of a line, and the header sits in a box as wide as a line. **The width can never be less than the longest line of the header**, even when `MinLineWidth` is smaller: the minimum of the width control is raised to fit it and a narrower width is raised to match, and a header wider than `MaxLineWidth` wins over the maximum. A new draft starts at `DefaultLineWidth`, or at `MaxLineWidth` when there is no default (no limit would exceed it); without a maximum the user may also clear the width to have no limit. The width is saved with the draft (`DraftEntity.LineWidth`).
 
-**Tags.** `EnableTags` (`true` by default) says whether messages carry a tag at all; when `false` no tag is shown in the draft editor, the message view or the entry list. The handler also says what a message tag may be, wherever one is entered: `TagCase` (`Mixed`, the default, leaves it as written; `Lower` and `Upper` force it as it is typed or pasted), `IsTagRequired` (`false` by default; when `true` a draft without a tag is not sent), `MinTagLength` (0 by default; the fewest characters a tag that is given may have), `MaxTagLength` (none by default; the tag box in the draft view is sized to fit exactly that many monospace characters and does not let more be typed), and `AllowTagSymbols`, `AllowTagNumbers` and `AllowTagSpaces` (all `true` by default; letters are always allowed). What is typed is filtered to what the rules allow, so a tag in the draft view is always a valid one except for being too short, which stops the send with a message. A tag passed to `IServiceConnection<,,>.SendMessage` that breaks the rules throws.
+**Tags.** `EnableTags` (`true` by default) says whether messages carry a tag at all; when `false` no tag is shown in the draft editor, the message view or the entry list. The handler also says what a message tag may be, wherever one is entered: `TagCase` (`Mixed`, the default, leaves it as written; `Lower` and `Upper` force it as it is typed or pasted), `IsTagRequired` (`false` by default; when `true` a draft without a tag is not sent), `MinTagLength` (0 by default; the fewest characters a tag that is given may have), `MaxTagLength` (none by default; the tag box in the draft view is sized to fit exactly that many monospace characters and does not let more be typed), and `AllowTagSymbols`, `AllowTagNumbers` and `AllowTagSpaces` (all `true` by default; letters are always allowed). What is typed is filtered to what the rules allow, so a tag in the draft view is always a valid one except for being too short, which stops the send with a message. A tag passed to `IServiceConnection<,,,>.SendMessage` that breaks the rules throws.
 
 **Defaults.** `DefaultTag`, `DefaultPriority` and `DefaultMessageLevel` say what a new draft starts with (none by default: no tag, the lowest priority the user may choose, and the highest message level the user may use). The tag is made to fit the tag rules, and a level the user may not choose, or a message level above their own, is brought to what they may.
 
-**Blocked combinations.** `IsBlocked(context)` says whether a combination of priority, message level, message aspect and tag may not be entered (`IDraftBlockContext`: those four, nothing else): `null` when it may, otherwise the reason it may not, which is what the user is told (the default blocks nothing). The draft view asks it for every choice the user could make, so a choice that would make a blocked combination cannot be made: the other choices are held to combinations that are not blocked. A tag that every combination is blocked for is refused as it is typed (the box keeps the last tag that was accepted) and the user is told the reason, in the message area of the draft view; so is the user when a tag that only blocks some combinations makes the other choices move to ones that are not, and when a send is refused. When the reason is empty the user is told only that the combination is not allowed. A blocked combination is therefore never entered and never sent. The handler gets who is on the network from the `IUserCatalog` it asks for through dependency injection, not from the context.
+**Blocked combinations.** `IsBlocked(context)` says whether a combination of priority, message level, message aspect and tag may not be entered (`IDraftBlockContext`: those four, nothing else): `null` when it may, otherwise the reason it may not, which is what the user is told (the default blocks nothing). The draft view asks it for every choice the user could make, so a choice that would make a blocked combination cannot be made: the other choices are held to combinations that are not blocked. A tag that every combination is blocked for is refused as it is typed (the box keeps the last tag that was accepted) and the user is told the reason, in the message area of the draft view; so is the user when a tag that only blocks some combinations makes the other choices move to ones that are not, and when a send is refused. When the reason is empty the user is told only that the combination is not allowed. A blocked combination is therefore never entered and never sent. The handler gets who is on the network from the `IUserCatalog<TProfile>` it asks for through dependency injection, not from the context.
 
 **Alert and identifier.** `IsAlert(context)` (an `IDraftContext`) says whether the draft's message is an alert (default: no), from its tag, body or other aspects: there is no alert flag for the user to set. `NextId(previous)` generates the message identifier (see [Message Identifiers](#message-identifiers)).
 
@@ -363,7 +371,7 @@ engine.Reconfigure<MyReconfigurer>();
 
 public sealed class MyReconfigurer : IReconfigurer
 {
-    public required IUserCatalog Users { get; init; }
+    public required IUserCatalog<NoProfile> Users { get; init; }
 
     public Task OnReconfigured() { ... }
 }
@@ -375,7 +383,7 @@ The host's own work after the configuration is loaded, for anything that depends
 
 **Network file:** none; it is code, not a setting.
 
-**Sample:** `Reconfigurer` logs how many users and groups the network has each time the configuration is loaded, taking the `IUserCatalog` and `ILogger` as required properties.
+**Sample:** `Reconfigurer` logs how many users and groups the network has each time the configuration is loaded, taking the `IUserCatalog<TProfile>` and `ILogger` as required properties.
 
 ---
 
@@ -654,7 +662,7 @@ Each external system is constructed directly by the configuration, not resolved 
 ```csharp
 engine.Frames<MyFrameHandler>();
 
-public sealed class MyFrameHandler(IUserCatalog users, INetwork<MyFrame, MyPriority, MyMessageLevel, MyMessageAspect> network) : IFrameHandler<MyFrame, MyPriority, MyMessageLevel, MyMessageAspect>
+public sealed class MyFrameHandler(IUserCatalog<NoProfile> users, INetwork<MyFrame, MyPriority, MyMessageLevel, MyMessageAspect> network) : IFrameHandler<MyFrame, MyPriority, MyMessageLevel, MyMessageAspect>
 {
     public Task OnConnected(INetworkConnectedContext context) { ... }
     public Task OnDisconnected(INetworkDisconnectedContext context) { ... }
@@ -668,13 +676,13 @@ public sealed class MyFrameHandler(IUserCatalog users, INetwork<MyFrame, MyPrior
 The handler is the whole protocol: the engine is only transport, GUI and storage, and does nothing automatically. Receiving, routing, receipting, retrieval, forwarding and the network indicator all happen here. Every method has a default that does nothing, returns a `Task`, runs in the background (not awaited by the engine), and an exception it throws is logged and never stops a later event from being handled.
 
 Events:
-- `OnConnected` / `OnDisconnected` fire once each time a user goes from unreachable to reachable over at least one live peer connection, or the other way around (`TargetUser` is that user's `UserInfo`).
-- `OnReceived` fires for every frame this instance receives, handed the `Frame` typed as the host's own frame type, the `SourceUser` (a `UserInfo`) it came from and its `Origin` (`FrameOrigin.Peer`, `Interface` or `ExternalSystem`).
-- `OnSent` fires when the user sends a message with the GUI (or `IServiceConnection<,,>.SendMessage`), handed the `Message<,,>` and its `Destinations` (a set of the users it is for, built from its addresses with groups expanded; a user it cannot be sent to, such as one below the message's level, is marked `Failed` by the engine first and is not in the set). The message is already in the Outbox with every recipient `Sending`. `OnSent` is not called when no destination is left.
+- `OnConnected` / `OnDisconnected` fire once each time a user goes from unreachable to reachable over at least one live peer connection, or the other way around (`TargetUser` is that user's name).
+- `OnReceived` fires for every frame this instance receives, handed the `Frame` typed as the host's own frame type, the `SourceUser` (a name) it came from and its `Origin` (`FrameOrigin.Peer`, `Interface` or `ExternalSystem`).
+- `OnSent` fires when the user sends a message with the GUI (or `IServiceConnection<,,,>.SendMessage`), handed the `Message<,,>` and its `Destinations` (a set of the users it is for, built from its addresses with groups expanded; a user it cannot be sent to, such as one below the message's level, is marked `Failed` by the engine first and is not in the set). The message is already in the Outbox with every recipient `Sending`. `OnSent` is not called when no destination is left.
 - `OnRead` fires when the user opens an unread Inbox message, handed that `Message<,,>`.
-- `OnRetrieval` fires when the user submits a retrieval, handed the `Server` (a `UserInfo`) and the `Criteria`.
+- `OnRetrieval` fires when the user submits a retrieval, handed the `Server` (a name) and the `Criteria`.
 
-A context holds only what is specific to the event it describes, as above. Everything a handler acts with, and everything it asks about the network, is a service it asks for through dependency injection (in its constructor or in `required` `init` properties), so it can be mocked and is the same wherever it is used. Who is on the network is the `IUserCatalog`: `CurrentUser`, `Users` and `ConnectedUsers` (read-only dictionaries of `UserInfo` by name, where a user is connected when its name is a key of `ConnectedUsers`) and `Groups` (a read-only dictionary of `GroupInfo` by group id, whose `Members` are the users of the group with the groups inside it expanded). Each property reads the current state when it is asked, so it follows a refreshed configuration and the connections as they come and go. What a handler does is the `INetwork<TFrame, TPriority, TLevel, TAspect>`, typed by what the host stated in `Types`:
+A context holds only what is specific to the event it describes, as above. Everything a handler acts with, and everything it asks about the network, is a service it asks for through dependency injection (in its constructor or in `required` `init` properties), so it can be mocked and is the same wherever it is used. Who is on the network is the `IUserCatalog<TProfile>`: `CurrentUser`, `Users` and `ConnectedUsers` (read-only dictionaries of `UserInfo` by name, where a user is connected when its name is a key of `ConnectedUsers`) and `Groups` (a read-only dictionary of `GroupInfo` by group id, whose `Members` are the users of the group with the groups inside it expanded). Each property reads the current state when it is asked, so it follows a refreshed configuration and the connections as they come and go. What a handler does is the `INetwork<TFrame, TPriority, TLevel, TAspect>`, typed by what the host stated in `Types`:
 - `Send(user, priority, frame)`: sends the frame, exactly as given, to `user`, who must be directly connected to the current user (a client's only such user is its server; a server's are its children and sibling servers), and returns whether they accepted it, or `false` when they are not connected. There is no routing or hopping: reaching anyone further away is the handler's job, by sending to the node that is directly connected and putting the real recipients in the frame. The priority is a required `TPriority`.
 - `ReceiveMessage(message)`: records a `Message<TPriority, TLevel, TAspect>` as received, so it is stored in the Inbox and shown (and alarms, when it is an alert). A message with a priority, level or aspect that is not configured throws.
 - `SetSentStatus(messageId, user, status)` (also taking several users at once) and `SetReceivedStatus(messageId, status)`: change the delivery status of a stored sent or received message.
@@ -735,13 +743,13 @@ Not unit tested directly, since it is inherently environment- and OS-dependent, 
 
 ---
 
-#### `IServiceConnection<TPriority, TLevel, TAspect>`
+#### `IServiceConnection<TPriority, TLevel, TAspect, TProfile>`
 
 ```csharp
 event Func<Message<TPriority, TLevel, TAspect>, Task>? MessageReceived;
 event Func<DeliveryStatusChangedEvent, Task>? DeliveryStatusChanged;
 Task Connect(CancellationToken cancellation = default);
-Task<UserInfo?> GetUserInfo(CancellationToken cancellation = default);
+Task<UserInfo<TProfile>?> GetUserInfo(CancellationToken cancellation = default);
 Task<List<string>> GetUserNames(CancellationToken cancellation = default);
 Task<List<string>> GetConnectedUsers(CancellationToken cancellation = default);
 Task<SendMessageResult?> SendMessage(string body, List<AddressRequest> addresses, TPriority? priority = null, string tag = "", TLevel? messageLevel = null, TAspect? messageAspect = null, CancellationToken cancellation = default);
@@ -750,7 +758,7 @@ Task<bool> MarkMessageRead(string messageId, CancellationToken cancellation = de
 
 High-level API for host code to interact with the running Engine. Engine registers `DirectServiceConnection`, which calls Engine services in-process, in both Client and Headless mode - Headless mode acts as a normal peer client, just without a GUI. External programs instead plug into the message stream over the local interface listener (see [Interface.md](Interface.md)), which is unrelated to this interface.
 
-Host applications resolve `IServiceConnection<TPriority, TLevel, TAspect>`, typed by the enums stated in `Types`, from the container to send messages and subscribe to inbound delivery events. `GetConnectedUsers` reports who is currently reachable over a live peer connection (`IPeerService.GetConnectedUsers`), unlike `GetUserNames`'s fixed configured directory.
+Host applications resolve `IServiceConnection<TPriority, TLevel, TAspect, TProfile>`, typed by the enums stated in `Types`, from the container to send messages and subscribe to inbound delivery events. `GetConnectedUsers` reports who is currently reachable over a live peer connection (`IPeerService.GetConnectedUsers`), unlike `GetUserNames`'s fixed configured directory.
 
 **Default:** `DirectServiceConnection`, registered in both Client and Headless mode.
 

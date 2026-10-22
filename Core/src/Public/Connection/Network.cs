@@ -2,7 +2,7 @@ namespace BlueHeighliner.Comlink;
 
 /// <summary>
 /// The ways a handler acts on the engine: sending frames, recording messages and delivery statuses, and keeping and finding messages. It is a service, not part of what a handler is handed: a handler asks for it
-/// through dependency injection, in its constructor or in a <see langword="required"/> <see langword="init"/> property, for the types the host stated in <see cref="IEngineBuilder.Types{TFrame, TPacket, TPriority, TLevel, TAspect}"/>.
+/// through dependency injection, in its constructor or in a <see langword="required"/> <see langword="init"/> property, for the types the host stated in <see cref="IEngineBuilder.Types{TFrame, TPacket, TPriority, TLevel, TAspect, TProfile}"/>.
 /// </summary>
 /// <typeparam name="TFrame">The host's frame type.</typeparam>
 /// <typeparam name="TPriority">The enum the host stated for its priorities.</typeparam>
@@ -84,6 +84,6 @@ public interface INetwork<TFrame, TPriority, TLevel, TAspect> where TFrame : cla
     IReadOnlySet<string> GetDestinations(Message<TPriority, TLevel, TAspect> message, out IReadOnlySet<string> excluded);
 
     /// <summary>Gets the users the current user has put on the target list of the auto forwarder named <paramref name="controllerName"/>, which the handler forwards what that auto forwarder accepts to, leaving out the current user so a forward never comes back to its sender. Empty when there is no such auto forwarder or the list is empty.</summary>
-    /// <param name="controllerName">The auto forwarder's name (see <see cref="IEngineBuilder{TFrame, TPacket, TPriority, TLevel, TAspect}.AutoForwarder"/>).</param>
+    /// <param name="controllerName">The auto forwarder's name (see <see cref="IEngineBuilder{TFrame, TPacket, TPriority, TLevel, TAspect, TProfile}.AutoForwarder"/>).</param>
     Task<IReadOnlyList<string>> GetAutoForwardTargets(string controllerName);
 }

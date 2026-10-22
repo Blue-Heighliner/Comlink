@@ -1,14 +1,15 @@
 namespace BlueHeighliner.Comlink.Testing;
 
 /// <summary>
-/// A stand-in for the <see cref="IServiceConnection{TPriority, TLevel, TAspect}"/> a host component uses to talk to the engine, to test the component without it. It connects at once, answers what it is set to, accepts every send and
+/// A stand-in for the <see cref="IServiceConnection{TPriority, TLevel, TAspect, TProfile}"/> a host component uses to talk to the engine, to test the component without it. It connects at once, answers what it is set to, accepts every send and
 /// mark read (recording them), and raises the engine's events when the test calls <see cref="RaiseMessageReceived"/> or <see cref="RaiseDeliveryStatusChanged"/>.
 /// </summary>
 /// <typeparam name="TPriority">The enum the host stated for its priorities.</typeparam>
 /// <typeparam name="TLevel">The enum the host stated for its message levels.</typeparam>
 /// <typeparam name="TAspect">The enum the host stated for its message aspects.</typeparam>
+/// <typeparam name="TProfile">The record type the host stated for user profiles in its <c>Types</c> call, or <see cref="NoProfile"/>.</typeparam>
 /// <param name="userInfo">What <c>GetUserInfo</c> answers, or <see langword="null"/> for no user.</param>
-public sealed class FakeServiceConnection<TPriority, TLevel, TAspect>(UserInfo? userInfo = null) : IServiceConnection<TPriority, TLevel, TAspect> where TPriority : struct, Enum where TLevel : struct, Enum where TAspect : struct, Enum
+public sealed class FakeServiceConnection<TPriority, TLevel, TAspect, TProfile>(UserInfo<TProfile>? userInfo = null) : IServiceConnection<TPriority, TLevel, TAspect, TProfile> where TPriority : struct, Enum where TLevel : struct, Enum where TAspect : struct, Enum where TProfile : class
 {
     /// <inheritdoc />
     public event Func<Message<TPriority, TLevel, TAspect>, Task>? MessageReceived;
@@ -26,7 +27,7 @@ public sealed class FakeServiceConnection<TPriority, TLevel, TAspect>(UserInfo? 
     public List<string> MarkedRead { get; } = [];
 
     /// <summary>Gets or sets what <c>GetUserInfo</c> answers.</summary>
-    public UserInfo? UserInfo { get; set; } = userInfo;
+    public UserInfo<TProfile>? UserInfo { get; set; } = userInfo;
 
     /// <summary>Gets or sets what <c>GetUserNames</c> answers. Defaults to none.</summary>
     public List<string> UserNames { get; set; } = [];
@@ -56,7 +57,7 @@ public sealed class FakeServiceConnection<TPriority, TLevel, TAspect>(UserInfo? 
     }
 
     /// <inheritdoc />
-    public Task<UserInfo?> GetUserInfo(CancellationToken cancellation = default) => Task.FromResult(UserInfo);
+    public Task<UserInfo<TProfile>?> GetUserInfo(CancellationToken cancellation = default) => Task.FromResult(UserInfo);
 
     /// <inheritdoc />
     public Task<List<string>> GetUserNames(CancellationToken cancellation = default) => Task.FromResult(UserNames);

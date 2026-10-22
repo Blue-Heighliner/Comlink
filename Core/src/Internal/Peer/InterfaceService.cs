@@ -181,7 +181,7 @@ internal sealed class InterfaceService : IInterfaceService
             return Task.CompletedTask;
         }
 
-        UserInfo? userInfo = userService.GetCurrentUserInfo();
+        IUserInfo? userInfo = userService.GetCurrentUserInfo();
         if (userInfo is null)
         {
             message.TryDispose();

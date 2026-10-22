@@ -97,6 +97,141 @@ public sealed class NetworkConfigTests : IDisposable
         Assert.Equal(["B"], config.Users.Keys);
     }
 
+    private sealed record DeskProfile(string Desk, int Floor);
+
+    private string WriteProfiles()
+        => Write("Profiles.json", """
+            {
+              "Users": {
+                "ALICE": { "Profile": { "desk": "4B", "FLOOR": 2 } },
+                "BOB": { },
+                "CAROL": { "Profile": null }
+              }
+            }
+            """);
+
+    /// <summary>A user's Profile is read into the type the host stated, names matched without regard to case; a user with no Profile key, or a null one, has none.</summary>
+    [Fact]
+    public void Profile_IsReadIntoTheStatedType()
+    {
+        NetworkConfig config = NetworkConfig.Load(["--config", WriteProfiles()], directory, typeof(DeskProfile));
+
+        Assert.Equal(new DeskProfile("4B", 2), config.GetUserInfo("ALICE")!.Profile);
+        Assert.Null(config.GetUserInfo("BOB")!.Profile);
+        Assert.Null(config.GetUserInfo("CAROL")!.Profile);
+    }
+
+    private enum Rank
+    {
+        Junior,
+        Senior
+    }
+
+    [Flags]
+    private enum Access
+    {
+        None = 0,
+        Read = 1,
+        Write = 2
+    }
+
+    private sealed record Office(string City, string? Zip);
+
+    private sealed record Employee(string Name, Rank Rank, Access Access, Office Home, List<Office> Offices, IReadOnlyList<string> Tags, Dictionary<string, int> Scores, Office? Backup, int? Age, TimeSpan Shift, DateOnly Start, Rank[] Past, IReadOnlyDictionary<string, Office> ByCode)
+    {
+        public string Extra { get; init; } = "default";
+    }
+
+    /// <summary>Lists, arrays, dictionaries, nested records, enums (by name in any case, flags included), nullables and the common value types all read into the profile record.</summary>
+    [Fact]
+    public void Profile_ComplexShapes_AreReadIntoTheRecord()
+    {
+        string path = Write("Complex.json", """
+            {
+              "Users": {
+                "ALICE": {
+                  "Profile": {
+                    "name": "Alice",
+                    "rank": "senior",
+                    "ACCESS": "Read, Write",
+                    "home": { "city": "Oslo", "zip": null },
+                    "offices": [ { "City": "Paris", "Zip": "75001" }, { "City": "Rome" } ],
+                    "tags": [ "a", "b" ],
+                    "scores": { "math": 90, "art": 70 },
+                    "backup": { "City": "Lima" },
+                    "age": 41,
+                    "shift": "08:30:00",
+                    "start": "2024-02-29",
+                    "past": [ "Junior", "senior", "SENIOR" ],
+                    "byCode": { "X": { "City": "Cairo" } },
+                    "unknownKey": [ 1, 2, 3 ],
+                    "extra": "set"
+                  }
+                }
+              }
+            }
+            """);
+
+        Employee profile = Assert.IsType<Employee>(NetworkConfig.Load(["--config", path], directory, typeof(Employee)).GetUserInfo("ALICE")!.Profile);
+
+        Assert.Equal(("Alice", Rank.Senior, Access.Read | Access.Write, "set"), (profile.Name, profile.Rank, profile.Access, profile.Extra));
+        Assert.Equal(new Office("Oslo", null), profile.Home);
+        Assert.Equal([new Office("Paris", "75001"), new Office("Rome", null)], profile.Offices);
+        Assert.Equal(["a", "b"], profile.Tags);
+        Assert.Equal(90, profile.Scores["math"]);
+        Assert.Equal(new Office("Lima", null), profile.Backup);
+        Assert.Equal((41, TimeSpan.FromMinutes(510), new DateOnly(2024, 2, 29)), (profile.Age, profile.Shift, profile.Start));
+        Assert.Equal([Rank.Junior, Rank.Senior, Rank.Senior], profile.Past);
+        Assert.Equal(new Office("Cairo", null), profile.ByCode["X"]);
+    }
+
+    /// <summary>An enum written as a number or as a name that is not one of the enum's members, or a type that cannot be read from JSON at all, fails the load naming the user, as a mismatched shape does.</summary>
+    [Theory]
+    [InlineData("""{ "Name": "A", "Rank": "Boss" }""", typeof(Employee))]
+    [InlineData("""{ "Name": "A", "Rank": 7 }""", typeof(Employee))]
+    [InlineData("""{ "Name": "A" }""", typeof(IDisposable))]
+    public void Profile_UnreadableValue_Fails(string profileJson, Type type)
+    {
+        string path = Write("Unreadable.json", $$"""{ "Users": { "ALICE": { "Profile": {{profileJson}} } } }""");
+
+        InvalidDataException error = Assert.Throws<InvalidDataException>(() => NetworkConfig.Load(["--config", path], directory, type));
+
+        Assert.Contains("profile of user ALICE", error.Message);
+    }
+
+    /// <summary>Without a stated type the profile is ignored, whatever the file holds.</summary>
+    [Fact]
+    public void Profile_WithoutAStatedType_IsNull() => Assert.Null(NetworkConfig.Load(["--config", WriteProfiles()], directory).GetUserInfo("ALICE")!.Profile);
+
+    /// <summary>A profile that cannot be read into the stated type fails the load and names the user, so a bad file is refused at start-up and on a refresh rather than when the profile is used.</summary>
+    [Fact]
+    public void Profile_NotMatchingTheStatedType_Fails()
+    {
+        string path = Write("Bad.json", """{ "Users": { "ALICE": { "Profile": { "Desk": 7, "Floor": "high" } } } }""");
+
+        InvalidDataException error = Assert.Throws<InvalidDataException>(() => NetworkConfig.Load(["--config", path], directory, typeof(DeskProfile)));
+
+        Assert.Contains("profile of user ALICE", error.Message);
+        Assert.Contains(nameof(DeskProfile), error.Message);
+    }
+
+    /// <summary>A reload reads the profiles again with the same type, so an edited profile is picked up and a bad one is refused.</summary>
+    [Fact]
+    public void Profile_Reload_ReadsAgainWithTheSameType()
+    {
+        string path = Write("Config.json", """{ "Users": { "ALICE": { "Profile": { "Desk": "1", "Floor": 1 } } } }""");
+        NetworkConfig config = NetworkConfig.Load([], directory, typeof(DeskProfile));
+        Assert.Equal(new DeskProfile("1", 1), config.GetUserInfo("ALICE")!.Profile);
+
+        File.WriteAllText(path, """{ "Users": { "ALICE": { "Profile": { "Desk": "2", "Floor": 3 } } } }""");
+        config.Reload();
+        Assert.Equal(new DeskProfile("2", 3), config.GetUserInfo("ALICE")!.Profile);
+
+        File.WriteAllText(path, """{ "Users": { "ALICE": { "Profile": { "Floor": "x" } } } }""");
+        Assert.Throws<InvalidDataException>(() => config.Reload());
+        Assert.Equal(new DeskProfile("2", 3), config.GetUserInfo("ALICE")!.Profile);
+    }
+
     /// <summary>A --config path that does not exist is an error rather than an empty network.</summary>
     [Fact]
     public void Load_MissingConfigArgumentFile_Throws() => Assert.Throws<FileNotFoundException>(() => NetworkConfig.Load(["--config", Path.Combine(directory, "Nope.json")], directory));
@@ -115,7 +250,6 @@ public sealed class NetworkConfigTests : IDisposable
                   "Children": [ "BOB", { "User": "CAROL", "Mode": "Hdlc", "Port": "ignored", "Address": 5 }, { "user": "DAN", "mode": "msmtconnect" } ],
                   "MessageLevel": "HIGH",
                   "AutoForwarders": [ "Alerts", "Backups" ],
-                  "Data": { "desk": "4" },
                   "Headless": true
                 }
               }
@@ -123,7 +257,7 @@ public sealed class NetworkConfigTests : IDisposable
             """);
 
         NetworkConfig config = NetworkConfig.Load(["--config", path], directory);
-        UserInfo info = config.GetUserInfo("alice")!;
+        UserInfo<object> info = config.GetUserInfo("alice")!;
         NetworkUserConfig node = config.Find("Alice")!;
 
         Assert.Equal("ALICE", info.Name);
@@ -137,7 +271,6 @@ public sealed class NetworkConfigTests : IDisposable
             info.Children);
         Assert.Equal("HIGH", info.MessageLevel);
         Assert.Equal(["Alerts", "Backups"], info.AutoForwarders);
-        Assert.Equal("4", info.Data["desk"]);
         Assert.Equal(["OPS"], info.Groups);
         Assert.True(node.Headless);
     }
@@ -153,16 +286,17 @@ public sealed class NetworkConfigTests : IDisposable
         Assert.Null(config.GetUserInfo("NOBODY"));
     }
 
-    /// <summary>The --authority and --certificate arguments are read like --user, and a file that still has the retired certificate keys loads with them ignored.</summary>
+    /// <summary>The --authority and --certificate arguments are read like --user, and a file that still has the retired certificate keys, or a user's retired Data, loads with them ignored.</summary>
     [Fact]
     public void CertificateArguments_AreReadAndRetiredKeysIgnored()
     {
-        string path = Write("Old.json", """{ "AuthorityCertificate": "../Root.cer", "CertificateStore": "certs", "Users": { "A": {} } }""");
+        string path = Write("Old.json", """{ "AuthorityCertificate": "../Root.cer", "CertificateStore": "certs", "Users": { "A": { "Data": { "desk": "4" } } } }""");
 
         NetworkConfig config = NetworkConfig.Load(["--config", path, "--authority", "root.cer", "--certificate", "me.pfx"], directory);
 
         Assert.Equal(("root.cer", "me.pfx"), (config.AuthorityCertificateOverride, config.UserCertificateOverride));
         Assert.Single(config.Users);
+        Assert.Equal("A", config.GetUserInfo("A")!.Name);
         Assert.Null(NetworkConfig.Load([], directory).AuthorityCertificateOverride);
     }
 
@@ -184,7 +318,7 @@ public sealed class NetworkConfigTests : IDisposable
             { "Users": { "A": { "Parent": "B", "Children": [ "C", { "User": "D", "Mode": "bogus" }, { "User": "E", "Mode": "Hdlc" } ] } } }
             """);
 
-        UserInfo info = NetworkConfig.Load(["--config", path], directory).GetUserInfo("A")!;
+        UserInfo<object> info = NetworkConfig.Load(["--config", path], directory).GetUserInfo("A")!;
 
         Assert.Equal(new UserLink { User = "B" }, info.Parent);
         Assert.Equal([new UserLink { User = "C" }, new UserLink { User = "D" }, new UserLink { User = "E", Mode = ConnectionMode.Hdlc }], info.Children);

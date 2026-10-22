@@ -1,7 +1,7 @@
 namespace BlueHeighliner.Comlink;
 
 /// <summary>
-/// Names and words the app shows its users. State one with <see cref="IEngineBuilder{TFrame, TPacket, TPriority, TLevel, TAspect}.Display{THandler}"/>. Every member is optional: returning <see langword="null"/> (or an empty string) keeps the engine's own
+/// Names and words the app shows its users. State one with <see cref="IEngineBuilder{TFrame, TPacket, TPriority, TLevel, TAspect, TProfile}.Display{THandler}"/>. Every member is optional: returning <see langword="null"/> (or an empty string) keeps the engine's own
 /// text, so a handler overrides only what it wants to.
 /// </summary>
 public interface IDisplayHandler

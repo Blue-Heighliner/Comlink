@@ -22,7 +22,7 @@ A host implements `IEngineConfiguration`, whose fluent `Configure` method states
 ```csharp
 public sealed class MyEngineConfiguration : IEngineConfiguration
 {
-    public void Configure(IEngineBuilder engine) => engine.Types<MyFrame, MyPriority, MyMessageLevel, MyMessageAspect>()
+    public void Configure(IEngineBuilder engine) => engine.Types<MyFrame, MyPriority, MyMessageLevel, MyMessageAspect, NoProfile>()
         .Display<MyDisplayHandler>()
         .Priority(MyPriority.Normal)
         .Certificates("Authority.cer", "Certificate.pfx")

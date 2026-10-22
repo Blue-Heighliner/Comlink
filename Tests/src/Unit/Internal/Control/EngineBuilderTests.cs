@@ -44,7 +44,7 @@ public sealed class EngineBuilderTests
 
     private sealed class TypesOnlyConfiguration : IEngineConfiguration
     {
-        public void Configure(IEngineBuilder engine) => engine.Types<TestFrame, TestMessagePriority, TestLevel, TestAspect>().Priority(TestMessagePriority.Normal);
+        public void Configure(IEngineBuilder engine) => engine.Types<TestFrame, TestMessagePriority, TestLevel, TestAspect, NoProfile>().Priority(TestMessagePriority.Normal);
     }
 
     /// <summary>A configuration that states its types but no frame handlers cannot start the engine.</summary>
@@ -57,9 +57,9 @@ public sealed class EngineBuilderTests
     public void Types_StatedTwice_Throws()
     {
         EngineBuilder builder = new();
-        builder.Types<TestFrame, TestMessagePriority, TestLevel, TestAspect>();
+        builder.Types<TestFrame, TestMessagePriority, TestLevel, TestAspect, NoProfile>();
 
-        Assert.Throws<InvalidOperationException>(() => builder.Types<TestFrame, TestMessagePriority, TestLevel, TestAspect>());
+        Assert.Throws<InvalidOperationException>(() => builder.Types<TestFrame, TestMessagePriority, TestLevel, TestAspect, NoProfile>());
     }
 
     /// <summary>The no-priority and no-message-level types give a single NORMAL level and none, and packets cannot be stated without a packet type.</summary>
@@ -67,7 +67,7 @@ public sealed class EngineBuilderTests
     public void Types_NoPriorityAndNoMessageLevel_AndPacketsWithoutAPacketType()
     {
         EngineBuilder builder = new();
-        IEngineBuilder<TestFrame, NoPacket, NoPriority, NoMessageLevel, NoMessageAspect> typed = builder.Types<TestFrame, NoPriority, NoMessageLevel, NoMessageAspect>();
+        IEngineBuilder<TestFrame, NoPacket, NoPriority, NoMessageLevel, NoMessageAspect, NoProfile> typed = builder.Types<TestFrame, NoPriority, NoMessageLevel, NoMessageAspect, NoProfile>();
 
         Assert.Equal(["NORMAL"], builder.PriorityOptions.Select(option => option.Name));
         Assert.Empty(builder.MessageLevelValues);
@@ -77,7 +77,7 @@ public sealed class EngineBuilderTests
     private sealed class UnorderedConfiguration : IEngineConfiguration
     {
         public void Configure(IEngineBuilder engine)
-            => engine.Types<TestFrame, TestPacket, TestMessagePriority, TestLevel, TestAspect>()
+            => engine.Types<TestFrame, TestPacket, TestMessagePriority, TestLevel, TestAspect, NoProfile>()
                 .Priority(TestMessagePriority.High).Priority(TestMessagePriority.Low).Priority(TestMessagePriority.Flash)
                 .Level(TestLevel.Secret).Level(TestLevel.Public)
                 .Frames<TestFrameHandler>()
@@ -87,7 +87,7 @@ public sealed class EngineBuilderTests
     private sealed class InterleavedConfiguration : IEngineConfiguration
     {
         public void Configure(IEngineBuilder engine)
-            => engine.Types<TestFrame, TestPacket, TestMessagePriority, TestLevel, TestAspect>()
+            => engine.Types<TestFrame, TestPacket, TestMessagePriority, TestLevel, TestAspect, NoProfile>()
                 .Priority(TestMessagePriority.High).Level(TestLevel.Secret).Priority(TestMessagePriority.Low).Label("LOW")
                 .Level(TestLevel.Public).Priority(TestMessagePriority.High).Priority(TestMessagePriority.Flash).Level(TestLevel.Internal)
                 .Frames<TestFrameHandler>();
@@ -130,7 +130,7 @@ public sealed class EngineBuilderTests
     private sealed class DuplicateLabelConfiguration : IEngineConfiguration
     {
         public void Configure(IEngineBuilder engine)
-            => engine.Types<TestFrame, TestPacket, TestMessagePriority, TestLevel, TestAspect>()
+            => engine.Types<TestFrame, TestPacket, TestMessagePriority, TestLevel, TestAspect, NoProfile>()
                 .Priority(TestMessagePriority.Normal).Label("SAME").Priority(TestMessagePriority.Flash).Label("same")
                 .Frames<TestFrameHandler>();
     }
@@ -168,14 +168,14 @@ public sealed class EngineBuilderTests
     public void Build_WithoutPriorityLevels_Throws()
     {
         EngineBuilder builder = new();
-        builder.Types<TestFrame, TestMessagePriority, TestLevel, TestAspect>();
+        builder.Types<TestFrame, TestMessagePriority, TestLevel, TestAspect, NoProfile>();
 
         Assert.Throws<InvalidOperationException>(() => EngineBuilder.Build(new NoPrioritiesConfiguration()));
     }
 
     private sealed class NoPrioritiesConfiguration : IEngineConfiguration
     {
-        public void Configure(IEngineBuilder engine) => engine.Types<TestFrame, TestMessagePriority, TestLevel, TestAspect>().Frames<TestFrameHandler>();
+        public void Configure(IEngineBuilder engine) => engine.Types<TestFrame, TestMessagePriority, TestLevel, TestAspect, NoProfile>().Frames<TestFrameHandler>();
     }
 
     private sealed class EmptyConfiguration : IEngineConfiguration
@@ -314,20 +314,18 @@ public sealed class EngineBuilderTests
 
     /// <summary>Users and groups come from the network file, and the data attached to a user comes from their entry.</summary>
     [Fact]
-    public void NetworkUsersGroupsAndData_AreReported()
+    public void NetworkUsersAndGroups_AreReported()
     {
         (_, EngineController controller) = Build(engine => engine,
             network: new NetworkConfig
             {
-                Users = { ["alice"] = new NetworkUserConfig { Data = new Dictionary<string, string> { ["desk"] = "4" } }, ["BOB"] = new NetworkUserConfig(), ["DAVE"] = new NetworkUserConfig() },
+                Users = { ["alice"] = new NetworkUserConfig(), ["BOB"] = new NetworkUserConfig(), ["DAVE"] = new NetworkUserConfig() },
                 UserGroups = { ["OPS"] = ["ALICE", "BOB", "DAVE"], ["EXTRA"] = ["DAVE"] }
             });
 
         Assert.Equal(["alice", "BOB", "DAVE", "OPS", "EXTRA"], controller.Users);
         Assert.Equal(["ALICE", "BOB", "DAVE"], controller.UserGroups["ops"]);
         Assert.Equal(["DAVE"], controller.UserGroups["extra"]);
-        Assert.Equal("4", controller.GetUserData("ALICE")["desk"]);
-        Assert.Empty(controller.GetUserData("BOB"));
         Assert.Equal(["OPS", "EXTRA"], controller.GetUserInfo("DAVE").Groups);
     }
 
@@ -338,7 +336,7 @@ public sealed class EngineBuilderTests
         (_, EngineController controller) = Build(engine => engine, network: Network(("ALICE", new NetworkUserConfig { MessageLevel = "HIGH" })));
 
         Assert.Equal("HIGH", controller.GetUserInfo("alice").MessageLevel);
-        UserInfo other = controller.GetUserInfo("BOB");
+        IUserInfo other = controller.GetUserInfo("BOB");
         Assert.Equal("BOB", other.Name);
         Assert.Null(other.Role);
     }
@@ -465,7 +463,7 @@ public sealed class EngineBuilderTests
     public void Packets_NonPositiveMaxPayloadSize_Throws(int size)
     {
         EngineBuilder builder = new();
-        IEngineBuilder<TestFrame, TestPacket, TestMessagePriority, TestLevel, TestAspect> typed = builder.Types<TestFrame, TestPacket, TestMessagePriority, TestLevel, TestAspect>();
+        IEngineBuilder<TestFrame, TestPacket, TestMessagePriority, TestLevel, TestAspect, NoProfile> typed = builder.Types<TestFrame, TestPacket, TestMessagePriority, TestLevel, TestAspect, NoProfile>();
 
         Assert.Throws<ArgumentOutOfRangeException>(() => typed.Packets<TestPacketHandler>(size));
     }
@@ -509,6 +507,24 @@ public sealed class EngineBuilderTests
         Assert.Equal(512, adjusted.HdlcOptions.MaxInfoField);
         Assert.Equal(HdlcCrc.Crc16Ccitt, adjusted.HdlcOptions.Link.Crc);
         Assert.Equal(new HdlcPeerOptions(), plain.HdlcOptions);
+    }
+
+    private sealed class ProfileHandler : IFrameHandler<TestFrame, TestMessagePriority, TestLevel, TestAspect>;
+
+    private sealed class ProfileConfiguration : IEngineConfiguration
+    {
+        public void Configure(IEngineBuilder engine) => engine.Types<TestFrame, TestPacket, TestMessagePriority, TestLevel, TestAspect, TestProfile>().Priority(TestMessagePriority.Normal).Frames<ProfileHandler>();
+    }
+
+    /// <summary>The profile type a host states in its Types call is recorded for the network configuration to read profiles into, and there is none when it states NoProfile.</summary>
+    [Fact]
+    public void Types_RecordTheProfileType()
+    {
+        (EngineBuilder none, _) = Build(engine => engine);
+        EngineBuilder stated = EngineBuilder.Build(new ProfileConfiguration());
+
+        Assert.Null(none.UserProfileType);
+        Assert.Equal(typeof(TestProfile), stated.UserProfileType);
     }
 
     /// <summary>A log handler fixes the widths of the fields it states, and without one no field is fixed.</summary>
@@ -628,7 +644,7 @@ public sealed class EngineBuilderTests
     private sealed class DependentHandlerConfiguration : IEngineConfiguration
     {
         public void Configure(IEngineBuilder engine)
-            => engine.Types<TestFrame, TestPacket, TestMessagePriority, TestLevel, TestAspect>()
+            => engine.Types<TestFrame, TestPacket, TestMessagePriority, TestLevel, TestAspect, NoProfile>()
                 .Priority(TestMessagePriority.Normal)
                 .Frames<DependentHandler>();
     }

@@ -1,13 +1,13 @@
 namespace BlueHeighliner.Comlink;
 
-/// <summary>Collects what is stated through <see cref="IEngineBuilder{TFrame, TPacket, TPriority, TLevel, TAspect}"/> and <see cref="IMessageLevelBuilder{TFrame, TPacket, TPriority, TLevel, TAspect}"/>, recording what is stated about each level and turning it into the engine's message levels.</summary>
+/// <summary>Collects what is stated through <see cref="IEngineBuilder{TFrame, TPacket, TPriority, TLevel, TAspect, TProfile}"/> and <see cref="IMessageLevelBuilder{TFrame, TPacket, TPriority, TLevel, TAspect, TProfile}"/>, recording what is stated about each level and turning it into the engine's message levels.</summary>
 internal sealed class MessageLevelBuilder<TLevel> where TLevel : struct, Enum
 {
     private readonly Dictionary<TLevel, (string? Label, string? Background, string? Foreground)> options = [];
     private readonly List<TLevel> order = [];
     private TLevel current;
 
-    /// <inheritdoc cref="IEngineBuilder{TFrame, TPacket, TPriority, TLevel, TAspect}.Level(TLevel)"/>
+    /// <inheritdoc cref="IEngineBuilder{TFrame, TPacket, TPriority, TLevel, TAspect, TProfile}.Level(TLevel)"/>
     public MessageLevelBuilder<TLevel> Level(TLevel level)
     {
         current = level;
@@ -18,7 +18,7 @@ internal sealed class MessageLevelBuilder<TLevel> where TLevel : struct, Enum
         return this;
     }
 
-    /// <inheritdoc cref="IMessageLevelBuilder{TFrame, TPacket, TPriority, TLevel, TAspect}.Label"/>
+    /// <inheritdoc cref="IMessageLevelBuilder{TFrame, TPacket, TPriority, TLevel, TAspect, TProfile}.Label"/>
     public MessageLevelBuilder<TLevel> Label(string label)
     {
         (_, string? background, string? foreground) = options.GetValueOrDefault(current);
@@ -26,7 +26,7 @@ internal sealed class MessageLevelBuilder<TLevel> where TLevel : struct, Enum
         return this;
     }
 
-    /// <inheritdoc cref="IMessageLevelBuilder{TFrame, TPacket, TPriority, TLevel, TAspect}.Background"/>
+    /// <inheritdoc cref="IMessageLevelBuilder{TFrame, TPacket, TPriority, TLevel, TAspect, TProfile}.Background"/>
     public MessageLevelBuilder<TLevel> Background(string background)
     {
         (string? label, _, string? foreground) = options.GetValueOrDefault(current);
@@ -34,7 +34,7 @@ internal sealed class MessageLevelBuilder<TLevel> where TLevel : struct, Enum
         return this;
     }
 
-    /// <inheritdoc cref="IMessageLevelBuilder{TFrame, TPacket, TPriority, TLevel, TAspect}.Foreground"/>
+    /// <inheritdoc cref="IMessageLevelBuilder{TFrame, TPacket, TPriority, TLevel, TAspect, TProfile}.Foreground"/>
     public MessageLevelBuilder<TLevel> Foreground(string foreground)
     {
         (string? label, string? background, _) = options.GetValueOrDefault(current);

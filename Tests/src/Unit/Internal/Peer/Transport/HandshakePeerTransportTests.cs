@@ -122,13 +122,11 @@ public sealed class HandshakePeerTransportTests
     {
         Mock<RawPacketEngineController> a = Controller("ALICE", "BOB");
         Mock<RawPacketEngineController> b = Controller("ALICE", "BOB");
-        a.Setup(c => c.GetUserData("BOB")).Returns(new Dictionary<string, string> { ["desk"] = "4" });
         (End endA, End endB) = Pair(a.Object, b.Object, aNames: ["ALICE"], bNames: ["BOB"]);
 
         PeerConnection connection = await endA.Transport.Connect(point);
 
         Assert.Equal("BOB", connection.User!.Name);
-        Assert.Equal("4", connection.User.Data["desk"]);
         await WaitUntil(() => endB.Connected.Count == 1);
         Assert.Equal("ALICE", endB.Connected[0].User!.Name);
         Assert.Same(connection, Assert.Single(endA.Connected));
@@ -255,19 +253,17 @@ public sealed class HandshakePeerTransportTests
         await Assert.ThrowsAsync<IOException>(() => endA.Transport.Request(connection, new byte[] { 1 }));
     }
 
-    /// <summary>The handlers decide the identity on both ends, ahead of the engine's own identification: the opener sends a message, the receiver answers and names the opener from it, and the opener names the receiver from the reply, data included.</summary>
+    /// <summary>The handlers decide the identity on both ends, ahead of the engine's own identification: the opener sends a message, the receiver answers and names the opener from it, and the opener names the receiver from the reply.</summary>
     [Fact]
     public async Task Handshake_IdentitiesComeFromTheHandlers()
     {
         Mock<RawPacketEngineController> a = WithHandler(Introduce("ALICE"));
-        a.Setup(c => c.GetUserData("BOB")).Returns(new Dictionary<string, string> { ["station"] = "4" });
         Mock<RawPacketEngineController> b = WithHandler(Introduce("BOB"));
         (End endA, End endB) = Pair(a.Object, b.Object);
 
         PeerConnection outbound = await endA.Transport.Connect(point);
 
         Assert.Equal("BOB", outbound.User!.Name);
-        Assert.Equal("4", outbound.User.Data["station"]);
         await WaitUntil(() => endB.Connected.Count == 1);
         Assert.Equal("ALICE", endB.Connected[0].User!.Name);
     }
@@ -319,13 +315,8 @@ public sealed class HandshakePeerTransportTests
     [Fact]
     public async Task Handshake_DataSentImmediately_IsHeldUntilTheReceiverIsEstablished()
     {
-        Mock<RawPacketEngineController> b = WithHandler(Introduce("BOB"));
-        b.Setup(c => c.GetUserData("ALICE")).Returns(() =>
-        {
-            Thread.Sleep(100);
-            return new Dictionary<string, string>();
-        });
-        (End endA, End endB) = Pair(WithHandler(Introduce("ALICE")).Object, b.Object);
+        (End endA, End endB) = Pair(WithHandler(Introduce("ALICE")).Object, WithHandler(Introduce("BOB")).Object);
+        endB.Transport.Connected.Listen(_ => Thread.Sleep(100));
 
         PeerConnection outbound = await endA.Transport.Connect(point);
         await endA.Transport.Request(outbound, new byte[] { 1 });

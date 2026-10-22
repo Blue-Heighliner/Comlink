@@ -3,9 +3,6 @@ namespace BlueHeighliner.Comlink;
 /// <summary>What the engine lets the host's frame handler do, with frames as plain objects since the engine does not know the host's frame type at compile time. A <see cref="EngineFrameHandler{TFrame, TPriority, TLevel, TAspect}"/> presents it to the handler with the frame type.</summary>
 internal interface INetworkEnvironment
 {
-    /// <summary>Returns everything known about <paramref name="userName"/>: the user the network configuration lists, or just the name for anyone else, such as an external system.</summary>
-    /// <param name="userName">The user's name.</param>
-    UserInfo GetUser(string userName);
 
     /// <summary>Gets the users that <paramref name="targets"/> stand for: each group is replaced by its members and every other target is taken to be a user, leaving out a user whose own message level ranks below <paramref name="minimumLevel"/>.</summary>
     /// <param name="minimumLevel">The lowest message level a user may run at to be included, or <see langword="null"/> for every user.</param>
@@ -74,7 +71,7 @@ internal interface INetworkEnvironment
 internal sealed class NetworkEnvironment(
     IServiceProvider services,
     IEngineController engineController,
-    IUserCatalog users,
+    IUserDirectory users,
     IEntryService entryService,
     IMessageEvents events,
     IMessageStorageService storage,
@@ -83,9 +80,6 @@ internal sealed class NetworkEnvironment(
     ILoggerFactory loggerFactory) : INetworkEnvironment
 {
     private readonly MicrosoftLogger logger = loggerFactory.CreateLogger(LogCategories.App);
-
-    /// <inheritdoc />
-    public UserInfo GetUser(string userName) => users.Users.GetValueOrDefault(userName) ?? new() { Name = userName };
 
     /// <inheritdoc />
     public IReadOnlySet<string> GetDestinations(Enum? minimumLevel, IEnumerable<string> targets, out IReadOnlySet<string> excluded)

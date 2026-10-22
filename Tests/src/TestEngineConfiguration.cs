@@ -14,7 +14,7 @@ public sealed class TestEngineConfiguration(bool packets = false, Action<TestFra
     /// <param name="engine">The builder to configure.</param>
     public TestEngineBuilder Apply(IEngineBuilder engine)
     {
-        TestEngineBuilder typed = engine.Types<TestFrame, TestPacket, TestMessagePriority, TestLevel, TestAspect>();
+        TestEngineBuilder typed = engine.Types<TestFrame, TestPacket, TestMessagePriority, TestLevel, TestAspect, NoProfile>();
         foreach (TestMessagePriority priority in Enum.GetValues<TestMessagePriority>())
         {
             typed.Priority(priority);

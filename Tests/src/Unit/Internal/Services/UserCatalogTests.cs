@@ -1,74 +1,26 @@
 namespace BlueHeighliner.Comlink.Tests.Unit.Internal.Services;
 
-/// <summary>Unit tests for <see cref="UserCatalog"/>.</summary>
+/// <summary>Unit tests for <see cref="UserCatalog{TProfile}"/>.</summary>
 public sealed class UserCatalogTests
 {
-    private readonly FakePeerService peers = new();
-    private readonly Mock<IUserService> users = new();
+    private static UserInfo<object> Alice() => new() { Name = "ALICE", Groups = ["OPS"], Profile = new TestProfile("4B", 2) };
 
-    private UserCatalog Build()
-    {
-        NetworkConfig network = new()
-        {
-            Users = new Dictionary<string, NetworkUserConfig>
-            {
-                ["SERVER2"] = new() { Role = "Server", Children = [new NetworkLinkConfig { User = "C1" }] },
-                ["C1"] = new() { Role = "Client" },
-                ["C2"] = new() { Role = "Client" }
-            },
-            UserGroups = new Dictionary<string, List<string>> { ["INNER"] = ["C1"], ["OUTER"] = ["INNER", "C2"] }
-        };
-        ServiceCollection services = new();
-        services.AddSingleton<IPeerService>(peers);
-        return new UserCatalog(services.BuildServiceProvider(), new TestEngineController(network), users.Object);
-    }
-
-    /// <summary>Each user the catalog lists carries everything known about them, such as their role, and groups are not users.</summary>
+    /// <summary>The users the directory knows reach the host typed by its profile type, current and connected ones included, and a profile of another type is none.</summary>
     [Fact]
-    public void Users_CarryWhatIsKnownAboutEachUser_AndLeaveOutGroups()
+    public void Users_AreTypedByTheHostsProfile()
     {
-        UserCatalog catalog = Build();
+        Mock<IUserDirectory> directory = new();
+        IUserInfo bob = new UserInfo<object> { Name = "BOB", Profile = "not a TestProfile" };
+        directory.SetupGet(d => d.CurrentUser).Returns(Alice());
+        directory.SetupGet(d => d.Users).Returns(new Dictionary<string, IUserInfo> { ["ALICE"] = Alice(), ["BOB"] = bob });
+        directory.SetupGet(d => d.ConnectedUsers).Returns(new Dictionary<string, IUserInfo> { ["ALICE"] = Alice() });
+        directory.SetupGet(d => d.Groups).Returns(new Dictionary<string, GroupInfo> { ["OPS"] = new() { Id = "OPS", Members = ["ALICE"] } });
+        UserCatalog<TestProfile> catalog = new(directory.Object);
 
-        Assert.Equal(["C1", "C2", "SERVER2"], catalog.Users.Keys.Order());
-        Assert.Equal(UserRole.Server, catalog.Users["SERVER2"].Role);
-        Assert.Equal(["C1"], catalog.Users["server2"].Children.Select(link => link.User));
-    }
-
-    /// <summary>Only the users with a live connection are connected, and the answer follows the connections as they come and go.</summary>
-    [Fact]
-    public void ConnectedUsers_AreTheOnesWithALiveConnection_AtTheMomentOfAsking()
-    {
-        UserCatalog catalog = Build();
-        Assert.Empty(catalog.ConnectedUsers);
-
-        peers.Connected.Add("C1");
-
-        Assert.Equal("C1", Assert.Single(catalog.ConnectedUsers).Key);
-        Assert.Equal(UserRole.Client, catalog.ConnectedUsers["c1"].Role);
-    }
-
-    /// <summary>Each group is listed by id with its members expanded to users, groups within it included, and a user lists the groups it is directly in.</summary>
-    [Fact]
-    public void Groups_ListEachGroupWithItsExpandedMembers()
-    {
-        UserCatalog catalog = Build();
-
-        Assert.Equal(["INNER", "OUTER"], catalog.Groups.Keys.Order());
-        Assert.Equal("OUTER", catalog.Groups["outer"].Id);
-        Assert.Equal(["C1", "C2"], catalog.Groups["OUTER"].Members.Order());
-        Assert.Equal(["C1"], catalog.Groups["INNER"].Members);
-        Assert.Equal(["INNER"], catalog.Users["C1"].Groups);
-    }
-
-    /// <summary>The current user is whoever the user service says, and without one the catalog says so instead of returning nothing.</summary>
-    [Fact]
-    public void CurrentUser_IsTheUserServicesUser_AndThrowsWithoutOne()
-    {
-        UserCatalog catalog = Build();
-        users.Setup(u => u.GetCurrentUserInfo()).Returns(new UserInfo { Name = "ME" });
-        Assert.Equal("ME", catalog.CurrentUser.Name);
-
-        users.Setup(u => u.GetCurrentUserInfo()).Returns((UserInfo?)null);
-        Assert.Throws<InvalidOperationException>(() => catalog.CurrentUser);
+        Assert.Equal(new TestProfile("4B", 2), catalog.CurrentUser.Profile);
+        Assert.Equal(new TestProfile("4B", 2), catalog.Users["alice"].Profile);
+        Assert.Null(catalog.Users["BOB"].Profile);
+        Assert.Equal("ALICE", Assert.Single(catalog.ConnectedUsers).Value.Name);
+        Assert.Equal(["ALICE"], catalog.Groups["OPS"].Members);
     }
 }

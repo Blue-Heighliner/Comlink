@@ -460,7 +460,7 @@ internal sealed partial class MainViewModel : ObservableObject, IMainViewModel
                 return;
             }
 
-            UserInfo userInfo = await connection.GetUserInfo() ?? throw new InvalidOperationException("The node has no current user");
+            IUserInfo userInfo = await connection.GetUserInfo() ?? throw new InvalidOperationException("The node has no current user");
 
             db.Initialize();
             await ApplyUserInfo(userInfo);
@@ -522,7 +522,7 @@ internal sealed partial class MainViewModel : ObservableObject, IMainViewModel
         IsErrorScreenVisible = true;
     }
 
-    private Task ApplyUserInfo(UserInfo info)
+    private Task ApplyUserInfo(IUserInfo info)
     {
         UserName = info.Name;
         ApplyRole();

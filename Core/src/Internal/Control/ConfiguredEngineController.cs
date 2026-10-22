@@ -178,8 +178,6 @@ internal sealed class ConfiguredEngineController : IEngineController
     public IReadOnlyList<ConnectionPoint> ParentPoints => fallback.ParentPoints;
     /// <inheritdoc />
     public IReadOnlyDictionary<string, ServerUserConfig> Servers => fallback.Servers;
-    /// <inheritdoc />
-    public IReadOnlyDictionary<string, string> GetUserData(string userName) => fallback.GetUserData(userName);
 
     /// <inheritdoc />
     public int PeerPort => fallback.PeerPort;
@@ -299,7 +297,7 @@ internal sealed class ConfiguredEngineController : IEngineController
     public IReadOnlyList<AutoForwarderDefinition> AutoForwarders => fallback.AutoForwarders;
 
     /// <inheritdoc />
-    public UserInfo GetUserInfo(string userName) => fallback.GetUserInfo(userName);
+    public IUserInfo GetUserInfo(string userName) => fallback.GetUserInfo(userName);
     /// <inheritdoc />
     public IConnectionInfo WithLocalUser(IConnectionInfo connection) => connection is ConnectionInfo info ? info with { LocalUser = currentUserProvider.UserName } : connection;
 }

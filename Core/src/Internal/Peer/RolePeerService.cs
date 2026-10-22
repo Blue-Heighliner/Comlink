@@ -15,7 +15,7 @@ internal interface IRolePeerService : IPeerService
 
 /// <summary>
 /// The <see cref="IPeerService"/> the rest of the engine depends on. Which implementation does the work is decided by
-/// <see cref="IEngineController.Role"/>, which comes from the current user's <see cref="UserInfo"/>; this therefore creates the
+/// <see cref="IEngineController.Role"/>, which comes from the current user's <see cref="IUserInfo"/>; this therefore creates the
 /// <see cref="ClientPeerService"/> or <see cref="ServerRoutingService"/> when <see cref="Start"/> runs, and forwards its events.
 /// Until then no user is connected and nothing can be sent.
 /// </summary>

@@ -5,7 +5,7 @@ public sealed class MainViewModelTests
 {
     private static readonly ILoggerFactory noLogger = LoggerFactory.Create(_ => { });
 
-    private static UserInfo MakeUserInfo(string name = "ALPHA") => new()
+    private static UserInfo<object> MakeUserInfo(string name = "ALPHA") => new()
     {
         Name = name
     };
@@ -94,7 +94,7 @@ public sealed class MainViewModelTests
     {
         Setup s = new();
         s.EngineController.SetupGet(e => e.Role).Returns(UserRole.Server);
-        s.EngineController.Setup(e => e.GetUserInfo("ALICE")).Returns(new UserInfo { Name = "ALICE", Role = UserRole.Client });
+        s.EngineController.Setup(e => e.GetUserInfo("ALICE")).Returns(new UserInfo<object> { Name = "ALICE", Role = UserRole.Client });
         s.EngineController.SetupGet(e => e.MessageLevels).Returns([]);
         s.EngineController.SetupGet(e => e.AutoForwarders).Returns([]);
         s.EngineController.Setup(e => e.GetUserMessageLevel("ALICE")).Returns(string.Empty);
@@ -115,7 +115,7 @@ public sealed class MainViewModelTests
     public async Task NetworkReloaded_WithAnotherUser_OpensTheirDatabaseAndFolders()
     {
         Setup s = new();
-        s.EngineController.Setup(e => e.GetUserInfo("BOB")).Returns(new UserInfo { Name = "BOB", Role = UserRole.Client });
+        s.EngineController.Setup(e => e.GetUserInfo("BOB")).Returns(new UserInfo<object> { Name = "BOB", Role = UserRole.Client });
         s.EngineController.SetupGet(e => e.MessageLevels).Returns([]);
         s.EngineController.SetupGet(e => e.AutoForwarders).Returns([]);
         s.EngineController.Setup(e => e.GetUserMessageLevel("BOB")).Returns(string.Empty);
@@ -157,7 +157,7 @@ public sealed class MainViewModelTests
     public async Task NetworkReloaded_AfterTheProblemIsFixed_LeavesTheErrorScreen()
     {
         Setup s = new();
-        s.EngineController.Setup(e => e.GetUserInfo("ALICE")).Returns(new UserInfo { Name = "ALICE", Role = UserRole.Client });
+        s.EngineController.Setup(e => e.GetUserInfo("ALICE")).Returns(new UserInfo<object> { Name = "ALICE", Role = UserRole.Client });
         s.EngineController.SetupGet(e => e.MessageLevels).Returns([]);
         s.EngineController.SetupGet(e => e.AutoForwarders).Returns([]);
         s.EngineController.Setup(e => e.GetUserMessageLevel("ALICE")).Returns(string.Empty);
@@ -361,7 +361,7 @@ public sealed class MainViewModelTests
     {
         Setup s = new();
         s.Connection.Setup(c => c.Connect(It.IsAny<CancellationToken>())).Returns(Task.CompletedTask);
-        s.Connection.Setup(c => c.GetUserInfo(It.IsAny<CancellationToken>())).ReturnsAsync((UserInfo?)null);
+        s.Connection.Setup(c => c.GetUserInfo(It.IsAny<CancellationToken>())).ReturnsAsync((UserInfo<object>?)null);
         MainViewModel vm = s.BuildVm();
 
         await vm.Initialize();
