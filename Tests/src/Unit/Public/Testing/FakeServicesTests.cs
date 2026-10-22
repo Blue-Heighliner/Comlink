@@ -151,4 +151,24 @@ public sealed class FakeServicesTests
         Assert.Equal(8, first.Memory.Length);
         Assert.Equal(0, second.Memory.Span[0]);
     }
+
+    /// <summary>The data store fake keeps what is saved by identifier whatever the case, hands the same instance back, overwrites, and refuses what the engine's refuses.</summary>
+    [Fact]
+    public async Task FakeDataStore_KeepsWhatIsSaved_AndRefusesWhatTheEnginesRefuses()
+    {
+        FakeDataStore store = new();
+        TestProfile first = new("4B", 1);
+        TestProfile second = new("5C", 2);
+
+        Assert.Null(await store.Load<TestProfile>("profile"));
+        await store.Save("Profile", first);
+        Assert.Same(first, await store.Load<TestProfile>("PROFILE"));
+        await store.Save("profile", second);
+
+        Assert.Same(second, await store.Load<TestProfile>("profile"));
+        Assert.Same(second, Assert.Single(store.Items).Value);
+        await Assert.ThrowsAsync<InvalidDataException>(() => store.Load<FakeLogger>("profile"));
+        await Assert.ThrowsAsync<ArgumentException>(() => store.Save(" ", first));
+        await Assert.ThrowsAsync<ArgumentException>(() => store.Load<TestProfile>(""));
+    }
 }

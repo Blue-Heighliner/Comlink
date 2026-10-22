@@ -23,6 +23,20 @@ public sealed class EngineExtensionsTests
         Assert.Same(provider.GetRequiredService<IConventionService>(), provider.GetRequiredService<IConventionService>());
     }
 
+    /// <summary>The engine's own scan finds its data store service: IDataStore resolves to the class named for it, built from the engine's controller.</summary>
+    [Fact]
+    public void ConventionSingletons_ResolveTheEnginesDataStore()
+    {
+        ServiceCollection services = new();
+        services.AddSingleton(Mock.Of<IEngineController>());
+        services.AddHostConventionSingletons([typeof(DataStore).Assembly]);
+
+        IServiceProvider provider = services.BuildServiceProvider();
+
+        Assert.IsType<DataStore>(provider.GetRequiredService<IDataStore>());
+        Assert.Same(provider.GetRequiredService<IDataStore>(), provider.GetRequiredService<IDataStore>());
+    }
+
     /// <summary>A registration the host made by hand wins over the convention, whether it was added before the scan or after it, and whether it was added or only tried.</summary>
     [Theory]
     [InlineData("before-add")]
