@@ -84,7 +84,7 @@ jobs:
           cache: true
           cache-dependency-path: "**/packages.lock.json"
 
-      # Core.csproj and Testing.csproj carry no <Version> of their own - the version always comes from the "version" input to
+      # Core.csproj carries no <Version> of its own - the version always comes from the "version" input to
       # this workflow, and this step fails the run rather than falling back to any default if it's missing
       # or malformed. The matching GitHub Release/tag is expected to already exist - Scripts/Publish.cs
       # creates it locally (as an Admin, since a tag ruleset blocks GITHUB_TOKEN from creating one here).
@@ -105,13 +105,12 @@ jobs:
           echo "override=-p:Version=$VERSION" >> "$GITHUB_OUTPUT"
 
       - name: Pack
-        # GeneratePackageOnBuild (Core/Core.csproj and Testing/Testing.csproj) is only meant to fire from `dotnet build`;
+        # GeneratePackageOnBuild (Core/Core.csproj) is only meant to fire from `dotnet build`;
         # combined with an explicit `dotnet pack` invocation it conflicts with `pack`'s own
         # Build-then-Pack target ordering and the build never runs (NU5026: DLL not found).
         # Disabling it here lets `dotnet pack`'s own wiring build first as normal.
         run: |
           dotnet pack Core/Core.csproj --configuration Release --output nupkgs -p:GeneratePackageOnBuild=false -p:RestoreLockedMode=true ${{ steps.version.outputs.override }}
-          dotnet pack Testing/Testing.csproj --configuration Release --output nupkgs -p:GeneratePackageOnBuild=false -p:RestoreLockedMode=true ${{ steps.version.outputs.override }}
 
       - name: Push to GitHub Packages
         run: >
@@ -126,31 +125,17 @@ jobs:
       # -> Add policy) naming this repo and this workflow file; assumed already done by the time this
       # job runs. NUGET_USER is just the nuget.org profile name of a member of the policy-owning
       # account/org - not a secret, but kept as one here for convenience.
-      # The key is single-use, so each package gets its own login and push.
-      - name: NuGet.org login (OIDC) for Core
-        id: nuget-login-core
+      - name: NuGet.org login (OIDC)
+        id: nuget-login
         uses: NuGet/login@v1
         with:
           user: ${{ secrets.NUGET_USER }}
 
-      - name: Push Core to NuGet.org
+      - name: Push to NuGet.org
         run: >
-          dotnet nuget push "nupkgs/BlueHeighliner.Comlink.${{ steps.version.outputs.version }}.nupkg"
+          dotnet nuget push "nupkgs/*.nupkg"
           --source "https://api.nuget.org/v3/index.json"
-          --api-key ${{ steps.nuget-login-core.outputs.NUGET_API_KEY }}
-          --skip-duplicate
-
-      - name: NuGet.org login (OIDC) for Testing
-        id: nuget-login-testing
-        uses: NuGet/login@v1
-        with:
-          user: ${{ secrets.NUGET_USER }}
-
-      - name: Push Testing to NuGet.org
-        run: >
-          dotnet nuget push "nupkgs/BlueHeighliner.Comlink.Testing.${{ steps.version.outputs.version }}.nupkg"
-          --source "https://api.nuget.org/v3/index.json"
-          --api-key ${{ steps.nuget-login-testing.outputs.NUGET_API_KEY }}
+          --api-key ${{ steps.nuget-login.outputs.NUGET_API_KEY }}
           --skip-duplicate
 
       # No .snupkg: Core.csproj deliberately omits IncludeSymbols/SymbolPackageFormat since its debug

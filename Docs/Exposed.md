@@ -23,33 +23,31 @@ Plain types, used directly.
 - `PooledBufferWriter` - an `IBufferWriter<byte>` over a pooled array, for a serializer to write into.
 - `LogCategories` - the categories the engine logs under and which of them are written by default, for use with `ILogger`.
 
-## Test mocks
+## Test fakes
 
-The `BlueHeighliner.Comlink.Testing` package (the `Testing` project, in the `BlueHeighliner.Comlink.Testing` namespace) has a mock of every context the engine hands to a host's handlers and of every service above, so custom handlers and components can be unit tested without the engine. Each is a Moq `Mock<T>` of the context's interface (Moq 4.20.72) with the members set up from what it is constructed with, which can be changed afterwards, and with the actions a handler takes answered sensibly, so a test hands the mock's `Object` to the handler and verifies what the handler did.
+The `BlueHeighliner.Comlink` package also has, in the `BlueHeighliner.Comlink.Testing` namespace, a fake of every context the engine hands to a host's handlers and of every service above, so custom handlers and components can be unit tested without the engine and without any mocking library. Each is a plain class implementing the interface, so a test hands the fake itself to the code under test. A fake gets what it answers from its constructor and settable properties, accepts what the code does with it, and records that in lists a test asserts on.
 
-- `MockDeleteContext` for `IDeleteContext`, handed to `IDeleteHandler.CanDelete`.
-- `MockFramePacketCreateContext<TFrame>` for `IFramePacketCreateContext<TFrame>`, handed to `IPacketHandler.CreateFramePacket`.
-- `MockDraftBlockContext<,,>` for `IDraftBlockContext<,,>`, handed to `IDraftHandler.IsBlocked`, and `MockDraftContext<,,>` for `IDraftContext<,,>`, handed to `IsAlert` and `GetHeader`.
-- `MockNetworkConnectedContext`, `MockNetworkDisconnectedContext`, `MockNetworkReceivedContext<TFrame>`, `MockNetworkSentContext<,,>`, `MockNetworkReadContext<,,>` and `MockNetworkRetrievalContext`, for the contexts of the six methods of `IFrameHandler`.
-- `MockFrameHandshakeContext<TFrame>` and `MockPacketHandshakeContext<TPacket>`, for the handshake contexts: `Send` reports that the other node accepted what was sent, and `Connected` and `Disconnect` finish at once.
-- `MockImportFormatContext<,>` for `IImportFormatContext<,>`, handed to a custom import format's reader: every `Add` finishes at once.
+- `FakeDeleteContext` for `IDeleteContext`, handed to `IDeleteHandler.CanDelete`.
+- `FakeFramePacketCreateContext<TFrame>` for `IFramePacketCreateContext<TFrame>`, handed to `IPacketHandler.CreateFramePacket`.
+- `FakeDraftBlockContext<,,>` for `IDraftBlockContext<,,>`, handed to `IDraftHandler.IsBlocked`, and `FakeDraftContext<,,>` for `IDraftContext<,,>`, handed to `IsAlert` and `GetHeader`.
+- `FakeNetworkConnectedContext`, `FakeNetworkDisconnectedContext`, `FakeNetworkReceivedContext<TFrame>`, `FakeNetworkSentContext<,,>`, `FakeNetworkReadContext<,,>` and `FakeNetworkRetrievalContext`, for the contexts of the six methods of `IFrameHandler`.
+- `FakeFrameHandshakeContext<TFrame>` and `FakePacketHandshakeContext<TPacket>`, for the handshake contexts: what a handler sends is recorded in `Sent` and accepted (`SendResult`), `Connected` and `Disconnect` are recorded and finish at once.
+- `FakeImportFormatContext<,>` for `IImportFormatContext<,>`, handed to a custom import format's reader: every addition is recorded in `Messages`, `Drafts`, `Notes` and `StagedSends`.
 
 Services:
 
-- `MockUserCatalog` for `IUserCatalog`: the users, groups and connections it is given, settable afterwards.
-- `MockNetwork<,,,>` for `INetwork<,,,>`: every send is accepted (`SendResult`) and every other operation finishes at once, so a test verifies what a handler did; `StoredMessages` and `AutoForwardTargets` set what it finds, and `GetDestinations` answers the distinct targets with no one left out.
-- `MockServiceConnection<,,>` for `IServiceConnection<,,>`: connects at once, answers `UserInfo`, `UserNames` and `ConnectedUsers`, accepts sends and mark read, and raises the engine's events with `RaiseMessageReceived` and `RaiseDeliveryStatusChanged`.
-- `MockLogger` for `ILogger`: records every entry as a `MockLogEntry` in `Entries`.
-- `MockDebugMode` for `IDebugMode` and `MockDataPool` for `IDataPool`: the former says what it is told, the latter rents a new array of the size asked each time.
-
-A test hands a mock's `Object` to the code under test and verifies what it did.
+- `FakeUserCatalog` for `IUserCatalog`: the users, groups and connections it is given, settable afterwards.
+- `FakeNetwork<,,,>` for `INetwork<,,,>`: every send is accepted (`SendResult`) and every other operation finishes at once, each recorded in a list of its own (`Sent`, `SentToInterfaces`, `SentStatuses` and so on); `FoundMessages` and `AutoForwardTargets` set what it finds, and `GetDestinations` answers the distinct targets with no one left out.
+- `FakeServiceConnection<,,>` for `IServiceConnection<,,>`: connects at once, answers `UserInfo`, `UserNames` and `ConnectedUsers`, accepts and records sends and mark read, and raises the engine's events with `RaiseMessageReceived` and `RaiseDeliveryStatusChanged`.
+- `FakeLogger` for `ILogger`: records every entry as a `FakeLogEntry` in `Entries`, and refuses an entry with no identifier as the engine's does.
+- `FakeDebugMode` for `IDebugMode` and `FakeDataPool` for `IDataPool`: the former says what it is told, the latter rents a new array of the size asked each time.
 
 ```csharp
-MockNetworkReceivedContext<MyFrame> context = new(new MyFrame { Body = "hi" }, new UserInfo { Name = "ALICE" });
-MockNetwork<MyFrame, MyPriority, MyLevel, MyAspect> network = new();
-MyFrameHandler handler = new(new MockUserCatalog(new UserInfo { Name = "ME" }).Object, network.Object);
+FakeNetworkReceivedContext<MyFrame> context = new(new MyFrame { Body = "hi" }, new UserInfo { Name = "ALICE" });
+FakeNetwork<MyFrame, MyPriority, MyLevel, MyAspect> network = new();
+MyFrameHandler handler = new(new FakeUserCatalog(new UserInfo { Name = "ME" }), network);
 
-await handler.OnReceived(context.Object);
+await handler.OnReceived(context);
 
-network.Verify(service => service.ReceiveMessage(It.IsAny<Message<MyPriority, MyLevel, MyAspect>>()), Times.Once);
+Assert.Single(network.Sent);
 ```

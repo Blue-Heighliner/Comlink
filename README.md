@@ -13,11 +13,7 @@ A messaging engine built on .NET 10, with a built-in Avalonia desktop GUI. Nodes
 dotnet add package BlueHeighliner.Comlink
 ```
 
-To unit test custom handlers without running the engine, add the mocks of the contexts the engine hands them and of the services it offers (`BlueHeighliner.Comlink.Testing`, built on Moq):
-
-```sh
-dotnet add package BlueHeighliner.Comlink.Testing
-```
+The same package has fakes of the contexts the engine hands to handlers and of the services it offers (the `BlueHeighliner.Comlink.Testing` namespace), to unit test custom handlers without running the engine.
 
 ## Getting started
 
