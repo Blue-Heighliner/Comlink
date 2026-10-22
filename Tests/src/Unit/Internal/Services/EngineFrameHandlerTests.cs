@@ -28,7 +28,7 @@ public sealed class EngineFrameHandlerTests
 
     /// <summary>A message's destinations are handed to the handler without the users it cannot be sent to, who are marked failed first.</summary>
     [Fact]
-    public async Task OnSent_MarksUsersBelowTheMessageLevelFailed_AndLeavesThemOutOfTheDestinations()
+    public async Task OnSent_MarksUsersBelowTheLevelFailed_AndLeavesThemOutOfTheDestinations()
     {
         IReadOnlySet<string> excluded = new HashSet<string>(["CAROL"]);
         Mock<INetworkEnvironment> environment = new();
@@ -47,7 +47,7 @@ public sealed class EngineFrameHandlerTests
             Addresses = [new MessageAddress { UserName = "BOB", Type = AddressType.To }, new MessageAddress { UserName = "CAROL", Type = AddressType.Cc }],
             SentAt = DateTime.UtcNow,
             Priority = TestMessagePriority.Normal,
-            MessageLevel = TestLevel.Secret
+            Level = TestLevel.Secret
         };
 
         await adapter.OnSent(environment.Object, message);
@@ -75,7 +75,7 @@ public sealed class EngineFrameHandlerTests
             Addresses = [new MessageAddress { UserName = "BOB", Type = AddressType.To }],
             SentAt = DateTime.UtcNow,
             Priority = TestMessagePriority.Normal,
-            MessageLevel = TestLevel.Secret
+            Level = TestLevel.Secret
         };
 
         await adapter.OnSent(environment.Object, message);

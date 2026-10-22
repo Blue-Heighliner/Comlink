@@ -13,18 +13,20 @@ internal interface IDraftFrameHandler
     bool EnableTags { get; }
     /// <summary>Gets what message tags may be.</summary>
     TagRules TagRules { get; }
+    /// <summary>Gets whether a message must have an aspect.</summary>
+    bool IsAspectRequired { get; }
     /// <summary>Gets the tag a new draft starts with, or <see langword="null"/> for none.</summary>
     string? DefaultTag { get; }
     /// <summary>Gets the priority a new draft starts at as the host's enum member, or <see langword="null"/> for the lowest the user may choose.</summary>
     Enum? DefaultPriority { get; }
-    /// <summary>Gets the message level a new draft starts at as the host's enum member, or <see langword="null"/> for the highest the user may use.</summary>
-    Enum? DefaultMessageLevel { get; }
-    /// <summary>Gets the message aspect a new draft starts with as the host's enum member, or <see langword="null"/> for none.</summary>
-    Enum? DefaultMessageAspect { get; }
+    /// <summary>Gets the level a new draft starts at as the host's enum member, or <see langword="null"/> for the highest the user may use.</summary>
+    Enum? DefaultLevel { get; }
+    /// <summary>Gets the aspect a new draft starts with as the host's enum member, or <see langword="null"/> for none.</summary>
+    Enum? DefaultAspect { get; }
     /// <summary>Returns why a draft may not have this combination, or <see langword="null"/> when it may.</summary>
     /// <param name="priority">The priority as the host's enum member.</param>
-    /// <param name="level">The message level as the host's enum member, or <see langword="null"/> for none.</param>
-    /// <param name="aspect">The message aspect as the host's enum member, or <see langword="null"/> for none.</param>
+    /// <param name="level">The level as the host's enum member, or <see langword="null"/> for none.</param>
+    /// <param name="aspect">The aspect as the host's enum member, or <see langword="null"/> for none.</param>
     /// <param name="tag">The tag, empty for none.</param>
     string? IsBlocked(Enum priority, Enum? level, Enum? aspect, string tag);
     /// <summary>Returns whether a message sent from the draft in <paramref name="content"/> is an alert.</summary>
@@ -39,7 +41,7 @@ internal interface IDraftFrameHandler
 }
 
 /// <summary>Adapts a typed <see cref="IDraftHandler{TPriority, TLevel, TAspect}"/> to <see cref="IDraftFrameHandler"/>.</summary>
-internal sealed class DraftFrameHandler<TPriority, TLevel, TAspect>(IDraftHandler<TPriority, TLevel, TAspect> handler, IReadOnlyList<MessageLevel> messageLevels, IReadOnlyList<MessageAspect> messageAspects) : IDraftFrameHandler where TPriority : struct, Enum where TLevel : struct, Enum where TAspect : struct, Enum
+internal sealed class DraftFrameHandler<TPriority, TLevel, TAspect>(IDraftHandler<TPriority, TLevel, TAspect> handler) : IDraftFrameHandler where TPriority : struct, Enum where TLevel : struct, Enum where TAspect : struct, Enum
 {
     /// <inheritdoc />
     public int? DefaultLineWidth => handler.DefaultLineWidth;
@@ -57,20 +59,23 @@ internal sealed class DraftFrameHandler<TPriority, TLevel, TAspect>(IDraftHandle
     public TagRules TagRules => new(handler.TagCase, Math.Max(0, handler.MinTagLength), handler.MaxTagLength, handler.AllowTagSymbols, handler.AllowTagNumbers, handler.AllowTagSpaces, handler.IsTagRequired);
 
     /// <inheritdoc />
+    public bool IsAspectRequired => handler.IsAspectRequired;
+
+    /// <inheritdoc />
     public string? DefaultTag => handler.DefaultTag;
 
     /// <inheritdoc />
     public Enum? DefaultPriority => handler.DefaultPriority is { } priority ? priority : null;
 
     /// <inheritdoc />
-    public Enum? DefaultMessageLevel => handler.DefaultMessageLevel is { } level ? level : null;
+    public Enum? DefaultLevel => handler.DefaultLevel is { } level ? level : null;
 
     /// <inheritdoc />
-    public Enum? DefaultMessageAspect => handler.DefaultMessageAspect is { } aspect ? aspect : null;
+    public Enum? DefaultAspect => handler.DefaultAspect is { } aspect ? aspect : null;
 
     /// <inheritdoc />
     public string? IsBlocked(Enum priority, Enum? level, Enum? aspect, string tag)
-        => handler.IsBlocked(new DraftBlockContext<TPriority, TLevel, TAspect> { Tag = tag, Priority = (TPriority)(object)priority, MessageLevel = level is null ? null : (TLevel)(object)level, MessageAspect = aspect is null ? null : (TAspect)(object)aspect });
+        => handler.IsBlocked(new DraftBlockContext<TPriority, TLevel, TAspect> { Tag = tag, Priority = (TPriority)(object)priority, Level = level is null ? null : (TLevel)(object)level, Aspect = aspect is null ? null : (TAspect)(object)aspect });
 
     /// <inheritdoc />
     public bool IsAlert(DraftContent content) => handler.IsAlert(ToState(content));
@@ -86,8 +91,8 @@ internal sealed class DraftFrameHandler<TPriority, TLevel, TAspect>(IDraftHandle
         {
             Tag = content.Tag,
             Priority = (TPriority)(object)content.Priority,
-            MessageLevel = string.IsNullOrEmpty(content.MessageLevel) ? null : messageLevels.FirstOrDefault(level => string.Equals(level.Name, content.MessageLevel, StringComparison.OrdinalIgnoreCase))?.Key is TLevel key ? key : null,
-            MessageAspect = string.IsNullOrEmpty(content.MessageAspect) ? null : messageAspects.FirstOrDefault(aspect => string.Equals(aspect.Name, content.MessageAspect, StringComparison.OrdinalIgnoreCase))?.Key is TAspect aspectKey ? aspectKey : null,
+            Level = content.Level is TLevel level ? level : null,
+            Aspect = content.Aspect is TAspect aspect ? aspect : null,
             Body = content.Body,
             Addresses = content.Addresses,
             LineWidth = content.LineWidth

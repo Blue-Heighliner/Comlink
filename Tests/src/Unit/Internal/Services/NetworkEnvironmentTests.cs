@@ -11,8 +11,8 @@ public sealed class NetworkEnvironmentTests
     public void IsAtLeast_ComparesTheUsersLevelWithTheGivenOne()
     {
         Mock<TestEngineController> controller = new() { CallBase = true };
-        controller.Setup(c => c.GetUserMessageLevel("ALICE")).Returns("SECRET");
-        controller.Setup(c => c.GetUserMessageLevel("BOB")).Returns("INTERNAL");
+        controller.Setup(c => c.GetUserLevel("ALICE")).Returns(TestLevel.Secret);
+        controller.Setup(c => c.GetUserLevel("BOB")).Returns(TestLevel.Internal);
         NetworkEnvironment environment = Build(controller);
 
         Assert.True(environment.IsAtLeast("ALICE", TestLevel.Secret));
@@ -45,13 +45,13 @@ public sealed class NetworkEnvironmentTests
         Assert.Empty(excluded);
     }
 
-    /// <summary>Users whose message level ranks below the minimum are left out and reported.</summary>
+    /// <summary>Users whose level ranks below the minimum are left out and reported.</summary>
     [Fact]
     public void GetDestinations_LeavesOutUsersBelowTheMinimumLevel_AndReportsThem()
     {
         Mock<TestEngineController> controller = new() { CallBase = true };
-        controller.Setup(c => c.GetUserMessageLevel("ALICE")).Returns("SECRET");
-        controller.Setup(c => c.GetUserMessageLevel("BOB")).Returns("INTERNAL");
+        controller.Setup(c => c.GetUserLevel("ALICE")).Returns(TestLevel.Secret);
+        controller.Setup(c => c.GetUserLevel("BOB")).Returns(TestLevel.Internal);
         NetworkEnvironment environment = BuildWithGroups(controller);
 
         IReadOnlySet<string> destinations = environment.GetDestinations(TestLevel.Secret, ["OPS"], out IReadOnlySet<string> excluded);

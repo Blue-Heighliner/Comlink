@@ -41,8 +41,8 @@ internal sealed class ExportService : IExportService
         IsAlert = entity.IsAlert,
         Priority = entity.Priority,
         Tag = entity.Tag,
-        MessageLevel = entity.MessageLevel,
-        MessageAspect = entity.MessageAspect,
+        Level = entity.Level,
+        Aspect = entity.Aspect,
         SentAt = entity.SentAt,
         CreatedAt = entity.CreatedAt,
         ModifiedAt = entity.ModifiedAt
@@ -251,8 +251,8 @@ internal sealed class ExportService : IExportService
         IsAlert = entity.Message.IsAlert,
         Priority = entity.Message.Priority,
         Tag = entity.Message.Tag,
-        MessageLevel = entity.Message.MessageLevel,
-        MessageAspect = entity.Message.MessageAspect,
+        Level = entity.Message.Level,
+        Aspect = entity.Message.Aspect,
         ReceivedAt = entity.ReceivedAt,
         ReadStatus = entity.ReadStatus,
         DeliveryStatuses = [.. entity.DeliveryStatuses.Select(d => new MessageDeliveryStatus { UserName = d.UserName, Status = d.Status, AddressedVia = d.AddressedVia })]

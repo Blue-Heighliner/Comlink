@@ -6,8 +6,8 @@ namespace BlueHeighliner.Comlink;
 /// </summary>
 /// <typeparam name="TFrame">The host's frame type.</typeparam>
 /// <typeparam name="TPriority">The enum the host stated for its priorities.</typeparam>
-/// <typeparam name="TLevel">The enum the host stated for its message levels.</typeparam>
-/// <typeparam name="TAspect">The enum the host stated for its message aspects.</typeparam>
+/// <typeparam name="TLevel">The enum the host stated for its levels.</typeparam>
+/// <typeparam name="TAspect">The enum the host stated for its aspects.</typeparam>
 public interface INetwork<TFrame, TPriority, TLevel, TAspect> where TFrame : class where TPriority : struct, Enum where TLevel : struct, Enum where TAspect : struct, Enum
 {
     /// <summary>
@@ -26,7 +26,7 @@ public interface INetwork<TFrame, TPriority, TLevel, TAspect> where TFrame : cla
     /// subject to the alarm handler's history limit. This is how a received frame becomes a message the user sees; the engine does it for nothing else.
     /// </summary>
     /// <param name="message">The message that was received.</param>
-    /// <exception cref="ArgumentException">The message's priority, message level or message aspect is not a configured one.</exception>
+    /// <exception cref="ArgumentException">The message's priority, level or aspect is not a configured one.</exception>
     Task ReceiveMessage(Message<TPriority, TLevel, TAspect> message);
 
     /// <summary>Changes <paramref name="userName"/>'s delivery status on the message the user sent with the identifier <paramref name="messageId"/>. A status that would move backward, such as <see cref="DestinationStatus.Sent"/> after <see cref="DestinationStatus.Received"/>, is ignored, and a destination the message did not list yet is added. Nothing happens for a message that is not stored.</summary>
@@ -70,15 +70,15 @@ public interface INetwork<TFrame, TPriority, TLevel, TAspect> where TFrame : cla
 
     /// <summary>
     /// Gets the users that <paramref name="targets"/> stand for: each target that is the name of a group is replaced by the users that belong to it, groups within it expanded, and every other target is taken to be a user.
-    /// A user whose own message level ranks below <paramref name="minimumLevel"/> is left out. 
+    /// A user whose own level ranks below <paramref name="minimumLevel"/> is left out. 
     /// </summary>
-    /// <param name="minimumLevel">The lowest message level a user may run at to be included, or <see langword="null"/> to include every user. Ignored when message levels are not in use.</param>
+    /// <param name="minimumLevel">The lowest level a user may run at to be included, or <see langword="null"/> to include every user. Ignored when levels are not in use.</param>
     /// <param name="excluded">The users that were left out for ranking below <paramref name="minimumLevel"/>, for the handler to report as failed.</param>
     /// <param name="targets">User and group names.</param>
-    /// <exception cref="ArgumentException"><paramref name="minimumLevel"/> is not one of the configured message levels.</exception>
+    /// <exception cref="ArgumentException"><paramref name="minimumLevel"/> is not one of the configured levels.</exception>
     IReadOnlySet<string> GetDestinations(TLevel? minimumLevel, out IReadOnlySet<string> excluded, params IEnumerable<string> targets);
 
-    /// <summary>Gets the users <paramref name="message"/> is for: the distinct user names of all its addresses that are not <see cref="AddressType.External"/>, with groups expanded and users whose message level ranks below the message's left out, as <see cref="GetDestinations(TLevel?, out IReadOnlySet{string}, IEnumerable{string})"/> does.</summary>
+    /// <summary>Gets the users <paramref name="message"/> is for: the distinct user names of all its addresses that are not <see cref="AddressType.External"/>, with groups expanded and users whose level ranks below the message's left out, as <see cref="GetDestinations(TLevel?, out IReadOnlySet{string}, IEnumerable{string})"/> does.</summary>
     /// <param name="message">The message.</param>
     /// <param name="excluded">The users that were left out for ranking below the message's level, for the handler to report as failed.</param>
     IReadOnlySet<string> GetDestinations(Message<TPriority, TLevel, TAspect> message, out IReadOnlySet<string> excluded);

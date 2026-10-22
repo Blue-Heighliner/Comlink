@@ -6,21 +6,21 @@
       "Msmt": { "Port": 50121 },
       "InterfacePort": 50120,
       "Children": [ "CLIENT1", "CLIENT2" ],
-      "MessageLevel": "RESTRICTED"
+      "Level": "RESTRICTED"
     },
     "CLIENT1": {
       "Role": "Client",
       "AutoForwarders": [ "Escalation" ],
       "InterfacePort": 50122,
       "Parent": "SERVER",
-      "MessageLevel": "INTERNAL"
+      "Level": "INTERNAL"
     },
     "CLIENT2": {
       "Role": "Client",
       "AutoForwarders": [ "Escalation" ],
       "InterfacePort": 50124,
       "Parent": "SERVER",
-      "MessageLevel": "INTERNAL"
+      "Level": "INTERNAL"
     }
   }
 }

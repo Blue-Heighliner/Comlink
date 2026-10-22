@@ -13,8 +13,8 @@ internal interface IPrintPolicy
 
 /// <summary>Presents a host's <see cref="IPrintHandler{TPriority, TLevel, TAspect}"/> as an <see cref="IPrintPolicy"/>.</summary>
 /// <typeparam name="TPriority">The enum the host stated for its priorities.</typeparam>
-/// <typeparam name="TLevel">The enum the host stated for its message levels.</typeparam>
-/// <typeparam name="TAspect">The enum the host stated for its message aspects.</typeparam>
+/// <typeparam name="TLevel">The enum the host stated for its levels.</typeparam>
+/// <typeparam name="TAspect">The enum the host stated for its aspects.</typeparam>
 /// <param name="handler">The host's handler.</param>
 internal sealed class PrintPolicy<TPriority, TLevel, TAspect>(IPrintHandler<TPriority, TLevel, TAspect> handler) : IPrintPolicy where TPriority : struct, Enum where TLevel : struct, Enum where TAspect : struct, Enum
 {

@@ -9,11 +9,11 @@ internal sealed record DraftContent
     /// <summary>Gets the priority level the draft is set to be sent at, a member of the host's priority enum.</summary>
     public required Enum Priority { get; init; }
 
-    /// <summary>Gets the name of the message level the draft is set to be sent at, or an empty string for none.</summary>
-    public required string MessageLevel { get; init; }
+    /// <summary>Gets the name of the level the draft is set to be sent at, or an empty string for none.</summary>
+    public required Enum? Level { get; init; }
 
-    /// <summary>Gets the name of the message aspect the draft is set to be sent with, or an empty string for none.</summary>
-    public string MessageAspect { get; init; } = string.Empty;
+    /// <summary>Gets the name of the aspect the draft is set to be sent with, or an empty string for none.</summary>
+    public Enum? Aspect { get; init; }
 
     /// <summary>Gets the draft's body text as it currently is.</summary>
     public required string Body { get; init; }

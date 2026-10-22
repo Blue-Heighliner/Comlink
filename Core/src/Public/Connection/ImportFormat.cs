@@ -6,7 +6,7 @@ namespace BlueHeighliner.Comlink;
 /// <see cref="IExportFormat"/>'s is. Unlike the built-in format, this is the reader's own file layout, not a zip archive of typed entries.
 /// </summary>
 /// <typeparam name="TPriority">The enum the host stated for its priorities.</typeparam>
-/// <typeparam name="TLevel">The enum the host stated for its message levels.</typeparam>
+/// <typeparam name="TLevel">The enum the host stated for its levels.</typeparam>
 public interface IImportFormat<TPriority, TLevel> where TPriority : struct, Enum where TLevel : struct, Enum
 {
     /// <summary>Gets the display name shown for this format in the import screen. A later format of the same name (case-insensitive) replaces an earlier one in place.</summary>

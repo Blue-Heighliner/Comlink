@@ -3,7 +3,7 @@ namespace BlueHeighliner.Comlink.Tests.Unit.Internal.Services;
 /// <summary>Unit tests for <see cref="ServiceConnection{TPriority, TLevel, TAspect}"/>.</summary>
 public sealed class ServiceConnectionTests
 {
-    private static Message MakeMessage() => new() { Id = "M1", FromUser = "ALICE", Body = "Hi", Addresses = [], SentAt = DateTime.UtcNow, Priority = TestMessagePriority.High, MessageLevel = TestLevel.Secret };
+    private static Message MakeMessage() => new() { Id = "M1", FromUser = "ALICE", Body = "Hi", Addresses = [], SentAt = DateTime.UtcNow, Priority = TestMessagePriority.High, Level = TestLevel.Secret };
 
     /// <summary>A message the engine received reaches the host typed by its own enums.</summary>
     [Fact]
@@ -17,7 +17,7 @@ public sealed class ServiceConnectionTests
         engine.Raise(e => e.MessageReceived += null!, MakeMessage());
 
         Assert.NotNull(seen);
-        Assert.Equal((TestMessagePriority.High, TestLevel.Secret, (TestAspect?)null), (seen.Priority, seen.MessageLevel, seen.MessageAspect));
+        Assert.Equal((TestMessagePriority.High, TestLevel.Secret, (TestAspect?)null), (seen.Priority, seen.Level, seen.Aspect));
     }
 
     /// <summary>The user's info reaches the host typed by its own profile type, and a node with no current user has none.</summary>
@@ -26,11 +26,11 @@ public sealed class ServiceConnectionTests
     {
         Mock<IEngineConnection> engine = new();
         engine.SetupSequence(e => e.GetUserInfo(It.IsAny<CancellationToken>()))
-            .ReturnsAsync(new UserInfo<object> { Name = "ALICE", Role = UserRole.Server, Profile = new TestProfile("4B", 2) })
+            .ReturnsAsync(new UserInformation { Name = "ALICE", Role = UserRole.Server, Profile = new TestProfile("4B", 2) })
             .ReturnsAsync((IUserInfo?)null);
         ServiceConnection<TestMessagePriority, TestLevel, TestAspect, TestProfile> connection = new(engine.Object);
 
-        UserInfo<TestProfile>? info = await connection.GetUserInfo();
+        UserInfo<TestLevel, TestProfile>? info = await connection.GetUserInfo();
 
         Assert.Equal(("ALICE", UserRole.Server, new TestProfile("4B", 2)), (info!.Name, info.Role, info.Profile));
         Assert.Null(await connection.GetUserInfo());

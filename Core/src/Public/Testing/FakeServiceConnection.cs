@@ -5,11 +5,11 @@ namespace BlueHeighliner.Comlink.Testing;
 /// mark read (recording them), and raises the engine's events when the test calls <see cref="RaiseMessageReceived"/> or <see cref="RaiseDeliveryStatusChanged"/>.
 /// </summary>
 /// <typeparam name="TPriority">The enum the host stated for its priorities.</typeparam>
-/// <typeparam name="TLevel">The enum the host stated for its message levels.</typeparam>
-/// <typeparam name="TAspect">The enum the host stated for its message aspects.</typeparam>
+/// <typeparam name="TLevel">The enum the host stated for its levels.</typeparam>
+/// <typeparam name="TAspect">The enum the host stated for its aspects.</typeparam>
 /// <typeparam name="TProfile">The record type the host stated for user profiles in its <c>Types</c> call, or <see cref="NoProfile"/>.</typeparam>
 /// <param name="userInfo">What <c>GetUserInfo</c> answers, or <see langword="null"/> for no user.</param>
-public sealed class FakeServiceConnection<TPriority, TLevel, TAspect, TProfile>(UserInfo<TProfile>? userInfo = null) : IServiceConnection<TPriority, TLevel, TAspect, TProfile> where TPriority : struct, Enum where TLevel : struct, Enum where TAspect : struct, Enum where TProfile : class
+public sealed class FakeServiceConnection<TPriority, TLevel, TAspect, TProfile>(UserInfo<TLevel, TProfile>? userInfo = null) : IServiceConnection<TPriority, TLevel, TAspect, TProfile> where TPriority : struct, Enum where TLevel : struct, Enum where TAspect : struct, Enum where TProfile : class
 {
     /// <inheritdoc />
     public event Func<Message<TPriority, TLevel, TAspect>, Task>? MessageReceived;
@@ -27,7 +27,7 @@ public sealed class FakeServiceConnection<TPriority, TLevel, TAspect, TProfile>(
     public List<string> MarkedRead { get; } = [];
 
     /// <summary>Gets or sets what <c>GetUserInfo</c> answers.</summary>
-    public UserInfo<TProfile>? UserInfo { get; set; } = userInfo;
+    public UserInfo<TLevel, TProfile>? UserInfo { get; set; } = userInfo;
 
     /// <summary>Gets or sets what <c>GetUserNames</c> answers. Defaults to none.</summary>
     public List<string> UserNames { get; set; } = [];
@@ -57,7 +57,7 @@ public sealed class FakeServiceConnection<TPriority, TLevel, TAspect, TProfile>(
     }
 
     /// <inheritdoc />
-    public Task<UserInfo<TProfile>?> GetUserInfo(CancellationToken cancellation = default) => Task.FromResult(UserInfo);
+    public Task<UserInfo<TLevel, TProfile>?> GetUserInfo(CancellationToken cancellation = default) => Task.FromResult(UserInfo);
 
     /// <inheritdoc />
     public Task<List<string>> GetUserNames(CancellationToken cancellation = default) => Task.FromResult(UserNames);
@@ -66,9 +66,9 @@ public sealed class FakeServiceConnection<TPriority, TLevel, TAspect, TProfile>(
     public Task<List<string>> GetConnectedUsers(CancellationToken cancellation = default) => Task.FromResult(ConnectedUsers);
 
     /// <inheritdoc />
-    public Task<SendMessageResult?> SendMessage(string body, List<AddressRequest> addresses, TPriority? priority = null, string tag = "", TLevel? messageLevel = null, TAspect? messageAspect = null, CancellationToken cancellation = default)
+    public Task<SendMessageResult?> SendMessage(string body, List<AddressRequest> addresses, TPriority? priority = null, string tag = "", TLevel? level = null, TAspect? aspect = null, CancellationToken cancellation = default)
     {
-        Sent.Add(new SentMessage(body, addresses, priority, tag, messageLevel, messageAspect));
+        Sent.Add(new SentMessage(body, addresses, priority, tag, level, aspect));
         return Task.FromResult(SendMessageResult);
     }
 
@@ -84,7 +84,7 @@ public sealed class FakeServiceConnection<TPriority, TLevel, TAspect, TProfile>(
     /// <param name="Addresses">The recipients.</param>
     /// <param name="Priority">The priority, or <see langword="null"/> for the default.</param>
     /// <param name="Tag">The tag, empty for none.</param>
-    /// <param name="MessageLevel">The message level, or <see langword="null"/> for the default.</param>
-    /// <param name="MessageAspect">The message aspect, or <see langword="null"/> for none.</param>
-    public sealed record SentMessage(string Body, List<AddressRequest> Addresses, TPriority? Priority, string Tag, TLevel? MessageLevel, TAspect? MessageAspect);
+    /// <param name="Level">The level, or <see langword="null"/> for the default.</param>
+    /// <param name="Aspect">The aspect, or <see langword="null"/> for none.</param>
+    public sealed record SentMessage(string Body, List<AddressRequest> Addresses, TPriority? Priority, string Tag, TLevel? Level, TAspect? Aspect);
 }

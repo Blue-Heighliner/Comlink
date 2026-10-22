@@ -7,7 +7,7 @@
       "InterfacePort": 50220,
       "Parent": "SERVER2",
       "Children": [ "CLIENT1" ],
-      "MessageLevel": "RESTRICTED"
+      "Level": "RESTRICTED"
     },
     "SERVER2": {
       "Role": "Server",
@@ -15,21 +15,21 @@
       "Msmt": { "Port": 50223 },
       "InterfacePort": 50222,
       "Children": [ "CLIENT2" ],
-      "MessageLevel": "RESTRICTED"
+      "Level": "RESTRICTED"
     },
     "CLIENT1": {
       "Role": "Client",
       "AutoForwarders": [ "Escalation" ],
       "InterfacePort": 50224,
       "Parent": "SERVER1",
-      "MessageLevel": "INTERNAL"
+      "Level": "INTERNAL"
     },
     "CLIENT2": {
       "Role": "Client",
       "AutoForwarders": [ "Escalation" ],
       "InterfacePort": 50226,
       "Parent": "SERVER2",
-      "MessageLevel": "INTERNAL"
+      "Level": "INTERNAL"
     }
   }
 }

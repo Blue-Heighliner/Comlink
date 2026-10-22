@@ -41,7 +41,7 @@ internal interface IImportSource
 
 /// <summary>Presents a host's <see cref="IImportFormat{TPriority, TLevel}"/> as an <see cref="IImportSource"/>.</summary>
 /// <typeparam name="TPriority">The enum the host stated for its priorities.</typeparam>
-/// <typeparam name="TLevel">The enum the host stated for its message levels.</typeparam>
+/// <typeparam name="TLevel">The enum the host stated for its levels.</typeparam>
 /// <param name="format">The host's format.</param>
 internal sealed class ImportSource<TPriority, TLevel>(IImportFormat<TPriority, TLevel> format) : IImportSource where TPriority : struct, Enum where TLevel : struct, Enum
 {
@@ -66,6 +66,6 @@ internal sealed class ImportSource<TPriority, TLevel>(IImportFormat<TPriority, T
         public Task AddNote(NoteExportData note) => context.AddNote(note);
 
         public void AddStagedSend(StagedSendData<TPriority, TLevel> send)
-            => context.AddStagedSend(new StagedSendData { Body = send.Body, Addresses = send.Addresses, Priority = send.Priority, Tag = send.Tag, MessageLevel = send.MessageLevel });
+            => context.AddStagedSend(new StagedSendData { Body = send.Body, Addresses = send.Addresses, Priority = send.Priority, Tag = send.Tag, Level = send.Level });
     }
 }

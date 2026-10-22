@@ -4,8 +4,8 @@ namespace BlueHeighliner.Comlink;
 /// Controls how drafts are composed: how wide a line may be, a header every message must start with, and which combinations of priority, level, aspect and tag are blocked. State one with <see cref="IEngineBuilder{TFrame, TPacket, TPriority, TLevel, TAspect, TProfile}.Drafts{THandler}"/>. Every member is optional.
 /// </summary>
 /// <typeparam name="TPriority">The enum whose members are the priority levels.</typeparam>
-/// <typeparam name="TLevel">The enum whose members are the message levels.</typeparam>
-/// <typeparam name="TAspect">The enum whose members are the message aspects, or <see cref="NoMessageAspect"/> for none.</typeparam>
+/// <typeparam name="TLevel">The enum whose members are the levels.</typeparam>
+/// <typeparam name="TAspect">The enum whose members are the aspects, or <see cref="NoAspect"/> for none.</typeparam>
 public interface IDraftHandler<TPriority, TLevel, TAspect> where TPriority : struct, Enum where TLevel : struct, Enum where TAspect : struct, Enum
 {
     /// <summary>
@@ -30,9 +30,15 @@ public interface IDraftHandler<TPriority, TLevel, TAspect> where TPriority : str
     bool IsTagRequired => false;
 
     /// <summary>
-    /// Says whether a draft may not have the combination of priority, message level, message aspect and tag in <paramref name="context"/>. The draft view asks it for every choice the user could make: a choice that would make a blocked
+    /// Gets whether a message must have an aspect: the draft view then offers no empty choice, so a draft always has one of the aspects (a new one starts at <see cref="DefaultAspect"/>, or at the first aspect that is not blocked), and a message
+    /// sent through <see cref="IServiceConnection{TPriority, TLevel, TAspect, TProfile}.SendMessage"/> without one is refused. Defaults to <see langword="false"/>. It needs aspects to choose from, so stating it without stating any aspect fails the engine at start.
+    /// </summary>
+    bool IsAspectRequired => false;
+
+    /// <summary>
+    /// Says whether a draft may not have the combination of priority, level, aspect and tag in <paramref name="context"/>. The draft view asks it for every choice the user could make: a choice that would make a blocked
     /// combination cannot be made, and when the user types a tag that would, the tag is refused and the user is told why, so a blocked combination is never entered and never sent. Defaults to <see langword="null"/>: nothing is blocked.
-    /// To tell who the current user is or who is connected, ask for the <see cref="IUserCatalog{TProfile}"/> through dependency injection.
+    /// To tell who the current user is or who is connected, ask for the <see cref="IUserCatalog{TLevel, TProfile}"/> through dependency injection.
     /// </summary>
     /// <param name="context">The combination.</param>
     /// <returns><see langword="null"/> if the combination is allowed, otherwise why it is blocked, in words the user reads; when empty the user is told only that the combination is not allowed.</returns>
@@ -58,11 +64,11 @@ public interface IDraftHandler<TPriority, TLevel, TAspect> where TPriority : str
     /// <summary>Gets the priority level a new draft starts at, or <see langword="null"/> (the default) for the lowest level the user may choose.</summary>
     TPriority? DefaultPriority => null;
 
-    /// <summary>Gets the message level a new draft starts at, or <see langword="null"/> (the default) for the highest level the user may use. A level above what the user may use is brought down to it.</summary>
-    TLevel? DefaultMessageLevel => null;
+    /// <summary>Gets the level a new draft starts at, or <see langword="null"/> (the default) for the highest level the user may use. A level above what the user may use is brought down to it.</summary>
+    TLevel? DefaultLevel => null;
 
-    /// <summary>Gets the message aspect a new draft starts with, or <see langword="null"/> (the default) for none.</summary>
-    TAspect? DefaultMessageAspect => null;
+    /// <summary>Gets the aspect a new draft starts with, or <see langword="null"/> (the default) for none.</summary>
+    TAspect? DefaultAspect => null;
 
     /// <summary>Gets the fewest characters a message tag may have once it is given. Defaults to <c>0</c>. Use <see cref="IsTagRequired"/> to require a tag at all.</summary>
     int MinTagLength => 0;
@@ -81,7 +87,7 @@ public interface IDraftHandler<TPriority, TLevel, TAspect> where TPriority : str
 
     /// <summary>
     /// Returns the header every message sent from the draft in <paramref name="context"/> must start with, or <see langword="null"/> (the default) for none. The engine asks again whenever one of the draft's aspects
-    /// (its tag, priority, message level, alert flag, recipients or line width) changes. The draft view shows a header above the body, where the user cannot edit it, and it is put in front of the body, followed by a line break, when the draft is sent.
+    /// (its tag, priority, level, alert flag, recipients or line width) changes. The draft view shows a header above the body, where the user cannot edit it, and it is put in front of the body, followed by a line break, when the draft is sent.
     /// It is shown wrapped to the line width like the body, but only shown so: no line break is added to it or to the body.
     /// </summary>
     /// <param name="context">The draft as it currently is.</param>

@@ -3,8 +3,8 @@ namespace BlueHeighliner.Comlink;
 /// <inheritdoc cref="INetwork{TFrame, TPriority, TLevel, TAspect}" />
 /// <typeparam name="TFrame">The host's frame type.</typeparam>
 /// <typeparam name="TPriority">The enum the host stated for its priorities.</typeparam>
-/// <typeparam name="TLevel">The enum the host stated for its message levels.</typeparam>
-/// <typeparam name="TAspect">The enum the host stated for its message aspects.</typeparam>
+/// <typeparam name="TLevel">The enum the host stated for its levels.</typeparam>
+/// <typeparam name="TAspect">The enum the host stated for its aspects.</typeparam>
 /// <param name="environment">What the engine lets a handler do, with frames as plain objects.</param>
 /// <param name="users">Says who the current user is.</param>
 internal sealed class Network<TFrame, TPriority, TLevel, TAspect>(INetworkEnvironment environment, IUserDirectory users) : INetwork<TFrame, TPriority, TLevel, TAspect> where TFrame : class where TPriority : struct, Enum where TLevel : struct, Enum where TAspect : struct, Enum
@@ -51,7 +51,7 @@ internal sealed class Network<TFrame, TPriority, TLevel, TAspect>(INetworkEnviro
 
     /// <inheritdoc />
     public IReadOnlySet<string> GetDestinations(Message<TPriority, TLevel, TAspect> message, out IReadOnlySet<string> excluded)
-        => GetDestinations(message.MessageLevel, out excluded, message.Addresses.Where(address => address.Type is not AddressType.External).Select(address => address.UserName));
+        => GetDestinations(message.Level, out excluded, message.Addresses.Where(address => address.Type is not AddressType.External).Select(address => address.UserName));
 
     /// <inheritdoc />
     public async Task<IReadOnlyList<string>> GetAutoForwardTargets(string controllerName)

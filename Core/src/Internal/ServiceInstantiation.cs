@@ -1,7 +1,7 @@
 namespace BlueHeighliner.Comlink;
 
 /// <summary>
-/// Builds the host's own types, the ones the engine constructs for it (its configuration, its handlers, its reconfigurer and the services found by convention), through dependency injection:
+/// Builds the host's own types, the ones the engine constructs for it (its configuration, its handlers, its configuration handler and the services found by convention), through dependency injection:
 /// a constructor's arguments come from the container, and so does every <see langword="required"/> property that can be set, an <see langword="init"/> one included, which is how a type takes a dependency without a constructor.
 /// A required property whose type is nullable is optional: it is left unset when the container has no such service.
 /// </summary>

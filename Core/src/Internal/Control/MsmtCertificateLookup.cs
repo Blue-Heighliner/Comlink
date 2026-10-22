@@ -35,7 +35,7 @@ internal static class MsmtCertificateLookup
     /// <summary>
     /// Checks the node's certificates and says who it is, or why that cannot be told. Never throws for a problem with the certificates: the problem is in the result, since a node that cannot be identified shows it to the user.
     /// </summary>
-    /// <param name="builder">What the host stated.</param>
+    /// <param name="builder">What the host stated, which says who a certificate means.</param>
     /// <param name="network">The users of the network and the command-line arguments.</param>
     public static IdentityCheck CheckIdentity(EngineBuilder builder, NetworkConfig network)
     {
@@ -56,12 +56,12 @@ internal static class MsmtCertificateLookup
 
     /// <summary>
     /// Works out who this node is and checks the certificates it proves it with. The files are the command-line arguments when overrides are allowed, otherwise the host's <c>Certificates</c> call (a relative path is relative to
-    /// the app data folder); the user certificate must be readable, chain to the authority certificate, the only root trusted, and carry as a subject common name a user the network lists, which is the user the process runs as
-    /// (when <c>--user</c> names one of its common names, that one).
+    /// the app data folder); the user certificate must be readable, chain to the authority certificate, the only root trusted, and identify, through the configuration handler's <see cref="IConfigurationHandler.Identify"/> (by default
+    /// its first subject common name), a user the network lists, which is the user the process runs as.
     /// </summary>
     /// <param name="builder">What the host stated.</param>
     /// <param name="network">The users of the network and the command-line arguments.</param>
-    /// <exception cref="InvalidOperationException">A file is not stated or does not exist, the certificate does not chain to the authority, or it is not issued to a user of the network.</exception>
+    /// <exception cref="InvalidOperationException">A file is not stated or does not exist, the certificate does not chain to the authority, or it identifies no user of the network.</exception>
     public static NodeIdentity ResolveIdentity(EngineBuilder builder, NetworkConfig network)
     {
         (string? authority, string? certificate) = FilesOf(builder, network);
@@ -92,18 +92,24 @@ internal static class MsmtCertificateLookup
             }
 
             IReadOnlyList<string> names = PeerIdentity.ExtractCommonNames(identity.Subject);
-            string? requested = network.User;
-            if (requested is not null && !names.Contains(requested, StringComparer.OrdinalIgnoreCase))
+            if (names.Count == 0)
             {
-                throw new InvalidOperationException($"The user certificate '{certificateFile}' is not issued to {requested}.");
+                throw new InvalidOperationException($"The user certificate '{certificateFile}' has no subject common name, so it names no user.");
             }
 
-            string? listed = names
-                .Where(name => requested is null || string.Equals(name, requested, StringComparison.OrdinalIgnoreCase))
-                .Select(name => network.Users.Keys.FirstOrDefault(user => string.Equals(user, name, StringComparison.OrdinalIgnoreCase)))
-                .FirstOrDefault(user => user is not null);
+            string identified;
+            try
+            {
+                identified = builder.Identify(names);
+            }
+            catch (Exception ex)
+            {
+                throw new InvalidOperationException($"The configuration handler could not tell which user the certificate '{certificateFile}' means: {ex.Message}", ex);
+            }
+
+            string? listed = network.Users.Keys.FirstOrDefault(user => string.Equals(user, identified, StringComparison.OrdinalIgnoreCase));
             return listed is null
-                ? throw new InvalidOperationException($"The user certificate '{certificateFile}' is issued to {string.Join(", ", names)}, which {(names.Count == 1 ? "is not a user" : "are not users")} of the network.")
+                ? throw new InvalidOperationException($"The user certificate '{certificateFile}' is issued to {string.Join(", ", names)}, which identifies {(string.IsNullOrWhiteSpace(identified) ? "no one" : identified)}, not a user of the network.")
                 : new NodeIdentity { UserName = listed, AuthorityFile = authorityFile, CertificateFile = certificateFile, CertificateThumbprint = identity.Thumbprint, AuthorityThumbprint = authorityCertificate.Thumbprint };
         }
         catch (Exception ex) when (ex is CryptographicException or IOException)

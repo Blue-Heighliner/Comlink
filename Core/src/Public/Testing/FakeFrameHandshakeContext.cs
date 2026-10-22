@@ -2,7 +2,7 @@ namespace BlueHeighliner.Comlink.Testing;
 
 /// <summary>
 /// A stand-in for the <see cref="IFrameHandshakeContext{TFrame}"/> a frame handshake handler is handed, to test a handshake without a connection. Whatever the handler sends is recorded in <see cref="Sent"/> and
-/// accepted unless <see cref="SendResult"/> says otherwise; <see cref="Connected"/> and <see cref="Disconnect"/> are recorded too and finish at once.
+/// accepted unless <see cref="SendResult"/> says otherwise; <see cref="Accept"/> and <see cref="Reject"/> are recorded too and finish at once.
 /// </summary>
 /// <typeparam name="TFrame">The host's frame type.</typeparam>
 /// <param name="connection">The connection the handshake is on.</param>
@@ -11,11 +11,11 @@ public sealed class FakeFrameHandshakeContext<TFrame>(IConnectionInfo connection
     /// <summary>Gets every frame the handler sent, in order.</summary>
     public List<TFrame> Sent { get; } = [];
 
-    /// <summary>Gets the user name of each call to <see cref="Connected"/>, in order.</summary>
-    public List<string> ConnectedAs { get; } = [];
+    /// <summary>Gets the user name of each call to <see cref="Accept"/>, in order.</summary>
+    public List<string> Accepted { get; } = [];
 
-    /// <summary>Gets how many times the handler disconnected.</summary>
-    public int DisconnectCount { get; private set; }
+    /// <summary>Gets the reason of each call to <see cref="Reject"/>, in order.</summary>
+    public List<string> Rejected { get; } = [];
 
     /// <summary>Gets or sets whether the other node accepts what is sent, which <c>Send</c> reports. Defaults to <see langword="true"/>.</summary>
     public bool SendResult { get; set; } = true;
@@ -24,16 +24,16 @@ public sealed class FakeFrameHandshakeContext<TFrame>(IConnectionInfo connection
     public IConnectionInfo Connection { get; set; } = connection;
 
     /// <inheritdoc />
-    public Task Connected(string userName)
+    public Task Accept(string userName)
     {
-        ConnectedAs.Add(userName);
+        Accepted.Add(userName);
         return Task.CompletedTask;
     }
 
     /// <inheritdoc />
-    public Task Disconnect()
+    public Task Reject(string reason)
     {
-        DisconnectCount++;
+        Rejected.Add(reason);
         return Task.CompletedTask;
     }
 

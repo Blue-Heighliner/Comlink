@@ -8,7 +8,7 @@ public sealed class EntryBarViewModelTests
     private static FolderItemViewModel MakeFolder(string id, FolderType type)
         => new(id, type.ToString(), type, null);
 
-    private static MessageEntity MakeMessage(string id = "MSG1", string fromUser = "ALPHA", string body = "Hello", int priority = 0, string tag = "", string messageLevel = "", bool isAlert = false)
+    private static MessageEntity MakeMessage(string id = "MSG1", string fromUser = "ALPHA", string body = "Hello", int priority = 0, string tag = "", string level = "", bool isAlert = false)
     {
         MessageData message = new();
         message.Id = id;
@@ -16,7 +16,7 @@ public sealed class EntryBarViewModelTests
         message.Body = body;
         message.Priority = priority;
         message.Tag = tag;
-        message.MessageLevel = Enum.TryParse(messageLevel, ignoreCase: true, out TestLevel parsedLevel) ? (int)parsedLevel : null;
+        message.Level = Enum.TryParse(level, ignoreCase: true, out TestLevel parsedLevel) ? (int)parsedLevel : null;
         message.IsAlert = isAlert;
         return new MessageEntity
         {
@@ -171,17 +171,17 @@ public sealed class EntryBarViewModelTests
         svc.Verify(s => s.GetMessages("root-inbox", 1, null), Times.AtLeastOnce);
     }
 
-    /// <summary>ShowMessageLevelFilter is true only for Inbox, Outbox and Drafts, and only when at least one message level is configured.</summary>
+    /// <summary>ShowLevelFilter is true only for Inbox, Outbox and Drafts, and only when at least one level is configured.</summary>
     [Theory]
     [InlineData(FolderType.Inbox, true)]
     [InlineData(FolderType.Outbox, true)]
     [InlineData(FolderType.Drafts, true)]
     [InlineData(FolderType.Notes, false)]
     [InlineData(FolderType.Activity, false)]
-    public async Task LoadFolder_SetsShowMessageLevelFilterWhenLevelsConfigured(FolderType folderType, bool expected)
+    public async Task LoadFolder_SetsShowLevelFilterWhenLevelsConfigured(FolderType folderType, bool expected)
     {
         Mock<TestEngineController> controller = new() { CallBase = true };
-        controller.Setup(c => c.MessageLevels).Returns([new MessageLevel { Name = "PUBLIC", Background = "#2E7D32" }]);
+        controller.Setup(c => c.Levels).Returns([new LevelDefinition { Label = "PUBLIC", Key = TestLevel.Public, Background = "#2E7D32" }]);
         Mock<IEntryService> svc = new();
         svc.Setup(s => s.GetMessages(It.IsAny<string>(), It.IsAny<int>(), It.IsAny<EntryFilter>())).ReturnsAsync((Items: new List<MessageEntity>(), Total: 0));
         svc.Setup(s => s.GetDrafts(It.IsAny<string>(), It.IsAny<int>(), It.IsAny<bool>(), It.IsAny<EntryFilter>())).ReturnsAsync((Items: new List<DraftEntity>(), Total: 0));
@@ -191,22 +191,22 @@ public sealed class EntryBarViewModelTests
 
         await vm.LoadFolder(MakeFolder("root", folderType));
 
-        Assert.Equal(expected, vm.ShowMessageLevelFilter);
+        Assert.Equal(expected, vm.ShowLevelFilter);
     }
 
-    /// <summary>ShowMessageLevelFilter is false for a message folder when no message levels are configured, even though ShowPriorityFilter and ShowAlertFilter still apply.</summary>
+    /// <summary>ShowLevelFilter is false for a message folder when no levels are configured, even though ShowPriorityFilter and ShowAlertFilter still apply.</summary>
     [Fact]
-    public async Task LoadFolder_NoMessageLevelsConfigured_HidesMessageLevelFilterOnly()
+    public async Task LoadFolder_NoLevelsConfigured_HidesLevelFilterOnly()
     {
         Mock<IEntryService> svc = new();
         svc.Setup(s => s.GetMessages(It.IsAny<string>(), It.IsAny<int>(), It.IsAny<EntryFilter>())).ReturnsAsync((Items: new List<MessageEntity>(), Total: 0));
         Mock<TestEngineController> controller = new() { CallBase = true };
-        controller.Setup(c => c.MessageLevels).Returns([]);
+        controller.Setup(c => c.Levels).Returns([]);
         EntryBarViewModel vm = new(svc.Object, controller.Object);
 
         await vm.LoadFolder(MakeFolder("root-inbox", FolderType.Inbox));
 
-        Assert.False(vm.ShowMessageLevelFilter);
+        Assert.False(vm.ShowLevelFilter);
         Assert.True(vm.ShowPriorityFilter);
         Assert.True(vm.ShowAlertFilter);
     }
@@ -449,7 +449,7 @@ public sealed class EntryBarViewModelTests
         Assert.Null(vm.DateTo);
         Assert.Null(vm.TimeTo);
         Assert.False(vm.AlertOnlyFilter);
-        Assert.Same(vm.AvailableMessageLevelFilters[0], vm.SelectedMessageLevelFilter);
+        Assert.Same(vm.AvailableLevelFilters[0], vm.SelectedLevelFilter);
         Assert.Same(vm.AvailablePriorityFilters[0], vm.SelectedPriorityFilter);
         Assert.Equal(1, vm.CurrentPage);
         Assert.Equal(0, vm.ActiveFilterCount);
@@ -699,25 +699,25 @@ public sealed class EntryBarViewModelTests
         Assert.Null(vm.Entries[0].TagText);
     }
 
-    /// <summary>Inbox entries carry a MessageLevelBackgroundHex resolved from the message's stored message level.</summary>
+    /// <summary>Inbox entries carry a LevelBackgroundHex resolved from the message's stored level.</summary>
     [Fact]
-    public async Task LoadFolder_Inbox_RecognizedMessageLevel_SetsMessageLevelBackgroundHex()
+    public async Task LoadFolder_Inbox_RecognizedLevel_SetsLevelBackgroundHex()
     {
-        Mock<TestEngineController> messageLevelProvider = new() { CallBase = true };
-        messageLevelProvider.Setup(p => p.MessageLevels).Returns([new MessageLevel { Name = "RESTRICTED", Key = TestLevel.Restricted, Background = "#C62828" }]);
+        Mock<TestEngineController> levelProvider = new() { CallBase = true };
+        levelProvider.Setup(p => p.Levels).Returns([new LevelDefinition { Label = "RESTRICTED", Key = TestLevel.Restricted, Background = "#C62828" }]);
         Mock<IEntryService> svc = new();
         svc.Setup(s => s.GetMessages(It.IsAny<string>(), It.IsAny<int>()))
-           .ReturnsAsync((Items: new List<MessageEntity> { MakeMessage("M1", messageLevel: "RESTRICTED") }, Total: 1));
-        EntryBarViewModel vm = new(svc.Object, messageLevelProvider.Object);
+           .ReturnsAsync((Items: new List<MessageEntity> { MakeMessage("M1", level: "RESTRICTED") }, Total: 1));
+        EntryBarViewModel vm = new(svc.Object, levelProvider.Object);
 
         await vm.LoadFolder(MakeFolder("root-inbox", FolderType.Inbox));
 
-        Assert.Equal("#C62828", vm.Entries[0].MessageLevelBackgroundHex);
+        Assert.Equal("#C62828", vm.Entries[0].LevelBackgroundHex);
     }
 
-    /// <summary>An unrecognized or empty stored message level yields a null MessageLevelBackgroundHex rather than a fallback color.</summary>
+    /// <summary>An unrecognized or empty stored level yields a null LevelBackgroundHex rather than a fallback color.</summary>
     [Fact]
-    public async Task LoadFolder_Inbox_NoMessageLevel_MessageLevelBackgroundHexIsNull()
+    public async Task LoadFolder_Inbox_NoLevel_LevelBackgroundHexIsNull()
     {
         Mock<IEntryService> svc = new();
         svc.Setup(s => s.GetMessages(It.IsAny<string>(), It.IsAny<int>()))
@@ -726,7 +726,7 @@ public sealed class EntryBarViewModelTests
 
         await vm.LoadFolder(MakeFolder("root-inbox", FolderType.Inbox));
 
-        Assert.Null(vm.Entries[0].MessageLevelBackgroundHex);
+        Assert.Null(vm.Entries[0].LevelBackgroundHex);
     }
 
     /// <summary>DeleteEntry passes the entry's IsOutboundMessage flag through to the service so self-addressed duplicates are disambiguated.</summary>

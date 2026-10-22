@@ -24,10 +24,10 @@ public sealed record MessageExportData
     public required int Priority { get; init; }
     /// <summary>Tag identifying the type of this message.</summary>
     public required string Tag { get; init; }
-    /// <summary>Integer value of the message level the message was sent at, a member of the enum the host stated for its message levels, or <see langword="null"/> for none.</summary>
-    public int? MessageLevel { get; init; }
-    /// <summary>Integer value of the message aspect the message carries, a member of the enum the host stated for its message aspects, or <see langword="null"/> for none.</summary>
-    public int? MessageAspect { get; init; }
+    /// <summary>Integer value of the level the message was sent at, a member of the enum the host stated for its levels, or <see langword="null"/> for none.</summary>
+    public int? Level { get; init; }
+    /// <summary>Integer value of the aspect the message carries, a member of the enum the host stated for its aspects, or <see langword="null"/> for none.</summary>
+    public int? Aspect { get; init; }
     /// <summary>UTC timestamp when this record was received or created.</summary>
     public required DateTime ReceivedAt { get; init; }
     /// <summary>Inbox-only read status; <see langword="null"/> on Outbox records.</summary>
@@ -71,10 +71,10 @@ public sealed record DraftExportData
     public required int Priority { get; init; }
     /// <summary>Tag identifying the type of this draft.</summary>
     public required string Tag { get; init; }
-    /// <summary>Integer value of the message level the draft is set to be sent at, a member of the enum the host stated for its message levels, or <see langword="null"/> for none.</summary>
-    public int? MessageLevel { get; init; }
-    /// <summary>Integer value of the message aspect the draft is set to be sent with, a member of the enum the host stated for its message aspects, or <see langword="null"/> for none.</summary>
-    public int? MessageAspect { get; init; }
+    /// <summary>Integer value of the level the draft is set to be sent at, a member of the enum the host stated for its levels, or <see langword="null"/> for none.</summary>
+    public int? Level { get; init; }
+    /// <summary>Integer value of the aspect the draft is set to be sent with, a member of the enum the host stated for its aspects, or <see langword="null"/> for none.</summary>
+    public int? Aspect { get; init; }
     /// <summary>UTC timestamp when the draft was sent, or <see langword="null"/> if not yet sent.</summary>
     public DateTime? SentAt { get; init; }
     /// <summary>UTC timestamp when this draft was first created.</summary>
@@ -122,7 +122,6 @@ public sealed record ActivityLogEventEntry
     public required DateTime At { get; init; }
     /// <summary>Human-readable description of the event.</summary>
     public required string Message { get; init; }
-    /// <summary>The identifier of the kind of event this is, such as <c>CL56</c>, or empty for an entry that has none. A package written when identifiers were plain numbers is read with <c>CL</c> in front of the number.</summary>
-    [JsonConverter(typeof(EventIdJsonConverter))]
+    /// <summary>The identifier of the kind of event this is, such as <c>CL56</c>, or empty for an entry that has none.</summary>
     public string EventId { get; init; } = string.Empty;
 }

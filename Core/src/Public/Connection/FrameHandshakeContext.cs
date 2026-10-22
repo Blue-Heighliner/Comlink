@@ -11,14 +11,15 @@ public interface IFrameHandshakeContext<TFrame> where TFrame : class
     /// <summary>Gets what is known about the connection.</summary>
     IConnectionInfo Connection { get; }
 
-    /// <summary>Marks the connection fully connected, as <paramref name="userName"/>. The connection is then usable, and anything after it is ordinary traffic.</summary>
+    /// <summary>Accepts the other node: marks the connection fully connected, as <paramref name="userName"/>. The connection is then usable, and anything after it is ordinary traffic.</summary>
     /// <param name="userName">The user on the other end.</param>
-    Task Connected(string userName);
+    Task Accept(string userName);
 
-    /// <summary>Drops the connection.</summary>
-    Task Disconnect();
+    /// <summary>Rejects the other node: drops the connection, which fails whatever was connecting, and logs <paramref name="reason"/> as why.</summary>
+    /// <param name="reason">Why the connection is refused, in words for the log, such as <c>The other node did not know the password</c>.</param>
+    Task Reject(string reason);
 
-    /// <summary>Sends <paramref name="frame"/> over the connection and completes once the other node has accepted it, so a handler awaits it before calling <see cref="Connected"/>. The connection is dropped if it cannot be sent, serialized with the frame serializer and, when packets are configured, split into packets like any frame. It is not stored, routed or shown.</summary>
+    /// <summary>Sends <paramref name="frame"/> over the connection and completes once the other node has accepted it, so a handler awaits it before calling <see cref="Accept"/>. The connection is dropped if it cannot be sent, serialized with the frame serializer and, when packets are configured, split into packets like any frame. It is not stored, routed or shown.</summary>
     /// <param name="frame">What to send.</param>
     /// <returns>Whether the other node accepted it.</returns>
     Task<bool> Send(TFrame frame);

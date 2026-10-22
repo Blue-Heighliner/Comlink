@@ -21,9 +21,9 @@ internal sealed class PacketHandshakeHandlerAdapter<TPacket>(IPacketHandshakeHan
     {
         public IConnectionInfo Connection => session.Connection;
 
-        public Task Connected(string userName) => session.Connected(userName);
+        public Task Accept(string userName) => session.Accept(userName);
 
-        public Task Disconnect() => session.Disconnect();
+        public Task Reject(string reason) => session.Reject(reason);
 
         public Task<bool> Send(TPacket packet) => session.Send(packet);
     }

@@ -1,21 +1,21 @@
 namespace BlueHeighliner.Comlink;
 
-/// <inheritdoc cref="IUserCatalog{TProfile}" />
+/// <inheritdoc cref="IUserCatalog{TLevel, TProfile}" />
 /// <param name="directory">Supplies who is on the network.</param>
-internal sealed class UserCatalog<TProfile>(IUserDirectory directory) : IUserCatalog<TProfile> where TProfile : class
+internal sealed class UserCatalog<TLevel, TProfile>(IUserDirectory directory) : IUserCatalog<TLevel, TProfile> where TLevel : struct, Enum where TProfile : class
 {
     /// <inheritdoc />
-    public UserInfo<TProfile> CurrentUser => UserInfo<TProfile>.From(directory.CurrentUser);
+    public UserInfo<TLevel, TProfile> CurrentUser => UserInfo<TLevel, TProfile>.From(directory.CurrentUser);
 
     /// <inheritdoc />
-    public IReadOnlyDictionary<string, UserInfo<TProfile>> Users => Typed(directory.Users);
+    public IReadOnlyDictionary<string, UserInfo<TLevel, TProfile>> Users => Typed(directory.Users);
 
     /// <inheritdoc />
-    public IReadOnlyDictionary<string, UserInfo<TProfile>> ConnectedUsers => Typed(directory.ConnectedUsers);
+    public IReadOnlyDictionary<string, UserInfo<TLevel, TProfile>> ConnectedUsers => Typed(directory.ConnectedUsers);
 
     /// <inheritdoc />
     public IReadOnlyDictionary<string, GroupInfo> Groups => directory.Groups;
 
-    private Dictionary<string, UserInfo<TProfile>> Typed(IReadOnlyDictionary<string, IUserInfo> users)
-        => users.ToDictionary(user => user.Key, user => UserInfo<TProfile>.From(user.Value), StringComparer.OrdinalIgnoreCase);
+    private Dictionary<string, UserInfo<TLevel, TProfile>> Typed(IReadOnlyDictionary<string, IUserInfo> users)
+        => users.ToDictionary(user => user.Key, user => UserInfo<TLevel, TProfile>.From(user.Value), StringComparer.OrdinalIgnoreCase);
 }

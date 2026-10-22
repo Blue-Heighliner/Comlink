@@ -42,10 +42,10 @@ internal interface IEntryBarViewModel
     DateTimeOffset? DateTo { get; set; }
     /// <summary>Gets or sets the time of day paired with <see cref="DateTo"/>; the last instant of the day (23:59:59.999) when unset, so picking only a date still covers that whole day. Setting it resets to the first page and reloads.</summary>
     TimeSpan? TimeTo { get; set; }
-    /// <summary>Gets the selectable message level filters, a leading "Any" (no filter) option followed by every configured <see cref="IEngineController.MessageLevels"/> entry.</summary>
-    IReadOnlyList<MessageLevelFilterOption> AvailableMessageLevelFilters { get; }
-    /// <summary>Gets or sets the selected message level filter. Setting it resets to the first page and reloads.</summary>
-    MessageLevelFilterOption SelectedMessageLevelFilter { get; set; }
+    /// <summary>Gets the selectable level filters, a leading "Any" (no filter) option followed by every configured <see cref="IEngineController.Levels"/> entry.</summary>
+    IReadOnlyList<LevelFilterOption> AvailableLevelFilters { get; }
+    /// <summary>Gets or sets the selected level filter. Setting it resets to the first page and reloads.</summary>
+    LevelFilterOption SelectedLevelFilter { get; set; }
     /// <summary>Gets the selectable priority filters, a leading "Any" (no filter) option followed by every <see cref="IEngineController.Priorities"/> entry.</summary>
     IReadOnlyList<PriorityFilterOption> AvailablePriorityFilters { get; }
     /// <summary>Gets or sets the selected priority filter. Setting it resets to the first page and reloads.</summary>
@@ -60,14 +60,14 @@ internal interface IEntryBarViewModel
     bool ShowAuthorFilter { get; set; }
     /// <summary>Gets or sets a value indicating whether the destination filter box is shown for the current folder; Outbox and Drafts only.</summary>
     bool ShowDestinationFilter { get; set; }
-    /// <summary>Gets or sets a value indicating whether the message level filter picker is shown for the current folder; Inbox, Outbox and Drafts only, and only when at least one message level is configured.</summary>
-    bool ShowMessageLevelFilter { get; set; }
+    /// <summary>Gets or sets a value indicating whether the level filter picker is shown for the current folder; Inbox, Outbox and Drafts only, and only when at least one level is configured.</summary>
+    bool ShowLevelFilter { get; set; }
     /// <summary>Gets or sets a value indicating whether the priority filter picker is shown for the current folder; Inbox, Outbox and Drafts only.</summary>
     bool ShowPriorityFilter { get; set; }
     /// <summary>Gets or sets a value indicating whether the alert-only filter checkbox is shown for the current folder; Inbox, Outbox and Drafts only.</summary>
     bool ShowAlertFilter { get; set; }
     /// <summary>
-    /// Gets or sets a value indicating whether the collapsible filter section (date range, author/destination, message level,
+    /// Gets or sets a value indicating whether the collapsible filter section (date range, author/destination, level,
     /// priority, alert-only) is expanded. Collapsed by default. Collapsing only hides the controls - it never clears or disables
     /// the filters themselves, so search continues to run against the same already-filtered set either way; see
     /// <see cref="EntryFilter"/>.
@@ -137,9 +137,9 @@ internal sealed partial class EntryBarViewModel : ObservableObject, IEntryBarVie
     {
         this.entryService = entryService;
         this.engineController = engineController;
-        AvailableMessageLevelFilters = [new MessageLevelFilterOption { Label = "Any", Name = null }, .. engineController.MessageLevels.Select(l => new MessageLevelFilterOption { Label = l.Name, Name = l.Name })];
+        AvailableLevelFilters = [new LevelFilterOption { Label = "Any", Level = null }, .. engineController.Levels.Select(l => new LevelFilterOption { Label = l.Label, Level = l.Key })];
         AvailablePriorityFilters = [new PriorityFilterOption { Label = "Any", Value = null }, .. engineController.Priorities.Select(p => new PriorityFilterOption { Label = p.Name, Value = p.Key })];
-        selectedMessageLevelFilter = AvailableMessageLevelFilters[0];
+        selectedLevelFilter = AvailableLevelFilters[0];
         selectedPriorityFilter = AvailablePriorityFilters[0];
     }
 
@@ -169,7 +169,7 @@ internal sealed partial class EntryBarViewModel : ObservableObject, IEntryBarVie
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(ActiveFilterCount))]
     [NotifyPropertyChangedFor(nameof(HasActiveFilters))]
-    private MessageLevelFilterOption selectedMessageLevelFilter;
+    private LevelFilterOption selectedLevelFilter;
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(ActiveFilterCount))]
     [NotifyPropertyChangedFor(nameof(HasActiveFilters))]
@@ -188,7 +188,7 @@ internal sealed partial class EntryBarViewModel : ObservableObject, IEntryBarVie
     private string destinationFilter = string.Empty;
     [ObservableProperty] private bool showAuthorFilter;
     [ObservableProperty] private bool showDestinationFilter;
-    [ObservableProperty] private bool showMessageLevelFilter;
+    [ObservableProperty] private bool showLevelFilter;
     [ObservableProperty] private bool showPriorityFilter;
     [ObservableProperty] private bool showAlertFilter;
     [ObservableProperty]
@@ -233,7 +233,7 @@ internal sealed partial class EntryBarViewModel : ObservableObject, IEntryBarVie
                 DateTo = CombinedDateTo,
                 Author = ShowAuthorFilter && !string.IsNullOrWhiteSpace(AuthorFilter) ? AuthorFilter.Trim() : null,
                 Destination = ShowDestinationFilter && !string.IsNullOrWhiteSpace(DestinationFilter) ? DestinationFilter.Trim() : null,
-                MessageLevel = SelectedMessageLevelFilter.Name,
+                Level = SelectedLevelFilter.Level,
                 Priority = SelectedPriorityFilter.Value
             };
         }
@@ -257,7 +257,7 @@ internal sealed partial class EntryBarViewModel : ObservableObject, IEntryBarVie
         TimeTo = null;
         AuthorFilter = string.Empty;
         DestinationFilter = string.Empty;
-        SelectedMessageLevelFilter = AvailableMessageLevelFilters[0];
+        SelectedLevelFilter = AvailableLevelFilters[0];
         SelectedPriorityFilter = AvailablePriorityFilters[0];
         AlertOnlyFilter = false;
     }
@@ -269,14 +269,14 @@ internal sealed partial class EntryBarViewModel : ObservableObject, IEntryBarVie
     partial void OnTimeToChanged(TimeSpan? value) => ResetPageAndRefresh();
     partial void OnAuthorFilterChanged(string value) => ResetPageAndRefresh();
     partial void OnDestinationFilterChanged(string value) => ResetPageAndRefresh();
-    partial void OnSelectedMessageLevelFilterChanged(MessageLevelFilterOption value) => ResetPageAndRefresh();
+    partial void OnSelectedLevelFilterChanged(LevelFilterOption value) => ResetPageAndRefresh();
     partial void OnSelectedPriorityFilterChanged(PriorityFilterOption value) => ResetPageAndRefresh();
     partial void OnAlertOnlyFilterChanged(bool value) => ResetPageAndRefresh();
 
     /// <summary>Gets the current page of entry items displayed in the list.</summary>
     public ObservableCollection<EntryItemViewModel> Entries { get; } = [];
     /// <inheritdoc />
-    public IReadOnlyList<MessageLevelFilterOption> AvailableMessageLevelFilters { get; }
+    public IReadOnlyList<LevelFilterOption> AvailableLevelFilters { get; }
     /// <inheritdoc />
     public IReadOnlyList<PriorityFilterOption> AvailablePriorityFilters { get; }
     /// <inheritdoc />
@@ -287,7 +287,7 @@ internal sealed partial class EntryBarViewModel : ObservableObject, IEntryBarVie
          + (DateTo is not null ? 1 : 0)
          + (ShowAuthorFilter && !string.IsNullOrWhiteSpace(AuthorFilter) ? 1 : 0)
          + (ShowDestinationFilter && !string.IsNullOrWhiteSpace(DestinationFilter) ? 1 : 0)
-         + (SelectedMessageLevelFilter.Name is not null ? 1 : 0)
+         + (SelectedLevelFilter.Level is not null ? 1 : 0)
          + (SelectedPriorityFilter.Value is not null ? 1 : 0)
          + (AlertOnlyFilter ? 1 : 0);
     /// <inheritdoc />
@@ -308,10 +308,10 @@ internal sealed partial class EntryBarViewModel : ObservableObject, IEntryBarVie
         return string.IsNullOrEmpty(message.Tag) ? null : message.Tag;
     }
 
-    private string? GetMessageLevelBackground(MessageData message)
+    private string? GetLevelBackground(MessageData message)
     {
-        string level = engineController.NameOfLevel(message);
-        return engineController.MessageLevels.IsRecognized(level) ? engineController.MessageLevels.GetBackground(level) : null;
+        Enum? level = engineController.LevelOf(message);
+        return engineController.Levels.IsRecognized(level) ? engineController.Levels.GetBackground(level) : null;
     }
 
     /// <summary>Loads the first page of entries for the given folder and resets pagination.</summary>
@@ -327,7 +327,7 @@ internal sealed partial class EntryBarViewModel : ObservableObject, IEntryBarVie
             bool isMessageOrDraftFolder = folder.RootType is FolderType.Inbox or FolderType.Outbox or FolderType.Drafts;
             ShowAuthorFilter = folder.RootType is FolderType.Inbox;
             ShowDestinationFilter = folder.RootType is FolderType.Outbox or FolderType.Drafts;
-            ShowMessageLevelFilter = isMessageOrDraftFolder && engineController.MessageLevels.Count > 0;
+            ShowLevelFilter = isMessageOrDraftFolder && engineController.Levels.Count > 0;
             ShowPriorityFilter = isMessageOrDraftFolder;
             ShowAlertFilter = folder.RootType is FolderType.Inbox or FolderType.Outbox && !engineController.SeparateAlerts;
             CanDeleteEntries = engineController.CanDelete(folder.RootType);
@@ -441,7 +441,7 @@ internal sealed partial class EntryBarViewModel : ObservableObject, IEntryBarVie
                         string timeText = m.ReceivedAt.ToString("dd-MMM-yyyy HH:mm").ToUpperInvariant();
                         EntryItemViewModel item = new(m.MessageId, m.Message.FromUser, EntryType.Message, m.ReceivedAt,
                             secondaryText: m.Message.Body.FirstLine, priorityText: GetPriorityLabel(m.Message), tagText: GetTagLabel(m.Message), timeText: timeText,
-                            messageLevelBackgroundHex: GetMessageLevelBackground(m.Message), isAlert: m.Message.IsAlert);
+                            levelBackgroundHex: GetLevelBackground(m.Message), isAlert: m.Message.IsAlert);
                         item.OverallStatus = m.ReadStatus;
                         items.Add(item);
                     }
@@ -457,7 +457,7 @@ internal sealed partial class EntryBarViewModel : ObservableObject, IEntryBarVie
                         string timeText = m.ReceivedAt.ToString("dd-MMM-yyyy HH:mm").ToUpperInvariant();
                         EntryItemViewModel item = new(m.MessageId, destinations, EntryType.Message, m.ReceivedAt,
                             secondaryText: m.Message.Body.FirstLine, priorityText: GetPriorityLabel(m.Message), tagText: GetTagLabel(m.Message), timeText: timeText, isOutboundMessage: true,
-                            messageLevelBackgroundHex: GetMessageLevelBackground(m.Message), isAlert: m.Message.IsAlert);
+                            levelBackgroundHex: GetLevelBackground(m.Message), isAlert: m.Message.IsAlert);
                         item.OverallStatus = m.OverallStatus;
                         items.Add(item);
                     }

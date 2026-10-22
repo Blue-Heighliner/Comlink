@@ -21,12 +21,12 @@ internal interface IEngineConnection
     /// destination's outcome as delivery status changes. Whether the message is an alert, which alarms recipients' Client-mode UI until it is read (see <c>Docs/Components/ViewModels.md</c>), is not
     /// chosen here: the host's draft handler decides it from the message's other properties (see <see cref="SendMessageResult.IsAlert"/>). <paramref name="priority"/>
     /// is the message's priority, which the handler sends it with (see <see cref="IFrameBuilder{TFrame, TPacket, TPriority, TLevel, TAspect, TProfile}"/>). <paramref name="tag"/>
-    /// is stored in the message's tag field (see <see cref="IFrameBuilder{TFrame, TPacket, TPriority, TLevel, TAspect, TProfile}"/>). <paramref name="messageLevel"/>
-    /// is the message level this message is sent at, a member of the enum the host stated for its message levels (or <see langword="null"/> for none), which must be a configured one or the call throws; a destination user whose own assigned level ranks lower
-    /// is never sent the message (see <see cref="IFrameBuilder{TFrame, TPacket, TPriority, TLevel, TAspect, TProfile}"/>). <paramref name="messageAspect"/> is the message aspect the message carries, a member of the enum the host stated with
-    /// <c>MessageAspects</c> (or <see langword="null"/> for none), which must be a configured one or the call throws.
+    /// is stored in the message's tag field (see <see cref="IFrameBuilder{TFrame, TPacket, TPriority, TLevel, TAspect, TProfile}"/>). <paramref name="level"/>
+    /// is the level this message is sent at, a member of the enum the host stated for its levels (or <see langword="null"/> for none), which must be a configured one or the call throws; a destination user whose own assigned level ranks lower
+    /// is never sent the message (see <see cref="IFrameBuilder{TFrame, TPacket, TPriority, TLevel, TAspect, TProfile}"/>). <paramref name="aspect"/> is the aspect the message carries, a member of the enum the host stated with
+    /// <c>Aspects</c> (or <see langword="null"/> for none), which must be a configured one or the call throws.
     /// </summary>
-    Task<SendMessageResult?> SendMessage(string body, List<AddressRequest> addresses, Enum? priority = null, string tag = "", Enum? messageLevel = null, Enum? messageAspect = null, CancellationToken cancellation = default);
+    Task<SendMessageResult?> SendMessage(string body, List<AddressRequest> addresses, Enum? priority = null, string tag = "", Enum? level = null, Enum? aspect = null, CancellationToken cancellation = default);
     /// <summary>
     /// Marks the Inbox record for <paramref name="messageId"/> as read (no-op if already read or not
     /// found) and tells the host's frame handler (see <see cref="IFrameHandler{TFrame, TPriority, TLevel, TAspect}.OnRead"/>), which can

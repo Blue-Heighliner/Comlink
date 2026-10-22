@@ -7,7 +7,7 @@ internal sealed class MessageEntity
     public ObjectId Id { get; set; } = ObjectId.NewObjectId();
     /// <summary>Application-level message identifier shared with peers, denormalized from <see cref="Message"/> so LiteDB can query and index on it directly.</summary>
     public string MessageId { get; set; } = string.Empty;
-    /// <summary>The message content: body, sender, addresses, sent time, priority, tag, message level, message aspect and whether it is an alert. This is the canonical representation of the message.</summary>
+    /// <summary>The message content: body, sender, addresses, sent time, priority, tag, level, aspect and whether it is an alert. This is the canonical representation of the message.</summary>
     public MessageData Message { get; set; } = new();
     /// <summary>Per-user delivery statuses for outbound messages.</summary>
     public List<DeliveryStatus> DeliveryStatuses { get; set; } = [];

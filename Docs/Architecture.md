@@ -39,7 +39,7 @@ Core/src/
 │   ├── Configuration/   The fluent builders a configuration is written against, and the types they take
 │   ├── Connection/      IServiceConnection<TPriority, TLevel, TAspect, TProfile>, the handler contexts and their models
 │   ├── ExternalSystems/ The external system contract and its base class
-│   ├── Models/          Types that appear in configuration (IUserInfo, UserInfo<TProfile>, ConnectionPoint, IConnectionInfo, ...)
+│   ├── Models/          Types that appear in configuration (IUserInfo, UserInfo<TLevel, TProfile>, ConnectionPoint, IConnectionInfo, ...)
 │   └── Serialization/   The frame and packet serializer contracts, their abstract bases, and the protobuf default
 └── Internal/      Everything else, never public
     ├── Control/       The controller the builder's state becomes, the network file's node settings decorator, and the builders' implementations
@@ -133,7 +133,7 @@ sequenceDiagram
 
 ## Startup Sequence
 
-`Engine.Start<T>(args, configureServices)` first constructs the host's `IEngineConfiguration` through dependency injection, from a bootstrap container holding logging plus the host's `configureServices` registrations, and runs it against an `EngineBuilder`, validating the result. The result says whether `--config`, `--authority`, `--certificate` and `--user` may be honored at all, which is why it must exist before `NetworkConfig` does: a configuration must never depend on `NetworkConfig`, since that is exactly what it decides whether to load. `NetworkConfig.Load` reads the network configuration file (`Config.json` in the app data folder); if the configuration allowed command-line overrides (`CommandLineOverrides`, off by default), those arguments take precedence, and otherwise they are ignored. Before anything else is built, `Engine.Start` then resolves who the node is (`MsmtCertificateLookup.ResolveIdentity`): the user is a subject common name of the user certificate (`Certificates`, or `--authority`/`--certificate`) that the network file lists, and the certificate must chain to the authority certificate. `MsmtCertificateLookup.CheckIdentity` records a missing or unreadable file, a certificate that does not chain, one issued to no listed user, or no certificate stated as a problem instead of throwing, and the GUI starts with an error screen in place of the app (no current user, no networking, database or folders) until a refresh finds the certificate in order. A headless node (the `Headless` entry of the user named by `--user`) has no window to show it in, so it fails the start with an `InvalidOperationException`. The result is registered with the engine, which holds the current user in `ICurrentUserProvider`.
+`Engine.Start<T>(args, configureServices)` first constructs the host's `IEngineConfiguration` through dependency injection, from a bootstrap container holding logging plus the host's `configureServices` registrations, and runs it against an `EngineBuilder`, validating the result. The result says whether `--config`, `--data`, `--authority` and `--certificate` may be honored at all, which is why it must exist before `NetworkConfig` does: a configuration must never depend on `NetworkConfig`, since that is exactly what it decides whether to load. `NetworkConfig.Load` reads the network configuration file (`Config.json` in the app's data folder, which `--data` replaces); if the configuration allowed command-line overrides (`CommandLineOverrides`, off by default), those arguments take precedence, and otherwise they are ignored. Before anything else is built, `Engine.Start` then resolves who the node is (`MsmtCertificateLookup.ResolveIdentity`): the user is what the configuration handler's `Identify` makes of the subject common names of the user certificate (`Certificates`, or `--authority`/`--certificate`), by default the first, which the network file must list, and the certificate must chain to the authority certificate. `MsmtCertificateLookup.CheckIdentity` records a missing or unreadable file, a certificate that does not chain, one issued to no listed user, or no certificate stated as a problem instead of throwing, and the GUI starts with an error screen in place of the app (no current user, no networking, database or folders) until a refresh finds the certificate in order. The result is registered with the engine, which holds the current user in `ICurrentUserProvider`.
 
 `EngineExtensions.UseEngine()` registers the core services, including the `IEngineController` built from the builder and wrapped by `ConfiguredEngineController` (which layers the current user's node settings from the network file on top of the settings that have a corresponding field, see [Configuration.md](Components/Configuration.md#network-configuration-file); the wrapped controller itself reads every user's info from the same file). For Client mode, `EngineUiExtensions.UseEngineUi()` additionally registers `MainWindow` and overrides `IBodyDocumentFactory`. The host's `configureServices` registrations run last, against the running engine's own container. `EngineHost` (an `IHostedService`) runs at startup:
 
@@ -160,23 +160,23 @@ These start, with the database opened, only when a user is current (external sys
 
 ## Data Storage
 
-All persistent data lives under `%APPDATA%/{AppName}`, in a folder per user (`IEngineController.AppDataPath`, always `%APPDATA%/{AppName}/{USERNAME}`, not configurable), beside the shared configuration files:
+All persistent data lives in one folder for the app, whoever the user is (`IEngineController.AppDataPath`, `%APPDATA%/{AppName}` unless the `--data` argument names another, which is how several nodes run on one machine):
 
 ```
 %APPDATA%/{AppName}/
 ├── Config.json      Network configuration file (optional, see Components/Config.md)
 ├── Logging.json     Log categories to turn on (optional)
-└── {USERNAME}/      IEngineController.AppDataPath
-    ├── Data.db      LiteDB file (messages, drafts, notes, folders, activity)
-    └── Logs/
-        └── yyyy-MM-dd.log
+├── Data.db          LiteDB file (messages, drafts, notes, folders, activity)
+├── Store/           Records kept through IDataStore
+└── Logs/
+    └── yyyy-MM-dd.log
 ```
 
 Export packages (`{name}.export.zip`, one JSON file per entry) are written to and read from an external drive selected by the user, not `AppDataPath` — see "Exporting and importing entries" above.
 
 ## Dependency Injection
 
-All external configuration and rule-based behavior, including the concrete frame, packet, priority and message level types and the handlers typed by them, is stated by the host through the fluent `IEngineBuilder` its `IEngineConfiguration` receives (see `Sample/src/EngineConfiguration.cs` (which also holds its entry point), and [Api.md](Api.md)). The builder only records what it is told; internally an `IEngineController` (implemented by `EngineController`, in `Core/src/Internal/Control/EngineController.cs`) reads the record and supplies a default for everything left unstated, and is what the rest of the engine depends on. It is registered explicitly rather than by convention scanning, and a host has no way to replace it. A configuration never reads `NetworkConfig` or an environment variable itself; users' info comes from the network configuration file through `EngineController`, and where a node setting has a corresponding field there, `ConfiguredEngineController`, a small decorator the engine owns, layers it on top instead. See [Configuration.md](Components/Configuration.md#network-configuration-file) and [Configuration.md](Components/Configuration.md#frame-format).
+All external configuration and rule-based behavior, including the concrete frame, packet, priority and level types and the handlers typed by them, is stated by the host through the fluent `IEngineBuilder` its `IEngineConfiguration` receives (see `Sample/src/EngineConfiguration.cs` (which also holds its entry point), and [Api.md](Api.md)). The builder only records what it is told; internally an `IEngineController` (implemented by `EngineController`, in `Core/src/Internal/Control/EngineController.cs`) reads the record and supplies a default for everything left unstated, and is what the rest of the engine depends on. It is registered explicitly rather than by convention scanning, and a host has no way to replace it. A configuration never reads `NetworkConfig` or an environment variable itself; users' info comes from the network configuration file through `EngineController`, and where a node setting has a corresponding field there, `ConfiguredEngineController`, a small decorator the engine owns, layers it on top instead. See [Configuration.md](Components/Configuration.md#network-configuration-file) and [Configuration.md](Components/Configuration.md#frame-format).
 
 `EngineUiExtensions.UseEngineUi` overrides `IBodyDocumentFactory` with `TextDocumentBodyDocumentFactory` so that drafts created in Client mode use a live AvaloniaEdit `TextDocument`. Without this call (e.g., in tests or Headless mode), the `BodyDocumentFactory` default creates `StringBodyDocument` instances.
 

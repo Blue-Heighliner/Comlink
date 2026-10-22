@@ -6,7 +6,7 @@ namespace BlueHeighliner.Comlink;
 /// send screen for review, and sent only once they press its final send button - never sent automatically.
 /// </summary>
 /// <typeparam name="TPriority">The enum the host stated for its priorities.</typeparam>
-/// <typeparam name="TLevel">The enum the host stated for its message levels.</typeparam>
+/// <typeparam name="TLevel">The enum the host stated for its levels.</typeparam>
 public sealed record StagedSendData<TPriority, TLevel> where TPriority : struct, Enum where TLevel : struct, Enum
 {
     /// <summary>Message body text.</summary>
@@ -17,6 +17,6 @@ public sealed record StagedSendData<TPriority, TLevel> where TPriority : struct,
     public TPriority? Priority { get; init; }
     /// <summary>Tag identifying the type of this message.</summary>
     public string Tag { get; init; } = string.Empty;
-    /// <summary>Message level this message will be sent at, a member of the enum the host stated for its message levels, or <see langword="null"/> for none; one that is not a configured level fails the send.</summary>
-    public TLevel? MessageLevel { get; init; }
+    /// <summary>Level this message will be sent at, a member of the enum the host stated for its levels, or <see langword="null"/> for none; one that is not a configured level fails the send.</summary>
+    public TLevel? Level { get; init; }
 }

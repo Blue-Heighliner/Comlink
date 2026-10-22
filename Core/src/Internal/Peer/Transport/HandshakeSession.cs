@@ -6,12 +6,13 @@ internal interface IHandshakeSession
     /// <summary>Gets what is known about the connection.</summary>
     IConnectionInfo Connection { get; }
 
-    /// <summary>Marks the connection fully connected as <paramref name="userName"/>, after everything awaited before it has been sent.</summary>
+    /// <summary>Accepts the other node: marks the connection fully connected as <paramref name="userName"/>, after everything awaited before it has been sent.</summary>
     /// <param name="userName">The user on the other end.</param>
-    Task Connected(string userName);
+    Task Accept(string userName);
 
-    /// <summary>Drops the connection.</summary>
-    Task Disconnect();
+    /// <summary>Rejects the other node: drops the connection and logs <paramref name="reason"/> as why.</summary>
+    /// <param name="reason">Why the connection is refused.</param>
+    Task Reject(string reason);
 
     /// <summary>Sends an item over the connection, completing once the other node has accepted it. A send that fails drops the connection.</summary>
     /// <param name="item">An instance of the handshake's type.</param>

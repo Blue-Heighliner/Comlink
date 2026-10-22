@@ -15,13 +15,13 @@ internal static class EntryServiceTestExtensions
         }
 
         /// <summary>Stores a message in the Inbox the way the engine does for a received message.</summary>
-        public Task<MessageEntity> StoreIncomingMessage(string messageId, string fromUser, string body, List<AddressData> addresses, DateTime sentAt, Enum? priority = null, string tag = "", string messageLevel = "", string messageAspect = "")
-            => service.StoreIncomingMessage(Build(messageId, fromUser, body, addresses, sentAt, priority, tag, messageLevel, messageAspect));
+        public Task<MessageEntity> StoreIncomingMessage(string messageId, string fromUser, string body, List<AddressData> addresses, DateTime sentAt, Enum? priority = null, string tag = "", string level = "", string aspect = "")
+            => service.StoreIncomingMessage(Build(messageId, fromUser, body, addresses, sentAt, priority, tag, level, aspect));
 
         /// <summary>Stores a message in the Outbox the way the engine does for a sent one, then gives each user in <paramref name="userResults"/> the status it says.</summary>
-        public async Task<MessageEntity> StoreSentMessage(string messageId, string body, List<AddressData> addresses, DateTime sentAt, IReadOnlyList<UserDeliveryResult> userResults, Enum? priority = null, string tag = "", string messageLevel = "", string messageAspect = "")
+        public async Task<MessageEntity> StoreSentMessage(string messageId, string body, List<AddressData> addresses, DateTime sentAt, IReadOnlyList<UserDeliveryResult> userResults, Enum? priority = null, string tag = "", string level = "", string aspect = "")
         {
-            MessageEntity entity = await service.StoreSentMessage(Build(messageId, "SENDER", body, addresses, sentAt, priority, tag, messageLevel, messageAspect));
+            MessageEntity entity = await service.StoreSentMessage(Build(messageId, "SENDER", body, addresses, sentAt, priority, tag, level, aspect));
             foreach (UserDeliveryResult result in userResults)
             {
                 entity = await service.UpdateDeliveryStatus(messageId, result.UserName, result.Success ? DestinationStatus.Sent : DestinationStatus.Failed) ?? entity;
@@ -40,7 +40,7 @@ internal static class EntryServiceTestExtensions
         }
     }
 
-    private static Message Build(string messageId, string fromUser, string body, List<AddressData> addresses, DateTime sentAt, Enum? priority, string tag, string messageLevel, string messageAspect)
+    private static Message Build(string messageId, string fromUser, string body, List<AddressData> addresses, DateTime sentAt, Enum? priority, string tag, string level, string aspect)
         => new()
         {
             Id = messageId,
@@ -51,7 +51,7 @@ internal static class EntryServiceTestExtensions
             Priority = priority ?? TestMessagePriority.Normal,
             Tag = tag,
             IsAlert = tag == "ALERT",
-            MessageLevel = messageLevel.Length > 0 ? Enum.Parse<TestLevel>(messageLevel, ignoreCase: true) : null,
-            MessageAspect = messageAspect.Length > 0 ? Enum.Parse<TestAspect>(messageAspect, ignoreCase: true) : null
+            Level = level.Length > 0 ? Enum.Parse<TestLevel>(level, ignoreCase: true) : null,
+            Aspect = aspect.Length > 0 ? Enum.Parse<TestAspect>(aspect, ignoreCase: true) : null
         };
 }

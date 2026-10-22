@@ -10,12 +10,12 @@ internal interface INetworkReloadService
     /// Reads the network configuration file again, then changes only what the new file makes necessary. A changed listen port restarts only the
     /// listener, outgoing points no longer defined are closed and newly defined ones opened while the others keep their connections, and a server's
     /// topology is updated in place; only a changed role or changed certificates restart the peer layer, and only a changed port or certificates
-    /// restart the local interface listener. Everything else, such as users, groups, message levels and node settings, is read on demand and so is
+    /// restart the local interface listener. Everything else, such as users, groups, levels and node settings, is read on demand and so is
     /// current as soon as the file has been read.
     /// </summary>
     /// <remarks>
     /// <c>Logging.json</c> is read again too, so the log categories it turns on take effect at once, and so are the certificate files: when the user certificate now names another user, that user becomes
-    /// current (see <see cref="IUserService.Refresh"/>) and the connections are started again for them instead of being adjusted, and a replaced authority or user certificate for the same user restarts the connections. Once all of that is applied, the host's <see cref="IReconfigurer"/> is called, unless there is no current user.
+    /// current (see <see cref="IUserService.Refresh"/>) and the connections are started again for them instead of being adjusted, and a replaced authority or user certificate for the same user restarts the connections. Once all of that is applied, the host's <see cref="IConfigurationHandler"/> is called, unless there is no current user.
     /// </remarks>
     /// <exception cref="Exception">The network file can no longer be read or parsed; the engine keeps running on the configuration it had.</exception>
     Task Reload();

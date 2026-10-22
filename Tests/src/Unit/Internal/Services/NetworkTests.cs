@@ -24,7 +24,7 @@ public sealed class NetworkTests
     [Fact]
     public async Task GetAutoForwardTargets_LeavesOutTheCurrentUser()
     {
-        users.SetupGet(u => u.CurrentUser).Returns(new UserInfo<object> { Name = "ME" });
+        users.SetupGet(u => u.CurrentUser).Returns(new UserInformation { Name = "ME" });
         environment.Setup(e => e.GetAutoForwardTargets("Alerts")).ReturnsAsync(["BOB", "ME", "CAROL"]);
 
         Assert.Equal(["BOB", "CAROL"], await Build().GetAutoForwardTargets("Alerts"));
@@ -74,7 +74,7 @@ public sealed class NetworkTests
             ],
             SentAt = DateTime.UtcNow,
             Priority = TestMessagePriority.Normal,
-            MessageLevel = TestLevel.Secret
+            Level = TestLevel.Secret
         };
 
         IReadOnlySet<string> result = Build().GetDestinations(message, out IReadOnlySet<string> left);

@@ -7,7 +7,10 @@ namespace BlueHeighliner.Comlink;
 /// </summary>
 internal sealed class EngineBuilder : IEngineBuilder, IAsyncDisposable
 {
+    private readonly Lock identifierLock = new();
     private ServiceProvider? bootstrap;
+    private IServiceProvider? handlerServices;
+    private IConfigurationHandler? identifier;
 
     /// <summary>Work the typed builders still have to do once the configuration has finished stating things, such as turning what was collected into the frame mapping.</summary>
     public List<Action> Completions { get; } = [];
@@ -26,12 +29,14 @@ internal sealed class EngineBuilder : IEngineBuilder, IAsyncDisposable
     public string AppDataRoot => Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData) is { Length: > 0 } root && Path.IsPathRooted(root) ? root : throw new InvalidOperationException("The operating system gave no absolute application data folder, and nothing is stored in the working directory instead.");
     /// <summary>The name of the folder under <see cref="AppDataRoot"/> that holds the app's data: what the display handler states, otherwise the entry assembly's name.</summary>
     public string DataFolderName => DisplayHandlerInstance?.DataFolderName.OrNull() ?? Assembly.GetEntryAssembly()?.GetName().Name ?? "App";
-    /// <summary>Absolute path to the app's folder under the application data root, which holds the network configuration file and every user's data.</summary>
-    public string AppDataFolder => Path.Combine(AppDataRoot, DataFolderName);
-    /// <summary>The configured message levels, in ascending order; empty when none were stated.</summary>
-    public List<MessageLevel> MessageLevelValues { get; } = [];
-    /// <summary>The configured message aspects, in the order stated; empty when none were stated.</summary>
-    public List<MessageAspect> MessageAspectValues { get; } = [];
+    /// <summary>The folder the <c>--data</c> argument names, made absolute, or <see langword="null"/> when it is not given or the command line may not override.</summary>
+    public string? DataFolderOverride { get; set; }
+    /// <summary>Absolute path to the app's one data folder, which holds the network configuration file, the database, the logs and the stored records: the <c>--data</c> folder when given, otherwise <see cref="DataFolderName"/> under <see cref="AppDataRoot"/>.</summary>
+    public string AppDataFolder => DataFolderOverride ?? Path.Combine(AppDataRoot, DataFolderName);
+    /// <summary>The configured levels, in ascending order; empty when none were stated.</summary>
+    public List<LevelDefinition> LevelValues { get; } = [];
+    /// <summary>The configured aspects, in the order stated; empty when none were stated.</summary>
+    public List<AspectDefinition> AspectValues { get; } = [];
     /// <summary>The handler that controls the alert alarm, if stated.</summary>
     public ServiceRegistration<IAlarmHandler>? AlarmHandler { get; set; }
     /// <summary>The largest payload of a packet, stated with the packets.</summary>
@@ -62,14 +67,16 @@ internal sealed class EngineBuilder : IEngineBuilder, IAsyncDisposable
     public string? AuthorityCertificateValue { get; set; }
     /// <summary>The user certificate file, if stated.</summary>
     public string? UserCertificateValue { get; set; }
-    /// <summary>Whether the command-line overrides (<c>--config</c>, <c>--authority</c>, <c>--certificate</c>, <c>--user</c> and <c>--log</c>) are honored.</summary>
+    /// <summary>Whether the command-line overrides (<c>--config</c>, <c>--authority</c>, <c>--certificate</c>, <c>--data</c> and <c>--log</c>) are honored.</summary>
     public bool AreCommandLineOverridesAllowed { get; set; }
     /// <summary>Whether a log entry that reports an exception also carries its stack trace; on unless stated.</summary>
     public bool IsStackTraceEnabled { get; set; } = true;
     /// <summary>The type each user's profile in the network configuration is read into, or <see langword="null"/> when the host stated <see cref="NoProfile"/>.</summary>
     public Type? UserProfileType { get; set; }
-    /// <summary>The reconfigurer that runs once the engine is ready, if stated.</summary>
-    public ServiceRegistration<IReconfigurer>? Reconfigurer { get; set; }
+    /// <summary>The configuration handler, if stated.</summary>
+    public ServiceRegistration<IConfigurationHandler>? ConfigurationHandler { get; set; }
+    /// <summary>Whether the configuration handler states its own <see cref="IConfigurationHandler.Identify"/> rather than taking the default.</summary>
+    public bool IsIdentifying { get; set; }
     /// <summary>The external systems.</summary>
     public List<IExternalSystem> ExternalSystems { get; } = [];
     /// <summary>Registers the services typed by the host's enums, once <c>Types</c> has stated them.</summary>
@@ -132,6 +139,7 @@ internal sealed class EngineBuilder : IEngineBuilder, IAsyncDisposable
         }
         builder.Validate();
         builder.DisplayHandlerInstance = builder.DisplayHandler?.Create(services);
+        builder.handlerServices = services;
         return builder;
     }
 
@@ -152,7 +160,7 @@ internal sealed class EngineBuilder : IEngineBuilder, IAsyncDisposable
         {
             services.AddSingleton<IServiceConnection<TPriority, TLevel, TAspect, TProfile>>(provider => new ServiceConnection<TPriority, TLevel, TAspect, TProfile>(provider.GetRequiredService<IEngineConnection>()));
             services.AddSingleton<INetwork<TFrame, TPriority, TLevel, TAspect>>(provider => new Network<TFrame, TPriority, TLevel, TAspect>(provider.GetRequiredService<INetworkEnvironment>(), provider.GetRequiredService<IUserDirectory>()));
-            services.AddSingleton<IUserCatalog<TProfile>>(provider => new UserCatalog<TProfile>(provider.GetRequiredService<IUserDirectory>()));
+            services.AddSingleton<IUserCatalog<TLevel, TProfile>>(provider => new UserCatalog<TLevel, TProfile>(provider.GetRequiredService<IUserDirectory>()));
         };
         UserProfileType = typeof(TProfile) == typeof(NoProfile) ? null : typeof(TProfile);
         if (typeof(TPriority) == typeof(NoPriority))
@@ -163,8 +171,40 @@ internal sealed class EngineBuilder : IEngineBuilder, IAsyncDisposable
         return new EngineBuilder<TFrame, TPacket, TPriority, TLevel, TAspect, TProfile>(this);
     }
 
+    /// <summary>Says which user a certificate means: the configuration handler's answer when it states one, otherwise the first common name. The handler asked is built once, from the bootstrap container, since the engine does not exist yet.</summary>
+    /// <param name="commonNames">The subject common names of the user certificate, never empty.</param>
+    public string Identify(IReadOnlyList<string> commonNames)
+    {
+        if (!IsIdentifying || ConfigurationHandler is null)
+        {
+            return commonNames[0];
+        }
+
+        lock (identifierLock)
+        {
+            identifier ??= ConfigurationHandler.Create(handlerServices);
+            return identifier.Identify(commonNames);
+        }
+    }
+
     /// <inheritdoc />
-    public ValueTask DisposeAsync() => bootstrap?.DisposeAsync() ?? ValueTask.CompletedTask;
+    public async ValueTask DisposeAsync()
+    {
+        switch (identifier)
+        {
+            case IAsyncDisposable asyncDisposable:
+                await asyncDisposable.DisposeAsync();
+                break;
+            case IDisposable disposable:
+                disposable.Dispose();
+                break;
+        }
+
+        if (bootstrap is not null)
+        {
+            await bootstrap.DisposeAsync();
+        }
+    }
 
     private void Validate()
     {

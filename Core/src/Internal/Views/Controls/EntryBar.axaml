@@ -87,7 +87,7 @@
           </Grid>
         </Button>
 
-        <!-- Search, date range, message level, priority and alert-only (shown when the section above is
+        <!-- Search, date range, level, priority and alert-only (shown when the section above is
              expanded). Each control gets its own full-width row rather than sharing one, since a
              DatePicker/TimePicker's segmented layout does not shrink to fit and gets cut off when squeezed into
              a narrower column. -->
@@ -129,10 +129,10 @@
                      Height="26" />
           </StackPanel>
 
-          <StackPanel Spacing="3" IsVisible="{Binding ShowMessageLevelFilter}">
-            <TextBlock Text="{vm:Display 'MESSAGE LEVEL'}" FontSize="10" Foreground="#5A5A5A" FontWeight="SemiBold" LetterSpacing="1" />
-            <ComboBox ItemsSource="{Binding AvailableMessageLevelFilters}"
-                      SelectedItem="{Binding SelectedMessageLevelFilter}"
+          <StackPanel Spacing="3" IsVisible="{Binding ShowLevelFilter}">
+            <TextBlock Text="{vm:Display 'LEVEL'}" FontSize="10" Foreground="#5A5A5A" FontWeight="SemiBold" LetterSpacing="1" />
+            <ComboBox ItemsSource="{Binding AvailableLevelFilters}"
+                      SelectedItem="{Binding SelectedLevelFilter}"
                       Background="#3C3C3C"
                       BorderThickness="0"
                       FontSize="12"
@@ -213,8 +213,8 @@
             <Border DockPanel.Dock="Top"
                     Height="3"
                     Margin="0,0,0,4"
-                    Background="{Binding MessageLevelBackgroundHex, Converter={x:Static vm:ColorHexToBrushConverter.Instance}}"
-                    IsVisible="{Binding MessageLevelBackgroundHex, Converter={x:Static StringConverters.IsNotNullOrEmpty}}" />
+                    Background="{Binding LevelBackgroundHex, Converter={x:Static vm:ColorHexToBrushConverter.Instance}}"
+                    IsVisible="{Binding LevelBackgroundHex, Converter={x:Static StringConverters.IsNotNullOrEmpty}}" />
             <Grid ColumnDefinitions="*,Auto" Background="Transparent">
               <Grid.ContextMenu>
                 <ContextMenu>

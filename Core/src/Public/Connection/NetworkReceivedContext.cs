@@ -1,6 +1,6 @@
 namespace BlueHeighliner.Comlink;
 
-/// <summary>Handed to <see cref="IFrameHandler{TFrame, TPriority, TLevel, TAspect}.OnReceived"/>. What a handler acts with is in <see cref="INetwork{TFrame, TPriority, TLevel, TAspect}"/> and <see cref="IUserCatalog{TProfile}"/>, which it asks for through dependency injection.</summary>
+/// <summary>Handed to <see cref="IFrameHandler{TFrame, TPriority, TLevel, TAspect}.OnReceived"/>. What a handler acts with is in <see cref="INetwork{TFrame, TPriority, TLevel, TAspect}"/> and <see cref="IUserCatalog{TLevel, TProfile}"/>, which it asks for through dependency injection.</summary>
 /// <typeparam name="TFrame">The host's frame type.</typeparam>
 public interface INetworkReceivedContext<TFrame> where TFrame : class
 {

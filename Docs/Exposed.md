@@ -6,12 +6,12 @@ What the package deliberately makes public so that a host's own code can use it,
 
 Asked for through dependency injection, in a constructor or in a `required` property, by a handler or by any class built from the container. Each is registered by the engine; a host that registers its own implementation for the interface takes precedence.
 
-- `IUserCatalog<TProfile>` - who is on the network, each as a `UserInfo<TProfile>`: the current user, every user the network configuration lists, the ones reachable right now, and the groups (`GroupInfo`) with their members expanded. Reads the current state each time, so it follows refreshes and connections. Only in the running engine.
+- `IUserCatalog<TLevel, TProfile>` - who is on the network, each as a `UserInfo<TLevel, TProfile>`: the current user, every user the network configuration lists, the ones reachable right now, and the groups (`GroupInfo`) with their members expanded. Reads the current state each time, so it follows refreshes and connections. Only in the running engine.
 - `INetwork<TFrame, TPriority, TLevel, TAspect>` - what a frame handler acts with: send a frame to a directly connected user, record a received message, set delivery statuses and the network indicator, send to interfaces and external systems, keep and find stored messages, expand destinations, read auto forward targets. Typed by what the host stated in `Types`. Only in the running engine.
 - `IServiceConnection<TPriority, TLevel, TAspect, TProfile>` - the host's high-level handle on the running engine: send a message, observe received messages and delivery status, mark a message read, list users. Only in the running engine.
 - `ILogger` - writes to the engine's log under a category and a required event identifier (`CL` is the engine's prefix, so a host uses its own), with or without an exception, for components that are not the engine. In the configuration's container too, where it writes nothing.
 - `IDebugMode` - whether the application was compiled with its own `DEBUG` constant (recorded in its assembly by the package's build targets). In the configuration's container too, so a configuration can state settings from it, such as `StackTrace(debug.IsDebug)`.
-- `IDataStore` - keeps the host's own records between runs: `Save(id, record)` writes a record of any class, typically a record type, as JSON under an identifier (replacing what was there) and `Load<T>(id)` reads it back or returns `null`. One file per identifier in the current user's data folder, so users sharing a machine never share records. Only in the running engine.
+- `IDataStore` - keeps the host's own records between runs: `Save(id, record)` writes a record of any class, typically a record type, as JSON under an identifier (replacing what was there) and `Load<T>(id)` reads it back or returns `null`. One file per identifier in the app's data folder. Only in the running engine.
 - `IDataPool` - rents byte buffers from a pool, as an `IMemoryOwner<byte>` of exactly the size asked for that returns the buffer when disposed. In the configuration's container too.
 
 ## Utilities
@@ -22,7 +22,7 @@ Plain types, used directly.
 - `BiDictionary<TLeft, TRight>` - pairs that can be looked up from either side, where each value is in exactly one pair.
 - `MemoryOwner<T>` - an `IMemoryOwner<T>` over memory someone else owns: it hands the memory out and disposing it does nothing.
 - `PooledBufferWriter` - an `IBufferWriter<byte>` over a pooled array, for a serializer to write into.
-- `IUserInfo`, `UserInfo<TProfile>` and `NoProfile` - everything known about a user, as the engine hands it to a host: always the `UserInfo<TProfile>` typed by the profile record the host stated in its `Types` call (`NoProfile` for none), which implements the non-generic `IUserInfo` for code that does not care about the profile.
+- `IUserInfo`, `UserInfo<TLevel, TProfile>` and `NoProfile` - everything known about a user, as the engine hands it to a host: always the `UserInfo<TLevel, TProfile>` typed by the profile record the host stated in its `Types` call (`NoProfile` for none), which implements the non-generic `IUserInfo` for code that does not care about the profile.
 - `LogCategories` - the categories the engine logs under and which of them are written by default, for use with `ILogger`.
 
 ## Test fakes
@@ -33,12 +33,12 @@ The `BlueHeighliner.Comlink` package also has, in the `BlueHeighliner.Comlink.Te
 - `FakeFramePacketCreateContext<TFrame>` for `IFramePacketCreateContext<TFrame>`, handed to `IPacketHandler.CreateFramePacket`.
 - `FakeDraftBlockContext<,,>` for `IDraftBlockContext<,,>`, handed to `IDraftHandler.IsBlocked`, and `FakeDraftContext<,,>` for `IDraftContext<,,>`, handed to `IsAlert` and `GetHeader`.
 - `FakeNetworkConnectedContext`, `FakeNetworkDisconnectedContext`, `FakeNetworkReceivedContext<TFrame>`, `FakeNetworkSentContext<,,>`, `FakeNetworkReadContext<,,>` and `FakeNetworkRetrievalContext`, for the contexts of the six methods of `IFrameHandler`.
-- `FakeFrameHandshakeContext<TFrame>` and `FakePacketHandshakeContext<TPacket>`, for the handshake contexts: what a handler sends is recorded in `Sent` and accepted (`SendResult`), `Connected` and `Disconnect` are recorded and finish at once.
+- `FakeFrameHandshakeContext<TFrame>` and `FakePacketHandshakeContext<TPacket>`, for the handshake contexts: what a handler sends is recorded in `Sent` and accepted (`SendResult`), `Accept` (`Accepted`) and `Reject` (`Rejected`, with the reasons) are recorded and finish at once.
 - `FakeImportFormatContext<,>` for `IImportFormatContext<,>`, handed to a custom import format's reader: every addition is recorded in `Messages`, `Drafts`, `Notes` and `StagedSends`.
 
 Services:
 
-- `FakeUserCatalog<TProfile>` for `IUserCatalog<TProfile>`: the users, groups and connections it is given, settable afterwards.
+- `FakeUserCatalog<TLevel, TProfile>` for `IUserCatalog<TLevel, TProfile>`: the users, groups and connections it is given, settable afterwards.
 - `FakeNetwork<,,,>` for `INetwork<,,,>`: every send is accepted (`SendResult`) and every other operation finishes at once, each recorded in a list of its own (`Sent`, `SentToInterfaces`, `SentStatuses` and so on); `FoundMessages` and `AutoForwardTargets` set what it finds, and `GetDestinations` answers the distinct targets with no one left out.
 - `FakeServiceConnection<,,,>` for `IServiceConnection<,,,>`: connects at once, answers `UserInfo`, `UserNames` and `ConnectedUsers`, accepts and records sends and mark read, and raises the engine's events with `RaiseMessageReceived` and `RaiseDeliveryStatusChanged`.
 - `FakeLogger` for `ILogger`: records every entry as a `FakeLogEntry` in `Entries`, and refuses an entry with no identifier as the engine's does.
@@ -48,7 +48,7 @@ Services:
 ```csharp
 FakeNetworkReceivedContext<MyFrame> context = new(new MyFrame { Body = "hi" }, "ALICE");
 FakeNetwork<MyFrame, MyPriority, MyLevel, MyAspect> network = new();
-MyFrameHandler handler = new(new FakeUserCatalog<NoProfile>(new UserInfo<NoProfile> { Name = "ME" }), network);
+MyFrameHandler handler = new(new FakeUserCatalog<MyLevel, NoProfile>(new UserInfo<MyLevel, NoProfile> { Name = "ME" }), network);
 
 await handler.OnReceived(context);
 

@@ -30,7 +30,7 @@ public static class Engine
     /// </typeparam>
     /// <param name="args">Command-line arguments passed from the host entry point.</param>
     /// <param name="configureServices">Registers the host's own services, which always take precedence over what the engine finds by convention (every concrete class of the configuration's assembly and of the entry assembly is registered as its <c>IThing</c> interface, so <c>MyService</c> answers for <c>IMyService</c> without being registered): the ones <typeparamref name="TConfiguration"/> depends on, and any others the host wants in the running engine (for example a hosted service that uses <see cref="IServiceConnection{TPriority, TLevel, TAspect, TProfile}"/>).</param>
-    /// <exception cref="InvalidOperationException"><typeparamref name="TConfiguration"/> cannot be constructed, or is incomplete or contradicts itself, or a headless node's certificates are missing, invalid or not issued to a user of the network (any other node shows the problem in its window instead).</exception>
+    /// <exception cref="InvalidOperationException"><typeparamref name="TConfiguration"/> cannot be constructed, or is incomplete or contradicts itself.</exception>
     public static async Task Start<TConfiguration>(string[] args, Action<IServiceCollection>? configureServices = null) where TConfiguration : class, IEngineConfiguration
     {
         ConfigureServices = configureServices;
@@ -38,17 +38,13 @@ public static class Engine
         Builder = EngineBuilder.Build<TConfiguration>(configureServices, HostAssemblies);
         await using (Builder)
         {
-            Network = NetworkConfig.Load(Builder.AreCommandLineOverridesAllowed ? args : [], Builder.AppDataFolder, Builder.UserProfileType);
+            string[] arguments = Builder.AreCommandLineOverridesAllowed ? args : [];
+            Builder.DataFolderOverride = NetworkConfig.Argument(arguments, "--data") is { } data ? Path.GetFullPath(data) : null;
+            Network = NetworkConfig.Load(arguments, Builder.AppDataFolder, Builder.UserProfileType, [.. Builder.LevelValues.Select(level => level.Key)]);
             Identity = MsmtCertificateLookup.CheckIdentity(Builder, Network);
 
-            // Without a window there is nowhere to show a problem, so a headless node that cannot be identified (it is the --user user that says it is headless) does not start.
-            if (Network.Find(Identity.Problem is null ? Identity.Identity.UserName : Network.User)?.Headless == true)
+            if (Identity.Problem is null && Network.Find(Identity.Identity.UserName)?.Headless == true)
             {
-                if (Identity.Problem is { } problem)
-                {
-                    throw new InvalidOperationException(problem);
-                }
-
                 await RunHeadless();
             }
             else

@@ -46,10 +46,10 @@ public sealed class TestDisplayHandler : IDisplayHandler
     public string? PriorityLabel => "Importance";
 
     /// <inheritdoc />
-    public string? MessageLevelLabel => "Classification";
+    public string? LevelLabel => "Classification";
 
     /// <inheritdoc />
-    public string? MessageAspectLabel => "Safeguard";
+    public string? AspectLabel => "Safeguard";
 
     /// <inheritdoc />
     public string? InboxLabel => "Received";

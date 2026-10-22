@@ -25,10 +25,10 @@ internal sealed class DraftEntity
     public int Priority { get; set; }
     /// <summary>Tag identifying the type of this draft.</summary>
     public string Tag { get; set; } = string.Empty;
-    /// <summary>Integer value of the member of the host's message level enum this draft should be sent at, or <see langword="null"/> for none.</summary>
-    public int? MessageLevel { get; set; }
-    /// <summary>Value of the message aspect this draft should be sent with, or <see langword="null"/> for none; see <see cref="IEngineController.MessageAspects"/>.</summary>
-    public int? MessageAspect { get; set; }
+    /// <summary>Integer value of the member of the host's level enum this draft should be sent at, or <see langword="null"/> for none.</summary>
+    public int? Level { get; set; }
+    /// <summary>Value of the aspect this draft should be sent with, or <see langword="null"/> for none; see <see cref="IEngineController.Aspects"/>.</summary>
+    public int? Aspect { get; set; }
     /// <summary>How many monospace characters wide a line of this draft is set to be, or <c>null</c> for no limit.</summary>
     public int? LineWidth { get; set; }
     /// <summary>UTC timestamp when the draft was sent, or <c>null</c> if not yet sent.</summary>

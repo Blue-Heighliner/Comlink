@@ -416,7 +416,7 @@ internal sealed class HandshakePeerTransport : IPeerTransport
     {
         public IConnectionInfo Connection => owner.engineController.WithLocalUser(session.Connection.Info);
 
-        public Task Connected(string userName)
+        public Task Accept(string userName)
         {
             if (owner.WrongSerialAddress(session.Connection, userName))
             {
@@ -429,9 +429,9 @@ internal sealed class HandshakePeerTransport : IPeerTransport
             return Task.CompletedTask;
         }
 
-        public Task Disconnect()
+        public Task Reject(string reason)
         {
-            owner.Fail(session, "was disconnected by its initial handler");
+            owner.Fail(session, $"was rejected by its initial handler: {reason}");
             return Task.CompletedTask;
         }
 

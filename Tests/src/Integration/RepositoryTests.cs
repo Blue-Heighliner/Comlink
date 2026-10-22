@@ -92,25 +92,6 @@ public sealed class RepositoryTests : IDisposable
         }
     }
 
-    /// <summary>An activity log written when event identifiers were numbers is still read, its identifiers as the engine's event of that number.</summary>
-    [Fact]
-    public void ActivityLog_WrittenWithNumericIds_IsStillRead()
-    {
-        using LiteDB.LiteDatabase database = new(new MemoryStream());
-        LiteDB.ILiteCollection<LiteDB.BsonDocument> raw = database.GetCollection("activity_logs");
-        raw.Insert(new LiteDB.BsonDocument
-        {
-            ["Date"] = DateTime.UtcNow.Date,
-            ["EventEntries"] = new LiteDB.BsonArray { new LiteDB.BsonDocument { ["At"] = DateTime.UtcNow, ["Message"] = "old", ["EventId"] = 65 } }
-        });
-
-        ActivityLogEntity entity = database.GetCollection<ActivityLogEntity>("activity_logs").FindAll().Single();
-
-        ActivityLogEntry entry = Assert.Single(entity.EventEntries);
-        Assert.Equal("old", entry.Message);
-        Assert.Equal("CL65", entry.EventId);
-    }
-
     /// <summary>Appending twice adds to the same day's entity.</summary>
     [Fact]
     public async Task ActivityLog_AppendEvent_AccumulatesOnSameDay()

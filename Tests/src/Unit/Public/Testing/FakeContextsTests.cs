@@ -37,9 +37,9 @@ public sealed class FakeContextsTests
         FakeDraftBlockContext<TestMessagePriority, TestLevel, TestAspect> block = new(TestMessagePriority.Low, tag: "SPAM");
 
         Assert.Equal("TAG: URGENT", new TestDraftHandler().GetHeader(draft));
-        Assert.Equal((TestMessagePriority.High, TestLevel.Secret, TestAspect.Signed, "body", 40), (draft.Priority, draft.MessageLevel, draft.MessageAspect, draft.Body, draft.LineWidth));
+        Assert.Equal((TestMessagePriority.High, TestLevel.Secret, TestAspect.Signed, "body", 40), (draft.Priority, draft.Level, draft.Aspect, draft.Body, draft.LineWidth));
         Assert.Equal("BOB", Assert.Single(draft.Addresses).UserName);
-        Assert.Equal((TestMessagePriority.Low, null, null, "SPAM"), (block.Priority, block.MessageLevel, block.MessageAspect, block.Tag));
+        Assert.Equal((TestMessagePriority.Low, null, null, "SPAM"), (block.Priority, block.Level, block.Aspect, block.Tag));
 
         block.Tag = "OK";
         Assert.Equal("OK", block.Tag);
@@ -64,7 +64,7 @@ public sealed class FakeContextsTests
         Assert.Equal(("SERVER", criteria), (retrieval.Server, retrieval.Criteria));
     }
 
-    /// <summary>The handshake contexts record what a handler sends and how it connects and disconnects, accept what is sent unless told otherwise, and finish at once.</summary>
+    /// <summary>The handshake contexts record what a handler sends and how it accepts and rejects, accept what is sent unless told otherwise, and finish at once.</summary>
     [Fact]
     public async Task FakeHandshakeContexts_AcceptWhatIsSent_AndRecordTheCalls()
     {
@@ -78,16 +78,16 @@ public sealed class FakeContextsTests
 
         Assert.Same(connection, packetContext.Connection);
         Assert.True(await packetContext.Send(packet));
-        await packetContext.Connected("ALICE");
-        await packetContext.Disconnect();
+        await packetContext.Accept("ALICE");
+        await packetContext.Reject("not trusted");
         Assert.True(await frameContext.Send(frame));
-        await frameContext.Connected("BOB");
+        await frameContext.Accept("BOB");
 
         Assert.Same(packet, Assert.Single(packets.Sent));
-        Assert.Equal(["ALICE"], packets.ConnectedAs);
-        Assert.Equal(1, packets.DisconnectCount);
+        Assert.Equal(["ALICE"], packets.Accepted);
+        Assert.Equal(["not trusted"], packets.Rejected);
         Assert.Same(frame, Assert.Single(frames.Sent));
-        Assert.Equal(["BOB"], frames.ConnectedAs);
+        Assert.Equal(["BOB"], frames.Accepted);
 
         frames.SendResult = false;
         Assert.False(await frameContext.Send(frame));

@@ -32,7 +32,7 @@ public sealed class TestTagRulesDraftHandler : IDraftHandler<TestMessagePriority
     public TestMessagePriority? DefaultPriority => TestMessagePriority.Level3;
 
     /// <inheritdoc />
-    public TestLevel? DefaultMessageLevel => TestLevel.Restricted;
+    public TestLevel? DefaultLevel => TestLevel.Restricted;
 
     /// <inheritdoc />
     public int MinTagLength => 2;

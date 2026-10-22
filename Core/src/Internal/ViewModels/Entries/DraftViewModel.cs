@@ -26,34 +26,34 @@ internal interface IDraftViewModel
     /// <summary>
     /// Gets the message priority levels available to choose from; see <see cref="IEngineController.Priorities"/>.
     /// Excludes any priority that <see cref="IEngineController.IsDraftBlocked"/> blocks with the current
-    /// message level, message aspect and <see cref="Tag"/>, so a blocked combination can never be selected in the first place.
+    /// level, aspect and <see cref="Tag"/>, so a blocked combination can never be selected in the first place.
     /// Recomputed whenever any of those change.
     /// </summary>
     IReadOnlyList<MessagePriorityOption> AvailablePriorities { get; }
     /// <summary>Gets or sets the priority level this draft will be sent at.</summary>
     MessagePriorityOption SelectedPriority { get; set; }
     /// <summary>
-    /// Gets the message levels available to send this draft at: every level configured with
+    /// Gets the levels available to send this draft at: every level configured with
     /// <see cref="IEngineBuilder{TFrame, TPacket, TPriority, TLevel, TAspect, TProfile}.Level"/> up to and including the current user's own assigned level (see
-    /// <see cref="IEngineController.GetUserMessageLevel"/>): a user can declassify to a lower level but never send
-    /// above their own clearance, and without the ones <see cref="IEngineController.IsDraftBlocked"/> blocks with the current priority, message aspect and tag.
-    /// Empty when no message levels are configured, in which case the picker is hidden.
+    /// <see cref="IEngineController.GetUserLevel"/>): a user can declassify to a lower level but never send
+    /// above their own clearance, and without the ones <see cref="IEngineController.IsDraftBlocked"/> blocks with the current priority, aspect and tag.
+    /// Empty when no levels are configured, in which case the picker is hidden.
     /// </summary>
-    IReadOnlyList<MessageLevel> AvailableMessageLevels { get; }
-    /// <summary>Gets or sets the message level this draft will be sent at, or <see langword="null"/> when no message levels are configured.</summary>
-    MessageLevel? SelectedMessageLevel { get; set; }
+    IReadOnlyList<LevelDefinition> AvailableLevels { get; }
+    /// <summary>Gets or sets the level this draft will be sent at, or <see langword="null"/> when no levels are configured.</summary>
+    LevelDefinition? SelectedLevel { get; set; }
     /// <summary>
-    /// Gets the choices for the message aspect this draft carries: none, then each aspect configured with <see cref="IEngineBuilder{TFrame, TPacket, TPriority, TLevel, TAspect, TProfile}.Aspect"/>.
-    /// Without the ones <see cref="IEngineController.IsDraftBlocked"/> blocks with the current priority, message level and tag.
-    /// Empty when no message aspects are configured, in which case the picker is hidden.
+    /// Gets the choices for the aspect this draft carries: none, then each aspect configured with <see cref="IEngineBuilder{TFrame, TPacket, TPriority, TLevel, TAspect, TProfile}.Aspect"/>.
+    /// Without the ones <see cref="IEngineController.IsDraftBlocked"/> blocks with the current priority, level and tag.
+    /// Empty when no aspects are configured, in which case the picker is hidden.
     /// </summary>
-    IReadOnlyList<MessageAspectOption> AvailableMessageAspects { get; }
-    /// <summary>Gets or sets the choice for the message aspect this draft will be sent with, or <see langword="null"/> when no message aspects are configured.</summary>
-    MessageAspectOption? SelectedMessageAspect { get; set; }
+    IReadOnlyList<AspectOption> AvailableAspects { get; }
+    /// <summary>Gets or sets the choice for the aspect this draft will be sent with, or <see langword="null"/> when no aspects are configured.</summary>
+    AspectOption? SelectedAspect { get; set; }
     /// <summary>
     /// Gets or sets the short, user-inputted tag identifying the type of this message; see
     /// the tag rules (see <see cref="IEngineController.DraftTagRules"/>). Setting a tag that <see cref="IEngineController.IsDraftBlocked"/>
-    /// blocks with every combination of priority, message level and message aspect is rejected: the value reverts to the
+    /// blocks with every combination of priority, level and aspect is rejected: the value reverts to the
     /// last valid tag and <see cref="StatusMessage"/> says why, so a blocked combination can never be entered. A tag that only blocks some combinations is accepted
     /// and the other choices move to a combination that is not blocked, which <see cref="StatusMessage"/> also says.
     /// </summary>
@@ -180,7 +180,7 @@ internal sealed partial class DraftViewModel : ObservableObject, IDraftViewModel
     /// <param name="engineController">Provides the shared alert label text, whether the alert checkbox is shown, the available message priority levels, tag input visibility/label, and blocked tag/priority combinations enforced on send.</param>
     /// <param name="bodyDocument">Optional body document implementation; defaults to <see cref="StringBodyDocument"/> when <see langword="null"/>.</param>
     /// <param name="confirmationWindow">How long an armed delete waits for its confirming press; defaults to a few seconds.</param>
-    /// <param name="currentMessageLevel">The current user's own assigned message level name; see <see cref="IEngineController.GetUserMessageLevel"/>.</param>
+    /// <param name="currentLevel">The current user's own level, a member of the host's level enum, or <see langword="null"/> when no levels are configured; see <see cref="IEngineController.GetUserLevel"/>.</param>
     /// <param name="isNew">Whether the draft has not been stored yet; it is only stored once it is altered and not blank.</param>
     public DraftViewModel(
         DraftEntity entity,
@@ -191,7 +191,7 @@ internal sealed partial class DraftViewModel : ObservableObject, IDraftViewModel
         IEngineController engineController,
         IBodyDocument? bodyDocument = null,
         TimeSpan? confirmationWindow = null,
-        string currentMessageLevel = "",
+        Enum? currentLevel = null,
         bool isNew = false)
     {
         this.entity = entity;
@@ -220,14 +220,14 @@ internal sealed partial class DraftViewModel : ObservableObject, IDraftViewModel
             ?? allPriorities.FirstOrDefault(p => p.Mode is PriorityMode.User)
             ?? allPriorities[0];
 
-        IReadOnlyList<MessageLevel> allMessageLevels = engineController.MessageLevels;
-        int ownRank = allMessageLevels.GetRank(currentMessageLevel);
-        allowedMessageLevels = ownRank < 0 ? [] : [.. allMessageLevels.Take(ownRank + 1)];
-        selectedMessageLevel = allowedMessageLevels.FirstOrDefault(l => l.Value == entity.MessageLevel)
-            ?? allowedMessageLevels.LastOrDefault();
+        IReadOnlyList<LevelDefinition> allLevels = engineController.Levels;
+        int ownRank = allLevels.GetRank(currentLevel);
+        allowedLevels = ownRank < 0 ? [] : [.. allLevels.Take(ownRank + 1)];
+        selectedLevel = allowedLevels.FirstOrDefault(l => l.Value == entity.Level)
+            ?? allowedLevels.LastOrDefault();
 
-        allMessageAspects = engineController.MessageAspects.Count == 0 ? [] : [new MessageAspectOption { Label = string.Empty }, .. engineController.MessageAspects.Select(aspect => new MessageAspectOption { Label = aspect.Name, Aspect = aspect })];
-        selectedMessageAspect = allMessageAspects.FirstOrDefault(option => option.Aspect is not null && option.Aspect.Value == entity.MessageAspect) ?? allMessageAspects.FirstOrDefault();
+        allAspects = engineController.Aspects.Count == 0 ? [] : [.. engineController.IsAspectRequired ? [] : new[] { new AspectOption { Label = string.Empty } }, .. engineController.Aspects.Select(aspect => new AspectOption { Label = aspect.Label, Aspect = aspect })];
+        selectedAspect = allAspects.FirstOrDefault(option => option.Aspect is not null && option.Aspect.Value == entity.Aspect) ?? allAspects.FirstOrDefault();
         RefreshChoices();
 
         foreach (AddressData a in entity.Addresses)
@@ -242,6 +242,7 @@ internal sealed partial class DraftViewModel : ObservableObject, IDraftViewModel
 
         Addresses.CollectionChanged += (_, _) =>
         {
+            ClearStatus();
             RebuildAddressGroups();
             UpdateHeader();
             StoreIfNew();
@@ -256,6 +257,7 @@ internal sealed partial class DraftViewModel : ObservableObject, IDraftViewModel
 
     private void RaiseTitleChanged()
     {
+        ClearStatus();
         TitleChanged?.Invoke(string.IsNullOrWhiteSpace(Name) ? BuildPlainBody().FirstLine : Name.Trim());
         StoreIfNew();
     }
@@ -327,13 +329,14 @@ internal sealed partial class DraftViewModel : ObservableObject, IDraftViewModel
     private readonly IEngineConnection connection;
     private readonly IEngineController engineController;
     private readonly IReadOnlyList<MessagePriorityOption> allPriorities;
-    private readonly IReadOnlyList<MessageLevel> allowedMessageLevels;
-    private readonly IReadOnlyList<MessageAspectOption> allMessageAspects;
+    private readonly IReadOnlyList<LevelDefinition> allowedLevels;
+    private readonly IReadOnlyList<AspectOption> allAspects;
     private readonly MicrosoftLogger logger;
     private DraftEntity entity;
     private string lastValidTag = string.Empty;
     private bool isReady;
     private bool isRefreshing;
+    private bool isRevertingTag;
 
     [ObservableProperty] private string name;
     [ObservableProperty] private string newAddressUser = string.Empty;
@@ -343,10 +346,10 @@ internal sealed partial class DraftViewModel : ObservableObject, IDraftViewModel
     private bool isAlert;
     [ObservableProperty] private MessagePriorityOption selectedPriority;
     [ObservableProperty] private IReadOnlyList<MessagePriorityOption> availablePriorities = [];
-    [ObservableProperty] private IReadOnlyList<MessageLevel> availableMessageLevels = [];
-    [ObservableProperty] private IReadOnlyList<MessageAspectOption> availableMessageAspects = [];
-    [ObservableProperty] private MessageLevel? selectedMessageLevel;
-    [ObservableProperty] private MessageAspectOption? selectedMessageAspect;
+    [ObservableProperty] private IReadOnlyList<LevelDefinition> availableLevels = [];
+    [ObservableProperty] private IReadOnlyList<AspectOption> availableAspects = [];
+    [ObservableProperty] private LevelDefinition? selectedLevel;
+    [ObservableProperty] private AspectOption? selectedAspect;
     [ObservableProperty] private string tag = string.Empty;
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(LineWidthValue))]
@@ -391,8 +394,15 @@ internal sealed partial class DraftViewModel : ObservableObject, IDraftViewModel
     /// <inheritdoc />
     public string FilterTag(string tag)
     {
+        ClearStatus();
         string filtered = engineController.DraftTagRules.Filter(tag);
-        return isReady && filtered != lastValidTag && !AnyCombinationAllowed(filtered) ? RejectTag(filtered) : filtered;
+        if (isReady && filtered != lastValidTag && !AnyCombinationAllowed(filtered))
+        {
+            StatusMessage = RejectTag(filtered);
+            return lastValidTag;
+        }
+
+        return filtered;
     }
 
     /// <inheritdoc />
@@ -461,10 +471,28 @@ internal sealed partial class DraftViewModel : ObservableObject, IDraftViewModel
 
     partial void OnNewAddressUserChanged(string value)
     {
+        ClearStatus();
         string upper = value.ToUpperInvariant();
         if (value != upper)
         {
             NewAddressUser = upper;
+        }
+    }
+
+    // A message about what the user did is about the draft as it was; once the user changes the draft it no longer applies. Choices the draft moves by itself are not input.
+    private void ClearStatus()
+    {
+        if (isReady)
+        {
+            StatusMessage = null;
+        }
+    }
+
+    private void ClearStatusOnChoice()
+    {
+        if (!isRefreshing)
+        {
+            ClearStatus();
         }
     }
 
@@ -478,14 +506,14 @@ internal sealed partial class DraftViewModel : ObservableObject, IDraftViewModel
         }
     }
 
-    private List<(MessagePriorityOption Priority, MessageLevel? Level, MessageAspectOption? Aspect)> AllowedCombinations(string draftTag)
+    private List<(MessagePriorityOption Priority, LevelDefinition? Level, AspectOption? Aspect)> AllowedCombinations(string draftTag)
     {
-        List<(MessagePriorityOption, MessageLevel?, MessageAspectOption?)> allowed = [];
+        List<(MessagePriorityOption, LevelDefinition?, AspectOption?)> allowed = [];
         foreach (MessagePriorityOption priority in allPriorities.Where(p => p.Mode is PriorityMode.User))
         {
-            foreach (MessageLevel? level in allowedMessageLevels.Count == 0 ? [null] : allowedMessageLevels.Cast<MessageLevel?>())
+            foreach (LevelDefinition? level in allowedLevels.Count == 0 ? [null] : allowedLevels.Cast<LevelDefinition?>())
             {
-                foreach (MessageAspectOption? aspect in allMessageAspects.Count == 0 ? [null] : allMessageAspects.Cast<MessageAspectOption?>())
+                foreach (AspectOption? aspect in allAspects.Count == 0 ? [null] : allAspects.Cast<AspectOption?>())
                 {
                     if (engineController.IsDraftBlocked(priority.Key, level?.Key, aspect?.Aspect?.Key, draftTag) is null)
                     {
@@ -500,17 +528,13 @@ internal sealed partial class DraftViewModel : ObservableObject, IDraftViewModel
 
     private bool AnyCombinationAllowed(string draftTag) => AllowedCombinations(draftTag).Count > 0;
 
-    private string? BlockedReason(MessagePriorityOption priority, MessageLevel? level, MessageAspectOption? aspect, string draftTag)
+    private string? BlockedReason(MessagePriorityOption priority, LevelDefinition? level, AspectOption? aspect, string draftTag)
         => engineController.IsDraftBlocked(priority.Key, level?.Key, aspect?.Aspect?.Key, draftTag) is { } given ? Explain(given) : null;
 
     private string Explain(string reason) => engineController.Display(string.IsNullOrWhiteSpace(reason) ? "This combination is not allowed" : reason);
 
     // The tag is refused whole, so it says why the tag the user was typing is blocked with what is chosen now, which is what the host's reason is about.
-    private string RejectTag(string rejected)
-    {
-        StatusMessage = BlockedReason(SelectedPriority, SelectedMessageLevel, SelectedMessageAspect, rejected) ?? Explain(string.Empty);
-        return lastValidTag;
-    }
+    private string RejectTag(string rejected) => BlockedReason(SelectedPriority, SelectedLevel, SelectedAspect, rejected) ?? Explain(string.Empty);
 
     // Each list keeps only what some allowed combination with the tag uses, and when the current choices are not an allowed combination the one just changed stays
     // and the others move to the allowed combination that keeps the most of what was chosen.
@@ -519,7 +543,7 @@ internal sealed partial class DraftViewModel : ObservableObject, IDraftViewModel
         isRefreshing = true;
         try
         {
-            List<(MessagePriorityOption Priority, MessageLevel? Level, MessageAspectOption? Aspect)> allowed = AllowedCombinations(Tag);
+            List<(MessagePriorityOption Priority, LevelDefinition? Level, AspectOption? Aspect)> allowed = AllowedCombinations(Tag);
             if (allowed.Count == 0)
             {
                 return;
@@ -532,41 +556,41 @@ internal sealed partial class DraftViewModel : ObservableObject, IDraftViewModel
                 AvailablePriorities = priorities;
             }
 
-            List<MessageLevel> levels = [.. allowedMessageLevels.Where(l => allowed.Any(c => c.Level == l))];
-            if (!levels.SequenceEqual(AvailableMessageLevels))
+            List<LevelDefinition> levels = [.. allowedLevels.Where(l => allowed.Any(c => c.Level == l))];
+            if (!levels.SequenceEqual(AvailableLevels))
             {
-                AvailableMessageLevels = levels;
+                AvailableLevels = levels;
             }
 
-            List<MessageAspectOption> aspects = [.. allMessageAspects.Where(a => allowed.Any(c => c.Aspect == a))];
-            if (!aspects.SequenceEqual(AvailableMessageAspects))
+            List<AspectOption> aspects = [.. allAspects.Where(a => allowed.Any(c => c.Aspect == a))];
+            if (!aspects.SequenceEqual(AvailableAspects))
             {
-                AvailableMessageAspects = aspects;
+                AvailableAspects = aspects;
             }
 
-            if (allowed.Any(c => c.Priority == SelectedPriority && c.Level == SelectedMessageLevel && c.Aspect == SelectedMessageAspect))
+            if (allowed.Any(c => c.Priority == SelectedPriority && c.Level == SelectedLevel && c.Aspect == SelectedAspect))
             {
                 return;
             }
 
             // The choices are about to move, because the combination they make is blocked: the user is told why, in the host's words when it gave any.
-            if (isReady && BlockedReason(SelectedPriority, SelectedMessageLevel, SelectedMessageAspect, Tag) is { } blockedReason)
+            if (isReady && BlockedReason(SelectedPriority, SelectedLevel, SelectedAspect, Tag) is { } blockedReason)
             {
                 StatusMessage = blockedReason;
             }
 
-            List<(MessagePriorityOption Priority, MessageLevel? Level, MessageAspectOption? Aspect)> candidates = [.. allowed.Where(c => changed switch
+            List<(MessagePriorityOption Priority, LevelDefinition? Level, AspectOption? Aspect)> candidates = [.. allowed.Where(c => changed switch
             {
                 DraftChoice.Priority => c.Priority == SelectedPriority,
-                DraftChoice.Level => c.Level == SelectedMessageLevel,
-                DraftChoice.Aspect => c.Aspect == SelectedMessageAspect,
+                DraftChoice.Level => c.Level == SelectedLevel,
+                DraftChoice.Aspect => c.Aspect == SelectedAspect,
                 _ => true
             })];
-            (MessagePriorityOption priority, MessageLevel? level, MessageAspectOption? aspect) = (candidates.Count == 0 ? allowed : candidates)
-                .MaxBy(c => (c.Priority == SelectedPriority ? 1 : 0) + (c.Level == SelectedMessageLevel ? 1 : 0) + (c.Aspect == SelectedMessageAspect ? 1 : 0));
+            (MessagePriorityOption priority, LevelDefinition? level, AspectOption? aspect) = (candidates.Count == 0 ? allowed : candidates)
+                .MaxBy(c => (c.Priority == SelectedPriority ? 1 : 0) + (c.Level == SelectedLevel ? 1 : 0) + (c.Aspect == SelectedAspect ? 1 : 0));
             SelectedPriority = priority;
-            SelectedMessageLevel = level;
-            SelectedMessageAspect = aspect;
+            SelectedLevel = level;
+            SelectedAspect = aspect;
         }
         finally
         {
@@ -576,6 +600,11 @@ internal sealed partial class DraftViewModel : ObservableObject, IDraftViewModel
 
     partial void OnTagChanged(string value)
     {
+        if (!isRevertingTag)
+        {
+            ClearStatus();
+        }
+
         // What is typed or pasted is made into a tag the rules allow, and the change is made again with that.
         string allowed = engineController.DraftTagRules.Filter(value);
         if (allowed != value)
@@ -589,7 +618,18 @@ internal sealed partial class DraftViewModel : ObservableObject, IDraftViewModel
             // Reject the change: every combination is blocked with this tag, so revert to the last valid tag instead of
             // letting the blocked value stand. Re-enters this method with a value that is never blocked
             // (by invariant, lastValidTag was itself accepted previously), so this does not recurse further.
-            Tag = RejectTag(value);
+            string reason = RejectTag(value);
+            isRevertingTag = true;
+            try
+            {
+                Tag = lastValidTag;
+            }
+            finally
+            {
+                isRevertingTag = false;
+            }
+
+            StatusMessage = reason;
             return;
         }
 
@@ -600,18 +640,21 @@ internal sealed partial class DraftViewModel : ObservableObject, IDraftViewModel
 
     partial void OnSelectedPriorityChanged(MessagePriorityOption value)
     {
+        ClearStatusOnChoice();
         RefreshIfChosen(DraftChoice.Priority);
         UpdateHeader();
     }
 
-    partial void OnSelectedMessageLevelChanged(MessageLevel? value)
+    partial void OnSelectedLevelChanged(LevelDefinition? value)
     {
+        ClearStatusOnChoice();
         RefreshIfChosen(DraftChoice.Level);
         UpdateHeader();
     }
 
-    partial void OnSelectedMessageAspectChanged(MessageAspectOption? value)
+    partial void OnSelectedAspectChanged(AspectOption? value)
     {
+        ClearStatusOnChoice();
         RefreshIfChosen(DraftChoice.Aspect);
         UpdateHeader();
     }
@@ -639,8 +682,8 @@ internal sealed partial class DraftViewModel : ObservableObject, IDraftViewModel
                 {
                     Tag = Tag,
                     Priority = SelectedPriority.Key,
-                    MessageLevel = SelectedMessageLevel?.Name ?? string.Empty,
-                    MessageAspect = SelectedMessageAspect?.Aspect?.Name ?? string.Empty,
+                    Level = SelectedLevel?.Key,
+                    Aspect = SelectedAspect?.Aspect?.Key,
                     Body = BuildPlainBody(),
                     Addresses = [.. Addresses.Select(a => new AddressRequest { UserName = a.UserName, Type = a.Type, Information = a.Information })],
                     LineWidth = LineWidth
@@ -810,8 +853,8 @@ internal sealed partial class DraftViewModel : ObservableObject, IDraftViewModel
         entity.IsAlert = IsAlert;
         entity.Priority = SelectedPriority.Stored;
         entity.Tag = Tag;
-        entity.MessageLevel = SelectedMessageLevel?.Value;
-        entity.MessageAspect = SelectedMessageAspect?.Aspect?.Value;
+        entity.Level = SelectedLevel?.Value;
+        entity.Aspect = SelectedAspect?.Aspect?.Value;
         entity.LineWidth = LineWidth;
     }
 
@@ -845,7 +888,7 @@ internal sealed partial class DraftViewModel : ObservableObject, IDraftViewModel
 
     // Everything a save writes, so leaving a draft that was only looked at does not save it and move it to the top of the list.
     private string Snapshot()
-        => string.Join('\u001F', Name, SerializeBody(), Tag, SelectedPriority.Stored, SelectedMessageLevel?.Value, SelectedMessageAspect?.Aspect?.Value, LineWidth, string.Join('\u001E', Addresses.Select(address => $"{address.UserName}\u001D{address.Type}\u001D{address.Information}")));
+        => string.Join('\u001F', Name, SerializeBody(), Tag, SelectedPriority.Stored, SelectedLevel?.Value, SelectedAspect?.Aspect?.Value, LineWidth, string.Join('\u001E', Addresses.Select(address => $"{address.UserName}\u001D{address.Type}\u001D{address.Information}")));
 
     [RelayCommand]
     private async Task Send()
@@ -866,7 +909,7 @@ internal sealed partial class DraftViewModel : ObservableObject, IDraftViewModel
         IsSaving = true;
         try
         {
-            if (BlockedReason(SelectedPriority, SelectedMessageLevel, SelectedMessageAspect, Tag) is { } blockedReason)
+            if (BlockedReason(SelectedPriority, SelectedLevel, SelectedAspect, Tag) is { } blockedReason)
             {
                 StatusMessage = blockedReason;
                 return;
@@ -879,7 +922,7 @@ internal sealed partial class DraftViewModel : ObservableObject, IDraftViewModel
             SendMessageResult? result = await connection.SendMessage(
                 body,
                 Addresses.Select(a => new AddressRequest { UserName = a.UserName, Type = a.Type, Information = a.Information }).ToList(),
-                SelectedPriority.Key, Tag, SelectedMessageLevel?.Key, SelectedMessageAspect?.Aspect?.Key);
+                SelectedPriority.Key, Tag, SelectedLevel?.Key, SelectedAspect?.Aspect?.Key);
             if (result is null)
             {
                 StatusMessage = engineController.Display("Cannot send: this node has no user");

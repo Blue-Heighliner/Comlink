@@ -9,9 +9,9 @@ internal enum DraftChoice
     /// <summary>The priority.</summary>
     Priority,
 
-    /// <summary>The message level.</summary>
+    /// <summary>The level.</summary>
     Level,
 
-    /// <summary>The message aspect.</summary>
+    /// <summary>The aspect.</summary>
     Aspect
 }

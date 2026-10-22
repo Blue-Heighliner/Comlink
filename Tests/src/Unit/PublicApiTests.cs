@@ -20,20 +20,19 @@ public sealed class PublicApiTests
                 "FakeDraftContext`3", "FakeFrameHandshakeContext`1", "FakeFramePacketCreateContext`1", "FakeImportFormatContext`2", "FakeLogEntry",
                 "FakeLogger", "FakeNetwork`4", "FakeNetworkConnectedContext", "FakeNetworkDisconnectedContext", "FakeNetworkReadContext`3",
                 "FakeNetworkReceivedContext`1", "FakeNetworkRetrievalContext", "FakeNetworkSentContext`3", "FakePacketHandshakeContext`1",
-                "FakeServiceConnection`4", "FakeUserCatalog`1", "FolderType", "FrameOrigin", "FrameSerializer`2", "GroupInfo", "HdlcRemote",
-                "IAddressTypeBuilder`6", "IAlarmHandler", "IConnectionInfo", "IDataPool", "IDataStore", "IDebugMode", "IDeleteContext", "IDeleteHandler",
+                "FakeServiceConnection`4", "FakeUserCatalog`2", "FolderType", "FrameOrigin", "FrameSerializer`2", "GroupInfo", "HdlcRemote",
+                "IAddressTypeBuilder`6", "IAlarmHandler", "IAspectBuilder`6", "IConfigurationHandler", "IConnectionInfo", "IDataPool", "IDataStore", "IDebugMode", "IDeleteContext", "IDeleteHandler",
                 "IDisplayHandler", "IDraftBlockContext`3", "IDraftContext`3", "IDraftHandler`3", "IEngineBuilder", "IEngineBuilder`6",
                 "IEngineConfiguration", "IExportFormat", "IExternalSystem", "IFrameBuilder`6", "IFrameHandler`4", "IFrameHandshakeContext`1",
                 "IFrameHandshakeHandler`1", "IFrameHeartbeatHandler`2", "IFramePacketCreateContext`1", "IFrameSerializer", "IHdlcBuilder`6",
-                "IImportFormat`2", "IImportFormatContext`2", "IIpConnectionInfo", "ILogger", "ILogHandler", "IMessageAspectBuilder`6",
-                "IMessageLevelBuilder`6", "IMsmtBuilder`6", "INetwork`4", "INetworkConnectedContext", "INetworkDisconnectedContext",
+                "IImportFormat`2", "IImportFormatContext`2", "IIpConnectionInfo", "ILevelBuilder`6", "ILogger", "ILogHandler", "IMsmtBuilder`6", "INetwork`4", "INetworkConnectedContext", "INetworkDisconnectedContext",
                 "INetworkReadContext`3", "INetworkReceivedContext`1", "INetworkRetrievalContext", "INetworkSentContext`3", "IPacketBuilder`6",
                 "IPacketHandler`2", "IPacketHandshakeContext`1", "IPacketHandshakeHandler`1", "IPacketHeartbeatHandler`2", "IPacketSerializer",
-                "IPrintHandler`3", "IPriorityLevelBuilder`6", "IReconfigurer", "ISerialConnectionInfo", "IServiceConnection`4", "IUserCatalog`1",
+                "IPrintHandler`3", "IPriorityLevelBuilder`6", "ISerialConnectionInfo", "IServiceConnection`4", "IUserCatalog`2",
                 "IUserInfo", "LogCategories", "MemoryOwner`1", "Message`3", "MessageAddress", "MessageDeliveryStatus", "MessageExportData",
-                "NoMessageAspect", "NoMessageLevel", "NoPacket", "NoPriority", "NoProfile", "NoteExportData", "PacketSerializer`2", "PooledBufferWriter",
+                "NoAspect", "NoLevel", "NoPacket", "NoPriority", "NoProfile", "NoteExportData", "PacketSerializer`2", "PooledBufferWriter",
                 "PriorityMode", "ProtobufSerializer", "RetrievalCriteria", "SendMessageResult", "SentMessage", "StagedSendData`2", "StagedSendMode",
-                "TagCase", "UserIdentity", "UserInfo`1", "UserLink", "UserRole"
+                "TagCase", "UserIdentity", "UserInfo`2", "UserLink", "UserRole"
             ],
             exported);
     }

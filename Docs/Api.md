@@ -9,12 +9,12 @@ already covered in the source itself.
 
 A host implements `IEngineConfiguration`, whose single `Configure` method receives an `IEngineBuilder` and states, through
 fluent calls, how the engine should run. It starts with `Types`, which fixes the frame type, the optional packet type, the
-priority enum and the message level enum, and returns the typed builder every other setting is stated on, so handlers,
-priorities and message levels are all checked against those types. After `Types`, the frame configuration (usually with the
+priority enum and the level enum, and returns the typed builder every other setting is stated on, so handlers,
+priorities and levels are all checked against those types. After `Types`, the frame configuration (usually with the
 frame handler that implements the protocol) is stated and anything else that should differ from the engine's defaults is optional (see [Configuration.md](Components/Configuration.md)).
 Core has no frame DTO of its own.
 
-Everything the engine constructs for the host (its configuration, handlers, serializers and reconfigurer) takes its dependencies as constructor arguments or as `required` properties, and the classes of the host's assemblies are registered under the interface named for them, so a service needs no registration unless the host wants a different one. Handlers act through services they ask for, such as `IUserCatalog<TProfile>` and `INetwork`, rather than through what a method is handed.
+Everything the engine constructs for the host (its configuration, handlers, serializers and configuration handler) takes its dependencies as constructor arguments or as `required` properties, and the classes of the host's assemblies are registered under the interface named for them, so a service needs no registration unless the host wants a different one. Handlers act through services they ask for, such as `IUserCatalog<TLevel, TProfile>` and `INetwork`, rather than through what a method is handed.
 
 `Engine.Start<TConfiguration>(string[] args, Action<IServiceCollection>? configureServices = null)` is the only entry
 point. The host never builds an engine object: it names the type that describes what it wants, and the engine constructs
@@ -34,17 +34,17 @@ await Engine.Start<MyEngineConfiguration>(args, services => services.AddSingleto
    `InvalidOperationException` if the configuration cannot be constructed, the frame type is missing, or a logical field
    is unmapped. The bootstrap container stays alive for the life of the engine, since the configuration may have handed the
    builder functions that use what was injected.
-2. `NetworkConfig.Load` reads the network configuration from `Config.json` in the app data folder; when the configuration allowed command-line overrides (`CommandLineOverrides`, off by default), `--config`,
-   `--authority`, `--certificate` and `--user` take precedence, and otherwise they are ignored.
-3. The node then works out who it is from its certificate files (`Certificates`, or the arguments): the user is a subject common name of the user certificate that the network file lists. A certificate file that is missing or unreadable, a user certificate that does not chain to the authority certificate, one not issued to a user the network lists, or no certificate stated is recorded as a problem rather than thrown: the window shows an error screen in place of the app until a refresh finds the certificate in order. A headless node (the `Headless` entry of the user named by `--user`) has no window to show it in, so there `Engine.Start` throws an `InvalidOperationException`.
-   If the user's entry sets `Headless`, `Engine` builds and runs an `IHost` with no UI. Otherwise
+2. `NetworkConfig.Load` reads the network configuration from `Config.json` in the app's one data folder; when the configuration allowed command-line overrides (`CommandLineOverrides`, off by default), `--data` replaces that folder, and `--config`,
+   `--authority` and `--certificate` take precedence, and otherwise they are ignored.
+3. The node then works out who it is from its certificate files (`Certificates`, or the arguments): the user is the one the configuration handler's `Identify` makes of the user certificate's subject common names (by default the first), which the network file must list. A certificate file that is missing or unreadable, a user certificate that does not chain to the authority certificate, one not issued to a user the network lists, or no certificate stated is recorded as a problem rather than thrown: the window shows an error screen in place of the app until a refresh finds the certificate in order. 
+   If the identified user's entry sets `Headless`, `Engine` builds and runs an `IHost` with no UI. Otherwise
    it builds and shows the Avalonia desktop application.
 4. In both cases the engine's services are registered from what the host stated, with a decorator layering
    the network file's node settings for the current user on top of the settings that have a corresponding
    field, and the host's
    `configureServices` registrations run again against the engine's own container, so a service the configuration used
    and a service the running engine uses are separate instances.
-5. Each time the configuration has been loaded and the current user identified, at start-up (before the engine connects to anyone) and after every refresh, the engine calls the host's reconfigurer, if it stated one (`Reconfigure<T>()`), and never while there is no current user.
+5. Each time the configuration has been loaded and the current user identified, at start-up (before the engine connects to anyone) and after every refresh, the engine calls the host's configuration handler's `OnReconfigured`, if it stated one (`Configure<T>()`), and never while there is no current user.
 6. Once started, a host interacts with the running engine through `IServiceConnection<TPriority, TLevel, TAspect, TProfile>`, sending
    messages, observing delivery status, and reading/writing entries: the same surface whether
    running with or without a UI.

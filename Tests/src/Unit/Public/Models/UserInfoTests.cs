@@ -1,12 +1,12 @@
 namespace BlueHeighliner.Comlink.Tests.Unit.Public.Models;
 
-/// <summary>Unit tests for <see cref="UserInfo{TProfile}"/>.</summary>
+/// <summary>Unit tests for <see cref="UserInfo{TLevel, TProfile}"/>.</summary>
 public sealed class UserInfoTests
 {
-    private static UserInfo<object> Full() => new()
+    private static UserInformation Full() => new()
     {
         Name = "ALICE",
-        MessageLevel = "HIGH",
+        Level = TestLevel.High,
         Groups = ["OPS"],
         Role = UserRole.Server,
         IpHost = "10.0.0.1",
@@ -26,7 +26,7 @@ public sealed class UserInfoTests
     {
         IUserInfo source = Full();
 
-        UserInfo<TestProfile> typed = UserInfo<TestProfile>.From(source);
+        UserInfo<TestLevel, TestProfile> typed = UserInfo<TestLevel, TestProfile>.From(source);
 
         foreach (System.Reflection.PropertyInfo property in typeof(IUserInfo).GetProperties().Where(property => property.Name is not nameof(IUserInfo.Profile)))
         {
@@ -34,8 +34,9 @@ public sealed class UserInfoTests
         }
 
         Assert.Equal(new TestProfile("4B", 2), typed.Profile);
-        Assert.Same(typed, UserInfo<TestProfile>.From(typed));
-        Assert.Null(UserInfo<NoProfile>.From(source).Profile);
-        Assert.Null(UserInfo<TestProfile>.From(new UserInfo<object> { Name = "BOB" }).Profile);
+        Assert.Same(typed, UserInfo<TestLevel, TestProfile>.From(typed));
+        Assert.Null(UserInfo<TestLevel, NoProfile>.From(source).Profile);
+        Assert.Null(UserInfo<TestMessagePriority, TestProfile>.From(source).Level);
+        Assert.Null(UserInfo<TestLevel, TestProfile>.From(new UserInformation { Name = "BOB" }).Profile);
     }
 }

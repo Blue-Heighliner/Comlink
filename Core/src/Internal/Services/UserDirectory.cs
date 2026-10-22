@@ -1,6 +1,6 @@
 namespace BlueHeighliner.Comlink;
 
-/// <summary>Who is on the network, without the typing of the user profiles the host's <c>Types</c> call states: what the engine itself works with, and what <see cref="UserCatalog{TProfile}"/> hands to the host typed.</summary>
+/// <summary>Who is on the network, without the typing of the user profiles the host's <c>Types</c> call states: what the engine itself works with, and what <see cref="UserCatalog{TLevel, TProfile}"/> hands to the host typed.</summary>
 internal interface IUserDirectory
 {
     /// <summary>Gets the user this node runs as.</summary>

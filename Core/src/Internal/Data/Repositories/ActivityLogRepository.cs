@@ -71,7 +71,7 @@ internal sealed class ActivityLogRepository : IActivityLogRepository
         ActivityLogEntry entry = new() { At = DateTime.UtcNow, Message = eventText, EventId = eventId };
         lock (pendingLock)
         {
-            // The database is opened on the user's data folder once the host starts, so what is logged before then waits and is written, with its own time, once it is open.
+            // The database is opened on the app's data folder once the host starts, so what is logged before then waits and is written, with its own time, once it is open.
             if (!ctx.IsOpen)
             {
                 pending.Add(entry);

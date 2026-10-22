@@ -2,8 +2,8 @@ namespace BlueHeighliner.Comlink;
 
 /// <summary>Controls how the print manager behaves. State one with <see cref="IEngineBuilder{TFrame, TPacket, TPriority, TLevel, TAspect, TProfile}.Prints{THandler}"/>. Every member is optional.</summary>
 /// <typeparam name="TPriority">The enum the host stated for its priorities.</typeparam>
-/// <typeparam name="TLevel">The enum the host stated for its message levels.</typeparam>
-/// <typeparam name="TAspect">The enum the host stated for its message aspects.</typeparam>
+/// <typeparam name="TLevel">The enum the host stated for its levels.</typeparam>
+/// <typeparam name="TAspect">The enum the host stated for its aspects.</typeparam>
 public interface IPrintHandler<TPriority, TLevel, TAspect> where TPriority : struct, Enum where TLevel : struct, Enum where TAspect : struct, Enum
 {
     /// <summary>Gets a value indicating whether the print manager's "print received" toggle starts enabled, adding every received message to the print queue from startup. Defaults to <see langword="false"/>. The user can still toggle it at any time.</summary>

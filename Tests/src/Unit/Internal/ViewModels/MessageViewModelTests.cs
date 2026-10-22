@@ -13,7 +13,7 @@ public sealed class MessageViewModelTests
         DeliveryStatus[]? deliveryStatuses = null,
         int priority = 0,
         string tag = "",
-        string messageLevel = "")
+        string level = "")
     {
         string id = messageId ?? Guid.NewGuid().ToString("N").ToUpperInvariant();
         MessageData message = new()
@@ -23,7 +23,7 @@ public sealed class MessageViewModelTests
             FromUser = fromUser,
             Priority = priority,
             Tag = tag,
-            MessageLevel = Enum.TryParse(messageLevel, ignoreCase: true, out TestLevel level) ? (int)level : null,
+            Level = Enum.TryParse(level, ignoreCase: true, out TestLevel parsed) ? (int)parsed : null,
             Addresses = [.. addresses ?? [new AddressData { UserName = "DEST", Type = "To" }]]
         };
         return new MessageEntity
@@ -79,7 +79,7 @@ public sealed class MessageViewModelTests
         mock.Setup(e => e.Priorities).Returns(format.Priorities);
         mock.Setup(e => e.TagsEnabled).Returns(format.TagsEnabled);
         mock.Setup(e => e.TagLabel).Returns(format.TagLabel);
-        mock.Setup(e => e.MessageLevels).Returns(format.MessageLevels);
+        mock.Setup(e => e.Levels).Returns(format.Levels);
         mock.Setup(e => e.AddressTypes).Returns([
             new AddressTypeOption { Type = AddressType.To, Label = "To" },
             new AddressTypeOption { Type = AddressType.Cc, Label = "Cc" },
@@ -198,31 +198,31 @@ public sealed class MessageViewModelTests
         Assert.Equal("RECEIVED", vm.ReadStatusText);
     }
 
-    /// <summary>An empty or unrecognized message level (no message levels configured) yields a null MessageLevelBackgroundHex and MessageLevelForegroundHex rather than a fallback color.</summary>
+    /// <summary>An empty or unrecognized level (no levels configured) yields a null LevelBackgroundHex and LevelForegroundHex rather than a fallback color.</summary>
     [Fact]
-    public void Ctor_NoMessageLevel_MessageLevelBackgroundHexIsNull()
+    public void Ctor_NoLevel_LevelBackgroundHexIsNull()
     {
         MessageEntity entity = MakeEntity();
 
         MessageViewModel vm = new(entity, format);
 
-        Assert.Equal("", vm.MessageLevelName);
-        Assert.Null(vm.MessageLevelBackgroundHex);
-        Assert.Null(vm.MessageLevelForegroundHex);
+        Assert.Equal("", vm.LevelName);
+        Assert.Null(vm.LevelBackgroundHex);
+        Assert.Null(vm.LevelForegroundHex);
     }
 
-    /// <summary>A recognized message level exposes its name and its configured background and foreground colors.</summary>
+    /// <summary>A recognized level exposes its name and its configured background and foreground colors.</summary>
     [Fact]
-    public void Ctor_RecognizedMessageLevel_ExposesNameAndColors()
+    public void Ctor_RecognizedLevel_ExposesNameAndColors()
     {
         Mock<TestEngineController> controller = new() { CallBase = true };
-        controller.Setup(c => c.MessageLevels).Returns([new MessageLevel { Name = "RESTRICTED", Key = TestLevel.Restricted, Background = "#C62828", Foreground = "#FFEE00" }]);
-        MessageEntity entity = MakeEntity(messageLevel: "RESTRICTED");
+        controller.Setup(c => c.Levels).Returns([new LevelDefinition { Label = "RESTRICTED", Key = TestLevel.Restricted, Background = "#C62828", Foreground = "#FFEE00" }]);
+        MessageEntity entity = MakeEntity(level: "RESTRICTED");
 
         MessageViewModel vm = new(entity, controller.Object);
 
-        Assert.Equal("RESTRICTED", vm.MessageLevelName);
-        Assert.Equal(("#C62828", "#FFEE00"), (vm.MessageLevelBackgroundHex, vm.MessageLevelForegroundHex));
+        Assert.Equal("RESTRICTED", vm.LevelName);
+        Assert.Equal(("#C62828", "#FFEE00"), (vm.LevelBackgroundHex, vm.LevelForegroundHex));
     }
 
     /// <summary>DeliveryStatusRow.StatusText is the uppercase status name, and DisplayName includes addressed group context when present.</summary>

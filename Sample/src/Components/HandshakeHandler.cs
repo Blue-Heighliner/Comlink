@@ -30,11 +30,11 @@ public sealed class HandshakeHandler : IPacketHandshakeHandler<Packet>
 
         if (packet.Chunk.Length == 0)
         {
-            await context.Disconnect();
+            await context.Reject("The other node did not say who it is");
         }
         else
         {
-            await context.Connected(Encoding.UTF8.GetString(packet.Chunk));
+            await context.Accept(Encoding.UTF8.GetString(packet.Chunk));
         }
     }
 

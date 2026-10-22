@@ -21,9 +21,9 @@ internal interface ILiteDbContext : IDisposable
     ILiteCollection<LastIdEntity> LastIds { get; }
     /// <summary>Raised after the database has been opened on a data folder, which is when what was waiting for it can be written.</summary>
     event Action? Opened;
-    /// <summary>Gets a value indicating whether the database has been opened, which is not until the current user's data folder is known.</summary>
+    /// <summary>Gets a value indicating whether the database has been opened, which is not until the host starts.</summary>
     bool IsOpen { get; }
-    /// <summary>Opens the database file in the current user's data folder, binds all collections, and ensures indexes and root folders exist. Does nothing when it is already open on that folder, so it is safe to call from anywhere that needs the database, and reopens when the folder has changed.</summary>
+    /// <summary>Opens the database file in the app's data folder, binds all collections, and ensures indexes and root folders exist. Does nothing when it is already open on that folder, so it is safe to call from anywhere that needs the database, and reopens when the folder has changed.</summary>
     void Initialize();
 }
 
@@ -114,9 +114,6 @@ internal sealed class LiteDbContext : ILiteDbContext
         {
             MessageData message = new() { Addresses = [new AddressData { UserName = string.Empty, Type = string.Empty, Information = string.Empty }] };
             BsonMapper mapper = BsonMapper.Global;
-            mapper.RegisterType(
-                entry => new BsonDocument { ["At"] = entry.At, ["Message"] = entry.Message, ["EventId"] = entry.EventId },
-                value => new ActivityLogEntry { At = value["At"].AsDateTime, Message = value["Message"].AsString ?? string.Empty, EventId = value["EventId"] is { IsInt32: true } number ? LogEvents.FromNumber(number.AsInt32) : value["EventId"].AsString ?? string.Empty });
             mapper.ToDocument(new MessageEntity
             {
                 MessageId = string.Empty,

@@ -218,8 +218,8 @@ internal sealed class ImportService : IImportService
             SentAt = data.SentAt,
             Priority = data.Priority,
             Tag = data.Tag,
-            MessageLevel = ConfiguredLevel(data.MessageLevel),
-            MessageAspect = ConfiguredAspect(data.MessageAspect),
+            Level = ConfiguredLevel(data.Level),
+            Aspect = ConfiguredAspect(data.Aspect),
             IsAlert = data.IsAlert
         };
 
@@ -263,8 +263,8 @@ internal sealed class ImportService : IImportService
                 IsAlert = data.IsAlert,
                 Priority = data.Priority,
                 Tag = data.Tag,
-                MessageLevel = ConfiguredLevel(data.MessageLevel),
-                MessageAspect = ConfiguredAspect(data.MessageAspect),
+                Level = ConfiguredLevel(data.Level),
+                Aspect = ConfiguredAspect(data.Aspect),
                 SentAt = data.SentAt,
                 FolderId = await folders.GetRootId(FolderType.Drafts)
             };
@@ -294,8 +294,8 @@ internal sealed class ImportService : IImportService
         existing.IsAlert = data.IsAlert;
         existing.Priority = data.Priority;
         existing.Tag = data.Tag;
-        existing.MessageLevel = ConfiguredLevel(data.MessageLevel);
-        existing.MessageAspect = ConfiguredAspect(data.MessageAspect);
+        existing.Level = ConfiguredLevel(data.Level);
+        existing.Aspect = ConfiguredAspect(data.Aspect);
         existing.SentAt = data.SentAt;
         existing.ModifiedAt = DateTime.UtcNow;
         await drafts.Update(existing);
@@ -303,9 +303,9 @@ internal sealed class ImportService : IImportService
     }
 
     // A value that is not a configured member (a package from a network that states other levels or aspects) is left unset rather than stored, since nothing could name it.
-    private int? ConfiguredLevel(int? value) => engineController.MessageLevels.Any(level => level.Value == value) ? value : null;
+    private int? ConfiguredLevel(int? value) => engineController.Levels.Any(level => level.Value == value) ? value : null;
 
-    private int? ConfiguredAspect(int? value) => engineController.MessageAspects.Any(aspect => aspect.Value == value) ? value : null;
+    private int? ConfiguredAspect(int? value) => engineController.Aspects.Any(aspect => aspect.Value == value) ? value : null;
 
     private async Task<(bool Imported, bool Overwritten)> ApplyNote(
         NoteExportData data,

@@ -9,12 +9,12 @@ internal interface IMainViewModel
     bool IsKioskMode { get; set; }
     /// <summary>Gets or sets the local user name displayed in the title bar.</summary>
     string UserName { get; set; }
-    /// <summary>Gets or sets the current user's message level name displayed in the title bar banner; see <see cref="IEngineController.GetUserMessageLevel"/>.</summary>
-    string MessageLevelName { get; set; }
-    /// <summary>Gets or sets the current user's message level background color as a hex string.</summary>
-    string MessageLevelBackground { get; set; }
-    /// <summary>Gets or sets the color of the text on <see cref="MessageLevelBackground"/> as a hex string.</summary>
-    string MessageLevelForeground { get; set; }
+    /// <summary>Gets or sets the current user's level name displayed in the title bar banner; see <see cref="IEngineController.GetUserLevel"/>.</summary>
+    string LevelName { get; set; }
+    /// <summary>Gets or sets the current user's level background color as a hex string.</summary>
+    string LevelBackground { get; set; }
+    /// <summary>Gets or sets the color of the text on <see cref="LevelBackground"/> as a hex string.</summary>
+    string LevelForeground { get; set; }
     /// <summary>Gets or sets the application version string.</summary>
     string AppVersion { get; set; }
     /// <summary>Gets the application name, shown in the title bar's info popup.</summary>
@@ -101,7 +101,7 @@ internal interface IMainViewModel
     IRelayCommand ShowPrintManagerCommand { get; }
     /// <summary>
     /// Re-reads the configuration files and applies what changed: the network file (connections are brought down or opened as it now defines them, and the
-    /// role, message level and access shown in the UI are updated), <c>Logging.json</c> and the node's certificates (when the user certificate now names another user, that user is switched to and the UI follows, and when it can no longer be used the error screen takes the place of the app until a refresh finds it in order).
+    /// role, level and access shown in the UI are updated), <c>Logging.json</c> and the node's certificates (when the user certificate now names another user, that user is switched to and the UI follows, and when it can no longer be used the error screen takes the place of the app until a refresh finds it in order).
     /// A network file that cannot be read is logged and leaves everything as it was.
     /// </summary>
     IAsyncRelayCommand RefreshCommand { get; }
@@ -122,7 +122,7 @@ internal sealed partial class MainViewModel : ObservableObject, IMainViewModel
 {
     /// <summary>Initializes a new <see cref="MainViewModel"/> with all required engine and UI dependencies.</summary>
     /// <param name="connection">Service connection used for user and messaging operations.</param>
-    /// <param name="db">LiteDB context, opened on the user's data folder.</param>
+    /// <param name="db">LiteDB context, opened on the app's data folder.</param>
     /// <param name="entryService">Entry CRUD service for messages, drafts, and notes.</param>
     /// <param name="folderBar">Folder tree ViewModel.</param>
     /// <param name="entryBar">Entry list ViewModel.</param>
@@ -243,9 +243,9 @@ internal sealed partial class MainViewModel : ObservableObject, IMainViewModel
     private bool isServerActivityViewActive;
     [ObservableProperty] private bool isKioskMode;
     [ObservableProperty] private string userName = string.Empty;
-    [ObservableProperty] private string messageLevelName = string.Empty;
-    [ObservableProperty] private string messageLevelBackground = "#1565C0";
-    [ObservableProperty] private string messageLevelForeground = "#FFFFFF";
+    [ObservableProperty] private string levelName = string.Empty;
+    [ObservableProperty] private string levelBackground = "#1565C0";
+    [ObservableProperty] private string levelForeground = "#FFFFFF";
     [ObservableProperty] private string appVersion;
     [ObservableProperty] private bool hasAutoForwardAccess;
 
@@ -433,10 +433,9 @@ internal sealed partial class MainViewModel : ObservableObject, IMainViewModel
                 string timeText = entity.ReceivedAt.ToString("dd-MMM-yyyy HH:mm").ToUpperInvariant();
                 string priorityText = engineController.NameOf(engineController.ResolvePriority(message.Priority));
                 string? tagText = engineController.TagsEnabled && !string.IsNullOrEmpty(message.Tag) ? message.Tag : null;
-                string messageLevelName = engineController.GetMessageLevelName(message.MessageLevel);
-                string? messageLevelColor = engineController.MessageLevels.IsRecognized(messageLevelName) ? engineController.MessageLevels.GetBackground(messageLevelName) : null;
+                string? levelColor = engineController.Levels.IsRecognized(message.Level) ? engineController.Levels.GetBackground(message.Level) : null;
                 EntryItemViewModel item = new(entity.MessageId, message.FromUser, EntryType.Message, entity.ReceivedAt,
-                    secondaryText: message.Body.FirstLine, priorityText: priorityText, tagText: tagText, timeText: timeText, messageLevelBackgroundHex: messageLevelColor, isAlert: message.IsAlert);
+                    secondaryText: message.Body.FirstLine, priorityText: priorityText, tagText: tagText, timeText: timeText, levelBackgroundHex: levelColor, isAlert: message.IsAlert);
                 item.OverallStatus = entity.ReadStatus;
                 await entryBar.PrependEntry(item);
             }
@@ -487,7 +486,7 @@ internal sealed partial class MainViewModel : ObservableObject, IMainViewModel
 
     private void OnNetworkReloaded() => _ = ApplyReloaded();
 
-    // The reload may also have changed who the user is (see IUserService.Refresh): another user's data is another database and another set of folders, and a certificate that cannot be used leaves nobody to show.
+    // The reload may also have changed who the user is (see IUserService.Refresh): which changes what the title bar shows, and a certificate that cannot be used leaves nobody to show.
     private async Task ApplyReloaded()
     {
         if (userService.Problem is { } problem)
@@ -516,7 +515,7 @@ internal sealed partial class MainViewModel : ObservableObject, IMainViewModel
         DeselectFolderAndEntry();
         contentArea.ShowHome();
         UserName = string.Empty;
-        MessageLevelName = string.Empty;
+        LevelName = string.Empty;
         HasAutoForwardAccess = false;
         errorViewModel.Message = problem;
         IsErrorScreenVisible = true;
@@ -526,10 +525,10 @@ internal sealed partial class MainViewModel : ObservableObject, IMainViewModel
     {
         UserName = info.Name;
         ApplyRole();
-        string level = engineController.GetUserMessageLevel(info.Name);
-        MessageLevelName = level;
-        MessageLevelBackground = engineController.MessageLevels.GetBackground(level);
-        MessageLevelForeground = engineController.MessageLevels.GetForeground(level);
+        Enum? level = engineController.GetUserLevel(info.Name);
+        LevelName = engineController.Levels.LabelOf(level);
+        LevelBackground = engineController.Levels.GetBackground(level);
+        LevelForeground = engineController.Levels.GetForeground(level);
         HasAutoForwardAccess = engineController.AutoForwarders.Any(forwarder => info.AutoForwarders.Contains(forwarder.Name));
         return Task.CompletedTask;
     }
@@ -629,8 +628,8 @@ internal sealed partial class MainViewModel : ObservableObject, IMainViewModel
     {
         DraftEntity entity = await entryService.NewDraft();
         List<string> userNames = await connection.GetUserNames();
-        string currentMessageLevel = engineController.GetUserMessageLevel(currentUserProvider.UserName ?? string.Empty);
-        DraftViewModel vm = new(entity, entryService, connection, userNames, loggerFactory, engineController, bodyDocumentFactory.Create(), currentMessageLevel: currentMessageLevel, isNew: true);
+        Enum? currentLevel = engineController.GetUserLevel(currentUserProvider.UserName ?? string.Empty);
+        DraftViewModel vm = new(entity, entryService, connection, userNames, loggerFactory, engineController, bodyDocumentFactory.Create(), currentLevel: currentLevel, isNew: true);
         vm.Duplicated += contentArea.ShowDraft;
         vm.TitleChanged += title => entryBar.UpdateTitle(vm.Id, EntryType.Draft, title);
         vm.DraftSent += async (IDraftViewModel _, MessageEntity msg) =>

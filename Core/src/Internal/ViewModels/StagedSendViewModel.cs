@@ -28,8 +28,8 @@ internal sealed record StagedSendEntry
     public Enum? Priority { get; init; }
     /// <summary>Tag identifying the type of this message.</summary>
     public string Tag { get; init; } = string.Empty;
-    /// <summary>Message level name this message will be sent at.</summary>
-    public Enum? MessageLevel { get; init; }
+    /// <summary>Level name this message will be sent at.</summary>
+    public Enum? Level { get; init; }
     /// <summary>How far this entry has gotten toward being sent.</summary>
     public StagedSendStatus Status { get; init; } = StagedSendStatus.Pending;
     /// <summary>The failure reason, when <see cref="StagedSendEntry.Status"/> is <see cref="StagedSendStatus.Failed"/>; otherwise <see langword="null"/>.</summary>
@@ -75,7 +75,7 @@ internal sealed partial class StagedSendViewModel : ObservableObject, IStagedSen
     /// <param name="connection">Service connection used to send each staged message.</param>
     /// <param name="entryService">Entry service used to persist each sent message to the Outbox.</param>
     /// <param name="loggerFactory">Factory for creating named loggers.</param>
-    /// <param name="engineController">Resolves a staged send's message level name to the configured level.</param>
+    /// <param name="engineController">Resolves a staged send's level name to the configured level.</param>
     public StagedSendViewModel(IEngineConnection connection, IEntryService entryService, ILoggerFactory loggerFactory, IEngineController engineController)
     {
         this.connection = connection;
@@ -123,7 +123,7 @@ internal sealed partial class StagedSendViewModel : ObservableObject, IStagedSen
                     Addresses = send.Addresses,
                     Priority = send.Priority,
                     Tag = send.Tag,
-                    MessageLevel = send.MessageLevel
+                    Level = send.Level
                 });
             }
         }
@@ -220,7 +220,7 @@ internal sealed partial class StagedSendViewModel : ObservableObject, IStagedSen
         try
         {
             SendMessageResult? result = await connection.SendMessage(
-                entry.Body, entry.Addresses, entry.Priority, entry.Tag, entry.MessageLevel);
+                entry.Body, entry.Addresses, entry.Priority, entry.Tag, entry.Level);
             if (result is null)
             {
                 SetStatus(entry.Id, StagedSendStatus.Failed, engineController.Display("Cannot send: this node has no user"));

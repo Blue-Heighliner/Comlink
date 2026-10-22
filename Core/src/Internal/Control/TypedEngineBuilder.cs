@@ -1,12 +1,12 @@
 namespace BlueHeighliner.Comlink;
 
-/// <summary>Implements <see cref="IEngineBuilder{TFrame, TPacket, TPriority, TLevel, TAspect, TProfile}"/> and every sub-configuration chained off it (frames, packets, priorities and message levels), recording what the host states in the <see cref="EngineBuilder"/> that created it. They are one object, so a sub-configuration continues straight into the settings of the engine builder.</summary>
-internal sealed class EngineBuilder<TFrame, TPacket, TPriority, TLevel, TAspect, TProfile> : IEngineBuilder<TFrame, TPacket, TPriority, TLevel, TAspect, TProfile>, IFrameBuilder<TFrame, TPacket, TPriority, TLevel, TAspect, TProfile>, IPacketBuilder<TFrame, TPacket, TPriority, TLevel, TAspect, TProfile>, IPriorityLevelBuilder<TFrame, TPacket, TPriority, TLevel, TAspect, TProfile>, IMessageLevelBuilder<TFrame, TPacket, TPriority, TLevel, TAspect, TProfile>, IMessageAspectBuilder<TFrame, TPacket, TPriority, TLevel, TAspect, TProfile>, IAddressTypeBuilder<TFrame, TPacket, TPriority, TLevel, TAspect, TProfile>, IMsmtBuilder<TFrame, TPacket, TPriority, TLevel, TAspect, TProfile>, IHdlcBuilder<TFrame, TPacket, TPriority, TLevel, TAspect, TProfile> where TFrame : class, new() where TPacket : class, new() where TPriority : struct, Enum where TLevel : struct, Enum where TAspect : struct, Enum where TProfile : class
+/// <summary>Implements <see cref="IEngineBuilder{TFrame, TPacket, TPriority, TLevel, TAspect, TProfile}"/> and every sub-configuration chained off it (frames, packets, priorities and levels), recording what the host states in the <see cref="EngineBuilder"/> that created it. They are one object, so a sub-configuration continues straight into the settings of the engine builder.</summary>
+internal sealed class EngineBuilder<TFrame, TPacket, TPriority, TLevel, TAspect, TProfile> : IEngineBuilder<TFrame, TPacket, TPriority, TLevel, TAspect, TProfile>, IFrameBuilder<TFrame, TPacket, TPriority, TLevel, TAspect, TProfile>, IPacketBuilder<TFrame, TPacket, TPriority, TLevel, TAspect, TProfile>, IPriorityLevelBuilder<TFrame, TPacket, TPriority, TLevel, TAspect, TProfile>, ILevelBuilder<TFrame, TPacket, TPriority, TLevel, TAspect, TProfile>, IAspectBuilder<TFrame, TPacket, TPriority, TLevel, TAspect, TProfile>, IAddressTypeBuilder<TFrame, TPacket, TPriority, TLevel, TAspect, TProfile>, IMsmtBuilder<TFrame, TPacket, TPriority, TLevel, TAspect, TProfile>, IHdlcBuilder<TFrame, TPacket, TPriority, TLevel, TAspect, TProfile> where TFrame : class, new() where TPacket : class, new() where TPriority : struct, Enum where TLevel : struct, Enum where TAspect : struct, Enum where TProfile : class
 {
     private readonly EngineBuilder state;
     private readonly PriorityBuilder<TPriority> priorities = new();
-    private readonly MessageLevelBuilder<TLevel> levels = new();
-    private readonly MessageAspectBuilder<TAspect> aspects = new();
+    private readonly LevelBuilder<TLevel> levels = new();
+    private readonly AspectBuilder<TAspect> aspects = new();
     private AddressType currentAddressType;
     private FrameBuilder<TFrame, TPriority, TLevel, TAspect>? frames;
     private PacketBuilder<TFrame, TPacket, TPriority>? packets;
@@ -59,7 +59,7 @@ internal sealed class EngineBuilder<TFrame, TPacket, TPriority, TLevel, TAspect,
     /// <inheritdoc />
     public IEngineBuilder<TFrame, TPacket, TPriority, TLevel, TAspect, TProfile> Drafts<THandler>() where THandler : IDraftHandler<TPriority, TLevel, TAspect>
     {
-        state.DraftHandler = ServiceRegistration<IDraftFrameHandler>.Of(typeof(THandler), instance => new DraftFrameHandler<TPriority, TLevel, TAspect>((IDraftHandler<TPriority, TLevel, TAspect>)instance, state.MessageLevelValues, state.MessageAspectValues));
+        state.DraftHandler = ServiceRegistration<IDraftFrameHandler>.Of(typeof(THandler), instance => new DraftFrameHandler<TPriority, TLevel, TAspect>((IDraftHandler<TPriority, TLevel, TAspect>)instance));
         return this;
     }
 
@@ -92,9 +92,11 @@ internal sealed class EngineBuilder<TFrame, TPacket, TPriority, TLevel, TAspect,
     }
 
     /// <inheritdoc />
-    public IEngineBuilder<TFrame, TPacket, TPriority, TLevel, TAspect, TProfile> Reconfigure<TReconfigurer>() where TReconfigurer : class, IReconfigurer
+    public IEngineBuilder<TFrame, TPacket, TPriority, TLevel, TAspect, TProfile> Configure<TConfigurationHandler>() where TConfigurationHandler : class, IConfigurationHandler
     {
-        state.Reconfigurer = ServiceRegistration<IReconfigurer>.Of(typeof(TReconfigurer), instance => (IReconfigurer)instance);
+        state.ConfigurationHandler = ServiceRegistration<IConfigurationHandler>.Of(typeof(TConfigurationHandler), instance => (IConfigurationHandler)instance);
+        InterfaceMapping map = typeof(TConfigurationHandler).GetInterfaceMap(typeof(IConfigurationHandler));
+        state.IsIdentifying = map.TargetMethods[Array.FindIndex(map.InterfaceMethods, method => method.Name == nameof(IConfigurationHandler.Identify))] is { DeclaringType.IsInterface: false };
         return this;
     }
 
@@ -449,42 +451,42 @@ internal sealed class EngineBuilder<TFrame, TPacket, TPriority, TLevel, TAspect,
     }
 
     /// <inheritdoc />
-    public IMessageAspectBuilder<TFrame, TPacket, TPriority, TLevel, TAspect, TProfile> Aspect(TAspect aspect)
+    public IAspectBuilder<TFrame, TPacket, TPriority, TLevel, TAspect, TProfile> Aspect(TAspect aspect)
     {
         aspects.Aspect(aspect);
         return this;
     }
 
     /// <inheritdoc />
-    IMessageAspectBuilder<TFrame, TPacket, TPriority, TLevel, TAspect, TProfile> IMessageAspectBuilder<TFrame, TPacket, TPriority, TLevel, TAspect, TProfile>.Label(string label)
+    IAspectBuilder<TFrame, TPacket, TPriority, TLevel, TAspect, TProfile> IAspectBuilder<TFrame, TPacket, TPriority, TLevel, TAspect, TProfile>.Label(string label)
     {
         aspects.Label(label);
         return this;
     }
 
     /// <inheritdoc />
-    public IMessageLevelBuilder<TFrame, TPacket, TPriority, TLevel, TAspect, TProfile> Level(TLevel level)
+    public ILevelBuilder<TFrame, TPacket, TPriority, TLevel, TAspect, TProfile> Level(TLevel level)
     {
         levels.Level(level);
         return this;
     }
 
     /// <inheritdoc />
-    public IMessageLevelBuilder<TFrame, TPacket, TPriority, TLevel, TAspect, TProfile> Background(string background)
+    public ILevelBuilder<TFrame, TPacket, TPriority, TLevel, TAspect, TProfile> Background(string background)
     {
         levels.Background(background);
         return this;
     }
 
     /// <inheritdoc />
-    public IMessageLevelBuilder<TFrame, TPacket, TPriority, TLevel, TAspect, TProfile> Foreground(string foreground)
+    public ILevelBuilder<TFrame, TPacket, TPriority, TLevel, TAspect, TProfile> Foreground(string foreground)
     {
         levels.Foreground(foreground);
         return this;
     }
 
     /// <inheritdoc />
-    IMessageLevelBuilder<TFrame, TPacket, TPriority, TLevel, TAspect, TProfile> IMessageLevelBuilder<TFrame, TPacket, TPriority, TLevel, TAspect, TProfile>.Label(string label)
+    ILevelBuilder<TFrame, TPacket, TPriority, TLevel, TAspect, TProfile> ILevelBuilder<TFrame, TPacket, TPriority, TLevel, TAspect, TProfile>.Label(string label)
     {
         levels.Label(label);
         return this;
@@ -509,18 +511,18 @@ internal sealed class EngineBuilder<TFrame, TPacket, TPriority, TLevel, TAspect,
             state.PacketHandshakeHandler = packets.HandshakeHandler;
         }
 
-        List<MessageLevel> builtLevels = levels.Build();
+        List<LevelDefinition> builtLevels = levels.Build();
         if (builtLevels.Count > 0)
         {
-            state.MessageLevelValues.Clear();
-            state.MessageLevelValues.AddRange(builtLevels);
+            state.LevelValues.Clear();
+            state.LevelValues.AddRange(builtLevels);
         }
 
-        List<MessageAspect> builtAspects = aspects.Build();
+        List<AspectDefinition> builtAspects = aspects.Build();
         if (builtAspects.Count > 0)
         {
-            state.MessageAspectValues.Clear();
-            state.MessageAspectValues.AddRange(builtAspects);
+            state.AspectValues.Clear();
+            state.AspectValues.AddRange(builtAspects);
         }
 
         List<MessagePriorityOption> builtPriorities = priorities.Build();

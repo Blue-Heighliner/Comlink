@@ -1,17 +1,17 @@
 # Network Configuration File Reference
 
-The engine defines the schema of one JSON file that describes a whole network: every user, their role, ports and connections, and who is in which group. It is shared by every node of the network, so nothing about a user is stated in code or in per-node files. It works identically in every build configuration; `Config.json` in the app data folder (`%APPDATA%/{AppName}/Config.json`, beside `Logging.json`) is always read, and whether the command-line arguments below may override it is decided solely by the host, through `IEngineBuilder.CommandLineOverrides(bool)` (see [Configuration.md](Configuration.md#command-line-overrides)); they are ignored unless the host allows them.
+The engine defines the schema of one JSON file that describes a whole network: every user, their role, ports and connections, and who is in which group. It is shared by every node of the network, so nothing about a user is stated in code or in per-node files. It works identically in every build configuration; `Config.json` in the app's data folder (`%APPDATA%/{AppName}/Config.json`, beside `Logging.json`) is always read, and whether the command-line arguments below may override it is decided solely by the host, through `IEngineBuilder.CommandLineOverrides(bool)` (see [Configuration.md](Configuration.md#command-line-overrides)); they are ignored unless the host allows them.
 
 ```sh
 Sample.exe --config path/to/Config.json --authority Root.cer --certificate CLIENT1.pfx
 ```
 
+- `--data <path>` (only when the host allows command-line overrides) names the app's data folder in place of `%APPDATA%/{AppName}`: the network file, `Logging.json`, the database, the logs and the stored records all live in it, so several nodes on one machine each pass their own. A relative path is relative to the working directory, and the folder is created when it is first written to.
 - `--config <path>` names the file (only when the host allows command-line overrides). When omitted, `Config.json` in the app data folder is used if it exists, and otherwise the network is empty. A `--config` path that does not exist or cannot be read makes the process throw at startup.
 - `--log <categories>` (also only when overrides are allowed) turns on log categories that are not on by default, as a comma separated list such as `Frames,Packets`, in addition to those named by `Logging.json`; see the logging component.
 - `--authority <path>` and `--certificate <path>` (also only when overrides are allowed) name the authority certificate file and the user's PKCS#12 identity file instead of those the host stated with `Certificates`; a relative path is relative to the working directory.
-- `--user <name>` (also only when overrides are allowed) picks which subject common name of the user certificate is the user this process runs as, for a certificate issued to several names. Without it the first common name the file lists is used. The name must be one of the certificate's common names and a user of this file.
 
-Who the node is comes from the certificate, never from this file: the user is a subject common name of the user certificate, matched case-insensitively to a user listed here (the name is then spelled as this file spells it). The certificate must chain to the authority certificate, the only trusted root; when a certificate file is missing or unreadable, does not chain, is issued to no user of this file, or is not stated, the node shows an error screen instead of the app and refuses to connect until a refresh finds the certificate in order (a headless node, having no window, throws at startup instead). The certificate files are not part of this file and are never resolved relative to it.
+Who the node is comes from the certificate, never from this file: the user is what the configuration handler's `Identify` makes of the subject common names of the user certificate, by default the first, matched case-insensitively to a user listed here (the name is then spelled as this file spells it). The certificate must chain to the authority certificate, the only trusted root; when a certificate file is missing or unreadable, does not chain, identifies no user of this file, or is not stated, the node shows an error screen instead of the app and refuses to connect until a refresh finds the certificate in order. The certificate files are not part of this file and are never resolved relative to it.
 
 The file is read again while the application runs when the user presses "Refresh" in the info panel of the title bar; see [Configuration.md](Configuration.md#network-configuration-file) for what that applies. Property names are PascalCase; deserialization is case-insensitive, and so are user names. Unrecognised fields are silently ignored and missing fields use their defaults. An empty file (`{}`) is an empty network. By convention user names are all uppercase.
 
@@ -31,7 +31,7 @@ The file is read again while the application runs when the user presses "Refresh
       "InterfacePort": 50020,
       "Parent": null,
       "Children": [],
-      "MessageLevel": null,
+      "Level": null,
       "Profile": { "Role": "clerk" },
 
       "Headless": false
@@ -59,7 +59,7 @@ Group name to member names. Members may be user names or other group names, enab
 
 **Type:** `object` | **Default:** `{}`
 
-Every user of the network, keyed by user name. The fields of an entry are in two groups: what is known about the user, which becomes their `UserInfo<TProfile>`, and the settings of the node that user runs, which apply only while that user is the current one.
+Every user of the network, keyed by user name. The fields of an entry are in two groups: what is known about the user, which becomes their `UserInfo<TLevel, TProfile>`, and the settings of the node that user runs, which apply only while that user is the current one.
 
 ## What is known about a user
 
@@ -69,7 +69,7 @@ These become the user's `UserInfo` (see [Configuration.md](Configuration.md#user
 
 **Type:** `string | null` | **Default:** `null` (`"Client"`)
 
-The networking role of a node this user runs: `"Client"` or `"Server"` (case-insensitive). An unrecognized value, including the retired `"Peer"`, is an error: the file does not load, so networking does not start (and a reload keeps the previous contents). Leaving it out is a `"Client"`. See [Peer.md](Peer.md#user-roles).
+The networking role of a node this user runs: `"Client"` or `"Server"` (case-insensitive). An unrecognized value is an error: the file does not load, so networking does not start (and a reload keeps the previous contents). Leaving it out is a `"Client"`. See [Peer.md](Peer.md#user-roles).
 
 ### `IpHost`
 
@@ -137,17 +137,17 @@ Instead of a plain user name, a link may be an object that forces how the connec
 
 The names of the auto forwarders the user has access to (see [Configuration.md](Configuration.md#auto-forwarders)): each is an option in their auto forward screen, where they keep a target list for it. A name no auto forwarder of that name exists for does nothing.
 
-### `MessageLevel`
+### `Level`
 
 **Type:** `string | null` | **Default:** `null` (the lowest configured level)
 
-The name of the message level the user runs at (see [Configuration.md](Configuration.md#message-levels)).
+The name of the member of the host's level enum the user runs at (see [Configuration.md](Configuration.md#levels)), matched without regard to case. It is the member name and has nothing to do with a level's label, which is only what the interface shows. A level that is none of the configured ones fails the load.
 
 ### `Profile`
 
 **Type:** `object` | **Default:** none
 
-An object of the host's own shape, such as `{ "Desk": "4B", "Floor": 2 }`. When the host states a record type as the profile type of its `Types` call it is read into that type, names matched without regard to case and enums written by name, and is `UserInfo<TProfile>.Profile`; with `NoProfile`, or without the key, `Profile` is `null`. A profile that does not fit the type makes the file invalid (naming the user).
+An object of the host's own shape, such as `{ "Desk": "4B", "Floor": 2 }`. When the host states a record type as the profile type of its `Types` call it is read into that type, names matched without regard to case and enums written by name, and is `UserInfo<TLevel, TProfile>.Profile`; with `NoProfile`, or without the key, `Profile` is `null`. A profile that does not fit the type makes the file invalid (naming the user).
 
 ## Settings of the node a user runs
 
@@ -168,9 +168,9 @@ One server with two clients that each name it as their parent, the server storin
 ```json
 {
   "Users": {
-    "SERVER":  { "Role": "Server", "IpHost": "127.0.0.1", "Msmt": { "Port": 50121 }, "InterfacePort": 50120, "Children": [ "CLIENT1", "CLIENT2" ], "MessageLevel": "RESTRICTED" },
-    "CLIENT1": { "Role": "Client", "InterfacePort": 50122, "Parent": "SERVER", "MessageLevel": "INTERNAL" },
-    "CLIENT2": { "Role": "Client", "InterfacePort": 50124, "Parent": "SERVER", "MessageLevel": "INTERNAL" }
+    "SERVER":  { "Role": "Server", "IpHost": "127.0.0.1", "Msmt": { "Port": 50121 }, "InterfacePort": 50120, "Children": [ "CLIENT1", "CLIENT2" ], "Level": "RESTRICTED" },
+    "CLIENT1": { "Role": "Client", "InterfacePort": 50122, "Parent": "SERVER", "Level": "INTERNAL" },
+    "CLIENT2": { "Role": "Client", "InterfacePort": 50124, "Parent": "SERVER", "Level": "INTERNAL" }
   }
 }
 ```

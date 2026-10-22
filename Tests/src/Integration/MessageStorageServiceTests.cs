@@ -37,7 +37,7 @@ public sealed class MessageStorageServiceTests : IDisposable
         IsAlert = true,
         Priority = TestMessagePriority.Level2,
         Tag = "TAG",
-        MessageLevel = TestLevel.Restricted,
+        Level = TestLevel.Restricted,
         Addresses = [.. to.Select(user => new MessageAddress { UserName = user, Type = AddressType.To })]
     };
 
@@ -104,7 +104,7 @@ public sealed class MessageStorageServiceTests : IDisposable
 
         Assert.Equal(("M1", "ALICE", "Body M1"), (found.Id, found.FromUser, found.Body));
         Assert.Equal(day1, found.SentAt.ToUniversalTime());
-        Assert.Equal((TestMessagePriority.Level2, "TAG", TestLevel.Restricted), (found.Priority, found.Tag, found.MessageLevel));
+        Assert.Equal((TestMessagePriority.Level2, "TAG", TestLevel.Restricted), (found.Priority, found.Tag, found.Level));
         Assert.Equal(["CAROL", "BOB"], found.Addresses.Select(address => address.UserName));
     }
 }

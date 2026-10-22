@@ -1,6 +1,6 @@
 namespace BlueHeighliner.Comlink;
 
-/// <summary>A message an import format prepared to send, as the engine holds it, with the host's priority and message level as plain enum members.</summary>
+/// <summary>A message an import format prepared to send, as the engine holds it, with the host's priority and level as plain enum members.</summary>
 internal sealed record StagedSendData
 {
     /// <summary>Gets the message body text.</summary>
@@ -15,6 +15,6 @@ internal sealed record StagedSendData
     /// <summary>Gets the tag identifying the type of this message.</summary>
     public string Tag { get; init; } = string.Empty;
 
-    /// <summary>Gets the message level this message will be sent at, or <see langword="null"/> for none.</summary>
-    public Enum? MessageLevel { get; init; }
+    /// <summary>Gets the level this message will be sent at, or <see langword="null"/> for none.</summary>
+    public Enum? Level { get; init; }
 }

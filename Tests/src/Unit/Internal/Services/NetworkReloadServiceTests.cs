@@ -17,8 +17,8 @@ public sealed class NetworkReloadServiceTests : IDisposable
     public NetworkReloadServiceTests()
     {
         Directory.CreateDirectory(directory);
-        Write("""{ "Users": { "ME": { "PeerPort": 1000, "InterfacePort": 2000, "OutgoingPoints": [ { "IpAddress": "10.0.0.1", "Port": 1 } ], "MessageLevel": "LOW" } } }""");
-        network = NetworkConfig.Load([], directory);
+        Write("""{ "Users": { "ME": { "PeerPort": 1000, "InterfacePort": 2000, "OutgoingPoints": [ { "IpAddress": "10.0.0.1", "Port": 1 } ], "Level": "LOW" } } }""");
+        network = NetworkConfig.Load([], directory, levels: [TestLevel.Low, TestLevel.High]);
         users.Setup(u => u.Identity).Returns(() => identity);
         users.Setup(u => u.Refresh(It.IsAny<CancellationToken>())).ReturnsAsync(false);
         CurrentUserProvider user = new() { UserName = "ME" };
@@ -31,19 +31,19 @@ public sealed class NetworkReloadServiceTests : IDisposable
 
     private void Write(string json) => File.WriteAllText(Path.Combine(directory, "Config.json"), json);
 
-    /// <summary>A change that does not affect connections, such as a message level, restarts and reconfigures nothing that matters but is still read and announced.</summary>
+    /// <summary>A change that does not affect connections, such as a level, restarts and reconfigures nothing that matters but is still read and announced.</summary>
     [Fact]
     public async Task Reload_UnrelatedChange_RestartsNothing_ButIsAppliedAndAnnounced()
     {
         int announced = 0;
         service.Reloaded += () => announced++;
-        Write("""{ "Users": { "ME": { "PeerPort": 1000, "InterfacePort": 2000, "OutgoingPoints": [ { "IpAddress": "10.0.0.1", "Port": 1 } ], "MessageLevel": "HIGH" } } }""");
+        Write("""{ "Users": { "ME": { "PeerPort": 1000, "InterfacePort": 2000, "OutgoingPoints": [ { "IpAddress": "10.0.0.1", "Port": 1 } ], "Level": "HIGH" } } }""");
 
         await service.Reload();
 
         peer.Verify(p => p.Restart(), Times.Never);
         listener.Verify(l => l.Restart(), Times.Never);
-        Assert.Equal("HIGH", network.Find("ME")!.MessageLevel);
+        Assert.Equal("HIGH", network.Find("ME")!.Level);
         Assert.Equal(1, announced);
     }
 
@@ -109,7 +109,7 @@ public sealed class NetworkReloadServiceTests : IDisposable
 
         await Assert.ThrowsAnyAsync<Exception>(() => service.Reload());
 
-        Assert.Equal("LOW", network.Find("ME")!.MessageLevel);
+        Assert.Equal("LOW", network.Find("ME")!.Level);
         peer.Verify(p => p.Restart(), Times.Never);
         peer.Verify(p => p.Reconfigure(), Times.Never);
         listener.Verify(l => l.Restart(), Times.Never);
@@ -142,11 +142,11 @@ public sealed class NetworkReloadServiceTests : IDisposable
         Assert.Equal(1, announced);
     }
 
-    /// <summary>The host's reconfigurer is called once after every successful reload, once the reload has been applied and announced to nobody yet, even when the user changed.</summary>
+    /// <summary>The host's configuration handler is called once after every successful reload, once the reload has been applied and announced to nobody yet, even when the user changed.</summary>
     [Theory]
     [InlineData(false)]
     [InlineData(true)]
-    public async Task Reload_CallsTheReconfigurerAfterApplyingIt_AndBeforeAnnouncing(bool userChanged)
+    public async Task Reload_CallsTheConfigurationHandlerAfterApplyingIt_AndBeforeAnnouncing(bool userChanged)
     {
         users.Setup(u => u.Refresh(It.IsAny<CancellationToken>())).ReturnsAsync(userChanged);
         List<string> order = [];
@@ -159,9 +159,9 @@ public sealed class NetworkReloadServiceTests : IDisposable
         Assert.Equal(userChanged ? ["reconfigured", "announced"] : ["applied", "reconfigured", "announced"], order);
     }
 
-    /// <summary>A reload that cannot read the file changes nothing, so the reconfigurer is not called.</summary>
+    /// <summary>A reload that cannot read the file changes nothing, so the configuration handler is not called.</summary>
     [Fact]
-    public async Task Reload_UnreadableFile_DoesNotCallTheReconfigurer()
+    public async Task Reload_UnreadableFile_DoesNotCallTheConfigurationHandler()
     {
         Write("{ not json");
 

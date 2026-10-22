@@ -3,13 +3,13 @@ namespace BlueHeighliner.Comlink;
 /// <summary>
 /// Runs the host's own protocol, independent of any UI. The engine only transports frames and keeps the user's messages: it does not receive, route, receipt or retrieve anything itself and does not keep the
 /// network indicator, so what happens when a user sends a message, a frame arrives or a user asks for stored messages is whatever this handler does, with the engine's help through the services it asks for and the context each method is
-/// handed (see <see cref="INetwork{TFrame, TPriority, TLevel, TAspect}"/> and <see cref="IUserCatalog{TProfile}"/>, which a handler asks for through dependency injection). A method runs in the background: it is not awaited by the engine, and an exception it throws is logged rather than thrown back. Every method has a default that
+/// handed (see <see cref="INetwork{TFrame, TPriority, TLevel, TAspect}"/> and <see cref="IUserCatalog{TLevel, TProfile}"/>, which a handler asks for through dependency injection). A method runs in the background: it is not awaited by the engine, and an exception it throws is logged rather than thrown back. Every method has a default that
 /// does nothing, so a handler states only what it takes part in. State one with <see cref="IEngineBuilder{TFrame, TPacket, TPriority, TLevel, TAspect, TProfile}.Frames{THandler}"/>.
 /// </summary>
 /// <typeparam name="TFrame">The host's frame type.</typeparam>
 /// <typeparam name="TPriority">The enum the host stated for its priorities.</typeparam>
-/// <typeparam name="TLevel">The enum the host stated for its message levels.</typeparam>
-/// <typeparam name="TAspect">The enum the host stated for its message aspects.</typeparam>
+/// <typeparam name="TLevel">The enum the host stated for its levels.</typeparam>
+/// <typeparam name="TAspect">The enum the host stated for its aspects.</typeparam>
 public interface IFrameHandler<TFrame, TPriority, TLevel, TAspect> where TFrame : class where TPriority : struct, Enum where TLevel : struct, Enum where TAspect : struct, Enum
 {
     /// <summary>Called when a user goes from having no live peer connection to having at least one. <see cref="INetworkConnectedContext.TargetUser"/> names the user that connected.</summary>

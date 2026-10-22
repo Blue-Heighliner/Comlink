@@ -8,7 +8,7 @@ namespace BlueHeighliner.Comlink;
 /// so a reader only needs to build the DTO, not reimplement matching.
 /// </summary>
 /// <typeparam name="TPriority">The enum the host stated for its priorities.</typeparam>
-/// <typeparam name="TLevel">The enum the host stated for its message levels.</typeparam>
+/// <typeparam name="TLevel">The enum the host stated for its levels.</typeparam>
 public interface IImportFormatContext<TPriority, TLevel> where TPriority : struct, Enum where TLevel : struct, Enum
 {
     /// <summary>

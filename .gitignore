@@ -15,6 +15,9 @@ TestResults/
 !.github/badges/badge_linecoverage.svg
 
 *.db
+
+# Each node a scenario script starts keeps its own app data folder here (--data).
+Scripts/Support/*/Data/
 *.db-shm
 *.db-wal
 

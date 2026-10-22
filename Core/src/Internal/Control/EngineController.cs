@@ -64,14 +64,12 @@ internal interface IEngineController
     string AppName { get; }
     /// <summary>The application version, shown in the title bar and the info popup.</summary>
     string AppVersion { get; }
-    /// <summary>Absolute path to the directory every application data directory lives in: <c>%APPDATA%</c>.</summary>
-    string AppDataRoot { get; }
     /// <summary>
-    /// Absolute path to the current user's data directory, <c>{AppDataRoot}/{DataFolderName}/{USERNAME}</c>, which holds their database and logs. Without a current user
-    /// (only before the node's identity is known) it is <c>{AppDataRoot}/{DataFolderName}</c>.
+    /// Absolute path to the app's one data directory, which holds the network configuration file, the database, the logs and the stored records, whoever the current user is: the folder the <c>--data</c> argument names when the host allows it and it is given,
+    /// otherwise <c>{application data root}/{DataFolderName}</c>.
     /// </summary>
     string AppDataPath { get; }
-    /// <summary>Absolute path to <c>Logging.json</c>, which turns on the log categories that are not on by default; it lives in <c>{AppDataRoot}/{DataFolderName}</c>, beside <c>Config.json</c>, and need not exist.</summary>
+    /// <summary>Absolute path to <c>Logging.json</c>, which turns on the log categories that are not on by default; it lives in <see cref="AppDataPath"/>, beside <c>Config.json</c>, and need not exist.</summary>
     string LoggingFilePath { get; }
     /// <summary><see langword="true"/> to enable kiosk mode, which hides the minimize and maximize buttons and has the close button restart rather than exit.</summary>
     bool IsKioskMode { get; }
@@ -79,8 +77,8 @@ internal interface IEngineController
     bool SeparateAlerts { get; }
     /// <summary>Whether a log entry that reports an exception also carries its entire stack trace, as stated with <see cref="IEngineBuilder{TFrame, TPacket, TPriority, TLevel, TAspect, TProfile}.StackTrace"/>. On unless stated.</summary>
     bool IsStackTraceEnabled { get; }
-    /// <summary>The host's reconfigurer, or <see langword="null"/> when it stated none.</summary>
-    IReconfigurer? Reconfigurer { get; }
+    /// <summary>The host's configuration handler, or <see langword="null"/> when it stated none.</summary>
+    IConfigurationHandler? ConfigurationHandler { get; }
     /// <summary>The label the network indicator shows while online (<paramref name="isOnline"/> is <see langword="true"/>) or offline, from the display handler.</summary>
     /// <param name="isOnline">Whether the indicator shows online.</param>
     string GetNetworkIndicatorLabel(bool isOnline);
@@ -130,7 +128,9 @@ internal interface IEngineController
     LineWidthRange? DraftLineWidth { get; }
     /// <summary>Gets what message tags may be: their case, length, and whether they may hold symbols, numbers and spaces (see <see cref="IDraftHandler{TPriority, TLevel, TAspect}"/>). Unrestricted without a draft handler.</summary>
     TagRules DraftTagRules { get; }
-    /// <summary>Gets what a new draft starts with: its tag, priority and message level (see <see cref="IDraftHandler{TPriority, TLevel, TAspect}"/>).</summary>
+    /// <summary>Gets whether a message must have an aspect (see <see cref="IDraftHandler{TPriority, TLevel, TAspect}.IsAspectRequired"/>): a draft always has one and a message sent without one is refused. <see langword="false"/> when no draft handler is stated.</summary>
+    bool IsAspectRequired { get; }
+    /// <summary>Gets what a new draft starts with: its tag, priority and level (see <see cref="IDraftHandler{TPriority, TLevel, TAspect}"/>).</summary>
     DraftDefaults DraftDefaults { get; }
     /// <summary>Returns the header a message sent from the draft described by <paramref name="draft"/> must start with, or <see langword="null"/> for none (always the case without a draft handler).</summary>
     /// <param name="draft">The draft as it currently is.</param>
@@ -158,20 +158,20 @@ internal interface IEngineController
     string TagLabel { get; }
     /// <summary>Gets the name of the priority concept in the user interface (see <see cref="IDisplayHandler.PriorityLabel"/>).</summary>
     string PriorityLabel { get; }
-    /// <summary>Gets the name of the message level concept in the user interface (see <see cref="IDisplayHandler.MessageLevelLabel"/>).</summary>
-    string MessageLevelLabel { get; }
-    /// <summary>Gets the name of the message aspect concept in the user interface (see <see cref="IDisplayHandler.MessageAspectLabel"/>).</summary>
-    string MessageAspectLabel { get; }
-    /// <summary>Gets the plural of <see cref="MessageAspectLabel"/>.</summary>
-    string MessageAspectPluralLabel { get; }
+    /// <summary>Gets the name of the level concept in the user interface (see <see cref="IDisplayHandler.LevelLabel"/>).</summary>
+    string LevelLabel { get; }
+    /// <summary>Gets the name of the aspect concept in the user interface (see <see cref="IDisplayHandler.AspectLabel"/>).</summary>
+    string AspectLabel { get; }
+    /// <summary>Gets the plural of <see cref="AspectLabel"/>.</summary>
+    string AspectPluralLabel { get; }
     /// <summary>
-    /// Gets the message aspects a message can carry, in the order stated with <see cref="IEngineBuilder{TFrame, TPacket, TPriority, TLevel, TAspect, TProfile}.Aspect"/>; empty when none were stated, which turns the feature off.
+    /// Gets the aspects a message can carry, in the order stated with <see cref="IEngineBuilder{TFrame, TPacket, TPriority, TLevel, TAspect, TProfile}.Aspect"/>; empty when none were stated, which turns the feature off.
     /// </summary>
-    IReadOnlyList<MessageAspect> MessageAspects { get; }
-    /// <summary>Gets the name of the configured message aspect <paramref name="aspect"/>, or an empty string for <see langword="null"/>.</summary>
-    /// <param name="aspect">The aspect, a member of the enum stated for the message aspects, or <see langword="null"/> for none.</param>
-    /// <exception cref="ArgumentException"><paramref name="aspect"/> is not a configured message aspect.</exception>
-    string GetMessageAspectName(Enum? aspect);
+    IReadOnlyList<AspectDefinition> Aspects { get; }
+    /// <summary>Returns <paramref name="aspect"/> once it is known to be one of the configured aspects, or <see langword="null"/> for none.</summary>
+    /// <param name="aspect">The aspect, a member of the enum stated for the aspects, or <see langword="null"/> for none.</param>
+    /// <exception cref="ArgumentException"><paramref name="aspect"/> is not a configured aspect.</exception>
+    Enum? RequireAspect(Enum? aspect);
     /// <summary>Gets the word the user interface uses for a user of the network (see <see cref="IDisplayHandler.UserLabel"/>).</summary>
     string UserLabel { get; }
     /// <summary>Gets the plural of <see cref="UserLabel"/>.</summary>
@@ -182,15 +182,15 @@ internal interface IEngineController
     string TagPluralLabel { get; }
     /// <summary>Gets the plural of <see cref="PriorityLabel"/>.</summary>
     string PriorityPluralLabel { get; }
-    /// <summary>Gets the plural of <see cref="MessageLevelLabel"/>.</summary>
-    string MessageLevelPluralLabel { get; }
+    /// <summary>Gets the plural of <see cref="LevelLabel"/>.</summary>
+    string LevelPluralLabel { get; }
     /// <summary>Returns the text to show for <paramref name="label"/>, the engine's own name for a concept of the app: what the host's display handler calls it (see <see cref="IDisplayHandler.InboxLabel"/> and the members like it), or <paramref name="label"/> itself.</summary>
     /// <param name="label">The engine's name for the concept.</param>
     string Rename(string label);
     /// <summary>Returns why a draft may not have this combination (see <see cref="IDraftHandler{TPriority, TLevel, TAspect}.IsBlocked"/>), or <see langword="null"/> when it may; no combination is blocked when no draft handler is stated.</summary>
     /// <param name="priority">The priority as the host's enum member.</param>
-    /// <param name="level">The message level as the host's enum member, or <see langword="null"/> for none.</param>
-    /// <param name="aspect">The message aspect as the host's enum member, or <see langword="null"/> for none.</param>
+    /// <param name="level">The level as the host's enum member, or <see langword="null"/> for none.</param>
+    /// <param name="aspect">The aspect as the host's enum member, or <see langword="null"/> for none.</param>
     /// <param name="tag">The tag, empty for none.</param>
     string? IsDraftBlocked(Enum priority, Enum? level, Enum? aspect, string tag);
     /// <summary>
@@ -201,20 +201,19 @@ internal interface IEngineController
     /// </summary>
     IReadOnlyList<AddressTypeOption> AddressTypes { get; }
     /// <summary>
-    /// Every configured message level, in ascending order (index 0 is lowest); empty when
+    /// Every configured level, in ascending order (index 0 is lowest); empty when
     /// <see cref="IEngineBuilder{TFrame, TPacket, TPriority, TLevel, TAspect, TProfile}.Level"/> was never stated, which turns the whole feature off. A
     /// message may only be sent at one of these levels, and a destination user's own assigned level (see
-    /// <see cref="GetUserMessageLevel"/>) must rank at or above it.
+    /// <see cref="GetUserLevel"/>) must rank at or above it.
     /// </summary>
-    IReadOnlyList<MessageLevel> MessageLevels { get; }
+    IReadOnlyList<LevelDefinition> Levels { get; }
 
     /// <summary>
-    /// Returns the message level name the given user runs at; see <see cref="IUserInfo.MessageLevel"/>.
-    /// Defaults to the lowest configured level for a user with no assignment, or an empty string when no message
-    /// levels are configured at all.
+    /// Returns the level the given user runs at, a member of the enum stated for the levels; see <see cref="IUserInfo.Level"/>.
+    /// Defaults to the lowest configured level for a user with no assignment, or <see langword="null"/> when no levels are configured at all.
     /// </summary>
-    /// <param name="userName">The user name to resolve a message level for.</param>
-    string GetUserMessageLevel(string userName);
+    /// <param name="userName">The user name to resolve a level for.</param>
+    Enum? GetUserLevel(string userName);
 
     /// <summary>
     /// When <see langword="true"/>, the print manager's "print received" toggle (<see cref="IPrintManagerViewModel.PrintReceivedEnabled"/>)
@@ -259,7 +258,7 @@ internal interface IEngineController
 
     /// <summary>Gets the handler that carries out the handshake of frames on each new connection (see <see cref="IFrameBuilder{TFrame, TPacket, TPriority, TLevel, TAspect, TProfile}.Handshake{THandler}"/>), or <see langword="null"/> for none.</summary>
     IHandshakeHandler? FrameHandshakeHandler { get; }
-    /// <summary>When <see langword="true"/>, the <c>--config</c>, <c>--authority</c>, <c>--certificate</c> and <c>--user</c> command-line arguments override the network configuration file, the certificate files and the running user (see <see cref="IEngineBuilder{TFrame, TPacket, TPriority, TLevel, TAspect, TProfile}.CommandLineOverrides"/>); when <see langword="false"/> (the default) they are ignored and only <c>Config.json</c> in the app data folder and the certificates the host stated are used.</summary>
+    /// <summary>When <see langword="true"/>, the <c>--config</c>, <c>--data</c>, <c>--authority</c> and <c>--certificate</c> command-line arguments override the network configuration file, the data folder and the certificate files (see <see cref="IEngineBuilder{TFrame, TPacket, TPriority, TLevel, TAspect, TProfile}.CommandLineOverrides"/>); when <see langword="false"/> (the default) they are ignored and only <c>Config.json</c> in the app data folder and the certificates the host stated are used.</summary>
     bool CommandLineOverridesAllowed { get; }
 
     /// <summary>
@@ -343,10 +342,10 @@ internal interface IEngineController
     /// <summary>Gets the name of <paramref name="priority"/> as it is shown to users: the name of the level, or of the lowest level when it is not a configured one.</summary>
     /// <param name="priority">The level.</param>
     string NameOf(Enum priority);
-    /// <summary>Gets the name of the configured message level <paramref name="level"/>, or an empty string for <see langword="null"/>.</summary>
-    /// <param name="level">The level, a member of the enum stated for the message levels, or <see langword="null"/> for none.</param>
-    /// <exception cref="ArgumentException"><paramref name="level"/> is not a configured message level.</exception>
-    string GetMessageLevelName(Enum? level);
+    /// <summary>Returns <paramref name="level"/> once it is known to be one of the configured levels, or <see langword="null"/> for none.</summary>
+    /// <param name="level">The level, a member of the enum stated for the levels, or <see langword="null"/> for none.</param>
+    /// <exception cref="ArgumentException"><paramref name="level"/> is not a configured level.</exception>
+    Enum? RequireLevel(Enum? level);
 
     /// <summary>Creates a packet carrying one piece of a serialized frame through the host's packet handler. Only called while <see cref="PacketType"/> is set.</summary>
     /// <param name="frame">The frame the packet is being created from, an instance of the host's frame type.</param>
@@ -452,7 +451,7 @@ internal class EngineController(EngineBuilder builder, ICurrentUserProvider curr
     private readonly Lazy<ILogHandler?> logHandler = new(() => builder.LogHandler?.Create(services));
     private readonly Lazy<IPrintPolicy?> printHandler = new(() => builder.PrintHandler?.Create(services));
     private readonly Lazy<IDeleteHandler?> deleteHandler = new(() => builder.DeleteHandler?.Create(services));
-    private readonly Lazy<IReconfigurer?> reconfigurer = new(() => builder.Reconfigurer?.Create(services));
+    private readonly Lazy<IConfigurationHandler?> configurationHandler = new(() => builder.ConfigurationHandler?.Create(services));
     private readonly Lazy<IEngineFrameHandler?> frameHandler = new(() => builder.FrameHandler?.Create(services));
     private readonly IReadOnlyList<MessagePriorityOption> defaultPriorities = [new MessagePriorityOption { Name = "NORMAL", Value = 0, Key = NoPriority.Normal }];
     private readonly IReadOnlyList<AddressType> addressTypeOrder = [AddressType.To, AddressType.Cc, AddressType.External];
@@ -470,19 +469,14 @@ internal class EngineController(EngineBuilder builder, ICurrentUserProvider curr
     /// <inheritdoc />
     public virtual int PacketWindow => builder.PacketWindowValue ?? 1;
 
-    /// <summary>Gets the name of the folder under the application data root that holds the app's data: what the display handler states, otherwise the entry assembly's name. It is not the app name, so renaming the app never moves the data.</summary>
-    protected string DataFolderName => builder.DataFolderName;
-
     /// <inheritdoc />
     public virtual string AppName => builder.DisplayHandlerInstance?.AppName.OrNull() ?? Assembly.GetEntryAssembly()?.GetName().Name ?? "App";
     /// <inheritdoc />
     public virtual string AppVersion => builder.DisplayHandlerInstance?.Version.OrNull() ?? (Assembly.GetEntryAssembly()?.GetName().Version is { } version ? $"{version.Major}.{version.Minor}.{version.Build}" : "1.0.0");
     /// <inheritdoc />
-    public virtual string AppDataRoot => builder.AppDataRoot;
+    public virtual string AppDataPath => builder.AppDataFolder;
     /// <inheritdoc />
-    public virtual string AppDataPath => currentUserProvider.UserName is { Length: > 0 } user ? Path.Combine(AppDataRoot, DataFolderName, user) : Path.Combine(AppDataRoot, DataFolderName);
-    /// <inheritdoc />
-    public virtual string LoggingFilePath => Path.Combine(AppDataRoot, DataFolderName, "Logging.json");
+    public virtual string LoggingFilePath => Path.Combine(AppDataPath, "Logging.json");
     /// <inheritdoc />
     public virtual bool IsKioskMode => builder.DisplayHandlerInstance?.IsKiosk ?? false;
     /// <inheritdoc />
@@ -501,7 +495,7 @@ internal class EngineController(EngineBuilder builder, ICurrentUserProvider curr
     /// <inheritdoc />
     public virtual bool IsStackTraceEnabled => builder.IsStackTraceEnabled;
     /// <inheritdoc />
-    public virtual IReconfigurer? Reconfigurer => reconfigurer.Value;
+    public virtual IConfigurationHandler? ConfigurationHandler => configurationHandler.Value;
     /// <inheritdoc />
     public virtual bool SeparateAlerts => builder.DisplayHandlerInstance?.SeparateAlerts ?? false;
     /// <inheritdoc />
@@ -588,10 +582,12 @@ internal class EngineController(EngineBuilder builder, ICurrentUserProvider curr
     public virtual TimeSpan AlarmSoundDuration => alarmHandler.Value?.AlertDuration ?? TimeSpan.FromSeconds(30);
     /// <inheritdoc />
     public virtual DraftDefaults DraftDefaults
-        => draftHandler.Value is { } handler ? new DraftDefaults(DraftTagRules.Filter(handler.DefaultTag ?? string.Empty), handler.DefaultPriority, handler.DefaultMessageLevel, handler.DefaultMessageAspect) : DraftDefaults.None;
+        => draftHandler.Value is { } handler ? new DraftDefaults(DraftTagRules.Filter(handler.DefaultTag ?? string.Empty), handler.DefaultPriority, handler.DefaultLevel, handler.DefaultAspect) : DraftDefaults.None;
 
     /// <inheritdoc />
     public virtual TagRules DraftTagRules => draftHandler.Value?.TagRules ?? TagRules.Unrestricted;
+    /// <inheritdoc />
+    public virtual bool IsAspectRequired => draftHandler.Value?.IsAspectRequired ?? false;
 
     /// <inheritdoc />
     public virtual LineWidthRange? DraftLineWidth
@@ -617,18 +613,18 @@ internal class EngineController(EngineBuilder builder, ICurrentUserProvider curr
     /// <inheritdoc />
     public virtual string UserPluralLabel => PluralOf(builder.DisplayHandlerInstance?.UserPluralLabel, builder.DisplayHandlerInstance?.UserLabel, "Users");
     /// <inheritdoc />
-    public virtual string MessageAspectLabel => builder.DisplayHandlerInstance?.MessageAspectLabel.OrNull() ?? "Message Aspect";
+    public virtual string AspectLabel => builder.DisplayHandlerInstance?.AspectLabel.OrNull() ?? "Aspect";
     /// <inheritdoc />
-    public virtual string MessageAspectPluralLabel => PluralOf(builder.DisplayHandlerInstance?.MessageAspectPluralLabel, builder.DisplayHandlerInstance?.MessageAspectLabel, "Message Aspects");
+    public virtual string AspectPluralLabel => PluralOf(builder.DisplayHandlerInstance?.AspectPluralLabel, builder.DisplayHandlerInstance?.AspectLabel, "Aspects");
     /// <inheritdoc />
-    public virtual IReadOnlyList<MessageAspect> MessageAspects => builder.MessageAspectValues;
+    public virtual IReadOnlyList<AspectDefinition> Aspects => builder.AspectValues;
     /// <inheritdoc />
-    public virtual string GetMessageAspectName(Enum? aspect)
-        => aspect is null ? string.Empty
-        : MessageAspects.FirstOrDefault(candidate => aspect.Equals(candidate.Key))?.Name
-            ?? throw new ArgumentException($"A message aspect of {aspect.GetType().Name}.{aspect} is used, which is not one of the configured message aspects: {string.Join(", ", MessageAspects.Select(candidate => candidate.Name))}", nameof(aspect));
+    public virtual Enum? RequireAspect(Enum? aspect)
+        => aspect is null || Aspects.Any(candidate => aspect.Equals(candidate.Key))
+            ? aspect
+            : throw new ArgumentException($"An aspect of {aspect.GetType().Name}.{aspect} is used, which is not one of the configured aspects: {string.Join(", ", Aspects.Select(candidate => candidate.Key))}", nameof(aspect));
     /// <inheritdoc />
-    public virtual string MessageLevelLabel => builder.DisplayHandlerInstance?.MessageLevelLabel.OrNull() ?? "Message Level";
+    public virtual string LevelLabel => builder.DisplayHandlerInstance?.LevelLabel.OrNull() ?? "Level";
     /// <inheritdoc />
     public virtual string Rename(string label)
         => (builder.DisplayHandlerInstance is { } display ? label switch
@@ -653,7 +649,7 @@ internal class EngineController(EngineBuilder builder, ICurrentUserProvider curr
     /// <inheritdoc />
     public virtual string PriorityPluralLabel => PluralOf(builder.DisplayHandlerInstance?.PriorityPluralLabel, builder.DisplayHandlerInstance?.PriorityLabel, "Priorities");
     /// <inheritdoc />
-    public virtual string MessageLevelPluralLabel => PluralOf(builder.DisplayHandlerInstance?.MessageLevelPluralLabel, builder.DisplayHandlerInstance?.MessageLevelLabel, "Message Levels");
+    public virtual string LevelPluralLabel => PluralOf(builder.DisplayHandlerInstance?.LevelPluralLabel, builder.DisplayHandlerInstance?.LevelLabel, "Levels");
     /// <inheritdoc />
     public virtual string TagLabel => builder.DisplayHandlerInstance?.TagLabel.OrNull() ?? "Tag";
     /// <inheritdoc />
@@ -662,17 +658,10 @@ internal class EngineController(EngineBuilder builder, ICurrentUserProvider curr
     public virtual IReadOnlyList<AddressTypeOption> AddressTypes
         => [.. addressTypeOrder.Select(type => new AddressTypeOption { Type = type, Label = builder.AddressTypeLabels.TryGetValue(type, out string? label) ? label : type.ToString() })];
     /// <inheritdoc />
-    public virtual IReadOnlyList<MessageLevel> MessageLevels => builder.MessageLevelValues;
+    public virtual IReadOnlyList<LevelDefinition> Levels => builder.LevelValues;
 
     /// <inheritdoc />
-    public virtual string GetUserMessageLevel(string userName)
-    {
-        if (GetUserInfo(userName).MessageLevel is { } stated)
-        {
-            return stated;
-        }
-        return builder.MessageLevelValues.Count > 0 ? builder.MessageLevelValues[0].Name : string.Empty;
-    }
+    public virtual Enum? GetUserLevel(string userName) => GetUserInfo(userName).Level ?? (builder.LevelValues.Count > 0 ? builder.LevelValues[0].Key : null);
 
     /// <inheritdoc />
     public virtual bool PrintReceivedDefaultEnabled => printHandler.Value?.PrintReceivedByDefault ?? false;
@@ -857,6 +846,11 @@ internal class EngineController(EngineBuilder builder, ICurrentUserProvider curr
     /// <inheritdoc />
     public virtual void Validate()
     {
+        if (IsAspectRequired && Aspects.Count == 0)
+        {
+            throw new InvalidOperationException("The draft handler requires an aspect, but the configuration states no aspects: state them with Aspect(...), or do not require one.");
+        }
+
         if (HeartbeatsEnabled)
         {
             PriorityValue(heartbeatHandler.Value!.Priority);
@@ -880,10 +874,10 @@ internal class EngineController(EngineBuilder builder, ICurrentUserProvider curr
     public virtual int SendPriority(Enum? priority) => PriorityValue(RequirePriority(priority));
 
     /// <inheritdoc />
-    public virtual string GetMessageLevelName(Enum? level)
-        => level is null ? string.Empty
-        : MessageLevels.FirstOrDefault(candidate => level.Equals(candidate.Key))?.Name
-            ?? throw new ArgumentException($"A message level of {level.GetType().Name}.{level} is used, which is not one of the configured message levels: {string.Join(", ", MessageLevels.Select(candidate => candidate.Name))}", nameof(level));
+    public virtual Enum? RequireLevel(Enum? level)
+        => level is null || Levels.Any(candidate => level.Equals(candidate.Key))
+            ? level
+            : throw new ArgumentException($"A level of {level.GetType().Name}.{level} is used, which is not one of the configured levels: {string.Join(", ", Levels.Select(candidate => candidate.Key))}", nameof(level));
 
     /// <inheritdoc />
     public virtual bool HeartbeatsEnabled => frame.Heartbeat is not null;
@@ -924,7 +918,7 @@ internal class EngineController(EngineBuilder builder, ICurrentUserProvider curr
     /// <inheritdoc />
     public virtual IUserInfo GetUserInfo(string userName)
     {
-        UserInfo<object> info = network.GetUserInfo(userName) ?? new UserInfo<object> { Name = userName };
+        UserInformation info = network.GetUserInfo(userName) ?? new UserInformation { Name = userName };
         return info with { Groups = [.. UserGroups.Where(group => group.Value.Contains(userName, StringComparer.OrdinalIgnoreCase)).Select(group => group.Key)] };
     }
 
@@ -946,12 +940,12 @@ internal class EngineController(EngineBuilder builder, ICurrentUserProvider curr
 internal static class EngineControllerExtensions
 {
     private static readonly Regex alertFolderPattern = new(@"^Alert (Inbox|Outbox)$", RegexOptions.IgnoreCase | RegexOptions.Compiled);
-    private static readonly Regex conceptPattern = new(@"\b(Alert Inbox|Alert Outbox|Message Aspects|Message Aspect|Message Levels|Message Level|Priorities|Priority|Alerts|Alert|Users|User|Tags|Tag|Inbox|Outbox|Drafts|Draft|Notes|Note|Activity|Messages|Message)\b", RegexOptions.IgnoreCase | RegexOptions.Compiled);
+    private static readonly Regex conceptPattern = new(@"\b(Alert Inbox|Alert Outbox|Aspects|Aspect|Levels|Level|Priorities|Priority|Alerts|Alert|Users|User|Tags|Tag|Inbox|Outbox|Drafts|Draft|Notes|Note|Activity|Messages|Message)\b", RegexOptions.IgnoreCase | RegexOptions.Compiled);
 
     extension(IEngineController engineController)
     {
 
-        /// <summary>Returns <paramref name="text"/>, a fixed piece of the user interface written with the engine's own names for concepts, with each concept name replaced by what the host calls it: the root folders, drafts, notes, messages and activity through the display handler's members for them, and alerts, tags, priorities and message levels through their own labels. A replacement keeps the case style of what it replaces (all capitals, all lowercase, or as written). Text with none of them, or with no host names for them, comes back as it is.</summary>
+        /// <summary>Returns <paramref name="text"/>, a fixed piece of the user interface written with the engine's own names for concepts, with each concept name replaced by what the host calls it: the root folders, drafts, notes, messages and activity through the display handler's members for them, and alerts, tags, priorities and levels through their own labels. A replacement keeps the case style of what it replaces (all capitals, all lowercase, or as written). Text with none of them, or with no host names for them, comes back as it is.</summary>
         /// <param name="text">The text, written with the engine's own names.</param>
         public string Display(string text)
         {
@@ -962,10 +956,10 @@ internal static class EngineControllerExtensions
 
             Dictionary<string, string?> replacements = new(StringComparer.OrdinalIgnoreCase)
             {
-                ["Message Aspects"] = engineController.MessageAspectPluralLabel,
-                ["Message Aspect"] = engineController.MessageAspectLabel,
-                ["Message Levels"] = engineController.MessageLevelPluralLabel,
-                ["Message Level"] = engineController.MessageLevelLabel,
+                ["Aspects"] = engineController.AspectPluralLabel,
+                ["Aspect"] = engineController.AspectLabel,
+                ["Levels"] = engineController.LevelPluralLabel,
+                ["Level"] = engineController.LevelLabel,
                 ["Priorities"] = engineController.PriorityPluralLabel,
                 ["Priority"] = engineController.PriorityLabel,
                 ["Users"] = engineController.UserPluralLabel,

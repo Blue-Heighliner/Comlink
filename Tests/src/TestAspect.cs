@@ -1,6 +1,6 @@
 namespace BlueHeighliner.Comlink.Tests;
 
-/// <summary>Message aspects for tests.</summary>
+/// <summary>Aspects for tests.</summary>
 public enum TestAspect
 {
     /// <summary>The first aspect.</summary>

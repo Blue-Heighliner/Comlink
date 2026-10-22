@@ -62,15 +62,15 @@ public sealed class EngineBuilderTests
         Assert.Throws<InvalidOperationException>(() => builder.Types<TestFrame, TestMessagePriority, TestLevel, TestAspect, NoProfile>());
     }
 
-    /// <summary>The no-priority and no-message-level types give a single NORMAL level and none, and packets cannot be stated without a packet type.</summary>
+    /// <summary>The no-priority and no-level types give a single NORMAL level and none, and packets cannot be stated without a packet type.</summary>
     [Fact]
-    public void Types_NoPriorityAndNoMessageLevel_AndPacketsWithoutAPacketType()
+    public void Types_NoPriorityAndNoLevel_AndPacketsWithoutAPacketType()
     {
         EngineBuilder builder = new();
-        IEngineBuilder<TestFrame, NoPacket, NoPriority, NoMessageLevel, NoMessageAspect, NoProfile> typed = builder.Types<TestFrame, NoPriority, NoMessageLevel, NoMessageAspect, NoProfile>();
+        IEngineBuilder<TestFrame, NoPacket, NoPriority, NoLevel, NoAspect, NoProfile> typed = builder.Types<TestFrame, NoPriority, NoLevel, NoAspect, NoProfile>();
 
         Assert.Equal(["NORMAL"], builder.PriorityOptions.Select(option => option.Name));
-        Assert.Empty(builder.MessageLevelValues);
+        Assert.Empty(builder.LevelValues);
         Assert.Throws<InvalidOperationException>(() => typed.Packets<IPacketHandler<TestFrame, NoPacket>>(16 * 1024));
     }
 
@@ -100,7 +100,7 @@ public sealed class EngineBuilderTests
         EngineController controller = new(EngineBuilder.Build(new InterleavedConfiguration()), new CurrentUserProvider(), null);
 
         Assert.Equal([TestMessagePriority.High, TestMessagePriority.Low, TestMessagePriority.Flash], controller.Priorities.Select(level => level.Key));
-        Assert.Equal(["SECRET", "PUBLIC", "INTERNAL"], controller.MessageLevels.Select(level => level.Name));
+        Assert.Equal(["SECRET", "PUBLIC", "INTERNAL"], controller.Levels.Select(level => level.Label));
     }
 
     /// <summary>Levels rank in the order they are stated, not the order of the enum, a member not stated is not a level, and what is stored is the member's integer value.</summary>
@@ -112,7 +112,7 @@ public sealed class EngineBuilderTests
 
         Assert.Equal([TestMessagePriority.High, TestMessagePriority.Low, TestMessagePriority.Flash], controller.Priorities.Select(level => level.Key).Take(3));
         Assert.Equal(3, controller.Priorities.Count);
-        Assert.Equal(["SECRET", "PUBLIC"], controller.MessageLevels.Select(level => level.Name));
+        Assert.Equal(["SECRET", "PUBLIC"], controller.Levels.Select(level => level.Label));
         Assert.Equal((int)TestMessagePriority.Flash, controller.StoredPriority(TestMessagePriority.Flash));
         Assert.Equal(TestMessagePriority.Flash, controller.PriorityOf((int)TestMessagePriority.Flash));
         Assert.Equal(TestMessagePriority.High, controller.PriorityOf(12345));
@@ -140,14 +140,15 @@ public sealed class EngineBuilderTests
     public void Build_DuplicatePriorityNames_Throws()
         => Assert.Contains("SAME", Assert.Throws<InvalidOperationException>(() => EngineBuilder.Build(new DuplicateLabelConfiguration())).Message);
 
-    /// <summary>A message level is named by its configured level, nothing for none, and anything else throws.</summary>
+    /// <summary>A level is accepted when it is a configured one, none is accepted as none, and anything else throws.</summary>
     [Fact]
-    public void GetMessageLevelName_NullIsNone_UnconfiguredThrows()
+    public void RequireLevel_NullIsNone_UnconfiguredThrows()
     {
         (_, EngineController controller) = Build(engine => engine);
 
-        Assert.Equal(["", "RESTRICTED"], [controller.GetMessageLevelName(null), controller.GetMessageLevelName(TestLevel.Restricted)]);
-        Assert.Throws<ArgumentException>(() => controller.GetMessageLevelName(TestMessagePriority.High));
+        Assert.Null(controller.RequireLevel(null));
+        Assert.Equal(TestLevel.Restricted, controller.RequireLevel(TestLevel.Restricted));
+        Assert.Throws<ArgumentException>(() => controller.RequireLevel(TestMessagePriority.High));
     }
 
     /// <summary>The tag rules are the draft handler's, and unrestricted without one.</summary>
@@ -199,18 +200,30 @@ public sealed class EngineBuilderTests
         Assert.True(builder.AreCommandLineOverridesAllowed);
     }
 
-    /// <summary>The data directory is the current user's own folder inside the application's folder under the application data root, and the application's folder itself before a user exists, where the install state always lives.</summary>
+    /// <summary>The data directory is the application's one folder under the application data root whoever the current user is, and the file that turns on log categories is in it.</summary>
     [Fact]
-    public void AppDataPath_IsTheCurrentUsersFolder()
+    public void AppDataPath_IsTheAppsOneFolder_WhoeverTheUserIs()
     {
-        string root = Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData);
+        string expected = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), "MyApp");
         (_, EngineController noUser) = Build(engine => engine.Display<TestDisplayHandler>());
         (_, EngineController alice) = Build(engine => engine.Display<TestDisplayHandler>(), "ALICE");
 
-        Assert.Equal(root, alice.AppDataRoot);
-        Assert.Equal(Path.Combine(root, "MyApp"), noUser.AppDataPath);
-        Assert.Equal(Path.Combine(root, "MyApp", "ALICE"), alice.AppDataPath);
-        Assert.Equal(Path.Combine(root, "MyApp", "Logging.json"), alice.LoggingFilePath);
+        Assert.Equal(expected, noUser.AppDataPath);
+        Assert.Equal(expected, alice.AppDataPath);
+        Assert.Equal(Path.Combine(expected, "Logging.json"), alice.LoggingFilePath);
+    }
+
+    /// <summary>A data folder stated by the command line replaces the app's folder under the application data root for everything stored.</summary>
+    [Fact]
+    public void AppDataPath_DataFolderOverride_ReplacesTheAppsFolder()
+    {
+        string folder = Path.Combine(Path.GetTempPath(), "node-data");
+        (EngineBuilder builder, EngineController controller) = Build(engine => engine.Display<TestDisplayHandler>(), "ALICE");
+        builder.DataFolderOverride = folder;
+
+        Assert.Equal(folder, builder.AppDataFolder);
+        Assert.Equal(folder, controller.AppDataPath);
+        Assert.Equal(Path.Combine(folder, "Logging.json"), controller.LoggingFilePath);
     }
 
     /// <summary>The app's folder, where the network configuration file is read from, is the data folder name under the absolute application data root, never relative to the working directory.</summary>
@@ -228,7 +241,7 @@ public sealed class EngineBuilderTests
     public void DraftHandler_DecidesWhichCombinationsAreBlocked()
     {
         Mock<IDraftHandler<TestMessagePriority, TestLevel, TestAspect>> handler = new() { CallBase = true };
-        handler.Setup(b => b.IsBlocked(It.Is<IDraftBlockContext<TestMessagePriority, TestLevel, TestAspect>>(context => context.Priority == TestMessagePriority.High && context.MessageLevel == TestLevel.Secret && context.MessageAspect == TestAspect.Signed && context.Tag == "SPAM"))).Returns("No spam at the top");
+        handler.Setup(b => b.IsBlocked(It.Is<IDraftBlockContext<TestMessagePriority, TestLevel, TestAspect>>(context => context.Priority == TestMessagePriority.High && context.Level == TestLevel.Secret && context.Aspect == TestAspect.Signed && context.Tag == "SPAM"))).Returns("No spam at the top");
         ServiceCollection services = new();
         services.AddSingleton(handler.Object);
         EngineBuilder builder = EngineBuilder.Build(new Configuration(engine => engine.Drafts<IDraftHandler<TestMessagePriority, TestLevel, TestAspect>>()));
@@ -247,8 +260,8 @@ public sealed class EngineBuilderTests
         (_, EngineController plain) = Build(engine => engine);
         (_, EngineController named) = Build(engine => engine.Display<TestDisplayHandler>());
 
-        Assert.Equal(["HOME", "ALERT", "Tag", "Priority", "Message Level", "Inbox"], [plain.HomeText, plain.AlertLabel, plain.TagLabel, plain.PriorityLabel, plain.MessageLevelLabel, plain.Rename("Inbox")]);
-        Assert.Equal(["Welcome", "ALARM", "Category", "Importance", "Classification", "Received", "Outbox"], [named.HomeText, named.AlertLabel, named.TagLabel, named.PriorityLabel, named.MessageLevelLabel, named.Rename("Inbox"), named.Rename("Outbox")]);
+        Assert.Equal(["HOME", "ALERT", "Tag", "Priority", "Level", "Inbox"], [plain.HomeText, plain.AlertLabel, plain.TagLabel, plain.PriorityLabel, plain.LevelLabel, plain.Rename("Inbox")]);
+        Assert.Equal(["Welcome", "ALARM", "Category", "Importance", "Classification", "Received", "Outbox"], [named.HomeText, named.AlertLabel, named.TagLabel, named.PriorityLabel, named.LevelLabel, named.Rename("Inbox"), named.Rename("Outbox")]);
     }
 
     /// <summary>Fixed interface text written with the engine's own names shows what the host calls the concepts, in the case style of what it replaces, and is untouched when the host states nothing.</summary>
@@ -260,8 +273,8 @@ public sealed class EngineBuilderTests
 
         Assert.Equal("NEW DRAFT in the Inbox, Alert only", plain.Display("NEW DRAFT in the Inbox, Alert only"));
         Assert.Equal("NEW DRAFT in the Received, ALARM only", named.Display("NEW DRAFT in the Inbox, Alert only"));
-        Assert.Equal("Categories, importances and classifications, plus alarms.", named.Display("Tags, priorities and message levels, plus alerts."));
-        Assert.Equal("Choose an importance, classification and category.", named.Display("Choose an priority, message level and tag."));
+        Assert.Equal("Categories, importances and classifications, plus alarms.", named.Display("Tags, priorities and levels, plus alerts."));
+        Assert.Equal("Choose an importance, classification and category.", named.Display("Choose an priority, level and tag."));
         Assert.Equal("No such user. Users are listed.", plain.Display("No such user. Users are listed."));
         Assert.Equal("No such operator. Operators are listed.", named.Display("No such user. Users are listed."));
         Assert.Equal("NO SUCH OPERATOR", named.Display("NO SUCH USER"));
@@ -333,9 +346,9 @@ public sealed class EngineBuilderTests
     [Fact]
     public void GetUserInfo_ReturnsTheNetworksDetailsOrJustTheName()
     {
-        (_, EngineController controller) = Build(engine => engine, network: Network(("ALICE", new NetworkUserConfig { MessageLevel = "HIGH" })));
+        (_, EngineController controller) = Build(engine => engine, network: Network(("ALICE", new NetworkUserConfig { LevelValue = TestLevel.High })));
 
-        Assert.Equal("HIGH", controller.GetUserInfo("alice").MessageLevel);
+        Assert.Equal(TestLevel.High, controller.GetUserInfo("alice").Level);
         IUserInfo other = controller.GetUserInfo("BOB");
         Assert.Equal("BOB", other.Name);
         Assert.Null(other.Role);
@@ -612,11 +625,11 @@ public sealed class EngineBuilderTests
         Assert.NotNull(seen);
         Assert.Same(info, seen.Connection);
         await seen.Send(sent);
-        await seen.Connected("ALICE");
-        await seen.Disconnect();
+        await seen.Accept("ALICE");
+        await seen.Reject("not trusted");
         session.Verify(s => s.Send(sent), Times.Once);
-        session.Verify(s => s.Connected("ALICE"), Times.Once);
-        session.Verify(s => s.Disconnect(), Times.Once);
+        session.Verify(s => s.Accept("ALICE"), Times.Once);
+        session.Verify(s => s.Reject("not trusted"), Times.Once);
     }
 
     /// <summary>External systems are reported in the order added, without duplicates.</summary>
@@ -681,7 +694,7 @@ public sealed class EngineBuilderTests
         Assert.Equal("PROPERTY-INJECTED", builder.DisplayHandlerInstance!.AppName);
     }
 
-    private sealed class PropertyReconfigurer : IReconfigurer
+    private sealed class PropertyConfigurationHandler : IConfigurationHandler
     {
         public required Dependency Dependency { get; init; }
 
@@ -694,22 +707,68 @@ public sealed class EngineBuilderTests
         }
     }
 
-    /// <summary>Without a reconfigurer none is reported, and a stated one is built through dependency injection, constructor and required properties alike, once.</summary>
+    /// <summary>Without a configuration handler none is reported, and a stated one is built through dependency injection, constructor and required properties alike, once.</summary>
     [Fact]
     public async Task Initialize_StatesTheInitializer_BuiltFromTheContainer()
     {
         ServiceCollection services = new();
         services.AddSingleton(new Dependency("INITIAL"));
-        EngineBuilder builder = EngineBuilder.Build(new Configuration(engine => engine.Reconfigure<PropertyReconfigurer>()));
+        EngineBuilder builder = EngineBuilder.Build(new Configuration(engine => engine.Configure<PropertyConfigurationHandler>()));
         EngineController stated = new(builder, new CurrentUserProvider(), null, services.BuildServiceProvider());
         (_, EngineController plain) = Build(engine => engine);
 
-        PropertyReconfigurer reconfigurer = Assert.IsType<PropertyReconfigurer>(stated.Reconfigurer);
-        await reconfigurer.OnReconfigured();
+        PropertyConfigurationHandler configurationHandler = Assert.IsType<PropertyConfigurationHandler>(stated.ConfigurationHandler);
+        await configurationHandler.OnReconfigured();
 
-        Assert.Equal(("INITIAL", 1), (reconfigurer.Dependency.Name, reconfigurer.Calls));
-        Assert.Same(reconfigurer, stated.Reconfigurer);
-        Assert.Null(plain.Reconfigurer);
+        Assert.Equal(("INITIAL", 1), (configurationHandler.Dependency.Name, configurationHandler.Calls));
+        Assert.Same(configurationHandler, stated.ConfigurationHandler);
+        Assert.Null(plain.ConfigurationHandler);
+    }
+
+    private sealed class DefaultIdentifier : IConfigurationHandler
+    {
+        public required Dependency Dependency { get; init; }
+    }
+
+    private sealed class LastNameIdentifier(Dependency dependency) : IConfigurationHandler
+    {
+        public int Calls { get; private set; }
+
+        public string Identify(IReadOnlyList<string> commonNames)
+        {
+            Calls++;
+            return dependency.Name + commonNames[^1];
+        }
+    }
+
+    private sealed class ExplicitIdentifier : IConfigurationHandler
+    {
+        string IConfigurationHandler.Identify(IReadOnlyList<string> commonNames) => "EXPLICIT";
+    }
+
+    /// <summary>Without a handler, or with one that does not state its own Identify, the first common name is the user and the handler is not built at all (it could not be, here, without its dependency).</summary>
+    [Fact]
+    public void Identify_WithoutAnOverride_IsTheFirstCommonName_AndBuildsNothing()
+    {
+        EngineBuilder none = EngineBuilder.Build(new Configuration(engine => engine), new ServiceCollection().BuildServiceProvider());
+        EngineBuilder notIdentifying = EngineBuilder.Build(new Configuration(engine => engine.Configure<DefaultIdentifier>()), new ServiceCollection().BuildServiceProvider());
+
+        Assert.Equal("A", none.Identify(["A", "B"]));
+        Assert.Equal("A", notIdentifying.Identify(["A", "B"]));
+    }
+
+    /// <summary>A handler that states Identify is built once from the bootstrap container and asked each time, and an explicit interface implementation counts as stating it.</summary>
+    [Fact]
+    public void Identify_WithAnOverride_AsksTheHandlerBuiltOnceFromTheBootstrapContainer()
+    {
+        ServiceCollection services = new();
+        services.AddSingleton(new Dependency("USER-"));
+        EngineBuilder builder = EngineBuilder.Build(new Configuration(engine => engine.Configure<LastNameIdentifier>()), services.BuildServiceProvider());
+        EngineBuilder explicitBuilder = EngineBuilder.Build(new Configuration(engine => engine.Configure<ExplicitIdentifier>()), services.BuildServiceProvider());
+
+        Assert.Equal("USER-B", builder.Identify(["A", "B"]));
+        Assert.Equal("USER-C", builder.Identify(["C"]));
+        Assert.Equal("EXPLICIT", explicitBuilder.Identify(["A"]));
     }
 
     private sealed class FirstExportFormat : IExportFormat
@@ -827,63 +886,58 @@ public sealed class EngineBuilderTests
 
     /// <summary>Levels take their order from how they are stated, their name from the member (or an override) and a neutral background and white foreground unless stated.</summary>
     [Fact]
-    public void MessageLevels_FollowTheStatedOrderWithOverrides()
+    public void Levels_FollowTheStatedOrderWithOverrides()
     {
         (_, EngineController controller) = Build(engine => engine.Level(TestLevel.High).Label("TOP").Background("#222222").Foreground("#EEEEEE"));
 
-        Assert.Equal(["PUBLIC", "TOP"], [controller.MessageLevels[0].Name, controller.MessageLevels[^1].Name]);
-        Assert.Equal(["#5A5A5A", "#222222"], [controller.MessageLevels[0].Background, controller.MessageLevels[^1].Background]);
-        Assert.Equal(["#FFFFFF", "#EEEEEE"], [controller.MessageLevels[0].Foreground, controller.MessageLevels[^1].Foreground]);
+        Assert.Equal(["PUBLIC", "TOP"], [controller.Levels[0].Label, controller.Levels[^1].Label]);
+        Assert.Equal(["#5A5A5A", "#222222"], [controller.Levels[0].Background, controller.Levels[^1].Background]);
+        Assert.Equal(["#FFFFFF", "#EEEEEE"], [controller.Levels[0].Foreground, controller.Levels[^1].Foreground]);
     }
 
-    /// <summary>A user's message level is the one on their entry, or the lowest configured level when none is stated.</summary>
+    /// <summary>A user's level is the one on their entry, or the lowest configured level when none is stated.</summary>
     [Fact]
-    public void GetUserMessageLevel_UsesTheEntryElseTheLowestLevel()
+    public void GetUserLevel_UsesTheEntryElseTheLowestLevel()
     {
         (_, EngineController controller) = Build(
             engine => engine.Level(TestLevel.Low).Background("#111111").Level(TestLevel.High).Background("#222222"),
-            network: Network(("ALICE", new NetworkUserConfig { MessageLevel = "HIGH" })));
+            network: Network(("ALICE", new NetworkUserConfig { LevelValue = TestLevel.High })));
 
-        Assert.Equal("HIGH", controller.GetUserMessageLevel("ALICE"));
-        Assert.Equal("PUBLIC", controller.GetUserMessageLevel("BOB"));
+        Assert.Equal(TestLevel.High, controller.GetUserLevel("ALICE"));
+        Assert.Equal(TestLevel.Public, controller.GetUserLevel("BOB"));
     }
 
     /// <summary>Aspects are offered in the order stated, named by their member in uppercase unless a label is given, and without the call there are none.</summary>
     [Fact]
-    public void MessageAspects_FollowTheStatedOrderWithLabels()
+    public void Aspects_FollowTheStatedOrderWithLabels()
     {
         (_, EngineController none) = Build(engine => engine);
         (_, EngineController controller) = Build(engine => engine.Aspect(TestAspect.Signed).Label("SIGNED BY SENDER").Aspect(TestAspect.Encrypted));
 
-        Assert.Empty(none.MessageAspects);
-        Assert.Equal(["SIGNED BY SENDER", "ENCRYPTED"], controller.MessageAspects.Select(aspect => aspect.Name));
-        Assert.Equal([1, 0], controller.MessageAspects.Select(aspect => aspect.Value));
+        Assert.Empty(none.Aspects);
+        Assert.Equal(["SIGNED BY SENDER", "ENCRYPTED"], controller.Aspects.Select(aspect => aspect.Label));
+        Assert.Equal([1, 0], controller.Aspects.Select(aspect => aspect.Value));
     }
 
-    /// <summary>An aspect is named by its stated name, none is an empty name, and one that was never stated throws.</summary>
+    /// <summary>An aspect is accepted when it was stated, none is accepted as none, and one that was never stated throws.</summary>
     [Fact]
-    public void GetMessageAspectName_NamesStatedAspectsOnly()
+    public void RequireAspect_StatedOnly()
     {
         (_, EngineController controller) = Build(engine => engine.Aspect(TestAspect.Signed).Label("SIGNED"));
 
-        Assert.Equal("SIGNED", controller.GetMessageAspectName(TestAspect.Signed));
-        Assert.Equal(string.Empty, controller.GetMessageAspectName(null));
-        Assert.Throws<ArgumentException>(() => controller.GetMessageAspectName(TestAspect.Unused));
+        Assert.Equal(TestAspect.Signed, controller.RequireAspect(TestAspect.Signed));
+        Assert.Null(controller.RequireAspect(null));
+        Assert.Throws<ArgumentException>(() => controller.RequireAspect(TestAspect.Unused));
     }
-
-    /// <summary>Two aspects cannot share a name.</summary>
-    [Fact]
-    public void MessageAspects_DuplicateNames_Throw()
-        => Assert.Throws<InvalidOperationException>(() => Build(engine => engine.Aspect(TestAspect.Signed).Label("X").Aspect(TestAspect.Encrypted).Label("x")));
 
     /// <summary>The aspect labels are the engine's own unless the display handler renames them, with the plural following the singular.</summary>
     [Fact]
-    public void MessageAspectLabels_DefaultAndFollowTheDisplayHandler()
+    public void AspectLabels_DefaultAndFollowTheDisplayHandler()
     {
         (_, EngineController plain) = Build(engine => engine);
         (_, EngineController named) = Build(engine => engine.Display<TestDisplayHandler>());
 
-        Assert.Equal(["Message Aspect", "Message Aspects"], [plain.MessageAspectLabel, plain.MessageAspectPluralLabel]);
-        Assert.Equal(["Safeguard", "Safeguards"], [named.MessageAspectLabel, named.MessageAspectPluralLabel]);
+        Assert.Equal(["Aspect", "Aspects"], [plain.AspectLabel, plain.AspectPluralLabel]);
+        Assert.Equal(["Safeguard", "Safeguards"], [named.AspectLabel, named.AspectPluralLabel]);
     }
 }

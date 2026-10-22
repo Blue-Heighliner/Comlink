@@ -32,8 +32,8 @@ public sealed class DraftViewModelTests
             new AddressTypeOption { Type = AddressType.Cc, Label = "Cc" },
             new AddressTypeOption { Type = AddressType.External, Label = "External" }
         ]);
-        mock.Setup(a => a.MessageLevels).Returns([]);
-        mock.Setup(a => a.MessageAspects).Returns([]);
+        mock.Setup(a => a.Levels).Returns([]);
+        mock.Setup(a => a.Aspects).Returns([]);
         return mock.Object;
     }
 
@@ -857,81 +857,130 @@ public sealed class DraftViewModelTests
     private static (DraftViewModel Vm, Mock<IEngineConnection> Connection, Mock<IEntryService> Entries, DraftEntity Entity) BuildWithAspects(int? storedAspect = null)
     {
         Mock<IEngineController> controller = Mock.Get(MakeEngineController());
-        controller.Setup(c => c.MessageAspects).Returns([new MessageAspect { Name = "ENCRYPTED", Key = TestAspect.Encrypted }, new MessageAspect { Name = "SIGNED", Key = TestAspect.Signed }]);
+        controller.Setup(c => c.Aspects).Returns([new AspectDefinition { Label = "ENCRYPTED", Key = TestAspect.Encrypted }, new AspectDefinition { Label = "SIGNED", Key = TestAspect.Signed }]);
         Mock<IEntryService> entries = new();
         Mock<IEngineConnection> connection = new();
         connection.Setup(c => c.SendMessage(It.IsAny<string>(), It.IsAny<List<AddressRequest>>(), It.IsAny<Enum?>(), It.IsAny<string>(), It.IsAny<Enum?>(), It.IsAny<Enum?>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync(new SendMessageResult { MessageId = "M1" });
-        DraftEntity entity = new() { Body = "B", Addresses = [new AddressData { UserName = "BOB", Type = "To" }], FolderId = "root-drafts", MessageAspect = storedAspect };
+        DraftEntity entity = new() { Body = "B", Addresses = [new AddressData { UserName = "BOB", Type = "To" }], FolderId = "root-drafts", Aspect = storedAspect };
         return (new DraftViewModel(entity, entries.Object, connection.Object, [], noLogger, controller.Object), connection, entries, entity);
+    }
+
+    /// <summary>When the handler requires an aspect the picker has no empty option and the draft opens on a real aspect, even with none stored.</summary>
+    [Fact]
+    public void Aspects_Required_OffersNoEmptyOption()
+    {
+        Mock<IEngineController> controller = Mock.Get(MakeEngineController());
+        controller.Setup(c => c.Aspects).Returns([new AspectDefinition { Label = "ENCRYPTED", Key = TestAspect.Encrypted }, new AspectDefinition { Label = "SIGNED", Key = TestAspect.Signed }]);
+        controller.Setup(c => c.IsAspectRequired).Returns(true);
+        DraftEntity entity = new() { Body = "B", Addresses = [], FolderId = "root-drafts" };
+
+        DraftViewModel vm = new(entity, Mock.Of<IEntryService>(), Mock.Of<IEngineConnection>(), [], noLogger, controller.Object);
+
+        Assert.Equal(["ENCRYPTED", "SIGNED"], vm.AvailableAspects.Select(option => option.Label));
+        Assert.NotNull(vm.SelectedAspect?.Aspect);
+    }
+
+    /// <summary>Anything the user changes in the draft takes the message about the earlier input away.</summary>
+    [Fact]
+    public void StatusMessage_DisappearsOnNewInput()
+    {
+        DraftViewModel vm = Build(out _, out _, isAllowed: Blocking("SPAM", null), blockReason: "SPAM is never allowed");
+
+        vm.Tag = "SPAM";
+        Assert.Equal("SPAM is never allowed", vm.StatusMessage);
+        vm.Tag = "URGENT";
+        Assert.Null(vm.StatusMessage);
+
+        vm.Tag = "SPAM";
+        vm.SelectedPriority = vm.AvailablePriorities.Single(p => p.Name == "FLASH");
+        Assert.Null(vm.StatusMessage);
+
+        vm.Tag = "SPAM";
+        vm.NewAddressUser = "BOB";
+        Assert.Null(vm.StatusMessage);
+    }
+
+    /// <summary>A tag typed into the box that is refused keeps its reason showing until something else changes.</summary>
+    [Fact]
+    public void StatusMessage_ARefusedTagKeepsItsReasonUntilTheNextInput()
+    {
+        DraftViewModel vm = Build(out _, out _, isAllowed: Blocking("SPAM", null), blockReason: "SPAM is never allowed");
+
+        vm.FilterTag("SPAM");
+        Assert.Equal("SPAM is never allowed", vm.StatusMessage);
+
+        vm.FilterTag("URGENT");
+        vm.Tag = "URGENT";
+        Assert.Null(vm.StatusMessage);
     }
 
     /// <summary>With aspects configured the picker offers none first and then each aspect, and a draft with no stored aspect starts on none; without aspects it is empty.</summary>
     [Fact]
-    public void MessageAspects_PickerOffersNoneThenEachAspect()
+    public void Aspects_PickerOffersNoneThenEachAspect()
     {
         (DraftViewModel vm, _, _, _) = BuildWithAspects();
 
-        Assert.Equal(["ENCRYPTED", "SIGNED"], vm.AvailableMessageAspects.Skip(1).Select(option => option.Label));
-        Assert.Null(vm.AvailableMessageAspects[0].Aspect);
-        Assert.Equal(string.Empty, vm.AvailableMessageAspects[0].Label);
-        Assert.Null(vm.SelectedMessageAspect?.Aspect);
-        Assert.Empty(Build(out _, out _).AvailableMessageAspects);
+        Assert.Equal(["ENCRYPTED", "SIGNED"], vm.AvailableAspects.Skip(1).Select(option => option.Label));
+        Assert.Null(vm.AvailableAspects[0].Aspect);
+        Assert.Equal(string.Empty, vm.AvailableAspects[0].Label);
+        Assert.Null(vm.SelectedAspect?.Aspect);
+        Assert.Empty(Build(out _, out _).AvailableAspects);
     }
 
     /// <summary>An aspect no allowed combination uses is not offered, and choosing a priority that blocks the chosen aspect moves the aspect to one that is allowed.</summary>
     [Fact]
-    public void MessageAspects_Blocked_AreNotOfferedAndSelectionMoves()
+    public void Aspects_Blocked_AreNotOfferedAndSelectionMoves()
     {
         Mock<IEngineController> controller = Mock.Get(MakeEngineController());
-        controller.Setup(c => c.MessageAspects).Returns([new MessageAspect { Name = "ENCRYPTED", Key = TestAspect.Encrypted }, new MessageAspect { Name = "SIGNED", Key = TestAspect.Signed }]);
+        controller.Setup(c => c.Aspects).Returns([new AspectDefinition { Label = "ENCRYPTED", Key = TestAspect.Encrypted }, new AspectDefinition { Label = "SIGNED", Key = TestAspect.Signed }]);
         SetupBlocked(controller, (priority, level, aspect, tag) => !TestAspect.Signed.Equals(aspect) && !(priority.Equals(TestMessagePriority.Flash) && TestAspect.Encrypted.Equals(aspect)));
-        DraftEntity entity = new() { Body = "B", Addresses = [], FolderId = "root-drafts", MessageAspect = (int)TestAspect.Encrypted };
+        DraftEntity entity = new() { Body = "B", Addresses = [], FolderId = "root-drafts", Aspect = (int)TestAspect.Encrypted };
         DraftViewModel vm = new(entity, Mock.Of<IEntryService>(), Mock.Of<IEngineConnection>(), [], noLogger, controller.Object);
-        Assert.Equal(["", "ENCRYPTED"], vm.AvailableMessageAspects.Select(option => option.Label));
-        Assert.Equal("ENCRYPTED", vm.SelectedMessageAspect?.Aspect?.Name);
+        Assert.Equal(["", "ENCRYPTED"], vm.AvailableAspects.Select(option => option.Label));
+        Assert.Equal("ENCRYPTED", vm.SelectedAspect?.Aspect?.Label);
 
         vm.SelectedPriority = vm.AvailablePriorities.Single(p => p.Name == "FLASH");
 
         Assert.Equal("FLASH", vm.SelectedPriority.Name);
-        Assert.Null(vm.SelectedMessageAspect?.Aspect);
+        Assert.Null(vm.SelectedAspect?.Aspect);
     }
 
-    /// <summary>A message level the draft handler refuses with the current tag is not offered, and a tag that blocks the chosen level moves the level to one that is allowed.</summary>
+    /// <summary>A level the draft handler refuses with the current tag is not offered, and a tag that blocks the chosen level moves the level to one that is allowed.</summary>
     [Fact]
-    public void MessageLevels_BlockedWithTag_AreNotOfferedAndSelectionMoves()
+    public void Levels_BlockedWithTag_AreNotOfferedAndSelectionMoves()
     {
         Mock<IEngineController> controller = Mock.Get(MakeEngineController());
-        controller.Setup(c => c.MessageLevels).Returns([new MessageLevel { Name = "PUBLIC", Background = "#000000", Key = TestLevel.Public }, new MessageLevel { Name = "SECRET", Background = "#000000", Key = TestLevel.Secret }]);
+        controller.Setup(c => c.Levels).Returns([new LevelDefinition { Label = "PUBLIC", Background = "#000000", Key = TestLevel.Public }, new LevelDefinition { Label = "SECRET", Background = "#000000", Key = TestLevel.Secret }]);
         SetupBlocked(controller, (priority, level, aspect, tag) => !(tag == "LEAK" && TestLevel.Secret.Equals(level)));
-        DraftEntity entity = new() { Body = "B", Addresses = [], FolderId = "root-drafts", MessageLevel = (int)TestLevel.Secret };
-        DraftViewModel vm = new(entity, Mock.Of<IEntryService>(), Mock.Of<IEngineConnection>(), [], noLogger, controller.Object, currentMessageLevel: "SECRET");
-        Assert.Equal("SECRET", vm.SelectedMessageLevel?.Name);
+        DraftEntity entity = new() { Body = "B", Addresses = [], FolderId = "root-drafts", Level = (int)TestLevel.Secret };
+        DraftViewModel vm = new(entity, Mock.Of<IEntryService>(), Mock.Of<IEngineConnection>(), [], noLogger, controller.Object, currentLevel: TestLevel.Secret);
+        Assert.Equal("SECRET", vm.SelectedLevel?.Label);
 
         vm.Tag = "LEAK";
 
         Assert.Equal("LEAK", vm.Tag);
-        Assert.Equal(["PUBLIC"], vm.AvailableMessageLevels.Select(level => level.Name));
-        Assert.Equal("PUBLIC", vm.SelectedMessageLevel?.Name);
+        Assert.Equal(["PUBLIC"], vm.AvailableLevels.Select(level => level.Label));
+        Assert.Equal("PUBLIC", vm.SelectedLevel?.Label);
     }
 
-    /// <summary>Choosing a message level that the handler refuses with the chosen aspect moves the aspect, not the level, and every level stays offered while some aspect allows it.</summary>
+    /// <summary>Choosing a level that the handler refuses with the chosen aspect moves the aspect, not the level, and every level stays offered while some aspect allows it.</summary>
     [Fact]
     public void ChoosingALevel_BlockedWithTheAspect_MovesTheAspect()
     {
         Mock<IEngineController> controller = Mock.Get(MakeEngineController());
-        controller.Setup(c => c.MessageLevels).Returns([new MessageLevel { Name = "PUBLIC", Background = "#000000", Key = TestLevel.Public }, new MessageLevel { Name = "SECRET", Background = "#000000", Key = TestLevel.Secret }]);
-        controller.Setup(c => c.MessageAspects).Returns([new MessageAspect { Name = "ENCRYPTED", Key = TestAspect.Encrypted }]);
+        controller.Setup(c => c.Levels).Returns([new LevelDefinition { Label = "PUBLIC", Background = "#000000", Key = TestLevel.Public }, new LevelDefinition { Label = "SECRET", Background = "#000000", Key = TestLevel.Secret }]);
+        controller.Setup(c => c.Aspects).Returns([new AspectDefinition { Label = "ENCRYPTED", Key = TestAspect.Encrypted }]);
         SetupBlocked(controller, (priority, level, aspect, tag) => !(TestLevel.Secret.Equals(level) && TestAspect.Encrypted.Equals(aspect)));
-        DraftEntity entity = new() { Body = "B", Addresses = [], FolderId = "root-drafts", MessageLevel = (int)TestLevel.Public, MessageAspect = (int)TestAspect.Encrypted };
-        DraftViewModel vm = new(entity, Mock.Of<IEntryService>(), Mock.Of<IEngineConnection>(), [], noLogger, controller.Object, currentMessageLevel: "SECRET");
-        Assert.Equal("ENCRYPTED", vm.SelectedMessageAspect?.Aspect?.Name);
+        DraftEntity entity = new() { Body = "B", Addresses = [], FolderId = "root-drafts", Level = (int)TestLevel.Public, Aspect = (int)TestAspect.Encrypted };
+        DraftViewModel vm = new(entity, Mock.Of<IEntryService>(), Mock.Of<IEngineConnection>(), [], noLogger, controller.Object, currentLevel: TestLevel.Secret);
+        Assert.Equal("ENCRYPTED", vm.SelectedAspect?.Aspect?.Label);
 
-        vm.SelectedMessageLevel = vm.AvailableMessageLevels.Single(level => level.Name == "SECRET");
+        vm.SelectedLevel = vm.AvailableLevels.Single(level => level.Label == "SECRET");
 
-        Assert.Equal("SECRET", vm.SelectedMessageLevel?.Name);
-        Assert.Null(vm.SelectedMessageAspect?.Aspect);
-        Assert.Equal(["PUBLIC", "SECRET"], vm.AvailableMessageLevels.Select(level => level.Name));
+        Assert.Equal("SECRET", vm.SelectedLevel?.Label);
+        Assert.Null(vm.SelectedAspect?.Aspect);
+        Assert.Equal(["PUBLIC", "SECRET"], vm.AvailableLevels.Select(level => level.Label));
     }
 
     /// <summary>A draft stored with a combination the handler now refuses opens on an allowed one instead.</summary>
@@ -947,24 +996,24 @@ public sealed class DraftViewModelTests
 
     /// <summary>A stored aspect is selected again when the draft is opened.</summary>
     [Fact]
-    public void MessageAspects_StoredAspectIsSelected()
+    public void Aspects_StoredAspectIsSelected()
     {
         (DraftViewModel vm, _, _, _) = BuildWithAspects(storedAspect: (int)TestAspect.Signed);
 
-        Assert.Equal("SIGNED", vm.SelectedMessageAspect?.Aspect?.Name);
+        Assert.Equal("SIGNED", vm.SelectedAspect?.Aspect?.Label);
     }
 
     /// <summary>The chosen aspect is sent with the message, and with none chosen none is sent.</summary>
     [Fact]
-    public async Task Send_PassesTheSelectedMessageAspect()
+    public async Task Send_PassesTheSelectedAspect()
     {
         (DraftViewModel vm, Mock<IEngineConnection> connection, _, DraftEntity entity) = BuildWithAspects();
-        vm.SelectedMessageAspect = vm.AvailableMessageAspects.Single(option => option.Label == "ENCRYPTED");
+        vm.SelectedAspect = vm.AvailableAspects.Single(option => option.Label == "ENCRYPTED");
 
         await vm.SendCommand.ExecuteAsync(null);
 
         connection.Verify(c => c.SendMessage(It.IsAny<string>(), It.IsAny<List<AddressRequest>>(), It.IsAny<Enum?>(), It.IsAny<string>(), It.IsAny<Enum?>(), TestAspect.Encrypted, It.IsAny<CancellationToken>()), Times.Once);
-        Assert.Equal((int)TestAspect.Encrypted, entity.MessageAspect);
+        Assert.Equal((int)TestAspect.Encrypted, entity.Aspect);
 
         (DraftViewModel plain, Mock<IEngineConnection> plainConnection, _, _) = BuildWithAspects();
         await plain.SendCommand.ExecuteAsync(null);

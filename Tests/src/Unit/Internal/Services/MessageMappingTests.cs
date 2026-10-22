@@ -14,7 +14,7 @@ public sealed class MessageMappingTests
         SentAt = new DateTime(2026, 1, 1, 12, 0, 0, DateTimeKind.Utc),
         Priority = TestMessagePriority.Level2,
         Tag = "TAG",
-        MessageLevel = TestLevel.Restricted,
+        Level = TestLevel.Restricted,
         IsAlert = true
     };
 
@@ -28,26 +28,26 @@ public sealed class MessageMappingTests
 
         Assert.Equal(original.Id, back.Id);
         Assert.Equal(original.Priority, back.Priority);
-        Assert.Equal(original.MessageLevel, back.MessageLevel);
-        Assert.Null(back.MessageAspect);
+        Assert.Equal(original.Level, back.Level);
+        Assert.Null(back.Aspect);
         Assert.Equal(original.Tag, back.Tag);
         Assert.True(back.IsAlert);
         Assert.Equal(("BOB", AddressType.Cc, "info"), (back.Addresses[0].UserName, back.Addresses[0].Type, back.Addresses[0].Information));
     }
 
-    /// <summary>A message level that is not configured is refused, so it never reaches storage.</summary>
+    /// <summary>A level that is not configured is refused, so it never reaches storage.</summary>
     [Fact]
     public void ToData_UnconfiguredLevel_Throws()
-        => Assert.Throws<ArgumentException>(() => controller.ToData(MakeMessage() with { MessageLevel = DayOfWeek.Monday }));
+        => Assert.Throws<ArgumentException>(() => controller.ToData(MakeMessage() with { Level = DayOfWeek.Monday }));
 
-    /// <summary>A level is named from its configuration, and a level or aspect that is none is empty.</summary>
+    /// <summary>A stored level reads back as the enum member it is, whatever the level is labelled, and a level or aspect that is none reads back as none.</summary>
     [Fact]
-    public void Names_ComeFromTheConfiguration()
+    public void LevelAndAspect_ReadBackAsEnumMembers()
     {
         MessageData data = controller.ToData(MakeMessage());
 
-        Assert.Equal("RESTRICTED", controller.NameOfLevel(data).ToUpperInvariant());
-        Assert.Equal(string.Empty, controller.NameOfAspect(data));
-        Assert.Equal(string.Empty, controller.NameOfLevel(new MessageData { Id = "X", FromUser = "A", Body = "" }));
+        Assert.Equal(TestLevel.Restricted, controller.LevelOf(data));
+        Assert.Null(controller.AspectOf(data));
+        Assert.Null(controller.LevelOf(new MessageData { Id = "X", FromUser = "A", Body = "" }));
     }
 }

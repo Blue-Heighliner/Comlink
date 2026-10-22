@@ -5,7 +5,7 @@ public sealed class MainViewModelTests
 {
     private static readonly ILoggerFactory noLogger = LoggerFactory.Create(_ => { });
 
-    private static UserInfo<object> MakeUserInfo(string name = "ALPHA") => new()
+    private static UserInformation MakeUserInfo(string name = "ALPHA") => new()
     {
         Name = name
     };
@@ -94,10 +94,10 @@ public sealed class MainViewModelTests
     {
         Setup s = new();
         s.EngineController.SetupGet(e => e.Role).Returns(UserRole.Server);
-        s.EngineController.Setup(e => e.GetUserInfo("ALICE")).Returns(new UserInfo<object> { Name = "ALICE", Role = UserRole.Client });
-        s.EngineController.SetupGet(e => e.MessageLevels).Returns([]);
+        s.EngineController.Setup(e => e.GetUserInfo("ALICE")).Returns(new UserInformation { Name = "ALICE", Role = UserRole.Client });
+        s.EngineController.SetupGet(e => e.Levels).Returns([]);
         s.EngineController.SetupGet(e => e.AutoForwarders).Returns([]);
-        s.EngineController.Setup(e => e.GetUserMessageLevel("ALICE")).Returns(string.Empty);
+        s.EngineController.Setup(e => e.GetUserLevel("ALICE")).Returns((Enum?)null);
         s.UserProvider.SetupGet(u => u.UserName).Returns("ALICE");
         MainViewModel vm = s.BuildVm();
         vm.UserName = "ALICE";
@@ -115,10 +115,10 @@ public sealed class MainViewModelTests
     public async Task NetworkReloaded_WithAnotherUser_OpensTheirDatabaseAndFolders()
     {
         Setup s = new();
-        s.EngineController.Setup(e => e.GetUserInfo("BOB")).Returns(new UserInfo<object> { Name = "BOB", Role = UserRole.Client });
-        s.EngineController.SetupGet(e => e.MessageLevels).Returns([]);
+        s.EngineController.Setup(e => e.GetUserInfo("BOB")).Returns(new UserInformation { Name = "BOB", Role = UserRole.Client });
+        s.EngineController.SetupGet(e => e.Levels).Returns([]);
         s.EngineController.SetupGet(e => e.AutoForwarders).Returns([]);
-        s.EngineController.Setup(e => e.GetUserMessageLevel("BOB")).Returns(string.Empty);
+        s.EngineController.Setup(e => e.GetUserLevel("BOB")).Returns((Enum?)null);
         s.UserProvider.SetupGet(u => u.UserName).Returns("BOB");
         s.FolderBar.Setup(f => f.Load()).Returns(Task.CompletedTask);
         MainViewModel vm = s.BuildVm();
@@ -157,10 +157,10 @@ public sealed class MainViewModelTests
     public async Task NetworkReloaded_AfterTheProblemIsFixed_LeavesTheErrorScreen()
     {
         Setup s = new();
-        s.EngineController.Setup(e => e.GetUserInfo("ALICE")).Returns(new UserInfo<object> { Name = "ALICE", Role = UserRole.Client });
-        s.EngineController.SetupGet(e => e.MessageLevels).Returns([]);
+        s.EngineController.Setup(e => e.GetUserInfo("ALICE")).Returns(new UserInformation { Name = "ALICE", Role = UserRole.Client });
+        s.EngineController.SetupGet(e => e.Levels).Returns([]);
         s.EngineController.SetupGet(e => e.AutoForwarders).Returns([]);
-        s.EngineController.Setup(e => e.GetUserMessageLevel("ALICE")).Returns(string.Empty);
+        s.EngineController.Setup(e => e.GetUserLevel("ALICE")).Returns((Enum?)null);
         s.UserProvider.SetupGet(u => u.UserName).Returns("ALICE");
         s.FolderBar.Setup(f => f.Load()).Returns(Task.CompletedTask);
         MainViewModel vm = s.BuildVm();
@@ -286,8 +286,8 @@ public sealed class MainViewModelTests
         s.Connection.Setup(c => c.Connect(It.IsAny<CancellationToken>())).Returns(Task.CompletedTask);
         s.Connection.Setup(c => c.GetUserInfo(It.IsAny<CancellationToken>())).ReturnsAsync(MakeUserInfo("BETA"));
         s.FolderBar.Setup(f => f.Load()).Returns(Task.CompletedTask);
-        s.EngineController.Setup(e => e.GetUserMessageLevel("BETA")).Returns("INTERNAL");
-        s.EngineController.Setup(e => e.MessageLevels).Returns([new MessageLevel { Name = "INTERNAL", Background = "#1565C0" }]);
+        s.EngineController.Setup(e => e.GetUserLevel("BETA")).Returns(TestLevel.Internal);
+        s.EngineController.Setup(e => e.Levels).Returns([new LevelDefinition { Label = "INTERNAL", Key = TestLevel.Internal, Background = "#1565C0" }]);
         MainViewModel vm = s.BuildVm();
 
         await vm.Initialize();
@@ -296,8 +296,8 @@ public sealed class MainViewModelTests
         s.Db.Verify(d => d.Initialize(), Times.Once);
         s.FolderBar.Verify(f => f.Load(), Times.Once);
         Assert.Equal("BETA", vm.UserName);
-        Assert.Equal("INTERNAL", vm.MessageLevelName);
-        Assert.Equal("#1565C0", vm.MessageLevelBackground);
+        Assert.Equal("INTERNAL", vm.LevelName);
+        Assert.Equal("#1565C0", vm.LevelBackground);
     }
 
     /// <summary>Initialize sets HasAutoForwardAccess when the user lists at least one configured auto forwarder.</summary>
@@ -361,7 +361,7 @@ public sealed class MainViewModelTests
     {
         Setup s = new();
         s.Connection.Setup(c => c.Connect(It.IsAny<CancellationToken>())).Returns(Task.CompletedTask);
-        s.Connection.Setup(c => c.GetUserInfo(It.IsAny<CancellationToken>())).ReturnsAsync((UserInfo<object>?)null);
+        s.Connection.Setup(c => c.GetUserInfo(It.IsAny<CancellationToken>())).ReturnsAsync((UserInformation?)null);
         MainViewModel vm = s.BuildVm();
 
         await vm.Initialize();

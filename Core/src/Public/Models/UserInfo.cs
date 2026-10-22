@@ -2,17 +2,17 @@ namespace BlueHeighliner.Comlink;
 
 /// <summary>
 /// Everything the engine knows about one user, without the user's profile: who they are and, for a user that runs a node, how that node takes part in the network. Code that does not care about the profile can take this;
-/// what the engine hands to a host is the <see cref="UserInfo{TProfile}"/> that implements it.
+/// what the engine hands to a host is the <see cref="UserInfo{TLevel, TProfile}"/> that implements it.
 /// </summary>
 public interface IUserInfo
 {
     /// <summary>Canonical name of the user. By convention user names are all uppercase.</summary>
     string Name { get; }
     /// <summary>
-    /// The name of the message level (see <see cref="IEngineBuilder{TFrame, TPacket, TPriority, TLevel, TAspect, TProfile}.Level"/>) this user runs at. <see langword="null"/> (the
-    /// default) is the lowest configured level.
+    /// The level (see <see cref="IEngineBuilder{TFrame, TPacket, TPriority, TLevel, TAspect, TProfile}.Level"/>) this user runs at, a member of the enum the host stated for its levels, as the network configuration
+    /// file names it. <see langword="null"/> (the default) is the lowest configured level.
     /// </summary>
-    string? MessageLevel { get; }
+    Enum? Level { get; }
     /// <summary>Names of the groups this user is a member of.</summary>
     IReadOnlyList<string> Groups { get; }
     /// <summary>The networking role of a node this user runs. <see langword="null"/> (the default) is <see cref="UserRole.Client"/>.</summary>
@@ -38,16 +38,19 @@ public interface IUserInfo
 }
 
 /// <summary>Everything the engine knows about one user: who they are and, for a user that runs a node, how that node takes part in the network, with the user's profile typed as the host stated it.</summary>
+/// <typeparam name="TLevel">The enum the host stated for its levels.</typeparam>
 /// <typeparam name="TProfile">The record type the host stated for user profiles in its <c>Types</c> call, or <see cref="NoProfile"/>.</typeparam>
-public sealed record UserInfo<TProfile> : IUserInfo where TProfile : class
+public sealed record UserInfo<TLevel, TProfile> : IUserInfo where TLevel : struct, Enum where TProfile : class
 {
     /// <summary>Canonical name of the user. By convention user names are all uppercase.</summary>
     public required string Name { get; init; }
     /// <summary>
-    /// The name of the message level (see <see cref="IEngineBuilder{TFrame, TPacket, TPriority, TLevel, TAspect, TProfile}.Level"/>) this user runs at. <see langword="null"/> (the
+    /// The level (see <see cref="IEngineBuilder{TFrame, TPacket, TPriority, TLevel, TAspect, TProfile}.Level"/>) this user runs at, as the network configuration file names it. <see langword="null"/> (the
     /// default) is the lowest configured level.
     /// </summary>
-    public string? MessageLevel { get; init; }
+    public TLevel? Level { get; init; }
+    /// <inheritdoc />
+    Enum? IUserInfo.Level => Level;
     /// <summary>Names of the groups this user is a member of.</summary>
     public IReadOnlyList<string> Groups { get; init; } = [];
     /// <summary>The networking role of a node this user runs. <see langword="null"/> (the default) is <see cref="UserRole.Client"/>.</summary>
@@ -73,11 +76,11 @@ public sealed record UserInfo<TProfile> : IUserInfo where TProfile : class
     /// <inheritdoc />
     object? IUserInfo.Profile => Profile;
 
-    internal static UserInfo<TProfile> From(IUserInfo info)
-        => info as UserInfo<TProfile> ?? new()
+    internal static UserInfo<TLevel, TProfile> From(IUserInfo info)
+        => info as UserInfo<TLevel, TProfile> ?? new()
         {
             Name = info.Name,
-            MessageLevel = info.MessageLevel,
+            Level = info.Level is TLevel level ? level : null,
             Groups = info.Groups,
             Role = info.Role,
             IpHost = info.IpHost,

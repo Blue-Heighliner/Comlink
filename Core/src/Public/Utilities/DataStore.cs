@@ -2,7 +2,7 @@ namespace BlueHeighliner.Comlink;
 
 /// <summary>
 /// Keeps records of the host's own on the computer between runs, each under an identifier of its choosing, for any component of the host to store data it needs long term (settings, state, caches) without handling files itself.
-/// A record is written as JSON, one file per identifier, in the current user's data folder, so users sharing a machine never share records. Ask for it through dependency injection.
+/// A record is written as JSON, one file per identifier, in the app's data folder. Ask for it through dependency injection.
 /// </summary>
 public interface IDataStore
 {

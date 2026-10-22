@@ -34,19 +34,19 @@
             </Border.IsVisible>
             <TextBlock Text="{Binding Tag}" FontSize="10" FontWeight="Bold" Foreground="#CCCCCC" />
           </Border>
-          <Border IsVisible="{Binding MessageLevelBackgroundHex, Converter={x:Static ObjectConverters.IsNotNull}}"
-                  Background="{Binding MessageLevelBackgroundHex, Converter={x:Static converters:ColorHexToBrushConverter.Instance}}"
+          <Border IsVisible="{Binding LevelBackgroundHex, Converter={x:Static ObjectConverters.IsNotNull}}"
+                  Background="{Binding LevelBackgroundHex, Converter={x:Static converters:ColorHexToBrushConverter.Instance}}"
                   CornerRadius="3"
                   Padding="6,2"
                   VerticalAlignment="Center">
-            <TextBlock Text="{Binding MessageLevelName}" FontSize="10" FontWeight="Bold" Foreground="{Binding MessageLevelForegroundHex, Converter={x:Static converters:ColorHexToBrushConverter.Instance}}" />
+            <TextBlock Text="{Binding LevelName}" FontSize="10" FontWeight="Bold" Foreground="{Binding LevelForegroundHex, Converter={x:Static converters:ColorHexToBrushConverter.Instance}}" />
           </Border>
-          <Border IsVisible="{Binding MessageAspectName, Converter={x:Static StringConverters.IsNotNullOrEmpty}}"
+          <Border IsVisible="{Binding AspectName, Converter={x:Static StringConverters.IsNotNullOrEmpty}}"
                   Background="#3C3C3C"
                   CornerRadius="3"
                   Padding="6,2"
                   VerticalAlignment="Center">
-            <TextBlock Text="{Binding MessageAspectName}" FontSize="10" FontWeight="Bold" Foreground="#CCCCCC" />
+            <TextBlock Text="{Binding AspectName}" FontSize="10" FontWeight="Bold" Foreground="#CCCCCC" />
           </Border>
           <Border IsVisible="{Binding IsAlert}"
                   Background="#C0392B"

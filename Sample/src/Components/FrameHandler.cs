@@ -7,11 +7,11 @@ namespace BlueHeighliner.Comlink.Sample;
 /// frame into a <see cref="Message"/> for the engine to store and show, passes it on to every connected interface, sends the sender a receive receipt (and a read receipt when the user opens the message),
 /// forwards a message tagged <c>ALERT</c> or <c>URGENT</c> on, as the original frame, sent as the forwarding user, addressed to every user on the target list of the Escalation auto forwarder, and turns the receipts it receives into delivery statuses. It asks a storage server for stored messages when the
 /// user submits a retrieval. It shows the network online while its parent is connected.</item>
-/// <item>A server routes what its clients send: it keeps a copy of every message, expands the group addresses, leaves out recipients whose message level is too low, and sends the frame once to each local client that
+/// <item>A server routes what its clients send: it keeps a copy of every message, expands the group addresses, leaves out recipients whose level is too low, and sends the frame once to each local client that
 /// is a recipient and once to each other server that owns a recipient (a frame that came from another server is only delivered locally). It answers a retrieval request addressed to it with the stored messages.</item>
 /// </list>
 /// </summary>
-public sealed class FrameHandler(IUserCatalog<NoProfile> users, INetwork<Frame, Priority, Level, Aspect> network) : IFrameHandler<Frame, Priority, Level, Aspect>
+public sealed class FrameHandler(IUserCatalog<Level, NoProfile> users, INetwork<Frame, Priority, Level, Aspect> network) : IFrameHandler<Frame, Priority, Level, Aspect>
 {
     /// <summary>Gets the name of the auto forwarder whose target list receives a copy of every received alert or <c>URGENT</c>-tagged message.</summary>
     public static string EscalationForwarder { get; } = "Escalation";
@@ -179,7 +179,7 @@ public sealed class FrameHandler(IUserCatalog<NoProfile> users, INetwork<Frame, 
         );
     }
 
-    private bool IsServer(string userName) => users.Users.TryGetValue(userName, out UserInfo<NoProfile>? info) && info.Role is UserRole.Server;
+    private bool IsServer(string userName) => users.Users.TryGetValue(userName, out UserInfo<Level, NoProfile>? info) && info.Role is UserRole.Server;
 
     // A retrieval request names the server it is for: this one answers it, and a request that came from a client is handed on to the other server it names.
     private async Task Answer(INetworkReceivedContext<Frame> context, Frame request)
@@ -216,7 +216,7 @@ public sealed class FrameHandler(IUserCatalog<NoProfile> users, INetwork<Frame, 
         HashSet<string> hops = [];
         foreach (string user in recipients)
         {
-            if (!users.Users.TryGetValue(user, out UserInfo<NoProfile>? info))
+            if (!users.Users.TryGetValue(user, out UserInfo<Level, NoProfile>? info))
             {
                 continue;
             }

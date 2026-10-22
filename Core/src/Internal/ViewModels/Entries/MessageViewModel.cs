@@ -33,14 +33,14 @@ internal interface IMessageViewModel
     bool TagsEnabled { get; }
     /// <summary>Gets the short, user-inputted tag identifying the type of this message, or an empty string if none was set.</summary>
     string Tag { get; }
-    /// <summary>Gets the message level name this message was sent at, or an empty string when no message levels are configured.</summary>
-    string MessageLevelName { get; }
-    /// <summary>Gets the hex background color for <see cref="MessageLevelName"/>, or <see langword="null"/> when it has none recognized.</summary>
-    string? MessageLevelBackgroundHex { get; }
-    /// <summary>Gets the hex color of the text on <see cref="MessageLevelBackgroundHex"/>, or <see langword="null"/> when <see cref="MessageLevelName"/> has none recognized.</summary>
-    string? MessageLevelForegroundHex { get; }
-    /// <summary>Gets the message aspect name this message carries, or an empty string for none.</summary>
-    string MessageAspectName { get; }
+    /// <summary>Gets the level name this message was sent at, or an empty string when no levels are configured.</summary>
+    string LevelName { get; }
+    /// <summary>Gets the hex background color for <see cref="LevelName"/>, or <see langword="null"/> when it has none recognized.</summary>
+    string? LevelBackgroundHex { get; }
+    /// <summary>Gets the hex color of the text on <see cref="LevelBackgroundHex"/>, or <see langword="null"/> when <see cref="LevelName"/> has none recognized.</summary>
+    string? LevelForegroundHex { get; }
+    /// <summary>Gets the aspect name this message carries, or an empty string for none.</summary>
+    string AspectName { get; }
     /// <summary>
     /// Gets or sets this Inbox message's own read status (<c>Received</c>/<c>Read</c>); <see langword="null"/>
     /// for an Outbox message, which tracks read state per-destination in <see cref="DeliveryStatuses"/> instead.
@@ -105,7 +105,7 @@ internal sealed partial class MessageViewModel : ObservableObject, IMessageViewM
 
     /// <summary>Initializes the ViewModel from the given message entity.</summary>
     /// <param name="entity">The message entity to display.</param>
-    /// <param name="engineController">Turns the entity's stored priority, message level and message aspect back into their names.</param>
+    /// <param name="engineController">Turns the entity's stored priority, level and aspect back into their names.</param>
     public MessageViewModel(MessageEntity entity, IEngineController engineController)
     {
         MessageId = entity.MessageId;
@@ -118,10 +118,11 @@ internal sealed partial class MessageViewModel : ObservableObject, IMessageViewM
         PriorityLabel = engineController.NameOf(engineController.PriorityOf(message.Priority));
         TagsEnabled = engineController.TagsEnabled;
         Tag = message.Tag;
-        MessageLevelName = engineController.NameOfLevel(message);
-        MessageLevelBackgroundHex = engineController.MessageLevels.IsRecognized(MessageLevelName) ? engineController.MessageLevels.GetBackground(MessageLevelName) : null;
-        MessageLevelForegroundHex = engineController.MessageLevels.IsRecognized(MessageLevelName) ? engineController.MessageLevels.GetForeground(MessageLevelName) : null;
-        MessageAspectName = engineController.NameOfAspect(message);
+        Enum? level = engineController.LevelOf(message);
+        LevelName = engineController.Levels.LabelOf(level);
+        LevelBackgroundHex = engineController.Levels.IsRecognized(level) ? engineController.Levels.GetBackground(level) : null;
+        LevelForegroundHex = engineController.Levels.IsRecognized(level) ? engineController.Levels.GetForeground(level) : null;
+        AspectName = engineController.Aspects.Find(engineController.AspectOf(message))?.Label ?? string.Empty;
         List<MessageAddress> addresses = [.. message.Addresses.Select(a => new MessageAddress { UserName = a.UserName, Type = a.Type.ParseAddressType(), Information = a.Information })];
         IReadOnlyList<AddressTypeOption> addressTypes = engineController.AddressTypes;
         ToLabel = addressTypes.GetLabel(AddressType.To).ToUpperInvariant();
@@ -181,14 +182,14 @@ internal sealed partial class MessageViewModel : ObservableObject, IMessageViewM
     public bool TagsEnabled { get; }
     /// <summary>Gets the short, user-inputted tag identifying the type of this message, or an empty string if none was set.</summary>
     public string Tag { get; }
-    /// <summary>Gets the message level name this message was sent at, or an empty string when no message levels are configured.</summary>
-    public string MessageLevelName { get; }
-    /// <summary>Gets the hex background color for <see cref="MessageLevelName"/>, or <see langword="null"/> when it has none recognized.</summary>
-    public string? MessageLevelBackgroundHex { get; }
-    /// <summary>Gets the hex color of the text on <see cref="MessageLevelBackgroundHex"/>, or <see langword="null"/> when <see cref="MessageLevelName"/> has none recognized.</summary>
-    public string? MessageLevelForegroundHex { get; }
+    /// <summary>Gets the level name this message was sent at, or an empty string when no levels are configured.</summary>
+    public string LevelName { get; }
+    /// <summary>Gets the hex background color for <see cref="LevelName"/>, or <see langword="null"/> when it has none recognized.</summary>
+    public string? LevelBackgroundHex { get; }
+    /// <summary>Gets the hex color of the text on <see cref="LevelBackgroundHex"/>, or <see langword="null"/> when <see cref="LevelName"/> has none recognized.</summary>
+    public string? LevelForegroundHex { get; }
     /// <inheritdoc />
-    public string MessageAspectName { get; }
+    public string AspectName { get; }
     /// <summary>Gets the uppercase display text for <see cref="ReadStatus"/>, or empty if <see langword="null"/>.</summary>
     public string ReadStatusText => ReadStatus?.ToString().ToUpperInvariant() ?? string.Empty;
     /// <summary>Gets a value indicating whether this message has any per-user delivery status rows.</summary>

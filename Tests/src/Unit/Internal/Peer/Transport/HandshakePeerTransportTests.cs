@@ -74,11 +74,11 @@ public sealed class HandshakePeerTransportTests
             Initial = async (session, item) =>
             {
                 await session.Send(Who(me));
-                await session.Connected(NameIn(item));
+                await session.Accept(NameIn(item));
             },
             Reply = async (session, item) =>
             {
-                await session.Connected(NameIn(item));
+                await session.Accept(NameIn(item));
             }
         };
 
@@ -93,10 +93,10 @@ public sealed class HandshakePeerTransportTests
 
     private static string NameIn(object item) => Encoding.UTF8.GetString(((TestPacket)item).Data);
 
-    private static (End A, End B) Pair(IEngineController a, IEngineController b, IReadOnlyList<string>? aNames = null, IReadOnlyList<string>? bNames = null, bool serial = false)
+    private static (End A, End B) Pair(IEngineController a, IEngineController b, IReadOnlyList<string>? aNames = null, IReadOnlyList<string>? bNames = null, bool serial = false, MicrosoftLogger? log = null)
     {
         (LoopbackPeerTransport rawA, LoopbackPeerTransport rawB) = LoopbackPeerTransport.CreatePair(aNames, bNames, serial);
-        End endA = new(new HandshakePeerTransport(rawA, a, logger, Handshake.ForPackets(a), identify: true), rawA);
+        End endA = new(new HandshakePeerTransport(rawA, a, log ?? logger, Handshake.ForPackets(a), identify: true), rawA);
         End endB = new(new HandshakePeerTransport(rawB, b, logger, Handshake.ForPackets(b), identify: true), rawB);
         endA.Watch();
         endB.Watch();
@@ -346,7 +346,7 @@ public sealed class HandshakePeerTransportTests
             },
             Reply = async (session, item) =>
             {
-                await session.Connected("BOB");
+                await session.Accept("BOB");
             }
         };
         Scripted acceptor = new()
@@ -360,7 +360,7 @@ public sealed class HandshakePeerTransportTests
                 }
 
                 await session.Send(Who("DONE"));
-                await session.Connected("ALICE");
+                await session.Accept("ALICE");
             }
         };
         (End endA, _) = Pair(WithHandler(opener).Object, WithHandler(acceptor).Object);
@@ -393,12 +393,26 @@ public sealed class HandshakePeerTransportTests
     [Fact]
     public async Task Handshake_HandlerDisconnects_DropsConnection()
     {
-        Scripted refusing = new() { Connected = async session => { await session.Disconnect(); } };
+        Scripted refusing = new() { Connected = async session => { await session.Reject("test"); } };
         (End endA, _) = Pair(WithHandler(refusing).Object, WithHandler(Introduce("BOB")).Object);
 
         await Assert.ThrowsAsync<IOException>(() => endA.Transport.Connect(point));
 
         Assert.Empty(endA.Connected);
+    }
+
+    /// <summary>The reason a handler gives for rejecting a connection is logged as why it was dropped.</summary>
+    [Fact]
+    public async Task Handshake_HandlerRejects_LogsTheReason()
+    {
+        Mock<MicrosoftLogger> log = new();
+        log.Setup(l => l.IsEnabled(It.IsAny<LogLevel>())).Returns(true);
+        Scripted refusing = new() { Connected = async session => { await session.Reject("certificate expired"); } };
+        (End endA, _) = Pair(WithHandler(refusing).Object, WithHandler(Introduce("BOB")).Object, log: log.Object);
+
+        await Assert.ThrowsAsync<IOException>(() => endA.Transport.Connect(point));
+
+        log.Verify(l => l.Log(It.IsAny<LogLevel>(), It.IsAny<EventId>(), It.Is<It.IsAnyType>((state, _) => state.ToString()!.Contains("certificate expired")), null, It.IsAny<Func<It.IsAnyType, Exception?, string>>()), Times.AtLeastOnce);
     }
 
     /// <summary>If the handler never marks the connection connected, the connection is dropped once the timeout passes and connecting fails.</summary>
@@ -455,7 +469,7 @@ public sealed class HandshakePeerTransportTests
             Reply = async (session, item) =>
             {
                 Assert.Equal(22, ((TestPacket)item).PayloadId);
-                await session.Connected("BOB");
+                await session.Accept("BOB");
             }
         };
         Scripted b = new()
@@ -465,7 +479,7 @@ public sealed class HandshakePeerTransportTests
             {
                 Assert.Equal(11, ((TestPacket)item).PayloadId);
                 await session.Send(new TestPacket { PayloadId = 22 });
-                await session.Connected("ALICE");
+                await session.Accept("ALICE");
             }
         };
         Mock<TestPacketEngineController> controllerA = new() { CallBase = true };

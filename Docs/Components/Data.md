@@ -4,11 +4,11 @@ The data layer is active in `Client` mode only. It uses LiteDB (a single-file em
 
 ## Database File
 
-A single file `Data.db` in `IEngineController.AppDataPath`, the current user's own folder `%APPDATA%/{AppName}/{USERNAME}`. The file is created on first `LiteDbContext.Initialize()` call.
+A single file `Data.db` in `IEngineController.AppDataPath`, the app's one data folder `%APPDATA%/{AppName}` (or the folder `--data` names). The file is created on first `LiteDbContext.Initialize()` call.
 
 ## LiteDbContext
 
-`LiteDbContext` owns the `LiteDatabase` instance and exposes typed collection handles. Call `Initialize()` after the user is known (at startup, and again when a refresh switches to another user). Re-calling `Initialize()` is safe: it does nothing when the database is already open on the current user's folder and reopens it when the folder has changed. A storage server's repository calls it itself, since a server with a named user starts routing before its window has initialized the database.
+`LiteDbContext` owns the `LiteDatabase` instance and exposes typed collection handles. Call `Initialize()` once the host starts. Re-calling `Initialize()` is safe: it does nothing when the database is already open on the data folder. A storage server's repository calls it itself, since a server with a named user starts routing before its window has initialized the database.
 
 Collections initialized:
 
@@ -76,7 +76,7 @@ Stored in both Inbox (received) and Outbox (sent).
 |-------|------|-------|
 | `Id` | `ObjectId` | LiteDB auto-ID (the actual primary key) |
 | `MessageId` | `string` | Denormalized from `Message.Id` so LiteDB can query/index on it directly. **Not unique** — see below |
-| `Message` | `MessageData` | The message content, embedded: `Id`, `FromUser`, `Body`, `Addresses`, `SentAt`, `Priority`, `Tag`, `MessageLevel`, `MessageAspect` (the enum members as integers, `null` for none) and `IsAlert`. It is built from the `Message` record the handler and the GUI hand to the engine, which `MessageMapping` turns back into a `Message` for the host. |
+| `Message` | `MessageData` | The message content, embedded: `Id`, `FromUser`, `Body`, `Addresses`, `SentAt`, `Priority`, `Tag`, `Level`, `Aspect` (the enum members as integers, `null` for none) and `IsAlert`. It is built from the `Message` record the handler and the GUI hand to the engine, which `MessageMapping` turns back into a `Message` for the host. |
 | `DeliveryStatuses` | `List<DeliveryStatus>` | Per-user delivery state (Outbox messages) |
 | `ReadStatus` | `DestinationStatus?` | Inbox-only: `Received` when stored, `Read` once the user opens it (see `Docs/Components/Peer.md#receipts`). Always `null` on Outbox records — per-destination read state lives in `DeliveryStatuses` instead |
 | `ReceivedAt` | `DateTime` | UTC timestamp; denormalized from `Message`'s sent time so LiteDB can sort/index on it directly |
@@ -98,8 +98,8 @@ Stored in both Inbox (received) and Outbox (sent).
 | `IsAlert` | `bool` | Whether this draft will be sent as an alert; see `Docs/Components/Peer.md#alert-messages` |
 | `Priority` | `int` | Integer value of the enum member that is the priority level this draft should be sent at (never the level's name or position, so it survives relabelling and reordering); see `Docs/Components/Configuration.md#message-composition` |
 | `Tag` | `string` | Short user-inputted tag identifying the type of this message; see `Docs/Components/Configuration.md#message-composition` |
-| `MessageLevel` | `int?` | Integer value of the enum member that is the message level this draft should be sent at, one of `IEngineController.MessageLevels`, or `null` when none is chosen or none are configured |
-| `MessageAspect` | `int?` | Integer value of the enum member that is the message aspect this draft should be sent with, one of `IEngineController.MessageAspects`, or `null` for none |
+| `Level` | `int?` | Integer value of the enum member that is the level this draft should be sent at, one of `IEngineController.Levels`, or `null` when none is chosen or none are configured |
+| `Aspect` | `int?` | Integer value of the enum member that is the aspect this draft should be sent with, one of `IEngineController.Aspects`, or `null` for none |
 | `LineWidth` | `int?` | How many monospace characters wide a line of this draft is set to be, within the range the draft handler states, or `null` for no limit; see `Docs/Components/Configuration.md#drafts` |
 | `SentAt` | `DateTime?` | UTC send time |
 | `ModifiedAt` | `DateTime` | UTC last edit time |
@@ -130,7 +130,7 @@ One record per day, accumulated throughout the day.
 |-------|------|
 | `Id` | `ObjectId` |
 | `Date` | `DateOnly` |
-| `EventEntries` | `List<ActivityLogEntry>` | The day's events: `{ At, Message, EventId }`, where `EventId` is the text identifier of the kind of event (`CL56`; empty for none). Entries stored when identifiers were numbers are read as the engine event of that number (`65` as `CL65`), by a mapper `LiteDbContext` registers; an export written then is read the same way |
+| `EventEntries` | `List<ActivityLogEntry>` | The day's events: `{ At, Message, EventId }`, where `EventId` is the text identifier of the kind of event (`CL56`; empty for none). |
 | `FolderId` | `string` |
 
 ### `FolderEntity`
@@ -221,6 +221,6 @@ Same interface shape as `DraftRepository`, including `GetAll()` and `GetAllInFol
 
 Separate from the database, `IDataStore` (`Core/src/Internal/Utilities/DataStore.cs`) keeps records for the host's own code. It is not used by the engine: it is a service for external components to hold data long term without handling files, asked for through dependency injection like the other exposed services.
 
-`Save<T>(id, value)` writes the record as indented JSON to `Store/{encoded id}.json` in `IEngineController.AppDataPath`, so each user has their own records and a refresh that switches user switches records with it; `Load<T>(id)` reads it back, or returns `null` when no file exists. Properties are named as the record names them and enums are written by name; reading matches names without regard to case, ignores properties the type no longer has and leaves properties the file lacks at their defaults, so a record type can change between runs. A record that cannot be read (broken JSON, or a value of the wrong kind) throws `InvalidDataException` and is left in place rather than treated as missing, since a later save would otherwise overwrite it silently.
+`Save<T>(id, value)` writes the record as indented JSON to `Store/{encoded id}.json` in `IEngineController.AppDataPath`; `Load<T>(id)` reads it back, or returns `null` when no file exists. Properties are named as the record names them and enums are written by name; reading matches names without regard to case, ignores properties the type no longer has and leaves properties the file lacks at their defaults, so a record type can change between runs. A record that cannot be read (broken JSON, or a value of the wrong kind) throws `InvalidDataException` and is left in place rather than treated as missing, since a later save would otherwise overwrite it silently.
 
 An identifier is any non-blank text, matched without regard to case on every platform (it is lowercased before use). It is turned into a file name by keeping letters, digits, `_` and `-` and writing every other byte of its UTF-8 as `%XX`, so an identifier can never contain a path, reach outside the folder, or hit a reserved name, and two different identifiers never share a file. A save writes the whole record to a temporary file beside the target and moves it over the target, which replaces atomically on Windows and Linux, so a failed or cancelled save leaves the old record, a reader never sees a half-written one, and processes saving the same identifier at once leave the last one's record whole. That atomic replace is what makes a lock unnecessary here, unlike the append-only log file.

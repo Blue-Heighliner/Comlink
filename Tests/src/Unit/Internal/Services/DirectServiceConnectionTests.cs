@@ -79,7 +79,7 @@ public sealed class DirectServiceConnectionTests
     public async Task SendMessage_StoresTheMessage_AndHandsItToTheHandler()
     {
         DirectServiceConnection conn = Build(out Mock<IUserService> user, out Mock<IEntryService> entry, out Mock<INetworkProcessing> processing, out _);
-        user.Setup(s => s.GetCurrentUserInfo()).Returns(new UserInfo<object> { Name = "ME" });
+        user.Setup(s => s.GetCurrentUserInfo()).Returns(new UserInformation { Name = "ME" });
         Message? stored = null;
         entry.Setup(e => e.StoreSentMessage(It.IsAny<Message>())).Callback<Message>(message => stored = message).ReturnsAsync(new MessageEntity());
 
@@ -94,12 +94,25 @@ public sealed class DirectServiceConnectionTests
         processing.Verify(p => p.Sent(stored), Times.Once);
     }
 
+    /// <summary>When the draft handler requires an aspect, a message without one is refused and nothing is stored.</summary>
+    [Fact]
+    public async Task SendMessage_AspectRequiredButMissing_Throws()
+    {
+        DirectServiceConnection conn = Build(out _, out Mock<IUserService> user, out Mock<IEntryService> entry, out Mock<TestEngineController> engine, out _, out _);
+        user.Setup(s => s.GetCurrentUserInfo()).Returns(new UserInformation { Name = "ME" });
+        engine.Setup(e => e.IsAspectRequired).Returns(true);
+
+        await Assert.ThrowsAsync<ArgumentException>(() => conn.SendMessage("hello", []));
+
+        entry.Verify(e => e.StoreSentMessage(It.IsAny<Message>()), Times.Never);
+    }
+
     /// <summary>Without an installed user nothing is stored or sent and the result is null.</summary>
     [Fact]
     public async Task SendMessage_NoUser_ReturnsNull()
     {
         DirectServiceConnection conn = Build(out Mock<IUserService> user, out Mock<IEntryService> entry, out Mock<INetworkProcessing> processing, out _);
-        user.Setup(s => s.GetCurrentUserInfo()).Returns((UserInfo<object>?)null);
+        user.Setup(s => s.GetCurrentUserInfo()).Returns((UserInformation?)null);
 
         Assert.Null(await conn.SendMessage("hello", []));
         entry.Verify(e => e.StoreSentMessage(It.IsAny<Message>()), Times.Never);

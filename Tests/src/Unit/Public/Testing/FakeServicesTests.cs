@@ -3,8 +3,8 @@ namespace BlueHeighliner.Comlink.Tests.Unit.Public.Testing;
 /// <summary>Unit tests for the service fakes of <c>BlueHeighliner.Comlink.Testing</c>: each answers what it was given, follows later changes, and records what a component does with the service.</summary>
 public sealed class FakeServicesTests
 {
-    private static readonly UserInfo<NoProfile> alice = new() { Name = "ALICE" };
-    private static readonly UserInfo<NoProfile> bob = new() { Name = "BOB" };
+    private static readonly UserInfo<TestLevel, NoProfile> alice = new() { Name = "ALICE" };
+    private static readonly UserInfo<TestLevel, NoProfile> bob = new() { Name = "BOB" };
 
     private static Message<TestMessagePriority, TestLevel, TestAspect> Message(params MessageAddress[] addresses)
         => new() { Id = "M1", FromUser = "ALICE", Body = "Hi", Addresses = addresses, SentAt = DateTime.UtcNow, Priority = TestMessagePriority.Normal };
@@ -13,7 +13,7 @@ public sealed class FakeServicesTests
     [Fact]
     public void FakeUserCatalog_AnswersWhatIsGiven_AndFollowsChanges()
     {
-        FakeUserCatalog<NoProfile> catalog = new(alice, [alice, bob], [new GroupInfo { Id = "OPS", Members = ["ALICE", "BOB"] }]);
+        FakeUserCatalog<TestLevel, NoProfile> catalog = new(alice, [alice, bob], [new GroupInfo { Id = "OPS", Members = ["ALICE", "BOB"] }]);
 
         Assert.Same(alice, catalog.CurrentUser);
         Assert.Equal(["ALICE", "BOB"], catalog.Users.Keys.Order());
@@ -21,12 +21,12 @@ public sealed class FakeServicesTests
         Assert.Empty(catalog.ConnectedUsers);
         Assert.Equal(["ALICE", "BOB"], catalog.Groups["ops"].Members);
 
-        catalog.ConnectedUsers = new Dictionary<string, UserInfo<NoProfile>> { ["BOB"] = bob };
+        catalog.ConnectedUsers = new Dictionary<string, UserInfo<TestLevel, NoProfile>> { ["BOB"] = bob };
         catalog.CurrentUser = bob;
 
         Assert.Equal("BOB", Assert.Single(catalog.ConnectedUsers).Key);
         Assert.Same(bob, catalog.CurrentUser);
-        Assert.Equal(["ALICE"], new FakeUserCatalog<NoProfile>(alice).Users.Keys);
+        Assert.Equal(["ALICE"], new FakeUserCatalog<TestLevel, NoProfile>(alice).Users.Keys);
     }
 
     /// <summary>The network fake accepts every send and finishes every other operation, records each in a list of its own, and answers what it is set to.</summary>

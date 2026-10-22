@@ -5,58 +5,58 @@ public sealed class ReconfigurationServiceTests
 {
     private readonly Mock<IEngineController> controller = new();
     private readonly Mock<IUserService> users = new();
-    private readonly Mock<IReconfigurer> reconfigurer = new();
+    private readonly Mock<IConfigurationHandler> configurationHandler = new();
 
     private ReconfigurationService Build() => new(controller.Object, users.Object, LoggerFactory.Create(_ => { }));
 
-    /// <summary>The reconfigurer is called every time it is run, while there is a current user.</summary>
+    /// <summary>The configuration handler is called every time it is run, while there is a current user.</summary>
     [Fact]
-    public async Task Run_WithACurrentUser_CallsTheReconfigurerEachTime()
+    public async Task Run_WithACurrentUser_CallsTheConfigurationHandlerEachTime()
     {
-        users.Setup(u => u.GetCurrentUserInfo()).Returns(new UserInfo<object> { Name = "ME" });
-        controller.SetupGet(c => c.Reconfigurer).Returns(reconfigurer.Object);
+        users.Setup(u => u.GetCurrentUserInfo()).Returns(new UserInformation { Name = "ME" });
+        controller.SetupGet(c => c.ConfigurationHandler).Returns(configurationHandler.Object);
         ReconfigurationService service = Build();
 
         await service.Run();
         await service.Run();
 
-        reconfigurer.Verify(r => r.OnReconfigured(), Times.Exactly(2));
+        configurationHandler.Verify(r => r.OnReconfigured(), Times.Exactly(2));
     }
 
-    /// <summary>With no current user the reconfigurer is never called, and is not even built.</summary>
+    /// <summary>With no current user the configuration handler is never called, and is not even built.</summary>
     [Fact]
-    public async Task Run_WithoutACurrentUser_NeverCallsTheReconfigurer()
+    public async Task Run_WithoutACurrentUser_NeverCallsTheConfigurationHandler()
     {
-        users.Setup(u => u.GetCurrentUserInfo()).Returns((UserInfo<object>?)null);
-        controller.SetupGet(c => c.Reconfigurer).Returns(reconfigurer.Object);
+        users.Setup(u => u.GetCurrentUserInfo()).Returns((UserInformation?)null);
+        controller.SetupGet(c => c.ConfigurationHandler).Returns(configurationHandler.Object);
 
         await Build().Run();
 
-        reconfigurer.Verify(r => r.OnReconfigured(), Times.Never);
-        controller.VerifyGet(c => c.Reconfigurer, Times.Never);
+        configurationHandler.Verify(r => r.OnReconfigured(), Times.Never);
+        controller.VerifyGet(c => c.ConfigurationHandler, Times.Never);
     }
 
-    /// <summary>Without a reconfigurer nothing happens.</summary>
+    /// <summary>Without a configuration handler nothing happens.</summary>
     [Fact]
-    public async Task Run_WithoutAReconfigurer_DoesNothing()
+    public async Task Run_WithoutAConfigurationHandler_DoesNothing()
     {
-        users.Setup(u => u.GetCurrentUserInfo()).Returns(new UserInfo<object> { Name = "ME" });
-        controller.SetupGet(c => c.Reconfigurer).Returns((IReconfigurer?)null);
+        users.Setup(u => u.GetCurrentUserInfo()).Returns(new UserInformation { Name = "ME" });
+        controller.SetupGet(c => c.ConfigurationHandler).Returns((IConfigurationHandler?)null);
 
         await Build().Run();
     }
 
-    /// <summary>A reconfigurer that throws, or cannot be built, does not throw back into the engine.</summary>
+    /// <summary>A configuration handler that throws, or cannot be built, does not throw back into the engine.</summary>
     [Fact]
-    public async Task Run_AReconfigurerThatFails_IsLoggedNotThrown()
+    public async Task Run_AConfigurationHandlerThatFails_IsLoggedNotThrown()
     {
-        users.Setup(u => u.GetCurrentUserInfo()).Returns(new UserInfo<object> { Name = "ME" });
-        controller.SetupGet(c => c.Reconfigurer).Returns(reconfigurer.Object);
-        reconfigurer.Setup(r => r.OnReconfigured()).ThrowsAsync(new InvalidOperationException("boom"));
+        users.Setup(u => u.GetCurrentUserInfo()).Returns(new UserInformation { Name = "ME" });
+        controller.SetupGet(c => c.ConfigurationHandler).Returns(configurationHandler.Object);
+        configurationHandler.Setup(r => r.OnReconfigured()).ThrowsAsync(new InvalidOperationException("boom"));
 
         await Build().Run();
 
-        controller.SetupGet(c => c.Reconfigurer).Throws(new InvalidOperationException("cannot build"));
+        controller.SetupGet(c => c.ConfigurationHandler).Throws(new InvalidOperationException("cannot build"));
         await Build().Run();
     }
 }

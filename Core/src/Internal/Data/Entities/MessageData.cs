@@ -24,11 +24,11 @@ internal sealed class MessageData
     /// <summary>The short tag identifying the type of message, or an empty string for none.</summary>
     public string Tag { get; set; } = string.Empty;
 
-    /// <summary>The integer value of the member of the host's message level enum that is the message's level, or <see langword="null"/> for none.</summary>
-    public int? MessageLevel { get; set; }
+    /// <summary>The integer value of the member of the host's level enum that is the message's level, or <see langword="null"/> for none.</summary>
+    public int? Level { get; set; }
 
-    /// <summary>The integer value of the member of the host's message aspect enum that is the message's aspect, or <see langword="null"/> for none.</summary>
-    public int? MessageAspect { get; set; }
+    /// <summary>The integer value of the member of the host's aspect enum that is the message's aspect, or <see langword="null"/> for none.</summary>
+    public int? Aspect { get; set; }
 
     /// <summary>Whether the message is an alert.</summary>
     public bool IsAlert { get; set; }

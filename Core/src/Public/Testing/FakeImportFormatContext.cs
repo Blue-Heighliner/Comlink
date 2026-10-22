@@ -2,7 +2,7 @@ namespace BlueHeighliner.Comlink.Testing;
 
 /// <summary>A stand-in for the <see cref="IImportFormatContext{TPriority, TLevel}"/> a custom import format's reader is handed, to test a reader by what it added. Every addition is recorded and finishes at once.</summary>
 /// <typeparam name="TPriority">The enum the host stated for its priorities.</typeparam>
-/// <typeparam name="TLevel">The enum the host stated for its message levels.</typeparam>
+/// <typeparam name="TLevel">The enum the host stated for its levels.</typeparam>
 public sealed class FakeImportFormatContext<TPriority, TLevel> : IImportFormatContext<TPriority, TLevel> where TPriority : struct, Enum where TLevel : struct, Enum
 {
     /// <summary>Gets every message the reader added, in order.</summary>

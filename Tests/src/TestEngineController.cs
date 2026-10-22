@@ -12,15 +12,15 @@ public sealed class TestFrame : IDisposable
     /// <summary>User name of the sender.</summary>
     [ProtoMember(2)] public string FromUser { get; set; } = string.Empty;
     /// <summary>Message body text.</summary>
-    [ProtoMember(4)] public string Body { get; set; } = string.Empty;
+    [ProtoMember(3)] public string Body { get; set; } = string.Empty;
     /// <summary>Address list associated with the message.</summary>
-    [ProtoMember(5)] public List<TestAddressEntry> Addresses { get; set; } = [];
+    [ProtoMember(4)] public List<TestAddressEntry> Addresses { get; set; } = [];
     /// <summary>UTC timestamp when the message was originally sent.</summary>
-    [ProtoMember(6)] public DateTime SentAt { get; set; }
+    [ProtoMember(5)] public DateTime SentAt { get; set; }
     /// <summary>Message ID this message is a read receipt for; empty for an ordinary message.</summary>
-    [ProtoMember(7)] public string ReadReceiptMessageId { get; set; } = string.Empty;
+    [ProtoMember(6)] public string ReadReceiptMessageId { get; set; } = string.Empty;
     /// <summary>Message ID this message is a receive receipt for; empty for an ordinary message.</summary>
-    [ProtoMember(19)] public string ReceiveReceiptMessageId { get; set; } = string.Empty;
+    [ProtoMember(7)] public string ReceiveReceiptMessageId { get; set; } = string.Empty;
     /// <summary>Whether this message is an alert.</summary>
     [ProtoMember(8)] public bool IsAlert { get; set; }
     public int PrintCount { get; set; } = 1;
@@ -28,23 +28,23 @@ public sealed class TestFrame : IDisposable
     [ProtoMember(9)] public string Priority { get; set; } = string.Empty;
     /// <summary>Tag identifying the type of this message.</summary>
     [ProtoMember(10)] public string Tag { get; set; } = string.Empty;
-    /// <summary>Message level name this message was sent at.</summary>
-    [ProtoMember(11)] public string MessageLevel { get; set; } = string.Empty;
-    [ProtoMember(40)] public string MessageAspect { get; set; } = string.Empty;
+    /// <summary>Level name this message was sent at.</summary>
+    [ProtoMember(11)] public string Level { get; set; } = string.Empty;
+    [ProtoMember(12)] public string Aspect { get; set; } = string.Empty;
     /// <summary>Whether this message is a retrieval request to a storage server.</summary>
-    [ProtoMember(12)] public bool IsRetrieval { get; set; }
+    [ProtoMember(13)] public bool IsRetrieval { get; set; }
     /// <summary>Retrieval request lower sent-time bound.</summary>
-    [ProtoMember(13)] public DateTime? RetrievalFrom { get; set; }
+    [ProtoMember(14)] public DateTime? RetrievalFrom { get; set; }
     /// <summary>Retrieval request upper sent-time bound.</summary>
-    [ProtoMember(14)] public DateTime? RetrievalTo { get; set; }
+    [ProtoMember(15)] public DateTime? RetrievalTo { get; set; }
     /// <summary>Retrieval request sender names.</summary>
-    [ProtoMember(15)] public List<string> RetrievalAuthors { get; set; } = [];
+    [ProtoMember(16)] public List<string> RetrievalAuthors { get; set; } = [];
     /// <summary>Retrieval request addressee names.</summary>
-    [ProtoMember(16)] public List<string> RetrievalDestinations { get; set; } = [];
+    [ProtoMember(17)] public List<string> RetrievalDestinations { get; set; } = [];
     /// <summary>Retrieval request message identifiers.</summary>
-    [ProtoMember(17)] public List<string> RetrievalIds { get; set; } = [];
+    [ProtoMember(18)] public List<string> RetrievalIds { get; set; } = [];
     /// <summary>Whether this frame is only network traffic rather than a message (stored inversely so an ordinary test frame is a message).</summary>
-    [ProtoMember(18)] public bool IsHidden { get; set; }
+    [ProtoMember(19)] public bool IsHidden { get; set; }
     /// <summary>Whether this frame is a heartbeat.</summary>
     [ProtoMember(20)] public bool IsHeartbeat { get; set; }
 

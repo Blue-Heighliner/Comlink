@@ -6,7 +6,7 @@ The engine configures two logging providers, both registered in `EngineExtension
 
 Writes all log output to a daily rotating file and to stdout.
 
-**File location**: `{AppDataPath}/Logs/yyyy-MM-dd.log` (the current user's folder, `%APPDATA%/{AppName}/{USERNAME}`; while the node cannot be identified there is no user, and lines go to `%APPDATA%/{AppName}/Logs`; the file follows the user when a refresh switches to another one or finds one)
+**File location**: `{AppDataPath}/Logs/yyyy-MM-dd.log` (the app's one data folder, `%APPDATA%/{AppName}` or the folder `--data` names, whoever the user is)
 
 **Log format**:
 ```
@@ -49,7 +49,7 @@ Writes structured activity events to the LiteDB database. Active in `Client` mod
 
 **Storage**: appends one `ActivityLogEntry { At, Message, EventId }` to today's `ActivityLogEntity` via `ActivityLogRepository.AppendEvent`, with the identifier of the logged event (text) as `EventId`, which the activity view shows in its ID column, beside a column for the content, and the export carries. Creates the day's record if it doesn't exist.
 
-**Before the database is open**: the database lives in the current user's data folder, so it is opened by the host once it starts, and the app starts logging before that (`starting`). `ActivityLogRepository.AppendEvent` therefore holds an event in memory, with the time it was logged, while `ILiteDbContext.IsOpen` is false, and writes the waiting events to the day they belong to when the database raises `Opened`, so the activity log starts with its start events.
+**Before the database is open**: the database is opened by the host once it starts, and the app starts logging before that (`starting`). `ActivityLogRepository.AppendEvent` therefore holds an event in memory, with the time it was logged, while `ILiteDbContext.IsOpen` is false, and writes the waiting events to the day they belong to when the database raises `Opened`, so the activity log starts with its start events.
 
 ## Usage
 
@@ -104,7 +104,7 @@ What a user reads in the in-app activity log: general, in plain words, with no e
 | CL67 | `{AppName} exited` | The host begins shutting down, so the application is exiting. |
 | CL117 | `Now running as {UserName}` | A refresh finds that the node's certificate now names another user, which becomes the current user. |
 | CL118 | `Cannot identify the user: {Problem}` | The node cannot be identified, at startup or after a refresh: a certificate file is missing or unreadable, the user certificate is not signed by the authority certificate, or it is not issued to a user of the network. The UI shows the problem in place of the app. |
-| CL120 | `The application's own work after a configuration change failed` | The host's reconfigurer throws; the technical detail is under `ERROR`. |
+| CL120 | `The application's own work after a configuration change failed` | The host's configuration handler throws; the technical detail is under `ERROR`. |
 | CL68 | `{Change} {UserName}` | A client or server connection to its parent, a child or a sibling server comes up (`Connected to`) or goes down (`Disconnected from`). |
 | CL70 | `Network {Status}` | The network indicator goes `online` or `offline`. |
 | CL72 | `Network configuration reloaded` | The user chooses Refresh and the network file has been read again. |
@@ -159,7 +159,7 @@ Technical events of the running application: connections, the wire and the netwo
 | ID | Content | Scenario |
 |----|---------|----------|
 | CL41 | `Rejected connection from {Name}, which is neither {Expected}` | A server (a child client or another server in the cluster) gets a connection from a user it does not know. |
-| CL43 | `Dropped a connection that {Reason}` | An IP connection cannot be identified or fails its handshake. |
+| CL43 | `Dropped a connection that {Reason}` | An IP connection cannot be identified, fails its handshake, or is rejected by a handshake handler (the reason it gave is in the message). |
 | CL44 | `Dropped a packet that could not be assembled: {Message}` | A received packet fails reassembly. |
 | CL45 | `IP connections are unavailable: {Message}` | The IP transport cannot be built, for example because certificates are missing. |
 | CL46 | `The payload size of {MaxPayloadSize} bytes leaves no room for a packet's own fields within the HDLC MaxInfoField of {MaxInfoField} bytes, so packets will fail to send over serial connections` | Packetization is on and its maximum payload size is not below the HDLC frame limit. |
@@ -199,7 +199,7 @@ Something failed. The technical detail of a problem that also has an `ACTIVITY` 
 | CL39 | `The network configuration could not be reloaded: {Message}` | A reload requested by the user fails because the file cannot be read or parsed. |
 | CL40 | `External system {Name} stopped unexpectedly` | An external system's run loop throws. |
 | CL88 | `Initialization failed` | The initial setup of the main window's view model throws. |
-| CL119 | `The reconfigurer failed: {Message}` | The host's reconfigurer, stated with `Reconfigure<T>()`, throws, or cannot be built. The engine goes on. |
+| CL119 | `The configuration handler failed: {Message}` | The host's configuration handler, stated with `Configure<T>()`, throws in `OnReconfigured`, or cannot be built. The engine goes on. |
 
 ### CRASH
 

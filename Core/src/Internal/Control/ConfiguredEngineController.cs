@@ -88,7 +88,7 @@ internal sealed class ConfiguredEngineController : IEngineController
     /// <inheritdoc />
     public int SendPriority(Enum? priority) => fallback.SendPriority(priority);
     /// <inheritdoc />
-    public string GetMessageLevelName(Enum? level) => fallback.GetMessageLevelName(level);
+    public Enum? RequireLevel(Enum? level) => fallback.RequireLevel(level);
     /// <inheritdoc />
     public object CreateFramePacket(object frame, int index, int count, int frameLength, ReadOnlyMemory<byte> payload) => fallback.CreateFramePacket(frame, index, count, frameLength, payload);
     /// <inheritdoc />
@@ -108,8 +108,6 @@ internal sealed class ConfiguredEngineController : IEngineController
     public string AppName => fallback.AppName;
     /// <inheritdoc />
     public string AppVersion => fallback.AppVersion;
-    /// <inheritdoc />
-    public string AppDataRoot => fallback.AppDataRoot;
     /// <inheritdoc />
     public string AppDataPath => fallback.AppDataPath;
     /// <inheritdoc />
@@ -131,7 +129,7 @@ internal sealed class ConfiguredEngineController : IEngineController
     /// <inheritdoc />
     public bool IsStackTraceEnabled => fallback.IsStackTraceEnabled;
     /// <inheritdoc />
-    public IReconfigurer? Reconfigurer => fallback.Reconfigurer;
+    public IConfigurationHandler? ConfigurationHandler => fallback.ConfigurationHandler;
     /// <inheritdoc />
     public string HomeText => fallback.HomeText;
     /// <inheritdoc />
@@ -139,17 +137,17 @@ internal sealed class ConfiguredEngineController : IEngineController
     /// <inheritdoc />
     public string PriorityPluralLabel => fallback.PriorityPluralLabel;
     /// <inheritdoc />
-    public string MessageLevelPluralLabel => fallback.MessageLevelPluralLabel;
+    public string LevelPluralLabel => fallback.LevelPluralLabel;
     /// <inheritdoc />
-    public string MessageLevelLabel => fallback.MessageLevelLabel;
+    public string LevelLabel => fallback.LevelLabel;
     /// <inheritdoc />
-    public string MessageAspectLabel => fallback.MessageAspectLabel;
+    public string AspectLabel => fallback.AspectLabel;
     /// <inheritdoc />
-    public string MessageAspectPluralLabel => fallback.MessageAspectPluralLabel;
+    public string AspectPluralLabel => fallback.AspectPluralLabel;
     /// <inheritdoc />
-    public IReadOnlyList<MessageAspect> MessageAspects => fallback.MessageAspects;
+    public IReadOnlyList<AspectDefinition> Aspects => fallback.Aspects;
     /// <inheritdoc />
-    public string GetMessageAspectName(Enum? aspect) => fallback.GetMessageAspectName(aspect);
+    public Enum? RequireAspect(Enum? aspect) => fallback.RequireAspect(aspect);
     /// <inheritdoc />
     public string UserLabel => fallback.UserLabel;
     /// <inheritdoc />
@@ -199,6 +197,8 @@ internal sealed class ConfiguredEngineController : IEngineController
     /// <inheritdoc />
     public TagRules DraftTagRules => fallback.DraftTagRules;
     /// <inheritdoc />
+    public bool IsAspectRequired => fallback.IsAspectRequired;
+    /// <inheritdoc />
     public DraftDefaults DraftDefaults => fallback.DraftDefaults;
     /// <inheritdoc />
     public string? GetDraftHeader(DraftContent draft) => fallback.GetDraftHeader(draft);
@@ -218,9 +218,9 @@ internal sealed class ConfiguredEngineController : IEngineController
     /// <inheritdoc />
     public IReadOnlyList<AddressTypeOption> AddressTypes => fallback.AddressTypes;
     /// <inheritdoc />
-    public IReadOnlyList<MessageLevel> MessageLevels => fallback.MessageLevels;
+    public IReadOnlyList<LevelDefinition> Levels => fallback.Levels;
     /// <inheritdoc />
-    public string GetUserMessageLevel(string userName) => fallback.GetUserMessageLevel(userName);
+    public Enum? GetUserLevel(string userName) => fallback.GetUserLevel(userName);
 
     /// <inheritdoc />
     public bool PrintReceivedDefaultEnabled => fallback.PrintReceivedDefaultEnabled;

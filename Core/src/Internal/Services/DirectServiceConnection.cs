@@ -73,7 +73,7 @@ internal sealed class DirectServiceConnection : IEngineConnection
         => Task.FromResult<List<string>>([.. peerService.GetConnectedUsers()]);
 
     /// <inheritdoc />
-    public async Task<SendMessageResult?> SendMessage(string body, List<AddressRequest> addresses, Enum? priority = null, string tag = "", Enum? messageLevel = null, Enum? messageAspect = null, CancellationToken cancellation = default)
+    public async Task<SendMessageResult?> SendMessage(string body, List<AddressRequest> addresses, Enum? priority = null, string tag = "", Enum? level = null, Enum? aspect = null, CancellationToken cancellation = default)
     {
         IUserInfo? userInfo = userService.GetCurrentUserInfo();
         if (userInfo is null)
@@ -87,9 +87,14 @@ internal sealed class DirectServiceConnection : IEngineConnection
         }
 
         Enum resolvedPriority = engineController.RequirePriority(priority);
-        string levelName = engineController.GetMessageLevelName(messageLevel);
-        string aspectName = engineController.GetMessageAspectName(messageAspect);
-        bool isAlert = engineController.IsAlert(new DraftContent { Tag = tag, Priority = resolvedPriority, MessageLevel = levelName, MessageAspect = aspectName, Body = body, Addresses = addresses, LineWidth = null });
+        Enum? resolvedLevel = engineController.RequireLevel(level);
+        Enum? resolvedAspect = engineController.RequireAspect(aspect);
+        if (engineController.IsAspectRequired && resolvedAspect is null)
+        {
+            throw new ArgumentException("The draft handler requires an aspect", nameof(aspect));
+        }
+
+        bool isAlert = engineController.IsAlert(new DraftContent { Tag = tag, Priority = resolvedPriority, Level = resolvedLevel, Aspect = resolvedAspect, Body = body, Addresses = addresses, LineWidth = null });
 
         Message message = new()
         {
@@ -100,8 +105,8 @@ internal sealed class DirectServiceConnection : IEngineConnection
             SentAt = DateTime.UtcNow,
             Priority = resolvedPriority,
             Tag = tag,
-            MessageLevel = messageLevel,
-            MessageAspect = messageAspect,
+            Level = resolvedLevel,
+            Aspect = resolvedAspect,
             IsAlert = isAlert
         };
 

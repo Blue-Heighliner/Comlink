@@ -40,8 +40,8 @@ internal interface IEngineFrameHandler
 /// <summary>Presents a host's <see cref="IFrameHandler{TFrame, TPriority, TLevel, TAspect}"/> as an <see cref="IEngineFrameHandler"/>, giving it a context of the right kind for each event.</summary>
 /// <typeparam name="TFrame">The host's frame type.</typeparam>
 /// <typeparam name="TPriority">The enum the host stated for its priorities.</typeparam>
-/// <typeparam name="TLevel">The enum the host stated for its message levels.</typeparam>
-/// <typeparam name="TAspect">The enum the host stated for its message aspects.</typeparam>
+/// <typeparam name="TLevel">The enum the host stated for its levels.</typeparam>
+/// <typeparam name="TAspect">The enum the host stated for its aspects.</typeparam>
 /// <param name="handler">The host's handler.</param>
 internal sealed class EngineFrameHandler<TFrame, TPriority, TLevel, TAspect>(IFrameHandler<TFrame, TPriority, TLevel, TAspect> handler) : IEngineFrameHandler where TFrame : class where TPriority : struct, Enum where TLevel : struct, Enum where TAspect : struct, Enum
 {
@@ -58,7 +58,7 @@ internal sealed class EngineFrameHandler<TFrame, TPriority, TLevel, TAspect>(IFr
     public async Task OnSent(INetworkEnvironment environment, Message message)
     {
         Message<TPriority, TLevel, TAspect> typed = message.ToTyped<TPriority, TLevel, TAspect>();
-        IReadOnlySet<string> destinations = environment.GetDestinations(typed.MessageLevel is { } level ? (Enum)level : null, typed.Addresses.Where(address => address.Type is not AddressType.External).Select(address => address.UserName), out IReadOnlySet<string> excluded);
+        IReadOnlySet<string> destinations = environment.GetDestinations(typed.Level is { } level ? (Enum)level : null, typed.Addresses.Where(address => address.Type is not AddressType.External).Select(address => address.UserName), out IReadOnlySet<string> excluded);
         foreach (string user in excluded)
         {
             await environment.SetSentStatus(message.Id, user, DestinationStatus.Failed);

@@ -24,7 +24,7 @@ between `sh` and `cmd.exe`.
   (`ClientServer`: `Server`/`Client1`/`Client2`; `ClientServerSerial`: `Server`/`Client1`/`Client2`, Client1 joined to the server by two physically cabled local MicroGate ports and Client2 over MSMT/IP;
   `ServerCluster`: `Server1`/`Server2`/`Client1`/`Client2`), passing the scenario's
   own `Config.json` (the network configuration describing every user of that scenario) as `--config` and
-  naming the role's authority and identity files with `--authority` and `--certificate`, the identity naming the role's user. Each role simulates one installation talking to the
+  naming the role's authority and identity files with `--authority` and `--certificate`, the identity naming the role's user, and giving the role its own app data folder with `--data` (`Support/<Scenario>/Data/<USERNAME>`, ignored by git). Each role simulates one installation talking to the
   others over loopback; `Support/Root.cer` is the shared certificate authority signing
   every role's `{USERNAME}.pfx` identity (the `ClientServerSerial` scenario reuses the `ClientServer` ones), and `Support/Root.pfx` holds that
   authority's certificate with its private key (no password), so new identities can be issued from it.

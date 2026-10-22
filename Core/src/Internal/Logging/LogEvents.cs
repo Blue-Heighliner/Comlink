@@ -212,11 +212,11 @@ internal static class LogEvents
     /// <summary>The node cannot be identified, at startup or after a refresh: a certificate file is missing or unreadable, the user certificate is not signed by the authority certificate, or it is not issued to a user of the network. The UI shows the problem in place of the app.</summary>
     public static EventId IdentityFailed { get; } = Define(118, LogCategories.Activity);
 
-    /// <summary>The host's reconfigurer throws.</summary>
-    public static EventId ReconfigurerFailed { get; } = Define(119, LogCategories.Error);
+    /// <summary>The host's configuration handler throws.</summary>
+    public static EventId ConfigurationHandlerFailed { get; } = Define(119, LogCategories.Error);
 
-    /// <summary>The host's reconfigurer throws; the activity log says so in general terms.</summary>
-    public static EventId ReconfigurerStopped { get; } = Define(120, LogCategories.Activity);
+    /// <summary>The host's configuration handler throws; the activity log says so in general terms.</summary>
+    public static EventId ConfigurationHandlerStopped { get; } = Define(120, LogCategories.Activity);
 
     /// <summary>Gets every event, in no particular order.</summary>
     public static IReadOnlyList<EventId> All { get; } = [.. typeof(LogEvents).GetProperties(BindingFlags.Public | BindingFlags.Static).Where(property => property.PropertyType == typeof(EventId)).Select(property => (EventId)property.GetValue(null)!)];
@@ -224,10 +224,6 @@ internal static class LogEvents
     /// <summary>Gets the category an event is logged under, or <see langword="null"/> for an identifier that is not one of the engine's events, which a log of the host's own or a library's can look like by its number alone.</summary>
     /// <param name="eventId">The event.</param>
     public static string? CategoryOf(EventId eventId) => eventId.Id > 0 && eventId.Name == $"{Prefix}{eventId.Id}" ? Categories.GetValueOrDefault(eventId.Id) : null;
-
-    /// <summary>Returns the identifier of the engine's event that data written when identifiers were plain numbers means by <paramref name="number"/>, or empty for <c>0</c>, which was no event.</summary>
-    /// <param name="number">The number that was written.</param>
-    public static string FromNumber(int number) => number is 0 ? string.Empty : $"{Prefix}{number}";
 
     private static EventId Define(int id, string category)
     {

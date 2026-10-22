@@ -5,8 +5,8 @@ namespace BlueHeighliner.Comlink;
 /// <see cref="IEngineBuilder.Types{TFrame, TPacket, TPriority, TLevel, TAspect, TProfile}"/>, in both Client and Headless mode.
 /// </summary>
 /// <typeparam name="TPriority">The enum the host stated for its priorities.</typeparam>
-/// <typeparam name="TLevel">The enum the host stated for its message levels.</typeparam>
-/// <typeparam name="TAspect">The enum the host stated for its message aspects.</typeparam>
+/// <typeparam name="TLevel">The enum the host stated for its levels.</typeparam>
+/// <typeparam name="TAspect">The enum the host stated for its aspects.</typeparam>
 /// <typeparam name="TProfile">The record type the host stated for user profiles in its <c>Types</c> call, or <see cref="NoProfile"/>.</typeparam>
 public interface IServiceConnection<TPriority, TLevel, TAspect, TProfile> where TPriority : struct, Enum where TLevel : struct, Enum where TAspect : struct, Enum where TProfile : class
 {
@@ -20,9 +20,9 @@ public interface IServiceConnection<TPriority, TLevel, TAspect, TProfile> where 
     /// <param name="cancellation">Cancels the wait.</param>
     Task Connect(CancellationToken cancellation = default);
 
-    /// <summary>Returns this user's own <see cref="UserInfo{TProfile}"/>, or <see langword="null"/> where no current user was given, which never happens in a running engine.</summary>
+    /// <summary>Returns this user's own <see cref="UserInfo{TLevel, TProfile}"/>, or <see langword="null"/> where no current user was given, which never happens in a running engine.</summary>
     /// <param name="cancellation">Cancels the wait.</param>
-    Task<UserInfo<TProfile>?> GetUserInfo(CancellationToken cancellation = default);
+    Task<UserInfo<TLevel, TProfile>?> GetUserInfo(CancellationToken cancellation = default);
 
     /// <summary>Returns the names of all known users in the messaging system.</summary>
     /// <param name="cancellation">Cancels the wait.</param>
@@ -35,16 +35,16 @@ public interface IServiceConnection<TPriority, TLevel, TAspect, TProfile> where 
     /// <summary>
     /// Sends a message with the given <paramref name="body"/> to the specified <paramref name="addresses"/>: the engine stores it in the Outbox and hands it to the host's frame handler
     /// (see <see cref="IFrameHandler{TFrame, TPriority, TLevel, TAspect}.OnSent"/>), which sends it and reports each destination's outcome as delivery status changes. Whether the message is an alert
-    /// is not chosen here: the host's draft handler decides it (see <see cref="SendMessageResult.IsAlert"/>). The priority, message level and message aspect must be configured ones or the call throws.
+    /// is not chosen here: the host's draft handler decides it (see <see cref="SendMessageResult.IsAlert"/>). The priority, level and aspect must be configured ones or the call throws.
     /// </summary>
     /// <param name="body">The body text.</param>
     /// <param name="addresses">The addresses the message is for.</param>
     /// <param name="priority">The message's priority, or <see langword="null"/> for the lowest.</param>
     /// <param name="tag">The message's tag.</param>
-    /// <param name="messageLevel">The message level the message is sent at, or <see langword="null"/> for none.</param>
-    /// <param name="messageAspect">The message aspect the message carries, or <see langword="null"/> for none.</param>
+    /// <param name="level">The level the message is sent at, or <see langword="null"/> for none.</param>
+    /// <param name="aspect">The aspect the message carries, or <see langword="null"/> for none.</param>
     /// <param name="cancellation">Cancels the wait.</param>
-    Task<SendMessageResult?> SendMessage(string body, List<AddressRequest> addresses, TPriority? priority = null, string tag = "", TLevel? messageLevel = null, TAspect? messageAspect = null, CancellationToken cancellation = default);
+    Task<SendMessageResult?> SendMessage(string body, List<AddressRequest> addresses, TPriority? priority = null, string tag = "", TLevel? level = null, TAspect? aspect = null, CancellationToken cancellation = default);
 
     /// <summary>
     /// Marks the Inbox record for <paramref name="messageId"/> as read (no-op if already read or not found) and tells the host's frame handler (see

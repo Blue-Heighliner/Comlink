@@ -213,9 +213,29 @@ public sealed class ControlProviderTests
         public void Dispose() => Directory.Delete(StoreDirectory, recursive: true);
     }
 
-    private static EngineBuilder BuilderFor(CertificateFiles files)
+    private sealed class Configured<THandler> : IEngineConfiguration where THandler : class, IConfigurationHandler
     {
-        EngineBuilder builder = EngineBuilder.Build(new TestEngineConfiguration());
+        public void Configure(IEngineBuilder engine) => new TestEngineConfiguration().Apply(engine).Configure<THandler>();
+    }
+
+    private sealed class IdentifiesBob : IConfigurationHandler
+    {
+        public string Identify(IReadOnlyList<string> commonNames) => "bob";
+    }
+
+    private sealed class IdentifiesNobody : IConfigurationHandler
+    {
+        string IConfigurationHandler.Identify(IReadOnlyList<string> commonNames) => "NOBODY";
+    }
+
+    private sealed class FailsToIdentify : IConfigurationHandler
+    {
+        public string Identify(IReadOnlyList<string> commonNames) => throw new NotSupportedException("no idea");
+    }
+
+    private static EngineBuilder BuilderFor(CertificateFiles files, IEngineConfiguration? configuration = null)
+    {
+        EngineBuilder builder = EngineBuilder.Build(configuration ?? new TestEngineConfiguration());
         builder.AuthorityCertificateValue = files.Authority;
         builder.UserCertificateValue = files.Identity("Certificate");
         return builder;
@@ -277,18 +297,49 @@ public sealed class ControlProviderTests
         Assert.Contains("authority certificate file", Assert.Throws<InvalidOperationException>(() => MsmtCertificateLookup.ResolveIdentity(BuilderFor(files), network)).Message);
     }
 
-    /// <summary>A certificate issued to someone the network does not list, or to someone other than the --user argument names, is refused.</summary>
+    /// <summary>A certificate issued to someone the network does not list is refused, saying who it is issued to.</summary>
     [Fact]
-    public void ResolveIdentity_CertificateNotIssuedToAListedOrNamedUser_Throws()
+    public void ResolveIdentity_CertificateNotIssuedToAListedUser_Throws()
     {
         using CertificateFiles files = new();
         (Dictionary<string, X509Certificate2> identities, X509Certificate2Collection authorities) = TestMsmtCertificates.CreateNamed("ALICE");
         files.WriteAuthority(authorities);
         files.WriteIdentity("Certificate", identities["ALICE"]);
 
-        Assert.Contains("not a user of the network", Assert.Throws<InvalidOperationException>(() => MsmtCertificateLookup.ResolveIdentity(BuilderFor(files), NetworkOf(files, [], "BOB"))).Message);
-        Assert.Contains("not issued to BOB", Assert.Throws<InvalidOperationException>(() => MsmtCertificateLookup.ResolveIdentity(BuilderFor(files), NetworkOf(files, ["--user", "BOB"], "ALICE", "BOB"))).Message);
-        Assert.Equal("ALICE", MsmtCertificateLookup.ResolveIdentity(BuilderFor(files), NetworkOf(files, ["--user", "alice"], "ALICE", "BOB")).UserName);
+        string message = Assert.Throws<InvalidOperationException>(() => MsmtCertificateLookup.ResolveIdentity(BuilderFor(files), NetworkOf(files, [], "BOB"))).Message;
+
+        Assert.Contains("issued to ALICE", message);
+        Assert.Contains("not a user of the network", message);
+    }
+
+    /// <summary>The configuration handler says which user the certificate means, spelled as the network file spells it, and a user it names that the network does not list is refused.</summary>
+    [Fact]
+    public void ResolveIdentity_TheHandlersAnswerIsTheUser()
+    {
+        using CertificateFiles files = new();
+        (Dictionary<string, X509Certificate2> identities, X509Certificate2Collection authorities) = TestMsmtCertificates.CreateNamed("ALICE");
+        files.WriteAuthority(authorities);
+        files.WriteIdentity("Certificate", identities["ALICE"]);
+        NetworkConfig network = NetworkOf(files, [], "ALICE", "BOB");
+
+        Assert.Equal("BOB", MsmtCertificateLookup.ResolveIdentity(BuilderFor(files, new Configured<IdentifiesBob>()), network).UserName);
+        Assert.Contains("identifies NOBODY", Assert.Throws<InvalidOperationException>(() => MsmtCertificateLookup.ResolveIdentity(BuilderFor(files, new Configured<IdentifiesNobody>()), network)).Message);
+    }
+
+    /// <summary>A configuration handler that throws leaves the node unidentified with the reason, which the check reports as the problem instead of throwing.</summary>
+    [Fact]
+    public void CheckIdentity_AHandlerThatThrows_IsAProblem()
+    {
+        using CertificateFiles files = new();
+        (Dictionary<string, X509Certificate2> identities, X509Certificate2Collection authorities) = TestMsmtCertificates.CreateNamed("ALICE");
+        files.WriteAuthority(authorities);
+        files.WriteIdentity("Certificate", identities["ALICE"]);
+
+        IdentityCheck check = MsmtCertificateLookup.CheckIdentity(BuilderFor(files, new Configured<FailsToIdentify>()), NetworkOf(files, [], "ALICE"));
+
+        Assert.Contains("could not tell which user", check.Problem);
+        Assert.Contains("no idea", check.Problem);
+        Assert.Equal(string.Empty, check.Identity.UserName);
     }
 
     /// <summary>A certificate signed by an authority other than the authority certificate is refused.</summary>

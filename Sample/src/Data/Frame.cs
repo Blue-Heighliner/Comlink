@@ -20,8 +20,8 @@ public sealed class Frame
             Timestamp = message.SentAt,
             Importance = (int)message.Priority,
             Category = message.Tag,
-            Confidentiality = (int?)message.MessageLevel,
-            Protection = (int?)message.MessageAspect,
+            Confidentiality = (int?)message.Level,
+            Protection = (int?)message.Aspect,
             Recipients = [.. message.Addresses.Select(address => new Recipient { User = address.UserName, Kind = address.Type switch { AddressType.Cc => "CC", AddressType.External => "OUTSIDE", _ => "TO" }, Note = address.Information })]
         };
 
@@ -30,41 +30,41 @@ public sealed class Frame
     /// <summary>User name of the sender.</summary>
     [ProtoMember(2)] public string Sender { get; set; } = string.Empty;
     /// <summary>Message body text.</summary>
-    [ProtoMember(4)] public string Text { get; set; } = string.Empty;
+    [ProtoMember(3)] public string Text { get; set; } = string.Empty;
     /// <summary>Recipient list.</summary>
-    [ProtoMember(5)] public List<Recipient> Recipients { get; set; } = [];
+    [ProtoMember(4)] public List<Recipient> Recipients { get; set; } = [];
     /// <summary>UTC timestamp when the message was originally sent.</summary>
-    [ProtoMember(6)] public DateTime Timestamp { get; set; }
+    [ProtoMember(5)] public DateTime Timestamp { get; set; }
     /// <summary>Message ID this message is a read receipt for; empty for an ordinary message.</summary>
-    [ProtoMember(7)] public string ReadMessageId { get; set; } = string.Empty;
+    [ProtoMember(6)] public string ReadMessageId { get; set; } = string.Empty;
     /// <summary>Integer value of the priority level of this message, the value of a Priority member.</summary>
-    [ProtoMember(9)] public int Importance { get; set; }
+    [ProtoMember(7)] public int Importance { get; set; }
     /// <summary>Short user-inputted tag identifying the type of this message.</summary>
-    [ProtoMember(10)] public string Category { get; set; } = string.Empty;
-    /// <summary>Integer value of the message level this message was sent at, the value of a Level member, or <see langword="null"/> for none.</summary>
-    [ProtoMember(11)] public int? Confidentiality { get; set; }
-    /// <summary>Integer value of the message aspect this message carries, the value of a Aspect member, or <see langword="null"/> for none.</summary>
-    [ProtoMember(22)] public int? Protection { get; set; }
+    [ProtoMember(8)] public string Category { get; set; } = string.Empty;
+    /// <summary>Integer value of the level this message was sent at, the value of a Level member, or <see langword="null"/> for none.</summary>
+    [ProtoMember(9)] public int? Confidentiality { get; set; }
+    /// <summary>Integer value of the aspect this message carries, the value of an Aspect member, or <see langword="null"/> for none.</summary>
+    [ProtoMember(10)] public int? Protection { get; set; }
     /// <summary>Whether this message is a retrieval request to a storage server.</summary>
-    [ProtoMember(12)] public bool IsRetrieval { get; set; }
+    [ProtoMember(11)] public bool IsRetrieval { get; set; }
     /// <summary>Retrieval request lower sent-time bound.</summary>
-    [ProtoMember(13)] public DateTime? RetrievalFrom { get; set; }
+    [ProtoMember(12)] public DateTime? RetrievalFrom { get; set; }
     /// <summary>Retrieval request upper sent-time bound.</summary>
-    [ProtoMember(14)] public DateTime? RetrievalTo { get; set; }
+    [ProtoMember(13)] public DateTime? RetrievalTo { get; set; }
     /// <summary>Retrieval request sender names.</summary>
-    [ProtoMember(15)] public List<string> RetrievalAuthors { get; set; } = [];
+    [ProtoMember(14)] public List<string> RetrievalAuthors { get; set; } = [];
     /// <summary>Retrieval request addressee names.</summary>
-    [ProtoMember(16)] public List<string> RetrievalDestinations { get; set; } = [];
+    [ProtoMember(15)] public List<string> RetrievalDestinations { get; set; } = [];
     /// <summary>Retrieval request message identifiers.</summary>
-    [ProtoMember(17)] public List<string> RetrievalIds { get; set; } = [];
+    [ProtoMember(16)] public List<string> RetrievalIds { get; set; } = [];
     /// <summary>Whether this frame is a message the user reads and that is stored, rather than only network traffic.</summary>
-    [ProtoMember(18)] public bool IsMessage { get; set; }
+    [ProtoMember(17)] public bool IsMessage { get; set; }
     /// <summary>Whether this frame is a read receipt for the message in <see cref="ReadMessageId"/>.</summary>
-    [ProtoMember(19)] public bool IsReadReceipt { get; set; }
+    [ProtoMember(18)] public bool IsReadReceipt { get; set; }
     /// <summary>The message this frame is a receive receipt for, when <see cref="IsReceiveReceipt"/>.</summary>
-    [ProtoMember(20)] public string ReceivedMessageId { get; set; } = string.Empty;
+    [ProtoMember(19)] public string ReceivedMessageId { get; set; } = string.Empty;
     /// <summary>Whether this frame is a receive receipt for the message in <see cref="ReceivedMessageId"/>.</summary>
-    [ProtoMember(21)] public bool IsReceiveReceipt { get; set; }
+    [ProtoMember(20)] public bool IsReceiveReceipt { get; set; }
 
     /// <summary>Gets the priority this frame is sent with: that of a receipt or a retrieval request, or the message's own importance.</summary>
     [ProtoIgnore]
@@ -84,8 +84,8 @@ public sealed class Frame
             SentAt = Timestamp,
             Priority = (Priority)Importance,
             Tag = Category,
-            MessageLevel = (Level?)Confidentiality,
-            MessageAspect = (Aspect?)Protection,
+            Level = (Level?)Confidentiality,
+            Aspect = (Aspect?)Protection,
             IsAlert = Category is "ALERT",
             Addresses = [.. Recipients.Select(recipient => new MessageAddress { UserName = recipient.User, Type = recipient.Kind switch { "CC" => AddressType.Cc, "OUTSIDE" => AddressType.External, _ => AddressType.To }, Information = recipient.Note })]
         };

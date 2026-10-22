@@ -7,8 +7,8 @@ internal static class MessageConversion
     {
         /// <summary>Returns the message typed by the host's enums.</summary>
         /// <typeparam name="TPriority">The enum the host stated for its priorities.</typeparam>
-        /// <typeparam name="TLevel">The enum the host stated for its message levels.</typeparam>
-        /// <typeparam name="TAspect">The enum the host stated for its message aspects.</typeparam>
+        /// <typeparam name="TLevel">The enum the host stated for its levels.</typeparam>
+        /// <typeparam name="TAspect">The enum the host stated for its aspects.</typeparam>
         public Message<TPriority, TLevel, TAspect> ToTyped<TPriority, TLevel, TAspect>() where TPriority : struct, Enum where TLevel : struct, Enum where TAspect : struct, Enum
             => new()
             {
@@ -19,8 +19,8 @@ internal static class MessageConversion
                 SentAt = message.SentAt,
                 Priority = (TPriority)message.Priority,
                 Tag = message.Tag,
-                MessageLevel = message.MessageLevel is { } level ? (TLevel)level : null,
-                MessageAspect = message.MessageAspect is { } aspect ? (TAspect)aspect : null,
+                Level = message.Level is { } level ? (TLevel)level : null,
+                Aspect = message.Aspect is { } aspect ? (TAspect)aspect : null,
                 IsAlert = message.IsAlert
             };
     }
@@ -38,8 +38,8 @@ internal static class MessageConversion
                 SentAt = message.SentAt,
                 Priority = message.Priority,
                 Tag = message.Tag,
-                MessageLevel = message.MessageLevel,
-                MessageAspect = message.MessageAspect,
+                Level = message.Level,
+                Aspect = message.Aspect,
                 IsAlert = message.IsAlert
             };
     }

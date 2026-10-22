@@ -1,7 +1,7 @@
 namespace BlueHeighliner.Comlink;
 
 /// <inheritdoc cref="IDataStore" />
-/// <param name="engineController">Supplies the current user's data folder.</param>
+/// <param name="engineController">Supplies the app's data folder.</param>
 internal sealed class DataStore(IEngineController engineController) : IDataStore
 {
     private readonly JsonSerializerOptions options = new() { WriteIndented = true, PropertyNameCaseInsensitive = true, Converters = { new JsonStringEnumConverter() } };

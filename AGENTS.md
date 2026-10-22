@@ -17,6 +17,7 @@ See [README.md](README.md) for the project layout (Core, Sample, Tests) and the 
 
 ## Coding
 
+- **No backwards compatibility before 1.0**: this is pre-release, so when a name, key, field or format changes, change it outright (stored LiteDB field names, export JSON keys, config keys follow the current names) and never keep aliases, `BsonField`/`JsonPropertyName` renames for old data, checks for obsolete keys, or migrations. Compatibility with earlier versions starts at 1.0.
 - .NET, C#. Use the latest language features without hesitation. Avalonia for UI; AvaloniaEdit for the body editor.
 - File-scoped namespaces everywhere, and one flat namespace per project: every `Core` type is in `BlueHeighliner.Comlink` except the test fakes under `Core/src/Public/Testing/`, which are in `BlueHeighliner.Comlink.Testing` (part of the `Core` package and assembly, and free of any mocking library), and every `Sample` type in `BlueHeighliner.Comlink.Sample`, never any other sub-namespace (folders group files, not namespaces). `Sample` types carry no `Sample` prefix in their name.
 - Each project has a single `Using.cs` file containing all `global using` directives for that project. Do not place `using` directives in individual files.

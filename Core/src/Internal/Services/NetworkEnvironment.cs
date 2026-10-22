@@ -4,11 +4,11 @@ namespace BlueHeighliner.Comlink;
 internal interface INetworkEnvironment
 {
 
-    /// <summary>Gets the users that <paramref name="targets"/> stand for: each group is replaced by its members and every other target is taken to be a user, leaving out a user whose own message level ranks below <paramref name="minimumLevel"/>.</summary>
-    /// <param name="minimumLevel">The lowest message level a user may run at to be included, or <see langword="null"/> for every user.</param>
+    /// <summary>Gets the users that <paramref name="targets"/> stand for: each group is replaced by its members and every other target is taken to be a user, leaving out a user whose own level ranks below <paramref name="minimumLevel"/>.</summary>
+    /// <param name="minimumLevel">The lowest level a user may run at to be included, or <see langword="null"/> for every user.</param>
     /// <param name="targets">User and group names.</param>
     /// <param name="excluded">The users that were left out for ranking below <paramref name="minimumLevel"/>.</param>
-    /// <exception cref="ArgumentException"><paramref name="minimumLevel"/> is not one of the configured message levels.</exception>
+    /// <exception cref="ArgumentException"><paramref name="minimumLevel"/> is not one of the configured levels.</exception>
     IReadOnlySet<string> GetDestinations(Enum? minimumLevel, IEnumerable<string> targets, out IReadOnlySet<string> excluded);
 
     /// <summary>Sends <paramref name="frame"/> to <paramref name="userName"/> over the connection identified as them.</summary>
@@ -20,7 +20,7 @@ internal interface INetworkEnvironment
 
     /// <summary>Records <paramref name="message"/> as received.</summary>
     /// <param name="message">The message.</param>
-    /// <exception cref="ArgumentException">The message's priority, message level or message aspect is not a configured one.</exception>
+    /// <exception cref="ArgumentException">The message's priority, level or aspect is not a configured one.</exception>
     Task ReceiveMessage(Message message);
 
     /// <summary>Changes a destination's delivery status on a sent message.</summary>
@@ -38,10 +38,10 @@ internal interface INetworkEnvironment
     /// <param name="isOnline"><see langword="true"/> for online.</param>
     void SetNetworkIndicator(bool isOnline);
 
-    /// <summary>Returns whether the user's own message level ranks at or above <paramref name="level"/>. Always <see langword="true"/> when message levels are not in use; a user with no level of their own runs at the lowest.</summary>
+    /// <summary>Returns whether the user's own level ranks at or above <paramref name="level"/>. Always <see langword="true"/> when levels are not in use; a user with no level of their own runs at the lowest.</summary>
     /// <param name="userName">The user.</param>
     /// <param name="level">The level to compare with.</param>
-    /// <exception cref="ArgumentException"><paramref name="level"/> is not one of the configured message levels.</exception>
+    /// <exception cref="ArgumentException"><paramref name="level"/> is not one of the configured levels.</exception>
     bool IsAtLeast(string userName, Enum level);
 
     /// <summary>Sends <paramref name="frame"/> to every connected interface.</summary>
@@ -160,8 +160,8 @@ internal sealed class NetworkEnvironment(
 
     /// <inheritdoc />
     public bool IsAtLeast(string userName, Enum level)
-        => engineController.MessageLevels.Count == 0
-            || engineController.MessageLevels.GetRank(engineController.GetUserMessageLevel(userName)) >= engineController.MessageLevels.GetRank(engineController.GetMessageLevelName(level));
+        => engineController.Levels.Count == 0
+            || engineController.Levels.GetRank(engineController.GetUserLevel(userName)) >= engineController.Levels.GetRank(level);
 
     /// <inheritdoc />
     /// <inheritdoc />

@@ -60,14 +60,14 @@ public interface IDisplayHandler
     /// <summary>Gets the name of the priority concept, as the entry list's priority filter and the help call it. Defaults to <c>Priority</c>.</summary>
     string? PriorityLabel => null;
 
-    /// <summary>Gets the name of the message level concept, as the entry list's message level filter calls it. Defaults to <c>Message Level</c>.</summary>
-    string? MessageLevelLabel => null;
+    /// <summary>Gets the name of the level concept, as the entry list's level filter calls it. Defaults to <c>Level</c>.</summary>
+    string? LevelLabel => null;
 
-    /// <summary>Gets the name of the message aspect concept, as the draft view's selector calls it. Defaults to <c>Message Aspect</c>.</summary>
-    string? MessageAspectLabel => null;
+    /// <summary>Gets the name of the aspect concept, as the draft view's selector calls it. Defaults to <c>Aspect</c>.</summary>
+    string? AspectLabel => null;
 
-    /// <summary>Gets the plural of <see cref="MessageAspectLabel"/>. Defaults to <see cref="MessageAspectLabel"/> with an <c>s</c> added when that is stated, otherwise <c>Message Aspects</c>.</summary>
-    string? MessageAspectPluralLabel => null;
+    /// <summary>Gets the plural of <see cref="AspectLabel"/>. Defaults to <see cref="AspectLabel"/> with an <c>s</c> added when that is stated, otherwise <c>Aspects</c>.</summary>
+    string? AspectPluralLabel => null;
 
     /// <summary>Gets the plural of <see cref="AlertLabel"/>, for text such as "Alerts". Defaults to <see cref="AlertLabel"/> with an <c>s</c> added when that is stated, otherwise <c>ALERTS</c>.</summary>
     string? AlertPluralLabel => null;
@@ -78,8 +78,8 @@ public interface IDisplayHandler
     /// <summary>Gets the plural of <see cref="PriorityLabel"/>. Defaults to <see cref="PriorityLabel"/> with an <c>s</c> added when that is stated, otherwise <c>Priorities</c>.</summary>
     string? PriorityPluralLabel => null;
 
-    /// <summary>Gets the plural of <see cref="MessageLevelLabel"/>. Defaults to <see cref="MessageLevelLabel"/> with an <c>s</c> added when that is stated, otherwise <c>Message Levels</c>.</summary>
-    string? MessageLevelPluralLabel => null;
+    /// <summary>Gets the plural of <see cref="LevelLabel"/>. Defaults to <see cref="LevelLabel"/> with an <c>s</c> added when that is stated, otherwise <c>Levels</c>.</summary>
+    string? LevelPluralLabel => null;
 
     /// <summary>Gets what the app calls <c>Inbox</c> wherever the user interface mentions it, in the case style of the text it replaces. Defaults to <c>Inbox</c>.</summary>
     string? InboxLabel => null;

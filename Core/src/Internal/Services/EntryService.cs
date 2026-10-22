@@ -61,8 +61,8 @@ internal interface IEntryService
     /// <summary>
     /// Returns a page of messages from the specified folder together with the total message count. A non-empty
     /// <paramref name="filter"/> matches <see cref="EntryFilter.Search"/> case-insensitively against the message's
-    /// body, sender, destinations, tag, priority label and message level name; <see cref="EntryFilter.DateFrom"/>/<see cref="EntryFilter.DateTo"/>
-    /// bound its received date; <see cref="EntryFilter.Author"/> matches its sender and <see cref="EntryFilter.Destination"/> any addressee (both by substring); <see cref="EntryFilter.MessageLevel"/>/<see cref="EntryFilter.Priority"/> match exactly and <see cref="EntryFilter.Alert"/> keeps only alerts or only non-alerts.
+    /// body, sender, destinations, tag, priority label and level name; <see cref="EntryFilter.DateFrom"/>/<see cref="EntryFilter.DateTo"/>
+    /// bound its received date; <see cref="EntryFilter.Author"/> matches its sender and <see cref="EntryFilter.Destination"/> any addressee (both by substring); <see cref="EntryFilter.Level"/>/<see cref="EntryFilter.Priority"/> match exactly and <see cref="EntryFilter.Alert"/> keeps only alerts or only non-alerts.
     ///  Filtering loads the whole folder rather than paginating the LiteDB query directly, since a
     /// message's fields live in an embedded document that is not indexed.
     /// </summary>
@@ -72,14 +72,14 @@ internal interface IEntryService
     /// <paramref name="filter"/> matches <see cref="EntryFilter.Search"/> against body or tag;
     /// <see cref="EntryFilter.DateFrom"/>/<see cref="EntryFilter.DateTo"/> bound the last-modified date;
     /// <see cref="EntryFilter.Destination"/> matches any addressee by substring;
-    /// <see cref="EntryFilter.MessageLevel"/>/<see cref="EntryFilter.Priority"/> match exactly.
+    /// <see cref="EntryFilter.Level"/>/<see cref="EntryFilter.Priority"/> match exactly.
     /// </summary>
     Task<(List<DraftEntity> Items, int Total)> GetDrafts(string folderId, int page, bool alphabetical, EntryFilter? filter = null);
     /// <summary>
     /// Returns a page of notes from the specified folder together with the total note count. A non-empty
     /// <paramref name="filter"/> matches <see cref="EntryFilter.Search"/> against the note's body text, and
     /// <see cref="EntryFilter.DateFrom"/>/<see cref="EntryFilter.DateTo"/> bound the last-modified date; every
-    /// other criterion is ignored, since notes have no message level, priority, or alert flag.
+    /// other criterion is ignored, since notes have no level, priority, or alert flag.
     /// </summary>
     Task<(List<NoteEntity> Items, int Total)> GetNotes(string folderId, int page, bool alphabetical, EntryFilter? filter = null);
     /// <summary>
@@ -316,8 +316,8 @@ internal sealed class EntryService : IEntryService
             FolderId = draftsId,
             Tag = defaults.Tag,
             Priority = defaults.Priority is { } priority ? engineController.StoredPriority(priority) : 0,
-            MessageLevel = defaults.MessageLevel is { } level ? engineController.MessageLevels.FirstOrDefault(candidate => level.Equals(candidate.Key))?.Value : null,
-            MessageAspect = defaults.MessageAspect is { } aspect ? engineController.MessageAspects.FirstOrDefault(candidate => aspect.Equals(candidate.Key))?.Value : null
+            Level = defaults.Level is { } level ? engineController.Levels.FirstOrDefault(candidate => level.Equals(candidate.Key))?.Value : null,
+            Aspect = defaults.Aspect is { } aspect ? engineController.Aspects.FirstOrDefault(candidate => aspect.Equals(candidate.Key))?.Value : null
         };
     }
 
@@ -352,8 +352,8 @@ internal sealed class EntryService : IEntryService
             IsAlert = source.IsAlert,
             Priority = source.Priority,
             Tag = source.Tag,
-            MessageLevel = source.MessageLevel,
-            MessageAspect = source.MessageAspect,
+            Level = source.Level,
+            Aspect = source.Aspect,
             LineWidth = source.LineWidth,
             FolderId = source.FolderId
         };
@@ -449,7 +449,7 @@ internal sealed class EntryService : IEntryService
     private bool MatchesMessage(MessageEntity entity, EntryFilter filter)
     {
         MessageData message = entity.Message;
-        string levelName = engineController.NameOfLevel(message);
+        Enum? messageLevel = engineController.LevelOf(message);
         if (filter.DateFrom is { } from && entity.ReceivedAt < from)
         {
             return false;
@@ -466,7 +466,7 @@ internal sealed class EntryService : IEntryService
         {
             return false;
         }
-        if (filter.MessageLevel is { } level && !string.Equals(levelName, level, StringComparison.OrdinalIgnoreCase))
+        if (filter.Level is { } level && !level.Equals(messageLevel))
         {
             return false;
         }
@@ -491,7 +491,7 @@ internal sealed class EntryService : IEntryService
             || Contains(destinations, search)
             || Contains(message.Tag, search)
             || Contains(priorityLabel, search)
-            || Contains(levelName, search);
+            || Contains(engineController.Levels.LabelOf(messageLevel), search);
     }
 
     private bool MatchesDraft(DraftEntity entity, EntryFilter filter)
@@ -508,7 +508,7 @@ internal sealed class EntryService : IEntryService
         {
             return false;
         }
-        if (filter.MessageLevel is { } level && !string.Equals(engineController.MessageLevels.FirstOrDefault(candidate => candidate.Value == entity.MessageLevel)?.Name, level, StringComparison.OrdinalIgnoreCase))
+        if (filter.Level is { } level && !level.Equals(engineController.Levels.Find(entity.Level)?.Key))
         {
             return false;
         }

@@ -65,10 +65,10 @@ public sealed class UserDirectoryTests
     public void CurrentUser_IsTheUserServicesUser_AndThrowsWithoutOne()
     {
         UserDirectory catalog = Build();
-        users.Setup(u => u.GetCurrentUserInfo()).Returns(new UserInfo<object> { Name = "ME" });
+        users.Setup(u => u.GetCurrentUserInfo()).Returns(new UserInformation { Name = "ME" });
         Assert.Equal("ME", catalog.CurrentUser.Name);
 
-        users.Setup(u => u.GetCurrentUserInfo()).Returns((UserInfo<object>?)null);
+        users.Setup(u => u.GetCurrentUserInfo()).Returns((UserInformation?)null);
         Assert.Throws<InvalidOperationException>(() => catalog.CurrentUser);
     }
 }

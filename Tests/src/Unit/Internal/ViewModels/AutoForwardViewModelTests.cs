@@ -14,7 +14,7 @@ public sealed class AutoForwardViewModelTests
         public Setup()
         {
             EngineController.Setup(e => e.AutoForwarders).Returns((IReadOnlyList<AutoForwarderDefinition>)[]);
-            EngineController.Setup(e => e.GetUserInfo(It.IsAny<string>())).Returns((string user) => new UserInfo<object> { Name = user, AutoForwarders = Access.GetValueOrDefault(user) ?? [] });
+            EngineController.Setup(e => e.GetUserInfo(It.IsAny<string>())).Returns((string user) => new UserInformation { Name = user, AutoForwarders = Access.GetValueOrDefault(user) ?? [] });
             Connection.Setup(c => c.GetUserNames(It.IsAny<CancellationToken>())).ReturnsAsync([]);
         }
 

@@ -17,12 +17,12 @@ The same package has fakes of the contexts the engine hands to handlers and of t
 
 ## Getting started
 
-A host implements `IEngineConfiguration`, whose fluent `Configure` method states how the engine runs (starting with the types it is typed by: its own frame DTO, priority enum and message level enum), and starts the engine with `Engine.Start<T>`, which constructs it through dependency injection:
+A host implements `IEngineConfiguration`, whose fluent `Configure` method states how the engine runs (starting with the types it is typed by: its own frame DTO, priority enum and level enum), and starts the engine with `Engine.Start<T>`, which constructs it through dependency injection:
 
 ```csharp
 public sealed class MyEngineConfiguration : IEngineConfiguration
 {
-    public void Configure(IEngineBuilder engine) => engine.Types<MyFrame, MyPriority, MyMessageLevel, MyMessageAspect, NoProfile>()
+    public void Configure(IEngineBuilder engine) => engine.Types<MyFrame, MyPriority, MyLevel, MyAspect, NoProfile>()
         .Display<MyDisplayHandler>()
         .Priority(MyPriority.Normal)
         .Certificates("Authority.cer", "Certificate.pfx")
