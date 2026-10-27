@@ -13,7 +13,7 @@ public interface IPriorityLevelBuilder<TFrame, TPacket, TPriority, TLevel, TAspe
     /// <param name="label">The name.</param>
     IPriorityLevelBuilder<TFrame, TPacket, TPriority, TLevel, TAspect, TProfile> Label(string label);
 
-    /// <summary>Sets whether the GUI offers the level to a user composing a message. It never restricts code. Defaults to <see cref="PriorityMode.User"/>.</summary>
-    /// <param name="mode">Whether the GUI offers the level.</param>
-    IPriorityLevelBuilder<TFrame, TPacket, TPriority, TLevel, TAspect, TProfile> Mode(PriorityMode mode);
+    /// <summary>Sets whether the priority is hidden from the GUI: a hidden one is never offered to a user composing a message, and is for code to use. It never restricts code. Not hidden unless stated.</summary>
+    /// <param name="isHidden">Whether it is hidden.</param>
+    IPriorityLevelBuilder<TFrame, TPacket, TPriority, TLevel, TAspect, TProfile> IsHidden(bool isHidden = true);
 }

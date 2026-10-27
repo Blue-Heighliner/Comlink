@@ -895,6 +895,24 @@ public sealed class EngineBuilderTests
         Assert.Equal(["#FFFFFF", "#EEEEEE"], [controller.Levels[0].Foreground, controller.Levels[^1].Foreground]);
     }
 
+    /// <summary>Priorities, levels and aspects can each be hidden from the GUI, which is not the default, without disturbing what else is stated about them.</summary>
+    [Fact]
+    public void IsHidden_CanBeStatedOnPrioritiesLevelsAndAspects()
+    {
+        (_, EngineController controller) = Build(engine => engine
+            .Priority(TestMessagePriority.Receipt).IsHidden().Label("RECEIPT")
+            .Level(TestLevel.Secret).IsHidden().IsHidden(false)
+            .Level(TestLevel.High).Label("TOP").IsHidden().Background("#222222")
+            .Aspect(TestAspect.Signed).IsHidden().Aspect(TestAspect.Encrypted));
+
+        Assert.True(controller.Priorities.Single(priority => priority.Key.Equals(TestMessagePriority.Receipt)).IsHidden);
+        Assert.All(controller.Priorities.Where(priority => !priority.Key.Equals(TestMessagePriority.Receipt)), priority => Assert.False(priority.IsHidden));
+        LevelDefinition top = controller.Levels.Single(level => level.Key.Equals(TestLevel.High));
+        Assert.Equal((true, "TOP", "#222222"), (top.IsHidden, top.Label, top.Background));
+        Assert.All(controller.Levels.Where(level => level != top), level => Assert.False(level.IsHidden));
+        Assert.Equal([true, false], controller.Aspects.Select(aspect => aspect.IsHidden));
+    }
+
     /// <summary>A user's level is the one on their entry, or the lowest configured level when none is stated.</summary>
     [Fact]
     public void GetUserLevel_UsesTheEntryElseTheLowestLevel()

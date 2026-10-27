@@ -9,8 +9,8 @@ internal sealed record MessagePriorityOption
     public required int Value { get; init; }
     /// <summary>Gets the integer value of <see cref="Key"/>, which is how the level is stored in drafts and exports and so must never change for a member of the host's enum.</summary>
     public int Stored => Convert.ToInt32(Key);
-    /// <summary>Gets whether the GUI offers this priority to a user composing a message; code may use any priority.</summary>
-    public PriorityMode Mode { get; init; } = PriorityMode.User;
+    /// <summary>Gets whether the GUI hides this priority from a user composing a message; code may use any priority.</summary>
+    public bool IsHidden { get; init; }
     /// <summary>Gets the enum member this level was declared from, which is how handlers and blocked combinations name it.</summary>
     public required Enum Key { get; init; }
 }

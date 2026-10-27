@@ -12,4 +12,8 @@ public interface IAspectBuilder<TFrame, TPacket, TPriority, TLevel, TAspect, TPr
     /// <summary>Sets the name of the aspect, which is how the draft view, the message view and frames refer to it. Defaults to the member name in uppercase.</summary>
     /// <param name="label">The name.</param>
     IAspectBuilder<TFrame, TPacket, TPriority, TLevel, TAspect, TProfile> Label(string label);
+
+    /// <summary>Sets whether the aspect is hidden from the GUI: a hidden one is never offered to a user composing a message, and is for code to use. It never restricts code. Not hidden unless stated.</summary>
+    /// <param name="isHidden">Whether it is hidden.</param>
+    IAspectBuilder<TFrame, TPacket, TPriority, TLevel, TAspect, TProfile> IsHidden(bool isHidden = true);
 }

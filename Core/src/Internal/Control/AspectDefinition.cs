@@ -6,6 +6,9 @@ internal sealed record AspectDefinition
     /// <summary>Gets the text the user interface shows for this aspect. It identifies nothing.</summary>
     public required string Label { get; init; }
 
+    /// <summary>Gets whether the GUI hides this aspect from a user composing a message; code may use any aspect.</summary>
+    public bool IsHidden { get; init; }
+
     /// <summary>Gets the member of the host's aspect enum this aspect is.</summary>
     public required Enum Key { get; init; }
 

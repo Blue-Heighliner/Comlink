@@ -21,7 +21,7 @@ public sealed class DraftViewModelTests
         mock.Setup(p => p.Priorities).Returns([
             new MessagePriorityOption { Name = "ROUTINE", Value = 0, Key = TestMessagePriority.Routine },
             new MessagePriorityOption { Name = "FLASH", Value = 3, Key = TestMessagePriority.Flash },
-            new MessagePriorityOption { Name = "RECEIPT", Value = 9, Mode = PriorityMode.System, Key = TestMessagePriority.Receipt }
+            new MessagePriorityOption { Name = "RECEIPT", Value = 9, IsHidden = true, Key = TestMessagePriority.Receipt }
         ]);
         mock.Setup(t => t.TagsEnabled).Returns(tagsEnabled);
         mock.Setup(t => t.TagLabel).Returns(tagLabel);
@@ -944,6 +944,45 @@ public sealed class DraftViewModelTests
 
         Assert.Equal("FLASH", vm.SelectedPriority.Name);
         Assert.Null(vm.SelectedAspect?.Aspect);
+    }
+
+    /// <summary>A level or aspect that is hidden is never offered to the user, however the draft was stored, while the user's own level still ranks the levels beneath it.</summary>
+    [Fact]
+    public void SystemLevelsAndAspects_AreNeverOffered()
+    {
+        Mock<IEngineController> controller = Mock.Get(MakeEngineController());
+        controller.Setup(c => c.Levels).Returns(
+        [
+            new LevelDefinition { Label = "PUBLIC", Background = "#000000", Key = TestLevel.Public },
+            new LevelDefinition { Label = "INTERNAL", Background = "#000000", Key = TestLevel.Internal, IsHidden = true },
+            new LevelDefinition { Label = "SECRET", Background = "#000000", Key = TestLevel.Secret }
+        ]);
+        controller.Setup(c => c.Aspects).Returns(
+        [
+            new AspectDefinition { Label = "ENCRYPTED", Key = TestAspect.Encrypted, IsHidden = true },
+            new AspectDefinition { Label = "SIGNED", Key = TestAspect.Signed }
+        ]);
+        DraftEntity entity = new() { Body = "B", Addresses = [], FolderId = "root-drafts", Level = (int)TestLevel.Internal, Aspect = (int)TestAspect.Encrypted };
+
+        DraftViewModel vm = new(entity, Mock.Of<IEntryService>(), Mock.Of<IEngineConnection>(), [], noLogger, controller.Object, currentLevel: TestLevel.Secret);
+
+        Assert.Equal(["PUBLIC", "SECRET"], vm.AvailableLevels.Select(level => level.Label));
+        Assert.Equal("SECRET", vm.SelectedLevel?.Label);
+        Assert.Equal(["", "SIGNED"], vm.AvailableAspects.Select(option => option.Label));
+        Assert.Null(vm.SelectedAspect?.Aspect);
+    }
+
+    /// <summary>When every aspect is hidden the aspect picker is empty.</summary>
+    [Fact]
+    public void OnlySystemAspects_LeaveNoAspectPicker()
+    {
+        Mock<IEngineController> controller = Mock.Get(MakeEngineController());
+        controller.Setup(c => c.Aspects).Returns([new AspectDefinition { Label = "ENCRYPTED", Key = TestAspect.Encrypted, IsHidden = true }]);
+        DraftEntity entity = new() { Body = "B", Addresses = [], FolderId = "root-drafts" };
+
+        DraftViewModel vm = new(entity, Mock.Of<IEntryService>(), Mock.Of<IEngineConnection>(), [], noLogger, controller.Object);
+
+        Assert.Empty(vm.AvailableAspects);
     }
 
     /// <summary>A level the draft handler refuses with the current tag is not offered, and a tag that blocks the chosen level moves the level to one that is allowed.</summary>

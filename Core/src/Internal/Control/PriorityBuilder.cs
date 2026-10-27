@@ -3,7 +3,7 @@ namespace BlueHeighliner.Comlink;
 /// <summary>Collects what is stated through <see cref="IEngineBuilder{TFrame, TPacket, TPriority, TLevel, TAspect, TProfile}"/> and <see cref="IPriorityLevelBuilder{TFrame, TPacket, TPriority, TLevel, TAspect, TProfile}"/>, recording what is stated about each level and turning it into the engine's priority options.</summary>
 internal sealed class PriorityBuilder<TPriority> where TPriority : struct, Enum
 {
-    private readonly Dictionary<TPriority, (string? Label, PriorityMode? Mode)> options = [];
+    private readonly Dictionary<TPriority, (string? Label, bool IsHidden)> options = [];
     private readonly List<TPriority> order = [];
     private TPriority current;
 
@@ -21,14 +21,14 @@ internal sealed class PriorityBuilder<TPriority> where TPriority : struct, Enum
     /// <inheritdoc cref="IPriorityLevelBuilder{TFrame, TPacket, TPriority, TLevel, TAspect, TProfile}.Label"/>
     public PriorityBuilder<TPriority> Label(string label)
     {
-        options[current] = (label, options.GetValueOrDefault(current).Mode);
+        options[current] = (label, options.GetValueOrDefault(current).IsHidden);
         return this;
     }
 
-    /// <inheritdoc cref="IPriorityLevelBuilder{TFrame, TPacket, TPriority, TLevel, TAspect, TProfile}.Mode"/>
-    public PriorityBuilder<TPriority> Mode(PriorityMode mode)
+    /// <inheritdoc cref="IPriorityLevelBuilder{TFrame, TPacket, TPriority, TLevel, TAspect, TProfile}.IsHidden"/>
+    public PriorityBuilder<TPriority> IsHidden(bool isHidden)
     {
-        options[current] = (options.GetValueOrDefault(current).Label, mode);
+        options[current] = (options.GetValueOrDefault(current).Label, isHidden);
         return this;
     }
 
@@ -39,13 +39,13 @@ internal sealed class PriorityBuilder<TPriority> where TPriority : struct, Enum
         List<MessagePriorityOption> built =
         [.. order.Select((priority, index) =>
         {
-            (string? label, PriorityMode? mode) = options.GetValueOrDefault(priority);
+            (string? label, bool isHidden) = options.GetValueOrDefault(priority);
             if (Convert.ToInt64(priority) is < int.MinValue or > int.MaxValue)
             {
                 throw new InvalidOperationException($"The priority {typeof(TPriority).Name}.{priority} has a value that does not fit an int, which is how priorities are stored");
             }
 
-            return new MessagePriorityOption { Name = label ?? priority.ToString().ToUpperInvariant(), Value = index, Mode = mode ?? PriorityMode.User, Key = priority };
+            return new MessagePriorityOption { Name = label ?? priority.ToString().ToUpperInvariant(), Value = index, IsHidden = isHidden, Key = priority };
         })];
         if (built.GroupBy(option => option.Name, StringComparer.OrdinalIgnoreCase).FirstOrDefault(group => group.Count() > 1) is { } duplicate)
         {

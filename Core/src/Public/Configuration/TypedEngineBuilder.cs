@@ -73,7 +73,7 @@ public interface IEngineBuilder<TFrame, TPacket, TPriority, TLevel, TAspect, TPr
     /// States one priority level, members of <typeparamref name="TPriority"/>, lowest first like <see cref="Level"/>: the position in which a level is stated is its send priority, regardless of the order of the enum, so later levels are sent before earlier ones, and a member not stated is not a level. Required unless the type is <see cref="NoPriority"/>.
     /// The integer values of the members are how levels are stored in drafts and exports, so a member's value must never change or be reused, even when it is no longer used.
     /// A level is named by its member name in uppercase unless its aspects say otherwise; the name is only shown to users.
-    /// A level is a <see cref="PriorityMode.User"/> priority, which the GUI offers to users composing a message, unless set to <see cref="PriorityMode.System"/>, which the GUI never offers; code may use any level.
+    /// A level is offered by the GUI to users composing a message unless it is hidden with <c>IsHidden()</c>, which the GUI never offers; code may use any level.
     /// A <typeparamref name="TPriority"/> of <see cref="NoPriority"/> is a single user level named <c>NORMAL</c>. Which tag and priority combinations are blocked when composing a draft is stated here too.
     /// </summary>
     IPriorityLevelBuilder<TFrame, TPacket, TPriority, TLevel, TAspect, TProfile> Priority(TPriority priority);

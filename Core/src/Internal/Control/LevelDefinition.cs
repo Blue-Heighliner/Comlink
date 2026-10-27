@@ -13,6 +13,8 @@ internal sealed record LevelDefinition
     public required Enum Key { get; init; }
     /// <summary>Gets the integer value of <see cref="Key"/>, which is how the level is stored in messages and drafts and so must never change for a member of the host's enum.</summary>
     public int Value => Convert.ToInt32(Key);
+    /// <summary>Gets whether the GUI hides this level from a user composing a message; code may use any level.</summary>
+    public bool IsHidden { get; init; }
     /// <summary>Gets the hex background color shown for this level: the top banner and the level's label in a message.</summary>
     public required string Background { get; init; }
     /// <summary>Gets the hex color of the text shown on <see cref="Background"/>.</summary>

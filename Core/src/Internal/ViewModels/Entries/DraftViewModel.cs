@@ -216,17 +216,18 @@ internal sealed partial class DraftViewModel : ObservableObject, IDraftViewModel
         newAddressType = AddressTypes[0];
 
         allPriorities = engineController.Priorities;
-        selectedPriority = allPriorities.FirstOrDefault(p => p.Mode is PriorityMode.User && p.Stored == entity.Priority)
-            ?? allPriorities.FirstOrDefault(p => p.Mode is PriorityMode.User)
+        selectedPriority = allPriorities.FirstOrDefault(p => !p.IsHidden && p.Stored == entity.Priority)
+            ?? allPriorities.FirstOrDefault(p => !p.IsHidden)
             ?? allPriorities[0];
 
         IReadOnlyList<LevelDefinition> allLevels = engineController.Levels;
         int ownRank = allLevels.GetRank(currentLevel);
-        allowedLevels = ownRank < 0 ? [] : [.. allLevels.Take(ownRank + 1)];
+        allowedLevels = ownRank < 0 ? [] : [.. allLevels.Take(ownRank + 1).Where(level => !level.IsHidden)];
         selectedLevel = allowedLevels.FirstOrDefault(l => l.Value == entity.Level)
             ?? allowedLevels.LastOrDefault();
 
-        allAspects = engineController.Aspects.Count == 0 ? [] : [.. engineController.IsAspectRequired ? [] : new[] { new AspectOption { Label = string.Empty } }, .. engineController.Aspects.Select(aspect => new AspectOption { Label = aspect.Label, Aspect = aspect })];
+        List<AspectDefinition> userAspects = [.. engineController.Aspects.Where(aspect => !aspect.IsHidden)];
+        allAspects = userAspects.Count == 0 ? [] : [.. engineController.IsAspectRequired ? [] : new[] { new AspectOption { Label = string.Empty } }, .. userAspects.Select(aspect => new AspectOption { Label = aspect.Label, Aspect = aspect })];
         selectedAspect = allAspects.FirstOrDefault(option => option.Aspect is not null && option.Aspect.Value == entity.Aspect) ?? allAspects.FirstOrDefault();
         RefreshChoices();
 
@@ -509,7 +510,7 @@ internal sealed partial class DraftViewModel : ObservableObject, IDraftViewModel
     private List<(MessagePriorityOption Priority, LevelDefinition? Level, AspectOption? Aspect)> AllowedCombinations(string draftTag)
     {
         List<(MessagePriorityOption, LevelDefinition?, AspectOption?)> allowed = [];
-        foreach (MessagePriorityOption priority in allPriorities.Where(p => p.Mode is PriorityMode.User))
+        foreach (MessagePriorityOption priority in allPriorities.Where(p => !p.IsHidden))
         {
             foreach (LevelDefinition? level in allowedLevels.Count == 0 ? [null] : allowedLevels.Cast<LevelDefinition?>())
             {

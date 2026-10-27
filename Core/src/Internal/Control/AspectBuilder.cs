@@ -4,6 +4,7 @@ namespace BlueHeighliner.Comlink;
 internal sealed class AspectBuilder<TAspect> where TAspect : struct, Enum
 {
     private readonly Dictionary<TAspect, string> labels = [];
+    private readonly HashSet<TAspect> hidden = [];
     private readonly List<TAspect> order = [];
     private TAspect current;
 
@@ -25,6 +26,21 @@ internal sealed class AspectBuilder<TAspect> where TAspect : struct, Enum
         return this;
     }
 
+    /// <inheritdoc cref="IAspectBuilder{TFrame, TPacket, TPriority, TLevel, TAspect, TProfile}.IsHidden"/>
+    public AspectBuilder<TAspect> IsHidden(bool isHidden)
+    {
+        if (isHidden)
+        {
+            hidden.Add(current);
+        }
+        else
+        {
+            hidden.Remove(current);
+        }
+
+        return this;
+    }
+
     /// <summary>Builds the aspects, one per stated member, in the order stated.</summary>
     /// <exception cref="InvalidOperationException">An aspect's value does not fit an <see cref="int"/>, which is how it is stored, or two aspects have the same name.</exception>
     public List<AspectDefinition> Build()
@@ -37,7 +53,7 @@ internal sealed class AspectBuilder<TAspect> where TAspect : struct, Enum
                 throw new InvalidOperationException($"The aspect {typeof(TAspect).Name}.{aspect} has a value that does not fit an int, which is how aspects are stored");
             }
 
-            return new AspectDefinition { Key = aspect, Label = labels.GetValueOrDefault(aspect) ?? aspect.ToString().ToUpperInvariant() };
+            return new AspectDefinition { Key = aspect, Label = labels.GetValueOrDefault(aspect) ?? aspect.ToString().ToUpperInvariant(), IsHidden = hidden.Contains(aspect) };
         })];
         return built;
     }

@@ -31,7 +31,7 @@ public sealed class PublicApiTests
                 "IPrintHandler`3", "IPriorityLevelBuilder`6", "ISerialConnectionInfo", "IServiceConnection`4", "IUserCatalog`2",
                 "IUserInfo", "LogCategories", "MemoryOwner`1", "Message`3", "MessageAddress", "MessageDeliveryStatus", "MessageExportData",
                 "NoAspect", "NoLevel", "NoPacket", "NoPriority", "NoProfile", "NoteExportData", "PacketSerializer`2", "PooledBufferWriter",
-                "PriorityMode", "ProtobufSerializer", "RetrievalCriteria", "SendMessageResult", "SentMessage", "StagedSendData`2", "StagedSendMode",
+                "ProtobufSerializer", "RetrievalCriteria", "SendMessageResult", "SentMessage", "StagedSendData`2", "StagedSendMode",
                 "TagCase", "UserIdentity", "UserInfo`2", "UserLink", "UserRole"
             ],
             exported);

@@ -20,4 +20,8 @@ public interface ILevelBuilder<TFrame, TPacket, TPriority, TLevel, TAspect, TPro
     /// <summary>Sets the hex color of the text shown on the level's background. Defaults to white.</summary>
     /// <param name="foreground">The color, such as <c>#FFFFFF</c>.</param>
     ILevelBuilder<TFrame, TPacket, TPriority, TLevel, TAspect, TProfile> Foreground(string foreground);
+
+    /// <summary>Sets whether the level is hidden from the GUI: a hidden one is never offered to a user composing a message, and is for code to use. It never restricts code. Not hidden unless stated.</summary>
+    /// <param name="isHidden">Whether it is hidden.</param>
+    ILevelBuilder<TFrame, TPacket, TPriority, TLevel, TAspect, TProfile> IsHidden(bool isHidden = true);
 }

@@ -214,9 +214,23 @@ internal sealed class EngineBuilder<TFrame, TPacket, TPriority, TLevel, TAspect,
     }
 
     /// <inheritdoc />
-    public IPriorityLevelBuilder<TFrame, TPacket, TPriority, TLevel, TAspect, TProfile> Mode(PriorityMode mode)
+    IPriorityLevelBuilder<TFrame, TPacket, TPriority, TLevel, TAspect, TProfile> IPriorityLevelBuilder<TFrame, TPacket, TPriority, TLevel, TAspect, TProfile>.IsHidden(bool isHidden)
     {
-        priorities.Mode(mode);
+        priorities.IsHidden(isHidden);
+        return this;
+    }
+
+    /// <inheritdoc />
+    ILevelBuilder<TFrame, TPacket, TPriority, TLevel, TAspect, TProfile> ILevelBuilder<TFrame, TPacket, TPriority, TLevel, TAspect, TProfile>.IsHidden(bool isHidden)
+    {
+        levels.IsHidden(isHidden);
+        return this;
+    }
+
+    /// <inheritdoc />
+    IAspectBuilder<TFrame, TPacket, TPriority, TLevel, TAspect, TProfile> IAspectBuilder<TFrame, TPacket, TPriority, TLevel, TAspect, TProfile>.IsHidden(bool isHidden)
+    {
+        aspects.IsHidden(isHidden);
         return this;
     }
 

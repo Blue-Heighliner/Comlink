@@ -7,7 +7,7 @@ public sealed class DraftEntityTests
     [Fact]
     public void LevelAndAspect_AreStoredUnderTheirOwnNames()
     {
-        LiteDB.BsonDocument document = LiteDB.BsonMapper.Global.ToDocument(new DraftEntity { Level = 2, Aspect = 1 });
+        LiteDB.BsonDocument document = new LiteDB.BsonMapper().ToDocument(new DraftEntity { Level = 2, Aspect = 1 });
 
         Assert.Equal(2, document["Level"].AsInt32);
         Assert.Equal(1, document["Aspect"].AsInt32);
