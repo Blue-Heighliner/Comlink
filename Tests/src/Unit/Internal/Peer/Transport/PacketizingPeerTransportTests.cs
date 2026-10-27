@@ -78,6 +78,7 @@ public sealed class PacketizingPeerTransportTests
 
         public void Complete(int index)
         {
+            SpinWait.SpinUntil(() => { lock (pending) { return pending.Count > index; } }, TimeSpan.FromSeconds(30));
             lock (pending) { pending[index].SetResult(true); }
         }
     }
