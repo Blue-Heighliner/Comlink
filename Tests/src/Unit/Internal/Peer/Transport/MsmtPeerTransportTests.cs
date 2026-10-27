@@ -12,7 +12,7 @@ public sealed class MsmtPeerTransportTests
         TestObservable<MsmtDisconnection> Disconnected,
         TestObservable<MsmtPackageChange> PackageChanged);
 
-    private static Fixture Build(MicrosoftLogger? logger = null)
+    private static Fixture Build(MicrosoftLogger? logger = null, TimeSpan? renewalLead = null, TimeSpan? renewalRetry = null)
     {
         Mock<IMsmtSessionPeer> peer = new();
         TestObservable<IMsmtConnection> connected = new();
@@ -22,12 +22,17 @@ public sealed class MsmtPeerTransportTests
         peer.SetupGet(p => p.Disconnected).Returns(disconnected);
         peer.SetupGet(p => p.PackageChanged).Returns(packageChanged);
         peer.SetupProperty(p => p.Receiver);
-        return new Fixture(new MsmtPeerTransport(peer.Object, logger), peer, connected, disconnected, packageChanged);
+        return new Fixture(new MsmtPeerTransport(peer.Object, logger, renewalLead, renewalRetry), peer, connected, disconnected, packageChanged);
     }
 
-    private static Mock<IMsmtConnection> OutboundConnection(ConnectionPoint point, bool connects = true)
+    private static Mock<IMsmtConnection> OutboundConnection(ConnectionPoint point, bool connects = true, TimeSpan? endsIn = null)
     {
         Mock<IMsmtConnection> connection = new();
+        if (endsIn is { } lifetime)
+        {
+            connection.SetupGet(c => c.Expiration).Returns(DateTime.UtcNow + lifetime);
+        }
+
         connection.SetupGet(c => c.Direction).Returns(MsmtConnectionDirection.Outgoing);
         connection.SetupGet(c => c.Remote).Returns(new MsmtTarget { Host = point.IpAddress, Port = point.Port });
         connection.SetupGet(c => c.Status).Returns(connects ? MsmtConnectionStatus.Connected : MsmtConnectionStatus.Disconnected);
@@ -74,6 +79,71 @@ public sealed class MsmtPeerTransportTests
         }
 
         public IReadOnlyList<string> Of(EventId id) => [.. Entries.Where(entry => entry.Id == id).Select(entry => entry.Message)];
+    }
+
+    private static async Task WaitUntil(Func<bool> condition)
+    {
+        DateTime deadline = DateTime.UtcNow.AddSeconds(5);
+        while (!condition() && DateTime.UtcNow < deadline)
+        {
+            await Task.Delay(10);
+        }
+
+        Assert.True(condition());
+    }
+
+    /// <summary>A connection is replaced before its session ends: the replacement is offered as a new connection, becomes the one used from then on, and is logged, while the old one is left alone.</summary>
+    [Fact]
+    public async Task Connect_BeforeTheSessionEnds_ReplacesTheConnection()
+    {
+        RecordingLogger log = new();
+        Fixture fx = Build(log, renewalLead: TimeSpan.FromMilliseconds(100));
+        Mock<IMsmtConnection> first = OutboundConnection(target, endsIn: TimeSpan.FromMilliseconds(400));
+        Mock<IMsmtConnection> second = OutboundConnection(target);
+        fx.Peer.SetupSequence(p => p.Connect(It.IsAny<MsmtNameTarget>())).Returns(first.Object).Returns(second.Object);
+        List<PeerConnection> offered = [];
+        fx.Transport.Connected.Listen(args => { lock (offered) { offered.Add(args.Connection); } });
+
+        PeerConnection original = await fx.Transport.Connect(target);
+        await WaitUntil(() => { lock (offered) { return offered.Count == 2; } });
+
+        Assert.Same(original, offered[0]);
+        Assert.NotSame(original, offered[1]);
+        Assert.Same(offered[1], await fx.Transport.Connect(target));
+        Assert.Single(log.Of(LogEvents.IpRenewed));
+        fx.Peer.Verify(p => p.Connect(It.IsAny<MsmtNameTarget>()), Times.Exactly(2));
+        first.Verify(c => c.Dispose(), Times.Never);
+    }
+
+    /// <summary>A replacement that cannot be made is tried again until it can, while the old connection is still up.</summary>
+    [Fact]
+    public async Task Connect_ReplacementFails_IsRetried()
+    {
+        Fixture fx = Build(renewalLead: TimeSpan.FromMilliseconds(100), renewalRetry: TimeSpan.FromMilliseconds(20));
+        Mock<IMsmtConnection> first = OutboundConnection(target, endsIn: TimeSpan.FromSeconds(5));
+        fx.Peer.SetupSequence(p => p.Connect(It.IsAny<MsmtNameTarget>())).Returns(first.Object).Returns(OutboundConnection(target, connects: false).Object).Returns(OutboundConnection(target).Object);
+        List<PeerConnection> offered = [];
+        fx.Transport.Connected.Listen(args => { lock (offered) { offered.Add(args.Connection); } });
+
+        await fx.Transport.Connect(target);
+        await WaitUntil(() => { lock (offered) { return offered.Count == 2; } });
+
+        fx.Peer.Verify(p => p.Connect(It.IsAny<MsmtNameTarget>()), Times.Exactly(3));
+    }
+
+    /// <summary>A point that is closed is not renewed.</summary>
+    [Fact]
+    public async Task Connect_PointClosed_IsNotRenewed()
+    {
+        Fixture fx = Build(renewalLead: TimeSpan.FromMilliseconds(100));
+        Mock<IMsmtConnection> first = OutboundConnection(target, endsIn: TimeSpan.FromMilliseconds(400));
+        fx.Peer.Setup(p => p.Connect(It.IsAny<MsmtNameTarget>())).Returns(first.Object);
+
+        await fx.Transport.Connect(target);
+        fx.Transport.SetClosed(target, true);
+        await Task.Delay(600);
+
+        fx.Peer.Verify(p => p.Connect(It.IsAny<MsmtNameTarget>()), Times.Once);
     }
 
     /// <summary>The listener starting and stopping is logged under IP.</summary>

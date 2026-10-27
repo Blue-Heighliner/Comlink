@@ -6,7 +6,7 @@
 
 `PeerTransportFactory` builds a `CompositePeerTransport` from two halves:
 
-- `MsmtPeerTransport` adapts an `IMsmtSessionPeer` for IP points (mutually authenticated TLS, session connections opened by `Connect` and cached per point, plus the ones remote nodes open to the listener).
+- `MsmtPeerTransport` adapts an `IMsmtSessionPeer` for IP points (mutually authenticated TLS, session connections opened by `Connect` and cached per point and replaced shortly before their session lifetime ends, plus the ones remote nodes open to the listener).
 - `SerialPeerTransport` holds one persistent `SerialLink` per distinct serial point for MicroGate cables.
 
 The composite routes each `Connect` by `ConnectionPoint.IsSerial` and each `Request` by the connection's own medium, and merges the `Received`, `Connected`, and `Disconnected` streams of both halves. `Connect` returns the connection to a point, opening it first when there is none, and a `Request` is always made over a `PeerConnection`, whichever end opened it. A `Request` completes only when the remote node has acknowledged the message, and throws if it could not be delivered; both halves honor that same contract, which is what lets the services stay medium agnostic.

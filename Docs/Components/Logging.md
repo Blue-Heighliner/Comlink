@@ -173,6 +173,7 @@ Written only while the `IP` category is turned on (see Enabling categories), fro
 | CL126 | `Accepted a connection from {Host}:{Port} as {Subject}` | The listener accepts an incoming connection, with the certificate subject the other end presented. |
 | CL127 | `Connection {Direction} {Host}:{Port} closed: {Reason}` | An established connection ends (`to` for one this node opened, `from` for one it accepted); the reason is the exception that closed it, or that it ended normally. |
 | CL128 | `A connection from {Host}:{Port} never completed: {Reason}` | An incoming connection ends before it is established, such as a client that never completes its handshake. |
+| CL134 | `Replaced the connection to {Host}:{Port} before its session ends` | A session has a negotiated lifetime (ten minutes unless the `Msmt()` session lifetimes say otherwise) after which MSMT closes the connection, so an outgoing connection is replaced a minute before then; the old one ends by itself. |
 
 ### AVALONIA
 

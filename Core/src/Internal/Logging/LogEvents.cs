@@ -248,6 +248,9 @@ internal static class LogEvents
     /// <summary>A serial port reports an error that does not break the link.</summary>
     public static EventId SerialPortError { get; } = Define(133, LogCategories.Serial);
 
+    /// <summary>An outgoing IP connection is replaced by a new one shortly before its session ends, so the link stays up.</summary>
+    public static EventId IpRenewed { get; } = Define(134, LogCategories.Ip);
+
     /// <summary>Gets every event, in no particular order.</summary>
     public static IReadOnlyList<EventId> All { get; } = [.. typeof(LogEvents).GetProperties(BindingFlags.Public | BindingFlags.Static).Where(property => property.PropertyType == typeof(EventId)).Select(property => (EventId)property.GetValue(null)!)];
 

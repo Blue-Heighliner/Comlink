@@ -35,7 +35,7 @@ Unlike message mode, a session connection is a real object the caller gets back 
 never reconnects or discards one on Comlink's behalf beyond a handshake timeout, a stall, or the negotiated
 session lifetime ending. `MsmtPeerTransport` (see below) owns this: it opens one outbound connection to a
 given point when it is connected to, and reuses that same connection for every later request over it
-until MSMT reports it disconnected, at which point the next connect opens a fresh one.
+until MSMT reports it disconnected, at which point the next connect opens a fresh one. A session has a negotiated lifetime (ten minutes unless the `Msmt()` session lifetimes say otherwise) after which MSMT closes the connection normally, which would drop the link for a moment every time; so the transport opens a replacement a minute before the session ends (a quarter of what is left when that is less), publishes it as a new connection, which the layers above identify like any other and take over as the newest connection of the user, and leaves the old one to end by itself. A replacement that cannot be made is retried every five seconds while the old connection lasts. Only the side that dialed renews: the other side simply sees a new connection arrive.
 Every peer service additionally runs a background `PeerConnectionMonitor` per outgoing point
 (a client's server; a server's or peer's configured points), sending a
 heartbeat (a frame from the host's optional heartbeat handler) on an interval so each of those connections is proactively opened and kept alive even

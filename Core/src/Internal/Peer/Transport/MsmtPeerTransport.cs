@@ -5,14 +5,18 @@ namespace BlueHeighliner.Comlink;
 /// session connections, each with per-message acknowledgement) to <see cref="IPeerTransport"/>. An outbound
 /// session connection is opened the first time a point is connected to, and reused until it disconnects, matching
 /// MSMT's own idle keep-alive rather than reconnecting per send. Session connections are bidirectional, so a
-/// connection the remote node opened carries this node's requests just like one this node opened.
+/// connection the remote node opened carries this node's requests just like one this node opened. A session has a negotiated lifetime after which MSMT closes the connection, so an outbound
+/// connection is replaced shortly before its session ends: the replacement is established and offered to the layers above as a new connection while the old one carries on until it ends by itself,
+/// so the link is not down for the end of a session.
 /// </summary>
 internal sealed class MsmtPeerTransport : IPeerTransport
 {
-    /// <summary>Initializes a new <see cref="MsmtPeerTransport"/> over <paramref name="peer"/>, logging to <paramref name="logger"/> (nothing when <see langword="null"/>).</summary>
-    public MsmtPeerTransport(IMsmtSessionPeer peer, MicrosoftLogger? logger = null)
+    /// <summary>Initializes a new <see cref="MsmtPeerTransport"/> over <paramref name="peer"/>, logging to <paramref name="logger"/> (nothing when <see langword="null"/>). A connection is replaced <paramref name="renewalLead"/> (a quarter of what is left of its session when that is less) before its session ends, retrying every <paramref name="renewalRetry"/> until it has.</summary>
+    public MsmtPeerTransport(IMsmtSessionPeer peer, MicrosoftLogger? logger = null, TimeSpan? renewalLead = null, TimeSpan? renewalRetry = null)
     {
         this.peer = peer;
+        this.renewalLead = renewalLead ?? TimeSpan.FromMinutes(1);
+        this.renewalRetry = renewalRetry ?? TimeSpan.FromSeconds(5);
         this.logger = logger ?? NullLogger.Instance;
         peer.Connected.Listen(OnAccepted);
         peer.Disconnected.Listen(OnDisconnected);
@@ -22,6 +26,8 @@ internal sealed class MsmtPeerTransport : IPeerTransport
 
     private readonly IMsmtSessionPeer peer;
     private readonly MicrosoftLogger logger;
+    private readonly TimeSpan renewalLead;
+    private readonly TimeSpan renewalRetry;
     private readonly ConcurrentDictionary<IMsmtConnection, PeerConnection> connections = new();
     private readonly ConcurrentDictionary<PeerConnection, IMsmtConnection> handles = new();
     private readonly ConcurrentDictionary<string, IMsmtConnection> outbound = new();
@@ -30,6 +36,7 @@ internal sealed class MsmtPeerTransport : IPeerTransport
     private readonly ConcurrentDictionary<string, bool> attempted = new();
     private readonly ConcurrentDictionary<string, bool> failed = new();
     private readonly Lock outboundLock = new();
+    private readonly CancellationTokenSource lifetime = new();
     private readonly PeerEvent<PeerReceivedEventArgs> received = new();
     private readonly PeerEvent<PeerConnectionEventArgs> connected = new();
     private readonly PeerEvent<PeerConnectionEventArgs> disconnected = new();
@@ -123,7 +130,61 @@ internal sealed class MsmtPeerTransport : IPeerTransport
     }
 
     /// <inheritdoc />
-    public ValueTask DisposeAsync() => peer.DisposeAsync();
+    public ValueTask DisposeAsync()
+    {
+        lifetime.Cancel();
+        return peer.DisposeAsync();
+    }
+
+    private bool IsCurrent(ConnectionPoint target, IMsmtConnection connection)
+        => !closed.ContainsKey(target.Key) && outbound.TryGetValue(target.Key, out IMsmtConnection? current) && ReferenceEquals(current, connection);
+
+    private void ScheduleRenewal(ConnectionPoint target, IMsmtConnection connection)
+    {
+        if (connection.Expiration is { } expiration)
+        {
+            _ = Task.Run(() => Renew(target, connection, expiration));
+        }
+    }
+
+    // The old connection is left to end by itself rather than disposed: requests already on it finish, and the layers above, which take the newest connection of a user, move to the replacement as soon as it is identified.
+    private async Task Renew(ConnectionPoint target, IMsmtConnection connection, DateTime expiration)
+    {
+        TimeSpan remaining = (expiration.Kind is DateTimeKind.Local ? expiration.ToUniversalTime() : DateTime.SpecifyKind(expiration, DateTimeKind.Utc)) - DateTime.UtcNow;
+        TimeSpan lead = TimeSpan.FromTicks(Math.Min(renewalLead.Ticks, remaining.Ticks / 4));
+        try
+        {
+            await Task.Delay(TimeSpan.FromTicks(Math.Max(0, (remaining - lead).Ticks)), lifetime.Token);
+            while (IsCurrent(target, connection) && connection.Status is MsmtConnectionStatus.Connected)
+            {
+                IMsmtConnection replacement = peer.Connect(ToMsmtTarget(target));
+                if (await replacement.Wait(lifetime.Token))
+                {
+                    lock (outboundLock)
+                    {
+                        if (!IsCurrent(target, connection))
+                        {
+                            replacement.Dispose();
+                            return;
+                        }
+
+                        outbound[target.Key] = replacement;
+                    }
+
+                    logger.Record(LogEvents.IpRenewed, "Replaced the connection to {Host}:{Port} before its session ends", replacement.Remote.Host, replacement.Remote.Port);
+                    MarkConnected(replacement);
+                    ScheduleRenewal(target, replacement);
+                    return;
+                }
+
+                replacement.Dispose();
+                await Task.Delay(renewalRetry, lifetime.Token);
+            }
+        }
+        catch (OperationCanceledException)
+        {
+        }
+    }
 
     private static string AddressOf(ConnectionPoint point) => $"{point.IpAddress}:{point.Port}";
 
@@ -160,6 +221,7 @@ internal sealed class MsmtPeerTransport : IPeerTransport
             failed.TryRemove(address, out _);
             logger.Record(LogEvents.IpConnected, "Connected to {Host}:{Port} as {Subject}", connection.Remote.Host, connection.Remote.Port, connection.Identity?.Subject ?? "no one");
             MarkConnected(connection);
+            ScheduleRenewal(target, connection);
         }
         return connection;
     }
