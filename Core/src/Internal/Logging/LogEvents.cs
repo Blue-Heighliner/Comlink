@@ -83,12 +83,6 @@ internal static class LogEvents
     /// <summary>Packetization is on and its payload size leaves no room for a packet's own fields within the HDLC frame limit.</summary>
     public static EventId MaxPayloadSizeExceedsHdlc { get; } = Define(46, LogCategories.App);
 
-    /// <summary>A serial link drops, cannot be opened or reports an error.</summary>
-    public static EventId SerialLinkProblem { get; } = Define(47, LogCategories.App);
-
-    /// <summary>The connection to an outgoing point cannot be opened, or its heartbeat fails, or the connection is dropped as soon as it is made, which is how a node refuses one.</summary>
-    public static EventId PeerConnectFailed { get; } = Define(115, LogCategories.App);
-
     /// <summary>A server has no live connection to a recipient.</summary>
     public static EventId CannotDeliverNoConnection { get; } = Define(54, LogCategories.App);
 
@@ -124,9 +118,6 @@ internal static class LogEvents
 
     /// <summary>A reload finds a changed interface port or certificate setting.</summary>
     public static EventId InterfaceRestarting { get; } = Define(74, LogCategories.App);
-
-    /// <summary>A serial link comes up.</summary>
-    public static EventId SerialLinkConnected { get; } = Define(75, LogCategories.App);
 
     /// <summary>A message arrives from a peer.</summary>
     public static EventId MessageReceived { get; } = Define(76, LogCategories.Activity);
@@ -217,6 +208,45 @@ internal static class LogEvents
 
     /// <summary>The host's configuration handler throws; the activity log says so in general terms.</summary>
     public static EventId ConfigurationHandlerStopped { get; } = Define(120, LogCategories.Activity);
+
+    /// <summary>The IP listener starts accepting connections.</summary>
+    public static EventId IpListening { get; } = Define(121, LogCategories.Ip);
+
+    /// <summary>The IP listener stops accepting connections.</summary>
+    public static EventId IpListenerStopped { get; } = Define(122, LogCategories.Ip);
+
+    /// <summary>An outgoing IP connection is being opened; repeated attempts to the same point are not logged again until it has connected.</summary>
+    public static EventId IpConnecting { get; } = Define(123, LogCategories.Ip);
+
+    /// <summary>An outgoing IP connection could not be opened; not logged again for the same point until it has connected.</summary>
+    public static EventId IpConnectFailed { get; } = Define(124, LogCategories.Ip);
+
+    /// <summary>An outgoing IP connection is established.</summary>
+    public static EventId IpConnected { get; } = Define(125, LogCategories.Ip);
+
+    /// <summary>The listener accepts an incoming IP connection.</summary>
+    public static EventId IpAccepted { get; } = Define(126, LogCategories.Ip);
+
+    /// <summary>An established IP connection closes.</summary>
+    public static EventId IpDisconnected { get; } = Define(127, LogCategories.Ip);
+
+    /// <summary>An incoming IP connection ends without being established, such as one that does not complete its handshake.</summary>
+    public static EventId IpRefused { get; } = Define(128, LogCategories.Ip);
+
+    /// <summary>A serial port moves to another state (ready, connecting, connected or disconnected); the states of retries that follow a failed attempt are not logged until the link has connected again.</summary>
+    public static EventId SerialPortState { get; } = Define(129, LogCategories.Serial);
+
+    /// <summary>A serial port cannot be opened or its link cannot be formed; not logged again until the link has connected.</summary>
+    public static EventId SerialPortFailed { get; } = Define(130, LogCategories.Serial);
+
+    /// <summary>A serial link is closed or opened again by the application.</summary>
+    public static EventId SerialLinkSwitched { get; } = Define(131, LogCategories.Serial);
+
+    /// <summary>The modem wires of a serial port change.</summary>
+    public static EventId SerialSignals { get; } = Define(132, LogCategories.Serial);
+
+    /// <summary>A serial port reports an error that does not break the link.</summary>
+    public static EventId SerialPortError { get; } = Define(133, LogCategories.Serial);
 
     /// <summary>Gets every event, in no particular order.</summary>
     public static IReadOnlyList<EventId> All { get; } = [.. typeof(LogEvents).GetProperties(BindingFlags.Public | BindingFlags.Static).Where(property => property.PropertyType == typeof(EventId)).Select(property => (EventId)property.GetValue(null)!)];

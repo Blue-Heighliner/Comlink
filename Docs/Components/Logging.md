@@ -29,7 +29,7 @@ and with a log handler fixing the category to 8, the user to 8 and the ID to 5:
 
 `LogLineFormatter` builds the line. **By default no field has a fixed size**: each is written at its natural length, so lines do not align. A host that wants lines aligned field by field states an `ILogHandler` (`engine.Logs<MyLogHandler>()`) whose `CategoryWidth`, `UserWidth` and `IdWidth` each give the fixed width of one field, in characters, or `null` (the default) to leave that field unfixed. The fields and their rules:
 
-- **Category**: the only classification of an entry; there are no log levels. The category in capitals: one of those the engine writes under (`ACTIVITY`, `FRAMES`, `PACKETS`, `AVALONIA`, `APP`, `ERROR`, `CRASH`, described under Usage and public as `LogCategories`), or a host's own. The category of an engine event is fixed by the event (see the tables below), whichever logger writes it.
+- **Category**: the only classification of an entry; there are no log levels. The category in capitals: one of those the engine writes under (`ACTIVITY`, `FRAMES`, `PACKETS`, `SERIAL`, `IP`, `AVALONIA`, `APP`, `ERROR`, `CRASH`, and `DEBUG` which only a host writes under, described under Usage and public as `LogCategories`), or a host's own. The category of an engine event is fixed by the event (see the tables below), whichever logger writes it.
 - **User**: the current value of `CurrentUserProvider.UserName`, the user the node's certificate names, empty while the node cannot be identified.
 - **ID**: the identifier of the event being logged, text. The engine's are `CL` and a number (`CL56`), the `LogEvents` entries, which every event has its own of and the tables below list; a host's are whatever it gave `ILogger`. It is empty only for a line that did not come from the engine or `ILogger`, such as one a framework library writes.
 
@@ -59,6 +59,9 @@ Log categories follow the existing convention:
 |----------|-------|
 | `ACTIVITY` | What a user should read, written to the in-app log and the log file, in general terms without technical detail: the app starting, started and exited, a refresh that switches the node to another user, a certificate problem that leaves the node unidentified, and a general notice of a problem whose detail is under `ERROR` or `CRASH` |
 | `FRAMES`, `PACKETS` | The bytes of every frame and every packet, off by default |
+| `SERIAL` | The activity of the serial (MicroGate) links with their serial details: the port, the local and remote station addresses and the HDLC state, a port failing to open or connect, a link closed or opened by the application, modem signals and errors the port reports; off by default |
+| `IP` | The activity of the IP (MSMT) connections with their IP details: the listener starting and stopping, outgoing connection attempts and failures (reported once per point until it has connected), connections made, accepted and closed, and incoming connections that never complete, each with host, port and certificate subject; off by default |
+| `DEBUG` | For the host's own debugging output: the engine never writes under it. It is written exactly while `IDebugMode.IsDebug` is true and cannot be turned on otherwise, by `Logging.json`, `--log` or the log handler |
 | `AVALONIA` | What Avalonia reports about itself, such as a binding that could not be resolved, off by default; Avalonia's own console output is switched off, so this is the only place it appears |
 | `APP` | Technical events of the running application that a user has no use for: connections, services, the network layers and conditions that are handled |
 | `ERROR` | Something failed, with the technical detail and any exception |
@@ -66,11 +69,11 @@ Log categories follow the existing convention:
 
 There are no log levels: the category is the whole classification. The category of an engine event belongs to the event (`LogEvents.CategoryOf`), so the same event always lands in the same category and the providers route by it: the activity provider keeps the `ACTIVITY` events, the file provider writes every enabled category.
 
-Any other category string is valid, but is off like `FRAMES` until `Logging.json` or `--log` names it.
+Any other category string is valid, but is off like `FRAMES` until `Logging.json` or `--log` names it. `DEBUG` is the one exception: it follows debug mode alone.
 
 ### Enabling categories
 
-Only `ACTIVITY`, `APP`, `ERROR` and `CRASH` are written by default, a whitelist in `LogCategories.OnByDefault` that the host's `ILogHandler.CategoriesOnByDefault` replaces as a whole when it states a list (names in any case; it may leave an engine category off or turn on any other); every other category is off (`FRAMES` and `PACKETS` write every frame and packet, `AVALONIA` many entries), including a host's own, until named. `ILogSettings` (`LogSettings`) turns them on from two places, which add up:
+Only `ACTIVITY`, `APP`, `ERROR` and `CRASH` are written by default, a whitelist in `LogCategories.OnByDefault` that the host's `ILogHandler.CategoriesOnByDefault` replaces as a whole when it states a list (names in any case; it may leave an engine category off or turn on any other); every other category is off (`FRAMES` and `PACKETS` write every frame and packet, `AVALONIA` many entries), including a host's own, until named. `DEBUG` is outside this: debug mode alone decides it, so it needs no naming and cannot be named on in a release build. `ILogSettings` (`LogSettings`) turns them on from two places, which add up:
 
 - `Logging.json` in the app data folder, beside `Config.json` (`IEngineController.LoggingFilePath`): `["Frames", "Packets"]`, a JSON list of the categories to enable, names in any case, unknown names ignored. The file need not exist. A file that is not valid JSON is ignored at startup (nothing can be logged yet) and fails a refresh like an unreadable network file.
 - The `--log` argument, a comma separated list such as `--log Frames,Packets`, when the host allows command-line overrides.
@@ -86,7 +89,7 @@ logger.Record(LogEvents.AppStarted, "{AppName} started", name);
 
 ### Logging from the host's components
 
-A component of the host, a handler, a hosted service or anything built through dependency injection, logs through the public `ILogger` it asks for, without knowing how the engine logs. `Log(category, id, message)` and `Log(category, id, exception, message)` go through the same loggers and providers as the engine's own entries, so they are in the file, follow the same layout and, for an `ACTIVITY` entry, appear in the activity log the user reads. An entry written this way always has an identifier, a required `id` that names the kind of event (never empty, or the call throws `ArgumentException`), which its line carries and the activity log lists. The engine's are prefixed `CL`, so a host gives its own a prefix of its own (`MYAPP7`) and keeps them unique. Which entries are written follows the category as for any other: the engine's own are on, and a category of the host's own is off until `Logging.json` or `--log` names it, so a component either logs under one of `LogCategories` or documents the category to turn on. The log handed to what is built before the engine runs (the configuration and the display handler) writes nothing.
+A component of the host, a handler, a hosted service or anything built through dependency injection, logs through the public `ILogger` it asks for, without knowing how the engine logs. `Log(category, id, message)` and `Log(category, id, exception, message)` go through the same loggers and providers as the engine's own entries, so they are in the file, follow the same layout and, for an `ACTIVITY` entry, appear in the activity log the user reads. An entry written this way always has an identifier, a required `id` that names the kind of event (never empty, or the call throws `ArgumentException`), which its line carries and the activity log lists. The engine's are prefixed `CL`, so a host gives its own a prefix of its own (`MYAPP7`) and keeps them unique. The `DEBUG` category (`LogCategories.Debug`) is meant for exactly this: a host's debugging output, written while `IDebugMode.IsDebug` is true and dropped otherwise, with no switch to flip. Which entries are written follows the category as for any other: the engine's own are on, and a category of the host's own is off until `Logging.json` or `--log` names it, so a component either logs under one of `LogCategories` or documents the category to turn on. The log handed to what is built before the engine runs (the configuration and the display handler) writes nothing.
 
 ## Log events
 
@@ -144,6 +147,33 @@ Written only while the `PACKETS` category is turned on (see Enabling categories)
 | CL113 | `Sent {Length} bytes to {User}: {Bytes}` | A packet is sent. |
 | CL114 | `Received {Length} bytes from {User}: {Bytes}` | A packet is received. |
 
+### SERIAL
+
+Written only while the `SERIAL` category is turned on (see Enabling categories). Every entry names the port and the local and remote HDLC station addresses (`SerialLink` knows the remote address it is trying, which rotates when several users may be at the other end of the cable). To keep a cable that is not connected from filling the log, the states of the retries after a failed attempt, and their failures, are written once and then not again until the link has connected; whatever happens to a link that is up is always written.
+
+| ID | Content | Scenario |
+|----|---------|----------|
+| CL129 | `Serial port {Port} (local address {Local}, remote address {Remote}) is {State}` | The port's HDLC peer moves to `Ready` (the device is open), `Connecting`, `Connected` or `Disconnected`. |
+| CL130 | `Serial port {Port} (local address {Local}, remote address {Remote}) cannot be opened or connected, retrying: {Reason}` | Opening the port or forming the link fails; written once until the link has connected. |
+| CL131 | `Serial port {Port} (local address {Local}) {Action} by the application` | The link is closed (`closed`) or reopened (`opened again`) by a refresh or the connection monitor. |
+| CL132 | `Serial port {Port} (local address {Local}, remote address {Remote}) signals: {Signals}` | The modem wires change, which the port reports only when signals are enabled in the HDLC options. |
+| CL133 | `Serial port {Port} (local address {Local}, remote address {Remote}) reported an error: {Message}` | The port reports an error that does not break the link, such as one thrown by a receiver. |
+
+### IP
+
+Written only while the `IP` category is turned on (see Enabling categories), from the MSMT transport. Every entry names the host and port of the other end. Connection attempts and failures to an outgoing point are written once and not again until a connection to it has been made, since the connection monitor retries every few seconds.
+
+| ID | Content | Scenario |
+|----|---------|----------|
+| CL121 | `Listening for connections on {Endpoint}` | The listener starts, with the address and port it is bound to. |
+| CL122 | `Stopped listening for connections` | The listener stops, such as when the listen port changes. |
+| CL123 | `Connecting to {Host}:{Port}` | An outgoing connection is being opened; written once until the point has connected. |
+| CL124 | `Could not connect to {Host}:{Port}: {Reason}` | An outgoing connection ends before it is established (refused, timed out, a failed TLS handshake or a certificate that is not trusted); written once until the point has connected. |
+| CL125 | `Connected to {Host}:{Port} as {Subject}` | An outgoing connection is established, with the certificate subject the other end presented. |
+| CL126 | `Accepted a connection from {Host}:{Port} as {Subject}` | The listener accepts an incoming connection, with the certificate subject the other end presented. |
+| CL127 | `Connection {Direction} {Host}:{Port} closed: {Reason}` | An established connection ends (`to` for one this node opened, `from` for one it accepted); the reason is the exception that closed it, or that it ended normally. |
+| CL128 | `A connection from {Host}:{Port} never completed: {Reason}` | An incoming connection ends before it is established, such as a client that never completes its handshake. |
+
 ### AVALONIA
 
 Written only while the `AVALONIA` category is turned on (see Enabling categories). Avalonia's own console output is replaced by `AvaloniaLogSink`, which records warnings and errors here instead, so a binding error never reaches the console.
@@ -163,15 +193,12 @@ Technical events of the running application: connections, the wire and the netwo
 | CL44 | `Dropped a packet that could not be assembled: {Message}` | A received packet fails reassembly. |
 | CL45 | `IP connections are unavailable: {Message}` | The IP transport cannot be built, for example because certificates are missing. |
 | CL46 | `The payload size of {MaxPayloadSize} bytes leaves no room for a packet's own fields within the HDLC MaxInfoField of {MaxInfoField} bytes, so packets will fail to send over serial connections` | Packetization is on and its maximum payload size is not below the HDLC frame limit. |
-| CL47 | `Serial link to {Point} {Problem}` | A serial link drops other than by being closed (`lost`), fails to open (`cannot be established, retrying: ...`, once per outage) or its HDLC layer reports an error (`met an error: ...`). |
-| CL115 | `Cannot reach {Point}, retrying: {Reason}` | The connection to an outgoing point cannot be opened, or its heartbeat throws, or the connection is dropped as soon as it is made (how a node refuses one), logged once per outage with the reason (a failed TLS handshake, a refused connection, a timeout). |
 | CL54 | `Cannot deliver to {User}: no connection is identified as them` | A server has no live connection to a recipient. |
 | CL57 | `External system {Name} failed to {Action}` | An operation of an external system throws: `connect`, `poll connection status`, `release its connection cleanly`, `send a message`, `filter a received message` or `process a received message`. |
 | CL60 | `External system {Name} cannot send a {Type}; it only handles {Expected}` | A frame of the wrong type is sent to an external system. |
 | CL62 | `External system {Name} received a message while not running; dropping it` | A message arrives from an external system after it stopped. |
 | CL73 | `Role or certificates changed, restarting connections` | A reload finds a changed role, or a replaced user or authority certificate for the same user. |
 | CL74 | `Interface listener changed, restarting it` | A reload finds a changed interface port or certificate setting. |
-| CL75 | `Serial link to {Point} connected` | A serial link comes up. |
 | CL84 | `Retrieval found {Count} stored message(s)` | The frame handler looks up stored messages. |
 | CL109 | `{Change} {UserName}` | A server connection to a parent, a child or a sibling server comes up (`Connected to`) or goes down (`Disconnected from`). |
 

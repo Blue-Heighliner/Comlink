@@ -61,7 +61,7 @@ internal sealed class SerialLink : IAsyncDisposable
     private volatile IHdlcPeer? current;
     private volatile bool isClosed;
     private CancellationTokenSource? attempt;
-    private bool failureLogged;
+    private volatile bool quiet;
     private int disposed;
 
     /// <summary>Whether the link is currently up.</summary>
@@ -80,8 +80,10 @@ internal sealed class SerialLink : IAsyncDisposable
     public void SetClosed(bool closed)
     {
         IHdlcPeer? toDrop = null;
+        bool changed;
         lock (closeLock)
         {
+            changed = isClosed != closed;
             isClosed = closed;
             if (closed)
             {
@@ -96,6 +98,11 @@ internal sealed class SerialLink : IAsyncDisposable
             {
                 openGate.TrySetResult();
             }
+        }
+
+        if (changed)
+        {
+            logger.Record(LogEvents.SerialLinkSwitched, "Serial port {Port} (local address {Local}) {Action} by the application", point.SerialPort, point.SerialAddress, closed ? "closed" : "opened again");
         }
 
         DropPeer(toDrop);
@@ -195,11 +202,37 @@ internal sealed class SerialLink : IAsyncDisposable
     {
         IHdlcPeer peer = peerFactory.Create();
         TaskCompletionSource ended = new(TaskCreationOptions.RunContinuationsAsynchronously);
+        // With several users that may be at the other end of the cable, each is tried in turn for a while, since the far end answers only the address it is given.
+        SerialConnectionInfo info = (SerialConnectionInfo)connection.Info;
+        byte? preferred = info.PreferredRemoteSerialAddress;
+        byte remote = preferred ?? remotes[nextRemote % remotes.Length];
         peer.Receiver = OnFrame;
-        peer.Exceptions.Listen(ex => logger.Record(LogEvents.SerialLinkProblem, "Serial link to {Point} {Problem}", point, $"met an error: {ex.Message}"));
+        peer.Exceptions.Listen(
+            ex =>
+            {
+                logger.Record(LogEvents.SerialPortError, "Serial port {Port} (local address {Local}, remote address {Remote}) reported an error: {Message}", point.SerialPort, point.SerialAddress, remote, ex.Message);
+            });
+        peer.SignalsChanged.Listen(
+            signals =>
+            {
+                if (!quiet)
+                {
+                    logger.Record(LogEvents.SerialSignals, "Serial port {Port} (local address {Local}, remote address {Remote}) signals: {Signals}", point.SerialPort, point.SerialAddress, remote, signals);
+                }
+            });
         peer.StateChanged.Listen(
             state =>
             {
+                if (state is HdlcPeerState.Connected)
+                {
+                    quiet = false;
+                }
+
+                if (!quiet)
+                {
+                    logger.Record(LogEvents.SerialPortState, "Serial port {Port} (local address {Local}, remote address {Remote}) is {State}", point.SerialPort, point.SerialAddress, remote, state);
+                }
+
                 if (state is HdlcPeerState.Disconnected)
                 {
                     ended.TrySetResult();
@@ -207,10 +240,6 @@ internal sealed class SerialLink : IAsyncDisposable
             },
             () => ended.TrySetResult());
 
-        // With several users that may be at the other end of the cable, each is tried in turn for a while, since the far end answers only the address it is given.
-        SerialConnectionInfo info = (SerialConnectionInfo)connection.Info;
-        byte? preferred = info.PreferredRemoteSerialAddress;
-        byte remote = preferred ?? remotes[nextRemote % remotes.Length];
         using CancellationTokenSource candidate = CancellationTokenSource.CreateLinkedTokenSource(attemptToken);
         if (remotes.Length > 1)
         {
@@ -224,6 +253,7 @@ internal sealed class SerialLink : IAsyncDisposable
         }
         catch (OperationCanceledException)
         {
+            quiet = true;
             await DisposeQuietly(peer);
             if (!attemptToken.IsCancellationRequested)
             {
@@ -240,10 +270,10 @@ internal sealed class SerialLink : IAsyncDisposable
         }
         catch (Exception ex)
         {
-            if (!failureLogged)
+            if (!quiet)
             {
-                failureLogged = true;
-                logger.Record(LogEvents.SerialLinkProblem, "Serial link to {Point} {Problem}", point, $"cannot be established, retrying: {ex.Message}");
+                logger.Record(LogEvents.SerialPortFailed, "Serial port {Port} (local address {Local}, remote address {Remote}) cannot be opened or connected, retrying: {Reason}", point.SerialPort, point.SerialAddress, remote, ex.Message);
+                quiet = true;
             }
 
             await DisposeQuietly(peer);
@@ -251,7 +281,6 @@ internal sealed class SerialLink : IAsyncDisposable
             return;
         }
 
-        failureLogged = false;
         info.RemoteSerialAddress = remote;
         bool closedMeanwhile;
         lock (closeLock)
@@ -269,7 +298,6 @@ internal sealed class SerialLink : IAsyncDisposable
             return;
         }
 
-        logger.Record(LogEvents.SerialLinkConnected, "Serial link to {Point} connected", point);
         connected.Publish(new PeerConnectionEventArgs { Connection = connection });
 
         try { await ended.Task.WaitAsync(lifetime.Token); }
@@ -277,11 +305,6 @@ internal sealed class SerialLink : IAsyncDisposable
 
         lock (closeLock) { current = null; }
         disconnected.Publish(new PeerConnectionEventArgs { Connection = connection });
-        if (!lifetime.IsCancellationRequested && !isClosed)
-        {
-            logger.Record(LogEvents.SerialLinkProblem, "Serial link to {Point} {Problem}", point, "lost");
-        }
-
         await DisposeQuietly(peer);
         if (!isClosed)
         {

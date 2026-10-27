@@ -46,7 +46,7 @@ public sealed class LogEventsTests
         }
     }
 
-    /// <summary>Every event belongs to one of the seven categories, and appears in the log document under the heading of its category.</summary>
+    /// <summary>Every event belongs to one of the engine's categories (DEBUG has none, since only a host writes under it), and appears in the log document under the heading of its category.</summary>
     [Fact]
     public void EveryEvent_HasACategory_AndIsDocumentedUnderIt()
     {
@@ -56,7 +56,7 @@ public sealed class LogEventsTests
             directory = Path.GetDirectoryName(directory);
         }
         string[] lines = File.ReadAllLines(Path.Combine(directory ?? throw new FileNotFoundException("Logging.md was not found above the test output"), "Docs", "Components", "Logging.md"));
-        string[] categories = ["ACTIVITY", "FRAMES", "PACKETS", "AVALONIA", "APP", "ERROR", "CRASH"];
+        string[] categories = ["ACTIVITY", "FRAMES", "PACKETS", "SERIAL", "IP", "AVALONIA", "APP", "ERROR", "CRASH"];
 
         foreach (EventId id in All())
         {

@@ -20,7 +20,7 @@ internal sealed class ClientPeerService : IPeerService, IConnectionStatusService
     {
         this.transportFactory = transportFactory;
         this.engineController = engineController;
-        points = new PointMaintenance(new PeerConnectionMonitor(engineController, loggerFactory.CreateLogger(LogCategories.App)));
+        points = new PointMaintenance(new PeerConnectionMonitor(engineController));
         logger = loggerFactory.CreateLogger(LogCategories.App);
     }
 

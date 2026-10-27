@@ -14,7 +14,7 @@ internal sealed class MsmtPeerTransport : IPeerTransport
     {
         this.peer = peer;
         this.logger = logger ?? NullLogger.Instance;
-        peer.Connected.Listen(MarkConnected);
+        peer.Connected.Listen(OnAccepted);
         peer.Disconnected.Listen(OnDisconnected);
         peer.PackageChanged.Listen(OnPackageChanged);
         peer.Receiver = OnReceived;
@@ -26,6 +26,9 @@ internal sealed class MsmtPeerTransport : IPeerTransport
     private readonly ConcurrentDictionary<PeerConnection, IMsmtConnection> handles = new();
     private readonly ConcurrentDictionary<string, IMsmtConnection> outbound = new();
     private readonly ConcurrentDictionary<string, bool> closed = new();
+    private readonly ConcurrentDictionary<IMsmtConnection, bool> established = new();
+    private readonly ConcurrentDictionary<string, bool> attempted = new();
+    private readonly ConcurrentDictionary<string, bool> failed = new();
     private readonly Lock outboundLock = new();
     private readonly PeerEvent<PeerReceivedEventArgs> received = new();
     private readonly PeerEvent<PeerConnectionEventArgs> connected = new();
@@ -41,10 +44,18 @@ internal sealed class MsmtPeerTransport : IPeerTransport
     public IObservable<PeerConnectionEventArgs> Disconnected => disconnected;
 
     /// <inheritdoc />
-    public void StartListener(int port) => peer.StartListener(port);
+    public void StartListener(int port)
+    {
+        peer.StartListener(port);
+        logger.Record(LogEvents.IpListening, "Listening for connections on {Endpoint}", peer.Listener is { } listener ? $"{listener.Host}:{listener.Port}" : $"port {port}");
+    }
 
     /// <inheritdoc />
-    public void StopListener() => peer.StopListener();
+    public void StopListener()
+    {
+        peer.StopListener();
+        logger.Record(LogEvents.IpListenerStopped, "Stopped listening for connections");
+    }
 
     /// <inheritdoc />
     public void SetClosed(ConnectionPoint point, bool isClosed)
@@ -114,6 +125,8 @@ internal sealed class MsmtPeerTransport : IPeerTransport
     /// <inheritdoc />
     public ValueTask DisposeAsync() => peer.DisposeAsync();
 
+    private static string AddressOf(ConnectionPoint point) => $"{point.IpAddress}:{point.Port}";
+
     private static MsmtNameTarget ToMsmtTarget(ConnectionPoint point) => new() { Host = point.IpAddress, Port = point.Port, ServerName = point.IpAddress };
 
     private async Task<IMsmtConnection> GetConnection(ConnectionPoint target, CancellationToken cancellation)
@@ -130,6 +143,11 @@ internal sealed class MsmtPeerTransport : IPeerTransport
             }
         }
 
+        if (created && attempted.TryAdd(AddressOf(target), true))
+        {
+            logger.Record(LogEvents.IpConnecting, "Connecting to {Host}:{Port}", target.IpAddress, target.Port);
+        }
+
         if (!await connection.Wait(cancellation))
         {
             throw new IOException($"Could not connect to {target}");
@@ -137,6 +155,10 @@ internal sealed class MsmtPeerTransport : IPeerTransport
 
         if (created)
         {
+            string address = AddressOf(target);
+            attempted.TryRemove(address, out _);
+            failed.TryRemove(address, out _);
+            logger.Record(LogEvents.IpConnected, "Connected to {Host}:{Port} as {Subject}", connection.Remote.Host, connection.Remote.Port, connection.Identity?.Subject ?? "no one");
             MarkConnected(connection);
         }
         return connection;
@@ -178,10 +200,45 @@ internal sealed class MsmtPeerTransport : IPeerTransport
         }
     }
 
-    private void MarkConnected(IMsmtConnection connection) => connected.Publish(new PeerConnectionEventArgs { Connection = Wrap(connection) });
+    private void MarkConnected(IMsmtConnection connection)
+    {
+        established[connection] = true;
+        connected.Publish(new PeerConnectionEventArgs { Connection = Wrap(connection) });
+    }
+
+    private void OnAccepted(IMsmtConnection connection)
+    {
+        logger.Record(LogEvents.IpAccepted, "Accepted a connection from {Host}:{Port} as {Subject}", connection.Remote.Host, connection.Remote.Port, connection.Identity?.Subject ?? "no one");
+        MarkConnected(connection);
+    }
+
+    private void LogEnded(MsmtDisconnection args)
+    {
+        IMsmtConnection ended = args.Connection;
+        string host = ended.Remote.Host;
+        int port = ended.Remote.Port;
+        string reason = args.Exception?.Message ?? "it ended normally";
+        bool outgoing = ended.Direction is MsmtConnectionDirection.Outgoing;
+        if (established.TryRemove(ended, out _))
+        {
+            logger.Record(LogEvents.IpDisconnected, "Connection {Direction} {Host}:{Port} closed: {Reason}", outgoing ? "to" : "from", host, port, reason);
+        }
+        else if (args.Exception is not null && outgoing)
+        {
+            if (failed.TryAdd($"{host}:{port}", true))
+            {
+                logger.Record(LogEvents.IpConnectFailed, "Could not connect to {Host}:{Port}: {Reason}", host, port, reason);
+            }
+        }
+        else if (args.Exception is not null)
+        {
+            logger.Record(LogEvents.IpRefused, "A connection from {Host}:{Port} never completed: {Reason}", host, port, reason);
+        }
+    }
 
     private void OnDisconnected(MsmtDisconnection args)
     {
+        LogEnded(args);
         if (connections.TryRemove(args.Connection, out PeerConnection? connection))
         {
             handles.TryRemove(connection, out _);

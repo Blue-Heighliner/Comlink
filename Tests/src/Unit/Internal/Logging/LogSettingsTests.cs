@@ -29,8 +29,11 @@ public sealed class LogSettingsTests : IDisposable
     [InlineData("AVALONIA", false)]
     [InlineData("FRAMES", false)]
     [InlineData("PACKETS", false)]
+    [InlineData("SERIAL", false)]
+    [InlineData("IP", false)]
+    [InlineData("DEBUG", false)]
     public void Defaults_OnlyTheWhitelistedCategoriesAreOn(string category, bool expected)
-        => Assert.Equal(expected, new LogSettings(controller.Object, NetworkConfig.Load([], directory)).IsEnabled(category));
+        => Assert.Equal(expected, new LogSettings(controller.Object, new FakeDebugMode(), NetworkConfig.Load([], directory)).IsEnabled(category));
 
     /// <summary>A list from the host replaces the whitelist: its categories are on in any case, the engine's own that it leaves out are off, and Logging.json still adds.</summary>
     [Fact]
@@ -39,7 +42,7 @@ public sealed class LogSettingsTests : IDisposable
         controller.SetupGet(c => c.LogCategoriesOnByDefault).Returns(["frames", "SomethingOfTheHost", "APP"]);
         Write("""["Packets"]""");
 
-        LogSettings settings = new(controller.Object, NetworkConfig.Load([], directory));
+        LogSettings settings = new(controller.Object, new FakeDebugMode(), NetworkConfig.Load([], directory));
 
         Assert.True(settings.IsEnabled("FRAMES"));
         Assert.True(settings.IsEnabled("somethingofthehost"));
@@ -55,10 +58,28 @@ public sealed class LogSettingsTests : IDisposable
     {
         Write("""["frames"]""");
 
-        LogSettings settings = new(controller.Object, NetworkConfig.Load([], directory));
+        LogSettings settings = new(controller.Object, new FakeDebugMode(), NetworkConfig.Load([], directory));
 
         Assert.True(settings.IsEnabled("FRAMES"));
         Assert.False(settings.IsEnabled("PACKETS"));
+    }
+
+    /// <summary>The DEBUG category is written exactly while debug mode is on, whatever the file, the command line or the log handler says.</summary>
+    [Fact]
+    public void Debug_FollowsDebugModeAlone()
+    {
+        Write("""["Debug"]""");
+        NetworkConfig named = NetworkConfig.Load(["--log", "debug"], directory);
+        controller.SetupGet(c => c.LogCategoriesOnByDefault).Returns(["DEBUG"]);
+        FakeDebugMode debug = new(isDebug: false);
+        LogSettings settings = new(controller.Object, debug, named);
+
+        Assert.False(settings.IsEnabled("DEBUG"));
+
+        debug.IsDebug = true;
+        controller.SetupGet(c => c.LogCategoriesOnByDefault).Returns([]);
+
+        Assert.True(settings.IsEnabled("debug"));
     }
 
     /// <summary>A category the engine has no switch for, such as a host's own, is written only once Logging.json names it.</summary>
@@ -67,7 +88,7 @@ public sealed class LogSettingsTests : IDisposable
     {
         Write("""["SomethingOfTheHost"]""");
 
-        Assert.True(new LogSettings(controller.Object, NetworkConfig.Load([], directory)).IsEnabled("SOMETHINGOFTHEHOST"));
+        Assert.True(new LogSettings(controller.Object, new FakeDebugMode(), NetworkConfig.Load([], directory)).IsEnabled("SOMETHINGOFTHEHOST"));
     }
 
     /// <summary>The --log argument turns on a comma separated list of categories, with or without the file.</summary>
@@ -76,7 +97,7 @@ public sealed class LogSettingsTests : IDisposable
     {
         Write("""["Frames"]""");
 
-        LogSettings settings = new(controller.Object, NetworkConfig.Load(["--log", "Packets, other"], directory));
+        LogSettings settings = new(controller.Object, new FakeDebugMode(), NetworkConfig.Load(["--log", "Packets, other"], directory));
 
         Assert.True(settings.IsEnabled("FRAMES"));
         Assert.True(settings.IsEnabled("PACKETS"));
@@ -86,7 +107,7 @@ public sealed class LogSettingsTests : IDisposable
     [Fact]
     public void Reload_FollowsTheFile()
     {
-        LogSettings settings = new(controller.Object, NetworkConfig.Load([], directory));
+        LogSettings settings = new(controller.Object, new FakeDebugMode(), NetworkConfig.Load([], directory));
         Assert.False(settings.IsEnabled("PACKETS"));
 
         Write("""["Packets"]""");

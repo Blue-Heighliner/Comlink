@@ -21,7 +21,7 @@ namespace BlueHeighliner.Comlink;
 /// whichever caller subscribes to those observables. A connection also has to outlive <see cref="IEngineController.ConnectionSettleTime"/> after its heartbeat is acknowledged before it counts as up, since a node that refuses it drops it just after acknowledging; one lost
 /// within that time is a failed attempt, retried only after <see cref="FastRetryInterval"/>. See <c>Docs/Components/Peer.md</c>.
 /// </remarks>
-internal sealed class PeerConnectionMonitor(IEngineController engineController, MicrosoftLogger? logger = null, TimeSpan? steadyInterval = null, TimeSpan? fastRetryInterval = null)
+internal sealed class PeerConnectionMonitor(IEngineController engineController, TimeSpan? steadyInterval = null, TimeSpan? fastRetryInterval = null)
 {
     private TimeSpan SteadyInterval => steadyInterval ?? engineController.HeartbeatInterval;
     private TimeSpan FastRetryInterval => fastRetryInterval ?? engineController.HeartbeatRetryInterval;
@@ -50,14 +50,12 @@ internal sealed class PeerConnectionMonitor(IEngineController engineController, 
 
     private async Task Loop(IPeerTransport transport, ConnectionPoint target, PeerLinkControl control, Action<PeerConnection>? acknowledged, CancellationToken cancellation)
     {
-        bool failureLogged = false;
         while (!cancellation.IsCancellationRequested)
         {
             TimeSpan delay = Timeout.InfiniteTimeSpan;
             if (!control.IsClosed)
             {
                 bool connected;
-                string? failure = null;
                 PeerConnection? connection = null;
                 long attempted = control.BeginAttempt();
                 try
@@ -105,25 +103,12 @@ internal sealed class PeerConnectionMonitor(IEngineController engineController, 
                         if (control.WasLostSince(attempted))
                         {
                             connected = false;
-                            failure = "the connection was dropped as soon as it was made, which is how a node refuses one";
                         }
                     }
                 }
-                catch (Exception ex)
+                catch (Exception)
                 {
                     connected = false;
-                    failure = ex.Message;
-                }
-
-                if (failure is not null && !failureLogged && !cancellation.IsCancellationRequested)
-                {
-                    failureLogged = true;
-                    logger?.Record(LogEvents.PeerConnectFailed, "Cannot reach {Point}, retrying: {Reason}", target, failure);
-                }
-
-                if (connected)
-                {
-                    failureLogged = false;
                 }
 
                 delay = connected ? SteadyInterval : FastRetryInterval;

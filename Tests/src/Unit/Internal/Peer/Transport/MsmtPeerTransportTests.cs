@@ -12,7 +12,7 @@ public sealed class MsmtPeerTransportTests
         TestObservable<MsmtDisconnection> Disconnected,
         TestObservable<MsmtPackageChange> PackageChanged);
 
-    private static Fixture Build()
+    private static Fixture Build(MicrosoftLogger? logger = null)
     {
         Mock<IMsmtSessionPeer> peer = new();
         TestObservable<IMsmtConnection> connected = new();
@@ -22,7 +22,7 @@ public sealed class MsmtPeerTransportTests
         peer.SetupGet(p => p.Disconnected).Returns(disconnected);
         peer.SetupGet(p => p.PackageChanged).Returns(packageChanged);
         peer.SetupProperty(p => p.Receiver);
-        return new Fixture(new MsmtPeerTransport(peer.Object), peer, connected, disconnected, packageChanged);
+        return new Fixture(new MsmtPeerTransport(peer.Object, logger), peer, connected, disconnected, packageChanged);
     }
 
     private static Mock<IMsmtConnection> OutboundConnection(ConnectionPoint point, bool connects = true)
@@ -55,6 +55,102 @@ public sealed class MsmtPeerTransportTests
     {
         PeerConnection connection = await fx.Transport.Connect(point);
         return await fx.Transport.Request(connection, data, options);
+    }
+
+    private sealed class RecordingLogger : MicrosoftLogger
+    {
+        private readonly Lock gate = new();
+        private readonly List<(EventId Id, string Message)> entries = [];
+
+        public IReadOnlyList<(EventId Id, string Message)> Entries { get { lock (gate) { return [.. entries]; } } }
+
+        public IDisposable? BeginScope<TState>(TState state) where TState : notnull => null;
+
+        public bool IsEnabled(LogLevel logLevel) => true;
+
+        public void Log<TState>(LogLevel logLevel, EventId eventId, TState state, Exception? exception, Func<TState, Exception?, string> formatter)
+        {
+            lock (gate) { entries.Add((eventId, formatter(state, exception))); }
+        }
+
+        public IReadOnlyList<string> Of(EventId id) => [.. Entries.Where(entry => entry.Id == id).Select(entry => entry.Message)];
+    }
+
+    /// <summary>The listener starting and stopping is logged under IP.</summary>
+    [Fact]
+    public void Listener_LogsStartAndStop()
+    {
+        RecordingLogger log = new();
+        Fixture fx = Build(log);
+        fx.Peer.SetupGet(p => p.Listener).Returns(new MsmtTarget { Host = "0.0.0.0", Port = 50121 });
+
+        fx.Transport.StartListener(50121);
+        fx.Transport.StopListener();
+
+        Assert.Equal("Listening for connections on 0.0.0.0:50121", Assert.Single(log.Of(LogEvents.IpListening)));
+        Assert.Single(log.Of(LogEvents.IpListenerStopped));
+    }
+
+    /// <summary>An outgoing connection logs the attempt and the connection with its host and port.</summary>
+    [Fact]
+    public async Task Connect_LogsTheAttemptAndTheConnection()
+    {
+        RecordingLogger log = new();
+        Fixture fx = Build(log);
+        Connects(fx.Peer, target, OutboundConnection(target));
+
+        await fx.Transport.Connect(target);
+
+        Assert.Equal("Connecting to 10.0.0.5:4000", Assert.Single(log.Of(LogEvents.IpConnecting)));
+        Assert.StartsWith("Connected to 10.0.0.5:4000", Assert.Single(log.Of(LogEvents.IpConnected)));
+    }
+
+    /// <summary>Repeated attempts that fail are logged once, with the reason, and the next attempt after a connection is logged again.</summary>
+    [Fact]
+    public async Task Connect_RepeatedFailures_AreLoggedOnce()
+    {
+        RecordingLogger log = new();
+        Fixture fx = Build(log);
+        Mock<IMsmtConnection> refused = OutboundConnection(target, connects: false);
+        Connects(fx.Peer, target, refused);
+
+        for (int attempt = 0; attempt < 3; attempt++)
+        {
+            await Assert.ThrowsAsync<IOException>(() => fx.Transport.Connect(target));
+            fx.Disconnected.Publish(new MsmtDisconnection { Connection = refused.Object, Exception = new IOException("connection refused") });
+        }
+
+        Assert.Single(log.Of(LogEvents.IpConnecting));
+        Assert.Equal("Could not connect to 10.0.0.5:4000: connection refused", Assert.Single(log.Of(LogEvents.IpConnectFailed)));
+
+        Mock<IMsmtConnection> first = OutboundConnection(target);
+        Connects(fx.Peer, target, first);
+        await fx.Transport.Connect(target);
+        Assert.Single(log.Of(LogEvents.IpConnecting));
+
+        first.SetupGet(c => c.Status).Returns(MsmtConnectionStatus.Disconnected);
+        fx.Disconnected.Publish(new MsmtDisconnection { Connection = first.Object });
+        Connects(fx.Peer, target, OutboundConnection(target));
+        await fx.Transport.Connect(target);
+        Assert.Equal(2, log.Of(LogEvents.IpConnecting).Count);
+    }
+
+    /// <summary>An accepted connection and its closing are logged with the other end's host, port, certificate and the reason, and one that never completes is logged as refused.</summary>
+    [Fact]
+    public void Accepted_LogsTheConnectionAndItsClosing()
+    {
+        RecordingLogger log = new();
+        Fixture fx = Build(log);
+        Mock<IMsmtConnection> accepted = InboundConnection("CN=Bob");
+        Mock<IMsmtConnection> stalled = InboundConnection("CN=Eve");
+
+        fx.Connected.Publish(accepted.Object);
+        fx.Disconnected.Publish(new MsmtDisconnection { Connection = accepted.Object, Exception = new TimeoutException("idle") });
+        fx.Disconnected.Publish(new MsmtDisconnection { Connection = stalled.Object, Exception = new IOException("handshake failed") });
+
+        Assert.Equal("Accepted a connection from 10.1.2.3:51234 as CN=Bob", Assert.Single(log.Of(LogEvents.IpAccepted)));
+        Assert.Equal("Connection from 10.1.2.3:51234 closed: idle", Assert.Single(log.Of(LogEvents.IpDisconnected)));
+        Assert.Equal("A connection from 10.1.2.3:51234 never completed: handshake failed", Assert.Single(log.Of(LogEvents.IpRefused)));
     }
 
     /// <summary>A request opens a connection to the point's host and port, sends the payload over it, and returns the remote acknowledgement.</summary>

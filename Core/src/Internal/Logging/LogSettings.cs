@@ -1,6 +1,6 @@
 namespace BlueHeighliner.Comlink;
 
-/// <summary>Says which log categories are written. Only the categories that are on by default (the log handler's, or else <see cref="LogCategories.OnByDefault"/>) are written; every other is turned on by <c>Logging.json</c> and the <c>--log</c> argument.</summary>
+/// <summary>Says which log categories are written. Only the categories that are on by default (the log handler's, or else <see cref="LogCategories.OnByDefault"/>) are written; every other is turned on by <c>Logging.json</c> and the <c>--log</c> argument, except <see cref="LogCategories.Debug"/>, which is written exactly while debug mode is on.</summary>
 internal interface ILogSettings
 {
     /// <summary>Returns whether entries of <paramref name="category"/> are written: the categories on by default, and any other that <c>Logging.json</c> or the <c>--log</c> argument names.</summary>
@@ -20,10 +20,12 @@ internal sealed class LogSettings : ILogSettings
 {
     /// <summary>Initializes the settings from the file and the command line. A file that cannot be read leaves the defaults, since nothing can be logged about it yet.</summary>
     /// <param name="engineController">Says where <c>Logging.json</c> is.</param>
+    /// <param name="debugMode">Says whether the <see cref="LogCategories.Debug"/> category is written.</param>
     /// <param name="network">Holds the categories named on the command line.</param>
-    public LogSettings(IEngineController engineController, NetworkConfig network)
+    public LogSettings(IEngineController engineController, IDebugMode debugMode, NetworkConfig network)
     {
         this.engineController = engineController;
+        this.debugMode = debugMode;
         this.network = network;
         onByDefault = new(() => new HashSet<string>(engineController.LogCategoriesOnByDefault, StringComparer.OrdinalIgnoreCase));
         try { Reload(); }
@@ -31,12 +33,14 @@ internal sealed class LogSettings : ILogSettings
     }
 
     private readonly IEngineController engineController;
+    private readonly IDebugMode debugMode;
     private readonly NetworkConfig network;
     private readonly Lazy<HashSet<string>> onByDefault;
     private volatile HashSet<string> enabled = new(StringComparer.OrdinalIgnoreCase);
 
     /// <inheritdoc />
-    public bool IsEnabled(string category) => onByDefault.Value.Contains(category) || enabled.Contains(category);
+    public bool IsEnabled(string category)
+        => string.Equals(category, LogCategories.Debug, StringComparison.OrdinalIgnoreCase) ? debugMode.IsDebug : onByDefault.Value.Contains(category) || enabled.Contains(category);
 
     /// <inheritdoc />
     public void Reload()

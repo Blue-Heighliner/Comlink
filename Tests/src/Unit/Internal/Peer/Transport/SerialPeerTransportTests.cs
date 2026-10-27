@@ -260,6 +260,90 @@ public sealed class SerialPeerTransportTests
         Assert.True(await Request(pair.A, point, new byte[] { 5 }).WaitAsync(timeout));
     }
 
+    private sealed class RecordingLogger : MicrosoftLogger
+    {
+        private readonly Lock gate = new();
+        private readonly List<(EventId Id, string Message)> entries = [];
+
+        public IReadOnlyList<(EventId Id, string Message)> Entries { get { lock (gate) { return [.. entries]; } } }
+
+        public IDisposable? BeginScope<TState>(TState state) where TState : notnull => null;
+
+        public bool IsEnabled(LogLevel logLevel) => true;
+
+        public void Log<TState>(LogLevel logLevel, EventId eventId, TState state, Exception? exception, Func<TState, Exception?, string> formatter)
+        {
+            lock (gate) { entries.Add((eventId, formatter(state, exception))); }
+        }
+
+        public IReadOnlyList<string> Of(EventId id) => [.. Entries.Where(entry => entry.Id == id).Select(entry => entry.Message)];
+    }
+
+    /// <summary>A link that comes up is logged under SERIAL with its port and its local and remote station addresses.</summary>
+    [Fact]
+    public async Task Link_LogsItsStatesWithThePortAndAddresses()
+    {
+        FakeHdlcCable cable = new();
+        RecordingLogger log = new();
+        await using SerialPeerTransport a = new(cable.EndA, log, TimeSpan.FromMilliseconds(20));
+        await using SerialPeerTransport b = new(cable.EndB, logger, TimeSpan.FromMilliseconds(20));
+        TaskCompletionSource up = new();
+        a.Connected.Listen(_ => up.TrySetResult());
+        ConnectionPoint addressed = new() { SerialPort = "SL0", SerialAddress = 3, RemoteSerialAddress = 4 };
+        Open(a, addressed);
+        Open(b, addressed);
+        await up.Task.WaitAsync(timeout);
+
+        IReadOnlyList<string> states = log.Of(LogEvents.SerialPortState);
+
+        Assert.Contains("Serial port SL0 (local address 3, remote address 4) is Connected", states);
+        Assert.All(states, state => Assert.StartsWith("Serial port SL0 (local address 3, remote address 4) is ", state));
+    }
+
+    /// <summary>A device that keeps failing to open is reported once, not on every retry, and the link coming up afterwards is reported again.</summary>
+    [Fact]
+    public async Task Link_RepeatedFailures_AreLoggedOnce()
+    {
+        FakeHdlcCable cable = new() { StartFailure = new IOException("no such port") };
+        RecordingLogger log = new();
+        await using SerialPeerTransport a = new(cable.EndA, log, TimeSpan.FromMilliseconds(20));
+        await using SerialPeerTransport b = new(cable.EndB, logger, TimeSpan.FromMilliseconds(20));
+        TaskCompletionSource up = new();
+        a.Connected.Listen(_ => up.TrySetResult());
+        Open(a, point);
+        Open(b, point);
+
+        await WaitUntil(() => cable.PeersCreated >= 4);
+        string failure = Assert.Single(log.Of(LogEvents.SerialPortFailed));
+        Assert.Contains("SL0", failure);
+        Assert.Contains("no such port", failure);
+
+        cable.StartFailure = null;
+        await up.Task.WaitAsync(timeout);
+
+        Assert.Single(log.Of(LogEvents.SerialPortFailed));
+        Assert.Contains(log.Of(LogEvents.SerialPortState), state => state.EndsWith("is Connected", StringComparison.Ordinal));
+    }
+
+    /// <summary>Closing the link and opening it again is logged once each, however often it is asked.</summary>
+    [Fact]
+    public async Task SetClosed_LogsOnlyChanges()
+    {
+        FakeHdlcCable cable = new();
+        RecordingLogger log = new();
+        await using SerialPeerTransport transport = new(cable.EndA, log, TimeSpan.FromMilliseconds(20));
+        Open(transport, point);
+
+        transport.SetClosed(point, true);
+        transport.SetClosed(point, true);
+        transport.SetClosed(point, false);
+
+        IReadOnlyList<string> switches = log.Of(LogEvents.SerialLinkSwitched);
+        Assert.Equal(2, switches.Count);
+        Assert.Contains("closed by the application", switches[0]);
+        Assert.Contains("opened again by the application", switches[1]);
+    }
+
     /// <summary>A device that cannot be opened is retried until it can, without ever surfacing an exception to the caller.</summary>
     [Fact]
     public async Task Link_StartFailure_IsRetriedUntilItSucceeds()
