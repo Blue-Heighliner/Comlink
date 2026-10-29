@@ -35,8 +35,7 @@ public sealed class RepositoryTests : IDisposable
     public void Dispose()
     {
         ctx.Dispose();
-        string dir = Path.Combine(
-            Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), appName);
+        string dir = TestAppDataPathProvider.DirectoryOf(appName);
         if (Directory.Exists(dir))
         {
             Directory.Delete(dir, recursive: true);
@@ -61,7 +60,8 @@ public sealed class RepositoryTests : IDisposable
     [Fact]
     public async Task ActivityLog_AppendEventBeforeTheDatabaseIsOpen_IsWrittenOnceItOpens()
     {
-        LiteDbContext closed = new(new TestAppDataPathProvider(Guid.NewGuid().ToString()));
+        string appName = Guid.NewGuid().ToString();
+        LiteDbContext closed = new(new TestAppDataPathProvider(appName));
         try
         {
             ActivityLogRepository repo = new(closed);
@@ -89,6 +89,11 @@ public sealed class RepositoryTests : IDisposable
         finally
         {
             closed.Dispose();
+            string dir = TestAppDataPathProvider.DirectoryOf(appName);
+            if (Directory.Exists(dir))
+            {
+                Directory.Delete(dir, recursive: true);
+            }
         }
     }
 

@@ -30,7 +30,7 @@ public sealed class ExportServiceTests : IDisposable
     public void Dispose()
     {
         ctx.Dispose();
-        string dbDir = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), appName);
+        string dbDir = TestAppDataPathProvider.DirectoryOf(appName);
         if (Directory.Exists(dbDir))
         {
             Directory.Delete(dbDir, recursive: true);

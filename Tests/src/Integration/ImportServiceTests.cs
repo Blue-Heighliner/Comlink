@@ -56,10 +56,9 @@ public sealed class ImportServiceTests : IDisposable
     {
         sourceCtx.Dispose();
         destCtx.Dispose();
-        string appData = Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData);
         foreach (string appName in new[] { sourceAppName, destAppName })
         {
-            string dir = Path.Combine(appData, appName);
+            string dir = TestAppDataPathProvider.DirectoryOf(appName);
             if (Directory.Exists(dir))
             {
                 Directory.Delete(dir, recursive: true);

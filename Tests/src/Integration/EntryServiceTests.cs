@@ -558,8 +558,7 @@ public sealed class EntryServiceTests : IDisposable
     public void Dispose()
     {
         ctx.Dispose();
-        string appData = Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData);
-        string dir = Path.Combine(appData, appName);
+        string dir = TestAppDataPathProvider.DirectoryOf(appName);
         if (Directory.Exists(dir))
         {
             Directory.Delete(dir, recursive: true);

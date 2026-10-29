@@ -21,7 +21,7 @@ public sealed class MessageStorageServiceTests : IDisposable
     public void Dispose()
     {
         ctx.Dispose();
-        string dir = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), appName);
+        string dir = TestAppDataPathProvider.DirectoryOf(appName);
         if (Directory.Exists(dir))
         {
             Directory.Delete(dir, recursive: true);
