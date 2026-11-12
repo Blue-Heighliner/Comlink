@@ -125,3 +125,49 @@ public sealed class BiDictionary<TLeft, TRight> : IEnumerable<KeyValuePair<TLeft
 
     IEnumerator IEnumerable.GetEnumerator() => GetEnumerator();
 }
+
+/// <summary>Builds a <see cref="BiDictionary{TLeft, TRight}"/> from a sequence or a dictionary.</summary>
+public static class BiDictionaryExtensions
+{
+    extension<TLeft, TRight>(IEnumerable<KeyValuePair<TLeft, TRight>> pairs) where TLeft : notnull where TRight : notnull
+    {
+        /// <summary>Builds a bidirectional dictionary of these pairs, the key being the left value. A dictionary is such a sequence.</summary>
+        /// <param name="leftComparer">Compares left values, or <see langword="null"/> for the default equality.</param>
+        /// <param name="rightComparer">Compares right values, or <see langword="null"/> for the default equality.</param>
+        /// <returns>The new dictionary.</returns>
+        /// <exception cref="ArgumentException">A left or a right value occurs in more than one pair.</exception>
+        public BiDictionary<TLeft, TRight> ToBiDictionary(IEqualityComparer<TLeft>? leftComparer = null, IEqualityComparer<TRight>? rightComparer = null)
+        {
+            BiDictionary<TLeft, TRight> result = new(leftComparer, rightComparer);
+            foreach ((TLeft left, TRight right) in pairs)
+            {
+                result.Add(left, right);
+            }
+
+            return result;
+        }
+    }
+
+    extension<TSource>(IEnumerable<TSource> source)
+    {
+        /// <summary>Builds a bidirectional dictionary of what two selectors make of each element.</summary>
+        /// <typeparam name="TLeft">The type of the left values.</typeparam>
+        /// <typeparam name="TRight">The type of the right values.</typeparam>
+        /// <param name="leftSelector">Makes the left value of an element.</param>
+        /// <param name="rightSelector">Makes the right value of an element.</param>
+        /// <param name="leftComparer">Compares left values, or <see langword="null"/> for the default equality.</param>
+        /// <param name="rightComparer">Compares right values, or <see langword="null"/> for the default equality.</param>
+        /// <returns>The new dictionary.</returns>
+        /// <exception cref="ArgumentException">A left or a right value occurs more than once.</exception>
+        public BiDictionary<TLeft, TRight> ToBiDictionary<TLeft, TRight>(Func<TSource, TLeft> leftSelector, Func<TSource, TRight> rightSelector, IEqualityComparer<TLeft>? leftComparer = null, IEqualityComparer<TRight>? rightComparer = null) where TLeft : notnull where TRight : notnull
+        {
+            BiDictionary<TLeft, TRight> result = new(leftComparer, rightComparer);
+            foreach (TSource element in source)
+            {
+                result.Add(leftSelector(element), rightSelector(element));
+            }
+
+            return result;
+        }
+    }
+}

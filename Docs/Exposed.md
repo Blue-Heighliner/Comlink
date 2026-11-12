@@ -19,9 +19,11 @@ Asked for through dependency injection, in a constructor or in a `required` prop
 Plain types, used directly.
 
 - `Bit` with `BitEndianness` - `Bit.Read` and `Bit.Write` read and write one bit of a span of bytes by index across the whole span (an index may be greater than 7), numbering the bits of each byte from its least significant end (`Little`) or its most significant end (`Big`).
-- `BiDictionary<TLeft, TRight>` - pairs that can be looked up from either side, where each value is in exactly one pair.
+- `BiDictionary<TLeft, TRight>` - pairs that can be looked up from either side, where each value is in exactly one pair; `ToBiDictionary` builds one from a dictionary, any sequence of pairs, or a sequence and two selectors.
+- `StringExtensions` - `AddSpacesToPascalCase()` puts a space between the words of Pascal or camel case text (`HTTPServer` becomes `HTTP Server`), such as to turn an enum member name into a label.
+- `ISeekableBufferWriter<T>` - an `IBufferWriter<T>` with `Length` and a settable `Position`, so bytes already written can be overwritten, such as a length prefix known only after the body.
 - `MemoryOwner<T>` - an `IMemoryOwner<T>` over memory someone else owns: it hands the memory out and disposing it does nothing.
-- `PooledBufferWriter` - an `IBufferWriter<byte>` over a pooled array, for a serializer to write into.
+- `PooledBufferWriter<T>` - an `ISeekableBufferWriter<T>` over a pooled array (`PooledBufferWriter<byte>` for a serializer to write into).
 - `IUserInfo`, `UserInfo<TLevel, TProfile>` and `NoProfile` - everything known about a user, as the engine hands it to a host: always the `UserInfo<TLevel, TProfile>` typed by the profile record the host stated in its `Types` call (`NoProfile` for none), which implements the non-generic `IUserInfo` for code that does not care about the profile.
 - `LogCategories` - the categories the engine logs under and which of them are written by default, for use with `ILogger`.
 

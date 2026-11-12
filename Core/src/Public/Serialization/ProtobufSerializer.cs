@@ -47,13 +47,14 @@ public sealed class ProtobufSerializer : IFrameSerializer, IPacketSerializer
         string typeName = type.AssemblyQualifiedName
             ?? throw new ArgumentException($"Type '{type}' has no assembly-qualified name and cannot be serialized.", nameof(value));
 
-        using PooledArrayBufferWriter<byte> innerWriter = new();
+        PooledBufferWriter<byte> innerWriter = new();
         RuntimeTypeModel.Default.Serialize(innerWriter, value);
-        ProtobufEnvelope envelope = new() { TypeName = typeName, Payload = innerWriter.WrittenMemory.ToArray() };
+        using IMemoryOwner<byte> inner = innerWriter.ToOwner();
+        ProtobufEnvelope envelope = new() { TypeName = typeName, Payload = inner.Memory.ToArray() };
 
-        PooledArrayBufferWriter<byte> writer = new();
+        PooledBufferWriter<byte> writer = new();
         RuntimeTypeModel.Default.Serialize(writer, envelope);
-        return new OwnedBuffer(writer);
+        return writer.ToOwner();
     }
 
     /// <summary>Deserializes a frame or a packet from <paramref name="data"/>, building only the types this serializer was told about.</summary>

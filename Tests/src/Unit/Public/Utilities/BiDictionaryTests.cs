@@ -3,6 +3,31 @@ namespace BlueHeighliner.Comlink.Tests.Unit.Public.Utilities;
 /// <summary>Unit tests for <see cref="BiDictionary{TLeft, TRight}"/>.</summary>
 public sealed class BiDictionaryTests
 {
+    /// <summary>A dictionary or any sequence of pairs becomes a bidirectional dictionary, with comparers, and a repeated value on either side is refused.</summary>
+    [Fact]
+    public void ToBiDictionary_FromPairsAndDictionaries()
+    {
+        Dictionary<string, int> source = new() { ["one"] = 1, ["two"] = 2 };
+
+        BiDictionary<string, int> fromDictionary = source.ToBiDictionary();
+        BiDictionary<string, int> caseInsensitive = source.ToBiDictionary(StringComparer.OrdinalIgnoreCase);
+
+        Assert.Equal((2, "two"), (fromDictionary.GetRight("two"), fromDictionary.GetLeft(2)));
+        Assert.Equal(1, caseInsensitive.GetRight("ONE"));
+        Assert.Throws<ArgumentException>(() => new[] { KeyValuePair.Create("a", 1), KeyValuePair.Create("b", 1) }.ToBiDictionary());
+    }
+
+    /// <summary>Selectors build the pairs from any sequence, and a repeated value is refused.</summary>
+    [Fact]
+    public void ToBiDictionary_FromSelectors()
+    {
+        BiDictionary<int, string> result = new[] { "a", "bb", "ccc" }.ToBiDictionary(text => text.Length, text => text.ToUpperInvariant());
+
+        Assert.Equal("BB", result.GetRight(2));
+        Assert.Equal(3, result.GetLeft("CCC"));
+        Assert.Throws<ArgumentException>(() => new[] { "a", "b" }.ToBiDictionary(text => text.Length, text => text));
+    }
+
     private static BiDictionary<string, int> Build() => new() { { "one", 1 }, { "two", 2 } };
 
     /// <summary>A pair is found from either side.</summary>

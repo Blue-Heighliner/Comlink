@@ -11,7 +11,7 @@ public sealed class FrameSerializer : FrameSerializer<Frame, Packet>
     /// <inheritdoc />
     public override IMemoryOwner<byte> Serialize(Frame frame)
     {
-        PooledBufferWriter buffer = new();
+        PooledBufferWriter<byte> buffer = new();
         using (Utf8JsonWriter writer = new(buffer)) { System.Text.Json.JsonSerializer.Serialize(writer, frame); }
 
         return buffer.ToOwner();
