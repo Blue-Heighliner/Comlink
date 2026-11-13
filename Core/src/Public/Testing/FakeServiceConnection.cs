@@ -8,7 +8,7 @@ namespace BlueHeighliner.Comlink.Testing;
 /// <typeparam name="TLevel">The enum the host stated for its levels.</typeparam>
 /// <typeparam name="TAspect">The enum the host stated for its aspects.</typeparam>
 /// <typeparam name="TProfile">The record type the host stated for user profiles in its <c>Types</c> call, or <see cref="NoProfile"/>.</typeparam>
-/// <param name="userInfo">What <c>GetUserInfo</c> answers, or <see langword="null"/> for no user.</param>
+/// <param name="userInfo">What <c>GetCurrentUser</c> answers, or <see langword="null"/> for no user.</param>
 public sealed class FakeServiceConnection<TPriority, TLevel, TAspect, TProfile>(UserInfo<TLevel, TProfile>? userInfo = null) : IServiceConnection<TPriority, TLevel, TAspect, TProfile> where TPriority : struct, Enum where TLevel : struct, Enum where TAspect : struct, Enum where TProfile : class
 {
     /// <inheritdoc />
@@ -26,17 +26,17 @@ public sealed class FakeServiceConnection<TPriority, TLevel, TAspect, TProfile>(
     /// <summary>Gets the identifier of every message the component marked read, in order.</summary>
     public List<string> MarkedRead { get; } = [];
 
-    /// <summary>Gets or sets what <c>GetUserInfo</c> answers.</summary>
-    public UserInfo<TLevel, TProfile>? UserInfo { get; set; } = userInfo;
+    /// <summary>Gets or sets what <c>GetCurrentUser</c> answers.</summary>
+    public UserInfo<TLevel, TProfile>? CurrentUser { get; set; } = userInfo;
 
-    /// <summary>Gets or sets what <c>GetUserNames</c> answers. Defaults to none.</summary>
-    public List<string> UserNames { get; set; } = [];
+    /// <summary>Gets or sets what <c>GetUsers</c> answers. Defaults to none.</summary>
+    public List<string> Users { get; set; } = [];
 
     /// <summary>Gets or sets what <c>GetConnectedUsers</c> answers. Defaults to none.</summary>
     public List<string> ConnectedUsers { get; set; } = [];
 
     /// <summary>Gets or sets what <c>SendMessage</c> answers, <see langword="null"/> for a send with no installed user. Defaults to a result with the identifier <c>MESSAGE</c>.</summary>
-    public SendMessageResult? SendMessageResult { get; set; } = new() { MessageId = "MESSAGE" };
+    public SendMessageResult? SendMessageResult { get; set; } = new() { Id = "MESSAGE" };
 
     /// <summary>Gets or sets what <c>MarkMessageRead</c> answers. Defaults to <see langword="true"/>.</summary>
     public bool MarkReadResult { get; set; } = true;
@@ -57,10 +57,10 @@ public sealed class FakeServiceConnection<TPriority, TLevel, TAspect, TProfile>(
     }
 
     /// <inheritdoc />
-    public Task<UserInfo<TLevel, TProfile>?> GetUserInfo(CancellationToken cancellation = default) => Task.FromResult(UserInfo);
+    public Task<UserInfo<TLevel, TProfile>?> GetCurrentUser(CancellationToken cancellation = default) => Task.FromResult(CurrentUser);
 
     /// <inheritdoc />
-    public Task<List<string>> GetUserNames(CancellationToken cancellation = default) => Task.FromResult(UserNames);
+    public Task<List<string>> GetUsers(CancellationToken cancellation = default) => Task.FromResult(Users);
 
     /// <inheritdoc />
     public Task<List<string>> GetConnectedUsers(CancellationToken cancellation = default) => Task.FromResult(ConnectedUsers);

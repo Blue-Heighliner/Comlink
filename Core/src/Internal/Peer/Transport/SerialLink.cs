@@ -31,7 +31,7 @@ internal sealed class SerialLink : IAsyncDisposable
         this.reconnectDelay = reconnectDelay ?? TimeSpan.FromSeconds(2);
         this.candidateTimeout = candidateTimeout ?? TimeSpan.FromSeconds(4);
         remotes = [point.RemoteSerialAddress, .. point.OtherRemotes.Select(remote => remote.Address)];
-        connection = new PeerConnection(point, new SerialConnectionInfo { SerialPort = point.SerialPort!, SerialAddress = point.SerialAddress, RemoteSerialAddress = point.RemoteSerialAddress }, () => DropPeer(current));
+        connection = new PeerConnection(point, new SerialConnectionInfo { Port = point.SerialPort!, Address = point.SerialAddress, RemoteAddress = point.RemoteSerialAddress }, () => DropPeer(current));
         isClosed = startClosed;
         if (!startClosed)
         {
@@ -204,7 +204,7 @@ internal sealed class SerialLink : IAsyncDisposable
         TaskCompletionSource ended = new(TaskCreationOptions.RunContinuationsAsynchronously);
         // With several users that may be at the other end of the cable, each is tried in turn for a while, since the far end answers only the address it is given.
         SerialConnectionInfo info = (SerialConnectionInfo)connection.Info;
-        byte? preferred = info.PreferredRemoteSerialAddress;
+        byte? preferred = info.PreferredRemoteAddress;
         byte remote = preferred ?? remotes[nextRemote % remotes.Length];
         peer.Receiver = OnFrame;
         peer.Exceptions.Listen(
@@ -259,7 +259,7 @@ internal sealed class SerialLink : IAsyncDisposable
             {
                 if (preferred is not null)
                 {
-                    info.PreferredRemoteSerialAddress = null;
+                    info.PreferredRemoteAddress = null;
                 }
                 else
                 {
@@ -281,7 +281,7 @@ internal sealed class SerialLink : IAsyncDisposable
             return;
         }
 
-        info.RemoteSerialAddress = remote;
+        info.RemoteAddress = remote;
         bool closedMeanwhile;
         lock (closeLock)
         {

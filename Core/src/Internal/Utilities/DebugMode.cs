@@ -14,8 +14,8 @@ internal sealed class DebugMode : IDebugMode
 
     /// <summary>Initializes the mode from <paramref name="assembly"/>.</summary>
     /// <param name="assembly">The assembly of the application, or <see langword="null"/> when there is none.</param>
-    internal DebugMode(Assembly? assembly) => IsDebug = assembly?.GetCustomAttributes<AssemblyMetadataAttribute>().Any(metadata => metadata.Key == MetadataKey && metadata.Value == "true") ?? false;
+    internal DebugMode(Assembly? assembly) => IsEnabled = assembly?.GetCustomAttributes<AssemblyMetadataAttribute>().Any(metadata => metadata.Key == MetadataKey && metadata.Value == "true") ?? false;
 
     /// <inheritdoc />
-    public bool IsDebug { get; }
+    public bool IsEnabled { get; }
 }

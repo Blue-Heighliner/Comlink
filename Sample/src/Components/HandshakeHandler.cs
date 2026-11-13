@@ -39,7 +39,7 @@ public sealed class HandshakeHandler : IPacketHandshakeHandler<Packet>
     }
 
     private bool Starts(IPacketHandshakeContext<Packet> context)
-        => context.Connection is ISerialConnectionInfo serial ? serial.SerialAddress > serial.RemoteSerialAddress : !context.Connection.IsInbound;
+        => context.Connection is ISerialConnectionInfo serial ? serial.Address > serial.RemoteAddress : !context.Connection.IsInbound;
 
     private Packet Announce(IPacketHandshakeContext<Packet> context) => new() { Chunk = Encoding.UTF8.GetBytes(context.Connection.LocalUser ?? string.Empty) };
 }

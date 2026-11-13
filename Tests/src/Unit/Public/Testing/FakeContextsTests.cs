@@ -33,12 +33,12 @@ public sealed class FakeContextsTests
     [Fact]
     public void FakeDraftContexts_HandOutTheDraft()
     {
-        FakeDraftContext<TestMessagePriority, TestLevel, TestAspect> draft = new(TestMessagePriority.High, TestLevel.Secret, TestAspect.Signed, "URGENT", "body", [new AddressRequest { UserName = "BOB" }], 40);
+        FakeDraftContext<TestMessagePriority, TestLevel, TestAspect> draft = new(TestMessagePriority.High, TestLevel.Secret, TestAspect.Signed, "URGENT", "body", [new AddressRequest { User = "BOB" }], 40);
         FakeDraftBlockContext<TestMessagePriority, TestLevel, TestAspect> block = new(TestMessagePriority.Low, tag: "SPAM");
 
         Assert.Equal("TAG: URGENT", new TestDraftHandler().GetHeader(draft));
         Assert.Equal((TestMessagePriority.High, TestLevel.Secret, TestAspect.Signed, "body", 40), (draft.Priority, draft.Level, draft.Aspect, draft.Body, draft.LineWidth));
-        Assert.Equal("BOB", Assert.Single(draft.Addresses).UserName);
+        Assert.Equal("BOB", Assert.Single(draft.Addresses).User);
         Assert.Equal((TestMessagePriority.Low, null, null, "SPAM"), (block.Priority, block.Level, block.Aspect, block.Tag));
 
         block.Tag = "OK";
@@ -114,13 +114,13 @@ public sealed class FakeContextsTests
     public void ConnectionInfoFakes_AreDistinctKindsOfConnection()
     {
         FakeIpConnectionInfo ip = new() { Host = "10.0.0.5", Port = 4000, IsInbound = true, LocalUser = "ME", CertificateSubject = "CN=Bob", CertificateNames = ["Bob"] };
-        FakeSerialConnectionInfo serial = new() { SerialPort = "SL1", SerialAddress = 3, RemoteSerialAddress = 4, LocalUser = "ME" };
+        FakeSerialConnectionInfo serial = new() { Port = "SL1", Address = 3, RemoteAddress = 4, LocalUser = "ME" };
         IConnectionInfo overIp = new FakeFrameHandshakeContext<TestFrame>(ip).Connection;
         IConnectionInfo overSerial = new FakePacketHandshakeContext<TestPacket>(serial).Connection;
 
         Assert.Equal(("10.0.0.5", 4000, true), (Assert.IsAssignableFrom<IIpConnectionInfo>(overIp).Host, ((IIpConnectionInfo)overIp).Port, overIp.IsInbound));
         Assert.IsNotAssignableFrom<ISerialConnectionInfo>(overIp);
-        Assert.Equal(("SL1", (byte)3, (byte)4, false), (Assert.IsAssignableFrom<ISerialConnectionInfo>(overSerial).SerialPort, ((ISerialConnectionInfo)overSerial).SerialAddress, ((ISerialConnectionInfo)overSerial).RemoteSerialAddress, overSerial.IsInbound));
+        Assert.Equal(("SL1", (byte)3, (byte)4, false), (Assert.IsAssignableFrom<ISerialConnectionInfo>(overSerial).Port, ((ISerialConnectionInfo)overSerial).Address, ((ISerialConnectionInfo)overSerial).RemoteAddress, overSerial.IsInbound));
         Assert.IsNotAssignableFrom<IIpConnectionInfo>(overSerial);
         Assert.Equal("ME", overIp.LocalUser);
         Assert.Equal("ME", overSerial.LocalUser);

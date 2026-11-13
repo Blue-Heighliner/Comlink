@@ -44,7 +44,7 @@ public sealed class EngineFrameHandlerTests
             Id = "M1",
             FromUser = "ALICE",
             Body = "Hi",
-            Addresses = [new MessageAddress { UserName = "BOB", Type = AddressType.To }, new MessageAddress { UserName = "CAROL", Type = AddressType.Cc }],
+            Addresses = [new MessageAddress { User = "BOB", Type = AddressType.To }, new MessageAddress { User = "CAROL", Type = AddressType.Cc }],
             SentAt = DateTime.UtcNow,
             Priority = TestMessagePriority.Normal,
             Level = TestLevel.Secret
@@ -72,7 +72,7 @@ public sealed class EngineFrameHandlerTests
             Id = "M1",
             FromUser = "ALICE",
             Body = "Hi",
-            Addresses = [new MessageAddress { UserName = "BOB", Type = AddressType.To }],
+            Addresses = [new MessageAddress { User = "BOB", Type = AddressType.To }],
             SentAt = DateTime.UtcNow,
             Priority = TestMessagePriority.Normal,
             Level = TestLevel.Secret

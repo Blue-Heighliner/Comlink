@@ -40,7 +40,7 @@ internal sealed class LogSettings : ILogSettings
 
     /// <inheritdoc />
     public bool IsEnabled(string category)
-        => string.Equals(category, LogCategories.Debug, StringComparison.OrdinalIgnoreCase) ? debugMode.IsDebug : onByDefault.Value.Contains(category) || enabled.Contains(category);
+        => string.Equals(category, LogCategories.Debug, StringComparison.OrdinalIgnoreCase) ? debugMode.IsEnabled : onByDefault.Value.Contains(category) || enabled.Contains(category);
 
     /// <inheritdoc />
     public void Reload()

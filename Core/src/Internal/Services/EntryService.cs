@@ -182,20 +182,20 @@ internal sealed class EntryService : IEntryService
         {
             IReadOnlyDictionary<string, IReadOnlyList<string>> groups = engineController.UserGroups;
             List<DeliveryStatus> deliveryStatuses = [];
-            foreach (MessageAddress address in message.Addresses.Where(address => address.Type is not AddressType.External && !groups.ContainsKey(address.UserName)))
+            foreach (MessageAddress address in message.Addresses.Where(address => address.Type is not AddressType.External && !groups.ContainsKey(address.User)))
             {
-                if (deliveryStatuses.Any(existing => string.Equals(existing.UserName, address.UserName, StringComparison.OrdinalIgnoreCase)))
+                if (deliveryStatuses.Any(existing => string.Equals(existing.UserName, address.User, StringComparison.OrdinalIgnoreCase)))
                 {
                     continue;
                 }
 
                 DestinationStatus status = DestinationStatus.Sending;
-                if (pendingStatuses.Remove((message.Id, address.UserName.ToUpperInvariant()), out DestinationStatus early) && DeliveryProgress(early) > DeliveryProgress(status))
+                if (pendingStatuses.Remove((message.Id, address.User.ToUpperInvariant()), out DestinationStatus early) && DeliveryProgress(early) > DeliveryProgress(status))
                 {
                     status = early;
                 }
 
-                deliveryStatuses.Add(new DeliveryStatus { UserName = address.UserName, Status = status });
+                deliveryStatuses.Add(new DeliveryStatus { UserName = address.User, Status = status });
             }
 
             MessageEntity entity = new()

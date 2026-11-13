@@ -31,7 +31,7 @@ internal sealed class Network<TFrame, TPriority, TLevel, TAspect>(INetworkEnviro
     public Task SetReceivedStatus(string messageId, DestinationStatus status) => environment.SetReceivedStatus(messageId, status);
 
     /// <inheritdoc />
-    public void SetNetworkIndicator(bool isOnline) => environment.SetNetworkIndicator(isOnline);
+    public void SetIndicator(bool isOnline) => environment.SetNetworkIndicator(isOnline);
 
     /// <inheritdoc />
     public Task SendInterface(TPriority priority, TFrame frame) => environment.SendInterface(priority, frame);
@@ -51,7 +51,7 @@ internal sealed class Network<TFrame, TPriority, TLevel, TAspect>(INetworkEnviro
 
     /// <inheritdoc />
     public IReadOnlySet<string> GetDestinations(Message<TPriority, TLevel, TAspect> message, out IReadOnlySet<string> excluded)
-        => GetDestinations(message.Level, out excluded, message.Addresses.Where(address => address.Type is not AddressType.External).Select(address => address.UserName));
+        => GetDestinations(message.Level, out excluded, message.Addresses.Where(address => address.Type is not AddressType.External).Select(address => address.User));
 
     /// <inheritdoc />
     public async Task<IReadOnlyList<string>> GetAutoForwardTargets(string controllerName)

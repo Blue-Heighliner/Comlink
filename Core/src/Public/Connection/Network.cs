@@ -48,7 +48,7 @@ public interface INetwork<TFrame, TPriority, TLevel, TAspect> where TFrame : cla
 
     /// <summary>Sets the network indicator in the top bar of a client to online or offline, with the labels and colors the display handler states. The engine never sets it itself.</summary>
     /// <param name="isOnline"><see langword="true"/> to show online, <see langword="false"/> to show offline.</param>
-    void SetNetworkIndicator(bool isOnline);
+    void SetIndicator(bool isOnline);
 
     /// <summary>Sends <paramref name="frame"/> to every interface connected to the local interface listener (see <c>Docs/Components/Interface.md</c>), over the connection each opened, and completes once each has acknowledged it or been lost. Does nothing when none is connected.</summary>
     /// <param name="priority">The priority to send it with.</param>

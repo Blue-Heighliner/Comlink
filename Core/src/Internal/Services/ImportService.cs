@@ -39,7 +39,7 @@ internal interface IImportService
 internal sealed class ImportService : IImportService
 {
     private static List<AddressData> ToAddressData(List<AddressRequest> addresses)
-        => [.. addresses.Select(a => new AddressData { UserName = a.UserName, Type = a.Type, Information = a.Information })];
+        => [.. addresses.Select(a => new AddressData { UserName = a.User, Type = a.Type, Information = a.Information })];
 
     private static EntryType? ParseEntryType(string fileName)
     {
@@ -197,7 +197,7 @@ internal sealed class ImportService : IImportService
 
     private async Task<bool> ApplyMessage(MessageExportData data)
     {
-        MessageEntity? existing = await messages.Get(data.MessageId, data.IsOutbound);
+        MessageEntity? existing = await messages.Get(data.Id, data.IsOutbound);
         if (existing is not null && existing.ReceivedAt.Date == data.ReceivedAt.Date)
         {
             return false;
@@ -205,16 +205,16 @@ internal sealed class ImportService : IImportService
 
         if (!engineController.Priorities.Any(level => level.Stored == data.Priority))
         {
-            logger.Record(LogEvents.ImportPriorityRejected, "{Item} was not imported: its priority is not supported", $"Message {data.MessageId} from {data.FromUser}");
+            logger.Record(LogEvents.ImportPriorityRejected, "{Item} was not imported: its priority is not supported", $"Message {data.Id} from {data.FromUser}");
             return false;
         }
 
         MessageData message = new()
         {
-            Id = data.MessageId,
+            Id = data.Id,
             FromUser = data.FromUser,
             Body = data.Body,
-            Addresses = [.. data.Addresses.Select(a => new AddressData { UserName = a.UserName, Type = a.Type, Information = a.Information })],
+            Addresses = [.. data.Addresses.Select(a => new AddressData { UserName = a.User, Type = a.Type, Information = a.Information })],
             SentAt = data.SentAt,
             Priority = data.Priority,
             Tag = data.Tag,
@@ -225,9 +225,9 @@ internal sealed class ImportService : IImportService
 
         MessageEntity entity = new()
         {
-            MessageId = data.MessageId,
+            MessageId = data.Id,
             Message = message,
-            DeliveryStatuses = [.. data.DeliveryStatuses.Select(d => new DeliveryStatus { UserName = d.UserName, Status = d.Status, AddressedVia = d.AddressedVia })],
+            DeliveryStatuses = [.. data.DeliveryStatuses.Select(d => new DeliveryStatus { UserName = d.User, Status = d.Status, AddressedVia = d.AddressedVia })],
             ReceivedAt = data.ReceivedAt,
             FolderId = await folders.GetRootId(data.IsOutbound ? FolderType.Outbox : FolderType.Inbox),
             IsOutbound = data.IsOutbound,

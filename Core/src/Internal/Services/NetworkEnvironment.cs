@@ -136,7 +136,7 @@ internal sealed class NetworkEnvironment(
         // Reports the status as stored rather than as raised, since a late, out-of-order event may have been ignored.
         DestinationStatus effective = entity.DeliveryStatuses.FirstOrDefault(d => string.Equals(d.UserName, userName, StringComparison.OrdinalIgnoreCase))?.Status ?? status;
         logger.Record(LogEvents.DeliveryStatusChanged, "{MessageId} status for {User}: {Status}", messageId, userName, effective);
-        await events.RaiseDeliveryStatusChanged(new DeliveryStatusChangedEvent { MessageId = messageId, UserName = userName, Status = effective, OverallStatus = entity.OverallStatus });
+        await events.RaiseDeliveryStatusChanged(new DeliveryStatusChangedEvent { MessageId = messageId, User = userName, Status = effective, OverallStatus = entity.OverallStatus });
     }
 
     /// <inheritdoc />

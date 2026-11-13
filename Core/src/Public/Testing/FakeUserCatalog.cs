@@ -11,19 +11,19 @@ public sealed class FakeUserCatalog<TLevel, TProfile> : IUserCatalog<TLevel, TPr
     /// <param name="groups">Every group, found by id whatever the case, or <see langword="null"/> for none.</param>
     public FakeUserCatalog(UserInfo<TLevel, TProfile> currentUser, IEnumerable<UserInfo<TLevel, TProfile>>? users = null, IEnumerable<GroupInfo>? groups = null)
     {
-        CurrentUser = currentUser;
-        Users = (users ?? [currentUser]).ToDictionary(user => user.Name, StringComparer.OrdinalIgnoreCase);
+        Current = currentUser;
+        All = (users ?? [currentUser]).ToDictionary(user => user.Name, StringComparer.OrdinalIgnoreCase);
         Groups = (groups ?? []).ToDictionary(group => group.Id, StringComparer.OrdinalIgnoreCase);
     }
 
     /// <inheritdoc />
-    public UserInfo<TLevel, TProfile> CurrentUser { get; set; }
+    public UserInfo<TLevel, TProfile> Current { get; set; }
 
     /// <inheritdoc />
-    public IReadOnlyDictionary<string, UserInfo<TLevel, TProfile>> Users { get; set; }
+    public IReadOnlyDictionary<string, UserInfo<TLevel, TProfile>> All { get; set; }
 
     /// <inheritdoc />
-    public IReadOnlyDictionary<string, UserInfo<TLevel, TProfile>> ConnectedUsers { get; set; } = new Dictionary<string, UserInfo<TLevel, TProfile>>(StringComparer.OrdinalIgnoreCase);
+    public IReadOnlyDictionary<string, UserInfo<TLevel, TProfile>> Connected { get; set; } = new Dictionary<string, UserInfo<TLevel, TProfile>>(StringComparer.OrdinalIgnoreCase);
 
     /// <inheritdoc />
     public IReadOnlyDictionary<string, GroupInfo> Groups { get; set; }

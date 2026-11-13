@@ -44,7 +44,7 @@ Services:
 
 - `FakeUserCatalog<TLevel, TProfile>` for `IUserCatalog<TLevel, TProfile>`: the users, groups and connections it is given, settable afterwards.
 - `FakeNetwork<,,,>` for `INetwork<,,,>`: every send is accepted (`SendResult`) and every other operation finishes at once, each recorded in a list of its own (`Sent`, `SentToInterfaces`, `SentStatuses` and so on); `FoundMessages` and `AutoForwardTargets` set what it finds, and `GetDestinations` answers the distinct targets with no one left out.
-- `FakeServiceConnection<,,,>` for `IServiceConnection<,,,>`: connects at once, answers `UserInfo`, `UserNames` and `ConnectedUsers`, accepts and records sends and mark read, and raises the engine's events with `RaiseMessageReceived` and `RaiseDeliveryStatusChanged`.
+- `FakeServiceConnection<,,,>` for `IServiceConnection<,,,>`: connects at once, answers `CurrentUser`, `Users` and `ConnectedUsers`, accepts and records sends and mark read, and raises the engine's events with `RaiseMessageReceived` and `RaiseDeliveryStatusChanged`.
 - `FakeLogger` for `ILogger`: records every entry as a `FakeLogEntry` in `Entries`, and refuses an entry with no identifier as the engine's does.
 - `FakeDebugMode` for `IDebugMode` and `FakeDataPool` for `IDataPool`: the former says what it is told, the latter rents a new array of the size asked each time.
 - `FakeDataStore` for `IDataStore`: keeps the saved instances in memory in `Items`, by identifier whatever the case, so a test can set up what a component finds and read what it saved.

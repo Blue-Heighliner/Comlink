@@ -24,7 +24,7 @@ public sealed class CsvImportFormat : IImportFormat<Priority, Level>
             {
                 continue;
             }
-            context.AddStagedSend(new StagedSendData<Priority, Level> { Body = parts[1], Addresses = [new AddressRequest { UserName = parts[0] }] });
+            context.AddStagedSend(new StagedSendData<Priority, Level> { Body = parts[1], Addresses = [new AddressRequest { User = parts[0] }] });
         }
     }
 }

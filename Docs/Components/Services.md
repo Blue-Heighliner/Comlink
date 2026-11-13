@@ -55,7 +55,7 @@ bool changed = await service.Refresh(cancellation);
 
 ## UserDirectory and UserCatalog
 
-The public `IUserCatalog<TLevel, TProfile>` (a thin typed layer over the internal `IUserDirectory`, which works in `IUserInfo`; `UserCatalog<TProfile>` turns each user into a `UserInfo<TLevel, TProfile>` as it is handed to the host), which a handler or any other component asks for through dependency injection instead of being handed it in a context. It reads the current state every time a property is read, so a value is a snapshot only until it is read again: `CurrentUser` is the user `UserService` says the node runs as (it throws without one, which is only so while the error screen shows and no handler runs), `Users` is every user the network configuration file lists with everything known about them (`IEngineController.GetUserInfo`), `ConnectedUsers` those with a live peer connection (`IPeerService.IsUserConnected`, resolved when asked since the peer service is built from the transport that may ask for the catalog), and `Groups` every group by id as a `GroupInfo` whose `Members` are users, groups inside it expanded. Keys are case-insensitive.
+The public `IUserCatalog<TLevel, TProfile>` (a thin typed layer over the internal `IUserDirectory`, which works in `IUserInfo`; `UserCatalog<TProfile>` turns each user into a `UserInfo<TLevel, TProfile>` as it is handed to the host), which a handler or any other component asks for through dependency injection instead of being handed it in a context. It reads the current state every time a property is read, so a value is a snapshot only until it is read again: `Current` is the user `UserService` says the node runs as (it throws without one, which is only so while the error screen shows and no handler runs), `All` is every user the network configuration file lists with everything known about them (`IEngineController.GetUserInfo`), `Connected` those with a live peer connection (`IPeerService.IsUserConnected`, resolved when asked since the peer service is built from the transport that may ask for the catalog), and `Groups` every group by id as a `GroupInfo` whose `Members` are users, groups inside it expanded. Keys are case-insensitive.
 
 ---
 
@@ -67,7 +67,7 @@ Everything a handler does is an operation of `NetworkEnvironment`, which the hos
 - `Send(user, priority, frame)` hands a frame to the peer layer with the wire priority of the given level, and reports whether the directly connected user accepted it. A user who is not directly connected fails. The frame is sent exactly as given.
 - `ReceiveMessage(message)` records a `Message` as received: it is validated against the configured priorities, levels and aspects and raised as `MessageReceived`, which `MainViewModel` stores in the Inbox and shows.
 - `SetSentStatus(messageId, user, status)` moves the stored Outbox status of one recipient, and `SetReceivedStatus(messageId, status)` marks a stored Inbox message `Read`. A status only moves forward, so a late earlier one is ignored.
-- `SetNetworkIndicator(isOnline)` is the only thing that changes the indicator.
+- `SetIndicator(isOnline)` is the only thing that changes the indicator.
 - `SendInterface(priority, frame)` sends to every connected interface (`InterfaceService.Send`), and `SendToExternalSystems(frame)` to every external system.
 - `StoreMessage`/`FindStoredMessages` keep and look up messages in the server-side store (`MessageStorageService`).
 - `GetAutoForwardTargets(controllerName)` reads the targets a user chose for an auto forwarder.
@@ -127,7 +127,7 @@ Implements `IEngineConnection`, registered in both `Client` and `Headless` mode.
 - `IEngineConnection.SendMessage(body, addresses, priority, tag, level, aspect)` builds a `Message` (the draft handler decides `IsAlert` and the next identifier), stores it in the Outbox and calls `NetworkProcessing.Sent`. The priority, level and aspect are members of the host's enums, and the call throws for one that is not configured.
 - Fires `IEngineConnection.MessageReceived(Message)` when the handler calls `ReceiveMessage`. In Client mode `MainViewModel` stores it with `EntryService.StoreIncomingMessage`.
 - On a delivery status change raised by the handler, fires `IEngineConnection.DeliveryStatusChanged` with the status as stored and the resulting `OverallStatus`.
-- `MarkMessageRead(messageId)`: calls `EntryService.MarkMessageRead`, fires `DeliveryStatusChanged` locally (empty `UserName`, status `Read`) so Client-mode UI reflects the read state immediately, then calls `NetworkProcessing.Read` so the handler can tell the sender.
+- `MarkMessageRead(messageId)`: calls `EntryService.MarkMessageRead`, fires `DeliveryStatusChanged` locally (empty `User`, status `Read`) so Client-mode UI reflects the read state immediately, then calls `NetworkProcessing.Read` so the handler can tell the sender.
 - Implements the user info query and the user names query by delegating to `UserService` / `IEngineController`
 
 ---
@@ -220,9 +220,9 @@ DTOs used across the service layer:
 | Type | Fields |
 |------|--------|
 | `Message<TPriority, TLevel, TAspect>` | `Id`, `FromUser`, `Body`, `Addresses[]`, `SentAt`, `Priority`, `Tag`, `Level`, `Aspect`, `IsAlert` |
-| `AddressRequest` | `UserName`, `Type` |
-| `SendMessageResult` | `MessageId`, `IsAlert` |
-| `DeliveryStatusChangedEvent` | `MessageId`, `UserName`, `Status`, `OverallStatus` — an empty `UserName` marks a local read-status notification for this user's own Inbox record rather than a remote destination |
+| `AddressRequest` | `User`, `Type` |
+| `SendMessageResult` | `Id`, `IsAlert` |
+| `DeliveryStatusChangedEvent` | `MessageId`, `User`, `Status`, `OverallStatus` — an empty `User` marks a local read-status notification for this user's own Inbox record rather than a remote destination |
 
 ---
 

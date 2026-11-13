@@ -119,13 +119,13 @@ internal sealed partial class ContentAreaViewModel : ObservableObject, IContentA
 
         // An empty UserName marks a local read-status notification for this user's own Inbox record
         // (see DirectServiceConnection.MarkMessageRead), not a remote destination's delivery status.
-        if (string.IsNullOrEmpty(evt.UserName))
+        if (string.IsNullOrEmpty(evt.User))
         {
             msgVm.ReadStatus = evt.Status;
         }
         else
         {
-            msgVm.UpdateDeliveryStatus(evt.UserName, evt.Status);
+            msgVm.UpdateDeliveryStatus(evt.User, evt.Status);
         }
         return Task.CompletedTask;
     }

@@ -19,8 +19,8 @@ internal interface IPrintPolicy
 internal sealed class PrintPolicy<TPriority, TLevel, TAspect>(IPrintHandler<TPriority, TLevel, TAspect> handler) : IPrintPolicy where TPriority : struct, Enum where TLevel : struct, Enum where TAspect : struct, Enum
 {
     /// <inheritdoc />
-    public bool PrintReceivedByDefault => handler.PrintReceivedByDefault;
+    public bool PrintReceivedByDefault => handler.ReceivedByDefault;
 
     /// <inheritdoc />
-    public int GetPrintCount(Message message) => handler.GetPrintCount(message.ToTyped<TPriority, TLevel, TAspect>());
+    public int GetPrintCount(Message message) => handler.GetCount(message.ToTyped<TPriority, TLevel, TAspect>());
 }

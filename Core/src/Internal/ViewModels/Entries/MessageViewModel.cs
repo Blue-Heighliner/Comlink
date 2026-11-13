@@ -101,7 +101,7 @@ internal sealed partial class MessageViewModel : ObservableObject, IMessageViewM
     private static string Describe(List<MessageAddress> addresses, AddressType type)
         => string.Join(", ", addresses
             .Where(a => a.Type == type)
-            .Select(a => string.IsNullOrWhiteSpace(a.Information) ? a.UserName : $"{a.UserName} - {a.Information}"));
+            .Select(a => string.IsNullOrWhiteSpace(a.Information) ? a.User : $"{a.User} - {a.Information}"));
 
     /// <summary>Initializes the ViewModel from the given message entity.</summary>
     /// <param name="entity">The message entity to display.</param>
@@ -123,7 +123,7 @@ internal sealed partial class MessageViewModel : ObservableObject, IMessageViewM
         LevelBackgroundHex = engineController.Levels.IsRecognized(level) ? engineController.Levels.GetBackground(level) : null;
         LevelForegroundHex = engineController.Levels.IsRecognized(level) ? engineController.Levels.GetForeground(level) : null;
         AspectName = engineController.Aspects.Find(engineController.AspectOf(message))?.Label ?? string.Empty;
-        List<MessageAddress> addresses = [.. message.Addresses.Select(a => new MessageAddress { UserName = a.UserName, Type = a.Type.ParseAddressType(), Information = a.Information })];
+        List<MessageAddress> addresses = [.. message.Addresses.Select(a => new MessageAddress { User = a.UserName, Type = a.Type.ParseAddressType(), Information = a.Information })];
         IReadOnlyList<AddressTypeOption> addressTypes = engineController.AddressTypes;
         ToLabel = addressTypes.GetLabel(AddressType.To).ToUpperInvariant();
         ToList = Describe(addresses, AddressType.To);

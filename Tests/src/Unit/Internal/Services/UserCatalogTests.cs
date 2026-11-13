@@ -17,10 +17,10 @@ public sealed class UserCatalogTests
         directory.SetupGet(d => d.Groups).Returns(new Dictionary<string, GroupInfo> { ["OPS"] = new() { Id = "OPS", Members = ["ALICE"] } });
         UserCatalog<TestLevel, TestProfile> catalog = new(directory.Object);
 
-        Assert.Equal(new TestProfile("4B", 2), catalog.CurrentUser.Profile);
-        Assert.Equal(new TestProfile("4B", 2), catalog.Users["alice"].Profile);
-        Assert.Null(catalog.Users["BOB"].Profile);
-        Assert.Equal("ALICE", Assert.Single(catalog.ConnectedUsers).Value.Name);
+        Assert.Equal(new TestProfile("4B", 2), catalog.Current.Profile);
+        Assert.Equal(new TestProfile("4B", 2), catalog.All["alice"].Profile);
+        Assert.Null(catalog.All["BOB"].Profile);
+        Assert.Equal("ALICE", Assert.Single(catalog.Connected).Value.Name);
         Assert.Equal(["ALICE"], catalog.Groups["OPS"].Members);
     }
 }

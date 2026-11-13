@@ -38,7 +38,7 @@ public sealed class MessageStorageServiceTests : IDisposable
         Priority = TestMessagePriority.Level2,
         Tag = "TAG",
         Level = TestLevel.Restricted,
-        Addresses = [.. to.Select(user => new MessageAddress { UserName = user, Type = AddressType.To })]
+        Addresses = [.. to.Select(user => new MessageAddress { User = user, Type = AddressType.To })]
     };
 
     private static readonly DateTime day1 = new(2026, 1, 1, 12, 0, 0, DateTimeKind.Utc);
@@ -105,6 +105,6 @@ public sealed class MessageStorageServiceTests : IDisposable
         Assert.Equal(("M1", "ALICE", "Body M1"), (found.Id, found.FromUser, found.Body));
         Assert.Equal(day1, found.SentAt.ToUniversalTime());
         Assert.Equal((TestMessagePriority.Level2, "TAG", TestLevel.Restricted), (found.Priority, found.Tag, found.Level));
-        Assert.Equal(["CAROL", "BOB"], found.Addresses.Select(address => address.UserName));
+        Assert.Equal(["CAROL", "BOB"], found.Addresses.Select(address => address.User));
     }
 }

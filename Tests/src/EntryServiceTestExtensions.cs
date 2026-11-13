@@ -46,7 +46,7 @@ internal static class EntryServiceTestExtensions
             Id = messageId,
             FromUser = fromUser,
             Body = body,
-            Addresses = [.. addresses.Select(a => new MessageAddress { UserName = a.UserName, Type = a.Type.ParseAddressType(), Information = a.Information })],
+            Addresses = [.. addresses.Select(a => new MessageAddress { User = a.UserName, Type = a.Type.ParseAddressType(), Information = a.Information })],
             SentAt = sentAt,
             Priority = priority ?? TestMessagePriority.Normal,
             Tag = tag,

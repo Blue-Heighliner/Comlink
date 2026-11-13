@@ -28,10 +28,10 @@ internal sealed class ServiceConnection<TPriority, TLevel, TAspect, TProfile> : 
     public Task Connect(CancellationToken cancellation = default) => engineConnection.Connect(cancellation);
 
     /// <inheritdoc />
-    public async Task<UserInfo<TLevel, TProfile>?> GetUserInfo(CancellationToken cancellation = default) => await engineConnection.GetUserInfo(cancellation) is { } info ? UserInfo<TLevel, TProfile>.From(info) : null;
+    public async Task<UserInfo<TLevel, TProfile>?> GetCurrentUser(CancellationToken cancellation = default) => await engineConnection.GetUserInfo(cancellation) is { } info ? UserInfo<TLevel, TProfile>.From(info) : null;
 
     /// <inheritdoc />
-    public Task<List<string>> GetUserNames(CancellationToken cancellation = default) => engineConnection.GetUserNames(cancellation);
+    public Task<List<string>> GetUsers(CancellationToken cancellation = default) => engineConnection.GetUserNames(cancellation);
 
     /// <inheritdoc />
     public Task<List<string>> GetConnectedUsers(CancellationToken cancellation = default) => engineConnection.GetConnectedUsers(cancellation);

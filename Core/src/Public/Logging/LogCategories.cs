@@ -24,7 +24,7 @@ public static class LogCategories
     /// <summary>Gets the category of a failure the application cannot go on after, or that stops a part of it.</summary>
     public static string Crash { get; } = "CRASH";
 
-    /// <summary>Gets the category for a host's own debugging output. The engine never writes under it. Unlike every other category it is not turned on by <c>Logging.json</c>, the <c>--log</c> argument or <see cref="ILogHandler.CategoriesOnByDefault"/>: it is written exactly while <see cref="IDebugMode.IsDebug"/> is <see langword="true"/>.</summary>
+    /// <summary>Gets the category for a host's own debugging output. The engine never writes under it. Unlike every other category it is not turned on by <c>Logging.json</c>, the <c>--log</c> argument or <see cref="ILogHandler.CategoriesOnByDefault"/>: it is written exactly while <see cref="IDebugMode.IsEnabled"/> is <see langword="true"/>.</summary>
     public static string Debug { get; } = "DEBUG";
 
     /// <summary>Gets the category of the activity of the serial (MicroGate) links: a port opening, connecting, connected, disconnected or failing, with its port and local and remote addresses. Off by default.</summary>

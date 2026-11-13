@@ -5,7 +5,7 @@ public sealed class StagedSendViewModelTests
 {
     private static readonly ILoggerFactory noLogger = LoggerFactory.Create(_ => { });
 
-    private static StagedSendData MakeSend(string body) => new() { Body = body, Addresses = [new AddressRequest { UserName = "Bob" }] };
+    private static StagedSendData MakeSend(string body) => new() { Body = body, Addresses = [new AddressRequest { User = "Bob" }] };
 
     private sealed class Setup
     {
@@ -44,7 +44,7 @@ public sealed class StagedSendViewModelTests
         Setup s = new();
         s.Connection
             .Setup(c => c.SendMessage(It.IsAny<string>(), It.IsAny<List<AddressRequest>>(), It.IsAny<Enum?>(), It.IsAny<string>(), It.IsAny<Enum?>(), It.IsAny<Enum?>(), It.IsAny<CancellationToken>()))
-            .ReturnsAsync(new SendMessageResult { MessageId = "M1" });
+            .ReturnsAsync(new SendMessageResult { Id = "M1" });
         StagedSendViewModel vm = s.Build();
         vm.Enqueue([MakeSend("A"), MakeSend("B")], StagedSendMode.Sequential, null);
 
@@ -65,7 +65,7 @@ public sealed class StagedSendViewModelTests
             .Returns<string, List<AddressRequest>, Enum?, string, Enum?, Enum?, CancellationToken>((body, _, _, _, _, _, _) =>
             {
                 order.Add(body);
-                return Task.FromResult<SendMessageResult?>(new SendMessageResult { MessageId = "M" });
+                return Task.FromResult<SendMessageResult?>(new SendMessageResult { Id = "M" });
             });
         StagedSendViewModel vm = s.Build();
         vm.Enqueue([MakeSend("A"), MakeSend("B"), MakeSend("C")], StagedSendMode.Sequential, null);
@@ -82,7 +82,7 @@ public sealed class StagedSendViewModelTests
         Setup s = new();
         s.Connection
             .Setup(c => c.SendMessage(It.IsAny<string>(), It.IsAny<List<AddressRequest>>(), It.IsAny<Enum?>(), It.IsAny<string>(), It.IsAny<Enum?>(), It.IsAny<Enum?>(), It.IsAny<CancellationToken>()))
-            .ReturnsAsync(new SendMessageResult { MessageId = "M" });
+            .ReturnsAsync(new SendMessageResult { Id = "M" });
         StagedSendViewModel vm = s.Build();
         vm.Enqueue([MakeSend("A"), MakeSend("B")], StagedSendMode.Simultaneous, null);
 
@@ -118,7 +118,7 @@ public sealed class StagedSendViewModelTests
         s.Connection
             .SetupSequence(c => c.SendMessage(It.IsAny<string>(), It.IsAny<List<AddressRequest>>(), It.IsAny<Enum?>(), It.IsAny<string>(), It.IsAny<Enum?>(), It.IsAny<Enum?>(), It.IsAny<CancellationToken>()))
             .ThrowsAsync(new IOException("disk error"))
-            .ReturnsAsync(new SendMessageResult { MessageId = "M" });
+            .ReturnsAsync(new SendMessageResult { Id = "M" });
         StagedSendViewModel vm = s.Build();
         vm.Enqueue([MakeSend("A"), MakeSend("B")], StagedSendMode.Sequential, null);
 
@@ -137,7 +137,7 @@ public sealed class StagedSendViewModelTests
         Setup s = new();
         s.Connection
             .Setup(c => c.SendMessage(It.IsAny<string>(), It.IsAny<List<AddressRequest>>(), It.IsAny<Enum?>(), It.IsAny<string>(), It.IsAny<Enum?>(), It.IsAny<Enum?>(), It.IsAny<CancellationToken>()))
-            .ReturnsAsync(new SendMessageResult { MessageId = "M" });
+            .ReturnsAsync(new SendMessageResult { Id = "M" });
         StagedSendViewModel vm = s.Build();
         vm.Enqueue([MakeSend("A")], StagedSendMode.Sequential, null);
 

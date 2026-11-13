@@ -4,5 +4,5 @@ namespace BlueHeighliner.Comlink.Sample;
 public sealed class PrintHandler : IPrintHandler<Priority, Level, Aspect>
 {
     /// <inheritdoc />
-    public int GetPrintCount(Message message) => message.IsAlert ? 2 : 1;
+    public int GetCount(Message message) => message.IsAlert ? 2 : 1;
 }

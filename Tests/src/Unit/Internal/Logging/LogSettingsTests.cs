@@ -71,12 +71,12 @@ public sealed class LogSettingsTests : IDisposable
         Write("""["Debug"]""");
         NetworkConfig named = NetworkConfig.Load(["--log", "debug"], directory);
         controller.SetupGet(c => c.LogCategoriesOnByDefault).Returns(["DEBUG"]);
-        FakeDebugMode debug = new(isDebug: false);
+        FakeDebugMode debug = new(isEnabled: false);
         LogSettings settings = new(controller.Object, debug, named);
 
         Assert.False(settings.IsEnabled("DEBUG"));
 
-        debug.IsDebug = true;
+        debug.IsEnabled = true;
         controller.SetupGet(c => c.LogCategoriesOnByDefault).Returns([]);
 
         Assert.True(settings.IsEnabled("debug"));

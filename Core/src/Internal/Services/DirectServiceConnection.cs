@@ -101,7 +101,7 @@ internal sealed class DirectServiceConnection : IEngineConnection
             Id = await ids.Next(),
             FromUser = userInfo.Name,
             Body = body,
-            Addresses = [.. addresses.Select(a => new MessageAddress { UserName = a.UserName, Type = a.Type.ParseAddressType(), Information = a.Information })],
+            Addresses = [.. addresses.Select(a => new MessageAddress { User = a.User, Type = a.Type.ParseAddressType(), Information = a.Information })],
             SentAt = DateTime.UtcNow,
             Priority = resolvedPriority,
             Tag = tag,
@@ -111,9 +111,9 @@ internal sealed class DirectServiceConnection : IEngineConnection
         };
 
         await entryService.StoreSentMessage(message);
-        logger.Record(LogEvents.MessageSending, "{MessageId} sending to {Destinations}", message.Id, string.Join(", ", message.Addresses.Where(a => a.Type is not AddressType.External).Select(a => a.UserName).Distinct(StringComparer.OrdinalIgnoreCase)));
+        logger.Record(LogEvents.MessageSending, "{MessageId} sending to {Destinations}", message.Id, string.Join(", ", message.Addresses.Where(a => a.Type is not AddressType.External).Select(a => a.User).Distinct(StringComparer.OrdinalIgnoreCase)));
         processing.Sent(message);
-        return new SendMessageResult { MessageId = message.Id, IsAlert = isAlert };
+        return new SendMessageResult { Id = message.Id, IsAlert = isAlert };
     }
 
     /// <inheritdoc />

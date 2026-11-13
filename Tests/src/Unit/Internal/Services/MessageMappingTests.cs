@@ -10,7 +10,7 @@ public sealed class MessageMappingTests
         Id = "M1",
         FromUser = "ALICE",
         Body = "Hi",
-        Addresses = [new MessageAddress { UserName = "BOB", Type = AddressType.Cc, Information = "info" }],
+        Addresses = [new MessageAddress { User = "BOB", Type = AddressType.Cc, Information = "info" }],
         SentAt = new DateTime(2026, 1, 1, 12, 0, 0, DateTimeKind.Utc),
         Priority = TestMessagePriority.Level2,
         Tag = "TAG",
@@ -32,7 +32,7 @@ public sealed class MessageMappingTests
         Assert.Null(back.Aspect);
         Assert.Equal(original.Tag, back.Tag);
         Assert.True(back.IsAlert);
-        Assert.Equal(("BOB", AddressType.Cc, "info"), (back.Addresses[0].UserName, back.Addresses[0].Type, back.Addresses[0].Information));
+        Assert.Equal(("BOB", AddressType.Cc, "info"), (back.Addresses[0].User, back.Addresses[0].Type, back.Addresses[0].Information));
     }
 
     /// <summary>A level that is not configured is refused, so it never reaches storage.</summary>

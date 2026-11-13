@@ -13,7 +13,7 @@ The peer services keep the established connections in a `UserConnections`, keyed
 The engine names the user on the other end of a connection from what is known about it, described by an `IConnectionInfo` (which a host's handlers narrow with a type pattern to `IIpConnectionInfo` or `ISerialConnectionInfo` for the medium specific details):
 
 - **`IIpConnectionInfo`**: the remote host and port (an inbound connection's port is the remote node's ephemeral one), the certificate subject, and the common names in it.
-- **`ISerialConnectionInfo`**: the local port name and the HDLC station addresses of both ends.
+- **`ISerialConnectionInfo`**: the local port name (`Port`) and the HDLC station addresses of both ends (`Address` and `RemoteAddress`).
 - **`IConnectionInfo`** (common to both): whether the connection was opened by the remote node and this node's own user name (`LocalUser`).
 
 The user the handshake handler marked the connection connected as (below) wins. Otherwise the engine decides:

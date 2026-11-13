@@ -4,5 +4,5 @@ namespace BlueHeighliner.Comlink;
 public interface IDebugMode
 {
     /// <summary>Gets a value indicating whether the application was compiled with its own <c>DEBUG</c> compiler constant defined, as the Debug configuration does and the Release configuration does not. The package's build targets record the constant in the application's assembly, which is why a <c>#if DEBUG</c> in the engine itself would not do: the package is always a Release build.</summary>
-    bool IsDebug { get; }
+    bool IsEnabled { get; }
 }

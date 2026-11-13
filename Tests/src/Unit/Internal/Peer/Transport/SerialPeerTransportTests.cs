@@ -192,8 +192,8 @@ public sealed class SerialPeerTransportTests
         Assert.Equal(point, connection.Point);
         Assert.False(connection.IsInbound);
         ISerialConnectionInfo serial = Assert.IsAssignableFrom<ISerialConnectionInfo>(connection.Info);
-        Assert.Equal("SL0", serial.SerialPort);
-        Assert.Equal(0xFF, serial.SerialAddress);
+        Assert.Equal("SL0", serial.Port);
+        Assert.Equal(0xFF, serial.Address);
     }
 
     /// <summary>Every serial link starts its peer with the configured options and the point's own and remote station addresses.</summary>
@@ -232,8 +232,8 @@ public sealed class SerialPeerTransportTests
         await WaitUntil(() => a.Connect(wrongFirst).IsCompletedSuccessfully);
 
         PeerConnection connection = await a.Connect(wrongFirst);
-        Assert.Equal(3, ((ISerialConnectionInfo)connection.Info).RemoteSerialAddress);
-        Assert.Equal("BOB", wrongFirst.UserAt(((ISerialConnectionInfo)connection.Info).RemoteSerialAddress));
+        Assert.Equal(3, ((ISerialConnectionInfo)connection.Info).RemoteAddress);
+        Assert.Equal("BOB", wrongFirst.UserAt(((ISerialConnectionInfo)connection.Info).RemoteAddress));
         Assert.Contains(cable.Starts, start => start.Address == 1 && start.RemoteAddress == 2);
         Assert.Contains(cable.Starts, start => start.Address == 1 && start.RemoteAddress == 3);
     }

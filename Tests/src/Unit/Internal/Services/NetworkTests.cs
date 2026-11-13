@@ -68,9 +68,9 @@ public sealed class NetworkTests
             Body = "Hi",
             Addresses =
             [
-                new MessageAddress { UserName = "OPS", Type = AddressType.To },
-                new MessageAddress { UserName = "ERIN", Type = AddressType.Cc },
-                new MessageAddress { UserName = "OMAHA", Type = AddressType.External }
+                new MessageAddress { User = "OPS", Type = AddressType.To },
+                new MessageAddress { User = "ERIN", Type = AddressType.Cc },
+                new MessageAddress { User = "OMAHA", Type = AddressType.External }
             ],
             SentAt = DateTime.UtcNow,
             Priority = TestMessagePriority.Normal,

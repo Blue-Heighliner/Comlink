@@ -12,7 +12,7 @@ public sealed class ConfigurationHandler : IConfigurationHandler
     /// <inheritdoc />
     public Task OnReconfigured()
     {
-        Logger.Log(LogCategories.App, "SM1", $"The network has {Users.Users.Count} users and {Users.Groups.Count} groups");
+        Logger.Log(LogCategories.App, "SM1", $"The network has {Users.All.Count} users and {Users.Groups.Count} groups");
         return Task.CompletedTask;
     }
 }

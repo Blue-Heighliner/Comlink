@@ -30,10 +30,10 @@ public sealed class ServiceConnectionTests
             .ReturnsAsync((IUserInfo?)null);
         ServiceConnection<TestMessagePriority, TestLevel, TestAspect, TestProfile> connection = new(engine.Object);
 
-        UserInfo<TestLevel, TestProfile>? info = await connection.GetUserInfo();
+        UserInfo<TestLevel, TestProfile>? info = await connection.GetCurrentUser();
 
         Assert.Equal(("ALICE", UserRole.Server, new TestProfile("4B", 2)), (info!.Name, info.Role, info.Profile));
-        Assert.Null(await connection.GetUserInfo());
+        Assert.Null(await connection.GetCurrentUser());
     }
 
     /// <summary>A send hands the host's enum members to the engine as plain enums.</summary>

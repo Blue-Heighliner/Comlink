@@ -7,7 +7,7 @@ namespace BlueHeighliner.Comlink;
 public sealed record MessageExportData
 {
     /// <summary>Application-level message identifier shared with peers.</summary>
-    public required string MessageId { get; init; }
+    public required string Id { get; init; }
     /// <summary><see langword="true"/> for an Outbox (sent) record, <see langword="false"/> for an Inbox (received) record.</summary>
     public required bool IsOutbound { get; init; }
     /// <summary>User name of the sender.</summary>
@@ -40,7 +40,7 @@ public sealed record MessageExportData
 public sealed record MessageDeliveryStatus
 {
     /// <summary>Name of the destination user.</summary>
-    public required string UserName { get; init; }
+    public required string User { get; init; }
     /// <summary>Delivery status for this user at the time of export.</summary>
     public required DestinationStatus Status { get; init; }
     /// <summary>Names of the groups in the message's address list that contained this user.</summary>

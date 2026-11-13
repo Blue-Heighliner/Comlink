@@ -425,7 +425,7 @@ public sealed class ImportServiceTests : IDisposable
             {
                 await context.AddMessage(new MessageExportData
                 {
-                    MessageId = "M1",
+                    Id = "M1",
                     IsOutbound = false,
                     FromUser = "Alice",
                     Body = "Hello",
@@ -450,7 +450,7 @@ public sealed class ImportServiceTests : IDisposable
                     ModifiedAt = DateTime.UtcNow
                 });
                 await context.AddNote(new NoteExportData { Id = string.Empty, Body = "New note", CreatedAt = DateTime.UtcNow, ModifiedAt = DateTime.UtcNow });
-                context.AddStagedSend(new StagedSendData { Body = "Staged body", Addresses = [new AddressRequest { UserName = "Bob" }] });
+                context.AddStagedSend(new StagedSendData { Body = "Staged body", Addresses = [new AddressRequest { User = "Bob" }] });
             }
         };
 

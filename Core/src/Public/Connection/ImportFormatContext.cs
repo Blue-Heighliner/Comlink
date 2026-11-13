@@ -13,7 +13,7 @@ public interface IImportFormatContext<TPriority, TLevel> where TPriority : struc
 {
     /// <summary>
     /// Adds a message, restored into the Inbox or Outbox per <see cref="MessageExportData.IsOutbound"/>. Skipped,
-    /// with no prompt, if an entry with the same <see cref="MessageExportData.MessageId"/>, direction, and
+    /// with no prompt, if an entry with the same <see cref="MessageExportData.Id"/>, direction, and
     /// received date already exists.
     /// </summary>
     Task AddMessage(MessageExportData message);

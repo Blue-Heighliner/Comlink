@@ -15,18 +15,18 @@ public sealed class FakeServicesTests
     {
         FakeUserCatalog<TestLevel, NoProfile> catalog = new(alice, [alice, bob], [new GroupInfo { Id = "OPS", Members = ["ALICE", "BOB"] }]);
 
-        Assert.Same(alice, catalog.CurrentUser);
-        Assert.Equal(["ALICE", "BOB"], catalog.Users.Keys.Order());
-        Assert.Same(bob, catalog.Users["bob"]);
-        Assert.Empty(catalog.ConnectedUsers);
+        Assert.Same(alice, catalog.Current);
+        Assert.Equal(["ALICE", "BOB"], catalog.All.Keys.Order());
+        Assert.Same(bob, catalog.All["bob"]);
+        Assert.Empty(catalog.Connected);
         Assert.Equal(["ALICE", "BOB"], catalog.Groups["ops"].Members);
 
-        catalog.ConnectedUsers = new Dictionary<string, UserInfo<TestLevel, NoProfile>> { ["BOB"] = bob };
-        catalog.CurrentUser = bob;
+        catalog.Connected = new Dictionary<string, UserInfo<TestLevel, NoProfile>> { ["BOB"] = bob };
+        catalog.Current = bob;
 
-        Assert.Equal("BOB", Assert.Single(catalog.ConnectedUsers).Key);
-        Assert.Same(bob, catalog.CurrentUser);
-        Assert.Equal(["ALICE"], new FakeUserCatalog<TestLevel, NoProfile>(alice).Users.Keys);
+        Assert.Equal("BOB", Assert.Single(catalog.Connected).Key);
+        Assert.Same(bob, catalog.Current);
+        Assert.Equal(["ALICE"], new FakeUserCatalog<TestLevel, NoProfile>(alice).All.Keys);
     }
 
     /// <summary>The network fake accepts every send and finishes every other operation, records each in a list of its own, and answers what it is set to.</summary>
@@ -45,7 +45,7 @@ public sealed class FakeServicesTests
         await network.SendToExternalSystems(frame);
         await network.StoreMessage(message);
         await network.ReceiveMessage(message);
-        network.SetNetworkIndicator(true);
+        network.SetIndicator(true);
         Assert.Empty(await network.FindStoredMessages(new RetrievalCriteria()));
         Assert.Empty(await network.GetAutoForwardTargets("Alerts"));
 
@@ -74,7 +74,7 @@ public sealed class FakeServicesTests
         INetwork<TestFrame, TestMessagePriority, TestLevel, TestAspect> network = new FakeNetwork<TestFrame, TestMessagePriority, TestLevel, TestAspect>();
 
         IReadOnlySet<string> ofTargets = network.GetDestinations(null, out IReadOnlySet<string> excluded, "BOB", "CAROL", "BOB");
-        IReadOnlySet<string> ofMessage = network.GetDestinations(Message(new MessageAddress { UserName = "ERIN", Type = AddressType.To }, new MessageAddress { UserName = "OMAHA", Type = AddressType.External }), out IReadOnlySet<string> excludedOfMessage);
+        IReadOnlySet<string> ofMessage = network.GetDestinations(Message(new MessageAddress { User = "ERIN", Type = AddressType.To }, new MessageAddress { User = "OMAHA", Type = AddressType.External }), out IReadOnlySet<string> excludedOfMessage);
 
         Assert.True(ofTargets.SetEquals(["BOB", "CAROL"]));
         Assert.True(ofMessage.SetEquals(["ERIN"]));
@@ -86,17 +86,17 @@ public sealed class FakeServicesTests
     [Fact]
     public async Task FakeServiceConnection_AnswersRecordsAndRaisesEvents()
     {
-        FakeServiceConnection<TestMessagePriority, TestLevel, TestAspect, NoProfile> fake = new(alice) { UserNames = ["ALICE", "BOB"] };
+        FakeServiceConnection<TestMessagePriority, TestLevel, TestAspect, NoProfile> fake = new(alice) { Users = ["ALICE", "BOB"] };
         IServiceConnection<TestMessagePriority, TestLevel, TestAspect, NoProfile> connection = fake;
         List<string> seen = [];
         connection.MessageReceived += message => { seen.Add(message.Id); return Task.CompletedTask; };
         connection.DeliveryStatusChanged += change => { seen.Add(change.MessageId); return Task.CompletedTask; };
 
         await connection.Connect();
-        Assert.Same(alice, await connection.GetUserInfo());
-        Assert.Equal(["ALICE", "BOB"], await connection.GetUserNames());
+        Assert.Same(alice, await connection.GetCurrentUser());
+        Assert.Equal(["ALICE", "BOB"], await connection.GetUsers());
         Assert.Empty(await connection.GetConnectedUsers());
-        Assert.Equal("MESSAGE", (await connection.SendMessage("Hi", [new AddressRequest { UserName = "BOB" }], TestMessagePriority.High, "URGENT"))?.MessageId);
+        Assert.Equal("MESSAGE", (await connection.SendMessage("Hi", [new AddressRequest { User = "BOB" }], TestMessagePriority.High, "URGENT"))?.Id);
         Assert.True(await connection.MarkMessageRead("M1"));
 
         await fake.RaiseMessageReceived(Message());
@@ -107,7 +107,7 @@ public sealed class FakeServicesTests
         Assert.Equal(["M1"], fake.MarkedRead);
         FakeServiceConnection<TestMessagePriority, TestLevel, TestAspect, NoProfile>.SentMessage sent = Assert.Single(fake.Sent);
         Assert.Equal(("Hi", TestMessagePriority.High, "URGENT"), (sent.Body, sent.Priority, sent.Tag));
-        Assert.Equal("BOB", Assert.Single(sent.Addresses).UserName);
+        Assert.Equal("BOB", Assert.Single(sent.Addresses).User);
     }
 
     /// <summary>The logger fake records every entry in order, with or without an exception, and refuses an entry with no identifier as the engine's does.</summary>
@@ -130,12 +130,12 @@ public sealed class FakeServicesTests
     public void FakeDebugMode_SaysWhatItWasTold()
     {
         FakeDebugMode mode = new();
-        Assert.False(mode.IsDebug);
+        Assert.False(mode.IsEnabled);
 
-        mode.IsDebug = true;
+        mode.IsEnabled = true;
 
-        Assert.True(mode.IsDebug);
-        Assert.True(new FakeDebugMode(true).IsDebug);
+        Assert.True(mode.IsEnabled);
+        Assert.True(new FakeDebugMode(true).IsEnabled);
     }
 
     /// <summary>The data pool fake rents a separate buffer of exactly the size asked for each time.</summary>

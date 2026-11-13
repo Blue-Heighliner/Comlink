@@ -14,7 +14,7 @@ public sealed class TextExportFormat : IExportFormat
     {
         string text = entry switch
         {
-            MessageExportData message => $"{(message.IsOutbound ? "To" : "From")}: {string.Join(", ", message.Addresses.Select(a => a.UserName))}\n\n{message.Body}\n",
+            MessageExportData message => $"{(message.IsOutbound ? "To" : "From")}: {string.Join(", ", message.Addresses.Select(a => a.User))}\n\n{message.Body}\n",
             DraftExportData draft => $"{draft.Body}\n",
             NoteExportData note => $"{note.Body}\n",
             _ => throw new ArgumentException($"Unsupported entry type '{entry.GetType()}' for the Text export format.", nameof(entry))

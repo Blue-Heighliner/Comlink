@@ -58,7 +58,7 @@ internal sealed class EngineFrameHandler<TFrame, TPriority, TLevel, TAspect>(IFr
     public async Task OnSent(INetworkEnvironment environment, Message message)
     {
         Message<TPriority, TLevel, TAspect> typed = message.ToTyped<TPriority, TLevel, TAspect>();
-        IReadOnlySet<string> destinations = environment.GetDestinations(typed.Level is { } level ? (Enum)level : null, typed.Addresses.Where(address => address.Type is not AddressType.External).Select(address => address.UserName), out IReadOnlySet<string> excluded);
+        IReadOnlySet<string> destinations = environment.GetDestinations(typed.Level is { } level ? (Enum)level : null, typed.Addresses.Where(address => address.Type is not AddressType.External).Select(address => address.User), out IReadOnlySet<string> excluded);
         foreach (string user in excluded)
         {
             await environment.SetSentStatus(message.Id, user, DestinationStatus.Failed);

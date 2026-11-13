@@ -299,12 +299,12 @@ internal sealed class HandshakePeerTransport : IPeerTransport
         byte? address = string.Equals(point.User, userName, StringComparison.OrdinalIgnoreCase)
             ? point.RemoteSerialAddress
             : point.OtherRemotes.FirstOrDefault(remote => string.Equals(remote.User, userName, StringComparison.OrdinalIgnoreCase))?.Address;
-        if (address is null || address == serial.RemoteSerialAddress)
+        if (address is null || address == serial.RemoteAddress)
         {
             return false;
         }
 
-        serial.PreferredRemoteSerialAddress = address;
+        serial.PreferredRemoteAddress = address;
         return true;
     }
 
@@ -360,9 +360,9 @@ internal sealed class HandshakePeerTransport : IPeerTransport
     }
 
     private string? SerialUser(SerialConnectionInfo info)
-        => engineController.OutgoingPoints.Where(point => point.IsSerial && string.Equals(point.SerialPort, info.SerialPort, StringComparison.OrdinalIgnoreCase) && point.SerialAddress == info.SerialAddress)
-            .Select(point => point.UserAt(info.RemoteSerialAddress)).FirstOrDefault(user => user is not null)
-            ?? info.SerialPort;
+        => engineController.OutgoingPoints.Where(point => point.IsSerial && string.Equals(point.SerialPort, info.Port, StringComparison.OrdinalIgnoreCase) && point.SerialAddress == info.Address)
+            .Select(point => point.UserAt(info.RemoteAddress)).FirstOrDefault(user => user is not null)
+            ?? info.Port;
 
     private string? MatchCertificate(IReadOnlyList<string> certificateNames)
     {

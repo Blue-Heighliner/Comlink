@@ -127,7 +127,7 @@ Everything about one user is stated on that user's entry in the [network configu
 | `Level` | The name of the level the user runs at (see [Levels](#levels)) | the lowest configured level |
 | `Profile` | An object of the host's own shape, read into the record type stated as `TProfile` in `Types` (see below) | none |
 
-**Profile.** A host that wants typed data on its users states the record type as the last type argument of `Types` (`NoProfile` for none), and the `Profile` object of each user is read into it, names matched without regard to case and enums written by name (in any case; flags as `"Read, Write"`; a number is refused). The result is `UserInfo<TLevel, TProfile>.Profile`, typed as the host stated it. Everywhere the engine hands a user to the host it is a `UserInfo<TLevel, TProfile>` (`IUserCatalog<TLevel, TProfile>`, `IServiceConnection<,,,>.GetUserInfo`), which implements the non-generic `IUserInfo` for code that does not care about the profile (it has everything but a typed profile; `IUserInfo.Profile` is an `object?`). The contexts a frame handler is handed carry only user names, so a handler looks a user up in the `IUserCatalog<TLevel, TProfile>` it asks for, and the handler itself is not typed by the profile. `Profile` is `null` for `NoProfile`, whatever the file holds, and for a user whose entry has no `Profile` key (or a `null` one). The profiles are read when the file is loaded, not when they are used: one that does not fit the type makes the whole file invalid, naming the user, at start-up and on a refresh (the refresh fails and changes nothing, like any unreadable file).
+**Profile.** A host that wants typed data on its users states the record type as the last type argument of `Types` (`NoProfile` for none), and the `Profile` object of each user is read into it, names matched without regard to case and enums written by name (in any case; flags as `"Read, Write"`; a number is refused). The result is `UserInfo<TLevel, TProfile>.Profile`, typed as the host stated it. Everywhere the engine hands a user to the host it is a `UserInfo<TLevel, TProfile>` (`IUserCatalog<TLevel, TProfile>`, `IServiceConnection<,,,>.GetCurrentUser`), which implements the non-generic `IUserInfo` for code that does not care about the profile (it has everything but a typed profile; `IUserInfo.Profile` is an `object?`). The contexts a frame handler is handed carry only user names, so a handler looks a user up in the `IUserCatalog<TLevel, TProfile>` it asks for, and the handler itself is not typed by the profile. `Profile` is `null` for `NoProfile`, whatever the file holds, and for a user whose entry has no `Profile` key (or a `null` one). The profiles are read when the file is loaded, not when they are used: one that does not fit the type makes the whole file invalid, naming the user, at start-up and on a refresh (the refresh fails and changes nothing, like any unreadable file).
 
 ```csharp
 engine.Types<MyFrame, MyPriority, MyLevel, MyAspect, DeskProfile>()
@@ -354,13 +354,13 @@ engine.StackTrace(true);   // log the whole stack trace of every exception (the 
 engine.StackTrace(false);  // log only what the exception says
 ```
 
-Whether a log entry that reports an exception also carries the exception's entire stack trace. Without it the entry is followed by the type and message of the exception and of each exception inside it; with it, by the exception's whole text, stack trace included. It applies to every entry that reports an exception, the engine's own and those written by the host's components through `ILogger`. A host that wants traces only while it is being developed asks for the `IDebugMode` in its configuration's constructor and states `StackTrace(debug.IsDebug)`; `IsDebug` is whether the host's own assembly was compiled with the `DEBUG` constant, which the package's build targets (`build/BlueHeighliner.Comlink.targets`, imported automatically from the NuGet package) record in the host's assembly, since a `#if DEBUG` in the engine could only say how the always-Release package was compiled.
+Whether a log entry that reports an exception also carries the exception's entire stack trace. Without it the entry is followed by the type and message of the exception and of each exception inside it; with it, by the exception's whole text, stack trace included. It applies to every entry that reports an exception, the engine's own and those written by the host's components through `ILogger`. A host that wants traces only while it is being developed asks for the `IDebugMode` in its configuration's constructor and states `StackTrace(debug.IsEnabled)`; `IsEnabled` is whether the host's own assembly was compiled with the `DEBUG` constant, which the package's build targets (`build/BlueHeighliner.Comlink.targets`, imported automatically from the NuGet package) record in the host's assembly, since a `#if DEBUG` in the engine could only say how the always-Release package was compiled.
 
 **Default:** on.
 
 **Network file:** none; it is stated in code.
 
-**Sample:** `EngineConfiguration` states `StackTrace(debug.IsDebug)`, so the Sample logs stack traces in a debug build only.
+**Sample:** `EngineConfiguration` states `StackTrace(debug.IsEnabled)`, so the Sample logs stack traces in a debug build only.
 
 ---
 
@@ -395,7 +395,7 @@ The host's part in the configuration, with two members that are both optional. `
 engine.Prints<MyPrintHandler>();  // an IPrintHandler<MyPriority, MyLevel, MyAspect>
 ```
 
-The print manager's automatic "print received" behavior: whether its toggle starts enabled (`IPrintHandler<,,>.PrintReceivedByDefault`), automatically adding every received message to the print queue from the moment the app starts (the user can still toggle it at any time), and how many times each received message is added to the print queue while it is (`0` to not print it, `1` once, `2` for two copies, and so on). Consulted once per received message via `IEntryService.MessageInserted`. The count is `IPrintHandler<,,>.GetPrintCount(Message<,,>)` (default `1`), since only received messages are printed.
+The print manager's automatic "print received" behavior: whether its toggle starts enabled (`IPrintHandler<,,>.ReceivedByDefault`), automatically adding every received message to the print queue from the moment the app starts (the user can still toggle it at any time), and how many times each received message is added to the print queue while it is (`0` to not print it, `1` once, `2` for two copies, and so on). Consulted once per received message via `IEntryService.MessageInserted`. The count is `IPrintHandler<,,>.GetPrintCount(Message<,,>)` (default `1`), since only received messages are printed.
 
 **Default:** off, one copy of each.
 
@@ -492,7 +492,7 @@ public sealed class MyCsvImportFormat : IImportFormat<MyPriority, MyLevel>
         {
             string[] parts = line.Split(',', 3);
             if (parts.Length < 3) { continue; }
-            context.AddStagedSend(new StagedSendData<MyPriority, MyLevel> { Body = parts[1], Addresses = [new AddressRequest { UserName = parts[0] }] });
+            context.AddStagedSend(new StagedSendData<MyPriority, MyLevel> { Body = parts[1], Addresses = [new AddressRequest { User = parts[0] }] });
         }
     }
 }
@@ -684,11 +684,11 @@ Events:
 - `OnRead` fires when the user opens an unread Inbox message, handed that `Message<,,>`.
 - `OnRetrieval` fires when the user submits a retrieval, handed the `Server` (a name) and the `Criteria`.
 
-A context holds only what is specific to the event it describes, as above. Everything a handler acts with, and everything it asks about the network, is a service it asks for through dependency injection (in its constructor or in `required` `init` properties), so it can be mocked and is the same wherever it is used. Who is on the network is the `IUserCatalog<TLevel, TProfile>`: `CurrentUser`, `Users` and `ConnectedUsers` (read-only dictionaries of `UserInfo` by name, where a user is connected when its name is a key of `ConnectedUsers`) and `Groups` (a read-only dictionary of `GroupInfo` by group id, whose `Members` are the users of the group with the groups inside it expanded). Each property reads the current state when it is asked, so it follows a refreshed configuration and the connections as they come and go. What a handler does is the `INetwork<TFrame, TPriority, TLevel, TAspect>`, typed by what the host stated in `Types`:
+A context holds only what is specific to the event it describes, as above. Everything a handler acts with, and everything it asks about the network, is a service it asks for through dependency injection (in its constructor or in `required` `init` properties), so it can be mocked and is the same wherever it is used. Who is on the network is the `IUserCatalog<TLevel, TProfile>`: `Current`, `All` and `Connected` (`All` and `Connected` are read-only dictionaries of `UserInfo` by name, where a user is connected when its name is a key of `Connected`) and `Groups` (a read-only dictionary of `GroupInfo` by group id, whose `Members` are the users of the group with the groups inside it expanded). Each property reads the current state when it is asked, so it follows a refreshed configuration and the connections as they come and go. What a handler does is the `INetwork<TFrame, TPriority, TLevel, TAspect>`, typed by what the host stated in `Types`:
 - `Send(user, priority, frame)`: sends the frame, exactly as given, to `user`, who must be directly connected to the current user (a client's only such user is its server; a server's are its children and sibling servers), and returns whether they accepted it, or `false` when they are not connected. There is no routing or hopping: reaching anyone further away is the handler's job, by sending to the node that is directly connected and putting the real recipients in the frame. The priority is a required `TPriority`.
 - `ReceiveMessage(message)`: records a `Message<TPriority, TLevel, TAspect>` as received, so it is stored in the Inbox and shown (and alarms, when it is an alert). A message with a priority, level or aspect that is not configured throws.
 - `SetSentStatus(messageId, user, status)` (also taking several users at once) and `SetReceivedStatus(messageId, status)`: change the delivery status of a stored sent or received message.
-- `SetNetworkIndicator(isOnline)`: the only thing that sets the network indicator.
+- `SetIndicator(isOnline)`: the only thing that sets the network indicator.
 - `GetDestinations(minimumLevel, out excluded, targets)` / `GetDestinations(message, out excluded)`: the set of users that some user and group names, or all the non-external addresses of a message, stand for, with groups expanded to their members recursively. Users whose own level ranks below the minimum level (the message's own level for the message overload; `null` for no minimum) are left out of the result and returned in `excluded`, for the handler to report as failed.
 - `SendInterface(priority, frame)`, which sends a frame to every interface connected to the local interface listener, `SendToExternalSystems(frame)`, `StoreMessage(message)`, `FindStoredMessages(criteria)` and `GetAutoForwardTargets(controllerName)`, which leaves out the current user.
 
@@ -700,7 +700,7 @@ The handler is stated by type and instantiated through the running engine's depe
 
 **Network file:** none; a handler is behavior, not a setting.
 
-**Sample:** `FrameHandler` implements the protocol for its two roles from `context.CurrentUser`: a client expands groups, enforces levels, sends one frame to its server, sends receive and read receipts, and forwards escalations; a server stores, routes once per hop or owning server and answers retrievals. A client keeps the network indicator in step with the connection to its server.
+**Sample:** `FrameHandler` implements the protocol for its two roles from `IUserCatalog.Current`: a client expands groups, enforces levels, sends one frame to its server, sends receive and read receipts, and forwards escalations; a server stores, routes once per hop or owning server and answers retrievals. A client keeps the network indicator in step with the connection to its server.
 
 ---
 
@@ -751,8 +751,8 @@ Not unit tested directly, since it is inherently environment- and OS-dependent, 
 event Func<Message<TPriority, TLevel, TAspect>, Task>? MessageReceived;
 event Func<DeliveryStatusChangedEvent, Task>? DeliveryStatusChanged;
 Task Connect(CancellationToken cancellation = default);
-Task<UserInfo<TLevel, TProfile>?> GetUserInfo(CancellationToken cancellation = default);
-Task<List<string>> GetUserNames(CancellationToken cancellation = default);
+Task<UserInfo<TLevel, TProfile>?> GetCurrentUser(CancellationToken cancellation = default);
+Task<List<string>> GetUsers(CancellationToken cancellation = default);
 Task<List<string>> GetConnectedUsers(CancellationToken cancellation = default);
 Task<SendMessageResult?> SendMessage(string body, List<AddressRequest> addresses, TPriority? priority = null, string tag = "", TLevel? level = null, TAspect? aspect = null, CancellationToken cancellation = default);
 Task<bool> MarkMessageRead(string messageId, CancellationToken cancellation = default);
@@ -760,7 +760,7 @@ Task<bool> MarkMessageRead(string messageId, CancellationToken cancellation = de
 
 High-level API for host code to interact with the running Engine. Engine registers `DirectServiceConnection`, which calls Engine services in-process, in both Client and Headless mode - Headless mode acts as a normal peer client, just without a GUI. External programs instead plug into the message stream over the local interface listener (see [Interface.md](Interface.md)), which is unrelated to this interface.
 
-Host applications resolve `IServiceConnection<TPriority, TLevel, TAspect, TProfile>`, typed by the enums stated in `Types`, from the container to send messages and subscribe to inbound delivery events. `GetConnectedUsers` reports who is currently reachable over a live peer connection (`IPeerService.GetConnectedUsers`), unlike `GetUserNames`'s fixed configured directory.
+Host applications resolve `IServiceConnection<TPriority, TLevel, TAspect, TProfile>`, typed by the enums stated in `Types`, from the container to send messages and subscribe to inbound delivery events. `GetConnectedUsers` reports who is currently reachable over a live peer connection (`IPeerService.GetConnectedUsers`), unlike `GetUsers`'s fixed configured directory.
 
 **Default:** `DirectServiceConnection`, registered in both Client and Headless mode.
 

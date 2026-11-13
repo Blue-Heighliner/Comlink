@@ -686,7 +686,7 @@ internal sealed partial class DraftViewModel : ObservableObject, IDraftViewModel
                     Level = SelectedLevel?.Key,
                     Aspect = SelectedAspect?.Aspect?.Key,
                     Body = BuildPlainBody(),
-                    Addresses = [.. Addresses.Select(a => new AddressRequest { UserName = a.UserName, Type = a.Type, Information = a.Information })],
+                    Addresses = [.. Addresses.Select(a => new AddressRequest { User = a.UserName, Type = a.Type, Information = a.Information })],
                     LineWidth = LineWidth
                 };
                 IsAlert = engineController.IsAlert(content);
@@ -922,7 +922,7 @@ internal sealed partial class DraftViewModel : ObservableObject, IDraftViewModel
 
             SendMessageResult? result = await connection.SendMessage(
                 body,
-                Addresses.Select(a => new AddressRequest { UserName = a.UserName, Type = a.Type, Information = a.Information }).ToList(),
+                Addresses.Select(a => new AddressRequest { User = a.UserName, Type = a.Type, Information = a.Information }).ToList(),
                 SelectedPriority.Key, Tag, SelectedLevel?.Key, SelectedAspect?.Aspect?.Key);
             if (result is null)
             {
@@ -936,7 +936,7 @@ internal sealed partial class DraftViewModel : ObservableObject, IDraftViewModel
             await InsertIfNew();
             await entryService.SaveDraft(entity);
 
-            MessageEntity sentMessage = await entryService.FindMessage(result.MessageId, outbound: true) ?? throw new InvalidOperationException($"The message {result.MessageId} was sent but is not stored");
+            MessageEntity sentMessage = await entryService.FindMessage(result.Id, outbound: true) ?? throw new InvalidOperationException($"The message {result.Id} was sent but is not stored");
 
             IsSent = true;
             StatusMessage = "Sent";

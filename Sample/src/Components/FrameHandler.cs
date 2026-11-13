@@ -19,9 +19,9 @@ public sealed class FrameHandler(IUserCatalog<Level, NoProfile> users, INetwork<
     /// <inheritdoc />
     public Task OnConnected(INetworkConnectedContext context)
     {
-        if (users.CurrentUser.Role is UserRole.Client && context.TargetUser == users.CurrentUser.Parent?.User)
+        if (users.Current.Role is UserRole.Client && context.TargetUser == users.Current.Parent?.User)
         {
-            network.SetNetworkIndicator(true);
+            network.SetIndicator(true);
         }
 
         return Task.CompletedTask;
@@ -30,9 +30,9 @@ public sealed class FrameHandler(IUserCatalog<Level, NoProfile> users, INetwork<
     /// <inheritdoc />
     public Task OnDisconnected(INetworkDisconnectedContext context)
     {
-        if (users.CurrentUser.Role is UserRole.Client && context.TargetUser == users.CurrentUser.Parent?.User)
+        if (users.Current.Role is UserRole.Client && context.TargetUser == users.Current.Parent?.User)
         {
-            network.SetNetworkIndicator(false);
+            network.SetIndicator(false);
         }
 
         return Task.CompletedTask;
@@ -40,12 +40,12 @@ public sealed class FrameHandler(IUserCatalog<Level, NoProfile> users, INetwork<
 
     /// <inheritdoc />
     public Task OnReceived(INetworkReceivedContext<Frame> context)
-        => users.CurrentUser.Role is UserRole.Server ? Serve(context) : Receive(context);
+        => users.Current.Role is UserRole.Server ? Serve(context) : Receive(context);
 
     /// <inheritdoc />
     public async Task OnSent(INetworkSentContext<Priority, Level, Aspect> context)
     {
-        bool sent = await network.Send(users.CurrentUser.Parent!.User, context.Message.Priority, Frame.FromMessage(context.Message));
+        bool sent = await network.Send(users.Current.Parent!.User, context.Message.Priority, Frame.FromMessage(context.Message));
         await network.SetSentStatus(context.Message.Id, context.Destinations, sent ? DestinationStatus.Sent : DestinationStatus.Failed);
     }
 
@@ -53,13 +53,13 @@ public sealed class FrameHandler(IUserCatalog<Level, NoProfile> users, INetwork<
     public Task OnRead(INetworkReadContext<Priority, Level, Aspect> context)
         => network.Send
         (
-            users.CurrentUser.Parent!.User,
+            users.Current.Parent!.User,
             Priority.Receipt,
             new()
             {
                 IsReadReceipt = true,
                 Id = Guid.NewGuid().ToString("N"),
-                Sender = users.CurrentUser.Name,
+                Sender = users.Current.Name,
                 ReadMessageId = context.Message.Id,
                 Timestamp = DateTime.UtcNow,
                 Recipients = [new() { User = context.Message.FromUser }]
@@ -70,13 +70,13 @@ public sealed class FrameHandler(IUserCatalog<Level, NoProfile> users, INetwork<
     public Task OnRetrieval(INetworkRetrievalContext context)
         => network.Send
         (
-            users.CurrentUser.Parent!.User,
+            users.Current.Parent!.User,
             Priority.Retrieval,
             new()
             {
                 IsRetrieval = true,
                 Id = Guid.NewGuid().ToString("N"),
-                Sender = users.CurrentUser.Name,
+                Sender = users.Current.Name,
                 Timestamp = DateTime.UtcNow,
                 Recipients = [new() { User = context.Server }],
                 RetrievalFrom = context.Criteria.From,
@@ -93,10 +93,10 @@ public sealed class FrameHandler(IUserCatalog<Level, NoProfile> users, INetwork<
         if (context.Origin is FrameOrigin.Interface)
         {
             // An application on this machine sends as the user: the frame goes out as if this node had written it.
-            frame.Sender = users.CurrentUser.Name;
+            frame.Sender = users.Current.Name;
             frame.Id = Guid.NewGuid().ToString("N");
             frame.Timestamp = DateTime.UtcNow;
-            await network.Send(users.CurrentUser.Parent!.User, frame.Priority, frame);
+            await network.Send(users.Current.Parent!.User, frame.Priority, frame);
             return;
         }
 
@@ -127,13 +127,13 @@ public sealed class FrameHandler(IUserCatalog<Level, NoProfile> users, INetwork<
 
         await network.Send
         (
-            users.CurrentUser.Parent!.User,
+            users.Current.Parent!.User,
             Priority.Receipt,
             new()
             {
                 IsReceiveReceipt = true,
                 Id = Guid.NewGuid().ToString("N"),
-                Sender = users.CurrentUser.Name,
+                Sender = users.Current.Name,
                 ReceivedMessageId = frame.Id,
                 Timestamp = DateTime.UtcNow,
                 Recipients = [new() { User = frame.Sender }]
@@ -145,9 +145,9 @@ public sealed class FrameHandler(IUserCatalog<Level, NoProfile> users, INetwork<
             IReadOnlyList<string> targets = await network.GetAutoForwardTargets(EscalationForwarder);
             if (targets.Count > 0)
             {
-                frame.Sender = users.CurrentUser.Name;
+                frame.Sender = users.Current.Name;
                 frame.Recipients = [.. targets.Select(target => new Recipient { User = target })];
-                await network.Send(users.CurrentUser.Parent!.User, frame.Priority, frame);
+                await network.Send(users.Current.Parent!.User, frame.Priority, frame);
             }
         }
     }
@@ -179,13 +179,13 @@ public sealed class FrameHandler(IUserCatalog<Level, NoProfile> users, INetwork<
         );
     }
 
-    private bool IsServer(string userName) => users.Users.TryGetValue(userName, out UserInfo<Level, NoProfile>? info) && info.Role is UserRole.Server;
+    private bool IsServer(string userName) => users.All.TryGetValue(userName, out UserInfo<Level, NoProfile>? info) && info.Role is UserRole.Server;
 
     // A retrieval request names the server it is for: this one answers it, and a request that came from a client is handed on to the other server it names.
     private async Task Answer(INetworkReceivedContext<Frame> context, Frame request)
     {
         string server = request.Recipients.FirstOrDefault()?.User ?? string.Empty;
-        if (server != users.CurrentUser.Name)
+        if (server != users.Current.Name)
         {
             if (!IsServer(context.SourceUser) && server.Length > 0)
             {
@@ -205,7 +205,7 @@ public sealed class FrameHandler(IUserCatalog<Level, NoProfile> users, INetwork<
         };
         foreach (Message stored in await network.FindStoredMessages(criteria))
         {
-            Frame copy = Frame.FromMessage(stored with { Addresses = [new() { UserName = request.Sender, Type = AddressType.To }], IsAlert = false });
+            Frame copy = Frame.FromMessage(stored with { Addresses = [new() { User = request.Sender, Type = AddressType.To }], IsAlert = false });
             await Route(context, copy, [request.Sender], true);
         }
     }
@@ -216,19 +216,19 @@ public sealed class FrameHandler(IUserCatalog<Level, NoProfile> users, INetwork<
         HashSet<string> hops = [];
         foreach (string user in recipients)
         {
-            if (!users.Users.TryGetValue(user, out UserInfo<Level, NoProfile>? info))
+            if (!users.All.TryGetValue(user, out UserInfo<Level, NoProfile>? info))
             {
                 continue;
             }
 
             if (info.Role is UserRole.Server)
             {
-                if (mayLeaveServer && user != users.CurrentUser.Name)
+                if (mayLeaveServer && user != users.Current.Name)
                 {
                     hops.Add(user);
                 }
             }
-            else if (info.Parent?.User == users.CurrentUser.Name)
+            else if (info.Parent?.User == users.Current.Name)
             {
                 hops.Add(user);
             }

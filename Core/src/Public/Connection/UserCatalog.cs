@@ -11,13 +11,13 @@ public interface IUserCatalog<TLevel, TProfile> where TLevel : struct, Enum wher
 {
     /// <summary>Gets the user this node runs as, the one its certificate names.</summary>
     /// <exception cref="InvalidOperationException">The node has no current user, which is only so while its certificate cannot be used and the engine shows its error screen; no handler runs then.</exception>
-    UserInfo<TLevel, TProfile> CurrentUser { get; }
+    UserInfo<TLevel, TProfile> Current { get; }
 
     /// <summary>Gets every known user in the messaging system (the users in the network configuration file), by name. Each carries the groups it is directly a member of, the same as <see cref="IUserInfo.Groups"/>.</summary>
-    IReadOnlyDictionary<string, UserInfo<TLevel, TProfile>> Users { get; }
+    IReadOnlyDictionary<string, UserInfo<TLevel, TProfile>> All { get; }
 
-    /// <summary>Gets the subset of <see cref="Users"/> currently reachable over at least one live peer connection, by name. Whether a given user is connected is whether it is a key here.</summary>
-    IReadOnlyDictionary<string, UserInfo<TLevel, TProfile>> ConnectedUsers { get; }
+    /// <summary>Gets the subset of <see cref="All"/> currently reachable over at least one live peer connection, by name. Whether a given user is connected is whether it is a key here.</summary>
+    IReadOnlyDictionary<string, UserInfo<TLevel, TProfile>> Connected { get; }
 
     /// <summary>Gets every group in the network configuration file, by id.</summary>
     IReadOnlyDictionary<string, GroupInfo> Groups { get; }

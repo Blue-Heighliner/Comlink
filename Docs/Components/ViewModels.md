@@ -127,7 +127,7 @@ Right-side content pane. Registered as `IContentAreaViewModel → ContentAreaVie
 
 **Methods**: `ShowHome()`, `ShowEntry(EntryItemViewModel)`, `ShowEntry(object)`. `ShowEntry(EntryItemViewModel)` loads from the database, so if another entry (or home) is shown before it finishes, its result is discarded rather than replacing what the user chose afterwards. All three first check whether `ActiveContent` is currently the injected `IStagedSendViewModel` instance and, if so, execute its `ClearCommand` before replacing it - the staged send screen only ever appears automatically (see `IStagedSendViewModel` below) and is never itself the destination of a `ShowHome()`/`ShowEntry()` call, so this check only ever fires on the way *out* of it, discarding whatever it was still holding the moment the user navigates anywhere else.
 
-The `DeliveryStatusChanged` handler checks `ActiveContent is IMessageViewModel` to route status updates to the currently displayed message — an empty `UserName` sets `IMessageViewModel.ReadStatus` directly (a local read-status notification), otherwise it calls `UpdateDeliveryStatus(userName, status)` (a remote destination's delivery status).
+The `DeliveryStatusChanged` handler checks `ActiveContent is IMessageViewModel` to route status updates to the currently displayed message — an empty `User` sets `IMessageViewModel.ReadStatus` directly (a local read-status notification), otherwise it calls `UpdateDeliveryStatus(userName, status)` (a remote destination's delivery status).
 
 When `ShowEntry(EntryItemViewModel)` opens an Inbox message whose `ReadStatus` is `Received`, it calls `IEngineConnection.MarkMessageRead(messageId)` before building the `MessageViewModel`, so the message is marked read (and a read receipt sent to the sender) as soon as it is displayed. See [Peer.md](Peer.md#receipts).
 
@@ -147,7 +147,7 @@ Read-only message display. Constructed with `new MessageViewModel(MessageEntity)
 
 **Status priority** (per-user `OverallStatus`, Outbox only): `Failed > Read (all) > Received (all Received/Read) > Sent > Sending`.
 
-**ReadStatus** (Inbox only, `null` on Outbox messages): `Received` when stored, `Read` once opened. Set directly by `ContentAreaViewModel` when it marks an unread message read, or by `ContentAreaViewModel.OnDeliveryStatusChanged` when a `DeliveryStatusChangedEvent` with an empty `UserName` arrives (see [Peer.md](Peer.md#receipts)) — distinct from `UpdateDeliveryStatus`, which only ever applies to `DeliveryStatuses` rows.
+**ReadStatus** (Inbox only, `null` on Outbox messages): `Received` when stored, `Read` once opened. Set directly by `ContentAreaViewModel` when it marks an unread message read, or by `ContentAreaViewModel.OnDeliveryStatusChanged` when a `DeliveryStatusChangedEvent` with an empty `User` arrives (see [Peer.md](Peer.md#receipts)) — distinct from `UpdateDeliveryStatus`, which only ever applies to `DeliveryStatuses` rows.
 
 ---
 

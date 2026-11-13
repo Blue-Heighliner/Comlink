@@ -69,9 +69,9 @@ public sealed class DirectServiceConnectionTests
         List<DeliveryStatusChangedEvent> raised = [];
         conn.DeliveryStatusChanged += change => { raised.Add(change); return Task.CompletedTask; };
 
-        await events.RaiseDeliveryStatusChanged(new DeliveryStatusChangedEvent { MessageId = "M1", UserName = "BOB", Status = DestinationStatus.Sent });
+        await events.RaiseDeliveryStatusChanged(new DeliveryStatusChangedEvent { MessageId = "M1", User = "BOB", Status = DestinationStatus.Sent });
 
-        Assert.Equal("BOB", Assert.Single(raised).UserName);
+        Assert.Equal("BOB", Assert.Single(raised).User);
     }
 
     /// <summary>SendMessage builds the message, stores it in the Outbox and hands it to the frame handler, which does the sending; the result carries its identifier and whether it is an alert.</summary>
@@ -83,14 +83,14 @@ public sealed class DirectServiceConnectionTests
         Message? stored = null;
         entry.Setup(e => e.StoreSentMessage(It.IsAny<Message>())).Callback<Message>(message => stored = message).ReturnsAsync(new MessageEntity());
 
-        SendMessageResult? result = await conn.SendMessage("hello", [new AddressRequest { UserName = "BOB", Type = "Cc", Information = "note" }], TestMessagePriority.Level3, "TAG");
+        SendMessageResult? result = await conn.SendMessage("hello", [new AddressRequest { User = "BOB", Type = "Cc", Information = "note" }], TestMessagePriority.Level3, "TAG");
 
         Assert.NotNull(result);
-        Assert.Equal("ID-1", result.MessageId);
+        Assert.Equal("ID-1", result.Id);
         Assert.NotNull(stored);
         Assert.Equal(("ID-1", "ME", "hello", "TAG", TestMessagePriority.Level3), (stored.Id, stored.FromUser, stored.Body, stored.Tag, stored.Priority));
         MessageAddress address = Assert.Single(stored.Addresses);
-        Assert.Equal(("BOB", AddressType.Cc, "note"), (address.UserName, address.Type, address.Information));
+        Assert.Equal(("BOB", AddressType.Cc, "note"), (address.User, address.Type, address.Information));
         processing.Verify(p => p.Sent(stored), Times.Once);
     }
 

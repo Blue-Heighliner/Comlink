@@ -22,13 +22,13 @@ public interface IServiceConnection<TPriority, TLevel, TAspect, TProfile> where 
 
     /// <summary>Returns this user's own <see cref="UserInfo{TLevel, TProfile}"/>, or <see langword="null"/> where no current user was given, which never happens in a running engine.</summary>
     /// <param name="cancellation">Cancels the wait.</param>
-    Task<UserInfo<TLevel, TProfile>?> GetUserInfo(CancellationToken cancellation = default);
+    Task<UserInfo<TLevel, TProfile>?> GetCurrentUser(CancellationToken cancellation = default);
 
     /// <summary>Returns the names of all known users in the messaging system.</summary>
     /// <param name="cancellation">Cancels the wait.</param>
-    Task<List<string>> GetUserNames(CancellationToken cancellation = default);
+    Task<List<string>> GetUsers(CancellationToken cancellation = default);
 
-    /// <summary>Returns the names of every user currently reachable over at least one live peer connection, unlike <see cref="GetUserNames"/>'s fixed configured directory.</summary>
+    /// <summary>Returns the names of every user currently reachable over at least one live peer connection, unlike <see cref="GetUsers"/>'s fixed configured directory.</summary>
     /// <param name="cancellation">Cancels the wait.</param>
     Task<List<string>> GetConnectedUsers(CancellationToken cancellation = default);
 

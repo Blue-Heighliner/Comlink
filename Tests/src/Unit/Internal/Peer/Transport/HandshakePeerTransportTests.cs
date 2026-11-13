@@ -9,7 +9,7 @@ public sealed class HandshakePeerTransportTests
     private static readonly TimeSpan timeout = TimeSpan.FromSeconds(30);
 
     private static bool Opens(IHandshakeSession session)
-        => session.Connection is ISerialConnectionInfo serial ? serial.SerialAddress > serial.RemoteSerialAddress : !session.Connection.IsInbound;
+        => session.Connection is ISerialConnectionInfo serial ? serial.Address > serial.RemoteAddress : !session.Connection.IsInbound;
 
     private sealed class Scripted : IHandshakeHandler
     {

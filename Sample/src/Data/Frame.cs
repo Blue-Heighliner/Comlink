@@ -22,7 +22,7 @@ public sealed class Frame
             Category = message.Tag,
             Confidentiality = (int?)message.Level,
             Protection = (int?)message.Aspect,
-            Recipients = [.. message.Addresses.Select(address => new Recipient { User = address.UserName, Kind = address.Type switch { AddressType.Cc => "CC", AddressType.External => "OUTSIDE", _ => "TO" }, Note = address.Information })]
+            Recipients = [.. message.Addresses.Select(address => new Recipient { User = address.User, Kind = address.Type switch { AddressType.Cc => "CC", AddressType.External => "OUTSIDE", _ => "TO" }, Note = address.Information })]
         };
 
     /// <summary>Application-level message identifier.</summary>
@@ -87,7 +87,7 @@ public sealed class Frame
             Level = (Level?)Confidentiality,
             Aspect = (Aspect?)Protection,
             IsAlert = Category is "ALERT",
-            Addresses = [.. Recipients.Select(recipient => new MessageAddress { UserName = recipient.User, Type = recipient.Kind switch { "CC" => AddressType.Cc, "OUTSIDE" => AddressType.External, _ => AddressType.To }, Information = recipient.Note })]
+            Addresses = [.. Recipients.Select(recipient => new MessageAddress { User = recipient.User, Type = recipient.Kind switch { "CC" => AddressType.Cc, "OUTSIDE" => AddressType.External, _ => AddressType.To }, Information = recipient.Note })]
         };
 }
 

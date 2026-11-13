@@ -561,7 +561,7 @@ public sealed class DraftViewModelTests
     {
         DraftViewModel vm = BuildWithHandler(out Mock<IEntryService> entryMock, out Mock<IEngineConnection> connMock);
         connMock.Setup(c => c.SendMessage(It.IsAny<string>(), It.IsAny<List<AddressRequest>>(), It.IsAny<Enum?>(), It.IsAny<string>(), It.IsAny<Enum?>(), It.IsAny<Enum?>(), It.IsAny<CancellationToken>()))
-            .ReturnsAsync(new SendMessageResult { MessageId = "M" });
+            .ReturnsAsync(new SendMessageResult { Id = "M" });
         entryMock.Setup(e => e.FindMessage(It.IsAny<string>(), It.IsAny<bool>())).ReturnsAsync(new MessageEntity());
         vm.Tag = "URGENT";
         vm.Addresses.Add(new AddressData { UserName = "BOB", Type = "To" });
@@ -670,7 +670,7 @@ public sealed class DraftViewModelTests
 
         SendMessageResult sendResult = new()
         {
-            MessageId = "MSG-001"
+            Id = "MSG-001"
         };
         connMock.Setup(c => c.SendMessage(It.IsAny<string>(),
                 It.IsAny<List<AddressRequest>>(), It.IsAny<Enum?>(), It.IsAny<string>(), It.IsAny<Enum?>(), It.IsAny<Enum?>(), It.IsAny<CancellationToken>()))
@@ -702,7 +702,7 @@ public sealed class DraftViewModelTests
 
         SendMessageResult sendResult = new()
         {
-            MessageId = "MSG-001"
+            Id = "MSG-001"
         };
         connMock.Setup(c => c.SendMessage(It.IsAny<string>(),
                 It.IsAny<List<AddressRequest>>(), TestMessagePriority.Flash, It.IsAny<string>(), It.IsAny<Enum?>(), It.IsAny<Enum?>(), It.IsAny<CancellationToken>()))
@@ -734,7 +734,7 @@ public sealed class DraftViewModelTests
 
         SendMessageResult sendResult = new()
         {
-            MessageId = "MSG-001"
+            Id = "MSG-001"
         };
         connMock.Setup(c => c.SendMessage(It.IsAny<string>(),
                 It.IsAny<List<AddressRequest>>(), It.IsAny<Enum?>(), "URGENT", It.IsAny<Enum?>(), It.IsAny<Enum?>(), It.IsAny<CancellationToken>()))
@@ -861,7 +861,7 @@ public sealed class DraftViewModelTests
         Mock<IEntryService> entries = new();
         Mock<IEngineConnection> connection = new();
         connection.Setup(c => c.SendMessage(It.IsAny<string>(), It.IsAny<List<AddressRequest>>(), It.IsAny<Enum?>(), It.IsAny<string>(), It.IsAny<Enum?>(), It.IsAny<Enum?>(), It.IsAny<CancellationToken>()))
-            .ReturnsAsync(new SendMessageResult { MessageId = "M1" });
+            .ReturnsAsync(new SendMessageResult { Id = "M1" });
         DraftEntity entity = new() { Body = "B", Addresses = [new AddressData { UserName = "BOB", Type = "To" }], FolderId = "root-drafts", Aspect = storedAspect };
         return (new DraftViewModel(entity, entries.Object, connection.Object, [], noLogger, controller.Object), connection, entries, entity);
     }

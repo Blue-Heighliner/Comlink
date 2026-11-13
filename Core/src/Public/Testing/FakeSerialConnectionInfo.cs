@@ -10,11 +10,11 @@ public sealed class FakeSerialConnectionInfo : ISerialConnectionInfo
     public string? LocalUser { get; set; }
 
     /// <inheritdoc />
-    public string SerialPort { get; set; } = "SL0";
+    public string Port { get; set; } = "SL0";
 
     /// <inheritdoc />
-    public byte SerialAddress { get; set; } = 1;
+    public byte Address { get; set; } = 1;
 
     /// <inheritdoc />
-    public byte RemoteSerialAddress { get; set; } = 2;
+    public byte RemoteAddress { get; set; } = 2;
 }

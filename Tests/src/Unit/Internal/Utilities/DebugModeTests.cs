@@ -19,11 +19,11 @@ public sealed class DebugModeTests
     [Fact]
     public void IsDebug_IsWhetherTheAssemblyWasStampedWithTheDebugConstant()
     {
-        Assert.True(new DebugMode(Compile((DebugMode.MetadataKey, "true"))).IsDebug);
-        Assert.False(new DebugMode(Compile()).IsDebug);
-        Assert.False(new DebugMode(Compile((DebugMode.MetadataKey, "false"))).IsDebug);
-        Assert.False(new DebugMode(Compile(("Something.Else", "true"))).IsDebug);
-        Assert.False(new DebugMode(null).IsDebug);
+        Assert.True(new DebugMode(Compile((DebugMode.MetadataKey, "true"))).IsEnabled);
+        Assert.False(new DebugMode(Compile()).IsEnabled);
+        Assert.False(new DebugMode(Compile((DebugMode.MetadataKey, "false"))).IsEnabled);
+        Assert.False(new DebugMode(Compile(("Something.Else", "true"))).IsEnabled);
+        Assert.False(new DebugMode(null).IsEnabled);
     }
 
     /// <summary>A project that imports the package's build targets is stamped when it is compiled with DEBUG and not otherwise.</summary>

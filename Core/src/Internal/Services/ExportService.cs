@@ -36,7 +36,7 @@ internal sealed class ExportService : IExportService
         Name = entity.Name,
         Body = entity.Body,
         BodySegmentsJson = entity.BodySegmentsJson,
-        Addresses = [.. entity.Addresses.Select(a => new AddressRequest { UserName = a.UserName, Type = a.Type, Information = a.Information })],
+        Addresses = [.. entity.Addresses.Select(a => new AddressRequest { User = a.UserName, Type = a.Type, Information = a.Information })],
         IsSent = entity.IsSent,
         IsAlert = entity.IsAlert,
         Priority = entity.Priority,
@@ -242,11 +242,11 @@ internal sealed class ExportService : IExportService
 
     private MessageExportData BuildMessageExportData(MessageEntity entity) => new()
     {
-        MessageId = entity.MessageId,
+        Id = entity.MessageId,
         IsOutbound = entity.IsOutbound,
         FromUser = entity.Message.FromUser,
         Body = entity.Message.Body,
-        Addresses = [.. entity.Message.Addresses.Select(a => new AddressRequest { UserName = a.UserName, Type = a.Type, Information = a.Information })],
+        Addresses = [.. entity.Message.Addresses.Select(a => new AddressRequest { User = a.UserName, Type = a.Type, Information = a.Information })],
         SentAt = entity.Message.SentAt,
         IsAlert = entity.Message.IsAlert,
         Priority = entity.Message.Priority,
@@ -255,6 +255,6 @@ internal sealed class ExportService : IExportService
         Aspect = entity.Message.Aspect,
         ReceivedAt = entity.ReceivedAt,
         ReadStatus = entity.ReadStatus,
-        DeliveryStatuses = [.. entity.DeliveryStatuses.Select(d => new MessageDeliveryStatus { UserName = d.UserName, Status = d.Status, AddressedVia = d.AddressedVia })]
+        DeliveryStatuses = [.. entity.DeliveryStatuses.Select(d => new MessageDeliveryStatus { User = d.UserName, Status = d.Status, AddressedVia = d.AddressedVia })]
     };
 }

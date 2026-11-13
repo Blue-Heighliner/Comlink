@@ -37,8 +37,8 @@ public sealed class MyFrameHandler(IUserCatalog<MyLevel, NoProfile> users, INetw
     public async Task OnSent(INetworkSentContext<MyPriority, MyLevel, MyAspect> context)
     {
         Message<MyPriority, MyLevel, MyAspect> message = context.Message;
-        MyFrame frame = new() { Id = message.Id, FromUser = message.FromUser, Body = message.Body, To = [.. message.Addresses.Select(a => a.UserName)] };
-        bool accepted = await network.Send(users.CurrentUser.Parent!.User, message.Priority, frame);
+        MyFrame frame = new() { Id = message.Id, FromUser = message.FromUser, Body = message.Body, To = [.. message.Addresses.Select(a => a.User)] };
+        bool accepted = await network.Send(users.Current.Parent!.User, message.Priority, frame);
         foreach (string user in frame.To)
         {
             await network.SetSentStatus(message.Id, user, accepted ? DestinationStatus.Sent : DestinationStatus.Failed);
@@ -51,7 +51,7 @@ public sealed class MyFrameHandler(IUserCatalog<MyLevel, NoProfile> users, INetw
             Id = context.Frame.Id,
             FromUser = context.Frame.FromUser,
             Body = context.Frame.Body,
-            Addresses = [.. context.Frame.To.Select(user => new MessageAddress { UserName = user, Type = AddressType.To })],
+            Addresses = [.. context.Frame.To.Select(user => new MessageAddress { User = user, Type = AddressType.To })],
             SentAt = DateTime.UtcNow,
             Priority = MyPriority.Normal
         });

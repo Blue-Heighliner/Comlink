@@ -110,7 +110,7 @@ public interface IEngineBuilder<TFrame, TPacket, TPriority, TLevel, TAspect, TPr
 
     /// <summary>
     /// Sets whether a log entry that reports an exception also carries the exception's entire stack trace. On by default. When turned off such an entry carries only the exception's type and message, and those of the exceptions inside it.
-    /// It applies to every entry that reports an exception, the engine's own and those written through <see cref="ILogger"/>. A host that wants traces only while it is being developed can ask for the <see cref="IDebugMode"/> in its configuration's constructor and pass <see cref="IDebugMode.IsDebug"/>.
+    /// It applies to every entry that reports an exception, the engine's own and those written through <see cref="ILogger"/>. A host that wants traces only while it is being developed can ask for the <see cref="IDebugMode"/> in its configuration's constructor and pass <see cref="IDebugMode.IsEnabled"/>.
     /// </summary>
     /// <param name="enabled"><see langword="true"/> to log stack traces, <see langword="false"/> not to.</param>
     IEngineBuilder<TFrame, TPacket, TPriority, TLevel, TAspect, TProfile> StackTrace(bool enabled);

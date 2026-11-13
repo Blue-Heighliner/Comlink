@@ -260,7 +260,7 @@ public sealed class ContentAreaViewModelTests
         DeliveryStatusChangedEvent evt = new()
         {
             MessageId = "MSG-1",
-            UserName = "DEST",
+            User = "DEST",
             Status = DestinationStatus.Received
         };
         await conn.RaiseDeliveryStatusChanged(evt);
@@ -281,7 +281,7 @@ public sealed class ContentAreaViewModelTests
         DeliveryStatusChangedEvent evt = new()
         {
             MessageId = "MSG-1",
-            UserName = "",
+            User = "",
             Status = DestinationStatus.Read
         };
         await conn.RaiseDeliveryStatusChanged(evt);
@@ -302,7 +302,7 @@ public sealed class ContentAreaViewModelTests
         DeliveryStatusChangedEvent evt = new()
         {
             MessageId = "MSG-OTHER",
-            UserName = "DEST",
+            User = "DEST",
             Status = DestinationStatus.Received
         };
         await conn.RaiseDeliveryStatusChanged(evt);
@@ -320,7 +320,7 @@ public sealed class ContentAreaViewModelTests
         DeliveryStatusChangedEvent evt = new()
         {
             MessageId = "MSG-1",
-            UserName = "DEST",
+            User = "DEST",
             Status = DestinationStatus.Received
         };
         await conn.RaiseDeliveryStatusChanged(evt);

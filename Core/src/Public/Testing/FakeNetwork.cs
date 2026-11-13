@@ -80,7 +80,7 @@ public sealed class FakeNetwork<TFrame, TPriority, TLevel, TAspect> : INetwork<T
     }
 
     /// <inheritdoc />
-    public void SetNetworkIndicator(bool isOnline) => NetworkIndicators.Add(isOnline);
+    public void SetIndicator(bool isOnline) => NetworkIndicators.Add(isOnline);
 
     /// <inheritdoc />
     public Task SendInterface(TPriority priority, TFrame frame)
@@ -117,7 +117,7 @@ public sealed class FakeNetwork<TFrame, TPriority, TLevel, TAspect> : INetwork<T
     public IReadOnlySet<string> GetDestinations(Message<TPriority, TLevel, TAspect> message, out IReadOnlySet<string> excluded)
     {
         excluded = new HashSet<string>();
-        return new HashSet<string>(message.Addresses.Where(address => address.Type is not AddressType.External).Select(address => address.UserName));
+        return new HashSet<string>(message.Addresses.Where(address => address.Type is not AddressType.External).Select(address => address.User));
     }
 
     /// <inheritdoc />

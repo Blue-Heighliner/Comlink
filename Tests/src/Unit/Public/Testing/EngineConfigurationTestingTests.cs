@@ -13,7 +13,7 @@ public sealed class EngineConfigurationTestingTests
 
     private sealed class ActingDeleteHandler(INetwork<TestFrame, TestMessagePriority, TestLevel, TestAspect> network, IUserCatalog<TestLevel, NoProfile> users, IDataStore store, IDebugMode debug) : IDeleteHandler
     {
-        public bool CanDelete(IDeleteContext context) => network is not null && users.CurrentUser is not null && store is not null && !debug.IsDebug;
+        public bool CanDelete(IDeleteContext context) => network is not null && users.Current is not null && store is not null && !debug.IsEnabled;
     }
 
     private sealed class NeedsMissingDeleteHandler(IMissing missing) : IDeleteHandler

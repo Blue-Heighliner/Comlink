@@ -47,7 +47,7 @@ public sealed class EngineConfiguration(IDebugMode debug) : IEngineConfiguration
             .Drafts<DraftHandler>()
             .Prints<PrintHandler>()
             .Logs<LogHandler>()
-            .StackTrace(debug.IsDebug)
+            .StackTrace(debug.IsEnabled)
             .Certificates("Authority.cer", "Certificate.pfx")
             .Configure<ConfigurationHandler>()
             .CommandLineOverrides(true)

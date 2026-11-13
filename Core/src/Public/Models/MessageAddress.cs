@@ -4,7 +4,7 @@ namespace BlueHeighliner.Comlink;
 public sealed record MessageAddress
 {
     /// <summary>Gets the name of the recipient user.</summary>
-    public required string UserName { get; init; }
+    public required string User { get; init; }
 
     /// <summary>Gets the address role (<see cref="AddressType.To"/>, <see cref="AddressType.Cc"/> or <see cref="AddressType.External"/>) for this recipient.</summary>
     public required AddressType Type { get; init; }
