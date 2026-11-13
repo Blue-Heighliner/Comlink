@@ -81,6 +81,8 @@ internal sealed class EngineBuilder : IEngineBuilder, IAsyncDisposable
     public List<IExternalSystem> ExternalSystems { get; } = [];
     /// <summary>Registers the services typed by the host's enums, once <c>Types</c> has stated them.</summary>
     public Action<IServiceCollection>? TypedServices { get; private set; }
+    /// <summary>Registers fakes of the services typed by the host's enums in place of the real ones, for verifying a configuration without an engine; set by <c>Types</c>.</summary>
+    public Action<IServiceCollection>? FakeTypedServices { get; private set; }
 
     /// <summary>The handler that reacts to peer activity, if stated.</summary>
     public ServiceRegistration<IEngineFrameHandler>? FrameHandler { get; set; }
@@ -161,6 +163,12 @@ internal sealed class EngineBuilder : IEngineBuilder, IAsyncDisposable
             services.AddSingleton<IServiceConnection<TPriority, TLevel, TAspect, TProfile>>(provider => new ServiceConnection<TPriority, TLevel, TAspect, TProfile>(provider.GetRequiredService<IEngineConnection>()));
             services.AddSingleton<INetwork<TFrame, TPriority, TLevel, TAspect>>(provider => new Network<TFrame, TPriority, TLevel, TAspect>(provider.GetRequiredService<INetworkEnvironment>(), provider.GetRequiredService<IUserDirectory>()));
             services.AddSingleton<IUserCatalog<TLevel, TProfile>>(provider => new UserCatalog<TLevel, TProfile>(provider.GetRequiredService<IUserDirectory>()));
+        };
+        FakeTypedServices = services =>
+        {
+            services.AddSingleton<IServiceConnection<TPriority, TLevel, TAspect, TProfile>>(new Testing.FakeServiceConnection<TPriority, TLevel, TAspect, TProfile>());
+            services.AddSingleton<INetwork<TFrame, TPriority, TLevel, TAspect>>(new Testing.FakeNetwork<TFrame, TPriority, TLevel, TAspect>());
+            services.AddSingleton<IUserCatalog<TLevel, TProfile>>(new Testing.FakeUserCatalog<TLevel, TProfile>(new UserInfo<TLevel, TProfile> { Name = "TEST" }));
         };
         UserProfileType = typeof(TProfile) == typeof(NoProfile) ? null : typeof(TProfile);
         if (typeof(TPriority) == typeof(NoPriority))

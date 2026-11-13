@@ -108,4 +108,22 @@ public sealed class FakeContextsTests
         Assert.Empty(context.Drafts);
         Assert.Empty(context.StagedSends);
     }
+
+    /// <summary>The two connection info fakes are different kinds of connection, so a handler that branches on the kind sees what it would in the engine, through a fake handshake context.</summary>
+    [Fact]
+    public void ConnectionInfoFakes_AreDistinctKindsOfConnection()
+    {
+        FakeIpConnectionInfo ip = new() { Host = "10.0.0.5", Port = 4000, IsInbound = true, LocalUser = "ME", CertificateSubject = "CN=Bob", CertificateNames = ["Bob"] };
+        FakeSerialConnectionInfo serial = new() { SerialPort = "SL1", SerialAddress = 3, RemoteSerialAddress = 4, LocalUser = "ME" };
+        IConnectionInfo overIp = new FakeFrameHandshakeContext<TestFrame>(ip).Connection;
+        IConnectionInfo overSerial = new FakePacketHandshakeContext<TestPacket>(serial).Connection;
+
+        Assert.Equal(("10.0.0.5", 4000, true), (Assert.IsAssignableFrom<IIpConnectionInfo>(overIp).Host, ((IIpConnectionInfo)overIp).Port, overIp.IsInbound));
+        Assert.IsNotAssignableFrom<ISerialConnectionInfo>(overIp);
+        Assert.Equal(("SL1", (byte)3, (byte)4, false), (Assert.IsAssignableFrom<ISerialConnectionInfo>(overSerial).SerialPort, ((ISerialConnectionInfo)overSerial).SerialAddress, ((ISerialConnectionInfo)overSerial).RemoteSerialAddress, overSerial.IsInbound));
+        Assert.IsNotAssignableFrom<IIpConnectionInfo>(overSerial);
+        Assert.Equal("ME", overIp.LocalUser);
+        Assert.Equal("ME", overSerial.LocalUser);
+        Assert.Equal(["Bob"], ip.CertificateNames);
+    }
 }
