@@ -1,6 +1,6 @@
 namespace BlueHeighliner.Comlink;
 
-/// <summary>An <see cref="IMemoryOwner{T}"/> over a slice of an array rented from <see cref="ArrayPool{T}.Shared"/>, returned to the pool on the first <see cref="Dispose"/>.</summary>
+/// <summary>An <see cref="IMemoryOwner{T}"/> over a slice of an array rented from <see cref="ArrayPool{T}.Shared"/>, wiped and returned to the pool on the first <see cref="Dispose"/>, so what it held (received message content) does not linger in the shared pool.</summary>
 internal sealed class PooledMemoryOwner : IMemoryOwner<byte>
 {
     /// <summary>Rents an array of at least <paramref name="length"/> bytes and wraps it, exposing exactly <paramref name="length"/> bytes.</summary>
@@ -24,7 +24,7 @@ internal sealed class PooledMemoryOwner : IMemoryOwner<byte>
     {
         if (Interlocked.Exchange(ref array, null) is { } rented)
         {
-            ArrayPool<byte>.Shared.Return(rented);
+            ArrayPool<byte>.Shared.Return(rented, clearArray: true);
         }
     }
 }

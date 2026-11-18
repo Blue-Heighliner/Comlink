@@ -12,6 +12,14 @@ internal sealed class DataPool : IDataPool
         return new Lease(pool, pool.Rent(size), size);
     }
 
+    /// <inheritdoc />
+    public IMemoryOwner<byte> RentCopy(ReadOnlySpan<byte> data)
+    {
+        IMemoryOwner<byte> owner = Rent(data.Length);
+        data.CopyTo(owner.Memory.Span);
+        return owner;
+    }
+
     private sealed class Lease(ArrayPool<byte> pool, byte[] array, int length) : IMemoryOwner<byte>
     {
         private byte[]? rented = array;
@@ -22,7 +30,7 @@ internal sealed class DataPool : IDataPool
         {
             if (Interlocked.Exchange(ref rented, null) is { } returned)
             {
-                pool.Return(returned);
+                pool.Return(returned, clearArray: true);
             }
         }
     }

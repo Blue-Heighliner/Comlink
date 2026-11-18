@@ -31,4 +31,18 @@ public sealed class PooledMemoryOwnerTests
 
         Assert.Throws<ObjectDisposedException>(() => owner.Memory);
     }
+
+    /// <summary>What the owner held is wiped when it goes back to the shared pool, so received content does not linger there.</summary>
+    [Fact]
+    public void Dispose_WipesTheArray()
+    {
+        byte[] array = ArrayPool<byte>.Shared.Rent(64);
+        PooledMemoryOwner owner = new(array, 8);
+        owner.Memory.Span.Fill(0xAB);
+        Assert.Equal(0xAB, array[0]);
+
+        owner.Dispose();
+
+        Assert.All(array.Take(8), value => Assert.Equal(0, value));
+    }
 }

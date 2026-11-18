@@ -152,6 +152,18 @@ public sealed class FakeServicesTests
         Assert.Equal(0, second.Memory.Span[0]);
     }
 
+    /// <summary>The data pool fake rents a copy of the data given that is independent of the source.</summary>
+    [Fact]
+    public void FakeDataPool_RentCopy_HoldsAnIndependentCopy()
+    {
+        byte[] source = [1, 2, 3];
+
+        using IMemoryOwner<byte> copy = new FakeDataPool().RentCopy(source);
+        source[0] = 9;
+
+        Assert.Equal(new byte[] { 1, 2, 3 }, copy.Memory.ToArray());
+    }
+
     /// <summary>The data store fake keeps what is saved by identifier whatever the case, hands the same instance back, overwrites, and refuses what the engine's refuses.</summary>
     [Fact]
     public async Task FakeDataStore_KeepsWhatIsSaved_AndRefusesWhatTheEnginesRefuses()

@@ -12,7 +12,7 @@ Asked for through dependency injection, in a constructor or in a `required` prop
 - `ILogger` - writes to the engine's log under a category and a required event identifier (`CL` is the engine's prefix, so a host uses its own), with or without an exception, for components that are not the engine. In the configuration's container too, where it writes nothing.
 - `IDebugMode` - whether the application was compiled with its own `DEBUG` constant (recorded in its assembly by the package's build targets). In the configuration's container too, so a configuration can state settings from it, such as `StackTrace(debug.IsDebug)`.
 - `IDataStore` - keeps the host's own records between runs: `Save(id, record)` writes a record of any class, typically a record type, as JSON under an identifier (replacing what was there) and `Load<T>(id)` reads it back or returns `null`. One file per identifier in the app's data folder. Only in the running engine.
-- `IDataPool` - rents byte buffers from a pool, as an `IMemoryOwner<byte>` of exactly the size asked for that returns the buffer when disposed. In the configuration's container too.
+- `IDataPool` - rents byte buffers from a pool, as an `IMemoryOwner<byte>` of exactly the size asked for that returns the buffer when disposed. A rented buffer is always zeroed, since every buffer is wiped as it goes back; `Rent(size)` gives an empty one and `RentCopy(span)` one filled with a copy of the span. In the configuration's container too.
 
 ## Utilities
 
@@ -46,7 +46,7 @@ Services:
 - `FakeNetwork<,,,>` for `INetwork<,,,>`: every send is accepted (`SendResult`) and every other operation finishes at once, each recorded in a list of its own (`Sent`, `SentToInterfaces`, `SentStatuses` and so on); `FoundMessages` and `AutoForwardTargets` set what it finds, and `GetDestinations` answers the distinct targets with no one left out.
 - `FakeServiceConnection<,,,>` for `IServiceConnection<,,,>`: connects at once, answers `CurrentUser`, `Users` and `ConnectedUsers`, accepts and records sends and mark read, and raises the engine's events with `RaiseMessageReceived` and `RaiseDeliveryStatusChanged`.
 - `FakeLogger` for `ILogger`: records every entry as a `FakeLogEntry` in `Entries`, and refuses an entry with no identifier as the engine's does.
-- `FakeDebugMode` for `IDebugMode` and `FakeDataPool` for `IDataPool`: the former says what it is told, the latter rents a new array of the size asked each time.
+- `FakeDebugMode` for `IDebugMode` and `FakeDataPool` for `IDataPool`: the former says what it is told, the latter rents a new array of the size asked, or a copy of the span given, each time.
 - `FakeDataStore` for `IDataStore`: keeps the saved instances in memory in `Items`, by identifier whatever the case, so a test can set up what a component finds and read what it saved.
 
 ```csharp

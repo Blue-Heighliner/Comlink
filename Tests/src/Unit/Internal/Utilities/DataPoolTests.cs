@@ -52,4 +52,51 @@ public sealed class DataPoolTests
         Assert.Equal(16, third.Memory.Length);
         second.Dispose();
     }
+
+    /// <summary>A returned buffer is wiped, so the next rental of that size never sees what the last user left, whether it was rented empty or as a copy.</summary>
+    [Fact]
+    public void Rent_AfterAReturn_IsCleared()
+    {
+        DataPool pool = new();
+        IMemoryOwner<byte> first = pool.Rent(16);
+        first.Memory.Span.Fill(0xAB);
+        first.Dispose();
+        IMemoryOwner<byte> copy = pool.RentCopy(Enumerable.Repeat((byte)0xCD, 16).ToArray());
+        Assert.Equal(Enumerable.Repeat((byte)0xCD, 16), copy.Memory.ToArray());
+        copy.Dispose();
+
+        using IMemoryOwner<byte> again = pool.Rent(16);
+
+        Assert.All(again.Memory.ToArray(), value => Assert.Equal(0, value));
+    }
+
+    /// <summary>A copy holds exactly the bytes given, is independent of the source, and can be empty.</summary>
+    [Theory]
+    [InlineData(0)]
+    [InlineData(3)]
+    [InlineData(5000)]
+    public void RentCopy_HoldsACopyOfTheData(int length)
+    {
+        byte[] source = [.. Enumerable.Range(0, length).Select(i => (byte)(i % 251))];
+
+        using IMemoryOwner<byte> copy = new DataPool().RentCopy(source);
+        if (length > 0)
+        {
+            source[0] ^= 0xFF;
+        }
+
+        Assert.Equal(length, copy.Memory.Length);
+        Assert.Equal([.. Enumerable.Range(0, length).Select(i => (byte)(i % 251))], copy.Memory.ToArray());
+    }
+
+    /// <summary>A copy is no longer usable once disposed.</summary>
+    [Fact]
+    public void RentCopy_Dispose_MakesItUnusable()
+    {
+        IMemoryOwner<byte> copy = new DataPool().RentCopy(new byte[] { 1, 2 });
+
+        copy.Dispose();
+
+        Assert.Throws<ObjectDisposedException>(() => copy.Memory);
+    }
 }
