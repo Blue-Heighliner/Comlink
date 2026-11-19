@@ -23,7 +23,8 @@ Plain types, used directly.
 - `StringExtensions` - `AddSpacesToPascalCase()` puts a space between the words of Pascal or camel case text (`HTTPServer` becomes `HTTP Server`), such as to turn an enum member name into a label.
 - `ISeekableBufferWriter<T>` - an `IBufferWriter<T>` with `Length` and a settable `Position`, so bytes already written can be overwritten, such as a length prefix known only after the body.
 - `MemoryOwner<T>` - an `IMemoryOwner<T>` over memory someone else owns: it hands the memory out and disposing it does nothing.
-- `PooledBufferWriter<T>` - an `ISeekableBufferWriter<T>` over a pooled array (`PooledBufferWriter<byte>` for a serializer to write into).
+- `IPredictiveBufferWriter<T>` - an `IBufferWriter<T>` with `Predict(size)`, to say how many more items will be written so the buffer is allocated once: a later prediction replaces the earlier one rather than adding to it, and a prediction only ever enlarges the buffer, never shrinks it.
+- `PooledBufferWriter<T>` - an `ISeekableBufferWriter<T>` and `IPredictiveBufferWriter<T>` over a pooled array (`PooledBufferWriter<byte>` for a serializer to write into).
 - `IUserInfo`, `UserInfo<TLevel, TProfile>` and `NoProfile` - everything known about a user, as the engine hands it to a host: always the `UserInfo<TLevel, TProfile>` typed by the profile record the host stated in its `Types` call (`NoProfile` for none), which implements the non-generic `IUserInfo` for code that does not care about the profile.
 - `LogCategories` - the categories the engine logs under and which of them are written by default, for use with `ILogger`.
 

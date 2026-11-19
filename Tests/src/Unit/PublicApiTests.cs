@@ -29,12 +29,12 @@ public sealed class PublicApiTests
                 "IFrameSerializer", "IHdlcBuilder`6", "IImportFormat`2", "IImportFormatContext`2", "IIpConnectionInfo", "ILevelBuilder`6", "ILogger",
                 "ILogHandler", "IMsmtBuilder`6", "INetwork`4", "INetworkConnectedContext", "INetworkDisconnectedContext", "INetworkReadContext`3",
                 "INetworkReceivedContext`1", "INetworkRetrievalContext", "INetworkSentContext`3", "IPacketBuilder`6", "IPacketHandler`2",
-                "IPacketHandshakeContext`1", "IPacketHandshakeHandler`1", "IPacketHeartbeatHandler`2", "IPacketSerializer", "IPrintHandler`3",
-                "IPriorityLevelBuilder`6", "ISeekableBufferWriter`1", "ISerialConnectionInfo", "IServiceConnection`4", "IUserCatalog`2", "IUserInfo",
-                "LogCategories", "MemoryOwner`1", "Message`3", "MessageAddress", "MessageDeliveryStatus", "MessageExportData", "NoAspect", "NoLevel",
-                "NoPacket", "NoPriority", "NoProfile", "NoteExportData", "PacketSerializer`2", "PooledBufferWriter`1", "ProtobufSerializer",
-                "RetrievalCriteria", "SendMessageResult", "SentMessage", "StagedSendData`2", "StagedSendMode", "StringExtensions", "TagCase",
-                "UserIdentity", "UserInfo`2", "UserLink", "UserRole"
+                "IPacketHandshakeContext`1", "IPacketHandshakeHandler`1", "IPacketHeartbeatHandler`2", "IPacketSerializer",
+                "IPredictiveBufferWriter`1", "IPrintHandler`3", "IPriorityLevelBuilder`6", "ISeekableBufferWriter`1", "ISerialConnectionInfo",
+                "IServiceConnection`4", "IUserCatalog`2", "IUserInfo", "LogCategories", "MemoryOwner`1", "Message`3", "MessageAddress",
+                "MessageDeliveryStatus", "MessageExportData", "NoAspect", "NoLevel", "NoPacket", "NoPriority", "NoProfile", "NoteExportData",
+                "PacketSerializer`2", "PooledBufferWriter`1", "ProtobufSerializer", "RetrievalCriteria", "SendMessageResult", "SentMessage",
+                "StagedSendData`2", "StagedSendMode", "StringExtensions", "TagCase", "UserIdentity", "UserInfo`2", "UserLink", "UserRole"
             ],
             exported);
     }

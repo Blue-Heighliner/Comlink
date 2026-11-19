@@ -111,7 +111,13 @@ public sealed class PooledBufferWriterTests
     {
         public List<bool> Cleared { get; } = [];
 
-        public override byte[] Rent(int minimumLength) => new byte[minimumLength];
+        public List<int> Rented { get; } = [];
+
+        public override byte[] Rent(int minimumLength)
+        {
+            Rented.Add(minimumLength);
+            return new byte[minimumLength];
+        }
 
         public override void Return(byte[] array, bool clearArray = false) => Cleared.Add(clearArray);
     }
@@ -146,5 +152,81 @@ public sealed class PooledBufferWriterTests
         writer.Advance(1);
 
         Assert.Equal(new byte[] { 1, 9, 3, 4 }, writer.WrittenMemory.ToArray());
+    }
+
+    /// <summary>A prediction makes room for what is coming at once, so writing it needs no further allocation.</summary>
+    [Fact]
+    public void Predict_AllocatesOnce_AndTheWritesThatFollowNeedNoMore()
+    {
+        RecordingPool pool = new();
+        PooledBufferWriter<byte> writer = new(initialCapacity: 4, pool);
+
+        writer.Predict(1000);
+        int rentsAfterPredict = pool.Rented.Count;
+        for (int i = 0; i < 10; i++)
+        {
+            writer.Write(new byte[100]);
+        }
+
+        Assert.Equal(2, rentsAfterPredict);
+        Assert.True(pool.Rented[1] >= 1000);
+        Assert.Equal(rentsAfterPredict, pool.Rented.Count);
+        Assert.Equal(1000, writer.Length);
+    }
+
+    /// <summary>Predicting again replaces the earlier prediction, so the same size twice reserves it once and a different size is not added to it.</summary>
+    [Fact]
+    public void Predict_ReplacesTheEarlierPrediction()
+    {
+        RecordingPool pool = new();
+        PooledBufferWriter<byte> writer = new(initialCapacity: 4, pool);
+
+        writer.Predict(1000);
+        writer.Predict(1000);
+        writer.Predict(1200);
+
+        Assert.Equal([4, 1000, 1200], pool.Rented);
+    }
+
+    /// <summary>A smaller prediction, or one already covered, never shrinks or reallocates the buffer.</summary>
+    [Fact]
+    public void Predict_NeverDecreasesTheBuffer()
+    {
+        RecordingPool pool = new();
+        PooledBufferWriter<byte> writer = new(initialCapacity: 4, pool);
+        writer.Predict(1000);
+        int capacity = writer.GetSpan().Length;
+
+        writer.Predict(10);
+        writer.Predict(0);
+
+        Assert.Equal(capacity, writer.GetSpan().Length);
+        Assert.Equal(2, pool.Rented.Count);
+        Assert.Single(pool.Cleared);
+    }
+
+    /// <summary>A prediction counts from the current position, and what was already written is kept when the buffer grows for it.</summary>
+    [Fact]
+    public void Predict_CountsFromThePosition_AndKeepsWhatIsWritten()
+    {
+        RecordingPool pool = new();
+        PooledBufferWriter<byte> writer = new(initialCapacity: 8, pool);
+        writer.Write(new byte[] { 1, 2, 3, 4, 5 });
+
+        writer.Predict(100);
+
+        Assert.True(pool.Rented[^1] >= 105);
+        Assert.Equal(new byte[] { 1, 2, 3, 4, 5 }, writer.WrittenMemory.ToArray());
+        Assert.Equal(5, writer.Position);
+    }
+
+    /// <summary>A negative prediction is refused.</summary>
+    [Fact]
+    public void Predict_RefusesNegative()
+    {
+        RecordingPool pool = new();
+        PooledBufferWriter<byte> writer = new(initialCapacity: 4, pool);
+
+        Assert.Throws<ArgumentOutOfRangeException>(() => writer.Predict(-1));
     }
 }

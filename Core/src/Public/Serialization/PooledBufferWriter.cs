@@ -1,12 +1,12 @@
 namespace BlueHeighliner.Comlink;
 
 /// <summary>
-/// An <see cref="ISeekableBufferWriter{T}"/> over a pooled array that grows by doubling, for a serializer to write into so that the buffer it returns from
+/// An <see cref="ISeekableBufferWriter{T}"/> and <see cref="IPredictiveBufferWriter{T}"/> over a pooled array that grows by doubling, or to what <see cref="Predict"/> says is coming, for a serializer to write into so that the buffer it returns from
 /// <see cref="IFrameSerializer.Serialize"/> or <see cref="IPacketSerializer.Serialize"/> comes from a pool instead of being allocated for every frame or packet.
 /// Write the serialized bytes (a <c>Utf8JsonWriter</c>, for instance, takes one), then hand the result to the caller with <see cref="ToOwner"/>. Every array is cleared when it goes back to the pool, so what was written never lingers there.
 /// </summary>
 /// <typeparam name="T">The type of the items written, <see cref="byte"/> for serialized data.</typeparam>
-public sealed class PooledBufferWriter<T> : ISeekableBufferWriter<T>
+public sealed class PooledBufferWriter<T> : ISeekableBufferWriter<T>, IPredictiveBufferWriter<T>
 {
     /// <summary>Initializes an empty writer.</summary>
     public PooledBufferWriter()
@@ -70,6 +70,17 @@ public sealed class PooledBufferWriter<T> : ISeekableBufferWriter<T>
         return buffer.AsSpan(position);
     }
 
+    /// <inheritdoc />
+    public void Predict(int size)
+    {
+        ArgumentOutOfRangeException.ThrowIfNegative(size);
+        int end = (int)Math.Min((long)position + size, Array.MaxLength);
+        if (end > buffer.Length)
+        {
+            Grow(end);
+        }
+    }
+
     /// <summary>Hands everything written over as a buffer whose <see cref="IMemoryOwner{T}.Memory"/> is exactly the written items and whose disposal clears the pooled array and returns it. The writer must not be used afterwards.</summary>
     public IMemoryOwner<T> ToOwner() => new OwnedBuffer<T>(this);
 
@@ -93,7 +104,11 @@ public sealed class PooledBufferWriter<T> : ISeekableBufferWriter<T>
             return;
         }
 
-        int newSize = Math.Max(buffer.Length * 2, needed);
+        Grow(Math.Max(buffer.Length * 2, needed));
+    }
+
+    private void Grow(int newSize)
+    {
         T[] newBuffer = pool.Rent(newSize);
         buffer.AsSpan(0, length).CopyTo(newBuffer);
         pool.Return(buffer, clearArray: true);
